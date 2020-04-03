@@ -11,4 +11,4 @@ CurrentModule = Quantica
 Modules = [Quantica]
 ```
 
-Quantica is a Julia package to build generic tight-binding models and compute their properties
+Quantica.jl is a Julia package to build generic tight-binding models and compute their properties
