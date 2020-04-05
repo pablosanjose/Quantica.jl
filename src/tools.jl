@@ -57,6 +57,8 @@ filltuple(x, ::Val{L}) where {L} = ntuple(_ -> x, Val(L))
 @inline padtotype(s::UniformScaling, st::Type{S}) where {S<:SMatrix} = S(s)
 @inline padtotype(s::UniformScaling, ::Type{T}) where {T<:Number} = T(s.λ)
 @inline padtotype(s::Number, ::Type{T}) where {T<:Number} = T(s)
+@inline padtotype(s::SMatrix{1,1}, ::Type{T}) where {T<:Number} = T(first(s))
+@inline padtotype(s::Number, ::Type{S}) where {S<:SMatrix{1,1}} = S(s)
 @inline padtotype(s, st::Type) =
     throw(DimensionMismatch("Dimension mismatch between model ($(typeof(s))) and Hamiltonian ($st). Did you correctly specify the `orbitals` in hamiltonian? Consider also using `I` to cover non-uniform orbital dimensions"))
 
