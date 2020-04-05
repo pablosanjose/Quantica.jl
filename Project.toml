@@ -15,8 +15,13 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 
 [compat]
-NearestNeighbors = "0.4"
-julia = "1.4"
+julia = "^1.4"
+NearestNeighbors = "^0.4"
+LinearMaps = "^2.6"
+Requires = "^1.0"
+StaticArrays = "^0.12"
+ProgressMeter = "^1.2"
+OffsetArrays = "^1.0"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
