@@ -1,5 +1,3 @@
-module ModelTest
-
 using Quantica: TightbindingModel, OnsiteTerm, HoppingTerm, padtotype, Selector
 
 @testset "onsite" begin
@@ -48,6 +46,3 @@ end
     @test (t -> t(r, r)).(model.terms) == (-@SMatrix[1 0; 1 1], -4I)
     @test model(r, r) == @SMatrix[-5 0; -1 -5]
 end
-
-end # module
-

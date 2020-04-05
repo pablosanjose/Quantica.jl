@@ -1,6 +1,5 @@
 using Test
 using Quantica
-using Random
 
 @testset "Quantica.jl" begin
     include("test_lattice.jl")

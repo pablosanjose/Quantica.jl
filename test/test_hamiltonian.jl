@@ -1,6 +1,5 @@
-module HamiltonianTest
-
 using LinearAlgebra: diag
+using Quantica: Hamiltonian
 
 @testset "basic hamiltonians" begin
     presets = (LatticePresets.linear, LatticePresets.square, LatticePresets.triangular,
@@ -35,9 +34,7 @@ end
     @test bloch(h1, 1, 2) == bloch(h2, 1, 2)
 end
 
-@testset "fields" begin
-    h = LatticePresets.honeycomb() |> hamiltonian(hopping(1) + onsite(0)) |> unitcell(2, onsite! = (o, r) -> 1)
+@testset "modifiers" begin
+    h = LatticePresets.honeycomb() |> hamiltonian(hopping(1) + onsite(0)) |> unitcell(2, modifiers = onsite!((o, r) -> 1))
     @test diag(bloch(h)) == ComplexF64[1, 1, 1, 1, 1, 1, 1, 1]
 end
-
-end # module

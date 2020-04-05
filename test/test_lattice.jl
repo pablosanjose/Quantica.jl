@@ -1,6 +1,5 @@
-module LatticeTest
-
 using Quantica: nsites, Sublat, Bravais, Lattice, Superlattice
+using Random
 
 @testset "bravais" begin
     @test bravais() isa Bravais{0,0,Float64,0}
@@ -77,5 +76,3 @@ end
     @test supercell(LatticePresets.bcc(), (2,1,0), region = RegionPresets.circle(10)) isa Superlattice{3,3}
     @test supercell(LatticePresets.cubic(), (2,1,0), region = RegionPresets.sphere(10)) isa Superlattice{3,3}
 end
-
-end # module
