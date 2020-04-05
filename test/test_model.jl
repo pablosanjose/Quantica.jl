@@ -2,7 +2,7 @@ using Quantica: TightbindingModel, OnsiteTerm, HoppingTerm, padtotype, Selector
 
 @testset "onsite" begin
     r = SVector(0.0, 0.0)
-    os = (1, 1.0, @SMatrix[1 0; 0 1], I, r -> 1, r -> I, r -> SMatrix{3,3}(I))
+    os = (I, 2I, 2.0I,@SMatrix[1 0; 0 1], r -> 2.0I, r -> I, r -> SMatrix{3,3}(3I))
     ss = (missing, :A, (:A,), (:A, :B))
     cs = (1, 1.0, 1.0f0)
     ts = (Float32, Float64, SMatrix{3,3}, SMatrix{3,2,Float64}, SMatrix{1,4,Float32})
@@ -19,7 +19,7 @@ end
 
 @testset "hopping" begin
     r = SVector(0.0, 0.0)
-    hs = (1, 1.0, @SMatrix[1 0; 0 1], I, (r, dr) -> 1, (r, dr) -> I, (r, dr) -> SMatrix{3,3}(I))
+    hs = (I, 2I, 2.0I, @SMatrix[1 0; 0 1], (r, dr) -> 2.0I, (r, dr) -> I, (r, dr) -> SMatrix{3,3}(3I))
     ss = (missing, :A, (:A,), (:A, :B), ((:A,:B), :C), ((:A,:B), (:C,)), ((:A,:B), (:C, :D)))
     cs = (1, 1.0, 1.0f0)
     ts = (Float32, Float64, SMatrix{3,3}, SMatrix{3,2,Float64}, SMatrix{1,4,Float32})
