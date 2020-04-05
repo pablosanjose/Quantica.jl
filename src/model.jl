@@ -206,14 +206,15 @@ Create an `TightbindingModelTerm` that applies an onsite energy `o` to a `Lattic
 creating a `Hamiltonian` with `hamiltonian`. A subset of sites can be specified with the
 `kw...`, see `onsiteselector` for details.
 
-The onsite energy `o` can be a number, a matrix (preferably `SMatrix`) or a function of the
-form `r -> ...` for a position-dependent onsite energy. If `forcehermitian` is true, the
-model will produce an hermitian Hamiltonian.
+The onsite energy `o` can be a number, a matrix (preferably `SMatrix`), a `UniformScaling`
+(e.g. `3*I`) or a function of the form `r -> ...` for a position-dependent onsite energy. If
+`forcehermitian` is true, the model will produce an hermitian Hamiltonian.
 
 The dimension of `o::AbstractMatrix` must match the orbital dimension of applicable
-sublattices (see also `orbitals` option for `hamiltonian`). If `o::Number` it will be
-treated as `o * I` (proportional to identity matrix) when applied to multiorbital
-sublattices.
+sublattices (see also `orbitals` option for `hamiltonian`). If `o::UniformScaling` it will
+be converted to an identity matrix of the appropriate size when applied to
+multiorbital sublattices. Similarly, if `o::SMatrix` it will be truncated or padded to the
+appropriate size.
 
 `TightbindingModelTerm`s created with `onsite` or `hopping` can be added or substracted
 together to build more complicated `TightbindingModel`s.
@@ -260,16 +261,18 @@ Create an `TightbindingModelTerm` that applies a hopping `t` to a `Lattice` when
 creating a `Hamiltonian` with `hamiltonian`. A subset of hoppings can be specified with the
 `kw...`, see `hoppingselector` for details. Note that a default `range = 1` is assumed.
 
-The hopping amplitude `t` can be a number, a matrix (preferably `SMatrix`) or a function
-of the form `(r, dr) -> ...` for a position-dependent hopping (`r` is the bond center,
-and `dr` the bond vector). If `sublats` is specified as a sublattice name pair, or tuple
-thereof, `hopping` is only applied between sublattices with said names. If `forcehermitian`
-is true, the model will produce an hermitian Hamiltonian.
+The hopping amplitude `t` can be a number, a matrix (preferably `SMatrix`), a
+`UniformScaling` (e.g. `3*I`) or a function of the form `(r, dr) -> ...` for a
+position-dependent hopping (`r` is the bond center, and `dr` the bond vector). If `sublats`
+is specified as a sublattice name pair, or tuple thereof, `hopping` is only applied between
+sublattices with said names. If `forcehermitian` is true, the model will produce an
+hermitian Hamiltonian.
 
 The dimension of `t::AbstractMatrix` must match the orbital dimension of applicable
-sublattices (see also `orbitals` option for `hamiltonian`). If `t::Number` it will be
-treated as `t * I` (proportional to identity matrix) when applied to multiorbital
-sublattices.
+sublattices (see also `orbitals` option for `hamiltonian`). If `t::UniformScaling` it will
+be converted to a (possibly rectangular) identity matrix of the appropriate size when
+applied to multiorbital sublattices. Similarly, if `t::SMatrix` it will be truncated or
+padded to the appropriate size.
 
 `TightbindingModelTerm`s created with `onsite` or `hopping` can be added or substracted
 together to build more complicated `TightbindingModel`s.
@@ -376,31 +379,6 @@ _sublatranges(rs::Tuple, i::Int, is...) = _sublatranges((rs..., last(last(rs)) +
 _sublatranges(rs::Tuple) = rs
 
 findblock(s, sr) = findfirst(r -> s in r, sr)
-
-#######################################################################
-# checkmodelorbs - check for inconsistent orbital dimensions
-#######################################################################
-checkmodelorbs(model::TightbindingModel, orbs, lat) =
-    foreach(term -> _checkmodelorbs(term, orbs, lat), model.terms)
-
-function _checkmodelorbs(term::HoppingTerm, orbs, lat)
-    for (s1, s2) in sublats(term, lat)
-        _checkmodelorbs(term(first(sites(lat, s1)), first(sites(lat, s2))), length(orbs[s1]), length(orbs[s2]))
-    end
-    return nothing
-end
-
-function _checkmodelorbs(term::OnsiteTerm, orbs, lat)
-    for s in sublats(term, lat)
-        _checkmodelorbs(term(first(sites(lat, s)), first(sites(lat, s))), length(orbs[s]))
-    end
-    return nothing
-end
-
-_checkmodelorbs(s::SMatrix, m, n = m) =
-    size(s) == (m, n) || @warn("Possible dimension mismatch between model and Hamiltonian. Did you correctly specify the `orbitals` in hamiltonian?")
-
-_checkmodelorbs(s::Number, m, n = m) = _checkmodelorbs(SMatrix{1,1}(s), m, n)
 
 #######################################################################
 # onsite! and hopping!

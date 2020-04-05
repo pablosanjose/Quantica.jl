@@ -49,13 +49,16 @@ padright(t::NTuple{N´,<:Any}, ::Val{N}) where {N´,N} = ntuple(i -> i > N´ ? 0
 
 filltuple(x, ::Val{L}) where {L} = ntuple(_ -> x, Val(L))
 
+# Pad element type to a larger type `st` that encompases all sublattices
 @inline padtotype(s::SMatrix{E,L}, st::Type{S}) where {E,L,E2,L2,S<:SMatrix{E2,L2}} =
     S(SMatrix{E2,E}(I) * s * SMatrix{L,L2}(I))
-@inline padtotype(s::UniformScaling, st::Type{S}) where {S<:SMatrix} = S(s)
-@inline padtotype(s::Number, ::Type{S}) where {S<:SMatrix} = S(s*I)
-@inline padtotype(s::Number, ::Type{T}) where {T<:Number} = T(s)
+@inline padtotype(s::SMatrix{E,L}, st::Type{S}) where {E,L,S<:SMatrix{E,L}} = S(s)
 @inline padtotype(s::AbstractArray, ::Type{T}) where {T<:Number} = T(first(s))
+@inline padtotype(s::UniformScaling, st::Type{S}) where {S<:SMatrix} = S(s)
 @inline padtotype(s::UniformScaling, ::Type{T}) where {T<:Number} = T(s.λ)
+@inline padtotype(s::Number, ::Type{T}) where {T<:Number} = T(s)
+@inline padtotype(s, st::Type) =
+    throw(DimensionMismatch("Dimension mismatch between model ($(typeof(s))) and Hamiltonian ($st). Did you correctly specify the `orbitals` in hamiltonian? Consider also using `I` to cover non-uniform orbital dimensions"))
 
 ## Work around BUG: -SVector{0,Int}() isa SVector{0,Union{}}
 negative(s::SVector{L,<:Number}) where {L} = -s

@@ -511,7 +511,6 @@ function hamiltonian_sparse(Mtype, lat, orbs, model)
 end
 
 function hamiltonian_sparse!(builder::IJVBuilder{L,M}, lat::AbstractLattice{E,L}, orbs, model) where {E,L,M}
-    checkmodelorbs(model, orbs, lat)
     applyterms!(builder, terms(model)...)
     n = nsites(lat)
     HT = HamiltonianHarmonic{L,M,SparseMatrixCSC{M,Int}}
