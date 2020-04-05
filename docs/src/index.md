@@ -14,7 +14,9 @@ A Julia package for building generic tight-binding models and computing various 
 
 ```@contents
 Pages = [
-    "man/introduction.md",
+    "man/tutorial.md",
+    "man/examples.md",
+    "man/reference.md",
 ]
 Depth = 1
 ```
