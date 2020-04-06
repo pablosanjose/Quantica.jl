@@ -29,9 +29,7 @@ Depth = 1
 
 - Efficiently compute the Bloch Hamiltonian matrix at arbitrary wave vector
 
-- Compute the band structure or spectrum of a Hamiltonian.
-
-- Use advanced meshing and co-diagonalization techniques to resolve degeneracies and extract subbands
+- Compute the band structure or spectrum of a Hamiltonian, using advanced meshing and co-diagonalization techniques to resolve degeneracies and extract subbands
 
 - Use Order-N Kernel polynomial methods to compute spectral and transport properties efficiently
 
