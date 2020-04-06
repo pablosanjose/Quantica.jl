@@ -1,4 +1,7 @@
 # Reference
+```@meta
+CurrentModule = Quantica
+```
 
 ```@index
 ```

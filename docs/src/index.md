@@ -1,7 +1,3 @@
-```@meta
-CurrentModule = Quantica
-```
-
 # Quantica.jl
 
 A Julia package for building generic tight-binding models and computing various spectral and transport properties.
