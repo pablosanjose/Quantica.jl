@@ -49,13 +49,14 @@ padright(t::NTuple{N´,<:Any}, ::Val{N}) where {N´,N} = ntuple(i -> i > N´ ? 0
 
 filltuple(x, ::Val{L}) where {L} = ntuple(_ -> x, Val(L))
 
-@inline padtotype(s::SMatrix{E,L}, st::Type{S}) where {E,L,E2,L2,S<:SMatrix{E2,L2}} =
+# Pad element type to a "larger" type
+@inline padtotype(s::SMatrix{E,L}, ::Type{S}) where {E,L,E2,L2,S<:SMatrix{E2,L2}} =
     S(SMatrix{E2,E}(I) * s * SMatrix{L,L2}(I))
-@inline padtotype(s::UniformScaling, st::Type{S}) where {S<:SMatrix} = S(s)
-@inline padtotype(s::Number, ::Type{S}) where {S<:SMatrix} = S(s*I)
-@inline padtotype(s::Number, ::Type{T}) where {T<:Number} = T(s)
-@inline padtotype(s::AbstractArray, ::Type{T}) where {T<:Number} = T(first(s))
-@inline padtotype(s::UniformScaling, ::Type{T}) where {T<:Number} = T(s.λ)
+@inline padtotype(x::Number, ::Type{S}) where {E,L,S<:SMatrix{E,L}} =
+    S(x * (SMatrix{E,1}(I) * SMatrix{1,L}(I)))
+@inline padtotype(x::Number, ::Type{T}) where {T<:Number} = T(x)
+@inline padtotype(u::UniformScaling, ::Type{T}) where {T<:Number} = T(u.λ)
+@inline padtotype(u::UniformScaling, ::Type{S}) where {S<:SMatrix} = S(u)
 
 ## Work around BUG: -SVector{0,Int}() isa SVector{0,Union{}}
 negative(s::SVector{L,<:Number}) where {L} = -s
