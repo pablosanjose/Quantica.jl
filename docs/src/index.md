@@ -39,20 +39,7 @@ Depth = 1
 
 - Use Order-N Kernel polynomial methods to compute spectral and transport properties efficiently
 
-## Planned functionality
-
-- Interpolated Green's functions
-- Landauer and Kubo formalisms
-- Self-consistent mean field calculations
-
-```@index
-```
-
-```@autodocs
-Modules = [Quantica]
-```
-
 !!! tip "Funding"
 
-    This work has been partly funded by the Spanish Ministry of Economy and Competitiveness under Grant Nos. FIS2015-65706-P, PCI2018-093026, and the CSIC Intramural Project 201760I086. 
-   
+    This work has been partly funded by the Spanish Ministry of Economy and Competitiveness under Grant Nos. FIS2015-65706-P, PCI2018-093026, and the CSIC Intramural Project 201760I086.
+
