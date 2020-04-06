@@ -471,6 +471,8 @@ function IJVBuilder(lat::AbstractLattice{E,L}, orbs, hs::Hamiltonian...) where {
     return builder
 end
 
+Base.eltype(b::IJVBuilder{L,M}) where {L,M} = M
+
 function Base.getindex(b::IJVBuilder{L,M}, dn::SVector{L2,Int}) where {L,L2,M}
     L == L2 || throw(error("Tried to apply an $L2-dimensional model to an $L-dimensional lattice"))
     for e in b.ijvs
@@ -524,7 +526,7 @@ applyterms!(builder, terms...) = foreach(term -> applyterm!(builder, term), term
 applyterm!(builder::IJVBuilder, term::Union{OnsiteTerm, HoppingTerm}) =
     applyterm!(builder, term, sublats(term, builder.lat))
 
-function applyterm!(builder::IJVBuilder{L,M}, term::OnsiteTerm, termsublats) where {L,M}
+function applyterm!(builder::IJVBuilder{L}, term::OnsiteTerm, termsublats) where {L}
     selector = term.selector
     lat = builder.lat
     for s in termsublats
@@ -535,15 +537,14 @@ function applyterm!(builder::IJVBuilder{L,M}, term::OnsiteTerm, termsublats) whe
         for i in is
             isinregion(i, dn0, selector.region, lat) || continue
             r = lat.unitcell.sites[i]
-            vs = orbsized(term(r,r), builder.orbs[s])
-            v = padtotype(vs, M)
+            v = toeltype(term(r, r), eltype(builder), builder.orbs[s], builder.orbs[s])
             term.forcehermitian ? push!(ijv, (i, i, 0.5 * (v + v'))) : push!(ijv, (i, i, v))
         end
     end
     return nothing
 end
 
-function applyterm!(builder::IJVBuilder{L,M}, term::HoppingTerm, termsublats) where {L,M}
+function applyterm!(builder::IJVBuilder{L}, term::HoppingTerm, termsublats) where {L}
     selector = term.selector
     checkinfinite(selector)
     lat = builder.lat
@@ -565,8 +566,7 @@ function applyterm!(builder::IJVBuilder{L,M}, term::HoppingTerm, termsublats) wh
                     foundlink = true
                     rtarget = lat.unitcell.sites[i]
                     r, dr = _rdr(rsource, rtarget)
-                    vs = orbsized(term(r, dr), builder.orbs[s1], builder.orbs[s2])
-                    v = padtotype(vs, M)
+                    v = toeltype(term(r, dr), eltype(builder), builder.orbs[s1], builder.orbs[s2])
                     if addadjoint
                         v *= redundancyfactor(dn, (s1, s2), selector)
                         push!(ijv, (i, j, v))
@@ -582,8 +582,14 @@ function applyterm!(builder::IJVBuilder{L,M}, term::HoppingTerm, termsublats) wh
     return nothing
 end
 
-orbsized(m, orbs) = orbsized(m, orbs, orbs)
-orbsized(m, o1::NTuple{D1}, o2::NTuple{D2}) where {D1,D2} = padtotype(m, SMatrix{D1,D2})
+toeltype(t::Number, ::Type{T}, t1::NTuple{1}, t2::NTuple{1}) where {T<:Number} = T(t)
+toeltype(t::SMatrix{N1,N2}, ::Type{S}, t1::NTuple{N1}, t2::NTuple{N2}) where {N1,N2,S<:SMatrix} =
+    padtotype(t, S)
+toeltype(u::UniformScaling, ::Type{T}, t1::NTuple{1}, t2::NTuple{1}) where {T<:Number} = T(u.λ)
+toeltype(u::UniformScaling, ::Type{S}, t1::NTuple{N1}, t2::NTuple{N2}) where {N1,N2,S<:SMatrix} =
+    padtotype(SMatrix{N1,N2}(u), S)
+toeltype(t, s, t1, t2) =
+    throw(DimensionMismatch("Dimension mismatch between model and Hamiltonian. Did you correctly specify the `orbitals` in hamiltonian? Consider also using `I` to cover non-uniform orbital dimensions"))
 
 dniter(dns::Missing, ::Val{L}) where {L} = BoxIterator(zero(SVector{L,Int}))
 dniter(dns, ::Val) = dns

@@ -25,9 +25,3 @@ Base.promote_rule(::Type{Sublat{E1,T1}}, ::Type{Sublat{E2,T2}}) where {E1,E2,T1,
 
 Bravais{E,L,T}(b::Bravais) where {E,L,T} =
     Bravais(padtotype(b.matrix, SMatrix{E,L,T}), padright(b.semibounded, Val(L)))
-
-# Promotion
-
-# promote_model(model::Model, sys::System{E,L,T,Tv}, systems...) where {E,L,T,Tv} = promote_model(Tv, model, systems...)
-# promote_model(::Type{Tv}, model::Model, sys::System{E,L,T,Tv2}, systems...) where {Tv,E,L,T,Tv2} = promote_model(promote_type(Tv, Tv2), model, systems...)
-# promote_model(::Type{Tv}, model::Model) where {Tv} = convert(Model{Tv}, model)
