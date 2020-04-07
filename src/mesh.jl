@@ -113,11 +113,13 @@ switchlast(s::NTuple{N,T}) where {N,T} = ntuple(i -> i < N - 1 ? s[i] : s[2N - i
 # Special meshes
 ######################################################################
 """
+    marchingmesh(; npoints, axes = 1.0 * I, shift = missing)
     marchingmesh(npoints::Integer...; axes = 1.0 * I, shift = missing)
 
 Creates a L-dimensional marching-tetrahedra `Mesh`. The mesh is confined to the box defined
 by the rows of `axes`, shifted by `shift` (an `NTuple` or `Number`) if not `missing`, and
-contains `npoints[i]` along each axis `i`.
+contains `npoints[i]` along each axis `i`. In zero-argument form `npoints` can be an `Int` 
+(for `L=1`) or a `NTuple{L,Int}`.
 
     marchingmesh(ranges::AbstractRange...; axes = 1.0 * I, shift = missing)
 
@@ -127,11 +129,6 @@ as e.g. `-1.0:0.1:1.0`.
 Note that the size of `axes` should match the number `L` of elements in `npoints` or
 `ranges`. The `eltype` of points is given by that of `ranges` or `axes`.
 
-    marchingmesh(h::Hamiltonian{<:Lattice}; npoints = 13, shift = missing)
-
-Equivalent to `marchingmesh(ntuple(_ -> range(-π, π; length = npoints), Val(L))...)` where
-`L` is the dimension of the Hamiltonian's lattice.
-
 # External links
 
 - Marching tetrahedra (https://en.wikipedia.org/wiki/Marching_tetrahedra) in Wikipedia
@@ -139,19 +136,12 @@ Equivalent to `marchingmesh(ntuple(_ -> range(-π, π; length = npoints), Val(L)
 marchingmesh(ranges::Vararg{AbstractRange,L}; axes = 1.0 * I, shift = missing) where {L} =
     _marchingmesh(shiftranges(ranges, shift), SMatrix{L,L}(axes))
 
+marchingmesh(; npoints, kw...) = marchingmesh(npoints...; kw...)
+
 function marchingmesh(npoints::Vararg{Integer,L}; axes = 1.0 * I, shift = missing) where {L}
     ranges = meshranges(npoints, Val(L))
     ranges´ = shiftranges(ranges, shift)
     return _marchingmesh(ranges´, SMatrix{L,L}(axes))
-end
-
-marchingmesh(; kw...) = throw(ArgumentError("Need a finite number of points"))
-
-function marchingmesh(h::Hamiltonian{<:Lattice,L}; npoints = 13, shift = missing) where {L}
-    checkfinitedim(h)
-    ranges = meshranges(npoints, Val(L))
-    ranges´ = shiftranges(ranges, shift)
-    return _marchingmesh(ranges´, SMatrix{L,L}(I))
 end
 
 meshranges(n::Int, ::Val{L}) where {L} = meshranges(filltuple(n, Val(L)), Val(L))

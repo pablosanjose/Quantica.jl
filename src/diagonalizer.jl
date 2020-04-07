@@ -10,12 +10,9 @@ struct Diagonalizer{S<:AbstractDiagonalizeMethod,C}
     minprojection::Float64
 end
 
-diagonalizer(h::Hamiltonian, mesh::Mesh, method, minprojection) =
-    Diagonalizer(method, codiagonalizer(h, mesh), minprojection)
-
 ## Diagonalize methods ##
 
-function defaultmethod(h::Hamiltonian)
+function defaultmethod(h::Union{Hamiltonian,AbstractMatrix})
     if eltype(h) <: Number
         # method = issparse(h) ? ArpackPackage() : LinearAlgebraPackage()
         method = LinearAlgebraPackage()
@@ -138,8 +135,8 @@ function resolve_degeneracies!(ϵ, ψ, ϕs, matrix, codiag)
     ranges, ranges´ = codiag.rangesA, codiag.rangesB
     resize!(ranges, 0)
     pushapproxruns!(ranges, ϵ, 0, codiag.degtol) # 0 is an offset
-    for n in 1:num_codiag_matrices(codiag)
-        v = codiag_matrix!(matrix, n, codiag, ϕs)
+    for n in codiag.matrixindices
+        v = codiag.cmatrixf(ϕs, n)
         resize!(ranges´, 0)
         for (i, r) in enumerate(ranges)
             subspace = view(ψ, :, r)
@@ -170,45 +167,62 @@ end
 #######################################################################
 # Codiagonalizer
 #######################################################################
-codiagonalizer(h, mesh) = VelocityCodiagonalizer(h, meshdelta(mesh))
 
-meshdelta(mesh::Mesh{<:Any,T}) where {T} = T(0.1) * first(minmax_edge_length(mesh))
-
-## VelocityCodiagonalizer
+## Codiagonalizer
 ## Uses velocity operators along different directions. If not enough, use finite differences
-struct VelocityCodiagonalizer{S,T,H<:Hamiltonian}
-    h::H
+struct Codiagonalizer{S,T,F<:Function}
+    cmatrixf::F
+    matrixindices::UnitRange{Int}
     directions::Vector{S}
     degtol::T
-    delta::T                        # Finite differences
     rangesA::Vector{UnitRange{Int}} # Prealloc buffer for degeneray ranges
     rangesB::Vector{UnitRange{Int}} # Prealloc buffer for degeneray ranges
     perm::Vector{Int}               # Prealloc for sortperm!
 end
 
-function VelocityCodiagonalizer(h::Hamiltonian{<:Any,L}, delta;
-                                direlements = -0:1, onlypositive = true, kw...) where {L}
+function codiagonalizer(h::Hamiltonian, matrix, mesh::Mesh{L}; kw...) where {L}
+    directions = velocitydirections(Val(L); kw...)
+    ndirs = length(directions)
+    matrixindices = 1:(2 * ndirs + 1)
+    degtol = sqrt(eps(realtype(h)))
+    delta = meshdelta(mesh)
+    delta = iszero(delta) ? degtol : delta
+    cmatrixf(ϕs, n) =
+        if n <= ndirs
+            bloch!(matrix, h, ϕs, dn -> im * directions[n]' * dn)
+        elseif n <= 2ndirs # resort to finite differences
+            bloch!(matrix, h, ϕs + delta * directions[n - ndirs])
+        else # use a fixed random matrix
+            randomfill!(matrix)
+        end
+    return Codiagonalizer(cmatrixf, matrixindices, directions, degtol, UnitRange{Int}[], UnitRange{Int}[], Int[])
+end
+
+function codiagonalizer(matrixf::Function, matrix::AbstractMatrix{T}, mesh::Mesh{L}; kw...) where {L,T}
+    directions = velocitydirections(Val(L); kw...)
+    ndirs = length(directions)
+    matrixindices = 1:(ndirs + 1)
+    degtol = sqrt(eps(real(eltype(T))))
+    delta = meshdelta(mesh)
+    delta = iszero(delta) ? degtol : delta
+    cmatrixf(ϕs, n) =
+        if n <= ndirs # finite differences
+            matrixf((ϕs + delta * directions[n - ndirs])...)
+        else # use a fixed random matrix
+            randomfill!(matrix)
+        end
+    return Codiagonalizer(cmatrixf, matrixindices, directions, degtol, UnitRange{Int}[], UnitRange{Int}[], Int[])
+end
+
+function velocitydirections(::Val{L}; direlements = 0:1, onlypositive = true) where {L}
     directions = vec(SVector{L,Int}.(Iterators.product(ntuple(_ -> direlements, Val(L))...)))
     onlypositive && filter!(ispositive, directions)
     unique!(normalize, directions)
     sort!(directions, by = norm, rev = false)
-    degtol = sqrt(eps(realtype(h)))
-    delta´ = delta === missing ? degtol : delta
-    VelocityCodiagonalizer(h, directions, degtol, delta´, UnitRange{Int}[], UnitRange{Int}[], Int[])
+    return directions
 end
 
-num_codiag_matrices(codiag) = 2 * length(codiag.directions) + 1
-function codiag_matrix!(matrix, n, codiag, ϕs)
-    ndirs = length(codiag.directions)
-    if n <= ndirs
-        bloch!(matrix, codiag.h, ϕs, dn -> im * codiag.directions[n]' * dn)
-    elseif n <= 2ndirs # resort to finite differences
-        bloch!(matrix, codiag.h, ϕs + codiag.delta * codiag.directions[n - ndirs])
-    else # use a fixed random matrix
-        randomfill!(matrix)
-    end
-    return matrix
-end
+meshdelta(mesh::Mesh{<:Any,T}) where {T} = T(0.1) * first(minmax_edge_length(mesh))
 
 function randomfill!(matrix::SparseMatrixCSC, seed = 1234)
     Random.seed!(seed)
