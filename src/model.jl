@@ -145,6 +145,15 @@ isinrange(inds, ::Missing, lat) = true
 isinrange((row, col)::Tuple{Int,Int}, range::Number, lat) =
     norm(sites(lat)[col] - sites(lat)[row]) <= range
 
+# injects non-missing fields of s´ into s
+updateselector!(s::OnsiteSelector, s´::OnsiteSelector) =
+    OnsiteSelector(updateselector!.((s.region, s.sublats),(s´.region, s´.sublats))...)
+updateselector!(s::HoppingSelector, s´::HoppingSelector) =
+HoppingSelector(updateselector!.((s.region, s.sublats, s.dns, s.range),
+                            (s´.region, s´.sublats, s´.dns, s´.range))...)
+updateselector!(o, o´::Missing) = o
+updateselector!(o, o´) = o´
+
 #######################################################################
 # TightbindingModelTerm
 #######################################################################
@@ -159,12 +168,18 @@ struct OnsiteTerm{F,S<:OnsiteSelector,C} <: AbstractOnsiteTerm
     forcehermitian::Bool
 end
 
+OnsiteTerm(t::OnsiteTerm, os::OnsiteSelector) =
+    OnsiteTerm(t.o, os, t.coefficient, t.forcehermitian)
+
 struct HoppingTerm{F,S<:HoppingSelector,C} <: AbstractHoppingTerm
     t::F
     selector::S
     coefficient::C
     forcehermitian::Bool
 end
+
+HoppingTerm(t::HoppingTerm, os::HoppingSelector) =
+    HoppingTerm(t.t, os, t.coefficient, t.forcehermitian)
 
 (o::OnsiteTerm{<:Function})(r,dr) = o.coefficient * o.o(r)
 (o::OnsiteTerm)(r,dr) = o.coefficient * o.o
@@ -379,6 +394,39 @@ _sublatranges(rs::Tuple, i::Int, is...) = _sublatranges((rs..., last(last(rs)) +
 _sublatranges(rs::Tuple) = rs
 
 findblock(s, sr) = findfirst(r -> s in r, sr)
+
+#######################################################################
+# onsiteselector! and hoppingselector!
+#######################################################################
+"""
+    onsiteselector!(model::TightbindingModel; region = missing, sublats = missing)
+
+Generates a new model identical to `model` but with keyword arguments applied to all onsite
+terms. See `onsite` for a description of the different keywords.
+
+# See also:
+    `hoppingselector!`, `onsite`, `hopping`
+"""
+onsiteselector!(m::TightbindingModel; kw...) =
+    TightbindingModel(onsiteselector!.(m.terms, Ref(onsiteselector(; kw...))))
+
+onsiteselector!(t::HoppingTerm, os) = t
+onsiteselector!(t::OnsiteTerm, os) = OnsiteTerm(t, updateselector!(t.selector, os))
+
+"""
+    hoppingselector!(model::TightbindingModel; region = missing, sublats = missing, dn = missing, range = missing)
+
+Generates a new model identical to `model` but with keyword arguments applied to all hopping
+terms. See `hopping` for a description of the possible keywords.
+
+# See also:
+    `onsiteselector!`, `hopping`, `onsite`
+"""
+hoppingselector!(m::TightbindingModel; kw...) =
+    TightbindingModel(hoppingselector!.(m.terms, Ref(hoppingselector(; kw...))))
+
+hoppingselector!(t::OnsiteTerm, os) = t
+hoppingselector!(t::HoppingTerm, os) = HoppingTerm(t, updateselector!(t.selector, os))
 
 #######################################################################
 # onsite! and hopping!
