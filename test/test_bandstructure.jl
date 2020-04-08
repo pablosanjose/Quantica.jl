@@ -15,16 +15,16 @@
 end
 
 @testset "functional bandstructures" begin
-    const hc = LatticePresets.honeycomb() |> hamiltonian(hopping(-1, sublats = :A => :B))
-    const matrix = similarmatrix(hc, LinearAlgebraPackage())
+    hc = LatticePresets.honeycomb() |> hamiltonian(hopping(-1, sublats = :A => :B))
+    matrix = similarmatrix(hc, LinearAlgebraPackage())
     hf(x) = bloch!(matrix, hc, (x, -x))
     b = bandstructure(hf, npoints = 13)
     @test length(bands(b)) == 2
 
     hc2 = LatticePresets.honeycomb() |> hamiltonian(hopping(-1)) 
-    const hp = parametric(hc2, hopping!((t; s) -> s*t))
-    const matrix = similarmatrix(hc2, LinearAlgebraPackage())
-    hf(s, x) = bloch!(matrix, hp(s = s), (x, x))
-    b = bandstructure(hf, npoints = (13,13))
+    hp2 = parametric(hc2, hopping!((t; s) -> s*t))
+    matrix2 = similarmatrix(hc2, LinearAlgebraPackage())
+    hf2(s, x) = bloch!(matrix2, hp2(s = s), (x, x))
+    b = bandstructure(hf2, npoints = (13,13))
     @test length(bands(b)) == 2
 end
