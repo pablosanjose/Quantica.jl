@@ -150,7 +150,7 @@ updateselector!(s::OnsiteSelector, s´::OnsiteSelector) =
     OnsiteSelector(updateselector!.((s.region, s.sublats),(s´.region, s´.sublats))...)
 updateselector!(s::HoppingSelector, s´::HoppingSelector) =
 HoppingSelector(updateselector!.((s.region, s.sublats, s.dns, s.range),
-                            (s´.region, s´.sublats, s´.dns, s´.range))...)
+                                 (s´.region, s´.sublats, s´.dns, s´.range))...)
 updateselector!(o, o´::Missing) = o
 updateselector!(o, o´) = o´
 
