@@ -146,8 +146,9 @@ homogeneous `NTuple{L,Int}` (same npoints for all Bloch axes).
     bandstructure(matrixf::Function; npoints, shift = missing, kw...)
 
 Same as above, but where `npoints` must be specified (the dimension of the mesh cannot be
-inferred from `matrixf`). If `matrixf(ϕs...)` has `L` arguments (i.e. `ϕs` are vertices of a
-`Mesh{L}`), then use `npoints::NTuple{L,Int}` (or optionally `npoints::Int` for `L==1`).
+inferred from `matrixf`). If `npoints` is an `Int`, then `matrixf` must be a single-argument
+function. If `matrixf(ϕs...)` has `L` arguments (i.e. `ϕs` are vertices of a `Mesh{L}`),
+then use `npoints::NTuple{L,Int}`.
 
 # Example
 ```

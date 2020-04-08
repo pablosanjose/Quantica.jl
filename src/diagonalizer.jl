@@ -207,7 +207,7 @@ function codiagonalizer(matrixf::Function, matrix::AbstractMatrix{T}, mesh::Mesh
     delta = iszero(delta) ? degtol : delta
     cmatrixf(ϕs, n) =
         if n <= ndirs # finite differences
-            matrixf((ϕs + delta * directions[n - ndirs])...)
+            matrixf((ϕs + delta * directions[n])...)
         else # use a fixed random matrix
             randomfill!(matrix)
         end
