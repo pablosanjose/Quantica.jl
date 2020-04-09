@@ -117,10 +117,19 @@ states(b::Band) = reshape(b.states, b.dimstates)
 Compute the bandstructure of Bloch Hamiltonian `bloch(h, ϕs)`, with `ϕs` evaluated on the
 vertices of `mesh`. It is assumed that `h` is hermitian.
 
+    bandstructure(h::Hamiltonian; resolution = 13, kw...)
+
+Same as above with a uniform `mesh` of marching tetrahedra (generalized to the lattice
+dimensions of the Hamiltonian), with points `range(-π, π, length = resolution)` along each
+Bravais axis. Note that `resolution` denotes the number of points along each Bloch axis,
+including endpoints (can be a tuple for axis-dependent points).
+
     bandstructure(matrixf::Function, mesh::Mesh; kw...)
 
 Compute the bandstructure of the Hamiltonian matrix `m = matrixf(ϕs...)`, with `ϕs`
-evaluated on the vertices of `mesh`. It is assumed that `m` is hermitian.
+evaluated on the vertices of `mesh`. It is assumed that `m` is hermitian for all `ϕs`.
+
+# Options
 
 The option `minprojection` determines the minimum projection between eigenstates to connect
 them into a common subband. The option `method` is chosen automatically if unspecified, and
@@ -134,13 +143,6 @@ can be one of the following
 Options passed to the `method` will be forwarded to the diagonalization function. For example,
 `method = ArpackPackage(nev = 8, sigma = 1im)` will use `Arpack.eigs(matrix; nev = 8,
 sigma = 1im)` to compute the bandstructure.
-
-    bandstructure(h::Hamiltonian; resolution = 13, kw...)
-
-Same as above with a uniform `mesh` of marching tetrahedra (generalized to the lattice
-dimensions of the Hamiltonian), with points `range(-π, π, length = resolution)` along each
-Bravais axis. Note that `resolution` denotes the number of points along each Bloch axis,
-including endpoints (can be a tuple for axis-dependent points).
 
 # Example
 ```
@@ -164,8 +166,7 @@ function bandstructure(h::Hamiltonian{<:Any,L,M}; resolution = 13, kw...) where 
 end
 
 function bandstructure(h::Hamiltonian{<:Any,L}, mesh::Mesh{L}; method = defaultmethod(h), minprojection = 0.5) where {L}
-    ishermitian(h) || throw(ArgumentError("Hamiltonian must be hermitian"))
-    d = diagonalizer(h, mesh, method, minprojection)
+    # ishermitian(h) || throw(ArgumentError("Hamiltonian must be hermitian"))
     matrix = similarmatrix(h, method)
     d = Diagonalizer(method, codiagonalizer(h, matrix, mesh), minprojection)
     matrixf(φs...) = bloch!(matrix, h, φs)
