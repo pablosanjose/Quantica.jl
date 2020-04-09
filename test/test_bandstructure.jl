@@ -1,16 +1,16 @@
 @testset "basic bandstructures" begin
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(-1, sublats = :A => :B))
-    b = bandstructure(h, npoints = 13)
+    b = bandstructure(h, resolution = 13)
     @test length(bands(b)) == 1
 
     h = LatticePresets.honeycomb() |>
         hamiltonian(onsite(0.5, sublats = :A) + onsite(-0.5, sublats = :B) +
                     hopping(-1, sublats = :A => :B))
-    b = bandstructure(h, npoints = 13)
+    b = bandstructure(h, resolution = 13)
     @test length(bands(b)) == 2
 
     h = LatticePresets.square() |> hamiltonian(hopping(1)) |> unitcell(2)
-    b = bandstructure(h, npoints = 13)
+    b = bandstructure(h, resolution = 13)
     @test length(bands(b)) == 4
 end
 
