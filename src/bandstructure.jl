@@ -117,10 +117,10 @@ states(b::Band) = reshape(b.states, b.dimstates)
 Compute the bandstructure of Bloch Hamiltonian `bloch(h, ϕs)`, with `ϕs` evaluated on the
 vertices of `mesh`. It is assumed that `h` is hermitian.
 
-    bandstructure(matrixf::Function, mesh::Mesh; minprojection = 0.5, method = defaultmethod(h))
+    bandstructure(matrixf::Function, mesh::Mesh; kw...)
 
-Compute the bandstructure of the Hamiltonian matrix `matrixf(ϕs...)`, with `ϕs`
-evaluated on the vertices of `mesh`. It is assumed that `h` is hermitian.
+Compute the bandstructure of the Hamiltonian matrix `m = matrixf(ϕs...)`, with `ϕs`
+evaluated on the vertices of `mesh`. It is assumed that `m` is hermitian.
 
 The option `minprojection` determines the minimum projection between eigenstates to connect
 them into a common subband. The option `method` is chosen automatically if unspecified, and
@@ -141,13 +141,6 @@ Same as above with a uniform `mesh` of marching tetrahedra (generalized to the l
 dimensions of the Hamiltonian), with points `range(-π, π, length = resolution)` along each
 Bravais axis. Note that `resolution` denotes the number of points along each Bloch axis,
 including endpoints (can be a tuple for axis-dependent points).
-
-    bandstructure(matrixf::Function; npoints, shift = missing, kw...)
-
-Same as above, but where `npoints` must be specified (the dimension of the mesh cannot be
-inferred from `matrixf`). If `npoints` is an `Int`, then `matrixf` must be a single-argument
-function. If `matrixf(ϕs...)` has `L` arguments (i.e. `ϕs` are vertices of a `Mesh{L}`),
-then use `npoints::NTuple{L,Int}`.
 
 # Example
 ```
@@ -179,20 +172,12 @@ function bandstructure(h::Hamiltonian{<:Any,L}, mesh::Mesh{L}; method = defaultm
     return _bandstructure(matrixf, matrix, mesh, d)
 end
 
-function bandstructure(matrixf::Function; npoints = _need_npoints_error(), shift = missing, kw...)
-    mesh = marchingmesh(; npoints = npoints, shift = shift)
-    return bandstructure(matrixf, mesh; kw...)
-end
-
 function bandstructure(matrixf::Function, mesh::Mesh;
                        matrix = _samplematrix(matrixf, mesh),
                        method = defaultmethod(matrix), minprojection = 0.5)
     d = Diagonalizer(method, codiagonalizer(matrixf, matrix, mesh), minprojection)
     return _bandstructure(matrixf, matrix, mesh, d)
 end
-
-_need_npoints_error() =
-    throw(ArgumentError("Please specify `npoints::NTuple{L,Int}`, where `L` is the number of matrix function arguments"))
 
 _samplematrix(matrixf, mesh) = matrixf(Tuple(first(vertices(mesh)))...)
 
