@@ -81,7 +81,7 @@ function parametric_ptrdata(h::Hamiltonian{LA,L,M,<:AbstractSparseMatrix}, t::El
         for col in 1:size(matrix, 2), ptr in nzrange(matrix, col)
             row = rows[ptr]
             selected  = selector(lat, (row, col), (dn, zero(dn)))
-            selected´ = t.forcehermitian && selector(lat, (col, row), (zero(dn), dn))
+            selected´ = t.selector.forcehermitian && selector(lat, (col, row), (zero(dn), dn))
             selected  && push!(ptrdata, ptrdatum(t, lat,  ptr, (row, col)))
             selected´ && push!(ptrdata, ptrdatum(t, lat, -ptr, (col, row)))
         end
