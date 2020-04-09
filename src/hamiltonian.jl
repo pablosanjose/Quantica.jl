@@ -538,7 +538,8 @@ function applyterm!(builder::IJVBuilder{L}, term::OnsiteTerm, termsublats) where
             isinregion(i, dn0, selector.region, lat) || continue
             r = lat.unitcell.sites[i]
             v = toeltype(term(r, r), eltype(builder), builder.orbs[s], builder.orbs[s])
-            term.forcehermitian ? push!(ijv, (i, i, 0.5 * (v + v'))) : push!(ijv, (i, i, v))
+            term.selector.forcehermitian ?
+                push!(ijv, (i, i, 0.5 * (v + v'))) : push!(ijv, (i, i, v))
         end
     end
     return nothing
@@ -552,7 +553,7 @@ function applyterm!(builder::IJVBuilder{L}, term::HoppingTerm, termsublats) wher
         is, js = siterange(lat, s1), siterange(lat, s2)
         dns = dniter(selector.dns, Val(L))
         for dn in dns
-            addadjoint = term.forcehermitian
+            addadjoint = term.selector.forcehermitian
             foundlink = false
             ijv = builder[dn]
             addadjoint && (ijvc = builder[negative(dn)])
