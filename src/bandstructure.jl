@@ -135,13 +135,12 @@ Options passed to the `method` will be forwarded to the diagonalization function
 `method = ArpackPackage(nev = 8, sigma = 1im)` will use `Arpack.eigs(matrix; nev = 8,
 sigma = 1im)` to compute the bandstructure.
 
-    bandstructure(h::Hamiltonian; npoints = 13, shift = missing, kw...)
+    bandstructure(h::Hamiltonian; resolution = 13, kw...)
 
-Same as above with a  uniform `mesh = marchingmesh(; npoints = npoints, shift = shift)`
-of marching tetrahedra (generalized to the lattice dimensions of the Hamiltonian). Note that
-`npoints` denotes the number of points along each Bloch axis, including endpoints (can be
-a tuple for axis-dependent points). If `npoints` is a single Int, it is first converted to a
-homogeneous `NTuple{L,Int}` (same npoints for all Bloch axes).
+Same as above with a uniform `mesh` of marching tetrahedra (generalized to the lattice
+dimensions of the Hamiltonian), with points `range(-π, π, length = resolution)` along each
+Bravais axis. Note that `resolution` denotes the number of points along each Bloch axis,
+including endpoints (can be a tuple for axis-dependent points).
 
     bandstructure(matrixf::Function; npoints, shift = missing, kw...)
 
@@ -166,19 +165,14 @@ Bandstructure: bands for a 2D hamiltonian
 # See also
     marchingmesh
 """
-function bandstructure(h::Hamiltonian{<:Lattice,L}; npoints = 13, shift = missing, kw...) where {L}
-    checkfinitedim(h)
-    npoints´ = _npoints(npoints, Val(L))
-    mesh = marchingmesh(npoints´...; shift = shift)
+function bandstructure(h::Hamiltonian{<:Any,L,M}; resolution = 13, kw...) where {L,M}
+    mesh = marchingmesh(filltuple(range(-π, π, length = resolution), Val(L))...)
     return bandstructure(h, mesh; kw...)
 end
 
-_npoints(npoints::Int, ::Val{L}) where {L} = filltuple(npoints, Val(L))
-_npoints(npoints::NTuple{L,Int}, ::Val{L}) where {L} = npoints
-
-function bandstructure(h::Hamiltonian{<:Lattice,L,M}, mesh::Mesh{L};
-                       method = defaultmethod(h), minprojection = 0.5) where {L,L´,M}
-    # ishermitian(h) || throw(ArgumentError("Hamiltonian must be hermitian"))
+function bandstructure(h::Hamiltonian{<:Any,L}, mesh::Mesh{L}; method = defaultmethod(h), minprojection = 0.5) where {L}
+    ishermitian(h) || throw(ArgumentError("Hamiltonian must be hermitian"))
+    d = diagonalizer(h, mesh, method, minprojection)
     matrix = similarmatrix(h, method)
     d = Diagonalizer(method, codiagonalizer(h, matrix, mesh), minprojection)
     matrixf(φs...) = bloch!(matrix, h, φs)
