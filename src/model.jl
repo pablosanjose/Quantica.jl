@@ -17,34 +17,9 @@ struct HoppingSelector{M,S,D,T} <: Selector{M,S}
     forcehermitian::Bool
 end
 
-"""
-    onsiteselector(; region = missing, sublats = missing, forcehermitian = true)
-
-Specifies a subset of onsites energies in a given hamiltonian. Only sites at position `r` in
-sublattice with name `s::NameType` will be selected if `region(r) && s in sublats` is true.
-Any missing `region` or `sublat` will not be used to constraint the selection. The keyword
-`forcehermitian` specifies whether an `OnsiteTerm` applied to a selected site should be made
-hermitian.
-
-# See also:
-    `hoppingselector`, `onsite`, `hopping`
-"""
 onsiteselector(; region = missing, sublats = missing, forcehermitian = true) =
     OnsiteSelector(region, sanitize_sublats(sublats), forcehermitian)
 
-"""
-    hoppingselector(; region = missing, sublats = missing, dn = missing, range = missing, forcehermitian = true)
-
-Specifies a subset of hoppings in a given hamiltonian. Only hoppings between two sites at
-positions `r₁ = r - dr/2` and `r₂ = r + dr`, belonging to unit cells at integer distance
-`dn´` and to sublattices `s₁` and `s₂` will be selected if: `region(r, dr) && s in sublats
-&& dn´ in dn && norm(dr) <= range`. If any of these is `missing` it will not be used to
-constraint the selection. The keyword `forcehermitian` specifies whether a `HoppingTerm`
-applied to a selected hopping should be made hermitian.
-
-# See also:
-    `onsiteselector`, `onsite`, `hopping`
-"""
 hoppingselector(; region = missing, sublats = missing, dn = missing, range = missing, forcehermitian = true) =
     HoppingSelector(region, sanitize_sublatpairs(sublats), sanitize_dn(dn), sanitize_range(range), forcehermitian)
 
@@ -150,17 +125,17 @@ isinrange(inds, ::Missing, lat) = true
 isinrange((row, col)::Tuple{Int,Int}, range::Number, lat) =
     norm(sites(lat)[col] - sites(lat)[row]) <= range
 
-# injects non-missing fields of s´ into s
-updateselector!(s::OnsiteSelector, s´::OnsiteSelector) =
-    OnsiteSelector(updateselector!.(
+# merge non-missing fields of s´ into s
+merge_non_missing(s::OnsiteSelector, s´::OnsiteSelector) =
+    OnsiteSelector(merge_non_missing.(
         (s.region,  s.sublats,  s.forcehermitian),
         (s´.region, s´.sublats, s´.forcehermitian))...)
-updateselector!(s::HoppingSelector, s´::HoppingSelector) =
-    HoppingSelector(updateselector!.(
+merge_non_missing(s::HoppingSelector, s´::HoppingSelector) =
+    HoppingSelector(merge_non_missing.(
         (s.region,  s.sublats,  s.dns,  s.range,  s.forcehermitian),
         (s´.region, s´.sublats, s´.dns, s´.range, s´.forcehermitian))...)
-updateselector!(o, o´::Missing) = o
-updateselector!(o, o´) = o´
+merge_non_missing(o, o´::Missing) = o
+merge_non_missing(o, o´) = o´
 
 #######################################################################
 # Tightbinding types
@@ -253,24 +228,27 @@ end
 
 # External API #
 """
-    onsite(o; kw...)
-    onsite(o, onsiteselector(; kw...))
+    onsite(o; region = missing, sublats = missing, forcehermitian = true)
 
-Create an `TightbindingModelTerm` that applies an onsite energy `o` to a `Lattice` when
-creating a `Hamiltonian` with `hamiltonian`. A subset of sites can be specified with the
-`kw...`, see `onsiteselector` for details.
+Create an `TightbindingModel` with a single `OnsiteTerm` that applies an onsite energy `o`
+to a `Lattice` when creating a `Hamiltonian` with `hamiltonian`.
+
+Only sites at position `r` in sublattice with name `s::NameType` will be selected if
+`region(r) && s in sublats` is true. Any missing `region` or `sublat` will not be used to
+constraint the selection. The keyword `forcehermitian` specifies whether the `OnsiteTerm`
+applied to a selected site should be made hermitian.
 
 The onsite energy `o` can be a number, a matrix (preferably `SMatrix`), a `UniformScaling`
 (e.g. `3*I`) or a function of the form `r -> ...` for a position-dependent onsite energy.
 
 The dimension of `o::AbstractMatrix` must match the orbital dimension of applicable
 sublattices (see also `orbitals` option for `hamiltonian`). If `o::UniformScaling` it will
-be converted to an identity matrix of the appropriate size when applied to
-multiorbital sublattices. Similarly, if `o::SMatrix` it will be truncated or padded to the
-appropriate size.
+be converted to an identity matrix of the appropriate size when applied to multiorbital
+sublattices. Similarly, if `o::SMatrix` it will be truncated or padded to the appropriate
+size.
 
-`TightbindingModelTerm`s created with `onsite` or `hopping` can be added or substracted
-together to build more complicated `TightbindingModel`s.
+`OnsiteTerm`s and `HoppingTerm`s created with `onsite` or `hopping` can be added or
+substracted together to build more complicated `TightbindingModel`s.
 
     onsite(model::TightbindingModel; kw...)
 
@@ -279,7 +257,7 @@ applied to all such terms.
 
 # Examples
 ```
-julia> model = onsite(1, sublats = (:A,:B)) - hopping(2, sublats = :A=>:A)
+julia> model = onsite(1, sublats = (:A,:B)) - 2 * hopping(2, sublats = :A=>:A)
 TightbindingModel{2}: model with 2 terms
   OnsiteTerm{Int64}:
     Sublattices      : (:A, :B)
@@ -290,7 +268,7 @@ TightbindingModel{2}: model with 2 terms
     dn cell distance : any
     Hopping range    : 1.0
     Force hermitian  : true
-    Coefficient      : -1
+    Coefficient      : -2
 
 julia> newmodel = onsite(model; sublats = :A) + hopping(model)
 TightbindingModel{2}: model with 2 terms
@@ -303,7 +281,7 @@ TightbindingModel{2}: model with 2 terms
     dn cell distance : any
     Hopping range    : 1.0
     Force hermitian  : true
-    Coefficient      : -1
+    Coefficient      : -2
 
 julia> LatticePresets.honeycomb() |> hamiltonian(onsite(r->@SMatrix[1 2; 3 4]), orbitals = Val(2))
 Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
@@ -318,28 +296,32 @@ Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
 ```
 
 # See also:
-    `hopping`, `onsiteselector`, `hoppingselector`
+    `hopping`
 """
 onsite(o; kw...) = onsite(o, onsiteselector(; kw...))
 
-onsite(o, selector::Selector) =
-    TightbindingModel(OnsiteTerm(o, selector, 1))
+onsite(o, selector::Selector) = TightbindingModel(OnsiteTerm(o, selector, 1))
 
 onsite(m::TightbindingModel, selector::Selector) =
     TightbindingModel(_onlyonsites(selector, m.terms...))
 
 _onlyonsites(s, t::OnsiteTerm, args...) =
-    (OnsiteTerm(t, updateselector!(t.selector, s)), _onlyonsites(s, args...)...)
+    (OnsiteTerm(t, merge_non_missing(t.selector, s)), _onlyonsites(s, args...)...)
 _onlyonsites(s, t::HoppingTerm, args...) = (_onlyonsites(s, args...)...,)
 _onlyonsites(s) = ()
 
 """
-    hopping(t; range = 1, kw...)
-    hopping(t, hoppingselector(; range = 1, kw...))
+    hopping(t; region = missing, sublats = missing, dn = missing, range = 1, forcehermitian = true)
 
-Create an `TightbindingModelTerm` that applies a hopping `t` to a `Lattice` when
-creating a `Hamiltonian` with `hamiltonian`. A subset of hoppings can be specified with the
-`kw...`, see `hoppingselector` for details. Note that a default `range = 1` is assumed.
+Create an `TightbindingModel` with a single `HoppingTerm` that applies a hopping `t` to a
+`Lattice` when creating a `Hamiltonian` with `hamiltonian`.
+
+Only hoppings between two sites at positions `r₁ = r - dr/2` and `r₂ = r + dr`, belonging to
+unit cells at integer distance `dn´` and to sublattices `s₁` and `s₂` will be selected if:
+`region(r, dr) && s in sublats && dn´ in dn && norm(dr) <= range`. If any of these is
+`missing` it will not be used to constraint the selection. Note that the default `range` is
+1, not `missing`. The keyword `forcehermitian` specifies whether the `HoppingTerm` applied
+to a selected hopping should be made hermitian.
 
 The hopping amplitude `t` can be a number, a matrix (preferably `SMatrix`), a
 `UniformScaling` (e.g. `3*I`) or a function of the form `(r, dr) -> ...` for a
@@ -353,8 +335,8 @@ be converted to a (possibly rectangular) identity matrix of the appropriate size
 applied to multiorbital sublattices. Similarly, if `t::SMatrix` it will be truncated or
 padded to the appropriate size.
 
-`TightbindingModelTerm`s created with `onsite` or `hopping` can be added or substracted
-together to build more complicated `TightbindingModel`s.
+`OnsiteTerm`s and `HoppingTerm`s created with `onsite` or `hopping` can be added or
+substracted together to build more complicated `TightbindingModel`s.
 
     hopping(model::TightbindingModel; kw...)
 
@@ -363,12 +345,12 @@ applied to all such terms.
 
 # Examples
 ```
-julia> model = onsite(1) - hopping(2, dn = ((1,2), (0,0)), sublats = :A=>:B)
+julia> model = 3 * onsite(1) - hopping(2, dn = ((1,2), (0,0)), sublats = :A=>:B)
 TightbindingModel{2}: model with 2 terms
   OnsiteTerm{Int64}:
     Sublattices      : any
     Force hermitian  : true
-    Coefficient      : 1
+    Coefficient      : 3
   HoppingTerm{Int64}:
     Sublattice pairs : (:A => :B,)
     dn cell distance : ([1, 2], [0, 0])
@@ -381,7 +363,7 @@ TightbindingModel{2}: model with 2 terms
   OnsiteTerm{Int64}:
     Sublattices      : any
     Force hermitian  : true
-    Coefficient      : 1
+    Coefficient      : 3
   HoppingTerm{Int64}:
     Sublattice pairs : (:A => :B,)
     dn cell distance : ([1, 2], [0, 0])
@@ -401,10 +383,9 @@ Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
 ```
 
 # See also:
-    `onsite`, `onsiteselector`, `hoppingselector`
+    `onsite`
 """
-hopping(t; range = 1, kw...) =
-    hopping(t, hoppingselector(; range = range, kw...))
+hopping(t; range = 1, kw...) = hopping(t, hoppingselector(; range = range, kw...))
 hopping(t, selector) = TightbindingModel(HoppingTerm(t, selector, 1))
 
 hopping(m::TightbindingModel, selector::Selector) =
@@ -412,7 +393,7 @@ hopping(m::TightbindingModel, selector::Selector) =
 
 _onlyhoppings(s, t::OnsiteTerm, args...) = (_onlyhoppings(s, args...)...,)
 _onlyhoppings(s, t::HoppingTerm, args...) =
-    (HoppingTerm(t, updateselector!(t.selector, s)), _onlyhoppings(s, args...)...)
+    (HoppingTerm(t, merge_non_missing(t.selector, s)), _onlyhoppings(s, args...)...)
 _onlyhoppings(s) = ()
 
 Base.:*(x, o::OnsiteTerm) =
@@ -473,7 +454,7 @@ struct Hopping!{V<:Val,F<:Function,S<:Selector} <: ElementModifier{V,F,S}
     f::F
     needspositions::V    # Val{false} for f(h; kw...), Val{true} for f(h, r, dr; kw...) or other
     selector::S
-    addconjugate::Bool   # determines whether to return f(t) or (f(t) + f(t')')/2 
+    addconjugate::Bool   # determines whether to return f(t) or (f(t) + f(t')')/2
                          # (equal to *unresolved* selector.sublats and selector.forcehermitian)
 end
 
