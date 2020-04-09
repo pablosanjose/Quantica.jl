@@ -130,12 +130,12 @@ Options passed to the `method` will be forwarded to the diagonalization function
 `method = ArpackPackage(nev = 8, sigma = 1im)` will use `Arpack.eigs(matrix; nev = 8,
 sigma = 1im)` to compute the bandstructure.
 
-    bandstructure(h::Hamiltonian; resolution = 13, shift = missing, kw...)
+    bandstructure(h::Hamiltonian; resolution = 13, kw...)
 
-Same as above with a  uniform `mesh = marchingmesh(h; npoints = resolution, shift = shift)`
-of marching tetrahedra (generalized to the lattice dimensions of the Hamiltonian). Note that
-`resolution` denotes the number of points along each Bloch axis, including endpoints (can be
-a tuple for axis-dependent points).
+Same as above with a uniform `mesh` of marching tetrahedra (generalized to the lattice
+dimensions of the Hamiltonian), with points `range(-π, π, length = resolution)` along each
+Bravais axis. Note that `resolution` denotes the number of points along each Bloch axis,
+including endpoints (can be a tuple for axis-dependent points).
 
 # Example
 ```
@@ -153,14 +153,12 @@ Bandstructure: bands for a 2D hamiltonian
 # See also
     marchingmesh
 """
-function bandstructure(h::Hamiltonian{<:Any,L,M}; resolution = 13, shift = missing, kw...) where {L,M}
-    checkfinitedim(h)
-    mesh = marchingmesh(h; npoints = resolution, shift = shift)
-    return bandstructure(h,  mesh; kw...)
+function bandstructure(h::Hamiltonian{<:Any,L,M}; resolution = 13, kw...) where {L,M}
+    mesh = marchingmesh(filltuple(range(-π, π, length = resolution), Val(L))...)
+    return bandstructure(h, mesh; kw...)
 end
 
-function bandstructure(h::Hamiltonian, mesh::Mesh; method = defaultmethod(h), minprojection = 0.5)
-    checkfinitedim(h)
+function bandstructure(h::Hamiltonian{<:Any,L}, mesh::Mesh{L}; method = defaultmethod(h), minprojection = 0.5) where {L}
     ishermitian(h) || throw(ArgumentError("Hamiltonian must be hermitian"))
     d = diagonalizer(h, mesh, method, minprojection)
     matrix = similarmatrix(h, method)
