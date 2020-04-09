@@ -113,57 +113,22 @@ switchlast(s::NTuple{N,T}) where {N,T} = ntuple(i -> i < N - 1 ? s[i] : s[2N - i
 # Special meshes
 ######################################################################
 """
-    marchingmesh(npoints::Integer...; axes = 1.0 * I, shift = missing)
+    marchingmesh(ranges::Vararg{AbstractRange,L}; axes = 1.0 * I)
 
-Creates a L-dimensional marching-tetrahedra `Mesh`. The mesh is confined to the box defined
-by the rows of `axes`, shifted by `shift` (an `NTuple` or `Number`) if not `missing`, and
-contains `npoints[i]` along each axis `i`.
-
-    marchingmesh(ranges::AbstractRange...; axes = 1.0 * I, shift = missing)
-
-The same as above, but allows to specify the points in axis `i` by a range `ranges[i]`, such
-as e.g. `-1.0:0.1:1.0`.
-
-Note that the size of `axes` should match the number `L` of elements in `npoints` or
-`ranges`. The `eltype` of points is given by that of `ranges` or `axes`.
-
-    marchingmesh(h::Hamiltonian{<:Lattice}; npoints = 13, shift = missing)
-
-Equivalent to `marchingmesh(ntuple(_ -> range(-π, π; length = npoints), Val(L))...)` where
-`L` is the dimension of the Hamiltonian's lattice.
+Creates a L-dimensional marching-tetrahedra `Mesh` over a parallelepiped with axes given by
+the columns of `axes`. The points along axis `i` are given by `ranges[i]`.
 
 # External links
 
 - Marching tetrahedra (https://en.wikipedia.org/wiki/Marching_tetrahedra) in Wikipedia
 """
-marchingmesh(ranges::Vararg{AbstractRange,L}; axes = 1.0 * I, shift = missing) where {L} =
-    _marchingmesh(shiftranges(ranges, shift), SMatrix{L,L}(axes))
+marchingmesh(ranges::Vararg{AbstractRange,L}; axes = 1.0 * I) where {L} =
+    _marchingmesh(ranges, SMatrix{L,L}(axes))
 
-function marchingmesh(npoints::Vararg{Integer,L}; axes = 1.0 * I, shift = missing) where {L}
-    ranges = meshranges(npoints, Val(L))
-    ranges´ = shiftranges(ranges, shift)
-    return _marchingmesh(ranges´, SMatrix{L,L}(axes))
-end
-
-marchingmesh(; kw...) = throw(ArgumentError("Need a finite number of points"))
-
-function marchingmesh(h::Hamiltonian{<:Lattice,L}; npoints = 13, shift = missing) where {L}
-    checkfinitedim(h)
-    ranges = meshranges(npoints, Val(L))
-    ranges´ = shiftranges(ranges, shift)
-    return _marchingmesh(ranges´, SMatrix{L,L}(I))
-end
-
-meshranges(n::Int, ::Val{L}) where {L} = meshranges(filltuple(n, Val(L)), Val(L))
-meshranges(ns::NTuple{L,Int}, ::Val{L}) where {L} = (n -> range(-π, π; length = n)).(ns)
-
-shiftranges(rs, shift::Missing) = rs
-shiftranges(rs::NTuple{L}, shift::Number) where {L} = shiftranges(rs, filltuple(shift, Val(L)))
-shiftranges(rs::NTuple{L}, shifts::NTuple{L}) where {L} = ((r, s) -> r .+ s).(rs, shifts)
+marchingmesh(; kw...) = throw(ArgumentError("Need a finite number of ranges to build a mesh"))
 
 function _marchingmesh(ranges::NTuple{D,AbstractRange}, axes::SMatrix{D,D}) where {D}
     npoints = length.(ranges)
-    projection = axes' # ./ (SVector(npoints) - 1)' # Projects binary vector to m box with npoints
     cs = CartesianIndices(ntuple(n -> 1:npoints[n], Val(D)))
     ls = LinearIndices(cs)
     csinner = CartesianIndices(ntuple(n -> 1:npoints[n]-1, Val(D)))
@@ -176,7 +141,7 @@ function _marchingmesh(ranges::NTuple{D,AbstractRange}, axes::SMatrix{D,D}) wher
     utets = [cumsum(pushfirst!(perm, zero(CartesianIndex{D}))) for perm in perms]
 
     # We don't use generators because their non-inferreble eltype causes problems later
-    verts = [projection * SVector(getindex.(ranges, Tuple(c))) for c in cs]
+    verts = [axes * SVector(getindex.(ranges, Tuple(c))) for c in cs]
 
     s = SparseMatrixBuilder{Bool}(length(cs), length(cs))
     for c in cs
