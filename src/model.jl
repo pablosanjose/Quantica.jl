@@ -465,13 +465,12 @@ Hopping!(f, selector) =
 
 """
     onsite!(f; kw...)
-    onsite!(f, onsiteselector(; kw...))
 
 Create an `ElementModifier`, to be used with `parametric`, that applies `f` to onsite
-energies specified by `onsiteselector(; kw...)`. The form of `f` may be `f = (o; kw...) ->
-...` or `f = (o, r; kw...) -> ...` if the modification is position (`r`) dependent. The
-former is naturally more efficient, as there is no need to compute the positions of each
-onsite energy.
+energies specified by `kw` (see `onsite` for details). The form of `f` may be `f = (o;
+kw...) -> ...` or `f = (o, r; kw...) -> ...` if the modification is position (`r`)
+dependent. The former is naturally more efficient, as there is no need to compute the
+positions of each onsite energy.
 
 # See also:
     `hopping!`, `parametric`
@@ -482,13 +481,12 @@ onsite!(f, selector) = Onsite!(f, selector)
 
 """
     hopping!(f; kw...)
-    hopping!(f, hoppingselector(; kw...))
 
 Create an `ElementModifier`, to be used with `parametric`, that applies `f` to hoppings
-specified by `hoppingselector(; kw...)`. The form of `f` may be `f = (t; kw...) -> ...` or
-`f = (t, r, dr; kw...) -> ...` if the modification is position (`r, dr`) dependent. The
-former is naturally more efficient, as there is no need to compute the positions of the two
-sites involved in each hopping.
+specified by `kw` (see `hopping` for details). The form of `f` may be `f = (t; kw...) ->
+...` or `f = (t, r, dr; kw...) -> ...` if the modification is position (`r, dr`) dependent.
+The former is naturally more efficient, as there is no need to compute the positions of the
+two sites involved in each hopping.
 
 # See also:
     `onsite!`, `parametric`
