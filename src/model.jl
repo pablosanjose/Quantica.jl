@@ -435,31 +435,58 @@ _sublatranges(rs::Tuple) = rs
 findblock(s, sr) = findfirst(r -> s in r, sr)
 
 #######################################################################
+# ParametricFunction
+#######################################################################
+struct ParametricFunction{N,M,F}
+    f::F
+    params::NTuple{M,Symbol}
+end
+
+ParametricFunction{N}(f::F, p::NTuple{M,Symbol}) where {N,M,F} = ParametricFunction{N,M,F}(f, p)
+
+(pf::ParametricFunction)(args...; kw...) = pf.f(args...; kw...)
+
+macro par(f, params...)
+    (f isa Expr && f.head == :->) ||
+        throw(ArgumentError("Only @par(args -> ..., parameters...) syntax supported"))
+    farg = f.args[1]
+    body = f.args[2]
+    symbolarg = isa(farg, Symbol)
+    symbolarg || isa(first(farg.args), Symbol) ||
+        throw(ArgumentError("Keyword arguments not supported in @par"))
+    N = symbolarg ? 1 : length(farg.args)
+    newargs = symbolarg ? (esc(farg),) : esc.(Tuple(farg.args))
+    newparams = esc.(params)
+    newbody = esc(body)
+    newf = :(($(newargs...), ; $(newparams...)) -> $(newbody))
+    return :(ParametricFunction{$N}($newf, $params))
+end
+
+
+#######################################################################
 # onsite! and hopping!
 #######################################################################
 abstract type ElementModifier{V,F,S} end
 
-struct Onsite!{V<:Val,F<:Function,S<:Selector} <: ElementModifier{V,F,S}
+struct Onsite!{N,F<:ParametricFunction{N},S<:Selector} <: ElementModifier{N,F,S}
     f::F
-    needspositions::V    # Val{false} for f(o; kw...), Val{true} for f(o, r; kw...) or other
     selector::S
     addconjugate::Bool   # determines whether to return f(o) or (f(o) + f(o')')/2
                          # (equatl to selector.forcehermitian)
 end
 
 Onsite!(f, selector) =
-    Onsite!(f, Val(!applicable(f, 0.0)), selector, false)
+    Onsite!(f, selector, false)
 
-struct Hopping!{V<:Val,F<:Function,S<:Selector} <: ElementModifier{V,F,S}
+struct Hopping!{N,F<:ParametricFunction{N},S<:Selector} <: ElementModifier{N,F,S}
     f::F
-    needspositions::V    # Val{false} for f(h; kw...), Val{true} for f(h, r, dr; kw...) or other
     selector::S
     addconjugate::Bool   # determines whether to return f(t) or (f(t) + f(t')')/2
                          # (equal to *unresolved* selector.sublats and selector.forcehermitian)
 end
 
 Hopping!(f, selector) =
-    Hopping!(f, Val(!applicable(f, 0.0)), selector, false)
+    Hopping!(f, selector, false)
 
 # API #
 
