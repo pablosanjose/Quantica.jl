@@ -475,8 +475,7 @@ positions of each onsite energy.
 # See also:
     `hopping!`, `parametric`
 """
-onsite!(f; kw...) =
-    onsite!(f, onsiteselector(; kw...))
+onsite!(f; kw...) = onsite!(f, onsiteselector(; kw...))
 onsite!(f, selector) = Onsite!(f, selector)
 
 """
