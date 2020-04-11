@@ -1,5 +1,5 @@
 using LinearAlgebra: diag
-using Quantica: Hamiltonian
+using Quantica: Hamiltonian, ParametricHamiltonian
 
 @testset "basic hamiltonians" begin
     presets = (LatticePresets.linear, LatticePresets.square, LatticePresets.triangular,
