@@ -3,11 +3,13 @@ module Quantica
 using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
       ProgressMeter, LinearMaps, Random
 
+using ExprTools
+
 using SparseArrays: getcolptr, AbstractSparseMatrix
 
 export sublat, bravais, lattice, dims, sites, supercell, unitcell,
-       hopping, onsite, onsite!, hopping!,
-       hamiltonian, parametric, @par, bloch, bloch!, optimize!, similarmatrix,
+       hopping, onsite, @onsite!, @hopping!, parameters,
+       hamiltonian, parametric, bloch, bloch!, optimize!, similarmatrix,
        flatten, wrap, transform!, combine,
        spectrum, bandstructure, marchingmesh, defaultmethod, bands, vertices,
        energies, states,

@@ -20,6 +20,8 @@ toSVector(v::AbstractVector) = SVector(Tuple(v))
 ensuretuple(s::Tuple) = s
 ensuretuple(s) = (s,)
 
+tuplemost(t::NTuple{N,Any}) where {N} = ntuple(i -> t[i], Val(N-1))
+
 # ensureSMatrix(f::Function) = f
 # ensureSMatrix(m::T) where T<:Number = SMatrix{1,1,T,1}(m)
 # ensureSMatrix(m::SMatrix) = m

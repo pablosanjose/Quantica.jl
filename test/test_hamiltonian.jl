@@ -80,7 +80,93 @@ end
         @SMatrix[3 0; 0 0]
 end
 
-@testset "modifiers" begin
-    h = LatticePresets.honeycomb() |> hamiltonian(hopping(1) + onsite(0)) |> unitcell(2, modifiers = onsite!((o, r) -> 1))
+@testset "unitcell modifiers" begin
+    h = LatticePresets.honeycomb() |> hamiltonian(hopping(1) + onsite(0)) |> unitcell(2, modifiers = (@onsite!((o, r) -> 1), @hopping!(h -> 1)))
     @test diag(bloch(h)) == ComplexF64[1, 1, 1, 1, 1, 1, 1, 1]
+end
+
+@testset "@onsite!" begin
+    el = @SMatrix[1 2; 2 1]
+
+    @test @onsite!(o -> 2o)(el) == 2el
+    @test @onsite!(o -> 2o)(el, p = 2) == 2el
+    @test @onsite!((o;) -> 2o)(el) == 2el
+    @test @onsite!((o;) -> 2o)(el, p = 2) == 2el
+    @test @onsite!((o; z) -> 2o)(el, z = 2) == 2el
+    @test @onsite!((o; z) -> 2o)(el, z = 2, p = 2) == 2el
+    @test @onsite!((o; z = 2) -> 2o)(el) == 2el
+    @test @onsite!((o; z = 2) -> 2o)(el, p = 2) == 2el
+    @test @onsite!((o; z = 2) -> 2o)(el, z = 1, p = 2) == 2el
+    @test @onsite!((o; kw...) -> 2o)(el) == 2el
+    @test @onsite!((o; kw...) -> 2o)(el, p = 2) == 2el
+    @test @onsite!((o; z, kw...) -> 2o)(el, z = 2) == 2el
+    @test @onsite!((o; z, kw...) -> 2o)(el, z = 2, p = 2) == 2el
+    @test @onsite!((o; z, y = 2, kw...) -> 2o)(el, z = 2, p = 2) == 2el
+    @test @onsite!((o; z, y = 2, kw...) -> 2o)(el, z = 2, y = 3, p = 2) == 2el
+
+    r = SVector(0,0)
+
+    @test @onsite!((o, r;) -> 2o)(el, r) == 2el
+    @test @onsite!((o, r;) -> 2o)(el, r, p = 2) == 2el
+    @test @onsite!((o, r; z) -> 2o)(el, r, z = 2) == 2el
+    @test @onsite!((o, r; z) -> 2o)(el, r, z = 2, p = 2) == 2el
+    @test @onsite!((o; z = 2) -> 2o)(el, r) == 2el
+    @test @onsite!((o; z = 2) -> 2o)(el, r, p = 2) == 2el
+    @test @onsite!((o; z = 2) -> 2o)(el, r, z = 1, p = 2) == 2el
+    @test @onsite!((o, r; kw...) -> 2o)(el, r) == 2el
+    @test @onsite!((o, r; kw...) -> 2o)(el, r, p = 2) == 2el
+    @test @onsite!((o, r; z, kw...) -> 2o)(el, r, z = 2) == 2el
+    @test @onsite!((o, r; z, kw...) -> 2o)(el, r, z = 2, p = 2) == 2el
+    @test @onsite!((o, r; z, y = 2, kw...) -> 2o)(el, r, z = 2, p = 2) == 2el
+    @test @onsite!((o, r; z, y = 2, kw...) -> 2o)(el, r, z = 2, y = 3, p = 2) == 2el
+
+    @test @onsite!((o; z, y = 2, kw...) -> 2o) isa Quantica.UniformOnsiteModifier
+    @test @onsite!((o, r; z, y = 2, kw...) -> 2o) isa Quantica.OnsiteModifier{2}
+
+    @test parameters(@onsite!((o, r; z, y = 2, kw...) -> 2o)) == (:z, :y)
+end
+
+@testset "@hopping!" begin
+    el = @SMatrix[1 2; 2 1]
+
+    @test @hopping!(t -> 2t)(el) == 2el
+    @test @hopping!(t -> 2t)(el, p = 2) == 2el
+    @test @hopping!((t;) -> 2t)(el) == 2el
+    @test @hopping!((t;) -> 2t)(el, p = 2) == 2el
+    @test @hopping!((t; z) -> 2t)(el, z = 2) == 2el
+    @test @hopping!((t; z) -> 2t)(el, z = 2, p = 2) == 2el
+    @test @hopping!((t; z = 2) -> 2t)(el) == 2el
+    @test @hopping!((t; z = 2) -> 2t)(el, p = 2) == 2el
+    @test @hopping!((t; z = 2) -> 2t)(el, z = 1, p = 2) == 2el
+    @test @hopping!((t; kw...) -> 2t)(el) == 2el
+    @test @hopping!((t; kw...) -> 2t)(el, p = 2) == 2el
+    @test @hopping!((t; z, kw...) -> 2t)(el, z = 2) == 2el
+    @test @hopping!((t; z, kw...) -> 2t)(el, z = 2, p = 2) == 2el
+    @test @hopping!((t; z, y = 2, kw...) -> 2t)(el, z = 2, p = 2) == 2el
+    @test @hopping!((t; z, y = 2, kw...) -> 2t)(el, z = 2, y = 3, p = 2) == 2el
+
+    r = dr = SVector(0,0)
+
+    @test @hopping!((t, r, dr;) -> 2t)(el, r, dr) == 2el
+    @test @hopping!((t, r, dr;) -> 2t)(el, r, dr, p = 2) == 2el
+    @test @hopping!((t, r, dr; z) -> 2t)(el, r, dr, z = 2) == 2el
+    @test @hopping!((t, r, dr; z) -> 2t)(el, r, dr, z = 2, p = 2) == 2el
+    @test @hopping!((t; z = 2) -> 2t)(el, r, dr) == 2el
+    @test @hopping!((t; z = 2) -> 2t)(el, r, dr, p = 2) == 2el
+    @test @hopping!((t; z = 2) -> 2t)(el, r, dr, z = 1, p = 2) == 2el
+    @test @hopping!((t, r, dr; kw...) -> 2t)(el, r, dr) == 2el
+    @test @hopping!((t, r, dr; kw...) -> 2t)(el, r, dr, p = 2) == 2el
+    @test @hopping!((t, r, dr; z, kw...) -> 2t)(el, r, dr, z = 2) == 2el
+    @test @hopping!((t, r, dr; z, kw...) -> 2t)(el, r, dr, z = 2, p = 2) == 2el
+    @test @hopping!((t, r, dr; z, y = 2, kw...) -> 2t)(el, r, dr, z = 2, p = 2) == 2el
+    @test @hopping!((t, r, dr; z, y = 2, kw...) -> 2t)(el, r, dr, z = 2, y = 3, p = 2) == 2el
+
+    @test @hopping!((t; z, y = 2, kw...) -> 2t) isa Quantica.UniformHoppingModifier
+    @test @hopping!((t, r, dr; z, y = 2, kw...) -> 2t) isa Quantica.HoppingModifier{3}
+end
+
+@testset "parametric" begin
+    h = LatticePresets.honeycomb() |> hamiltonian(hopping(1) + onsite(0))
+    hp = parametric(h, @onsite!(o -> 2o))
+    @test parametric(h, @onsite!(o -> 2o)) isa ParametricHamiltonian
 end
