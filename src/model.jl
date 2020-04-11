@@ -538,6 +538,8 @@ function get_f_N_params(f, msg)
         else
             push!(kwargs, :(_...))  # normalization : append _... to kwargs
         end
+        # Workaround for Issue #8 in ExprTools. Remove when PR #9 is merged
+        kwargs[1] isa Expr && kwargs[1].head == :(=) && (kwargs[1] = :($(Expr(:kw, kwargs[1].args...))))
     end
     N = haskey(d, :args) ? length(d[:args]) : 0
     f´ = ExprTools.combinedef(d)
