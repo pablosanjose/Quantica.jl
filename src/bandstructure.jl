@@ -158,7 +158,7 @@ Bandstructure: bands for a 2D hamiltonian
 ```
 
 # See also
-    marchingmesh
+    `marchingmesh`
 """
 function bandstructure(h::Hamiltonian{<:Any,L,M}; resolution = 13, kw...) where {L,M}
     mesh = marchingmesh(filltuple(range(-π, π, length = resolution), Val(L))...)

@@ -16,6 +16,8 @@ using Quantica: Hamiltonian, ParametricHamiltonian
             @test hamiltonian(lat, onsite(t) + hopping(t; dn = dn0, forcehermitian = false), orbitals = o) isa Hamiltonian
         end
     end
+    h = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = 1/√3))
+    @test bloch(h) == h.harmonics[1].h
 end
 
 @testset "orbitals and sublats" begin
@@ -31,7 +33,7 @@ end
                       orbitals = :B => Val(2))
     h2 = hamiltonian(lat, onsite(I) + hopping(@SMatrix[1 2], sublats = ((:A,:B),)),
                       orbitals = :B => Val(2))
-    @test bloch(h1, 1, 2) == bloch(h2, 1, 2)
+    @test bloch(h1, (1, 2)) == bloch(h2, (1, 2))
 end
 
 @testset "onsite dimensions" begin
