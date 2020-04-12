@@ -1,5 +1,11 @@
 # This file is machine-generated - editing it directly is not advised
 
+[[ColorTypes]]
+deps = ["FixedPointNumbers", "Random"]
+git-tree-sha1 = "c4c1cca28748906265ed62c788d6fe6f0134d264"
+uuid = "3da002f7-5984-5a60-b8a6-cbb66c0b333f"
+version = "0.10.0"
+
 [[Distances]]
 deps = ["LinearAlgebra", "Statistics"]
 git-tree-sha1 = "23717536c81b63e250f682b0e0933769eecd1411"
@@ -14,6 +20,17 @@ uuid = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 git-tree-sha1 = "08c1f74d9ad03acf0ee84c12c9e665ab1a9a6e33"
 uuid = "e2ba6199-217a-4e67-a87a-7c52f15ade04"
 version = "0.1.0"
+
+[[FixedPointNumbers]]
+git-tree-sha1 = "3ba9ea634d4c8b289d590403b4a06f8e227a6238"
+uuid = "53c48c17-4a7d-5ca2-90c5-79b7896eea93"
+version = "0.8.0"
+
+[[GeometryTypes]]
+deps = ["ColorTypes", "FixedPointNumbers", "LinearAlgebra", "StaticArrays"]
+git-tree-sha1 = "96fd99cf83b1952a7d8cb54f4c585a648275805a"
+uuid = "4d00f742-c7ba-57c2-abde-4428a4b178cb"
+version = "0.8.2"
 
 [[Libdl]]
 uuid = "8f399da3-3557-5675-b5ff-fb832c97cbdb"
