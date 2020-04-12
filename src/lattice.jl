@@ -97,7 +97,7 @@ Bravais{2,2,Float64} : set of 2 Bravais vectors in 2D space.
 ```
 
 # See also:
-    semibounded
+    `semibounded`
 """
 bravais(vs::Union{Tuple,AbstractVector,AbstractMatrix}...; semibounded = false, kw...) =
     (s = toSMatrix(vs...); Bravais(s, sanitize_semibounded(semibounded, s)))
@@ -260,7 +260,7 @@ Lattice{2,2,Float64} : 2D lattice in 2D space
 ```
 
 # See also:
-    LatticePresets, bravais, sublat, supercell, intracell
+    `LatticePresets`, `bravais`, `sublat`, `supercell`, `intracell`
 """
 lattice(s::Sublat, ss::Sublat...; kw...) = _lattice(Unitcell(s, ss...; kw...))
 _lattice(u::Unitcell{E,T}) where {E,T} = Lattice(Bravais{E,T}(), u)
@@ -550,7 +550,7 @@ Superlattice{2,2,Float64,2} : 2D lattice in 2D space, filling a 2D supercell
 ```
 
 # See also:
-    unitcell
+    `unitcell`
 """
 supercell(v::Union{SMatrix,Tuple,SVector,Integer}...; kw...) = lat -> supercell(lat, v...; kw...)
 
@@ -746,7 +746,7 @@ Lattice{2,2,Float64} : 2D lattice in 2D space
 ```
 
 # See also:
-    supercell
+    `supercell`
 """
 unitcell(v::Union{SMatrix,Tuple,SVector,Integer}...; kw...) = lat -> unitcell(lat, v...; kw...)
 unitcell(lat::Lattice, args...; kw...) = unitcell(supercell(lat, args...; kw...))
