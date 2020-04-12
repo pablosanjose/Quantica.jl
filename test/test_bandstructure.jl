@@ -23,7 +23,7 @@ end
     @test length(bands(b)) == 2
 
     hc2 = LatticePresets.honeycomb() |> hamiltonian(hopping(-1)) 
-    hp2 = parametric(hc2, hopping!((t; s) -> s*t))
+    hp2 = parametric(hc2, @hopping!((t; s) -> s*t))
     matrix2 = similarmatrix(hc2, LinearAlgebraPackage())
     hf2(s, x) = bloch!(matrix2, hp2(s = s), (x, x))
     mesh2 = marchingmesh(range(0, 1, length = 13), range(0, 1, length = 13))
