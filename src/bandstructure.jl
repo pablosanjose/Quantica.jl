@@ -114,7 +114,7 @@ states(b::Band) = reshape(b.states, b.dimstates)
 """
     bandstructure(h::Hamiltonian, mesh::Mesh; minprojection = 0.5, method = defaultmethod(h))
 
-Compute the bandstructure of Bloch Hamiltonian `bloch(h, ϕs...)` with `ϕs` evaluated on the
+Compute the bandstructure of Bloch Hamiltonian `bloch(h, ϕs)` with `ϕs` evaluated on the
 vertices of `mesh`. It is assumed that `h` is hermitian.
 
 The option `minprojection` determines the minimum projection between eigenstates to connect
@@ -151,7 +151,7 @@ Bandstructure: bands for a 2D hamiltonian
 ```
 
 # See also
-    marchingmesh
+    `marchingmesh`
 """
 function bandstructure(h::Hamiltonian{<:Any,L,M}; resolution = 13, kw...) where {L,M}
     mesh = marchingmesh(filltuple(range(-π, π, length = resolution), Val(L))...)
