@@ -114,8 +114,22 @@ states(b::Band) = reshape(b.states, b.dimstates)
 """
     bandstructure(h::Hamiltonian, mesh::Mesh; minprojection = 0.5, method = defaultmethod(h))
 
-Compute the bandstructure of Bloch Hamiltonian `bloch(h, ϕs)` with `ϕs` evaluated on the
+Compute the bandstructure of Bloch Hamiltonian `bloch(h, ϕs)`, with `ϕs` evaluated on the
 vertices of `mesh`. It is assumed that `h` is hermitian.
+
+    bandstructure(h::Hamiltonian; resolution = 13, kw...)
+
+Same as above with a uniform `mesh` of marching tetrahedra (generalized to the lattice
+dimensions of the Hamiltonian), with points `range(-π, π, length = resolution)` along each
+Bravais axis. Note that `resolution` denotes the number of points along each Bloch axis,
+including endpoints (can be a tuple for axis-dependent points).
+
+    bandstructure(matrixf::Function, mesh::Mesh; kw...)
+
+Compute the bandstructure of the Hamiltonian matrix `m = matrixf(ϕs...)`, with `ϕs`
+evaluated on the vertices of `mesh`. It is assumed that `m` is hermitian for all `ϕs`.
+
+# Options
 
 The option `minprojection` determines the minimum projection between eigenstates to connect
 them into a common subband. The option `method` is chosen automatically if unspecified, and
@@ -130,18 +144,11 @@ Options passed to the `method` will be forwarded to the diagonalization function
 `method = ArpackPackage(nev = 8, sigma = 1im)` will use `Arpack.eigs(matrix; nev = 8,
 sigma = 1im)` to compute the bandstructure.
 
-    bandstructure(h::Hamiltonian; resolution = 13, kw...)
-
-Same as above with a uniform `mesh` of marching tetrahedra (generalized to the lattice
-dimensions of the Hamiltonian), with points `range(-π, π, length = resolution)` along each
-Bravais axis. Note that `resolution` denotes the number of points along each Bloch axis,
-including endpoints (can be a tuple for axis-dependent points).
-
 # Example
 ```
 julia> h = LatticePresets.honeycomb() |> unitcell(3) |> hamiltonian(hopping(-1, range = 1/√3));
 
-julia> bandstructure(h; resolution = 25, method = LinearAlgebraPackage())
+julia> bandstructure(h; npoints = 25, method = LinearAlgebraPackage())
 Bandstructure: bands for a 2D hamiltonian
   Bands        : 8
   Element type : scalar (Complex{Float64})
@@ -159,25 +166,35 @@ function bandstructure(h::Hamiltonian{<:Any,L,M}; resolution = 13, kw...) where 
 end
 
 function bandstructure(h::Hamiltonian{<:Any,L}, mesh::Mesh{L}; method = defaultmethod(h), minprojection = 0.5) where {L}
-    ishermitian(h) || throw(ArgumentError("Hamiltonian must be hermitian"))
-    d = diagonalizer(h, mesh, method, minprojection)
+    # ishermitian(h) || throw(ArgumentError("Hamiltonian must be hermitian"))
     matrix = similarmatrix(h, method)
-    return bandstructure!(matrix, h, mesh, d)
+    d = Diagonalizer(method, codiagonalizer(h, matrix, mesh), minprojection)
+    matrixf(φs...) = bloch!(matrix, h, φs)
+    return _bandstructure(matrixf, matrix, mesh, d)
 end
 
-function bandstructure!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,<:Any,M}, mesh::MD, d::Diagonalizer) where {M,D,T,MD<:Mesh{D,T}}
+function bandstructure(matrixf::Function, mesh::Mesh;
+                       matrix = _samplematrix(matrixf, mesh),
+                       method = defaultmethod(matrix), minprojection = 0.5)
+    d = Diagonalizer(method, codiagonalizer(matrixf, matrix, mesh), minprojection)
+    return _bandstructure(matrixf, matrix, mesh, d)
+end
+
+_samplematrix(matrixf, mesh) = matrixf(Tuple(first(vertices(mesh)))...)
+
+function _bandstructure(matrixf::Function, matrix´::AbstractMatrix{M}, mesh::MD, d::Diagonalizer) where {M,D,T,MD<:Mesh{D,T}}
     nϵ = 0                           # Temporary, to be reassigned
     ϵks = Matrix{T}(undef, 0, 0)     # Temporary, to be reassigned
     ψks = Array{M,3}(undef, 0, 0, 0) # Temporary, to be reassigned
 
-    dimh = size(h, 1)
+    dimh = size(matrix´, 1)
     nk = nvertices(mesh)
     # function to apply to eigenvalues when building bands (depends on momenta type)
     by = _maybereal(T)
 
     p = Progress(nk, "Step 1/2 - Diagonalising: ")
     for (n, ϕs) in enumerate(vertices(mesh))
-        bloch!(matrix, h, ϕs)
+        matrix = matrixf(Tuple(ϕs)...)
         # (ϵk, ψk) = diagonalize(Hermitian(matrix), d)  ## This is faster (!)
         (ϵk, ψk) = diagonalize(matrix, d.method)
         resolve_degeneracies!(ϵk, ψk, ϕs, matrix, d.codiag)

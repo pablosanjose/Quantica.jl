@@ -899,6 +899,10 @@ bloch(h::Hamiltonian{<:Lattice}, args...) = bloch!(similarmatrix(h), h, args...)
 
 Create an uninitialized matrix of the same type of the Hamiltonian's matrix, calling
 `optimize!(h)` first to produce an optimal work matrix in the sparse case.
+
+    similarmatrix(h::Hamiltonian, method::AbstractDiagonalizeMethod)
+
+Adapts the type of the matrix (e.g. dense/sparse) to the specified `method`
 """
 function similarmatrix(h::Hamiltonian)
     optimize!(h)
