@@ -168,6 +168,16 @@ end
 end
 
 @testset "parametric" begin
-    h = LatticePresets.honeycomb() |> hamiltonian(hopping(1) + onsite(0))
-    @test parametric(h, @onsite!(o -> 2o)) isa ParametricHamiltonian
+    h = LatticePresets.honeycomb() |> hamiltonian(hopping(1) + onsite(2)) |> unitcell(10)
+    T = typeof(h)
+    @test parametric(h, @onsite!(o -> 2o))() isa T
+    @test parametric(h, @onsite!((o, r) -> 2o))() isa T
+    @test parametric(h, @onsite!((o, r; a = 2) -> a*o))() isa T
+    @test parametric(h, @onsite!((o, r; a = 2) -> a*o))(a=1) isa T
+    @test parametric(h, @onsite!((o, r; a = 2) -> a*o), @hopping!(t -> 2t))(a=1) isa T
+    @test parametric(h, @onsite!((o, r) -> o), @hopping!((t, r, dr) -> r[1]*t))() isa T
+    @test parametric(h, @onsite!((o, r) -> o), @hopping!((t, r, dr; a = 2) -> r[1]*t))() isa T
+    @test parametric(h, @onsite!((o, r) -> o), @hopping!((t, r, dr; a = 2) -> r[1]*t))(a=1) isa T
+    @test parametric(h, @onsite!((o, r; b) -> o), @hopping!((t, r, dr; a = 2) -> r[1]*t))(b=1) isa T
+    @test parametric(h, @onsite!((o, r; b) -> o*b), @hopping!((t, r, dr; a = 2) -> r[1]*t))(a=1, b=2) isa T
 end
