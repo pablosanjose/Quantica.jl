@@ -126,7 +126,7 @@ including endpoints (can be a tuple for axis-dependent points).
 
     bandstructure(matrixf::Function, mesh::Mesh; kw...)
 
-Compute the bandstructure of the Hamiltonian matrix `m = matrixf(ϕs)`, with `ϕs`
+Compute the bandstructure of the Hamiltonian matrix `m = matrixf(ϕs...)`, with `ϕs`
 evaluated on the vertices of `mesh`. It is assumed that `m` is hermitian for all `ϕs`.
 
 # Options
@@ -169,7 +169,7 @@ function bandstructure(h::Hamiltonian{<:Any,L}, mesh::Mesh{L}; method = defaultm
     # ishermitian(h) || throw(ArgumentError("Hamiltonian must be hermitian"))
     matrix = similarmatrix(h, method)
     d = Diagonalizer(method, codiagonalizer(h, matrix, mesh), minprojection)
-    matrixf(φs) = bloch!(matrix, h, φs)
+    matrixf(φs...) = bloch!(matrix, h, φs)
     return _bandstructure(matrixf, matrix, mesh, d)
 end
 
@@ -194,7 +194,7 @@ function _bandstructure(matrixf::Function, matrix´::AbstractMatrix{M}, mesh::MD
 
     p = Progress(nk, "Step 1/2 - Diagonalising: ")
     for (n, ϕs) in enumerate(vertices(mesh))
-        matrix = matrixf(Tuple(ϕs))
+        matrix = matrixf(Tuple(ϕs)...)
         # (ϵk, ψk) = diagonalize(Hermitian(matrix), d)  ## This is faster (!)
         (ϵk, ψk) = diagonalize(matrix, d.method)
         resolve_degeneracies!(ϵk, ψk, ϕs, matrix, d.codiag)
