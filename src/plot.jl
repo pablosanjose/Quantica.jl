@@ -7,9 +7,9 @@ import AbstractPlotting: plot!, plot, to_value
 function meandist(h::Hamiltonian)
     distsum = 0.0
     num = 0
-    ss = Elsa.sites(h.lattice)
+    ss = Quantica.sites(h.lattice)
     br = h.lattice.bravais.matrix
-    for (row, col, dn) in Elsa.eachindex_nz(h)
+    for (row, col, dn) in Quantica.eachindex_nz(h)
         if row != col
             num += 1
             rsrc = ss[col]
@@ -73,7 +73,7 @@ function plot!(plot::HamiltonianPlot)
     h = to_value(plot[1])
     lat = h.lattice
     colors = cycle(plot[:colors][])
-    sublats = Elsa.sublats(lat)
+    sublats = Quantica.sublats(lat)
 
     mdist = meandist(h)
     mdist > 0 || (mdist = 1)
@@ -101,7 +101,7 @@ function plot!(plot::HamiltonianPlot)
                 csrc´ = iszero(har.dn) ? csrc : transparent(csrc, 1 - plot[:dimming][])
                 csrc´ = darken(csrc´, plot[:linkdarken][])
                 for (sdst, cdst) in zip(sublats, colors)
-                    itr = Elsa.eachindex_nz(har, siterange(lat, sdst), siterange(lat, ssrc))
+                    itr = Quantica.eachindex_nz(har, siterange(lat, sdst), siterange(lat, ssrc))
                     plotlinks!(plot, lat, itr, har.dn, n, csrc´)
                 end
             end
@@ -111,7 +111,7 @@ function plot!(plot::HamiltonianPlot)
 end
 
 function plotsites!(plot, lat, srange, dn, n, color)
-    allsites = Elsa.sites(lat)
+    allsites = Quantica.sites(lat)
     br = lat.bravais.matrix
     sites = [padright(allsites[i] + br * dn, Val(3)) for i in srange]
     plot[:tooltips][] && (tt = [(site, 0, n) for site in srange])
@@ -141,7 +141,7 @@ end
 function plotlinks!(plot, lat, itr, dn, n, color)
     links = Pair{SVector{3,Float32},SVector{3,Float32}}[]
     plot[:tooltips][] && (tt = Tuple{Int,Int,Int}[])
-    sites = Elsa.sites(lat)
+    sites = Quantica.sites(lat)
     br = lat.bravais.matrix
     for (row, col) in itr
         iszero(dn) && row == col && continue
@@ -180,7 +180,7 @@ end
 function addtooltips!(scene, h)
     sceneplot = scene[end]
     visible = Node(false)
-    N = Elsa.blockdim(h)
+    N = Quantica.blockdim(h)
     poprect = lift(scene.events.mouseposition) do mp
         FRect((mp .+ 5), 1,1)
     end
@@ -310,7 +310,7 @@ function plot!(plot::BandPlot3D)
         else
             mesh!(plot, vertices, connectivity, color = color, transparency = false)
             if plot[:wireframe][]
-                edgevertices = collect(Elsa.edgevertices(band.mesh))
+                edgevertices = collect(Quantica.edgevertices(band.mesh))
                 linesegments!(plot, edgevertices, linewidth = plot[:linewidth])
             end
         end
