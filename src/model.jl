@@ -83,9 +83,9 @@ resolve(s::HoppingSelector, lat::AbstractLattice) =
     HoppingSelector(s.region, sublats(s, lat), _checkdims(s.dns, lat), s.range, s.forcehermitian)
 resolve(s::OnsiteSelector, lat::AbstractLattice) = OnsiteSelector(s.region, sublats(s, lat), s.forcehermitian)
 
-_checkdims(dns::Missing, lat::Lattice{E,L}) where {E,L} = dns
-_checkdims(dns::Tuple{Vararg{SVector{L,Int}}}, lat::Lattice{E,L}) where {E,L} = dns
-_checkdims(dns, lat::Lattice{E,L}) where {E,L} =
+_checkdims(dns::Missing, lat::AbstractLattice{E,L}) where {E,L} = dns
+_checkdims(dns::Tuple{Vararg{SVector{L,Int}}}, lat::AbstractLattice{E,L}) where {E,L} = dns
+_checkdims(dns, lat::AbstractLattice{E,L}) where {E,L} =
     throw(DimensionMismatch("Specified cell distance `dn` does not match lattice dimension $L"))
 
 # are sites at (i,j) and (dni, dnj) or (dn, 0) selected?
@@ -435,88 +435,141 @@ _sublatranges(rs::Tuple) = rs
 findblock(s, sr) = findfirst(r -> s in r, sr)
 
 #######################################################################
-# onsite! and hopping!
+# @onsite! and @hopping!
 #######################################################################
-abstract type ElementModifier{V,F,S} end
+abstract type ElementModifier{N,F,S} end
 
-struct Onsite!{V<:Val,F<:Function,S<:Selector} <: ElementModifier{V,F,S}
+struct ParametricFunction{N,M,F}
     f::F
-    needspositions::V    # Val{false} for f(o; kw...), Val{true} for f(o, r; kw...) or other
+    params::NTuple{M,Symbol}
+end
+
+ParametricFunction{N}(f::F, p::NTuple{M,Symbol}) where {N,M,F} = ParametricFunction{N,M,F}(f, p)
+
+(pf::ParametricFunction)(args...; kw...) = pf.f(args...; kw...)
+
+struct OnsiteModifier{N,F<:ParametricFunction{N},S<:Selector} <: ElementModifier{N,F,S}
+    f::F
     selector::S
     addconjugate::Bool   # determines whether to return f(o) or (f(o) + f(o')')/2
                          # (equatl to selector.forcehermitian)
 end
 
-Onsite!(f, selector) =
-    Onsite!(f, Val(!applicable(f, 0.0)), selector, false)
+OnsiteModifier(f, selector) = OnsiteModifier(f, selector, false)
 
-struct Hopping!{V<:Val,F<:Function,S<:Selector} <: ElementModifier{V,F,S}
+struct HoppingModifier{N,F<:ParametricFunction{N},S<:Selector} <: ElementModifier{N,F,S}
     f::F
-    needspositions::V    # Val{false} for f(h; kw...), Val{true} for f(h, r, dr; kw...) or other
     selector::S
     addconjugate::Bool   # determines whether to return f(t) or (f(t) + f(t')')/2
                          # (equal to *unresolved* selector.sublats and selector.forcehermitian)
 end
 
-Hopping!(f, selector) =
-    Hopping!(f, Val(!applicable(f, 0.0)), selector, false)
+HoppingModifier(f, selector) = HoppingModifier(f, selector, false)
 
-# API #
+const UniformModifier = ElementModifier{1}
+const UniformHoppingModifier = HoppingModifier{1}
+const UniformOnsiteModifier = OnsiteModifier{1}
 
 """
-    onsite!(f; kw...)
-    onsite!(f, onsiteselector(; kw...))
+    parameters(p::ElementModifier)
 
-Create an `ElementModifier`, to be used with `parametric`, that applies `f` to onsite
-energies specified by `onsiteselector(; kw...)`. The form of `f` may be `f = (o; kw...) ->
-...` or `f = (o, r; kw...) -> ...` if the modification is position (`r`) dependent. The
-former is naturally more efficient, as there is no need to compute the positions of each
-onsite energy.
+Return the parameter names for an `ElementModifier` created with `@onsite!` or `@hopping!`
+"""
+parameters(pf::ParametricFunction) = pf.params
+parameters(m::ElementModifier) = parameters(m.f)
+
+"""
+    @onsite!(args -> body; kw...)
+
+Create an `ElementModifier`, to be used with `parametric`, that applies `f = args -> body`
+to onsite energies specified by `kw` (see `onsite` for details  on possible `kw`s). The form
+of `args -> body` may be `(o; params...) -> ...` or `(o, r; params...) -> ...` if the
+modification is position (`r`) dependent. Keyword arguments `params` are optional, and
+include any parameters that `body` depends on that the user may want to tune.
 
 # See also:
-    `hopping!`, `parametric`
+    `@hopping!`, `parametric`
 """
-onsite!(f; kw...) =
-    onsite!(f, onsiteselector(; kw...))
-onsite!(f, selector) = Onsite!(f, selector)
+macro onsite!(kw, f)
+    f, N, params = get_f_N_params(f, "Only @onsite!(args -> body; kw...) syntax supported")
+    return esc(:(Quantica.OnsiteModifier(Quantica.ParametricFunction{$N}($f, $params), Quantica.onsiteselector($kw))))
+end
+
+macro onsite!(f)
+    f, N, params = get_f_N_params(f, "Only @onsite!(args -> body; kw...) syntax supported")
+    return esc(:(Quantica.OnsiteModifier(Quantica.ParametricFunction{$N}($f, $params), Quantica.onsiteselector())))
+end
 
 """
-    hopping!(f; kw...)
-    hopping!(f, hoppingselector(; kw...))
+    @hopping!(args -> body; kw...)
 
-Create an `ElementModifier`, to be used with `parametric`, that applies `f` to hoppings
-specified by `hoppingselector(; kw...)`. The form of `f` may be `f = (t; kw...) -> ...` or
-`f = (t, r, dr; kw...) -> ...` if the modification is position (`r, dr`) dependent. The
-former is naturally more efficient, as there is no need to compute the positions of the two
-sites involved in each hopping.
+Create an `ElementModifier`, to be used with `parametric`, that applies `f = args -> body`
+to hoppings energies specified by `kw` (see `hopping` for details on possible `kw`s). The
+form of `args -> body` may be `(t; params...) -> ...` or `(t, r, dr; params...) -> ...` if
+the modification is position (`r`, `dr`) dependent. Keyword arguments `params` are optional,
+and include any parameters that `body` depends on that the user may want to tune.
 
 # See also:
-    `onsite!`, `parametric`
+    `@onsite!`, `parametric`
 """
-hopping!(f; kw...) = hopping!(f, hoppingselector(; kw...))
-hopping!(f, selector) = Hopping!(f, selector)
+macro hopping!(kw, f)
+    f, N, params = get_f_N_params(f, "Only @hopping!(args -> body; kw...) syntax supported")
+    return esc(:(Quantica.HoppingModifier(Quantica.ParametricFunction{$N}($f, $params), Quantica.hoppingselector($kw))))
+end
 
-function resolve(o::Onsite!, lat)
+macro hopping!(f)
+    f, N, params = get_f_N_params(f, "Only @hopping!(args -> body; kw...) syntax supported")
+    return esc(:(Quantica.HoppingModifier(Quantica.ParametricFunction{$N}($f, $params), Quantica.hoppingselector())))
+end
+
+# Extracts normalized f, number of arguments and kwarg names from an anonymous function f
+function get_f_N_params(f, msg)
+    (f isa Expr && f.head == :->) || throw(ArgumentError(msg))
+    d = ExprTools.splitdef(f)
+    kwargs = convert(Vector{Any}, get!(d, :kwargs, []))
+    d[:kwargs] = kwargs  # in case it wasn't Vector{Any} originally
+    if isempty(kwargs)
+        params = ()
+        push!(kwargs, :(_...))  # normalization : append _... to kwargs
+    else
+        params = get_kwname.(kwargs) |> Tuple
+        if !isempty(params) && last(params) == :...
+            params = tuplemost(params)  # drop _... kwarg from params
+        else
+            push!(kwargs, :(_...))  # normalization : append _... to kwargs
+        end
+        # Workaround for Issue #8 in ExprTools. Remove when PR #9 is merged
+        kwargs[1] isa Expr && kwargs[1].head == :(=) && (kwargs[1] = :($(Expr(:kw, kwargs[1].args...))))
+    end
+    N = haskey(d, :args) ? length(d[:args]) : 0
+    f´ = ExprTools.combinedef(d)
+    return f´, N, params
+end
+
+get_kwname(x::Symbol) = x
+get_kwname(x::Expr) = x.head === :kw ? x.args[1] : x.head  # x.head == :...
+
+function resolve(o::OnsiteModifier, lat)
     addconjugate = o.selector.forcehermitian
-    Onsite!(o.f, o.needspositions, resolve(o.selector, lat), addconjugate)
+    OnsiteModifier(o.f, resolve(o.selector, lat), addconjugate)
 end
 
-function resolve(h::Hopping!, lat)
+function resolve(h::HoppingModifier, lat)
     addconjugate = h.selector.sublats === missing && h.selector.forcehermitian
-    Hopping!(h.f, h.needspositions, resolve(h.selector, lat), addconjugate)
+    HoppingModifier(h.f, resolve(h.selector, lat), addconjugate)
 end
 
-# Intended for resolved ElementModifiers only
-@inline (o!::Onsite!{Val{false}})(o, r; kw...) = o!(o; kw...)
-@inline (o!::Onsite!{Val{false}})(o, r, dr; kw...) = o!(o; kw...)
-@inline (o!::Onsite!{Val{false}})(o; kw...) =
+# Intended for resolved ElementModifier{N} only. The N is the number of arguments accepted.
+@inline (o!::UniformOnsiteModifier)(o, r; kw...) = o!(o; kw...)
+@inline (o!::UniformOnsiteModifier)(o, r, dr; kw...) = o!(o; kw...)
+@inline (o!::UniformOnsiteModifier)(o; kw...) =
     o!.addconjugate ? 0.5 * (o!.f(o; kw...) + o!.f(o'; kw...)') : o!.f(o; kw...)
-@inline (o!::Onsite!{Val{true}})(o, r, dr; kw...) = o!(o, r; kw...)
-@inline (o!::Onsite!{Val{true}})(o, r; kw...) =
+@inline (o!::OnsiteModifier)(o, r, dr; kw...) = o!(o, r; kw...)
+@inline (o!::OnsiteModifier)(o, r; kw...) =
     o!.addconjugate ? 0.5 * (o!.f(o, r; kw...) + o!.f(o', r; kw...)') : o!.f(o, r; kw...)
 
-@inline (h!::Hopping!{Val{false}})(t, r, dr; kw...) = h!(t; kw...)
-@inline (h!::Hopping!{Val{false}})(t; kw...) =
+@inline (h!::UniformHoppingModifier)(t, r, dr; kw...) = h!(t; kw...)
+@inline (h!::UniformHoppingModifier)(t; kw...) =
     h!.addconjugate ? 0.5 * (h!.f(t; kw...) + h!.f(t'; kw...)') : h!.f(t; kw...)
-@inline (h!::Hopping!{Val{true}})(t, r, dr; kw...) =
+@inline (h!::HoppingModifier)(t, r, dr; kw...) =
     h!.addconjugate ? 0.5 * (h!.f(t, r, dr; kw...) + h!.f(t', r, -dr; kw...)') : h!.f(t, r, dr; kw...)
