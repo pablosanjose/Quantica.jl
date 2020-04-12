@@ -4,6 +4,7 @@ authors = ["Pablo San-Jose"]
 version = "0.1.0"
 
 [deps]
+AbstractPlotting = "537997a7-5e4e-5d89-9595-2241ea00577e"
 ExprTools = "e2ba6199-217a-4e67-a87a-7c52f15ade04"
 GeometryTypes = "4d00f742-c7ba-57c2-abde-4428a4b178cb"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
@@ -18,15 +19,16 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 
 [compat]
-julia = "^1.4"
+AbstractPlotting = "^0.9"
+GeometryTypes = "^0.8"
 LinearMaps = "^2.6"
+Makie = "^0.9"
 NearestNeighbors = "^0.4"
 OffsetArrays = "^1.0"
 ProgressMeter = "^1.2"
 Requires = "^1.0"
 StaticArrays = "^0.12"
-Makie = "^0.9"
-GeometryTypes = "^0.8"
+julia = "^1.4"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
