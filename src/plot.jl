@@ -1,5 +1,6 @@
-using Makie, GeometryTypes
-import AbstractPlotting: plot!, plot, to_value
+using .Makie
+using GeometryTypes
+import .Makie.AbstractPlotting: plot!, plot, to_value
 
 #######################################################################
 # Tools
@@ -72,7 +73,7 @@ end
 function plot!(plot::HamiltonianPlot)
     h = to_value(plot[1])
     lat = h.lattice
-    colors = cycle(plot[:colors][])
+    colors = Iterators.cycle(plot[:colors][])
     sublats = Quantica.sublats(lat)
 
     mdist = meandist(h)
@@ -275,7 +276,7 @@ end
 function plot!(plot::BandPlot2D)
     bs = to_value(plot[1])
     bands = haskey(plot, :bands) ? to_value(plot[:bands]) : eachindex(bs.bands)
-    colors = cycle(plot[:colors][])
+    colors = Iterators.cycle(plot[:colors][])
     for (nb, color) in zip(bands, colors)
         band = bs.bands[nb]
         vertices = band.mesh.vertices
@@ -300,7 +301,7 @@ end
 function plot!(plot::BandPlot3D)
     bs = to_value(plot[1])
     bands = haskey(plot, :bands) ? to_value(plot[:bands]) : eachindex(bs.bands)
-    colors = cycle(plot[:colors][])
+    colors = Iterators.cycle(plot[:colors][])
     for (nb, color) in zip(bands, colors)
         band = bs.bands[nb]
         vertices = band.mesh.vertices
