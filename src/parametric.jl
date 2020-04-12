@@ -19,10 +19,11 @@ end
     parametric(h::Hamiltonian, modifiers::ElementModifier...)
 
 Builds a `ParametricHamiltonian` that can be used to efficiently apply `modifiers` to `h`.
-`modifiers` can be any number of `onsite!(f;...)` and `hopping!(f; ...)` transformations,
-each with a set of parameters given as keyword arguments of functions `f`. The resulting
-`ph::ParamtricHamiltonian` can be used to produced the modified Hamiltonian simply by
-calling it with those same parameters as keyword arguments.
+`modifiers` can be any number of `@onsite!(args -> body; kw...)` and `@hopping!(args -> body;
+kw...)` transformations, each with a set of parameters `ps` given as keyword arguments of
+functions `f = (...; ps...) -> body`. The resulting `ph::ParamtricHamiltonian` can be used
+to produced the modified Hamiltonian simply by calling it with those same parameters as
+keyword arguments.
 
 Note 1: for sparse `h`, `parametric` only modifies existing onsites and hoppings in `h`,
 so be sure to add zero onsites and/or hoppings to `h` if they are originally not present but
@@ -59,7 +60,7 @@ Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
   Coordination     : 3.0
 
 # See also
-    `onsite!`, `hopping!`
+    `@onsite!`, `@hopping!`
 ```
 """
 function parametric(h::Hamiltonian, ts::ElementModifier...)
@@ -89,22 +90,23 @@ function parametric_ptrdata(h::Hamiltonian{LA,L,M,<:AbstractSparseMatrix}, t::El
     return harmonic_ptrdata
 end
 
-# needspositions = false, one vector of nzval ptr per harmonic
-empty_ptrdata(h, t::Onsite!{Val{false}})  = [Int[] for _ in h.harmonics]
-empty_ptrdata(h, t::Hopping!{Val{false}}) = [Int[] for _ in h.harmonics]
-# needspositions = true, one vector of (ptr, r, dr) per harmonic
-function empty_ptrdata(h, t::Onsite!{Val{true}})
+# Uniform case, one vector of nzval ptr per harmonic
+empty_ptrdata(h, t::UniformModifier)  = [Int[] for _ in h.harmonics]
+# Non-uniform case, one vector of (ptr, r, dr) per harmonic
+function empty_ptrdata(h, t::OnsiteModifier)
     S = positiontype(h.lattice)
     return [Tuple{Int,S}[] for _ in h.harmonics]
 end
-function empty_ptrdata(h, t::Hopping!{Val{true}})
+function empty_ptrdata(h, t::HoppingModifier)
     S = positiontype(h.lattice)
     return [Tuple{Int,S,S}[] for _ in h.harmonics]
 end
 
-ptrdatum(t::ElementModifier{Val{false}}, lat, ptr, (row, col)) = ptr
-ptrdatum(t::Onsite!{Val{true}}, lat, ptr, (row, col)) = (ptr, sites(lat)[col])
-function ptrdatum(t::Hopping!{Val{true}}, lat, ptr, (row, col))
+# Uniform case
+ptrdatum(t::UniformModifier, lat, ptr, (row, col)) = ptr
+# Non-uniform case
+ptrdatum(t::OnsiteModifier, lat, ptr, (row, col)) = (ptr, sites(lat)[col])
+function ptrdatum(t::HoppingModifier, lat, ptr, (row, col))
     r, dr = _rdr(sites(lat)[col], sites(lat)[row])
     return (ptr, r, dr)
 end
@@ -149,6 +151,13 @@ function checkconsistency(ph::ParametricHamiltonian, fullcheck = true)
         throw(error("ParametricHamiltonian is not internally consistent, it may have been modified after creation"))
     return nothing
 end
+
+"""
+    parameters(ph::ParametricHamiltonian)
+
+Return the parameter names for each of the `ElementModifier`s involved in `ph`
+"""
+parameters(ph::ParametricHamiltonian) = parameters.(ph.modifiers)
 
 Base.copy(ph::ParametricHamiltonian) =
     ParametricHamiltonian(copy(ph.originalh), copy(ph.h), ph.modifiers, copy(h.ptrdata))

@@ -680,29 +680,29 @@ wrap_dn(olddn::SVector, newdn::SVector, supercell::SMatrix) = olddn - supercell 
 
 applymodifiers(val, lat, inds, dns) = val
 
-function applymodifiers(val, lat, inds, dns, m::ElementModifier{Val{false}}, ms...)
+function applymodifiers(val, lat, inds, dns, m::UniformModifier, ms...)
     selected = m.selector(lat, inds, dns)
     val´ = selected ? m.f(val) : val
     return applymodifiers(val´, lat, inds, dns, ms...)
 end
 
-function applymodifiers(val, lat, (row, col), (dnrow, dncol), m::Onsite!{Val{true}}, ms...)
+function applymodifiers(val, lat, (row, col), (dnrow, dncol), m::OnsiteModifier, ms...)
     selected = m.selector(lat, (row, col), (dnrow, dncol))
     if selected
         r = sites(lat)[col] + bravais(lat) * dncol
-        val´ = selected ? m.f(val, r) : val
+        val´ = selected ? m(val, r) : val
     else
         val´ = val
     end
     return applymodifiers(val´, lat, (row, col), (dnrow, dncol), ms...)
 end
 
-function applymodifiers(val, lat, (row, col), (dnrow, dncol), m::Hopping!{Val{true}}, ms...)
+function applymodifiers(val, lat, (row, col), (dnrow, dncol), m::HoppingModifier, ms...)
     selected = m.selector(lat, (row, col), (dnrow, dncol))
     if selected
         br = bravais(lat)
         r, dr = _rdr(sites(lat)[col] + br * dncol, sites(lat)[row] + br * dnrow)
-        val´ = selected ? m.f(val, r, dr) : val
+        val´ = selected ? m(val, r, dr) : val
     else
         val´ = val
     end
