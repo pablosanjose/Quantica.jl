@@ -524,7 +524,7 @@ function applyterm!(builder::IJVBuilder{L}, term::HoppingTerm, termsublats) wher
     selector = term.selector
     checkinfinite(selector)
     lat = builder.lat
-    for (s1, s2) in termsublats
+    for (s2, s1) in termsublats  # Each is a Pair s2 => s1
         is, js = siterange(lat, s1), siterange(lat, s2)
         dns = dniter(selector.dns, Val(L))
         for dn in dns

@@ -27,12 +27,12 @@ end
     for orb in orbs
         @test hamiltonian(lat, onsite(I), orbitals = orb) isa Hamiltonian
     end
-    @test hamiltonian(lat, onsite(I) + hopping(@SMatrix[1 2], sublats = (:A,:B)),
-                      orbitals = :B => Val(2)) isa Hamiltonian
-    h1 = hamiltonian(lat, onsite(I) + hopping(@SMatrix[1 2], sublats = (:A,:B)),
-                      orbitals = :B => Val(2))
-    h2 = hamiltonian(lat, onsite(I) + hopping(@SMatrix[1 2], sublats = ((:A,:B),)),
-                      orbitals = :B => Val(2))
+    @test hamiltonian(lat, onsite(I) + hopping(@SMatrix[1 2], sublats = :A =>:B),
+                      orbitals = :A => Val(2)) isa Hamiltonian
+    h1 = hamiltonian(lat, onsite(I) + hopping(@SMatrix[1 2], sublats = :A =>:B),
+                      orbitals = :A => Val(2))
+    h2 = hamiltonian(lat, onsite(I) + hopping(@SMatrix[1 2], sublats = (:A =>:B,)),
+                      orbitals = :A => Val(2))
     @test bloch(h1, (1, 2)) == bloch(h2, (1, 2))
 end
 
