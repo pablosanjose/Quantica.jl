@@ -20,13 +20,20 @@ toSVector(v::AbstractVector) = SVector(Tuple(v))
 ensuretuple(s::Tuple) = s
 ensuretuple(s) = (s,)
 
+tupletopair(s::Tuple) = Pair(s...)
+
 tuplemost(t::NTuple{N,Any}) where {N} = ntuple(i -> t[i], Val(N-1))
 
-# ensureSMatrix(f::Function) = f
-# ensureSMatrix(m::T) where T<:Number = SMatrix{1,1,T,1}(m)
-# ensureSMatrix(m::SMatrix) = m
-# ensureSMatrix(m::Array) =
-#     throw(ErrorException("Write all model terms using scalars or @SMatrix[matrix]"))
+filltuple(x, ::Val{L}) where {L} = ntuple(_ -> x, Val(L))
+
+@inline tuplejoin() = ()
+@inline tuplejoin(x) = x
+@inline tuplejoin(x, y) = (x..., y...)
+@inline tuplejoin(x, y, z...) = (x..., tuplejoin(y, z...)...)
+
+tupleproduct(p1, p2) = tupleproduct(ensuretuple(p1), ensuretuple(p2))
+tupleproduct(p1::NTuple{M,Any}, p2::NTuple{N,Any}) where {M,N} =
+    ntuple(i -> (p1[1+fld(i-1, N)], p2[1+mod(i-1, N)]), Val(M * N))
 
 _rdr(r1, r2) = (0.5 * (r1 + r2), r2 - r1)
 
@@ -48,8 +55,6 @@ padright(sv::StaticVector{E,T}, ::Val{E2}) where {E,T,E2} = padright(sv, zero(T)
 padright(sv::StaticVector{E,T}, ::Val{E}) where {E,T} = sv
 padright(t::NTuple{N´,<:Any}, x, ::Val{N}) where {N´,N} = ntuple(i -> i > N´ ? x : t[i], Val(N))
 padright(t::NTuple{N´,<:Any}, ::Val{N}) where {N´,N} = ntuple(i -> i > N´ ? 0 : t[i], Val(N))
-
-filltuple(x, ::Val{L}) where {L} = ntuple(_ -> x, Val(L))
 
 # Pad element type to a "larger" type
 @inline padtotype(s::SMatrix{E,L}, ::Type{S}) where {E,L,E2,L2,S<:SMatrix{E2,L2}} =
@@ -85,11 +90,6 @@ function pinvmultiple(s::SMatrix{L,L´}) where {L,L´}
     pinverse = inv(qrfact.R) * qrfact.Q'
     return round.(Int, n * inv(qrfact.R) * qrfact.Q'), round(Int, n)
 end
-
-@inline tuplejoin() = ()
-@inline tuplejoin(x) = x
-@inline tuplejoin(x, y) = (x..., y...)
-@inline tuplejoin(x, y, z...) = (x..., tuplejoin(y, z...)...)
 
 function isgrowing(vs::AbstractVector, i0 = 1)
     i0 > length(vs) && return true

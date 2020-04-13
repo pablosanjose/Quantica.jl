@@ -11,7 +11,7 @@ end
 
 struct HoppingSelector{M,S,D,T} <: Selector{M,S}
     region::M
-    sublats::S  # NTuple{N,Tuple{NameType,NameType}} (unres) or Vector{Tuple{Int,Int}} (res)
+    sublats::S  # NTuple{N,Pair{NameType,NameType}} (unres) or Vector{Pair{Int,Int}} (res)
     dns::D
     range::T
     forcehermitian::Bool
@@ -29,16 +29,18 @@ sanitize_sublats(s::NameType) = (s,)
 sanitize_sublats(s::Tuple) = nametype.(s)
 sanitize_sublats(s::Tuple{}) = ()
 sanitize_sublats(n) = throw(ErrorException(
-    "`sublats` for `onsite` must be either `missing`, an `s` or a tuple of `s`s, with `s::$NameType` is a sublattice name"))
+    "`sublats` for `onsite` must be either `missing`, a sublattice name or a tuple of names, see `onsite` for details"))
 
 sanitize_sublatpairs(s::Missing) = missing
-sanitize_sublatpairs((s1, s2)::NTuple{2,Union{Integer,NameType}}) = ((nametype(s1), nametype(s2)),)
-sanitize_sublatpairs((s2, s1)::Pair) = sanitize_sublatpairs((s1, s2))
-sanitize_sublatpairs(s::Union{Integer,NameType}) = sanitize_sublatpairs((s,s))
-sanitize_sublatpairs(s::NTuple{N,Any}) where {N} =
-    ntuple(n -> first(sanitize_sublatpairs(s[n])), Val(N))
+sanitize_sublatpairs(p::Pair{<:Union{NameType,Integer}, <:Union{NameType,Integer}}) =
+    (ensurenametype(p),)
+sanitize_sublatpairs(pp::Pair) =
+    ensurenametype.(tupletopair.(tupleproduct(first(pp), last(pp))))
+sanitize_sublatpairs(ps::Tuple) = tuplejoin(sanitize_sublatpairs.(ps)...)
 sanitize_sublatpairs(s) = throw(ErrorException(
-    "`sublats` for `hopping` must be either `missing`, a tuple `(s₁, s₂)`, or a tuple of such tuples, with `sᵢ::$NameType` a sublattice name"))
+    "`sublats` for `hopping` must be either `missing` or a series of sublattice `Pair`s, see `hopping` for details"))
+
+ensurenametype((s1, s2)::Pair) = nametype(s1) => nametype(s2)
 
 sanitize_dn(dn::Missing) = missing
 sanitize_dn(dn::Tuple{Vararg{NTuple{N}}}) where {N} = SVector{N,Int}.(dn)
@@ -65,11 +67,11 @@ sublats(s::HoppingSelector{<:Any,Missing}, lat::AbstractLattice) =
 
 function sublats(s::HoppingSelector{<:Any,<:Tuple}, lat::AbstractLattice)
     names = lat.unitcell.names
-    ss = Tuple{Int,Int}[]
-    for (n1, n2) in s.sublats
-        i1 = findfirst(isequal(n1), names)
-        i2 = findfirst(isequal(n2), names)
-        i1 !== nothing && i2 !== nothing && push!(ss, (i1, i2))
+    ss = Pair{Int,Int}[]
+    for (nsrc, ndst) in s.sublats
+        isrc = findfirst(isequal(nsrc), names)
+        idst = findfirst(isequal(ndst), names)
+        isrc !== nothing && idst !== nothing && push!(ss, isrc => idst)
     end
     return ss
 end
@@ -203,6 +205,8 @@ HoppingTerm(t::HoppingTerm, os::HoppingSelector) =
 
 sublats(t::TightbindingModelTerm, lat) = sublats(t.selector, lat)
 
+sublats(m::TightbindingModel) = (t -> t.selector.sublats).(terms(m))
+
 displayparameter(::Type{<:Function}) = "Function"
 displayparameter(::Type{T}) where {T} = "$T"
 
@@ -219,7 +223,7 @@ function Base.show(io::IO, h::HoppingTerm{F}) where {F}
     i = get(io, :indent, "")
     print(io,
 "$(i)HoppingTerm{$(displayparameter(F))}:
-$(i)  Sublattice pairs : $(h.selector.sublats === missing ? "any" : (t -> Pair(reverse(t)...)).(h.selector.sublats))
+$(i)  Sublattice pairs : $(h.selector.sublats === missing ? "any" : h.selector.sublats)
 $(i)  dn cell distance : $(h.selector.dns === missing ? "any" : h.selector.dns)
 $(i)  Hopping range    : $(round(h.selector.range, digits = 6))
 $(i)  Force hermitian  : $(h.selector.forcehermitian)
@@ -233,11 +237,6 @@ end
 Create an `TightbindingModel` with a single `OnsiteTerm` that applies an onsite energy `o`
 to a `Lattice` when creating a `Hamiltonian` with `hamiltonian`.
 
-Only sites at position `r` in sublattice with name `s::NameType` will be selected if
-`region(r) && s in sublats` is true. Any missing `region` or `sublat` will not be used to
-constraint the selection. The keyword `forcehermitian` specifies whether the `OnsiteTerm`
-applied to a selected site should be made hermitian.
-
 The onsite energy `o` can be a number, a matrix (preferably `SMatrix`), a `UniformScaling`
 (e.g. `3*I`) or a function of the form `r -> ...` for a position-dependent onsite energy.
 
@@ -247,13 +246,29 @@ be converted to an identity matrix of the appropriate size when applied to multi
 sublattices. Similarly, if `o::SMatrix` it will be truncated or padded to the appropriate
 size.
 
-`OnsiteTerm`s and `HoppingTerm`s created with `onsite` or `hopping` can be added or
-substracted together to build more complicated `TightbindingModel`s.
-
     onsite(model::TightbindingModel; kw...)
 
 Return a `TightbindingModel` with only the onsite terms of `model`. Any non-missing `kw` is
 applied to all such terms.
+
+# Keyword arguments
+
+Only sites at position `r` in sublattice with name `s::NameType` will be selected if
+`region(r) && s in sublats` is true. Any missing `region` or `sublat` will not be used to
+constraint the selection.
+
+The keyword `forcehermitian` specifies whether the `OnsiteTerm` applied to a selected site
+should be made hermitian. The keyword `sublats` allows the following formats:
+
+    sublats = :A           # Onsite on sublat :A only
+    sublats = (:A,)        # Same as above
+    sublats = (:A, :B)     # Onsite on sublat :A and :B
+
+# Combining models
+
+`OnsiteTerm`s and `HoppingTerm`s created with `onsite` or `hopping` can added or substracted
+together or be multiplied by scalars to build more complicated `TightbindingModel`s, e.g.
+`onsite(1) - 3 * hopping(2)`
 
 # Examples
 ```
@@ -316,13 +331,6 @@ _onlyonsites(s) = ()
 Create an `TightbindingModel` with a single `HoppingTerm` that applies a hopping `t` to a
 `Lattice` when creating a `Hamiltonian` with `hamiltonian`.
 
-Only hoppings between two sites at positions `r₁ = r - dr/2` and `r₂ = r + dr`, belonging to
-unit cells at integer distance `dn´` and to sublattices `s₁` and `s₂` will be selected if:
-`region(r, dr) && s in sublats && dn´ in dn && norm(dr) <= range`. If any of these is
-`missing` it will not be used to constraint the selection. Note that the default `range` is
-1, not `missing`. The keyword `forcehermitian` specifies whether the `HoppingTerm` applied
-to a selected hopping should be made hermitian.
-
 The hopping amplitude `t` can be a number, a matrix (preferably `SMatrix`), a
 `UniformScaling` (e.g. `3*I`) or a function of the form `(r, dr) -> ...` for a
 position-dependent hopping (`r` is the bond center, and `dr` the bond vector). If `sublats`
@@ -342,6 +350,29 @@ substracted together to build more complicated `TightbindingModel`s.
 
 Return a `TightbindingModel` with only the hopping terms of `model`. Any non-missing `kw` is
 applied to all such terms.
+
+# Keyword arguments
+
+Only hoppings between two sites at positions `r₁ = r - dr/2` and `r₂ = r + dr`, belonging to
+unit cells at integer distance `dn´` and to sublattices `s₁` and `s₂` will be selected if:
+`region(r, dr) && s in sublats && dn´ in dn && norm(dr) <= range`. If any of these is
+`missing` it will not be used to constraint the selection. Note that the default `range` is
+1, not `missing`.
+
+The keyword `forcehermitian` specifies whether the `HoppingTerm` applied to a selected
+hopping should be made hermitian. The keyword `sublats` allows the following formats:
+
+    sublats = :A => :B                 # Hopping from :A to :B sublattices
+    sublats = (:A => :B,)              # Same as above
+    sublats = (:A => :B, :C => :D)     # Hopping from :A to :B or :C to :D
+    sublats = (:A, :C) .=> (:B, :D)    # Broadcasted pairs, same as above
+    sublats = (:A, :C) => (:B, :D)     # Direct product, (:A=>:B, :A=:D, :C=>:B, :C=>D)
+
+# Combining models
+
+`OnsiteTerm`s and `HoppingTerm`s created with `onsite` or `hopping` can added or substracted
+together or be multiplied by scalars to build more complicated `TightbindingModel`s, e.g.
+`onsite(1) - 3 * hopping(2)`
 
 # Examples
 ```
@@ -371,15 +402,15 @@ TightbindingModel{2}: model with 2 terms
     Force hermitian  : true
     Coefficient      : -1
 
-julia> LatticePresets.honeycomb() |> hamiltonian(hopping((r,dr) -> cos(r[1]), sublats = ((:A,:A), (:B,:B))))
+julia> LatticePresets.honeycomb() |> hamiltonian(hopping((r,dr) -> cos(r[1]), sublats = (:A,:B) => (:A,:B)))
 Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
   Bloch harmonics  : 7 (SparseMatrixCSC, sparse)
   Harmonic size    : 2 × 2
   Orbitals         : ((:a,), (:a,))
   Element type     : scalar (Complex{Float64})
   Onsites          : 0
-  Hoppings         : 12
-  Coordination     : 6.0
+  Hoppings         : 18
+  Coordination     : 9.0
 ```
 
 # See also:

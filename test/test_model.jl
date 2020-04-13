@@ -1,4 +1,4 @@
-using Quantica: TightbindingModel, OnsiteTerm, HoppingTerm, padtotype, Selector
+using Quantica: TightbindingModel, OnsiteTerm, HoppingTerm, padtotype, Selector, sublats
 
 @testset "term algebra" begin
     r = SVector(0, 0)
@@ -11,9 +11,9 @@ using Quantica: TightbindingModel, OnsiteTerm, HoppingTerm, padtotype, Selector
     @test model(r, r) == @SMatrix[-5 0; -1 -5]
 end
 
-@testset "onsite modification" begin
+@testset "onsite terms" begin
     rs = (r->true, missing)
-    ss = (:A, missing)
+    ss = (:A, (:A, :B), missing)
     for r in rs, s in ss
         model0 = onsite(1, region = r, sublats = s) + hopping(1)
         model1 = onsite(1) + hopping(1)
@@ -25,10 +25,10 @@ end
     end
 end
 
-@testset "hopping modification" begin
+@testset "hopping terms" begin
     rs = (r->true, missing)
-    ss = (:A, missing)
-    dns = ((0,1), missing)
+    ss = (:A => :B, :A => (:A,:B), (:A,:B) .=> (:A,:B), (:A,:B) => (:A,:B), missing)
+    dns = ((0,1), ((0,1),(1,0)), missing)
     ranges = (Inf, 1)  # no missing here, because hopping range default is 1.0
     for r in rs, s in ss, dn in dns, rn in ranges
         model0 = hopping(1, region = r, sublats = s, dn = dn, range = rn) + onsite(1)
@@ -41,4 +41,9 @@ end
         @test hopping(model3, region = r, sublats = s, dn = dn, range = rn) + onsite(model3) === model0
         @test hopping(model4, region = r, sublats = s, dn = dn, range = rn) + onsite(model4) === model0
     end
+
+    sublats(hopping(1, sublats = (:A,:B) => (:A,:B))) == ((:A => :A, :A => :B, :B => :A, :B => :B),)
+    sublats(hopping(1, sublats = (:A,:B) .=> (:A,:B))) == ((:A => :A, :B => :B),)
+    sublats(hopping(1, sublats = :A => (:A,:B))) == ((:A => :A, :A => :B),)
+    sublats(hopping(1, sublats = (:C => :C, (:A,:B) => (:A,:B)))) == ((:C => :C, :A => :A, :A => :B, :B => :A, :B => :B),)
 end
