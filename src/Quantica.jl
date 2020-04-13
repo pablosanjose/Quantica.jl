@@ -1,5 +1,8 @@
 module Quantica
 
+# Use README as the docstring of the module:
+@doc read(joinpath(dirname(@__DIR__), "README.md"), String) Quantica
+
 using Requires
 
 function __init__()
