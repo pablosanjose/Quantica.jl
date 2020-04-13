@@ -307,7 +307,6 @@ Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
   Onsites          : 2
   Hoppings         : 0
   Coordination     : 0.0
-
 ```
 
 # See also:
