@@ -1,6 +1,6 @@
 # Quantica.jl
 
-A Julia package for building generic tight-binding models and computing various spectral and transport properties.
+[Quantica.jl](https://github.com/pablosanjose/Quantica.jl/actions) is a Julia package for building generic tight-binding models and computing various spectral and transport properties.
 
 !!! note "Important information"
 
