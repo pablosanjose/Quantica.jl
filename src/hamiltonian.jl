@@ -264,7 +264,7 @@ end
 ```
 ```jldoctest
 julia> h = hamiltonian(LatticePresets.honeycomb(), hopping(@SMatrix[1 2; 3 4], range = 1/√3), orbitals = Val(2))
-Hamiltonian{<:Lattice} : 2D Hamiltonian on a 2D Lattice in 2D space
+Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
   Bloch harmonics  : 5 (SparseMatrixCSC, sparse)
   Harmonic size    : 2 × 2
   Orbitals         : ((:a, :a), (:a, :a))
@@ -274,7 +274,7 @@ Hamiltonian{<:Lattice} : 2D Hamiltonian on a 2D Lattice in 2D space
   Coordination     : 3.0
 
 julia> push!(h, (3,3)) # Adding a new Hamiltonian harmonic (if not already present)
-Hamiltonian{<:Lattice} : 2D Hamiltonian on a 2D Lattice in 2D space
+Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
   Bloch harmonics  : 6 (SparseMatrixCSC, sparse)
   Harmonic size    : 2 × 2
   Orbitals         : ((:a, :a), (:a, :a))
@@ -283,15 +283,14 @@ Hamiltonian{<:Lattice} : 2D Hamiltonian on a 2D Lattice in 2D space
   Hoppings         : 6
   Coordination     : 3.0
 
-julia> h[3,3][1,1] = @SMatrix[1 2; 2 1]; h[3,3] # element assignment
+julia> h[(3,3)][1,1] = @SMatrix[1 2; 2 1]; h[(3,3)] # element assignment
 2×2 SparseArrays.SparseMatrixCSC{StaticArrays.SArray{Tuple{2,2},Complex{Float64},2,4},Int64} with 1 stored entry:
   [1, 1]  =  [1.0+0.0im 2.0+0.0im; 2.0+0.0im 1.0+0.0im]
 
-julia> h[3,3][[1,2],[1,2]] .= rand(SMatrix{2,2,Float64}, 2, 2) # Broadcast assignment
+julia> h[(3,3)][[1,2],[1,2]] .= Ref(@SMatrix[1 2; 2 1])
 2×2 view(::SparseArrays.SparseMatrixCSC{StaticArrays.SArray{Tuple{2,2},Complex{Float64},2,4},Int64}, [1, 2], [1, 2]) with eltype StaticArrays.SArray{Tuple{2,2},Complex{Float64},2,4}:
- [0.271152+0.0im 0.921417+0.0im; 0.138212+0.0im 0.525911+0.0im]  [0.444284+0.0im 0.280035+0.0im; 0.565106+0.0im 0.121869+0.0im]
- [0.201126+0.0im 0.912446+0.0im; 0.372099+0.0im 0.931358+0.0im]  [0.883422+0.0im 0.874016+0.0im; 0.296095+0.0im 0.995861+0.0im]
-```
+ [1.0+0.0im 2.0+0.0im; 2.0+0.0im 1.0+0.0im]  [1.0+0.0im 2.0+0.0im; 2.0+0.0im 1.0+0.0im]
+ [1.0+0.0im 2.0+0.0im; 2.0+0.0im 1.0+0.0im]  [1.0+0.0im 2.0+0.0im; 2.0+0.0im 1.0+0.0im]```
 ```@meta
 DocTestSetup = nothing
 ```
@@ -716,8 +715,9 @@ DocTestSetup = quote
 end
 ```
 ```jldoctest
-julia> LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = 1/√3)) |> unitcell((1,-1), (10, 10)) |> wrap(2)
-Hamiltonian{<:Lattice} : 1D Hamiltonian on a 1D Lattice in 2D space
+julia> LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = 1/√3)) |>
+       unitcell((1,-1), (10, 10)) |> wrap(2)
+Hamiltonian{<:Lattice} : Hamiltonian on a 1D Lattice in 2D space
   Bloch harmonics  : 3 (SparseMatrixCSC, sparse)
   Harmonic size    : 40 × 40
   Orbitals         : ((:a,), (:a,))
@@ -811,7 +811,7 @@ DocTestSetup = quote
 end
 ```
 ```jldoctest
-julia> h = LatticePresets.honeycomb() |> hamiltonian(onsite(1), hopping(2));
+julia> h = LatticePresets.honeycomb() |> hamiltonian(onsite(1) + hopping(2));
 
 julia> bloch!(similarmatrix(h), h, (.2,.3))
 2×2 SparseArrays.SparseMatrixCSC{Complex{Float64},Int64} with 4 stored entries:
@@ -909,12 +909,12 @@ DocTestSetup = quote
 end
 ```
 ```jldoctest
-julia> h = LatticePresets.honeycomb() |> hamiltonian(onsite(1), hopping(2)) |> bloch(.2,.3)
+julia> h = LatticePresets.honeycomb() |> hamiltonian(onsite(1) + hopping(2)) |> bloch((.2,.3))
 2×2 SparseArrays.SparseMatrixCSC{Complex{Float64},Int64} with 4 stored entries:
-  [1, 1]  =  1.99001-0.199667im
-  [2, 1]  =  1.96013-0.397339im
-  [1, 2]  =  1.96013+0.397339im
-  [2, 2]  =  1.99001-0.199667im
+  [1, 1]  =  12.7216+0.0im
+  [2, 1]  =  5.87081+0.988379im
+  [1, 2]  =  5.87081-0.988379im
+  [2, 2]  =  12.7216+0.0im
 ```
 ```@meta
 DocTestSetup = nothing

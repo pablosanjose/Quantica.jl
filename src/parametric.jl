@@ -12,7 +12,7 @@ function Base.show(io::IO, ::MIME"text/plain", pham::ParametricHamiltonian{N}) w
     i = get(io, :indent, "")
     print(io, i, "Parametric")
     show(io, pham.h)
-    print(io, i, "\n", "$i  Param Modifiers  : $N")
+    print(io, i, "\n", "$i  Parameters       : $(parameters(pham))")
 end
 
 """
@@ -43,26 +43,27 @@ DocTestSetup = quote
 end
 ```
 ```jldoctest
-julia> ph = LatticePresets.honeycomb() |> hamiltonian(onsite(0) + hopping(1, range = 1/√3)) |> unitcell(10) |> parametric(onsite!((o; μ) -> o - μ))
+julia> ph = LatticePresets.honeycomb() |> hamiltonian(onsite(0) + hopping(1, range = 1/√3)) |>
+       unitcell(10) |> parametric(@onsite!((o; μ) -> o - μ))
 ParametricHamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
   Bloch harmonics  : 5 (SparseMatrixCSC, sparse)
   Harmonic size    : 200 × 200
   Orbitals         : ((:a,), (:a,))
   Element type     : scalar (Complex{Float64})
   Onsites          : 200
-  Hoppings         : 600
-  Coordination     : 3.0
-  Param Modifiers  : 1
+  Hoppings         : 640
+  Coordination     : 3.2
+  Parameters       : (:μ,)
 
-julia> ph(; μ = 2)
+julia> ph(μ = 2)
 Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
   Bloch harmonics  : 5 (SparseMatrixCSC, sparse)
   Harmonic size    : 200 × 200
   Orbitals         : ((:a,), (:a,))
   Element type     : scalar (Complex{Float64})
   Onsites          : 200
-  Hoppings         : 600
-  Coordination     : 3.0
+  Hoppings         : 640
+  Coordination     : 3.2
 ```
 ```@meta
 DocTestSetup = nothing
@@ -164,7 +165,7 @@ end
 
 Return the parameter names for each of the `ElementModifier`s involved in `ph`
 """
-parameters(ph::ParametricHamiltonian) = parameters.(ph.modifiers)
+parameters(ph::ParametricHamiltonian) = mergetuples(parameters.(ph.modifiers)...)
 
 Base.copy(ph::ParametricHamiltonian) =
     ParametricHamiltonian(copy(ph.originalh), copy(ph.h), ph.modifiers, copy(h.ptrdata))

@@ -103,8 +103,9 @@ end
 ```jldoctest
 julia> bravais((1.0, 2), (3, 4))
 Bravais{2,2,Float64} : set of 2 Bravais vectors in 2D space.
-  Vectors : ((1.0, 2.0), (3.0, 4.0))
-  Matrix  : [1.0 3.0; 2.0 4.0]
+  Vectors     : ((1.0, 2.0), (3.0, 4.0))
+  Matrix      : [1.0 3.0; 2.0 4.0],
+  Semibounded : none
 ```
 ```@meta
 DocTestSetup = nothing
@@ -264,7 +265,7 @@ end
 ```jldoctest
 julia> lattice(bravais((1, 0)), sublat((0, 0)), sublat((0, Float32(1))); dim = Val(3))
 Lattice{3,1,Float32} : 1D lattice in 3D space
-  Bravais vectors : ((1.0, 0.0, 0.0),)
+  Bravais vectors : ((1.0f0, 0.0f0, 0.0f0),)
   Sublattices     : 2
     Names         : (:A, :B)
     Sites         : (1, 1) --> 2 total per unit cell
@@ -547,7 +548,6 @@ Superlattice{2,2,Float64,0} : 2D lattice in 2D space, filling a 0D supercell
   Bravais vectors : ((0.5, 0.866025), (-0.5, 0.866025))
   Sublattices     : 2
     Names         : (:A, :B)
-    Orbitals      : ((:noname,), (:noname,))
     Sites         : (1, 1) --> 2 total per unit cell
   Supercell{2,0} for 0D superlattice of the base 2D lattice
     Supervectors  : ()
@@ -558,7 +558,6 @@ Superlattice{2,2,Float64,2} : 2D lattice in 2D space, filling a 2D supercell
   Bravais vectors : ((0.5, 0.866025), (-0.5, 0.866025))
   Sublattices     : 1
     Names         : (:A)
-    Orbitals      : ((:noname,),)
     Sites         : (1) --> 1 total per unit cell
   Supercell{2,2} for 2D superlattice of the base 2D lattice
     Supervectors  : ((1, 1), (1, -1))
@@ -569,7 +568,6 @@ Superlattice{2,2,Float64,2} : 2D lattice in 2D space, filling a 2D supercell
   Bravais vectors : ((1.0, 0.0), (0.0, 1.0))
   Sublattices     : 1
     Names         : (:A)
-    Orbitals      : ((:noname,),)
     Sites         : (1) --> 1 total per unit cell
   Supercell{2,2} for 2D superlattice of the base 2D lattice
     Supervectors  : ((3, 0), (0, 3))
@@ -752,7 +750,6 @@ Lattice{2,0,Float64} : 0D lattice in 2D space
   Bravais vectors : ()
   Sublattices     : 2
     Names         : (:A, :B)
-    Orbitals      : ((:noname,), (:noname,))
     Sites         : (326483, 326483) --> 652966 total per unit cell
 
 julia> unitcell(LatticePresets.triangular(), (1,1), (1, -1))
@@ -760,7 +757,6 @@ Lattice{2,2,Float64} : 2D lattice in 2D space
   Bravais vectors : ((0.0, 1.732051), (1.0, 0.0))
   Sublattices     : 1
     Names         : (:A)
-    Orbitals      : ((:noname,),)
     Sites         : (2) --> 2 total per unit cell
 
 julia> LatticePresets.square() |> unitcell(3)
@@ -768,7 +764,6 @@ Lattice{2,2,Float64} : 2D lattice in 2D space
   Bravais vectors : ((3.0, 0.0), (0.0, 3.0))
   Sublattices     : 1
     Names         : (:A)
-    Orbitals      : ((:noname,),)
     Sites         : (9) --> 9 total per unit cell
 
 julia> supercell(LatticePresets.square(), 3) |> unitcell
@@ -776,7 +771,6 @@ Lattice{2,2,Float64} : 2D lattice in 2D space
   Bravais vectors : ((3.0, 0.0), (0.0, 3.0))
   Sublattices     : 1
     Names         : (:A)
-    Orbitals      : ((:noname,),)
     Sites         : (9) --> 9 total per unit cell
 ```
 ```@meta
