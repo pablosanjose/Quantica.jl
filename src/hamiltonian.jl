@@ -258,8 +258,9 @@ do `deleteat!(h, dn)`.
 
 # Examples
 ```@meta
-DocTestSetup =
+DocTestSetup = quote
     using Quantica
+end
 ```
 ```jldoctest
 julia> h = hamiltonian(LatticePresets.honeycomb(), hopping(@SMatrix[1 2; 3 4], range = 1/√3), orbitals = Val(2))
@@ -710,8 +711,9 @@ Functional form equivalent to `wrap(h, axis; kw...)`.
 
 # Examples
 ```@meta
-DocTestSetup =
+DocTestSetup = quote
     using Quantica
+end
 ```
 ```jldoctest
 julia> LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = 1/√3)) |> unitcell((1,-1), (10, 10)) |> wrap(2)
@@ -804,8 +806,9 @@ be of the same type (e.g. it can be dense, while `h` is sparse).
 
 # Examples
 ```@meta
-DocTestSetup =
+DocTestSetup = quote
     using Quantica
+end
 ```
 ```jldoctest
 julia> h = LatticePresets.honeycomb() |> hamiltonian(onsite(1), hopping(2));
@@ -901,8 +904,9 @@ Functional forms of `bloch`, equivalent to `bloch(h, ϕs, ...)`
 
 # Examples
 ```@meta
-DocTestSetup =
+DocTestSetup = quote
     using Quantica
+end
 ```
 ```jldoctest
 julia> h = LatticePresets.honeycomb() |> hamiltonian(onsite(1), hopping(2)) |> bloch(.2,.3)
@@ -1007,8 +1011,9 @@ the rest of the API).
 
 # Examples
 ```@meta
-DocTestSetup =
+DocTestSetup = quote
     using Quantica
+end
 ```
 ```jldoctest
 julia> h = LatticePresets.honeycomb() |> hamiltonian(hopping(@SMatrix[1; 2], range = 1/√3, sublats = :A =>:B), orbitals = (Val(1), Val(2)))
