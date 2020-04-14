@@ -37,7 +37,7 @@ to extra zero onsites and hoppings being stored in sparse `h`s.
 Function form of `parametric`, equivalent to `parametric(h, modifiers...)`.
 
 # Examples
-```
+```jldoctest
 julia> ph = LatticePresets.honeycomb() |> hamiltonian(onsite(0) + hopping(1, range = 1/√3)) |> unitcell(10) |> parametric(onsite!((o; μ) -> o - μ))
 ParametricHamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
   Bloch harmonics  : 5 (SparseMatrixCSC, sparse)

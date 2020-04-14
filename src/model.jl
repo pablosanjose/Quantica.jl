@@ -271,7 +271,7 @@ together or be multiplied by scalars to build more complicated `TightbindingMode
 `onsite(1) - 3 * hopping(2)`
 
 # Examples
-```
+```jldoctest
 julia> model = onsite(1, sublats = (:A,:B)) - 2 * hopping(2, sublats = :A=>:A)
 TightbindingModel{2}: model with 2 terms
   OnsiteTerm{Int64}:
@@ -374,7 +374,7 @@ together or be multiplied by scalars to build more complicated `TightbindingMode
 `onsite(1) - 3 * hopping(2)`
 
 # Examples
-```
+```jldoctest
 julia> model = 3 * onsite(1) - hopping(2, dn = ((1,2), (0,0)), sublats = :A=>:B)
 TightbindingModel{2}: model with 2 terms
   OnsiteTerm{Int64}:

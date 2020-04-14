@@ -702,7 +702,7 @@ flux Φ through the loop, if `factor = exp(im * 2π * Φ/Φ₀)`.
 Functional form equivalent to `wrap(h, axis; kw...)`.
 
 # Examples
-```
+```jldoctest
 julia> LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = 1/√3)) |> unitcell((1,-1), (10, 10)) |> wrap(2)
 Hamiltonian{<:Lattice} : 1D Hamiltonian on a 1D Lattice in 2D space
   Bloch harmonics  : 3 (SparseMatrixCSC, sparse)
@@ -789,7 +789,7 @@ conventient way to obtain a `matrix` is to use `similarmatrix(h)`, which will re
 be of the same type (e.g. it can be dense, while `h` is sparse).
 
 # Examples
-```
+```jldoctest
 julia> h = LatticePresets.honeycomb() |> hamiltonian(onsite(1), hopping(2));
 
 julia> bloch!(similarmatrix(h), h, (.2,.3))
@@ -879,7 +879,7 @@ Functional forms of `bloch`, equivalent to `bloch(h, ϕs, ...)`
 `bloch!`.
 
 # Examples
-```
+```jldoctest
 julia> h = LatticePresets.honeycomb() |> hamiltonian(onsite(1), hopping(2)) |> bloch(.2,.3)
 2×2 SparseArrays.SparseMatrixCSC{Complex{Float64},Int64} with 4 stored entries:
   [1, 1]  =  1.99001-0.199667im
@@ -978,7 +978,7 @@ Functional form equivalent to `flatten(h)` of `h |> flatten` (included for consi
 the rest of the API).
 
 # Examples
-```
+```jldoctest
 julia> h = LatticePresets.honeycomb() |> hamiltonian(hopping(@SMatrix[1 2], range = 1/√3, sublats = (:A,:B)), orbitals = (Val(1), Val(2)))
 Hamiltonian{<:Lattice} : 2D Hamiltonian on a 2D Lattice in 2D space
   Bloch harmonics  : 5 (SparseMatrixCSC, sparse)
