@@ -24,20 +24,18 @@ nsites(s::Sublat) = length(s.sites)
 # External API #
 
 """
-    sublat(sites...; name::$(NameType), orbitals = (:noname,))
-    sublat(sites::Vector{<:SVector}; name::$(NameType), orbitals = (:noname,))
+    sublat(sites...; name::$(NameType))
+    sublat(sites::Vector{<:SVector}; name::$(NameType))
 
 Create a `Sublat{E,T,D}` that adds a sublattice, of name `name`, with sites at positions
-`sites` in `E` dimensional space, each of which hosts `D` different orbitals, with orbital
-names specified by `orbitals`. Sites can be entered as tuples or `SVectors`.
+`sites` in `E` dimensional space. Sites can be entered as tuples or `SVectors`.
 
 # Examples
 ```jldoctest
-julia> sublat((0.0, 0), (1, 1), (1, -1), name = :A, orbitals = (:upspin, :downspin))
-Sublat{2,Float64,2} : sublattice in 2D space with 2 orbitals per site
+julia> sublat((0.0, 0), (1, 1), (1, -1), name = :A)
+Sublat{2,Float64} : sublattice of Float64-typed sites in 2D space
   Sites    : 3
   Name     : :A
-  Orbitals : (:upspin, :downspin)
 ```
 """
 sublat(sites::Vector{<:SVector}; name = :_, kw...) =
