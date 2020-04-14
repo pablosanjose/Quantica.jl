@@ -258,7 +258,8 @@ do `deleteat!(h, dn)`.
 
 # Examples
 ```@meta
-DocTestSetup = using Quantica
+DocTestSetup =
+    using Quantica
 ```
 ```jldoctest
 julia> h = hamiltonian(LatticePresets.honeycomb(), hopping(@SMatrix[1 2; 3 4], range = 1/√3), orbitals = Val(2))
@@ -709,7 +710,8 @@ Functional form equivalent to `wrap(h, axis; kw...)`.
 
 # Examples
 ```@meta
-DocTestSetup = using Quantica
+DocTestSetup =
+    using Quantica
 ```
 ```jldoctest
 julia> LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = 1/√3)) |> unitcell((1,-1), (10, 10)) |> wrap(2)
@@ -802,7 +804,8 @@ be of the same type (e.g. it can be dense, while `h` is sparse).
 
 # Examples
 ```@meta
-DocTestSetup = using Quantica
+DocTestSetup =
+    using Quantica
 ```
 ```jldoctest
 julia> h = LatticePresets.honeycomb() |> hamiltonian(onsite(1), hopping(2));
@@ -898,7 +901,8 @@ Functional forms of `bloch`, equivalent to `bloch(h, ϕs, ...)`
 
 # Examples
 ```@meta
-DocTestSetup = using Quantica
+DocTestSetup =
+    using Quantica
 ```
 ```jldoctest
 julia> h = LatticePresets.honeycomb() |> hamiltonian(onsite(1), hopping(2)) |> bloch(.2,.3)
@@ -1003,11 +1007,12 @@ the rest of the API).
 
 # Examples
 ```@meta
-DocTestSetup = using Quantica
+DocTestSetup =
+    using Quantica
 ```
 ```jldoctest
-julia> h = LatticePresets.honeycomb() |> hamiltonian(hopping(@SMatrix[1 2], range = 1/√3, sublats = (:A,:B)), orbitals = (Val(1), Val(2)))
-Hamiltonian{<:Lattice} : 2D Hamiltonian on a 2D Lattice in 2D space
+julia> h = LatticePresets.honeycomb() |> hamiltonian(hopping(@SMatrix[1; 2], range = 1/√3, sublats = :A =>:B), orbitals = (Val(1), Val(2)))
+Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
   Bloch harmonics  : 5 (SparseMatrixCSC, sparse)
   Harmonic size    : 2 × 2
   Orbitals         : ((:a,), (:a, :a))
@@ -1017,7 +1022,7 @@ Hamiltonian{<:Lattice} : 2D Hamiltonian on a 2D Lattice in 2D space
   Coordination     : 3.0
 
 julia> flatten(h)
-Hamiltonian{<:Lattice} : 2D Hamiltonian on a 2D Lattice in 2D space
+Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
   Bloch harmonics  : 5 (SparseMatrixCSC, sparse)
   Harmonic size    : 3 × 3
   Orbitals         : ((:flat,), (:flat,))

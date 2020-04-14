@@ -38,7 +38,8 @@ Function form of `parametric`, equivalent to `parametric(h, modifiers...)`.
 
 # Examples
 ```@meta
-DocTestSetup = using Quantica
+DocTestSetup =
+    using Quantica
 ```
 ```jldoctest
 julia> ph = LatticePresets.honeycomb() |> hamiltonian(onsite(0) + hopping(1, range = 1/√3)) |> unitcell(10) |> parametric(onsite!((o; μ) -> o - μ))

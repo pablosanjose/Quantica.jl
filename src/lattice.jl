@@ -32,7 +32,8 @@ Create a `Sublat{E,T,D}` that adds a sublattice, of name `name`, with sites at p
 
 # Examples
 ```@meta
-DocTestSetup = using Quantica
+DocTestSetup =
+    using Quantica
 ```
 ```jldoctest
 julia> sublat((0.0, 0), (1, 1), (1, -1), name = :A)
@@ -94,7 +95,8 @@ Obtain the Bravais matrix of lattice `lat` or Hamiltonian `h`
 
 # Examples
 ```@meta
-DocTestSetup = using Quantica
+DocTestSetup =
+    using Quantica
 ```
 ```jldoctest
 julia> bravais((1.0, 2), (3, 4))
@@ -253,7 +255,8 @@ See also `LatticePresets` for built-in lattices.
 
 # Examples
 ```@meta
-DocTestSetup = using Quantica
+DocTestSetup =
+    using Quantica
 ```
 ```jldoctest
 julia> lattice(bravais((1, 0)), sublat((0, 0)), sublat((0, Float32(1))); dim = Val(3))
@@ -531,7 +534,8 @@ which always refers to the unitcell of the lattice.
 
 # Examples
 ```@meta
-DocTestSetup = using Quantica
+DocTestSetup =
+    using Quantica
 ```
 ```jldoctest
 julia> supercell(LatticePresets.honeycomb(), region = RegionPresets.circle(300))
@@ -734,7 +738,8 @@ Functional syntax, equivalent to `unitcell(lat_or_h, v...; kw...)
 
 # Examples
 ```@meta
-DocTestSetup = using Quantica
+DocTestSetup =
+    using Quantica
 ```
 ```jldoctest
 julia> unitcell(LatticePresets.honeycomb(), region = RegionPresets.circle(300))
