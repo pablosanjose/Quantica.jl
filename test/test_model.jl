@@ -28,7 +28,7 @@ end
 @testset "hopping terms" begin
     rs = (r->true, missing)
     ss = (:A => :B, :A => (:A,:B), (:A,:B) .=> (:A,:B), (:A,:B) => (:A,:B), missing)
-    dns = ((0,1), ((0,1),(1,0)), missing)
+    dns = ((0,1), ((0,1),(1,0)), SVector(0,1), (SVector(0,1), (0,3)), [1, 2], ([1.0,2], (0,4.0)), missing)
     ranges = (Inf, 1)  # no missing here, because hopping range default is 1.0
     for r in rs, s in ss, dn in dns, rn in ranges
         model0 = hopping(1, region = r, sublats = s, dn = dn, range = rn) + onsite(1)

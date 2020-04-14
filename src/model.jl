@@ -43,11 +43,12 @@ sanitize_sublatpairs(s) = throw(ErrorException(
 ensurenametype((s1, s2)::Pair) = nametype(s1) => nametype(s2)
 
 sanitize_dn(dn::Missing) = missing
-sanitize_dn(dn::SVector{N}) where {N} = (SVector{N,Int}(dn),)
-sanitize_dn(dn::Tuple{Vararg{SVector{N}}}) where {N} = SVector{N,Int}.(dn)
-sanitize_dn(dn::Tuple{Vararg{NTuple{N}}}) where {N} = SVector{N,Int}.(dn)
-sanitize_dn(dn::Tuple{Vararg{Number,N}}) where {N} = (SVector{N,Int}(dn),)
-sanitize_dn(dn::Tuple{}) = ()
+sanitize_dn(dn::Tuple{Vararg{Number,N}}) where {N} = (_sanitize_dn(dn),)
+sanitize_dn(dn::Vector) = (_sanitize_dn(dn),)
+sanitize_dn(dn::Tuple) = _sanitize_dn.(dn)
+_sanitize_dn(dn::Tuple{Vararg{Number,N}}) where {N} = SVector{N,Int}(dn)
+_sanitize_dn(dn::SVector{N}) where {N} = SVector{N,Int}(dn)
+_sanitize_dn(dn::Vector) = SVector{length(dn),Int}(dn)
 
 sanitize_range(::Missing) = missing
 sanitize_range(range::Real) = isfinite(range) ? float(range) + sqrt(eps(float(range))) : float(range)
@@ -368,8 +369,9 @@ unit cells at integer distance `dn´` and to sublattices `s₁` and `s₂` will 
 `missing` it will not be used to constraint the selection. Note that the default `range` is
 1, not `missing`.
 
-The keyword `forcehermitian` specifies whether the `HoppingTerm` applied to a selected
-hopping should be made hermitian. The keyword `sublats` allows the following formats:
+The keyword `dn` can be a `Tuple`/`Vector`/`SVector` of `Int`s, or a tuple thereof. The
+keyword `forcehermitian` specifies whether the `HoppingTerm` applied to a selected hopping
+should be made hermitian. The keyword `sublats` allows the following formats:
 
     sublats = :A => :B                 # Hopping from :A to :B sublattices
     sublats = (:A => :B,)              # Same as above
