@@ -163,7 +163,7 @@ end
 """
     parameters(ph::ParametricHamiltonian)
 
-Return the parameter names for each of the `ElementModifier`s involved in `ph`
+Return the names of the parameter that `ph` depends on
 """
 parameters(ph::ParametricHamiltonian) = mergetuples(parameters.(ph.modifiers)...)
 
