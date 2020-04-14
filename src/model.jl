@@ -43,6 +43,8 @@ sanitize_sublatpairs(s) = throw(ErrorException(
 ensurenametype((s1, s2)::Pair) = nametype(s1) => nametype(s2)
 
 sanitize_dn(dn::Missing) = missing
+sanitize_dn(dn::SVector{N}) where {N} = (SVector{N,Int}(dn),)
+sanitize_dn(dn::Tuple{Vararg{SVector{N}}}) where {N} = SVector{N,Int}.(dn)
 sanitize_dn(dn::Tuple{Vararg{NTuple{N}}}) where {N} = SVector{N,Int}.(dn)
 sanitize_dn(dn::Tuple{Vararg{Number,N}}) where {N} = (SVector{N,Int}(dn),)
 sanitize_dn(dn::Tuple{}) = ()
