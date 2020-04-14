@@ -44,7 +44,7 @@ ensurenametype((s1, s2)::Pair) = nametype(s1) => nametype(s2)
 
 sanitize_dn(dn::Missing) = missing
 sanitize_dn(dn::Tuple{Vararg{Number,N}}) where {N} = (_sanitize_dn(dn),)
-sanitize_dn(dn::Vector) = (_sanitize_dn(dn),)
+sanitize_dn(dn) = (_sanitize_dn(dn),)
 sanitize_dn(dn::Tuple) = _sanitize_dn.(dn)
 _sanitize_dn(dn::Tuple{Vararg{Number,N}}) where {N} = SVector{N,Int}(dn)
 _sanitize_dn(dn::SVector{N}) where {N} = SVector{N,Int}(dn)
