@@ -217,6 +217,9 @@ transform!(u::Unitcell, f::Function) = (u.sites .= f.(u.sites); u)
 
 Base.copy(u::Unitcell) = Unitcell(copy(u.sites), u.names, copy(u.offsets))
 
+Base.isequal(u1::Unitcell, u2::Unitcell) =
+    isequal(u1.sites, u2.sites) && isequal(u1.names, u2.names) && isequal(u1.offsets, u2.offsets)
+
 #######################################################################
 # Lattice
 #######################################################################
@@ -314,10 +317,6 @@ struct Supercell{L,L´,M<:Union{Missing,OffsetArray{Bool}},S<:SMatrix{L,L´}} # 
     semibounded::SVector{L´,Bool}
 end
 
-# Supercell{L}(ns::Integer) where {L} =
-#     Supercell(SMatrix{L,L,Int,L*L}(I), 1:ns, CartesianIndices(ntuple(_->0:0, Val(L))),
-#               missing, filltuple(false, Val(L)))
-
 dim(::Supercell{L,L´}) where {L,L´} = L´
 
 nsites(s::Supercell{L,L´,<:OffsetArray}) where {L,L´} = sum(s.mask)
@@ -338,18 +337,61 @@ end
 ismasked(s::Supercell{L,L´,<:OffsetArray})  where {L,L´} = true
 ismasked(s::Supercell{L,L´,Missing})  where {L,L´} = false
 
-isinmask(s::Supercell{L,L´,<:OffsetArray}, site, dn) where {L,L´} = s.mask[site, Tuple(dn)...]
-isinmask(s::Supercell{L,L´,Missing}, site, dn) where {L,L´} = true
-isinmask(s::Supercell{L,L´,<:OffsetArray}, site) where {L,L´} = s.mask[site]
-isinmask(s::Supercell{L,L´,Missing}, site) where {L,L´} = true
+isinmask(s::Supercell, inds...) = isinmask(s.mask, inds...)
+isinmask(mask::Missing, inds...) = true
+isinmask(mask::OffsetArray, inds...) = checkbounds(Bool, mask, inds...) && mask[inds...]
 
 issemibounded(sc::Supercell) = !iszero(sc.semibounded)
 
 Base.copy(s::Supercell{<:Any,<:Any,Missing}) =
-    Supercell(copy(s.matrix), s.sites, s.cells, s.mask, s.semibounded)
+    Supercell(s.matrix, s.sites, s.cells, s.mask, s.semibounded)
 
 Base.copy(s::Supercell{<:Any,<:Any,<:AbstractArray}) =
-    Supercell(copy(s.matrix), s.sites, s.cells, copy(s.mask), s.semibounded)
+    Supercell(s.matrix, s.sites, s.cells, copy(s.mask), s.semibounded)
+
+Base.isequal(s1::Supercell, s2::Supercell) =
+    isequal(s1.matrix, s2.matrix) && isequal(s1.sites, s2.sites) &&
+    isequal(s1.cells, s2.cells) && isequal(s1.mask, s2.mask) &&
+    isequal(s1.semibounded, s2.semibounded)
+
+## Boolean masking
+
+(Base.:&)(s1::Supercell, s2::Supercell) = boolean_mask_supercell(Base.:&, s1, s2)
+(Base.:|)(s1::Supercell, s2::Supercell) = boolean_mask_supercell(Base.:|, s1, s2)
+(Base.xor)(s1::Supercell, s2::Supercell) = boolean_mask_supercell(Base.xor, s1, s2)
+
+function boolean_mask_supercell(f, s1::Supercell, s2::Supercell)
+    check_compatible_supercell(s1, s2)
+    cells = boolean_mask_bbox(f, s1.cells, s2.cells)
+    indranges = (s1.sites, cells.indices...)
+    mask  = boolean_mask(f, s1.mask, s2.mask, indranges)
+    mask´ = all(mask) ? missing : mask
+    return Supercell(s1.matrix, s1.sites, cells, mask´, s1.semibounded)
+end
+
+function check_compatible_supercell(s1, s2)
+    compatible = isequal(s1.matrix, s2.matrix) && isequal(s1.sites, s2.sites) &&
+                 isequal(s1.semibounded, s2.semibounded)
+    compatible || throw(ArgumentError("Supercells are incompatible"))
+    return nothing
+end
+
+boolean_mask_bbox(f, bbox1::CartesianIndices, bbox2::CartesianIndices) =
+    CartesianIndices(boolean_mask_bbox.(f, bbox1.indices, bbox2.indices))
+boolean_mask_bbox(::typeof(Base.:&),  r1::AbstractRange, r2::AbstractRange) =
+    max(first(r1), first(r2)):min(last(r1), last(r2))
+boolean_mask_bbox(::typeof(Base.:|),  r1::AbstractRange, r2::AbstractRange) =
+    min(first(r1), first(r2)):max(last(r1), last(r2))
+boolean_mask_bbox(::typeof(Base.xor), r1::AbstractRange, r2::AbstractRange) =
+    min(first(r1), first(r2)):max(last(r1), last(r2))
+
+function boolean_mask(f, mask1, mask2, indranges)
+    mask = OffsetArray{Bool}(undef, indranges)
+    for I in CartesianIndices(mask)
+        mask[I] = f(isinmask(mask1, I), isinmask(mask2, I))
+    end
+    return mask
+end
 
 #######################################################################
 # Superlattice
@@ -381,7 +423,7 @@ function foreach_supersite(f::F, lat::Superlattice) where {F<:Function}
     newi = 0
     for s in 1:nsublats(lat), oldi in siterange(lat, s)
         for dn in CartesianIndices(lat.supercell)
-            if isinmask(lat.supercell, oldi, dn)
+            if isinmask(lat.supercell, oldi, Tuple(dn)...)
                 newi += 1
                 f(s, oldi, toSVector(Int, Tuple(dn)), newi)
             end
@@ -392,12 +434,66 @@ end
 
 issemibounded(lat::Superlattice) = issemibounded(lat.supercell)
 
+## Boolean masking
+
+"""
+    &(l1::Superlattice, l2::Superlattice)
+
+Construct a new `Superlattice` using an `and` boolean mask, i.e. with a supercell that
+contains cells that are both in the supercell of `l1` and `l2`
+
+# See also:
+    `|`, `xor`
+"""
+(Base.:&)(s1::Superlattice, s2::Superlattice) = boolean_mask_superlattice(Base.:&, s1, s2)
+
+"""
+    |(l1::Superlattice, l2::Superlattice)
+
+Construct a new `Superlattice` using an `or` boolean mask, i.e. with a supercell that
+contains cells that are in either the supercell of `l1` or `l2`
+
+# See also:
+    `|`, `xor`
+"""
+(Base.:|)(s1::Superlattice, s2::Superlattice) = boolean_mask_superlattice(Base.:|, s1, s2)
+
+"""
+    xor(l1::Superlattice, l2::Superlattice)
+
+Construct a new `Superlattice` using a `xor` boolean mask, i.e. with a supercell that
+contains cells that are in either the supercell of `l1` or `l2`, but not in both
+
+# See also:
+    `&`, `|`
+"""
+(Base.xor)(s1::Superlattice, s2::Superlattice) = boolean_mask_superlattice(Base.xor, s1, s2)
+
+function boolean_mask_superlattice(f, s1::Superlattice, s2::Superlattice)
+    check_compatible_superlattice(s1, s2)
+    return Superlattice(s1.bravais, s1.unitcell, f(s1.supercell, s2.supercell))
+end
+
+function check_compatible_superlattice(s1, s2)
+    compatible = isequal(s1.unitcell, s2.unitcell) &&
+                 is_bravais_compatible(s1.bravais, s2.bravais)
+    compatible || throw(ArgumentError("Superlattices are incompatible for boolean masking"))
+    return nothing
+end
+
 #######################################################################
 # AbstractLattice interface
 #######################################################################
 
 Base.copy(lat::Lattice) = Lattice(lat.bravais, copy(lat.unitcell))
 Base.copy(lat::Superlattice) = Superlattice(lat.bravais, copy(lat.unitcell), copy(lat.supercell))
+
+Base.isequal(l1::Lattice, l2::Lattice) =
+    isequal(l1.unitcell, l2.unitcell) && isequal(l1.bravais, l2.bravais)
+
+Base.isequal(l1::Superlattice, l2::Superlattice) =
+    isequal(l1.unitcell, l2.unitcell) && isequal(l1.bravais, l2.bravais) &&
+    isequal(l1.supercell, l2.supercell)
 
 numbertype(::AbstractLattice{E,L,T}) where {E,L,T} = T
 positiontype(::AbstractLattice{E,L,T}) where {E,L,T} = SVector{E,T}
@@ -471,6 +567,7 @@ end
 
 is_bravais_compatible() = true
 is_bravais_compatible(lat::Lattice, lats::Lattice...) = all(l -> isequal(lat.bravais, l.bravais), lats)
+is_bravais_compatible(b::Bravais, bs::Bravais...) = all(bi -> isequal(b, bi), bs)
 
 function Base.isequal(b1::Bravais{E,L}, b2::Bravais{E,L}) where {E,L}
     vs1 = ntuple(i -> b1.matrix[:, i], Val(L))
@@ -582,7 +679,7 @@ DocTestSetup = nothing
 """
 supercell(v::Union{SMatrix,Tuple,SVector,Integer}...; kw...) = lat -> supercell(lat, v...; kw...)
 
-supercell(lat::AbstractLattice{E,L}; kw...) where {E,L} =
+supercell(lat::AbstractLattice{E,L}, v::Tuple{} = (); kw...) where {E,L} =
     supercell(lat, SMatrix{L,0,Int}(); kw...)
 supercell(lat::AbstractLattice{E,L}, factors::Vararg{<:Integer,L}; kw...) where {E,L} =
     _supercell(lat, factors...)
