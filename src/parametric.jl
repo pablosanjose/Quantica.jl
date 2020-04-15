@@ -37,11 +37,7 @@ to extra zero onsites and hoppings being stored in sparse `h`s.
 Function form of `parametric`, equivalent to `parametric(h, modifiers...)`.
 
 # Examples
-```@meta
-DocTestSetup = quote
-    using Quantica
-end
-```
+
 ```jldoctest
 julia> ph = LatticePresets.honeycomb() |> hamiltonian(onsite(0) + hopping(1, range = 1/√3)) |>
        unitcell(10) |> parametric(@onsite!((o; μ) -> o - μ))
@@ -64,9 +60,6 @@ Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
   Onsites          : 200
   Hoppings         : 640
   Coordination     : 3.2
-```
-```@meta
-DocTestSetup = nothing
 ```
 # See also
     `@onsite!`, `@hopping!`

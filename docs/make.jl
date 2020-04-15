@@ -1,6 +1,8 @@
 using Quantica
 using Documenter
 
+DocMeta.setdocmeta!(Quantica, :DocTestSetup, :(using Quantica); recursive=true)
+
 makedocs(;
     modules=[Quantica],
     authors="Pablo San-Jose",
