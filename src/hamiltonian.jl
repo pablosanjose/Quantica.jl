@@ -257,11 +257,7 @@ To add an empty harmonic with a given `dn::NTuple{L,Int}`, do `push!(h, dn)`. To
 do `deleteat!(h, dn)`.
 
 # Examples
-```@meta
-DocTestSetup = quote
-    using Quantica
-end
-```
+
 ```jldoctest
 julia> h = hamiltonian(LatticePresets.honeycomb(), hopping(@SMatrix[1 2; 3 4], range = 1/√3), orbitals = Val(2))
 Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
@@ -291,9 +287,6 @@ julia> h[(3,3)][[1,2],[1,2]] .= Ref(@SMatrix[1 2; 2 1])
 2×2 view(::SparseArrays.SparseMatrixCSC{StaticArrays.SArray{Tuple{2,2},Complex{Float64},2,4},Int64}, [1, 2], [1, 2]) with eltype StaticArrays.SArray{Tuple{2,2},Complex{Float64},2,4}:
  [1.0+0.0im 2.0+0.0im; 2.0+0.0im 1.0+0.0im]  [1.0+0.0im 2.0+0.0im; 2.0+0.0im 1.0+0.0im]
  [1.0+0.0im 2.0+0.0im; 2.0+0.0im 1.0+0.0im]  [1.0+0.0im 2.0+0.0im; 2.0+0.0im 1.0+0.0im]```
-```@meta
-DocTestSetup = nothing
-```
 
 # See also:
     `onsite`, `hopping`, `bloch`, `bloch!`
@@ -709,11 +702,7 @@ flux Φ through the loop, if `factor = exp(im * 2π * Φ/Φ₀)`.
 Functional form equivalent to `wrap(h, axis; kw...)`.
 
 # Examples
-```@meta
-DocTestSetup = quote
-    using Quantica
-end
-```
+
 ```jldoctest
 julia> LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = 1/√3)) |>
        unitcell((1,-1), (10, 10)) |> wrap(2)
@@ -725,9 +714,6 @@ Hamiltonian{<:Lattice} : Hamiltonian on a 1D Lattice in 2D space
   Onsites          : 0
   Hoppings         : 120
   Coordination     : 3.0
-```
-```@meta
-DocTestSetup = nothing
 ```
 """
 function wrap(h::Hamiltonian{<:Lattice,L}, axis; factor = 1) where {L}
@@ -805,11 +791,7 @@ conventient way to obtain a `matrix` is to use `similarmatrix(h)`, which will re
 be of the same type (e.g. it can be dense, while `h` is sparse).
 
 # Examples
-```@meta
-DocTestSetup = quote
-    using Quantica
-end
-```
+
 ```jldoctest
 julia> h = LatticePresets.honeycomb() |> hamiltonian(onsite(1) + hopping(2));
 
@@ -819,9 +801,6 @@ julia> bloch!(similarmatrix(h), h, (.2,.3))
   [2, 1]  =  5.87081+0.988379im
   [1, 2]  =  5.87081-0.988379im
   [2, 2]  =  12.7216+0.0im
-```
-```@meta
-DocTestSetup = nothing
 ```
 
 # See also:
@@ -903,11 +882,7 @@ Functional forms of `bloch`, equivalent to `bloch(h, ϕs, ...)`
 `bloch!`.
 
 # Examples
-```@meta
-DocTestSetup = quote
-    using Quantica
-end
-```
+
 ```jldoctest
 julia> h = LatticePresets.honeycomb() |> hamiltonian(onsite(1) + hopping(2)) |> bloch((.2,.3))
 2×2 SparseArrays.SparseMatrixCSC{Complex{Float64},Int64} with 4 stored entries:
@@ -915,9 +890,6 @@ julia> h = LatticePresets.honeycomb() |> hamiltonian(onsite(1) + hopping(2)) |> 
   [2, 1]  =  5.87081+0.988379im
   [1, 2]  =  5.87081-0.988379im
   [2, 2]  =  12.7216+0.0im
-```
-```@meta
-DocTestSetup = nothing
 ```
 
 # See also:
@@ -1010,11 +982,7 @@ Functional form equivalent to `flatten(h)` of `h |> flatten` (included for consi
 the rest of the API).
 
 # Examples
-```@meta
-DocTestSetup = quote
-    using Quantica
-end
-```
+
 ```jldoctest
 julia> h = LatticePresets.honeycomb() |> hamiltonian(hopping(@SMatrix[1; 2], range = 1/√3, sublats = :A =>:B), orbitals = (Val(1), Val(2)))
 Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
@@ -1035,9 +1003,6 @@ Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
   Onsites          : 0
   Hoppings         : 12
   Coordination     : 4.0
-```
-```@meta
-DocTestSetup = nothing
 ```
 """
 flatten() = h -> flatten(h)

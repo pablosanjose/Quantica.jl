@@ -31,19 +31,12 @@ Create a `Sublat{E,T,D}` that adds a sublattice, of name `name`, with sites at p
 `sites` in `E` dimensional space. Sites can be entered as tuples or `SVectors`.
 
 # Examples
-```@meta
-DocTestSetup = quote
-    using Quantica
-end
-```
+
 ```jldoctest
 julia> sublat((0.0, 0), (1, 1), (1, -1), name = :A)
 Sublat{2,Float64} : sublattice of Float64-typed sites in 2D space
   Sites    : 3
   Name     : :A
-```
-```@meta
-DocTestSetup = nothing
 ```
 """
 sublat(sites::Vector{<:SVector}; name = :_, kw...) =
@@ -95,20 +88,13 @@ We can scale a `b::Bravais` simply by multiplying it with a factor `a`, like `a 
 Obtain the Bravais matrix of lattice `lat` or Hamiltonian `h`
 
 # Examples
-```@meta
-DocTestSetup = quote
-    using Quantica
-end
-```
+
 ```jldoctest
 julia> bravais((1.0, 2), (3, 4))
 Bravais{2,2,Float64} : set of 2 Bravais vectors in 2D space.
   Vectors     : ((1.0, 2.0), (3.0, 4.0))
   Matrix      : [1.0 3.0; 2.0 4.0],
   Semibounded : none
-```
-```@meta
-DocTestSetup = nothing
 ```
 
 # See also:
@@ -257,11 +243,7 @@ that all sublattice names are unique.
 See also `LatticePresets` for built-in lattices.
 
 # Examples
-```@meta
-DocTestSetup = quote
-    using Quantica
-end
-```
+
 ```jldoctest
 julia> lattice(bravais((1, 0)), sublat((0, 0)), sublat((0, Float32(1))); dim = Val(3))
 Lattice{3,1,Float32} : 1D lattice in 3D space
@@ -277,9 +259,6 @@ Lattice{2,2,Float64} : 2D lattice in 2D space
   Sublattices     : 2
     Names         : (:C, :D)
     Sites         : (1, 1) --> 2 total per unit cell
-```
-```@meta
-DocTestSetup = nothing
 ```
 
 # See also:
@@ -537,11 +516,7 @@ Promotes the `Lattice` of `h` to a `Superlattice` without changing the Hamiltoni
 which always refers to the unitcell of the lattice.
 
 # Examples
-```@meta
-DocTestSetup = quote
-    using Quantica
-end
-```
+
 ```jldoctest
 julia> supercell(LatticePresets.honeycomb(), region = RegionPresets.circle(300))
 Superlattice{2,2,Float64,0} : 2D lattice in 2D space, filling a 0D supercell
@@ -572,9 +547,6 @@ Superlattice{2,2,Float64,2} : 2D lattice in 2D space, filling a 2D supercell
   Supercell{2,2} for 2D superlattice of the base 2D lattice
     Supervectors  : ((3, 0), (0, 3))
     Supersites    : 9
-```
-```@meta
-DocTestSetup = nothing
 ```
 
 # See also:
@@ -739,11 +711,7 @@ the first time.
 Functional syntax, equivalent to `unitcell(lat_or_h, v...; kw...)
 
 # Examples
-```@meta
-DocTestSetup = quote
-    using Quantica
-end
-```
+
 ```jldoctest
 julia> unitcell(LatticePresets.honeycomb(), region = RegionPresets.circle(300))
 Lattice{2,0,Float64} : 0D lattice in 2D space
@@ -772,9 +740,6 @@ Lattice{2,2,Float64} : 2D lattice in 2D space
   Sublattices     : 1
     Names         : (:A)
     Sites         : (9) --> 9 total per unit cell
-```
-```@meta
-DocTestSetup = nothing
 ```
 
 # See also:
