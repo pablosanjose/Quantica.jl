@@ -183,3 +183,36 @@ end
     @test parametric(h, @onsite!((o, r; b) -> o), @hopping!((t, r, dr; a = 2) -> r[1]*t))(b=1) isa T
     @test parametric(h, @onsite!((o, r; b) -> o*b), @hopping!((t, r, dr; a = 2) -> r[1]*t))(a=1, b=2) isa T
 end
+
+@testset "boolean masks" begin
+    for b in ((), (1,1), 4)
+        @show b
+        h1 = LatticePresets.honeycomb() |> hamiltonian(hopping(1) + onsite(2)) |>
+             supercell(b, region = RegionPresets.circle(10))
+        h2 = LatticePresets.honeycomb() |> hamiltonian(hopping(1) + onsite(2)) |>
+             supercell(b, region = RegionPresets.circle(20))
+
+        @test isequal(h1 & h2, h1)
+        @test isequal(h1, h2) || !isequal(h1 & h2, h2)
+        @test isequal(h1, h2) || !isequal(h1 | h2, h1)
+        @test  isequal(h1 | h2, h2)
+
+        @test isequal(unitcell(h1 & h2), unitcell(h1))
+        @test isequal(h1, h2) || !isequal(unitcell(h1 & h2), unitcell(h2))
+        @test isequal(h1, h2) || !isequal(unitcell(h1 | h2), unitcell(h1))
+        @test isequal(unitcell(h1 | h2), unitcell(h2))
+
+        h1 = h1.lattice
+        h2 = h2.lattice
+
+        @test isequal(h1 & h2, h1)
+        @test isequal(h1, h2) || !isequal(h1 & h2, h2)
+        @test isequal(h1, h2) || !isequal(h1 | h2, h1)
+        @test  isequal(h1 | h2, h2)
+
+        @test isequal(unitcell(h1 & h2), unitcell(h1))
+        @test isequal(h1, h2) || !isequal(unitcell(h1 & h2), unitcell(h2))
+        @test isequal(h1, h2) || !isequal(unitcell(h1 | h2), unitcell(h1))
+        @test isequal(unitcell(h1 | h2), unitcell(h2))
+    end
+end

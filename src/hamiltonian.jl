@@ -14,7 +14,7 @@ HamiltonianHarmonic{L,M,A}(dn::SVector{L,Int}, n::Int, m::Int) where {L,M,A<:Mat
 
 struct Hamiltonian{LA<:AbstractLattice,L,M,A<:AbstractMatrix,
                    H<:HamiltonianHarmonic{L,M,A},
-                   O<:Tuple{Vararg{Tuple{Vararg{NameType}}}}} <: AbstractMatrix{M}
+                   O<:Tuple{Vararg{Tuple{Vararg{NameType}}}}} # <: AbstractMatrix{M}
     lattice::LA
     harmonics::Vector{H}
     orbitals::O
@@ -50,6 +50,9 @@ Base.summary(::Hamiltonian{LA}) where {E,L,T,L´,LA<:Superlattice{E,L,T,L´}} =
     "Hamiltonian{<:Superlattice} : $(L)D Hamiltonian on a $(L´)D Superlattice in $(E)D space"
 
 Base.eltype(::Hamiltonian{<:Any,<:Any,M}) where {M} = M
+
+Base.isequal(h1::HamiltonianHarmonic, h2::HamiltonianHarmonic) =
+    h1.dn == h2.dn && h1.h == h2.h
 
 displaymatrixtype(h::Hamiltonian) = displaymatrixtype(matrixtype(h))
 displaymatrixtype(::Type{<:SparseMatrixCSC}) = "SparseMatrixCSC, sparse"
@@ -212,6 +215,10 @@ Base.IteratorSize(::EachIndexNonzeros) = Base.SizeUnknown()
 Base.IteratorEltype(::EachIndexNonzeros) = Base.HasEltype()
 Base.eltype(s::EachIndexNonzeros{<:Hamiltonian}) = Tuple{Int, Int, typeof(first(s.h.harmonics).dn)}
 Base.eltype(s::EachIndexNonzeros{<:HamiltonianHarmonic}) = Tuple{Int, Int}
+
+Base.isequal(h1::Hamiltonian, h2::Hamiltonian) =
+    isequal(h1.lattice, h2.lattice) && isequal(h1.harmonics, h2.harmonics) &&
+    isequal(h1.orbitals, h2.orbitals)
 
 # stored_indices(h::Hamiltonian) = ((har.dn, rowvals(har.h)[ptr], col) for har in h.harmonics
 #                                   for col in 1:size(har.h, 2) for ptr in nzrange(har.h, col))
@@ -402,6 +409,55 @@ Base.isassigned(h::Hamiltonian, dn::Vararg{Int}) = isassigned(h, SVector(dn))
 Base.isassigned(h::Hamiltonian, dn::NTuple) = isassigned(h, SVector(dn))
 Base.isassigned(h::Hamiltonian{<:Any,L}, dn::SVector{L,Int}) where {L} =
     findfirst(hh -> hh.dn == dn, h.harmonics) != nothing
+
+## Boolean masking
+"""
+    &(h1::Hamiltonian{<:Superlattice}, h2::Hamiltonian{<:Superlattice})
+
+Construct a new `Hamiltonian{<:Superlattice}` using an `and` boolean mask, i.e. with a
+supercell that contains cells that are both in the supercell of `h1` and `h2`
+
+# See also:
+    `|`, `xor`
+"""
+(Base.:&)(s1::Hamiltonian{<:Superlattice}, s2::Hamiltonian{<:Superlattice}) =
+    boolean_mask_hamiltonian(Base.:&, s1, s2)
+
+"""
+    |(h1::Hamiltonian{<:Superlattice}, h2::Hamiltonian{<:Superlattice})
+
+Construct a new `Hamiltonian{<:Superlattice}` using an `or` boolean mask, i.e. with a
+supercell that contains cells that are either in the supercell of `h1` or `h2`
+
+# See also:
+    `&`, `xor`
+"""
+(Base.:|)(s1::Hamiltonian{<:Superlattice}, s2::Hamiltonian{<:Superlattice}) =
+    boolean_mask_hamiltonian(Base.:|, s1, s2)
+
+"""
+    xor(h1::Hamiltonian{<:Superlattice}, h2::Hamiltonian{<:Superlattice})
+
+Construct a new `Hamiltonian{<:Superlattice}` using a `xor` boolean mask, i.e. with a
+supercell that contains cells that are either in the supercell of `h1` or `h2` but not in
+both
+
+# See also:
+    `&`, `|`
+"""
+(Base.xor)(s1::Hamiltonian{<:Superlattice}, s2::Hamiltonian{<:Superlattice}) =
+    boolean_mask_hamiltonian(Base.xor, s1, s2)
+
+function boolean_mask_hamiltonian(f, s1::Hamiltonian{<:Superlattice}, s2::Hamiltonian{<:Superlattice})
+    check_compatible_hsuper(s1, s2)
+    return Hamiltonian(f(s1.lattice, s2.lattice), s1.harmonics, s1.orbitals)
+end
+
+function check_compatible_hsuper(s1, s2)
+    compatible = isequal(s1.harmonics, s2.harmonics) && isequal(s1.orbitals, s2.orbitals)
+    compatible || throw(ArgumentError("Hamiltonians are incompatible for boolean masking"))
+    return nothing
+end
 
 #######################################################################
 # auxiliary types
