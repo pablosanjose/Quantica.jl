@@ -415,37 +415,8 @@ issemibounded(lat::Superlattice) = issemibounded(lat.supercell)
 
 ## Boolean masking
 
-"""
-    &(l1::Superlattice, l2::Superlattice)
-
-Construct a new `Superlattice` using an `and` boolean mask, i.e. with a supercell that
-contains cells that are both in the supercell of `l1` and `l2`
-
-# See also:
-    `|`, `xor`
-"""
 (Base.:&)(s1::Superlattice, s2::Superlattice) = boolean_mask_superlattice(Base.:&, s1, s2)
-
-"""
-    |(l1::Superlattice, l2::Superlattice)
-
-Construct a new `Superlattice` using an `or` boolean mask, i.e. with a supercell that
-contains cells that are in either the supercell of `l1` or `l2`
-
-# See also:
-    `|`, `xor`
-"""
 (Base.:|)(s1::Superlattice, s2::Superlattice) = boolean_mask_superlattice(Base.:|, s1, s2)
-
-"""
-    xor(l1::Superlattice, l2::Superlattice)
-
-Construct a new `Superlattice` using a `xor` boolean mask, i.e. with a supercell that
-contains cells that are in either the supercell of `l1` or `l2`, but not in both
-
-# See also:
-    `&`, `|`
-"""
 (Base.xor)(s1::Superlattice, s2::Superlattice) = boolean_mask_superlattice(Base.xor, s1, s2)
 
 function boolean_mask_superlattice(f, s1::Superlattice, s2::Superlattice)

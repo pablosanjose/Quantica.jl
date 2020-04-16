@@ -417,6 +417,10 @@ Base.isassigned(h::Hamiltonian{<:Any,L}, dn::SVector{L,Int}) where {L} =
 Construct a new `Hamiltonian{<:Superlattice}` using an `and` boolean mask, i.e. with a
 supercell that contains cells that are both in the supercell of `h1` and `h2`
 
+    &(s1::Superlattice, s2::Superlattice}
+
+Equivalent of the above for `Superlattice`s
+
 # See also:
     `|`, `xor`
 """
@@ -428,6 +432,10 @@ supercell that contains cells that are both in the supercell of `h1` and `h2`
 
 Construct a new `Hamiltonian{<:Superlattice}` using an `or` boolean mask, i.e. with a
 supercell that contains cells that are either in the supercell of `h1` or `h2`
+
+    |(s1::Superlattice, s2::Superlattice}
+
+Equivalent of the above for `Superlattice`s
 
 # See also:
     `&`, `xor`
@@ -441,6 +449,10 @@ supercell that contains cells that are either in the supercell of `h1` or `h2`
 Construct a new `Hamiltonian{<:Superlattice}` using a `xor` boolean mask, i.e. with a
 supercell that contains cells that are either in the supercell of `h1` or `h2` but not in
 both
+
+    xor(s1::Superlattice, s2::Superlattice}
+
+Equivalent of the above for `Superlattice`s
 
 # See also:
     `&`, `|`
