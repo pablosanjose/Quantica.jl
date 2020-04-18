@@ -118,7 +118,7 @@ function nonsites(ham::Hamiltonian)
     return count
 end
 
-_nnz(h::AbstractSparseMatrix) = nnz(h)
+_nnz(h::AbstractSparseMatrix) = count(!iszero, nonzeros(h)) # Does not include stored zeros
 _nnz(h::DenseMatrix) = count(!iszero, h)
 
 function _nnzdiag(s::SparseMatrixCSC)
