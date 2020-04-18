@@ -2,11 +2,12 @@
 # ParametricHamiltonian
 #######################################################################
 struct ParametricHamiltonian{N,M<:NTuple{N,ElementModifier},P<:NTuple{N,Any},H<:Hamiltonian}
-    originalh::H
+    baseh::H
     h::H
-    modifiers::M  # N modifiers
-    ptrdata::P    # P is an NTuple{N,Vector{Vector{ptrdata}}}, one per harmonic
-end               # ptrdata may be a nzval ptr, a (ptr,r) or a (ptr, r, dr)
+    modifiers::M                   # N modifiers
+    ptrdata::P                     # P is an NTuple{N,Vector{Vector{ptrdata}}}, one per harmonic
+    allptrs::Vector{Vector{Int}}   # ptrdata may be a nzval ptr, a (ptr,r) or a (ptr, r, dr)
+end                                # allptrs are modified ptrs in each harmonic
 
 function Base.show(io::IO, ::MIME"text/plain", pham::ParametricHamiltonian{N}) where {N}
     i = get(io, :indent, "")
@@ -67,16 +68,20 @@ Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
 function parametric(h::Hamiltonian, ts::ElementModifier...)
     ts´ = resolve.(ts, Ref(h.lattice))
     optimize!(h)  # to avoid ptrs getting out of sync if optimize! later
-    return ParametricHamiltonian(h, copy(h), ts´, parametric_ptrdata.(Ref(h), ts´))
+    allptrs = [Int[] for _ in h.harmonics]
+    ptrdata = parametric_ptrdata!.(Ref(allptrs), Ref(h), ts´)
+    foreach(sort!, allptrs)
+    foreach(unique!, allptrs)
+    return ParametricHamiltonian(h, copy(h), ts´, ptrdata, allptrs)
 end
 
 parametric(ts::ElementModifier...) = h -> parametric(h, ts...)
 
-function parametric_ptrdata(h::Hamiltonian{LA,L,M,<:AbstractSparseMatrix}, t::ElementModifier) where {LA,L,M}
+function parametric_ptrdata!(allptrs, h::Hamiltonian{LA,L,M,<:AbstractSparseMatrix}, t::ElementModifier) where {LA,L,M}
     harmonic_ptrdata = empty_ptrdata(h, t)
     lat = h.lattice
     selector = t.selector
-    for (har, ptrdata) in zip(h.harmonics, harmonic_ptrdata)
+    for (har, ptrdata, allptrs_har) in zip(h.harmonics, harmonic_ptrdata, allptrs)
         matrix = har.h
         dn = har.dn
         rows = rowvals(matrix)
@@ -86,6 +91,7 @@ function parametric_ptrdata(h::Hamiltonian{LA,L,M,<:AbstractSparseMatrix}, t::El
             selected´ = t.selector.forcehermitian && selector(lat, (col, row), (zero(dn), dn))
             selected  && push!(ptrdata, ptrdatum(t, lat,  ptr, (row, col)))
             selected´ && push!(ptrdata, ptrdatum(t, lat, -ptr, (col, row)))
+            (selected || selected´) && push!(allptrs_har, ptr)
         end
     end
     return harmonic_ptrdata
@@ -93,11 +99,13 @@ end
 
 # Uniform case, one vector of nzval ptr per harmonic
 empty_ptrdata(h, t::UniformModifier)  = [Int[] for _ in h.harmonics]
+
 # Non-uniform case, one vector of (ptr, r, dr) per harmonic
 function empty_ptrdata(h, t::OnsiteModifier)
     S = positiontype(h.lattice)
     return [Tuple{Int,S}[] for _ in h.harmonics]
 end
+
 function empty_ptrdata(h, t::HoppingModifier)
     S = positiontype(h.lattice)
     return [Tuple{Int,S,S}[] for _ in h.harmonics]
@@ -105,8 +113,10 @@ end
 
 # Uniform case
 ptrdatum(t::UniformModifier, lat, ptr, (row, col)) = ptr
+
 # Non-uniform case
 ptrdatum(t::OnsiteModifier, lat, ptr, (row, col)) = (ptr, sites(lat)[col])
+
 function ptrdatum(t::HoppingModifier, lat, ptr, (row, col))
     r, dr = _rdr(sites(lat)[col], sites(lat)[row])
     return (ptr, r, dr)
@@ -114,19 +124,28 @@ end
 
 function (ph::ParametricHamiltonian)(; kw...)
     checkconsistency(ph, false) # only weak check for performance
-    applymodifier_ptrdata!.(Ref(ph.h), Ref(ph.originalh), ph.modifiers, ph.ptrdata, Ref(values(kw)))
+    reset_harmonic!.(ph.h.harmonics, ph.baseh.harmonics, ph.allptrs)
+    applymodifier_ptrdata!.(Ref(ph.h), ph.modifiers, ph.ptrdata, Ref(values(kw)))
     return ph.h
 end
 
-function applymodifier_ptrdata!(h, originalh, modifier, ptrdata, kw)
-    for (ohar, har, hardata) in zip(originalh.harmonics, h.harmonics, ptrdata)
+function reset_harmonic!(har, basehar, ptrs)
+    nz = nonzeros(har.h)
+    onz = nonzeros(basehar.h)
+    @simd for ptr in ptrs
+        nz[ptr] = onz[ptr]
+    end
+    return har
+end
+
+function applymodifier_ptrdata!(h, modifier, ptrdata, kw)
+    for (har, hardata) in zip(h.harmonics, ptrdata)
         nz = nonzeros(har.h)
-        onz = nonzeros(ohar.h)
-        for data in hardata
+        @simd for data in hardata  # @simd is valid because ptrs are not repeated
             ptr = first(data)
             isadjoint = ptr < 0
             isadjoint && (ptr = -ptr)
-            args = modifier_args(onz, data)
+            args = modifier_args(nz, data)
             val = modifier(args...; kw...)
             nz[ptr] = isadjoint ? val' : val
         end
@@ -134,18 +153,19 @@ function applymodifier_ptrdata!(h, originalh, modifier, ptrdata, kw)
     return h
 end
 
-modifier_args(onz, ptr::Int) = (onz[abs(ptr)],)
-modifier_args(onz, (ptr, r)::Tuple{Int,SVector}) = (onz[abs(ptr)], r)
-modifier_args(onz, (ptr, r, dr)::Tuple{Int,SVector,SVector}) = (onz[abs(ptr)], r, dr)
+# A negative ptr corresponds to a forced-hermitian element
+modifier_args(nz, ptr::Int) = (nz[abs(ptr)],)
+modifier_args(nz, (ptr, r)::Tuple{Int,SVector}) = (nz[abs(ptr)], r)
+modifier_args(nz, (ptr, r, dr)::Tuple{Int,SVector,SVector}) = (nz[abs(ptr)], r, dr)
 
 function checkconsistency(ph::ParametricHamiltonian, fullcheck = true)
     isconsistent = true
-    length(ph.originalh.harmonics) == length(ph.h.harmonics) || (isconsitent = false)
+    length(ph.baseh.harmonics) == length(ph.h.harmonics) || (isconsitent = false)
     if fullcheck && isconsistent
-        for (ohar, har) in zip(ph.originalh.harmonics, ph.h.harmonics)
-            length(nonzeros(har.h)) == length(nonzeros(ohar.h)) || (isconsistent = false; break)
-            rowvals(har.h) == rowvals(ohar.h) || (isconsistent = false; break)
-            getcolptr(har.h) == getcolptr(ohar.h) || (isconsistent = false; break)
+        for (basehar, har) in zip(ph.baseh.harmonics, ph.h.harmonics)
+            length(nonzeros(har.h)) == length(nonzeros(basehar.h)) || (isconsistent = false; break)
+            rowvals(har.h) == rowvals(basehar.h) || (isconsistent = false; break)
+            getcolptr(har.h) == getcolptr(basehar.h) || (isconsistent = false; break)
         end
     end
     isconsistent ||
@@ -161,7 +181,7 @@ Return the names of the parameter that `ph` depends on
 parameters(ph::ParametricHamiltonian) = mergetuples(parameters.(ph.modifiers)...)
 
 Base.copy(ph::ParametricHamiltonian) =
-    ParametricHamiltonian(copy(ph.originalh), copy(ph.h), ph.modifiers, copy(h.ptrdata))
+    ParametricHamiltonian(copy(ph.baseh), copy(ph.h), ph.modifiers, copy(h.ptrdata), copy(h.allptrs))
 
 Base.size(ph::ParametricHamiltonian, n...) = size(ph.h, n...)
 

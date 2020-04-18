@@ -182,6 +182,14 @@ end
     @test parametric(h, @onsite!((o, r) -> o), @hopping!((t, r, dr; a = 2) -> r[1]*t))(a=1) isa T
     @test parametric(h, @onsite!((o, r; b) -> o), @hopping!((t, r, dr; a = 2) -> r[1]*t))(b=1) isa T
     @test parametric(h, @onsite!((o, r; b) -> o*b), @hopping!((t, r, dr; a = 2) -> r[1]*t))(a=1, b=2) isa T
+
+    # Issue #35
+    for orb in (Val(1), Val(2))
+        h = LatticePresets.triangular() |> hamiltonian(hopping(I) + onsite(I), orbitals = orb) |> unitcell(10)
+        ph = parametric(h, @onsite!((o, r; b) -> o+b*I), @hopping!((t, r, dr; a = 2) -> t+r[1]*I),
+                       @onsite!((o, r; b) -> o-b*I), @hopping!((t, r, dr; a = 2) -> t-r[1]*I))
+        @test isapprox(bloch(ph(a=1, b=2), (1, 2)), bloch(h, (1, 2)))
+    end
 end
 
 @testset "boolean masks" begin
