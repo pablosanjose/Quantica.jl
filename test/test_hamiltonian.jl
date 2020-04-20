@@ -215,7 +215,6 @@ end
 
 @testset "boolean masks" begin
     for b in ((), (1,1), 4)
-        @show b
         h1 = LatticePresets.honeycomb() |> hamiltonian(hopping(1) + onsite(2)) |>
              supercell(b, region = RegionPresets.circle(10))
         h2 = LatticePresets.honeycomb() |> hamiltonian(hopping(1) + onsite(2)) |>
