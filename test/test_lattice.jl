@@ -51,10 +51,10 @@ end
             @test unitcell(preset(), l) isa Lattice{E,L}
         end
     end
-    @test unitcell(LatticePresets.honeycomb(), region = RegionPresets.circle(10)) isa Lattice{2,0}
+    @test unitcell(LatticePresets.honeycomb(), region = RegionPresets.circle(10, (10,0))) isa Lattice{2,0}
     @test unitcell(LatticePresets.honeycomb(), (2,1), region = RegionPresets.circle(10)) isa Lattice{2,1}
     @test unitcell(LatticePresets.bcc(), (2,1,0), region = RegionPresets.circle(10)) isa Lattice{3,1}
-    @test unitcell(LatticePresets.cubic(), (2,1,0), region = RegionPresets.sphere(10)) isa Lattice{3,1}
+    @test unitcell(LatticePresets.cubic(), (2,1,0), region = RegionPresets.sphere(10, , (10,20,30))) isa Lattice{3,1}
 end
 
 @testset "supercell" begin
@@ -71,8 +71,8 @@ end
             @test supercell(preset(), l) isa Superlattice{E,<:Any,<:Any,L}
         end
     end
-    @test supercell(LatticePresets.honeycomb(), region = RegionPresets.circle(10)) isa Superlattice{2,2}
+    @test supercell(LatticePresets.honeycomb(), region = RegionPresets.circle(10, (0,2))) isa Superlattice{2,2}
     @test supercell(LatticePresets.honeycomb(), (2,1), region = RegionPresets.circle(10)) isa Superlattice{2,2}
-    @test supercell(LatticePresets.bcc(), (2,1,0), region = RegionPresets.circle(10)) isa Superlattice{3,3}
+    @test supercell(LatticePresets.bcc(), (2,1,0), region = RegionPresets.circle(10, (1,0))) isa Superlattice{3,3}
     @test supercell(LatticePresets.cubic(), (2,1,0), region = RegionPresets.sphere(10)) isa Superlattice{3,3}
 end
