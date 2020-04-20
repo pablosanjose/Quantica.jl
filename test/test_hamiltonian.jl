@@ -1,4 +1,4 @@
-using LinearAlgebra: diag
+using LinearAlgebra: diag, norm
 using Quantica: Hamiltonian, ParametricHamiltonian
 
 @testset "basic hamiltonians" begin
@@ -244,4 +244,18 @@ end
         @test isequal(h1, h2) || !isequal(unitcell(h1 | h2), unitcell(h1))
         @test isequal(unitcell(h1 | h2), unitcell(h2))
     end
+end
+
+@testset "unitcell seeds" begin
+    p1 = @SVector[100,0]
+    p2 = @SVector[0,20]
+    lat = LatticePresets.honeycomb()
+    model = hopping(1, range = 1/√3) + onsite(2)
+    h1 = lat |> hamiltonian(model) |> supercell(region = r -> norm(r-p1)<3, seed = p1)
+    h2 = lat |> hamiltonian(model) |> supercell(region = r -> norm(r-p2)<3, seed = p2)
+    h = unitcell(h1 | h2)
+    h3 = lat |> hamiltonian(model) |> unitcell(region = r -> norm(r-p1)<3 || norm(r-p2)<3, seed = p2)
+
+    @test Quantica.nsites(h) == 130
+    @test Quantica.nsites(h3) == 64
 end

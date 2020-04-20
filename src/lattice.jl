@@ -552,8 +552,8 @@ end
 # supercell
 #######################################################################
 """
-    supercell(lat::AbstractLattice{E,L}, v::NTuple{L,Integer}...; region = missing)
-    supercell(lat::AbstractLattice{E,L}, sc::SMatrix{L,L´,Int}; region = missing)
+    supercell(lat::AbstractLattice{E,L}, v::NTuple{L,Integer}...; region = missing, seed = missing)
+    supercell(lat::AbstractLattice{E,L}, sc::SMatrix{L,L´,Int}; region = missing, seed = missing)
 
 Generates a `Superlattice` from an `L`-dimensional lattice `lat` with Bravais vectors
 `br´= br * sc`, where `sc::SMatrix{L,L´,Int}` is the integer supercell matrix with the `L´`
@@ -562,14 +562,15 @@ semibounded axes, these cannot be mixed with any other axes (they can only be re
 intact or scaled by a factor, see below).
 
 Only sites at position `r` such that `region(r) == true` will be included in the supercell.
-If `region` is missing, a Bravais unit cell perpendicular to the `v` axes will be selected
-for the `L-L´` non-periodic directions.
+The search for included sites will start from point `seed::Union{Tuple,SVector}`, or the
+origin if missing. If `region` is missing, a Bravais unit cell perpendicular to the `v` axes
+will be selected for the `L-L´` non-periodic directions.
 
-    supercell(lattice::AbstractLattice{E,L}, factor::Integer; region = missing)
+    supercell(lattice::AbstractLattice{E,L}, factor::Integer; kw...)
 
 Calls `supercell` with a uniformly scaled `sc = SMatrix{L,L}(factor * I)`
 
-    supercell(lattice::AbstractLattice, factors::Integer...; region = missing)
+    supercell(lattice::AbstractLattice, factors::Integer...; kw...)
 
 Calls `supercell` with different scaling along each Bravais vector (diagonal supercell
 with factors along the diagonal)
@@ -630,9 +631,10 @@ supercell(lat::AbstractLattice{E,L}, factors::Vararg{<:Integer,L´}; kw...) wher
     throw(ArgumentError("Provide either a single scaling factor or one for each of the $L lattice dimensions"))
 supercell(lat::AbstractLattice{E,L}, factor::Integer; kw...) where {E,L} =
     _supercell(lat, ntuple(_ -> factor, Val(L))...)
-supercell(lat::AbstractLattice, vecs::NTuple{L,Integer}...; region = missing) where {L} =
-    _supercell(lat, toSMatrix(Int, vecs...), region)
-supercell(lat::AbstractLattice, s::SMatrix; region = missing) = _supercell(lat, s, region)
+supercell(lat::AbstractLattice, vecs::NTuple{L,Integer}...; region = missing, seed = missing) where {L} =
+    _supercell(lat, toSMatrix(Int, vecs...), region, seed)
+supercell(lat::AbstractLattice, s::SMatrix; region = missing, seed = missing) =
+    _supercell(lat, s, region, seed)
 
 function _supercell(lat::AbstractLattice{E,L}, factors::Vararg{Integer,L}) where {E,L}
     scmatrix = SMatrix{L,L,Int}(Diagonal(SVector(factors)))
@@ -644,12 +646,12 @@ function _supercell(lat::AbstractLattice{E,L}, factors::Vararg{Integer,L}) where
     return Superlattice(lat.bravais, lat.unitcell, supercell)
 end
 
-function _supercell(lat::AbstractLattice{E,L}, scmatrix::SMatrix{L,L´,Int}, region) where {E,L,L´}
+function _supercell(lat::AbstractLattice{E,L}, scmatrix::SMatrix{L,L´,Int}, region, seed) where {E,L,L´}
     semibounded = supercell_semibounded(lat, scmatrix)
     brmatrix = lat.bravais.matrix
     regionfunc = region === missing ? ribbonfunc(brmatrix, scmatrix) : region
     in_supercell_func = is_perp_dir(scmatrix)
-    cells = supercell_cells(lat, regionfunc, in_supercell_func)
+    cells = supercell_cells(lat, regionfunc, in_supercell_func, seed)
     ns = nsites(lat)
     mask = OffsetArray(BitArray(undef, ns, size(cells)...), 1:ns, cells.indices...)
     @inbounds for dn in cells
@@ -689,9 +691,10 @@ function ribbonfunc(bravais::SMatrix{E,L,T}, supercell::SMatrix{L,L´}) where {E
     return regionfunc
 end
 
-function supercell_cells(lat::Lattice{E,L}, regionfunc, in_supercell_func) where {E,L}
+function supercell_cells(lat::Lattice{E,L}, regionfunc, in_supercell_func, seed) where {E,L}
     bravais = lat.bravais.matrix
-    iter = BoxIterator(zero(SVector{L,Int}))
+    seed´ = seed === missing ? zero(SVector{L,Int}) : seedcell(SVector{E}(seed), bravais)
+    iter = BoxIterator(seed´)
     foundfirst = false
     counter = 0
     for dn in iter
@@ -713,6 +716,9 @@ function supercell_cells(lat::Lattice{E,L}, regionfunc, in_supercell_func) where
     c = CartesianIndices(iter)
     return c
 end
+
+seedcell(seed::NTuple{N,Any}, brmat) where {N} = seedcell(SVector{N}(seed), brmat)
+seedcell(seed::SVector{E}, brmat::SMatrix{E}) where {E} = round.(Int, brmat \ seed)
 
 supercell_semibounded(lat::Lattice, s::SMatrix) = supercell_semibounded(lat.bravais, s)
 function supercell_semibounded(b::Bravais, s::SMatrix{L,L´,Int}) where {L,L´}
@@ -736,8 +742,8 @@ end
 # unitcell
 #######################################################################
 """
-    unitcell(lat::Lattice{E,L}, v::NTuple{L,Integer}...; region = missing)
-    unitcell(lat::Lattice{E,L}, uc::SMatrix{L,L´,Int}; region = missing)
+    unitcell(lat::Lattice{E,L}, v::NTuple{L,Integer}...; region = missing, seed = missing)
+    unitcell(lat::Lattice{E,L}, uc::SMatrix{L,L´,Int}; region = missing, seed = missing)
 
 Generates a `Lattice` from an `L`-dimensional lattice `lat` and a larger unit cell, such
 that its Bravais vectors are `br´= br * uc`. Here `uc::SMatrix{L,L´,Int}` is the integer
@@ -745,14 +751,15 @@ unitcell matrix, with the `L´` vectors `v`s as columns. If no `v` are given, th
 will be bounded.
 
 Only sites at position `r` such that `region(r) == true` will be included in the new
-unitcell. If `region` is missing, a Bravais unitcell perpendicular to the `v` axes will be
-selected for the `L-L´` non-periodic directions.
+unitcell. The search for included sites will start from point `seed::Union{Tuple,SVector}`,
+or the origin if missing. If `region` is missing, a Bravais unitcell perpendicular to the
+`v` axes will be selected for the `L-L´` non-periodic directions.
 
-    unitcell(lattice::Lattice{E,L}, factor::Integer; region = missing)
+    unitcell(lattice::Lattice{E,L}, factor::Integer; kw...)
 
 Calls `unitcell` with a uniformly scaled `uc = SMatrix{L,L}(factor * I)`
 
-    unitcell(lattice::Lattice{E,L}, factors::Integer...; region = missing)
+    unitcell(lattice::Lattice{E,L}, factors::Integer...; kw...)
 
 Calls `unitcell` with different scaling along each Bravais vector (diagonal supercell
 with factors along the diagonal)
