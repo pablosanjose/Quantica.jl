@@ -114,7 +114,7 @@ function ispositive(ndist)
     return result
 end
 
-isnonnegative(ndist) = iszero(ndist) || ispositive(ndist)
+# isnonnegative(ndist) = iszero(ndist) || ispositive(ndist)
 
 ############################################################################################
 ######## _copy! and _add! #  Revise after #33589 is merged #################################

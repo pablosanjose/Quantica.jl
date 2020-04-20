@@ -13,7 +13,6 @@ using Quantica: Hamiltonian, ParametricHamiltonian
         for (t, o) in zip(ts, orbs)
             @test hamiltonian(lat, onsite(t) + hopping(t; range = 1), orbitals = o) isa Hamiltonian
             @test hamiltonian(lat, onsite(t) - hopping(t; dn = dn0), orbitals = o) isa Hamiltonian
-            @test hamiltonian(lat, onsite(t) + hopping(t; dn = dn0, forcehermitian = false), orbitals = o) isa Hamiltonian
         end
     end
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = 1/√3))
@@ -80,6 +79,22 @@ end
         @SMatrix[3 0; 0 0]
     @test bloch(hamiltonian(lat, hopping(3I, range = 1/√3), orbitals = (Val(1), Val(2))))[1,2] ==
         @SMatrix[3 0; 0 0]
+end
+
+@testset "hermiticity" begin
+    lat = LatticePresets.honeycomb()
+    @test !ishermitian(hamiltonian(lat, hopping(im, sublats = :A=>:B)))
+    @test !ishermitian(hamiltonian(lat, hopping(1, sublats = :A=>:B)))
+    @test !ishermitian(hamiltonian(lat, hopping(1, sublats = :A=>:B, dn = (-1,0))))
+    @test ishermitian(hamiltonian(lat, hopping(1, sublats = :A=>:B, dn = (1,0))))
+    @test !ishermitian(hamiltonian(lat, hopping(im)))
+    @test ishermitian(hamiltonian(lat, hopping(1)))
+
+    @test ishermitian(hamiltonian(lat, hopping(im, sublats = :A=>:B, plusadjoint = true)))
+    @test ishermitian(hamiltonian(lat, hopping(1, sublats = :A=>:B, plusadjoint = true)))
+    @test ishermitian(hamiltonian(lat, hopping(1, sublats = :A=>:B, dn = (1,0), plusadjoint = true)))
+    @test ishermitian(hamiltonian(lat, hopping(im, plusadjoint = true)))
+    @test ishermitian(hamiltonian(lat, hopping(1, plusadjoint = true)))
 end
 
 @testset "unitcell modifiers" begin
@@ -189,6 +204,12 @@ end
         ph = parametric(h, @onsite!((o, r; b) -> o+b*I), @hopping!((t, r, dr; a = 2) -> t+r[1]*I),
                        @onsite!((o, r; b) -> o-b*I), @hopping!((t, r, dr; a = 2) -> t-r[1]*I))
         @test isapprox(bloch(ph(a=1, b=2), (1, 2)), bloch(h, (1, 2)))
+    end
+    # Issue #37
+    for orb in (Val(1), Val(2))
+        h = LatticePresets.triangular() |> hamiltonian(hopping(I) + onsite(I), orbitals = orb) |> unitcell(10)
+        ph = parametric(h, @onsite!(o -> o*cis(1)))
+        @test ph()[1,1] ≈ h[1,1]*cis(1)
     end
 end
 

@@ -342,7 +342,6 @@ Base.size(h::HamiltonianHarmonic) = size(h.h)
 
 function LinearAlgebra.ishermitian(h::Hamiltonian)
     for hh in h.harmonics
-        isnonnegative(hh.dn) || continue
         isassigned(h, -hh.dn) || return false
         hh.h == h[-hh.dn]' || return false
     end
@@ -563,7 +562,6 @@ function hamiltonian_sparse!(builder::IJVBuilder{L,M}, lat::AbstractLattice{E,L}
     return Hamiltonian(lat, harmonics, orbs, n, n)
 end
 
-
 applyterms!(builder, terms...) = foreach(term -> applyterm!(builder, term), terms)
 
 applyterm!(builder::IJVBuilder, term::Union{OnsiteTerm, HoppingTerm}) =
@@ -581,8 +579,7 @@ function applyterm!(builder::IJVBuilder{L}, term::OnsiteTerm, termsublats) where
             isinregion(i, dn0, selector.region, lat) || continue
             r = lat.unitcell.sites[i]
             v = toeltype(term(r, r), eltype(builder), builder.orbs[s], builder.orbs[s])
-            term.selector.forcehermitian ?
-                push!(ijv, (i, i, 0.5 * (v + v'))) : push!(ijv, (i, i, v))
+            push!(ijv, (i, i, v))
         end
     end
     return nothing
@@ -590,16 +587,14 @@ end
 
 function applyterm!(builder::IJVBuilder{L}, term::HoppingTerm, termsublats) where {L}
     selector = term.selector
-    checkinfinite(selector)
+    L > 0 && checkinfinite(selector)
     lat = builder.lat
     for (s2, s1) in termsublats  # Each is a Pair s2 => s1
         is, js = siterange(lat, s1), siterange(lat, s2)
         dns = dniter(selector.dns, Val(L))
         for dn in dns
-            addadjoint = term.selector.forcehermitian
             foundlink = false
             ijv = builder[dn]
-            addadjoint && (ijvc = builder[negative(dn)])
             for j in js
                 sitej = lat.unitcell.sites[j]
                 rsource = sitej - lat.bravais.matrix * dn
@@ -611,13 +606,7 @@ function applyterm!(builder::IJVBuilder{L}, term::HoppingTerm, termsublats) wher
                     rtarget = lat.unitcell.sites[i]
                     r, dr = _rdr(rsource, rtarget)
                     v = toeltype(term(r, dr), eltype(builder), builder.orbs[s1], builder.orbs[s2])
-                    if addadjoint
-                        v *= redundancyfactor(dn, (s1, s2), selector)
-                        push!(ijv, (i, j, v))
-                        push!(ijvc, (j, i, v'))
-                    else
-                        push!(ijv, (i, j, v))
-                    end
+                    push!(ijv, (i, j, v))
                 end
             end
             foundlink && acceptcell!(dns, dn)
@@ -639,6 +628,7 @@ dniter(dns::Missing, ::Val{L}) where {L} = BoxIterator(zero(SVector{L,Int}))
 dniter(dns, ::Val) = dns
 
 function targets(builder, range::Real, rsource, s1)
+    !isfinite(range) && return targets(builder, missing, rsource, s1)
     if !isassigned(builder.kdtrees, s1)
         sites = view(builder.lat.unitcell.sites, siterange(builder.lat, s1))
         (builder.kdtrees[s1] = KDTree(sites))
@@ -648,19 +638,13 @@ function targets(builder, range::Real, rsource, s1)
     return targets
 end
 
-targets(builder, range::Missing, rsource, s1) = eachindex(builder.lat.sublats[s1].sites)
+targets(builder, range::Missing, rsource, s1) = siterange(builder.lat, s1)
 
 checkinfinite(selector) =
     selector.dns === missing && (selector.range === missing || !isfinite(selector.range)) &&
     throw(ErrorException("Tried to implement an infinite-range hopping on an unbounded lattice"))
 
 isselfhopping((i, j), (s1, s2), dn) = i == j && s1 == s2 && iszero(dn)
-
-# Avoid double-counting hoppings when adding adjoint
-redundancyfactor(dn, ss, selector) =
-    isnotredundant(dn, selector) || isnotredundant(ss, selector) ? 1.0 : 0.5
-isnotredundant(dn::SVector, selector) = selector.dns !== missing && !iszero(dn)
-isnotredundant((s1, s2)::Tuple{Int,Int}, selector) = selector.sublats !== missing && s1 != s2
 
 #######################################################################
 # unitcell/supercell for Hamiltonians
