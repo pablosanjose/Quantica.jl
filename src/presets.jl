@@ -106,39 +106,39 @@ Base.show(io::IO, ::Region{E}) where {E} =
 
 extended_eps(T = Float64) = sqrt(eps(T))
 
-circle(radius = 10.0) = Region{2}(_region_ellipse((radius, radius)))
+circle(radius = 10.0, c...) = Region{2}(_region_ellipse((radius, radius), c...))
 
-ellipse(radii = (10.0, 15.0)) = Region{2}(_region_ellipse(radii))
+ellipse(radii = (10.0, 15.0), c...) = Region{2}(_region_ellipse(radii, c...))
 
-square(side = 10.0) = Region{2}(_region_rectangle((side, side)))
+square(side = 10.0, c...) = Region{2}(_region_rectangle((side, side), c...))
 
-rectangle(sides = (10.0, 15.0)) = Region{2}(_region_rectangle(sides))
+rectangle(sides = (10.0, 15.0), c...) = Region{2}(_region_rectangle(sides, c...))
 
-sphere(radius = 10.0) = Region{3}(_region_ellipsoid((radius, radius, radius)))
+sphere(radius = 10.0, c...) = Region{3}(_region_ellipsoid((radius, radius, radius), c...))
 
-spheroid(radii = (10.0, 15.0, 20.0)) = Region{3}(_region_ellipsoid(radii))
+spheroid(radii = (10.0, 15.0, 20.0), c...) = Region{3}(_region_ellipsoid(radii, c...))
 
-cube(side = 10.0) = Region{3}(_region_cuboid((side, side, side)))
+cube(side = 10.0, c...) = Region{3}(_region_cuboid((side, side, side), c...))
 
-cuboid(sides = (10.0, 15.0, 20.0)) = Region{3}(_region_cuboid(sides))
+cuboid(sides = (10.0, 15.0, 20.0), c...) = Region{3}(_region_cuboid(sides, c...))
 
-function _region_ellipse((rx, ry))
-    return r -> (r[1]/rx)^2 + (r[2]/ry)^2 <= 1 + extended_eps(Float64)
+function _region_ellipse((rx, ry), (cx, cy) = (0, 0))
+    return r -> ((r[1]-cx)/rx)^2 + ((r[2]-cy)/ry)^2 <= 1 + extended_eps(Float64)
 end
 
-function _region_rectangle((lx, ly))
-    return r -> abs(2*r[1]) <= lx * (1 + extended_eps()) &&
-                abs(2*r[2]) <= ly * (1 + extended_eps())
+function _region_rectangle((lx, ly), (cx, cy) = (0, 0))
+    return r -> abs(2*(r[1]-cx)) <= lx * (1 + extended_eps()) &&
+                abs(2*(r[2]-cy)) <= ly * (1 + extended_eps())
 end
 
-function _region_ellipsoid((rx, ry, rz))
-    return r -> (r[1]/rx)^2 + (r[2]/ry)^2 + (r[3]/rz)^2 <= 1 + eps()
+function _region_ellipsoid((rx, ry, rz), (cx, cy, cz) = (0, 0, 0))
+    return r -> ((r[1]-cx)/rx)^2 + ((r[2]-cy)/ry)^2 + ((r[3]-cz)/rz)^2 <= 1 + eps()
 end
 
-function _region_cuboid((lx, ly, lz))
-    return r -> abs(2*r[1]) <= lx * (1 + extended_eps()) &&
-                abs(2*r[2]) <= ly * (1 + extended_eps()) &&
-                abs(2*r[3]) <= lz * (1 + extended_eps())
+function _region_cuboid((lx, ly, lz), (cx, cy, cz) = (0, 0, 0))
+    return r -> abs(2*(r[1]-cx)) <= lx * (1 + extended_eps()) &&
+                abs(2*(r[2]-cy)) <= ly * (1 + extended_eps()) &&
+                abs(2*(r[3]-cy)) <= lz * (1 + extended_eps())
 end
 
 end # module
