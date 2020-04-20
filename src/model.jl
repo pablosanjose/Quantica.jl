@@ -6,7 +6,6 @@ abstract type Selector{M,S} end
 struct OnsiteSelector{M,S} <: Selector{M,S}
     region::M
     sublats::S  # NTuple{N,NameType} (unresolved) or Vector{Int} (resolved on a lattice)
-    forcehermitian::Bool
 end
 
 struct HoppingSelector{M,S,D,T} <: Selector{M,S}
@@ -14,14 +13,13 @@ struct HoppingSelector{M,S,D,T} <: Selector{M,S}
     sublats::S  # NTuple{N,Pair{NameType,NameType}} (unres) or Vector{Pair{Int,Int}} (res)
     dns::D
     range::T
-    forcehermitian::Bool
 end
 
-onsiteselector(; region = missing, sublats = missing, forcehermitian = true) =
-    OnsiteSelector(region, sanitize_sublats(sublats), forcehermitian)
+onsiteselector(; region = missing, sublats = missing) =
+    OnsiteSelector(region, sanitize_sublats(sublats))
 
-hoppingselector(; region = missing, sublats = missing, dn = missing, range = missing, forcehermitian = true) =
-    HoppingSelector(region, sanitize_sublatpairs(sublats), sanitize_dn(dn), sanitize_range(range), forcehermitian)
+hoppingselector(; region = missing, sublats = missing, dn = missing, range = missing) =
+    HoppingSelector(region, sanitize_sublatpairs(sublats), sanitize_dn(dn), sanitize_range(range))
 
 sanitize_sublats(s::Missing) = missing
 sanitize_sublats(s::Integer) = (nametype(s),)
@@ -65,9 +63,6 @@ function sublats(s::OnsiteSelector{<:Any,<:Tuple}, lat::AbstractLattice)
     return ss
 end
 
-sublats(s::HoppingSelector{<:Any,Missing}, lat::AbstractLattice) =
-    vec(collect(Iterators.product(1:nsublats(lat), 1:nsublats(lat))))
-
 function sublats(s::HoppingSelector{<:Any,<:Tuple}, lat::AbstractLattice)
     names = lat.unitcell.names
     ss = Pair{Int,Int}[]
@@ -79,14 +74,17 @@ function sublats(s::HoppingSelector{<:Any,<:Tuple}, lat::AbstractLattice)
     return ss
 end
 
+sublats(s::HoppingSelector{<:Any,Missing}, lat::AbstractLattice) =
+    tupletopair.(vec(collect(Iterators.product(1:nsublats(lat), 1:nsublats(lat)))))
+
 # selector already resolved for a lattice
 sublats(s::Selector{<:Any,<:Vector}, lat) = s.sublats
 
 # API
 
 resolve(s::HoppingSelector, lat::AbstractLattice) =
-    HoppingSelector(s.region, sublats(s, lat), _checkdims(s.dns, lat), s.range, s.forcehermitian)
-resolve(s::OnsiteSelector, lat::AbstractLattice) = OnsiteSelector(s.region, sublats(s, lat), s.forcehermitian)
+    HoppingSelector(s.region, sublats(s, lat), _checkdims(s.dns, lat), s.range)
+resolve(s::OnsiteSelector, lat::AbstractLattice) = OnsiteSelector(s.region, sublats(s, lat))
 
 _checkdims(dns::Missing, lat::AbstractLattice{E,L}) where {E,L} = dns
 _checkdims(dns::Tuple{Vararg{SVector{L,Int}}}, lat::AbstractLattice{E,L}) where {E,L} = dns
@@ -99,7 +97,7 @@ _checkdims(dns, lat::AbstractLattice{E,L}) where {E,L} =
 
 (s::HoppingSelector)(lat::AbstractLattice, inds, dns) =
     !isonsite(inds, dns) && isinregion(inds, dns, s.region, lat) && isindns(dns, s.dns) &&
-    isinrange(inds, s.range, lat) && isinsublats(sublat.(Ref(lat), inds), s.sublats)
+    isinrange(inds, s.range, lat) && isinsublats(tupletopair(sublat.(Ref(lat), inds)), s.sublats)
 
 isonsite((i, j), (dni, dnj)) = i == j && dni == dnj
 
@@ -115,8 +113,8 @@ end
 
 isinsublats(s::Int, ::Missing) = true
 isinsublats(s::Int, sublats::Vector{Int}) = s in sublats
-isinsublats(ss::Tuple{Int,Int}, ::Missing) = true
-isinsublats(ss::Tuple{Int,Int}, sublats::Vector{Tuple{Int,Int}}) = ss in sublats
+isinsublats(ss::Pair{Int,Int}, ::Missing) = true
+isinsublats(ss::Pair{Int,Int}, sublats::Vector{Pair{Int,Int}}) = ss in sublats
 isinsublats(s, sublats) =
     throw(ArgumentError("Sublattices $sublats in selector are not resolved."))
 
@@ -133,14 +131,33 @@ isinrange((row, col)::Tuple{Int,Int}, range::Number, lat) =
 # merge non-missing fields of s´ into s
 merge_non_missing(s::OnsiteSelector, s´::OnsiteSelector) =
     OnsiteSelector(merge_non_missing.(
-        (s.region,  s.sublats,  s.forcehermitian),
-        (s´.region, s´.sublats, s´.forcehermitian))...)
+        (s.region,  s.sublats),
+        (s´.region, s´.sublats))...)
 merge_non_missing(s::HoppingSelector, s´::HoppingSelector) =
     HoppingSelector(merge_non_missing.(
-        (s.region,  s.sublats,  s.dns,  s.range,  s.forcehermitian),
-        (s´.region, s´.sublats, s´.dns, s´.range, s´.forcehermitian))...)
+        (s.region,  s.sublats,  s.dns,  s.range),
+        (s´.region, s´.sublats, s´.dns, s´.range))...)
 merge_non_missing(o, o´::Missing) = o
 merge_non_missing(o, o´) = o´
+
+Base.adjoint(s::OnsiteSelector) = s
+function Base.adjoint(s::HoppingSelector)
+    # is_unconstrained_selector(s) &&
+    #     @warn("Taking the adjoint of an unconstrained hopping is likely unintended")
+    region´ = _adjoint(s.region)
+    sublats´ = _adjoint.(s.sublats)
+    dns´ = _adjoint.(s.dns)
+    range = s.range
+    return HoppingSelector(region´, sublats´, dns´, range)
+end
+
+_adjoint(::Missing) = missing
+_adjoint(f::Function) = (r, dr) -> f(r, -dr)
+_adjoint(t::Pair) = reverse(t)
+_adjoint(t::SVector) = -t
+
+# is_unconstrained_selector(s::HoppingSelector{Missing,Missing,Missing}) = true
+# is_unconstrained_selector(s::HoppingSelector) = false
 
 #######################################################################
 # Tightbinding types
@@ -189,8 +206,6 @@ function Base.show(io::IO, m::TightbindingModel{N}) where {N}
     foreach(t -> print(ioindent, t, "\n"), m.terms)
 end
 
-LinearAlgebra.ishermitian(m::TightbindingModel) = all(t -> ishermitian(t), m.terms)
-
 #######################################################################
 # TightbindingModelTerm API
 #######################################################################
@@ -218,7 +233,6 @@ function Base.show(io::IO, o::OnsiteTerm{F}) where {F}
     print(io,
 "$(i)OnsiteTerm{$(displayparameter(F))}:
 $(i)  Sublattices      : $(o.selector.sublats === missing ? "any" : o.selector.sublats)
-$(i)  Force hermitian  : $(o.selector.forcehermitian)
 $(i)  Coefficient      : $(o.coefficient)")
 end
 
@@ -229,13 +243,12 @@ function Base.show(io::IO, h::HoppingTerm{F}) where {F}
 $(i)  Sublattice pairs : $(h.selector.sublats === missing ? "any" : h.selector.sublats)
 $(i)  dn cell distance : $(h.selector.dns === missing ? "any" : h.selector.dns)
 $(i)  Hopping range    : $(round(h.selector.range, digits = 6))
-$(i)  Force hermitian  : $(h.selector.forcehermitian)
 $(i)  Coefficient      : $(h.coefficient)")
 end
 
 # External API #
 """
-    onsite(o; region = missing, sublats = missing, forcehermitian = true)
+    onsite(o; region = missing, sublats = missing)
 
 Create an `TightbindingModel` with a single `OnsiteTerm` that applies an onsite energy `o`
 to a `Lattice` when creating a `Hamiltonian` with `hamiltonian`.
@@ -260,8 +273,7 @@ Only sites at position `r` in sublattice with name `s::NameType` will be selecte
 `region(r) && s in sublats` is true. Any missing `region` or `sublat` will not be used to
 constraint the selection.
 
-The keyword `forcehermitian` specifies whether the `OnsiteTerm` applied to a selected site
-should be made hermitian. The keyword `sublats` allows the following formats:
+The keyword `sublats` allows the following formats:
 
     sublats = :A           # Onsite on sublat :A only
     sublats = (:A,)        # Same as above
@@ -280,26 +292,22 @@ julia> model = onsite(1, sublats = (:A,:B)) - 2 * hopping(2, sublats = :A=>:A)
 TightbindingModel{2}: model with 2 terms
   OnsiteTerm{Int64}:
     Sublattices      : (:A, :B)
-    Force hermitian  : true
     Coefficient      : 1
   HoppingTerm{Int64}:
     Sublattice pairs : (:A => :A,)
     dn cell distance : any
     Hopping range    : 1.0
-    Force hermitian  : true
     Coefficient      : -2
 
 julia> newmodel = onsite(model; sublats = :A) + hopping(model)
 TightbindingModel{2}: model with 2 terms
   OnsiteTerm{Int64}:
     Sublattices      : (:A,)
-    Force hermitian  : true
     Coefficient      : 1
   HoppingTerm{Int64}:
     Sublattice pairs : (:A => :A,)
     dn cell distance : any
     Hopping range    : 1.0
-    Force hermitian  : true
     Coefficient      : -2
 
 julia> LatticePresets.honeycomb() |> hamiltonian(onsite(r->@SMatrix[1 2; 3 4]), orbitals = Val(2))
@@ -329,7 +337,7 @@ _onlyonsites(s, t::HoppingTerm, args...) = (_onlyonsites(s, args...)...,)
 _onlyonsites(s) = ()
 
 """
-    hopping(t; region = missing, sublats = missing, dn = missing, range = 1, forcehermitian = true)
+    hopping(t; region = missing, sublats = missing, dn = missing, range = 1, plusadjoint = false)
 
 Create an `TightbindingModel` with a single `HoppingTerm` that applies a hopping `t` to a
 `Lattice` when creating a `Hamiltonian` with `hamiltonian`.
@@ -363,14 +371,17 @@ unit cells at integer distance `dn´` and to sublattices `s₁` and `s₂` will 
 1, not `missing`.
 
 The keyword `dn` can be a `Tuple`/`Vector`/`SVector` of `Int`s, or a tuple thereof. The
-keyword `forcehermitian` specifies whether the `HoppingTerm` applied to a selected hopping
-should be made hermitian. The keyword `sublats` allows the following formats:
+keyword `sublats` allows the following formats:
 
     sublats = :A => :B                 # Hopping from :A to :B sublattices
     sublats = (:A => :B,)              # Same as above
     sublats = (:A => :B, :C => :D)     # Hopping from :A to :B or :C to :D
     sublats = (:A, :C) .=> (:B, :D)    # Broadcasted pairs, same as above
     sublats = (:A, :C) => (:B, :D)     # Direct product, (:A=>:B, :A=:D, :C=>:B, :C=>D)
+
+The keyword `plusadjoint` produces a model with the input hopping term plus its adjoint.
+Note that this substitution is made before multiplying by any coefficient, so that
+`im*hopping(..., plusadjoint = true) == im*(hopping(...) + hopping(...)')`.
 
 # Combining models
 
@@ -385,26 +396,22 @@ julia> model = 3 * onsite(1) - hopping(2, dn = ((1,2), (0,0)), sublats = :A=>:B)
 TightbindingModel{2}: model with 2 terms
   OnsiteTerm{Int64}:
     Sublattices      : any
-    Force hermitian  : true
     Coefficient      : 3
   HoppingTerm{Int64}:
     Sublattice pairs : (:A => :B,)
     dn cell distance : ([1, 2], [0, 0])
     Hopping range    : 1.0
-    Force hermitian  : true
     Coefficient      : -1
 
 julia> newmodel = onsite(model) + hopping(model, range = 2)
 TightbindingModel{2}: model with 2 terms
   OnsiteTerm{Int64}:
     Sublattices      : any
-    Force hermitian  : true
     Coefficient      : 3
   HoppingTerm{Int64}:
     Sublattice pairs : (:A => :B,)
     dn cell distance : ([1, 2], [0, 0])
     Hopping range    : 2.0
-    Force hermitian  : true
     Coefficient      : -1
 
 julia> LatticePresets.honeycomb() |> hamiltonian(hopping((r,dr) -> cos(r[1]), sublats = (:A,:B) => (:A,:B)))
@@ -421,7 +428,10 @@ Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
 # See also:
     `onsite`
 """
-hopping(t; range = 1, kw...) = hopping(t, hoppingselector(; range = range, kw...))
+function hopping(t; plusadjoint = false, range = 1, kw...)
+    hop = hopping(t, hoppingselector(; range = range, kw...))
+    return plusadjoint ? hop + hop' : hop
+end
 hopping(t, selector) = TightbindingModel(HoppingTerm(t, selector, 1))
 
 hopping(m::TightbindingModel, selector::Selector) =
@@ -438,8 +448,11 @@ Base.:*(x, t::HoppingTerm) = HoppingTerm(t.t, t.selector, x * t.coefficient)
 Base.:*(t::TightbindingModelTerm, x) = x * t
 Base.:-(t::TightbindingModelTerm) = (-1) * t
 
-LinearAlgebra.ishermitian(t::OnsiteTerm) = t.selector.forcehermitian
-LinearAlgebra.ishermitian(t::HoppingTerm) = t.selector.forcehermitian
+Base.adjoint(t::TightbindingModel) = TightbindingModel(adjoint.(terms(t)))
+Base.adjoint(t::OnsiteTerm{Function}) = OnsiteTerm(r -> t.o(r)', t.selector, t.coefficient')
+Base.adjoint(t::OnsiteTerm) = OnsiteTerm(t.o', t.selector, t.coefficient')
+Base.adjoint(t::HoppingTerm{Function}) = HoppingTerm((r, dr) -> t.t(r, -dr)', t.selector', t.coefficient')
+Base.adjoint(t::HoppingTerm) = HoppingTerm(t.t', t.selector', t.coefficient')
 
 #######################################################################
 # offdiagonal
@@ -487,8 +500,6 @@ ParametricFunction{N}(f::F, p::NTuple{M,Symbol}) where {N,M,F} = ParametricFunct
 struct OnsiteModifier{N,F<:ParametricFunction{N},S<:Selector} <: ElementModifier{N,F,S}
     f::F
     selector::S
-    addconjugate::Bool   # determines whether to return f(o) or (f(o) + f(o')')/2
-                         # (equatl to selector.forcehermitian)
 end
 
 OnsiteModifier(f, selector) = OnsiteModifier(f, selector, false)
@@ -496,8 +507,6 @@ OnsiteModifier(f, selector) = OnsiteModifier(f, selector, false)
 struct HoppingModifier{N,F<:ParametricFunction{N},S<:Selector} <: ElementModifier{N,F,S}
     f::F
     selector::S
-    addconjugate::Bool   # determines whether to return f(t) or (f(t) + f(t')')/2
-                         # (equal to *unresolved* selector.sublats and selector.forcehermitian)
 end
 
 HoppingModifier(f, selector) = HoppingModifier(f, selector, false)
@@ -585,27 +594,17 @@ end
 get_kwname(x::Symbol) = x
 get_kwname(x::Expr) = x.head === :kw ? x.args[1] : x.head  # x.head == :...
 
-function resolve(o::OnsiteModifier, lat)
-    addconjugate = o.selector.forcehermitian
-    OnsiteModifier(o.f, resolve(o.selector, lat), addconjugate)
-end
+resolve(o::OnsiteModifier, lat) = OnsiteModifier(o.f, resolve(o.selector, lat))
 
-function resolve(h::HoppingModifier, lat)
-    addconjugate = h.selector.sublats === missing && h.selector.forcehermitian
-    HoppingModifier(h.f, resolve(h.selector, lat), addconjugate)
-end
+resolve(h::HoppingModifier, lat) = HoppingModifier(h.f, resolve(h.selector, lat))
 
 # Intended for resolved ElementModifier{N} only. The N is the number of arguments accepted.
 @inline (o!::UniformOnsiteModifier)(o, r; kw...) = o!(o; kw...)
 @inline (o!::UniformOnsiteModifier)(o, r, dr; kw...) = o!(o; kw...)
-@inline (o!::UniformOnsiteModifier)(o; kw...) =
-    o!.addconjugate ? 0.5 * (o!.f(o; kw...) + o!.f(o'; kw...)') : o!.f(o; kw...)
+@inline (o!::UniformOnsiteModifier)(o; kw...) = o!.f(o; kw...)
 @inline (o!::OnsiteModifier)(o, r, dr; kw...) = o!(o, r; kw...)
-@inline (o!::OnsiteModifier)(o, r; kw...) =
-    o!.addconjugate ? 0.5 * (o!.f(o, r; kw...) + o!.f(o', r; kw...)') : o!.f(o, r; kw...)
+@inline (o!::OnsiteModifier)(o, r; kw...) = o!.f(o, r; kw...)
 
 @inline (h!::UniformHoppingModifier)(t, r, dr; kw...) = h!(t; kw...)
-@inline (h!::UniformHoppingModifier)(t; kw...) =
-    h!.addconjugate ? 0.5 * (h!.f(t; kw...) + h!.f(t'; kw...)') : h!.f(t; kw...)
-@inline (h!::HoppingModifier)(t, r, dr; kw...) =
-    h!.addconjugate ? 0.5 * (h!.f(t, r, dr; kw...) + h!.f(t', r, -dr; kw...)') : h!.f(t, r, dr; kw...)
+@inline (h!::UniformHoppingModifier)(t; kw...) = h!.f(t; kw...)
+@inline (h!::HoppingModifier)(t, r, dr; kw...) = h!.f(t, r, dr; kw...)

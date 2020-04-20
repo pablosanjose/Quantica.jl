@@ -26,7 +26,7 @@ end
 end
 
 @testset "hopping terms" begin
-    rs = (r->true, missing)
+    rs = ((r, dr) -> true, missing)
     ss = (:A => :B, :A => (:A,:B), (:A,:B) .=> (:A,:B), (:A,:B) => (:A,:B), missing)
     dns = ((0,1), ((0,1),(1,0)), SVector(0,1), (SVector(0,1), (0,3)), [1, 2], ([1.0,2], (0,4.0)), missing)
     ranges = (Inf, 1)  # no missing here, because hopping range default is 1.0
@@ -46,4 +46,18 @@ end
     sublats(hopping(1, sublats = (:A,:B) .=> (:A,:B))) == ((:A => :A, :B => :B),)
     sublats(hopping(1, sublats = :A => (:A,:B))) == ((:A => :A, :A => :B),)
     sublats(hopping(1, sublats = (:C => :C, (:A,:B) => (:A,:B)))) == ((:C => :C, :A => :A, :A => :B, :B => :A, :B => :B),)
+end
+
+@testset "hopping adjoint" begin
+    ts  = (1, 1im, @SMatrix[0 -im; im 0], @SMatrix[0 -im])
+    ss  = (:A => :B, :A => (:A,:B), (:A,:B) .=> (:A,:B), (:A,:B) => (:A,:B), missing)
+    ss´ = (:B => :A, (:A,:B) => :A, (:A,:B) .=> (:A,:B), (:A,:B,:A,:B) .=> (:A,:A,:B,:B), missing)
+    dns = ((0,1), ((0,1),(1,0)),    SVector(0,1),  (SVector(0,1), (0,3)),    [1, 2], ([1.0,2], (0,4.0)),   missing)
+    dns´= ((0,-1), ((0,-1),(-1,0)), SVector(0,-1), (SVector(0,-1), (0,-3)), -[1, 2], (-[1.0,2], (0,-4.0)), missing)
+    ranges = (Inf, 1)
+    for (t,t´) in zip(ts, adjoint.(ts)), (s, s´) in zip(ss, ss´), (dn, dn´) in zip(dns, dns´), rn in ranges
+        hop = hopping(t, sublats = s, dn = dn, range = rn)
+        hop´ = hopping(t´, sublats = s´, dn = dn´, range = rn)
+        @test hop' === hop´
+    end
 end

@@ -87,11 +87,11 @@ function parametric_ptrdata!(allptrs, h::Hamiltonian{LA,L,M,<:AbstractSparseMatr
         rows = rowvals(matrix)
         for col in 1:size(matrix, 2), ptr in nzrange(matrix, col)
             row = rows[ptr]
-            selected  = selector(lat, (row, col), (dn, zero(dn)))
-            selected´ = t.selector.forcehermitian && selector(lat, (col, row), (zero(dn), dn))
-            selected  && push!(ptrdata, ptrdatum(t, lat,  ptr, (row, col)))
-            selected´ && push!(ptrdata, ptrdatum(t, lat, -ptr, (col, row)))
-            (selected || selected´) && push!(allptrs_har, ptr)
+            selected = selector(lat, (row, col), (dn, zero(dn)))
+            if selected
+                push!(ptrdata, ptrdatum(t, lat,  ptr, (row, col)))
+                push!(allptrs_har, ptr)
+            end
         end
     end
     return harmonic_ptrdata
@@ -143,20 +143,18 @@ function applymodifier_ptrdata!(h, modifier, ptrdata, kw)
         nz = nonzeros(har.h)
         @simd for data in hardata  # @simd is valid because ptrs are not repeated
             ptr = first(data)
-            isadjoint = ptr < 0
-            isadjoint && (ptr = -ptr)
             args = modifier_args(nz, data)
             val = modifier(args...; kw...)
-            nz[ptr] = isadjoint ? val' : val
+            nz[ptr] = val
         end
     end
     return h
 end
 
 # A negative ptr corresponds to a forced-hermitian element
-modifier_args(nz, ptr::Int) = (nz[abs(ptr)],)
-modifier_args(nz, (ptr, r)::Tuple{Int,SVector}) = (nz[abs(ptr)], r)
-modifier_args(nz, (ptr, r, dr)::Tuple{Int,SVector,SVector}) = (nz[abs(ptr)], r, dr)
+modifier_args(nz, ptr::Int) = (nz[ptr],)
+modifier_args(nz, (ptr, r)::Tuple{Int,SVector}) = (nz[ptr], r)
+modifier_args(nz, (ptr, r, dr)::Tuple{Int,SVector,SVector}) = (nz[ptr], r, dr)
 
 function checkconsistency(ph::ParametricHamiltonian, fullcheck = true)
     isconsistent = true
