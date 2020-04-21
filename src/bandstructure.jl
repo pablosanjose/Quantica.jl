@@ -51,6 +51,13 @@ Return the states of `s` as the columns of a `Matrix`
 """
 states(s::Spectrum) = s.states
 
+"""
+    transform!(s::Spectrum, f::Function)
+
+Transform the energies of `s` by applying `f` to them in place.
+"""
+transform!(s::Spectrum, f) = map!(f, s.energies)
+
 #######################################################################
 # Bandstructure
 #######################################################################
@@ -107,6 +114,21 @@ Return the states of each vertex of the i-th band in `bs`, in the form of a `Mat
 states(bs::Bandstructure, i) = states(bands(bs)[i])
 
 states(b::Band) = reshape(b.states, b.dimstates)
+
+"""
+    transform!(b::Bandstructure, f::Function)
+
+Transform the energies of all bands in `b` by applying `f` to them in place.
+"""
+function transform!(bs::Bandstructure, f)
+    for band in bands(bs)
+        vs = vertices(band)
+        for (i, v) in enumerate(vs)
+            vs[i] = SVector((tuplemost(Tuple(v))..., f(last(v))))
+        end
+    end
+    return bs
+end
 
 #######################################################################
 # bandstructure
