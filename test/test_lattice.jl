@@ -9,7 +9,7 @@ using Random
 end
 
 @testset "sublat" begin
-    sitelist = [(3,3), (3,3.), [3,3.], @SVector[3, 3], @SVector[3, 3f0], @SVector[3f0, 3.]]
+    sitelist = [(3,3), (3,3.), [3,3.], SA[3, 3], SA[3, 3f0], SA[3f0, 3.]]
     for site2 in sitelist, site1 in sitelist
         @test sublat(site1, site2) isa
             Sublat{2,promote_type(typeof.(site1)..., typeof.(site2)...)}
