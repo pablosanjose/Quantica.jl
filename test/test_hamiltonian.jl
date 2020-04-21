@@ -17,6 +17,14 @@ using Quantica: Hamiltonian, ParametricHamiltonian
     end
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = 1/√3))
     @test bloch(h) == h.harmonics[1].h
+    # Inf range
+    h = LatticePresets.square() |> unitcell(region = RegionPresets.square(5)) |>
+        hamiltonian(hopping(1, range = Inf))
+    @test Quantica.nhoppings(h) = 600
+
+    h = LatticePresets.square() |> hamiltonian(hopping(1, dn = (10,0), range = Inf))
+    @test Quantica.nhoppings(h) = 1
+    @test isassigned(h, (10,0))
 end
 
 @testset "orbitals and sublats" begin

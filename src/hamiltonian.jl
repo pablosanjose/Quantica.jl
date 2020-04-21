@@ -633,9 +633,9 @@ function targets(builder, range::Real, rsource, s1)
         sites = view(builder.lat.unitcell.sites, siterange(builder.lat, s1))
         (builder.kdtrees[s1] = KDTree(sites))
     end
-    targets = inrange(builder.kdtrees[s1], rsource, range)
-    targets .+= builder.lat.unitcell.offsets[s1]
-    return targets
+    targetlist = inrange(builder.kdtrees[s1], rsource, range)
+    targetlist .+= builder.lat.unitcell.offsets[s1]
+    return targetlist
 end
 
 targets(builder, range::Missing, rsource, s1) = siterange(builder.lat, s1)
