@@ -20,10 +20,10 @@ using Quantica: Hamiltonian, ParametricHamiltonian
     # Inf range
     h = LatticePresets.square() |> unitcell(region = RegionPresets.square(5)) |>
         hamiltonian(hopping(1, range = Inf))
-    @test Quantica.nhoppings(h) = 600
+    @test Quantica.nhoppings(h) == 600
 
     h = LatticePresets.square() |> hamiltonian(hopping(1, dn = (10,0), range = Inf))
-    @test Quantica.nhoppings(h) = 1
+    @test Quantica.nhoppings(h) == 1
     @test isassigned(h, (10,0))
 end
 
