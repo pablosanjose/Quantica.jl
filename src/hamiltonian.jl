@@ -160,15 +160,16 @@ end
 
 function nextnonzero_row_col(m::AbstractSparseMatrix, itr, col = first(itr.colrange))
     rows = rowvals(m)
+    vals = nonzeros(m)
     for col´ in col:last(itr.colrange)
-        ptridx = findfirst(p -> isvalidrowcol(rows[p], col´, m, itr), nzrange(m, col´))
+        ptridx = findfirst(p -> isvalidrowcol(rows[p], col´, vals[p], itr), nzrange(m, col´))
         ptridx === nothing || return (ptridx, col´)
     end
     # (0, 0) is sentinel for "no non-zero row for col´ >= col
     return (0, 0)
 end
 
-isvalidrowcol(row, col, m, itr) = row in itr.rowrange && !iszero(m[row, col])
+isvalidrowcol(row, col, val, itr) = row in itr.rowrange && !iszero(val)
 
 function Base.iterate(itr::EachIndexNonzeros{<:Hamiltonian}, (ptridx, col, nhar) = firststate(itr, 1))
     nhar > length(itr.h.harmonics) && return nothing
@@ -194,9 +195,11 @@ function _iterate(m::AbstractSparseMatrix, itr, ptridx, col)
     col in itr.colrange || return nothing  # will also return nothing if col == 0 (sentinel)
     ptrs = nzrange(m, col)
     rows = rowvals(m)
+    vals = nonzeros(m)
     if ptridx <= length(ptrs)
         row = rows[ptrs[ptridx]]
-        row in itr.rowrange && return (row, col), (ptridx + 1, col)
+        val = vals[ptrs[ptridx]]
+        row in itr.rowrange && !iszero(val) && return (row, col), (ptridx + 1, col)
     end
     ptridx´, col´ = nextnonzero_row_col(m, itr, col + 1)
     return _iterate(m, itr, ptridx´, col´)
