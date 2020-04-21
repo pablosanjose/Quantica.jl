@@ -254,8 +254,8 @@ end
 end
 
 @testset "unitcell seeds" begin
-    p1 = @SVector[100,0]
-    p2 = @SVector[0,20]
+    p1 = SA[100,0]
+    p2 = SA[0,20]
     lat = LatticePresets.honeycomb()
     model = hopping(1, range = 1/√3) + onsite(2)
     h1 = lat |> hamiltonian(model) |> supercell(region = r -> norm(r-p1)<3, seed = p1)

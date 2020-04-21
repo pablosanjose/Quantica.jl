@@ -28,7 +28,7 @@ export LatticePresets, RegionPresets, HamiltonianPresets
 
 export LinearAlgebraPackage, ArpackPackage, KrylovKitPackage
 
-export @SMatrix, @SVector, SMatrix, SVector
+export @SMatrix, @SVector, SMatrix, SVector, SA
 
 export ishermitian, I
 
