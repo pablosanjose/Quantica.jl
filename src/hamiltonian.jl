@@ -624,8 +624,8 @@ toeltype(t::SMatrix{N1,N2}, ::Type{S}, t1::NTuple{N1}, t2::NTuple{N2}) where {N1
 toeltype(u::UniformScaling, ::Type{T}, t1::NTuple{1}, t2::NTuple{1}) where {T<:Number} = T(u.λ)
 toeltype(u::UniformScaling, ::Type{S}, t1::NTuple{N1}, t2::NTuple{N2}) where {N1,N2,S<:SMatrix} =
     padtotype(SMatrix{N1,N2}(u), S)
-toeltype(t, s, t1, t2) =
-    throw(DimensionMismatch("Dimension mismatch between model and Hamiltonian. Did you correctly specify the `orbitals` in hamiltonian? Consider also using `I` to cover non-uniform orbital dimensions"))
+toeltype(t::AbstractArray, s, t1, t2) = throw(ArgumentError("Non-static array input in model, please use StaticArrays instead (e.g. SA[1 0; 0 1] instead of [1 0; 0 1])"))
+toeltype(t, s, t1, t2) = throw(DimensionMismatch("Dimension mismatch between model and Hamiltonian. Did you correctly specify the `orbitals` in hamiltonian? Consider also using `I` to cover non-uniform orbital dimensions"))
 
 dniter(dns::Missing, ::Val{L}) where {L} = BoxIterator(zero(SVector{L,Int}))
 dniter(dns, ::Val) = dns
