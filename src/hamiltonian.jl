@@ -124,9 +124,10 @@ _nnz(h::DenseMatrix) = count(!iszero, h)
 function _nnzdiag(s::SparseMatrixCSC)
     count = 0
     rowptrs = rowvals(s)
+    nz = nonzeros(s)
     for col in 1:size(s,2)
         for ptr in nzrange(s, col)
-            rowptrs[ptr] == col && (count += 1; break)
+            rowptrs[ptr] == col && (count += !iszero(nz[ptr]); break)
         end
     end
     return count
