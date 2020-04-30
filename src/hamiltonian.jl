@@ -147,7 +147,6 @@ function nonzero_indices(h::Hamiltonian, rowrange = 1:size(h, 1), colrange = 1:s
                 for col in colrange´
                 for ptr in nzrange_inrows(har.h, col, rowrange´)
                 if !iszero(nonzeros(har.h)[ptr]))
-
     return gen
 end
 
@@ -158,7 +157,6 @@ function nonzero_indices(har::HamiltonianHarmonic, rowrange = 1:size(h, 1), colr
                 for col in colrange´
                 for ptr in nzrange_inrows(har.h, col, rowrange´)
                 if !iszero(nonzeros(har.h)[ptr]))
-
     return gen
 end
 
