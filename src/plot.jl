@@ -10,7 +10,7 @@ function meandist(h::Hamiltonian)
     num = 0
     ss = Quantica.sites(h.lattice)
     br = h.lattice.bravais.matrix
-    for (row, col, dn) in Quantica.eachindex_nz(h)
+    for (dn, row, col) in Quantica.nonzero_indices(h)
         if row != col
             num += 1
             rsrc = ss[col]
@@ -102,7 +102,7 @@ function plot!(plot::HamiltonianPlot)
                 csrc´ = iszero(har.dn) ? csrc : transparent(csrc, 1 - plot[:dimming][])
                 csrc´ = darken(csrc´, plot[:linkdarken][])
                 for (sdst, cdst) in zip(sublats, colors)
-                    itr = Quantica.eachindex_nz(har, siterange(lat, sdst), siterange(lat, ssrc))
+                    itr = Quantica.nonzero_indices(har, siterange(lat, sdst), siterange(lat, ssrc))
                     plotlinks!(plot, lat, itr, har.dn, n, csrc´)
                 end
             end

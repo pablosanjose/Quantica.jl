@@ -133,98 +133,55 @@ function _nnzdiag(s::SparseMatrixCSC)
 end
 _nnzdiag(s::Matrix) = count(!iszero, s[i,i] for i in 1:minimum(size(s)))
 
-# Iteration tools #
-
-struct EachIndexNonzeros{H}
-    h::H
-    rowrange::UnitRange{Int}
-    colrange::UnitRange{Int}
-end
-
-eachindex_nz(h, rowrange = 1:size(h, 1), colrange = 1:size(h, 2)) =
-    EachIndexNonzeros(h, rclamp(rowrange, 1:size(h, 1)), rclamp(colrange, 1:size(h, 2)))
-
-function firststate(itr::EachIndexNonzeros{<:Hamiltonian}, nhar)
-    m = itr.h.harmonics[nhar].h
-    row, col = nextnonzero_row_col(m, itr)
-    return (row, col, nhar)
-end
-
-function nextnonzero_row_col(m::DenseMatrix, itr, col = first(itr.colrange))
-    for col´ in col:last(itr.colrange), row in itr.rowrange
-        iszero(m[row, col´]) || return (row, col´)
-    end
-    # (0, 0) is sentinel for "no non-zero row for col´ >= col
-    return (0, 0)
-end
-
-function nextnonzero_row_col(m::AbstractSparseMatrix, itr, col = first(itr.colrange))
-    rows = rowvals(m)
-    vals = nonzeros(m)
-    for col´ in col:last(itr.colrange)
-        ptridx = findfirst(p -> isvalidrowcol(rows[p], col´, vals[p], itr), nzrange(m, col´))
-        ptridx === nothing || return (ptridx, col´)
-    end
-    # (0, 0) is sentinel for "no non-zero row for col´ >= col
-    return (0, 0)
-end
-
-isvalidrowcol(row, col, val, itr) = row in itr.rowrange && !iszero(val)
-
-function Base.iterate(itr::EachIndexNonzeros{<:Hamiltonian}, (ptridx, col, nhar) = firststate(itr, 1))
-    nhar > length(itr.h.harmonics) && return nothing
-    har = itr.h.harmonics[nhar]
-    i = _iterate(har.h, itr, ptridx, col)
-    if i === nothing
-        nhar´ = nhar + 1
-        return nhar´ > length(itr.h.harmonics) ? nothing : iterate(itr, firststate(itr, nhar´))
-    else
-        ((row, col), (ptridx, col)) = i
-        return (row, col, har.dn), (ptridx, col, nhar)
-    end
-end
-
-firststate(itr::EachIndexNonzeros{<:HamiltonianHarmonic}) = nextnonzero_row_col(itr.h.h, itr)
-
-function Base.iterate(itr::EachIndexNonzeros{<:HamiltonianHarmonic}, (row, col) = firststate(itr))
-    _iterate(itr.h.h, itr, row, col)
-end
-
-# Returns nothing or ((row, col), (nextrow, nextcol)), where row and nextrow can be a ptridx
-function _iterate(m::AbstractSparseMatrix, itr, ptridx, col)
-    col in itr.colrange || return nothing  # will also return nothing if col == 0 (sentinel)
-    ptrs = nzrange(m, col)
-    rows = rowvals(m)
-    vals = nonzeros(m)
-    if ptridx <= length(ptrs)
-        row = rows[ptrs[ptridx]]
-        val = vals[ptrs[ptridx]]
-        row in itr.rowrange && !iszero(val) && return (row, col), (ptridx + 1, col)
-    end
-    ptridx´, col´ = nextnonzero_row_col(m, itr, col + 1)
-    return _iterate(m, itr, ptridx´, col´)
-end
-
-function _iterate(m::DenseMatrix, itr, row, col)
-    col in itr.colrange || return nothing
-    for row´ in row:last(itr.rowrange)
-        iszero(m[row´, col]) || return (row´, col), (row´ + 1, col)
-    end
-    row´, col´ = nextnonzero_row_col(m, itr, col + 1)
-    return _iterate(m, itr, row´, col´)
-end
-
-Base.IteratorSize(::EachIndexNonzeros) = Base.SizeUnknown()
-Base.IteratorEltype(::EachIndexNonzeros) = Base.HasEltype()
-Base.eltype(s::EachIndexNonzeros{<:Hamiltonian}) = Tuple{Int, Int, typeof(first(s.h.harmonics).dn)}
-Base.eltype(s::EachIndexNonzeros{<:HamiltonianHarmonic}) = Tuple{Int, Int}
-
 Base.isequal(h1::Hamiltonian, h2::Hamiltonian) =
     isequal(h1.lattice, h2.lattice) && isequal(h1.harmonics, h2.harmonics) &&
     isequal(h1.orbitals, h2.orbitals)
 
-# stored_indices(h::Hamiltonian) = ((har.dn, rowvals(har.h)[ptr], col) for har in h.harmonics
-#                                   for col in 1:size(har.h, 2) for ptr in nzrange(har.h, col))
+# Iterators #
+
+function nonzero_indices(h::Hamiltonian, rowrange = 1:size(h, 1), colrange = 1:size(h, 2))
+    rowrange´ = rclamp(rowrange, 1:size(h, 1))
+    colrange´ = rclamp(colrange, 1:size(h, 2))
+    gen = ((har.dn, rowvals(har.h)[ptr], col)
+                for har in h.harmonics
+                for col in colrange´
+                for ptr in nzrange_inrows(har.h, col, rowrange´)
+                if !iszero(nonzeros(har.h)[ptr]))
+
+    return gen
+end
+
+function nonzero_indices(har::HamiltonianHarmonic, rowrange = 1:size(h, 1), colrange = 1:size(h, 2))
+    rowrange´ = rclamp(rowrange, 1:size(har, 1))
+    colrange´ = rclamp(colrange, 1:size(har, 2))
+    gen = ((rowvals(har.h)[ptr], col)
+                for col in colrange´
+                for ptr in nzrange_inrows(har.h, col, rowrange´)
+                if !iszero(nonzeros(har.h)[ptr]))
+
+    return gen
+end
+
+function nzrange_inrows(h, col, rowrange)
+    ptrs = nzrange(h, col)
+    rows = rowvals(h)
+    ptrmin = first(ptrs)
+    ptrmax = last(ptrs)
+
+    for p in ptrs
+        rows[p] in rowrange && break
+        ptrmin = p + 1
+    end
+
+    if ptrmin < ptrmax
+        for p in ptrmax:-1:ptrmin
+            ptrmax = p
+            rows[p] in rowrange && break
+        end
+    end
+
+    return ptrmin:ptrmax
+end
 
 # External API #
 """
