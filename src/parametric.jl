@@ -47,9 +47,9 @@ ParametricHamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
   Harmonic size    : 200 × 200
   Orbitals         : ((:a,), (:a,))
   Element type     : scalar (Complex{Float64})
-  Onsites          : 200
-  Hoppings         : 640
-  Coordination     : 3.2
+  Onsites          : 0
+  Hoppings         : 600
+  Coordination     : 3.0
   Parameters       : (:μ,)
 
 julia> ph(μ = 2)
@@ -59,8 +59,8 @@ Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
   Orbitals         : ((:a,), (:a,))
   Element type     : scalar (Complex{Float64})
   Onsites          : 200
-  Hoppings         : 640
-  Coordination     : 3.2
+  Hoppings         : 600
+  Coordination     : 3.0
 ```
 # See also
     `@onsite!`, `@hopping!`
