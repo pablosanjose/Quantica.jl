@@ -17,6 +17,10 @@ toSVector(::Type{T}, ::Tuple{}) where {T} = SVector{0,T}()
 # Dynamic dispatch
 toSVector(v::AbstractVector) = SVector(Tuple(v))
 
+@inline iszero_or_empty(s::SVector{0}) = true
+@inline iszero_or_empty(s::SVector) = iszero(s)
+@inline iszero_or_empty(s) = isempty(s) || iszero(s)
+
 ensuretuple(s::Tuple) = s
 ensuretuple(s) = (s,)
 

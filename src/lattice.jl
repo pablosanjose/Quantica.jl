@@ -126,7 +126,7 @@ end
 Base.:*(factor::Number, b::Bravais) = Bravais(factor * b.matrix, b.semibounded)
 Base.:*(b::Bravais, factor::Number) = Bravais(b.matrix * factor, b.semibounded)
 
-issemibounded(b::Bravais) = !iszero(b.semibounded)
+issemibounded(b::Bravais) = !iszero_or_empty(b.semibounded)
 
 #######################################################################
 # Unitcell
@@ -670,7 +670,7 @@ function _supercell(lat::AbstractLattice{E,L}, scmatrix::SMatrix{L,L´,Int}, reg
 end
 
 # This is true whenever old ndist is perpendicular to new lattice
-is_perp_dir(supercell) = let invs = pinvmultiple(supercell); dn -> iszero(new_dn(dn, invs)); end
+is_perp_dir(supercell) = let invs = pinvmultiple(supercell); dn -> iszero_or_empty(new_dn(dn, invs)); end
 
 new_dn(oldndist, (pinvs, n)) = fld.(pinvs * oldndist, n)
 new_dn(oldndist, ::Tuple{<:SMatrix{0,0},Int}) = SVector{0,Int}()
