@@ -830,14 +830,6 @@ _similarmatrix(h, ::Type{A}, ::Type{<:SMatrix}) where {T<:Number, A<:SparseMatri
 _similarmatrix(h::Hamiltonian{LA,L,M,A}, ::Type{A}, ::Type{M}) where {LA,L,M,A} =
     similar(h.harmonics[1].h, M, size(h)...)
 
-# function similarmatrix(h::Hamiltonian, ::Type{<:Matrix{T}}) where {T<:Number}
-#     optimize!(h)
-#     sm = size(h)
-#     T = eltype(h)
-#     matrix = similar(h.harmonics[1].h, T, sm[1], sm[2])
-#     return matrix
-# end
-
 """
     optimize!(h::Hamiltonian)
 
@@ -962,10 +954,8 @@ julia> bloch!(similarmatrix(h), h, (.2,.3))
 # See also:
     `bloch`, `optimize!`, `similarmatrix`
 """
-bloch!(matrix, h) = bloch!(matrix, h, ())
-bloch!(matrix, h, ϕs, axis = 0) = _bloch!(matrix, h, toSVector(ϕs), axis)
-bloch!(matrix::SparseMatrixIJV, h) = sparse(bloch!(matrix, h, ()))
-bloch!(matrix::SparseMatrixIJV, h, ϕs, axis = 0) = sparse(_bloch!(matrix, h, toSVector(ϕs), axis))
+bloch!(matrix, h, ϕs = (), axis = 0) = _bloch!(matrix, h, toSVector(ϕs), axis)
+bloch!(matrix::SparseMatrixIJV, h, ϕs = (), axis = 0) = sparse(_bloch!(matrix, h, toSVector(ϕs), axis))
 
 function _bloch!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,L,M}, ϕs, axis::Number) where {L,M}
     rawmatrix = parent(matrix)
