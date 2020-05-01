@@ -813,22 +813,35 @@ Specifies the desired type `T` of the uninitialized matrix.
 
 Adapts the type of the matrix (e.g. dense/sparse) to the specified `method`
 """
-function similarmatrix(h::Hamiltonian, ::Type{T} = matrixtype(h)) where {T<:AbstractMatrix}
+function similarmatrix(h::Hamiltonian, ::Type{A´} = matrixtype(h)) where {A´<:AbstractMatrix}
     optimize!(h)
-    return _similarmatrix(h, T, blocktype(h))
+    return _similarmatrix(h, matrixtype(h), A´)
 end
 
-_similarmatrix(h, ::Type{A}, ::Type{<:Number}) where {T<:Number, A<:Matrix{T}} =
-    similar(A, size(h)...)
+# We only provide the type combinations that make sense
+_similarmatrix(h, ::Type{A}, ::Type{A´}) where {A´,A<:A´} =
+    similar(h.harmonics[1].h)
 
-_similarmatrix(h, ::Type{A}, ::Type{<:SMatrix}) where {T<:Number, A<:Matrix{T}} =
-    similar(A, flatsize(h)...)
+_similarmatrix(h, ::Type{A}, ::Type{AbstractMatrix{T´}}) where {T<:Number,A<:AbstractMatrix{T},T´<:Number} =
+    similar(h.harmonics[1].h, T´)
 
-_similarmatrix(h, ::Type{A}, ::Type{<:SMatrix}) where {T<:Number, A<:SparseMatrixCSC{T}} =
-    SparseMatrixIJV{T}(flatsize(h)...)
+_similarmatrix(h, ::Type{A}, ::Type{AbstractMatrix{T´}}) where {N,T<:SMatrix{N,N},A<:AbstractMatrix{T},T´<:SMatrix{N,N}} =
+    similar(h.harmonics[1].h, T´)
 
-_similarmatrix(h::Hamiltonian{LA,L,M,A}, ::Type{A}, ::Type{M}) where {LA,L,M,A} =
-    similar(h.harmonics[1].h, M, size(h)...)
+_similarmatrix(h, ::Type{A}, ::Type{A´}) where {N,T<:SMatrix{N,N},A<:AbstractMatrix{T},T´<:SMatrix{N,N},A´<:DenseMatrix{T´}} =
+    similar(A´, size(h)...)
+
+_similarmatrix(h, ::Type{A}, ::Type{A´}) where {T<:Number,A<:AbstractMatrix{T},T´<:Number,A´<:DenseMatrix{T´}} =
+    similar(A´, size(h)...)
+
+_similarmatrix(h, ::Type{A}, ::Type{A´}) where {T<:SMatrix,A<:AbstractMatrix{T},T´<:Number,A´<:DenseMatrix{T´}} =
+    similar(A´, flatsize(h)...)
+
+_similarmatrix(h, ::Type{A}, ::Type{AbstractMatrix{T´}}) where {T<:SMatrix,A<:AbstractMatrix{T},T´<:Number} =
+    _flatten(h.harmonics[1].h, length.(h.orbitals), h.lattice, T´)
+
+_similarmatrix(h, ::Type{A}, ::Type{A´}) where {T<:SMatrix,A<:AbstractSparseMatrix{T},T´<:Number,A´<:AbstractSparseMatrix{T´}} =
+    _flatten(h.harmonics[1].h, length.(h.orbitals), h.lattice, T´)
 
 """
     optimize!(h::Hamiltonian)
@@ -934,28 +947,40 @@ bloch(h::Hamiltonian{<:Lattice}, args...) = bloch!(similarmatrix(h), h, args...)
 
 In-place version of `bloch`. Overwrite `matrix` with the Bloch Hamiltonian matrix of `h` for
 the specified Bloch phases `ϕs = (ϕ₁,ϕ₂,...)` (see `bloch` for definition and API).  A
-conventient way to obtain a `matrix` is to use `similarmatrix(h)`, which will return an
+conventient way to obtain a `matrix` is to use `similarmatrix(h,...)`, which will return an
 `AbstractMatrix` of the same type as the Hamiltonian's. Note, however, that matrix need not
-be of the same type (e.g. it can be dense, while `h` is sparse).
+be of the same type (e.g. it can be dense with `Number` eltype for a sparse `h` with
+`SMatrix` block eltype).
 
 # Examples
 
 ```jldoctest
-julia> h = LatticePresets.honeycomb() |> hamiltonian(onsite(1) + hopping(2));
+julia> h = LatticePresets.honeycomb() |> hamiltonian(hopping(2I), orbitals = (Val(2), Val(1)));
 
-julia> bloch!(similarmatrix(h), h, (.2,.3))
-2×2 SparseArrays.SparseMatrixCSC{Complex{Float64},Int64} with 4 stored entries:
-  [1, 1]  =  12.7216+0.0im
-  [2, 1]  =  5.87081+0.988379im
-  [1, 2]  =  5.87081-0.988379im
-  [2, 2]  =  12.7216+0.0im
+julia> bloch!(similarmatrix(h), h, (0.2, 0.3))
+2×2 SparseMatrixCSC{StaticArrays.SArray{Tuple{2,2},Complex{Float64},2,4},Int64} with 4 stored entries:
+  [1, 1]  =  [11.7216+0.0im 0.0+0.0im; 0.0+0.0im 11.7216+0.0im]
+  [2, 1]  =  [5.87081+0.988379im 0.0+0.0im; 0.0+0.0im 0.0+0.0im]
+  [1, 2]  =  [5.87081-0.988379im 0.0+0.0im; 0.0+0.0im 0.0+0.0im]
+  [2, 2]  =  [11.7216+0.0im 0.0+0.0im; 0.0+0.0im 0.0+0.0im]
+
+julia> bloch!(similarmatrix(h, AbstractMatrix{ComplexF64}), h, (0.2, 0.3))
+  3×3 SparseMatrixCSC{Complex{Float64},Int64} with 9 stored entries:
+    [1, 1]  =  11.7216+0.0im
+    [2, 1]  =  0.0+0.0im
+    [3, 1]  =  5.87081+0.988379im
+    [1, 2]  =  0.0+0.0im
+    [2, 2]  =  11.7216+0.0im
+    [3, 2]  =  0.0+0.0im
+    [1, 3]  =  5.87081-0.988379im
+    [2, 3]  =  0.0+0.0im
+    [3, 3]  =  11.7216+0.0im
 ```
 
 # See also:
     `bloch`, `optimize!`, `similarmatrix`
 """
 bloch!(matrix, h, ϕs = (), axis = 0) = _bloch!(matrix, h, toSVector(ϕs), axis)
-bloch!(matrix::SparseMatrixIJV, h, ϕs = (), axis = 0) = sparse(_bloch!(matrix, h, toSVector(ϕs), axis))
 
 function _bloch!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,L,M}, ϕs, axis::Number) where {L,M}
     rawmatrix = parent(matrix)
@@ -992,7 +1017,7 @@ function add_harmonics!(zerobloch, h::Hamiltonian{<:Lattice,L}, ϕs::SVector{L},
         prefactor = dnfunc(hh.dn)
         iszero_or_empty(prefactor) && continue
         ephi = prefactor * cis(-ϕs´ * hh.dn)
-        _add!(zerobloch, hhmatrix, ephi)
+        _add!(zerobloch, hhmatrix, h, ephi)
     end
     return zerobloch
 end
@@ -1004,23 +1029,35 @@ end
 _copy!(dest, src, h) = copy!(dest, src)
 _copy!(dst::DenseMatrix{<:Number}, src::SparseMatrixCSC{<:Number}, h) = _fast_sparse_copy!(dst, src)
 _copy!(dst::DenseMatrix{<:SMatrix{N,N}}, src::SparseMatrixCSC{<:SMatrix{N,N}}, h) where {N} = _fast_sparse_copy!(dst, src)
-_copy!(dst::SparseMatrixIJV{<:Number}, src::SparseMatrixCSC{<:SMatrix}, h) = flatten_sparse_copy!(dst, src, h)
-# _copy!(dst::AbstractMatrix{<:Number}, src::AbstractMatrix{<:SMatrix}) = _flatten_muladd!(dst, src)
+_copy!(dst::SparseMatrixCSC{<:Number}, src::SparseMatrixCSC{<:SMatrix}, h) = flatten_sparse_copy!(dst, src, h)
+_copy!(dst::DenseMatrix{<:Number}, src::DenseMatrix{<:SMatrix}, h) = flatten_dense_copy!(dst, src, h)
 
-_add!(dest, src, α) = _plain_muladd(dest, src, α)
-_add!(dst::DenseMatrix{<:Number}, src::SparseMatrixCSC{<:Number}, α = 1) = _fast_sparse_muladd!(dst, src, α)
-_add!(dst::DenseMatrix{<:SMatrix{N,N}}, src::SparseMatrixCSC{<:SMatrix{N,N}}, α = I) where {N} = _fast_sparse_muladd!(dst, src, α)
-_add!(dst::SparseMatrixIJV{<:Number}, src::SparseMatrixCSC{<:SMatrix}, α = I) = flatten_sparse_muladd!(dst, src, h, α)
-# _add!(dst::AbstractMatrix{<:Number}, src::AbstractMatrix{<:SMatrix}, α = I) = _flatten_muladd!(dst, src, α)
+_add!(dest, src, h, α) = _plain_muladd(dest, src, α)
+_add!(dst::DenseMatrix{<:Number}, src::SparseMatrixCSC{<:Number}, h, α = 1) = _fast_sparse_muladd!(dst, src, α)
+_add!(dst::DenseMatrix{<:SMatrix{N,N}}, src::SparseMatrixCSC{<:SMatrix{N,N}}, h, α = I) where {N} = _fast_sparse_muladd!(dst, src, α)
+_add!(dst::SparseMatrixCSC{<:Number}, src::SparseMatrixCSC{<:SMatrix}, h, α = I) = flatten_sparse_muladd!(dst, src, h, α)
+_add!(dst::DenseMatrix{<:Number}, src::DenseMatrix{<:SMatrix}, h, α = I) = flatten_dense_muladd!(dst, src, h, α)
 
 function flatten_sparse_copy!(dst, src, h)
-    resize!(dst.I, 0)
-    resize!(dst.J, 0)
-    resize!(dst.V, 0)
-    return flatten_sparse_muladd!(dst, src, h, I)
+    fill!(nonzeros(dst), zero(eltype(dst)))
+    norbs = length.(h.orbitals)
+    offsets = h.lattice.unitcell.offsets
+    offsets´ = flatoffsets(offsets, norbs)
+    for col in 1:size(src, 1)
+        coloffset, N´ = flatoffsetorbs(col, h.lattice, norbs, offsets´)
+        for p in nzrange(src, col)
+            val = nonzeros(src)[p]
+            row = rowvals(src)[p]
+            rowoffset, M´ = flatoffsetorbs(row, h.lattice, norbs, offsets´)
+            for j in 1:N´, i in 1:M´
+                dst[i + rowoffset, j + coloffset] = val[i, j]
+            end
+        end
+    end
+    return dst
 end
 
-function flatten_sparse_muladd!(dst::SparseMatrixIJV{<:Number}, src::SparseMatrixCSC{TS}, h, α = I) where {N,TS<:SMatrix{N,N}}
+function flatten_sparse_muladd!(dst::SparseMatrixCSC{<:Number}, src::SparseMatrixCSC{TS}, h, α = I) where {N,TS<:SMatrix{N,N}}
     norbs = length.(h.orbitals)
     offsets = h.lattice.unitcell.offsets
     offsets´ = flatoffsets(offsets, norbs)
@@ -1031,28 +1068,40 @@ function flatten_sparse_muladd!(dst::SparseMatrixIJV{<:Number}, src::SparseMatri
             row = rowvals(src)[p]
             rowoffset, M´ = flatoffsetorbs(row, h.lattice, norbs, offsets´)
             for j in 1:N´, i in 1:M´
-                push!(dst.I, i + rowoffset)
-                push!(dst.J, j + coloffset)
-                push!(dst.V, val[i, j])
+                dst[i + rowoffset, j + coloffset] += val[i, j]
             end
         end
     end
     return dst
 end
 
-# sublat offsets after flattening (without padding zeros)
-function flatoffsets(offsets, norbs)
-    offsets´ = similar(offsets)
-    i = 0
-    for s in eachindex(norbs)
-        offsets´[s] = i
-        ns = offsets[s + 1] - offsets[s]
-        no = norbs[s]
-        i += ns * no
+function flatten_dense_muladd!(dst, src, h, α = I)
+    norbs = length.(h.orbitals)
+    offsets = h.lattice.unitcell.offsets
+    offsets´ = flatoffsets(offsets, norbs)
+    for col in 1:size(src, 1)
+        coloffset, N´ = flatoffsetorbs(col, h.lattice, norbs, offsets´)
+        for row in 1:size(src, 2)
+            val = α * src[row, col]
+            rowoffset, M´ = flatoffsetorbs(row, h.lattice, norbs, offsets´)
+            for j in 1:N´, i in 1:M´
+                dst[i + rowoffset, j + coloffset] += val[i, j]
+            end
+        end
     end
-    offsets´[end] = i
-    return offsets´
+    return dst
 end
+
+function flatten_dense_copy!(dst, src, h)
+    fill!(dst, zero(eltype(dst)))
+    return flatten_dense_muladd!(dst, src, h, I)
+end
+
+# sublat offsets after flattening (without padding zeros)
+flatoffsets(offsets, norbs) = _flatoffsets((0,), offsets, norbs...)
+_flatoffsets(offsets´::NTuple{N,Any}, offsets, n, ns...) where {N} =
+    _flatoffsets((offsets´..., offsets´[end] + n * (offsets[N+1] - offsets[N])), offsets, ns...)
+_flatoffsets(offsets´, offsets) = offsets´
 
 # offset of site i after flattening
 @inline flatoffset(args...) = first(flatoffsetorbs(args...))
@@ -1118,11 +1167,11 @@ end
 flatten(h::HamiltonianHarmonic, orbs, lat) =
     HamiltonianHarmonic(h.dn, _flatten(h.h, length.(orbs), lat))
 
-function _flatten(src::SparseMatrixCSC{<:SMatrix{N,N,T}}, norbs::NTuple{S,<:Any}, lat) where {N,T,S}
+function _flatten(src::SparseMatrixCSC{<:SMatrix{N,N,T}}, norbs::NTuple{S,<:Any}, lat, ::Type{T´} = T) where {N,T,S,T´}
     offsets´ = flatoffsets(lat.unitcell.offsets, norbs)
     dim´ = last(offsets´)
 
-    builder = SparseMatrixBuilder{T}(dim´, dim´, nnz(src) * N * N)
+    builder = SparseMatrixBuilder{T´}(dim´, dim´, nnz(src) * N * N)
 
     for col in 1:size(src, 2)
         scol = sublat(lat, col)
@@ -1143,10 +1192,10 @@ function _flatten(src::SparseMatrixCSC{<:SMatrix{N,N,T}}, norbs::NTuple{S,<:Any}
     return matrix
 end
 
-function _flatten(src::DenseMatrix{<:SMatrix{N,N,T}}, norbs::NTuple{S,<:Any}, lat) where {N,T,S}
+function _flatten(src::DenseMatrix{<:SMatrix{N,N,T}}, norbs::NTuple{S,<:Any}, lat, ::Type{T´} = T) where {N,T,S,T´}
     offsets´ = flatoffsets(lat.unitcell.offsets, norbs)
     dim´ = last(offsets´)
-    matrix = similar(src, T, dim´, dim´)
+    matrix = similar(src, T´, dim´, dim´)
 
     for col in 1:size(src, 2), row in 1:size(src, 1)
         srow, scol = sublat(lat, row), sublat(lat, col)
@@ -1169,7 +1218,7 @@ function flatten(lat::Lattice, orbs)
 end
 
 function flatten(unitcell::Unitcell, norbs::NTuple{S,Int}) where {S}
-    offsets´ = flatoffsets(unitcell.offsets, norbs)
+    offsets´ = [flatoffsets(unitcell.offsets, norbs)...]
     ns´ = last(offsets´)
     sites´ = similar(unitcell.sites, ns´)
     i = 1

@@ -275,79 +275,79 @@ end
 
 Base.factorial(n::Integer, k::Integer) = factorial(promote(n, k)...)
 
-######################################################################
-# SparseMatrixIJV
-######################################################################
+# ######################################################################
+# # SparseMatrixIJV
+# ######################################################################
 
-struct SparseMatrixIJV{Tv,Ti<:Integer} <: AbstractSparseMatrix{Tv,Ti}
-    I::Vector{Ti}
-    J::Vector{Ti}
-    V::Vector{Tv}
-    m::Ti
-    n::Ti
-    klasttouch::Vector{Ti}
-    csrrowptr::Vector{Ti}
-    csrcolval::Vector{Ti}
-    csrnzval::Vector{Tv}
-    csccolptr::Vector{Ti}
-    cscrowval::Vector{Ti}
-    cscnzval::Vector{Tv}
-end
+# struct SparseMatrixIJV{Tv,Ti<:Integer} <: AbstractSparseMatrix{Tv,Ti}
+#     I::Vector{Ti}
+#     J::Vector{Ti}
+#     V::Vector{Tv}
+#     m::Ti
+#     n::Ti
+#     klasttouch::Vector{Ti}
+#     csrrowptr::Vector{Ti}
+#     csrcolval::Vector{Ti}
+#     csrnzval::Vector{Tv}
+#     csccolptr::Vector{Ti}
+#     cscrowval::Vector{Ti}
+#     cscnzval::Vector{Tv}
+# end
 
-SparseMatrixIJV{Tv}(m::Ti, n::Ti) where {Tv,Ti} = SparseMatrixIJV{Tv,Ti}(m,n)
+# SparseMatrixIJV{Tv}(m::Ti, n::Ti) where {Tv,Ti} = SparseMatrixIJV{Tv,Ti}(m,n)
 
-function SparseMatrixIJV{Tv,Ti}(m::Integer, n::Integer; hintnnz = 0) where {Tv,Ti}
-    I = Ti[]
-    J = Ti[]
-    V = Tv[]
-    klasttouch = Vector{Ti}(undef, n)
-    csrrowptr = Vector{Ti}(undef, m + 1)
-    csrcolval = Vector{Ti}()
-    csrnzval = Vector{Tv}()
-    csccolptr = Vector{Ti}(undef, n + 1)
-    cscrowval = Vector{Ti}()
-    cscnzval = Vector{Tv}()
+# function SparseMatrixIJV{Tv,Ti}(m::Integer, n::Integer; hintnnz = 0) where {Tv,Ti}
+#     I = Ti[]
+#     J = Ti[]
+#     V = Tv[]
+#     klasttouch = Vector{Ti}(undef, n)
+#     csrrowptr = Vector{Ti}(undef, m + 1)
+#     csrcolval = Vector{Ti}()
+#     csrnzval = Vector{Tv}()
+#     csccolptr = Vector{Ti}(undef, n + 1)
+#     cscrowval = Vector{Ti}()
+#     cscnzval = Vector{Tv}()
 
-    if hintnnz > 0
-        sizehint!(I, hintnnz)
-        sizehint!(J, hintnnz)
-        sizehint!(V, hintnnz)
-        sizehint!(csrcolval, hintnnz)
-        sizehint!(csrnzval, hintnnz)
-        sizehint!(cscrowval, hintnnz)
-        sizehint!(cscnzval, hintnnz)
-    end
+#     if hintnnz > 0
+#         sizehint!(I, hintnnz)
+#         sizehint!(J, hintnnz)
+#         sizehint!(V, hintnnz)
+#         sizehint!(csrcolval, hintnnz)
+#         sizehint!(csrnzval, hintnnz)
+#         sizehint!(cscrowval, hintnnz)
+#         sizehint!(cscnzval, hintnnz)
+#     end
 
-    return SparseMatrixIJV{Tv,Ti}(I, J, V, m, n, klasttouch, csrrowptr, csrcolval, csrnzval,
-                                                             csccolptr, cscrowval, cscnzval)
-end
+#     return SparseMatrixIJV{Tv,Ti}(I, J, V, m, n, klasttouch, csrrowptr, csrcolval, csrnzval,
+#                                                              csccolptr, cscrowval, cscnzval)
+# end
 
-Base.summary(::SparseMatrixIJV{Tv,Ti}) where {Tv,Ti} =
-    "SparseMatrixIJV{$Tv,$Ti} : Sparse matrix builder using the IJV format"
+# Base.summary(::SparseMatrixIJV{Tv,Ti}) where {Tv,Ti} =
+#     "SparseMatrixIJV{$Tv,$Ti} : Sparse matrix builder using the IJV format"
 
-function Base.show(io::IO, ::MIME"text/plain", s::SparseMatrixIJV)
-    i = get(io, :indent, "")
-    print(io, i, summary(s), "\n", "$i  Nonzero elements : $(length(s.I))")
-end
+# function Base.show(io::IO, ::MIME"text/plain", s::SparseMatrixIJV)
+#     i = get(io, :indent, "")
+#     print(io, i, summary(s), "\n", "$i  Nonzero elements : $(length(s.I))")
+# end
 
-function Base.push!(s::SparseMatrixIJV, (i, j, v))
-    push!(s.I, i)
-    push!(s.J, j)
-    push!(s.V, v)
-    return s
-end
+# function Base.push!(s::SparseMatrixIJV, (i, j, v))
+#     push!(s.I, i)
+#     push!(s.J, j)
+#     push!(s.V, v)
+#     return s
+# end
 
-function SparseArrays.sparse(s::SparseMatrixIJV)
-    numnz = length(s.I)
-    resize!(s.csrcolval, numnz)
-    resize!(s.csrnzval,  numnz)
-    resize!(s.cscrowval, numnz)
-    resize!(s.cscnzval,  numnz)
-    return SparseArrays.sparse!(s.I, s.J, s.V, s.m, s.n, +, s.klasttouch,
-        s.csrrowptr, s.csrcolval, s.csrnzval, s.csccolptr, s.cscrowval, s.cscnzval)
-end
+# function SparseArrays.sparse(s::SparseMatrixIJV)
+#     numnz = length(s.I)
+#     resize!(s.csrcolval, numnz)
+#     resize!(s.csrnzval,  numnz)
+#     resize!(s.cscrowval, numnz)
+#     resize!(s.cscnzval,  numnz)
+#     return SparseArrays.sparse!(s.I, s.J, s.V, s.m, s.n, +, s.klasttouch,
+#         s.csrrowptr, s.csrcolval, s.csrnzval, s.csccolptr, s.cscrowval, s.cscnzval)
+# end
 
-Base.size(s::SparseMatrixIJV) = (s.m, s.n)
+# Base.size(s::SparseMatrixIJV) = (s.m, s.n)
 
 ############################################################################################
 ######## fast sparse copy #  Revise after #33589 is merged #################################
@@ -385,4 +385,3 @@ function _fast_sparse_muladd!(dst::DenseMatrix{T}, src::SparseMatrixCSC, α = I)
 end
 
 rclamp(r1::UnitRange, r2::UnitRange) = clamp(minimum(r1), extrema(r2)...):clamp(maximum(r1), extrema(r2)...)
-

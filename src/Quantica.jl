@@ -32,6 +32,8 @@ export @SMatrix, @SVector, SMatrix, SVector, SA
 
 export ishermitian, I
 
+export SparseMatrixCSC
+
 const NameType = Symbol
 const nametype = Symbol
 
