@@ -320,7 +320,7 @@ isinmask(s::Supercell, inds...) = isinmask(s.mask, inds...)
 isinmask(mask::Missing, inds...) = true
 isinmask(mask::OffsetArray, inds...) = checkbounds(Bool, mask, inds...) && mask[inds...]
 
-issemibounded(sc::Supercell) = !iszero(sc.semibounded)
+issemibounded(sc::Supercell) = !iszero_or_empty(sc.semibounded)
 
 Base.copy(s::Supercell{<:Any,<:Any,Missing}) =
     Supercell(s.matrix, s.sites, s.cells, s.mask, s.semibounded)
