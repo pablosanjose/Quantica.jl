@@ -12,16 +12,7 @@ end
 
 ## Diagonalize methods ##
 
-function defaultmethod(h::Union{Hamiltonian,AbstractMatrix})
-    if eltype(h) <: Number
-        # method = issparse(h) ? ArpackPackage() : LinearAlgebraPackage()
-        method = LinearAlgebraPackage()
-    else
-        # method = KrylovKitPackage()
-        throw(ArgumentError("Methods for generic Hamiltonian eltypes not yet implemented. Consider using `flatten` on your Hamiltonian."))
-    end
-    return method
-end
+defaultmethod(h::Union{Hamiltonian,AbstractMatrix}) = LinearAlgebraPackage()
 
 checkloaded(package::Symbol) = isdefined(Main, package) ||
     throw(ArgumentError("Package $package not loaded, need to be `using $package`."))
