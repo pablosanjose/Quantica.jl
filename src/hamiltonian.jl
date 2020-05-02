@@ -1033,7 +1033,7 @@ _copy!(dst::DenseMatrix{<:SMatrix{N,N}}, src::SparseMatrixCSC{<:SMatrix{N,N}}, h
 _copy!(dst::SparseMatrixCSC{<:Number}, src::SparseMatrixCSC{<:SMatrix}, h) = flatten_sparse_copy!(dst, src, h)
 _copy!(dst::DenseMatrix{<:Number}, src::DenseMatrix{<:SMatrix}, h) = flatten_dense_copy!(dst, src, h)
 
-_add!(dest, src, h, α) = _plain_muladd(dest, src, α)
+_add!(dest, src, h, α) = _plain_muladd!(dest, src, α)
 _add!(dst::AbstractMatrix{<:Number}, src::SparseMatrixCSC{<:Number}, h, α = 1) = _fast_sparse_muladd!(dst, src, α)
 _add!(dst::AbstractMatrix{<:SMatrix{N,N}}, src::SparseMatrixCSC{<:SMatrix{N,N}}, h, α = I) where {N} = _fast_sparse_muladd!(dst, src, α)
 _add!(dst::SparseMatrixCSC{<:Number}, src::SparseMatrixCSC{<:SMatrix}, h, α = I) = flatten_sparse_muladd!(dst, src, h, α)
@@ -1095,7 +1095,7 @@ function flatten_dense_muladd!(dst, src, h, α = I)
             rowoffset = 0
             for s in sublats(h.lattice)
                 M´ = norbs[s]
-                for row in siterange(h.lattice, s´)
+                for row in siterange(h.lattice, s)
                     val = α * src[row, col]
                     for j in 1:N´, i in 1:M´
                         dst[i + rowoffset, j + coloffset] += val[i, j]

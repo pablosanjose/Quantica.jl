@@ -41,10 +41,10 @@ end
         for (h, A, E) in zip(hs, As, Es)
             sh = similarmatrix(h)
             @test sh isa A{E}
+            b1 = bloch!(similarmatrix(flatten(h)), flatten(h), (1,1))
+            b2 = bloch!(similarmatrix(h, AbstractMatrix{T}), h, (1,1))
+            @test isapprox(b1, b2)
             for T´ in types
-                b1 = bloch!(similarmatrix(flatten(h)), flatten(h), (1,1))
-                b2 = bloch!(similarmatrix(h, AbstractMatrix{T}), h, (1,1))
-                @test isapprox(b1, b2)
                 E´s = E <: SMatrix ? (SMatrix{2,2,T´,4}, T´) : (T´,)
                 for E´ in E´s
                     s1 = similarmatrix(h, Matrix{E´})

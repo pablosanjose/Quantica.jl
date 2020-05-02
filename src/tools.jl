@@ -354,7 +354,7 @@ Base.factorial(n::Integer, k::Integer) = factorial(promote(n, k)...)
 ############################################################################################
 
 # Using broadcast .+= instead allocates unnecesarily
-function _plain_muladd(dst, src, α)
+function _plain_muladd!(dst, src, α)
     @boundscheck checkbounds(dst, axes(src)...)
     for i in eachindex(src)
         @inbounds dst[i] += α * src[i]
