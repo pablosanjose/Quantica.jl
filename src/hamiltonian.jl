@@ -1033,8 +1033,8 @@ _copy!(dst::SparseMatrixCSC{<:Number}, src::SparseMatrixCSC{<:SMatrix}, h) = fla
 _copy!(dst::DenseMatrix{<:Number}, src::DenseMatrix{<:SMatrix}, h) = flatten_dense_copy!(dst, src, h)
 
 _add!(dest, src, h, α) = _plain_muladd(dest, src, α)
-_add!(dst::DenseMatrix{<:Number}, src::SparseMatrixCSC{<:Number}, h, α = 1) = _fast_sparse_muladd!(dst, src, α)
-_add!(dst::DenseMatrix{<:SMatrix{N,N}}, src::SparseMatrixCSC{<:SMatrix{N,N}}, h, α = I) where {N} = _fast_sparse_muladd!(dst, src, α)
+_add!(dst::AbstractMatrix{<:Number}, src::SparseMatrixCSC{<:Number}, h, α = 1) = _fast_sparse_muladd!(dst, src, α)
+_add!(dst::AbstractMatrix{<:SMatrix{N,N}}, src::SparseMatrixCSC{<:SMatrix{N,N}}, h, α = I) where {N} = _fast_sparse_muladd!(dst, src, α)
 _add!(dst::SparseMatrixCSC{<:Number}, src::SparseMatrixCSC{<:SMatrix}, h, α = I) = flatten_sparse_muladd!(dst, src, h, α)
 _add!(dst::DenseMatrix{<:Number}, src::DenseMatrix{<:SMatrix}, h, α = I) = flatten_dense_muladd!(dst, src, h, α)
 
@@ -1043,15 +1043,19 @@ function flatten_sparse_copy!(dst, src, h)
     norbs = length.(h.orbitals)
     offsets = h.lattice.unitcell.offsets
     offsets´ = flatoffsets(offsets, norbs)
-    for col in 1:size(src, 1)
-        coloffset, N´ = flatoffsetorbs(col, h.lattice, norbs, offsets´)
-        for p in nzrange(src, col)
-            val = nonzeros(src)[p]
-            row = rowvals(src)[p]
-            rowoffset, M´ = flatoffsetorbs(row, h.lattice, norbs, offsets´)
-            for j in 1:N´, i in 1:M´
-                dst[i + rowoffset, j + coloffset] = val[i, j]
+    coloffset = 0
+    for s´ in sublats(h.lattice)
+        N´ = norbs[s´]
+        for col in siterange(h.lattice, s´)
+            for p in nzrange(src, col)
+                val = nonzeros(src)[p]
+                row = rowvals(src)[p]
+                rowoffset, M´ = flatoffsetorbs(row, h.lattice, norbs, offsets´)
+                for j in 1:N´, i in 1:M´
+                    dst[i + rowoffset, j + coloffset] = val[i, j]
+                end
             end
+            coloffset += N´
         end
     end
     return dst
@@ -1061,15 +1065,19 @@ function flatten_sparse_muladd!(dst::SparseMatrixCSC{<:Number}, src::SparseMatri
     norbs = length.(h.orbitals)
     offsets = h.lattice.unitcell.offsets
     offsets´ = flatoffsets(offsets, norbs)
-    for col in 1:size(src, 1)
-        coloffset, N´ = flatoffsetorbs(col, h.lattice, norbs, offsets´)
-        for p in nzrange(src, col)
-            val = α * nonzeros(src)[p]
-            row = rowvals(src)[p]
-            rowoffset, M´ = flatoffsetorbs(row, h.lattice, norbs, offsets´)
-            for j in 1:N´, i in 1:M´
-                dst[i + rowoffset, j + coloffset] += val[i, j]
+    coloffset = 0
+    for s´ in sublats(h.lattice)
+        N´ = norbs[s´]
+        for col in siterange(h.lattice, s´)
+            for p in nzrange(src, col)
+                val = α * nonzeros(src)[p]
+                row = rowvals(src)[p]
+                rowoffset, M´ = flatoffsetorbs(row, h.lattice, norbs, offsets´)
+                for j in 1:N´, i in 1:M´
+                    dst[i + rowoffset, j + coloffset] += val[i, j]
+                end
             end
+            coloffset += N´
         end
     end
     return dst
@@ -1079,14 +1087,22 @@ function flatten_dense_muladd!(dst, src, h, α = I)
     norbs = length.(h.orbitals)
     offsets = h.lattice.unitcell.offsets
     offsets´ = flatoffsets(offsets, norbs)
-    for col in 1:size(src, 1)
-        coloffset, N´ = flatoffsetorbs(col, h.lattice, norbs, offsets´)
-        for row in 1:size(src, 2)
-            val = α * src[row, col]
-            rowoffset, M´ = flatoffsetorbs(row, h.lattice, norbs, offsets´)
-            for j in 1:N´, i in 1:M´
-                dst[i + rowoffset, j + coloffset] += val[i, j]
+    coloffset = 0
+    for s´ in sublats(h.lattice)
+        N´ = norbs[s´]
+        for col in siterange(h.lattice, s´)
+            rowoffset = 0
+            for s in sublats(h.lattice)
+                M´ = norbs[s]
+                for row in siterange(h.lattice, s´)
+                    val = α * src[row, col]
+                    for j in 1:N´, i in 1:M´
+                        dst[i + rowoffset, j + coloffset] += val[i, j]
+                    end
+                    rowoffset += M´
+                end
             end
+            coloffset += N´
         end
     end
     return dst

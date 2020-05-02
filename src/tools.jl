@@ -362,6 +362,7 @@ function _plain_muladd(dst, src, α)
     return dst
 end
 
+# Only needed for dense <- sparse (#33589), copy!(sparse, sparse) is fine
 function _fast_sparse_copy!(dst::DenseMatrix{T}, src::SparseMatrixCSC) where {T}
     @boundscheck checkbounds(dst, axes(src)...)
     fill!(dst, zero(eltype(src)))
@@ -373,8 +374,7 @@ function _fast_sparse_copy!(dst::DenseMatrix{T}, src::SparseMatrixCSC) where {T}
     return dst
 end
 
-# Only needed for dense <- sparse (#33589), copy!(sparse, sparse) is fine
-function _fast_sparse_muladd!(dst::DenseMatrix{T}, src::SparseMatrixCSC, α = I) where {T}
+function _fast_sparse_muladd!(dst::AbstractMatrix{T}, src::SparseMatrixCSC, α = I) where {T}
     @boundscheck checkbounds(dst, axes(src)...)
     for col in 1:size(src, 1)
         for p in nzrange(src, col)

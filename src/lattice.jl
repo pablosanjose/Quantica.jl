@@ -191,7 +191,13 @@ nsites(u::Unitcell, sublat) = sublatsites(u)[sublat]
 
 offsets(u::Unitcell) = u.offsets
 
-sublat(u::Unitcell, siteidx) = Int(findlast(o -> o < siteidx, u.offsets))
+function sublat(u::Unitcell, siteidx)
+    l = length(u.offsets)
+    for s in 2:l
+        @inbounds u.offsets[s] + 1 > siteidx && return s - 1
+    end
+    return l
+end
 
 sublatsites(u::Unitcell) = diff(u.offsets)
 
