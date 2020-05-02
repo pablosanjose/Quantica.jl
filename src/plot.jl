@@ -1,5 +1,5 @@
 using .Makie
-using GeometryTypes
+using GeometryTypes: Cylinder
 import .Makie.AbstractPlotting: plot!, plot, to_value
 
 #######################################################################
@@ -66,7 +66,7 @@ end
             ((0.960,0.600,.327), (0.410,0.067,0.031),(0.940,0.780,0.000),
             (0.640,0.760,0.900),(0.310,0.370,0.650),(0.600,0.550,0.810),
             (0.150,0.051,0.100),(0.870,0.530,0.640),(0.720,0.130,0.250))),
-        light = Vec{3,Float32}[[0, 0, 10], [0, 10, 0], [10, 0, 0], [10, 10, 10], [-10, -10, -10]]
+        light = Vec3f0[[0, 0, 10], [0, 10, 0], [10, 0, 0], [10, 10, 10], [-10, -10, -10]]
     )
 end
 
@@ -171,7 +171,7 @@ function plotlinks_hi!(plot, links, color)
     rotvectors = [r2 - r1 for (r1, r2) in links]
     radius = plot[:linkradius][]
     scales = [Vec3f0(radius, radius, norm(r2 - r1)/2) for (r1, r2) in links]
-    cylinder = GeometryTypes.Cylinder(Point3f0(0., 0., -1.0), Point3f0(0., 0, 1.0), Float32(1))
+    cylinder = Cylinder(Point3f0(0., 0., -1.0), Point3f0(0., 0, 1.0), Float32(1))
     meshscatter!(plot, positions;
         color = color, marker = cylinder, markersize = scales, rotations = rotvectors,
         light = plot[:light][])
