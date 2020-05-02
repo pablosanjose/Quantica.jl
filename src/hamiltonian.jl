@@ -1027,6 +1027,7 @@ end
 ############################################################################################
 
 _copy!(dest, src, h) = copy!(dest, src)
+_copy!(dst::AbstractMatrix{<:Number}, src::SparseMatrixCSC{<:Number}, h) = _fast_sparse_copy!(dst, src)
 _copy!(dst::DenseMatrix{<:Number}, src::SparseMatrixCSC{<:Number}, h) = _fast_sparse_copy!(dst, src)
 _copy!(dst::DenseMatrix{<:SMatrix{N,N}}, src::SparseMatrixCSC{<:SMatrix{N,N}}, h) where {N} = _fast_sparse_copy!(dst, src)
 _copy!(dst::SparseMatrixCSC{<:Number}, src::SparseMatrixCSC{<:SMatrix}, h) = flatten_sparse_copy!(dst, src, h)
@@ -1061,7 +1062,7 @@ function flatten_sparse_copy!(dst, src, h)
     return dst
 end
 
-function flatten_sparse_muladd!(dst::SparseMatrixCSC{<:Number}, src::SparseMatrixCSC{TS}, h, α = I) where {N,TS<:SMatrix{N,N}}
+function flatten_sparse_muladd!(dst, src, h, α = I)
     norbs = length.(h.orbitals)
     offsets = h.lattice.unitcell.offsets
     offsets´ = flatoffsets(offsets, norbs)
