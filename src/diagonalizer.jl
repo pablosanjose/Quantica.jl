@@ -12,16 +12,7 @@ end
 
 ## Diagonalize methods ##
 
-function defaultmethod(h::Union{Hamiltonian,AbstractMatrix})
-    if eltype(h) <: Number
-        # method = issparse(h) ? ArpackPackage() : LinearAlgebraPackage()
-        method = LinearAlgebraPackage()
-    else
-        # method = KrylovKitPackage()
-        throw(ArgumentError("Methods for generic Hamiltonian eltypes not yet implemented. Consider using `flatten` on your Hamiltonian."))
-    end
-    return method
-end
+defaultmethod(h::Union{Hamiltonian,AbstractMatrix}) = LinearAlgebraPackage()
 
 checkloaded(package::Symbol) = isdefined(Main, package) ||
     throw(ArgumentError("Package $package not loaded, need to be `using $package`."))
@@ -38,7 +29,7 @@ function diagonalize(matrix, method::LinearAlgebraPackage)
     return ϵ, ψ
 end
 
-similarmatrix(h, ::LinearAlgebraPackage) = Matrix(similarmatrix(h))
+similarmatrix(h, ::LinearAlgebraPackage) = similarmatrix(h, Matrix{blockeltype(h)})
 
 ## Arpack ##
 struct ArpackPackage{K<:NamedTuple} <: AbstractDiagonalizeMethod
@@ -52,7 +43,7 @@ function diagonalize(matrix, method::ArpackPackage)
     return ϵ, ψ
 end
 
-similarmatrix(h, ::ArpackPackage) = similarmatrix(h)
+similarmatrix(h, ::ArpackPackage) = similarmatrix(h, SparseMatrixCSC{blockeltype(h)})
 
 ## IterativeSolvers ##
 
@@ -85,7 +76,7 @@ function diagonalize(matrix::AbstractMatrix{M}, method::KrylovKitPackage) where 
     return ϵ´, ψ´
 end
 
-similarmatrix(h, ::KrylovKitPackage) = similarmatrix(h)
+similarmatrix(h, ::KrylovKitPackage) = similarmatrix(h, SparseMatrixCSC{blockeltype(h)})
 
 #######################################################################
 # shift and invert methods
@@ -184,7 +175,7 @@ function codiagonalizer(h::Hamiltonian, matrix, mesh::Mesh{L}; kw...) where {L}
     directions = velocitydirections(Val(L); kw...)
     ndirs = length(directions)
     matrixindices = 1:(2 * ndirs + 1)
-    degtol = sqrt(eps(realtype(h)))
+    degtol = sqrt(eps(real(blockeltype(h))))
     delta = meshdelta(mesh)
     delta = iszero(delta) ? degtol : delta
     cmatrixf(ϕs, n) =

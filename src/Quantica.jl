@@ -32,12 +32,15 @@ export @SMatrix, @SVector, SMatrix, SVector, SA
 
 export ishermitian, I
 
+export SparseMatrixCSC
+
 const NameType = Symbol
 const nametype = Symbol
 
 const TOOMANYITERS = 10^8
 
 include("iterators.jl")
+include("tools.jl")
 include("presets.jl")
 include("lattice.jl")
 include("model.jl")
@@ -48,6 +51,5 @@ include("diagonalizer.jl")
 include("bandstructure.jl")
 include("KPM.jl")
 include("convert.jl")
-include("tools.jl")
 
 end
