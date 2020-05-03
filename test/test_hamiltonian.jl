@@ -5,14 +5,15 @@ using Quantica: Hamiltonian, ParametricHamiltonian
     presets = (LatticePresets.linear, LatticePresets.square, LatticePresets.triangular,
                LatticePresets.honeycomb, LatticePresets.cubic, LatticePresets.fcc,
                LatticePresets.bcc)
-    ts = (1, 2.0I, @SMatrix[1 2; 3 4])
-    orbs = (Val(1), Val(1), Val(2))
-    for preset in presets, lat in (preset(), unitcell(preset()))
+    types = (Float16, Float32, Float64, ComplexF16, ComplexF32, ComplexF64)
+    ts = (1, 2.0I, @SMatrix[1 2; 3 4], 1.0f0*I)
+    orbs = (Val(1), Val(1), Val(2), (Val(1), Val(2)))
+    for preset in presets, lat in (preset(), unitcell(preset())), type in types
         E, L = dims(lat)
         dn0 = ntuple(_ -> 1, Val(L))
         for (t, o) in zip(ts, orbs)
-            @test hamiltonian(lat, onsite(t) + hopping(t; range = 1), orbitals = o) isa Hamiltonian
-            @test hamiltonian(lat, onsite(t) - hopping(t; dn = dn0), orbitals = o) isa Hamiltonian
+            @test hamiltonian(lat, onsite(t) + hopping(t; range = 1), orbitals = o, type = type) isa Hamiltonian
+            @test hamiltonian(lat, onsite(t) - hopping(t; dn = dn0), orbitals = o, type = type) isa Hamiltonian
         end
     end
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = 1/√3))
@@ -25,6 +26,35 @@ using Quantica: Hamiltonian, ParametricHamiltonian
     h = LatticePresets.square() |> hamiltonian(hopping(1, dn = (10,0), range = Inf))
     @test Quantica.nhoppings(h) == 1
     @test isassigned(h, (10,0))
+end
+
+@testset "similarmatrix" begin
+    types = (ComplexF16, ComplexF32, ComplexF64)
+    lat = LatticePresets.honeycomb()
+    for T in types
+        h0 = hamiltonian(lat, onsite(I) + hopping(2I; range = 1), orbitals = (Val(1), Val(2)), type = T)
+        hf = flatten(h0)
+        hm = Matrix(h0)
+        hs = (h0, hf, hm)
+        As = (SparseMatrixCSC, SparseMatrixCSC, Matrix)
+        Es = (SMatrix{2,2,T,4}, T, SMatrix{2,2,T,4})
+        for (h, A, E) in zip(hs, As, Es)
+            sh = similarmatrix(h)
+            @test sh isa A{E}
+            b1 = bloch!(similarmatrix(flatten(h)), flatten(h), (1,1))
+            b2 = bloch!(similarmatrix(h, AbstractMatrix{T}), h, (1,1))
+            @test isapprox(b1, b2)
+            for T´ in types
+                E´s = E <: SMatrix ? (SMatrix{2,2,T´,4}, T´) : (T´,)
+                for E´ in E´s
+                    s1 = similarmatrix(h, Matrix{E´})
+                    s2 = similarmatrix(h, AbstractMatrix{E´})
+                    @test s1 isa Matrix{E´}
+                    @test s2 isa A{E´}
+                end
+            end
+        end
+    end
 end
 
 @testset "orbitals and sublats" begin
