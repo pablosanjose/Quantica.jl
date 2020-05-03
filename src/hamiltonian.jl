@@ -22,7 +22,7 @@ end
 
 function Hamiltonian(lat, hs::Vector{H}, orbs, n::Int, m::Int) where {L,M,H<:HamiltonianHarmonic{L,M}}
     sort!(hs, by = h -> abs.(h.dn))
-    if isempty(hs) || !iszero_or_empty(first(hs).dn)
+    if isempty(hs) || !iszero(first(hs).dn)
         pushfirst!(hs, H(zero(SVector{L,Int}), empty_sparse(M, n, m)))
     end
     return Hamiltonian(lat, hs, orbs)
@@ -105,7 +105,7 @@ blockdim(::Type{T}) where {T<:Number} = 1
 function nhoppings(ham::Hamiltonian)
     count = 0
     for h in ham.harmonics
-        count += iszero_or_empty(h.dn) ? (_nnz(h.h) - _nnzdiag(h.h)) : _nnz(h.h)
+        count += iszero(h.dn) ? (_nnz(h.h) - _nnzdiag(h.h)) : _nnz(h.h)
     end
     return count
 end
@@ -113,7 +113,7 @@ end
 function nonsites(ham::Hamiltonian)
     count = 0
     for h in ham.harmonics
-        iszero_or_empty(h.dn) && (count += _nnzdiag(h.h))
+        iszero(h.dn) && (count += _nnzdiag(h.h))
     end
     return count
 end
@@ -603,7 +603,7 @@ checkinfinite(selector) =
     selector.dns === missing && (selector.range === missing || !isfinite(selector.range)) &&
     throw(ErrorException("Tried to implement an infinite-range hopping on an unbounded lattice"))
 
-isselfhopping((i, j), (s1, s2), dn) = i == j && s1 == s2 && iszero_or_empty(dn)
+isselfhopping((i, j), (s1, s2), dn) = i == j && s1 == s2 && iszero(dn)
 
 #######################################################################
 # unitcell/supercell for Hamiltonians
@@ -748,7 +748,7 @@ function _wrap(harmonics::Vector{HamiltonianHarmonic{L,M,A}}, axis, factor) wher
     for har in harmonics
         dn = har.dn
         dn´ = deleteat(dn, axis)
-        factor´ = iszero_or_empty(dn[axis]) ? 1 : factor
+        factor´ = iszero(dn[axis]) ? 1 : factor
         add_or_push!(harmonics´, dn´, har.h, factor´)
     end
     return harmonics´
@@ -835,7 +835,7 @@ end
 function _bloch!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,L,M}, ϕs, dnfunc::Function) where {L,M}
     prefactor0 = dnfunc(zero(ϕs))
     rawmatrix = parent(matrix)
-    if iszero_or_empty(prefactor0)
+    if iszero(prefactor0)
         fill!(rawmatrix, zero(M))
     else
         _copy!(rawmatrix, first(h.harmonics).h)
@@ -853,7 +853,7 @@ function add_harmonics!(zerobloch, h::Hamiltonian{<:Lattice,L}, ϕs::SVector{L},
         hh = h.harmonics[ns]
         hhmatrix = hh.h
         prefactor = dnfunc(hh.dn)
-        iszero_or_empty(prefactor) && continue
+        iszero(prefactor) && continue
         ephi = prefactor * cis(-ϕs´ * hh.dn)
         _add!(zerobloch, hhmatrix, ephi)
     end
@@ -946,7 +946,7 @@ Note that when calling `similarmatrix(h)` on a sparse `h`, `optimize!` is called
 function optimize!(ham::Hamiltonian{<:Lattice,L,M,A}) where {L,M,A<:SparseMatrixCSC}
     h0 = first(ham.harmonics)
     n, m = size(h0.h)
-    iszero_or_empty(h0.dn) || throw(ArgumentError("First Hamiltonian harmonic is not the fundamental"))
+    iszero(h0.dn) || throw(ArgumentError("First Hamiltonian harmonic is not the fundamental"))
     nh = length(ham.harmonics)
     builder = SparseMatrixBuilder{M}(n, m)
     for col in 1:m
