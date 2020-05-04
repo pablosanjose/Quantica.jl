@@ -249,6 +249,13 @@ end
         ph = parametric(h, @onsite!(o -> o*cis(1)))
         @test ph()[1,1] ≈ h[1,1]*cis(1)
     end
+    # Issue #54. Parametric Haldane model
+    sK(dr::SVector) = sK(atan(dr[2],dr[1]))
+    sK(ϕ) = 2*mod(round(Int, 6*ϕ/(2π)), 2) - 1
+    ph = LatticePresets.honeycomb() |> hamiltonian(hopping(1)) |>
+         parametric(@hopping!((t, r, dr; λ) ->  λ*im*sK(dr); sublats = :A=>:A),
+                    @hopping!((t, r, dr; λ) -> -λ*im*sK(dr); sublats = :B=>:B))
+    @test bloch(ph(λ=1), (π/2, -π/2)) ≈ [4 1; 1 -4]
 end
 
 @testset "boolean masks" begin
