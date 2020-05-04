@@ -126,9 +126,10 @@ including endpoints (can be a tuple for axis-dependent points).
 
     bandstructure(ph::ParametricHamiltonian, mesh; kw...)
 
-Compute the bandstructure of a `ph` with `i` parameters `p₁,..., pᵢ`, where `mesh` is
-interpreted as a discretization of parameter space ⊗ Brillouin zone, so that each vertex
-reads `v = (p₁,..., pᵢ, ϕ₁,..., ϕⱼ)`.
+Compute the bandstructure of a `ph` with `i` parameters (see `parameters(ph)`), where `mesh`
+is interpreted as a discretization of parameter space ⊗ Brillouin zone, so that each vertex
+reads `v = (p₁,..., pᵢ, ϕ₁,..., ϕⱼ)`, with `p` the values assigned to `parameters(ph)` and
+`ϕ` the Bloch phases.
 
     bandstructure(matrixf::Function, mesh::Mesh; kw...)
 
