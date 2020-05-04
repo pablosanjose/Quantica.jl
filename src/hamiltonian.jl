@@ -935,12 +935,12 @@ Functional forms of `bloch`, equivalent to `bloch(h, ϕs, ...)`
 # Examples
 
 ```jldoctest
-julia> h = LatticePresets.honeycomb() |> hamiltonian(onsite(1) + hopping(2)) |> bloch((0.2, 0.3))
-2×2 SparseArrays.SparseMatrixCSC{Complex{Float64},Int64} with 4 stored entries:
-  [1, 1]  =  12.7216+0.0im
-  [2, 1]  =  5.87081+0.988379im
-  [1, 2]  =  5.87081-0.988379im
-  [2, 2]  =  12.7216+0.0im
+julia> h = LatticePresets.honeycomb() |> hamiltonian(onsite(1) + hopping(2)) |> bloch((0, 0))
+2×2 SparseMatrixCSC{Complex{Float64},Int64} with 4 stored entries:
+  [1, 1]  =  13.0+0.0im
+  [2, 1]  =  6.0+0.0im
+  [1, 2]  =  6.0+0.0im
+  [2, 2]  =  13.0+0.0im
 ```
 
 # See also:
