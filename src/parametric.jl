@@ -1,13 +1,14 @@
 #######################################################################
 # ParametricHamiltonian
 #######################################################################
-struct ParametricHamiltonian{N,M<:NTuple{N,ElementModifier},P<:NTuple{N,Any},H<:Hamiltonian}
+struct ParametricHamiltonian{P,N,M<:NTuple{N,ElementModifier},D<:NTuple{N,Any},H<:Hamiltonian}
     baseh::H
     h::H
     modifiers::M                   # N modifiers
-    ptrdata::P                     # P is an NTuple{N,Vector{Vector{ptrdata}}}, one per harmonic
+    ptrdata::D                     # P is an NTuple{N,Vector{Vector{ptrdata}}}, one per harmonic
     allptrs::Vector{Vector{Int}}   # ptrdata may be a nzval ptr, a (ptr,r) or a (ptr, r, dr)
-end                                # allptrs are modified ptrs in each harmonic
+    parameters::NTuple{P,NameType} # allptrs are modified ptrs in each harmonic
+end
 
 function Base.show(io::IO, ::MIME"text/plain", pham::ParametricHamiltonian{N}) where {N}
     i = get(io, :indent, "")
@@ -72,7 +73,8 @@ function parametric(h::Hamiltonian, ts::ElementModifier...)
     ptrdata = parametric_ptrdata!.(Ref(allptrs), Ref(h), ts´)
     foreach(sort!, allptrs)
     foreach(unique!, allptrs)
-    return ParametricHamiltonian(h, copy(h), ts´, ptrdata, allptrs)
+    params = parameters(ts...)
+    return ParametricHamiltonian(h, copy(h), ts´, ptrdata, allptrs, params)
 end
 
 parametric(ts::ElementModifier...) = h -> parametric(h, ts...)
@@ -171,12 +173,24 @@ function checkconsistency(ph::ParametricHamiltonian, fullcheck = true)
     return nothing
 end
 
+# ParametricHamiltonian's are already optimized upon creation
+optimize!(ph::ParametricHamiltonian) = ph
+
 """
     parameters(ph::ParametricHamiltonian)
 
 Return the names of the parameter that `ph` depends on
 """
-parameters(ph::ParametricHamiltonian) = mergetuples(parameters.(ph.modifiers)...)
+parameters(ph::ParametricHamiltonian) = ph.parameters
+
+# This is not inferred, but it is only needed when calling parametric
+parameters(ms::ElementModifier...) = mergetuples(parameters.(ms)...)
+
+matrixtype(ph::ParametricHamiltonian) = matrixtype(parent(ph))
+
+blockeltype(ph::ParametricHamiltonian) = blockeltype(parent(ph))
+
+Base.parent(ph::ParametricHamiltonian) = ph.h
 
 Base.copy(ph::ParametricHamiltonian) =
     ParametricHamiltonian(copy(ph.baseh), copy(ph.h), ph.modifiers, copy(h.ptrdata), copy(h.allptrs))

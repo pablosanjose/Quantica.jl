@@ -67,7 +67,7 @@ Furthermore, the trace over a specific set of kets can also be computed; in this
 The order of the Chebyshev expansion is `order`. The `bandbrange = (ϵmin, ϵmax)` should completely encompass
 the full bandwidth of `hamiltonian`. If `missing` it is computed automatically using `ArnoldiMethods` (must be loaded).
 
-# Example
+# Examples
 ```
 julia> h = LatticePresets.cubic() |> hamiltonian(hopping(1)) |> unitcell(region = RegionPresets.sphere(10));
 

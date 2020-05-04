@@ -67,6 +67,8 @@ displayorbitals(h::Hamiltonian) =
 SparseArrays.issparse(h::Hamiltonian{LA,L,M,A}) where {LA,L,M,A<:AbstractSparseMatrix} = true
 SparseArrays.issparse(h::Hamiltonian{LA,L,M,A}) where {LA,L,M,A} = false
 
+Base.parent(h::Hamiltonian) = h
+
 # Internal API #
 
 latdim(h::Hamiltonian{LA}) where {E,L,LA<:AbstractLattice{E,L}} = L
@@ -813,12 +815,12 @@ Specifies the desired type `T` of the uninitialized matrix.
 
 Adapts the type of the matrix (e.g. dense/sparse) to the specified `method`
 """
-function similarmatrix(h::Hamiltonian, ::Type{A´} = matrixtype(h)) where {A´<:AbstractMatrix}
+function similarmatrix(h, ::Type{A´} = matrixtype(h)) where {A´<:AbstractMatrix}
     optimize!(h)
-    return _similarmatrix(h, matrixtype(h), A´)
+    return _similarmatrix(parent(h), matrixtype(h), A´)
 end
 
-# We only provide the type combinations that make sense
+# We only provide the type combinastions that make sense
 _similarmatrix(h, ::Type{A}, ::Type{A´}) where {A´,A<:A´} =
     similar(h.harmonics[1].h)
 

@@ -74,7 +74,7 @@ end
 function Base.show(io::IO, b::Bandstructure{D,M}) where {D,M}
     ioindent = IOContext(io, :indent => string("  "))
     print(io,
-"Bandstructure: bands for a $(D)D hamiltonian
+"Bandstructure{$D}: collection of $(D)D bands
   Bands        : $(length(b.bands))
   Element type : $(displayelements(M))")
     print(ioindent, "\n", b.kmesh)
@@ -112,10 +112,10 @@ states(b::Band) = reshape(b.states, b.dimstates)
 # bandstructure
 #######################################################################
 """
-    bandstructure(h::Hamiltonian, mesh::Mesh; minprojection = 0.5, method = defaultmethod(h))
+    bandstructure(h::Hamiltonian, mesh::Mesh; cut = missing, minprojection = 0.5, method = defaultmethod(h))
 
 Compute the bandstructure of Bloch Hamiltonian `bloch(h, ϕs)`, with `ϕs` evaluated on the
-vertices of `mesh`. It is assumed that `h` is hermitian.
+vertices of `mesh`.
 
     bandstructure(h::Hamiltonian; resolution = 13, kw...)
 
@@ -124,15 +124,30 @@ dimensions of the Hamiltonian), with points `range(-π, π, length = resolution)
 Bravais axis. Note that `resolution` denotes the number of points along each Bloch axis,
 including endpoints (can be a tuple for axis-dependent points).
 
+    bandstructure(ph::ParametricHamiltonian, mesh; kw...)
+
+Compute the bandstructure of a `ph` with `i` parameters `p₁,..., pᵢ`, where `mesh` is
+interpreted as a discretization of parameter space ⊗ Brillouin zone, so that each vertex
+reads `v = (p₁,..., pᵢ, ϕ₁,..., ϕⱼ)`.
+
     bandstructure(matrixf::Function, mesh::Mesh; kw...)
 
-Compute the bandstructure of the Hamiltonian matrix `m = matrixf(ϕs...)`, with `ϕs`
-evaluated on the vertices of `mesh`. It is assumed that `m` is hermitian for all `ϕs`.
+Compute the bandstructure of the Hamiltonian matrix `m = matrixf(ϕs)`, with `ϕs` evaluated
+on the vertices of `mesh`. No `cut` option is allowed in this case. If needed, include it in
+the definition of `matrixf`.
 
 # Options
 
+The option `cut`, when not `missing`, is a function `cut = (mesh_coordinates...) -> φs`,
+where `φs` are Bloch phases if sampling a `h::Hamiltonian`, or `(params..., φs...)` if
+sampling a `ph::ParametricHamiltonian`, and `params` are values for `parameters(ph)`. This
+allows to compute a bandstructure along a cut in the Brillouin zone/parameter space, see
+below for examples.
+
 The option `minprojection` determines the minimum projection between eigenstates to connect
-them into a common subband. The option `method` is chosen automatically if unspecified, and
+them into a common subband.
+
+The option `method` is chosen automatically if unspecified, and
 can be one of the following
 
     method                    diagonalization function
@@ -144,17 +159,26 @@ Options passed to the `method` will be forwarded to the diagonalization function
 `method = ArpackPackage(nev = 8, sigma = 1im)` will use `Arpack.eigs(matrix; nev = 8,
 sigma = 1im)` to compute the bandstructure.
 
-# Example
+# Examples
 ```
 julia> h = LatticePresets.honeycomb() |> unitcell(3) |> hamiltonian(hopping(-1, range = 1/√3));
 
-julia> bandstructure(h; npoints = 25, method = LinearAlgebraPackage())
+julia> bandstructure(h; resolution = 25, method = LinearAlgebraPackage())
 Bandstructure: bands for a 2D hamiltonian
   Bands        : 8
   Element type : scalar (Complex{Float64})
   Mesh{2}: mesh of a 2-dimensional manifold
     Vertices   : 625
     Edges      : 3552
+
+julia> bandstructure(h, marchingmesh(range(0, 2π, length = 11)); cut = φ -> (φ, 0))
+       ## Computes a `Γ-X` cut of the bandstructure
+Bandstructure{1}: collection of 1D bands
+  Bands        : 18
+  Element type : scalar (Complex{Float64})
+  Mesh{1}: mesh of a 1-dimensional manifold
+    Vertices   : 11
+    Edges      : 10
 ```
 
 # See also
@@ -165,24 +189,27 @@ function bandstructure(h::Hamiltonian{<:Any,L,M}; resolution = 13, kw...) where 
     return bandstructure(h, mesh; kw...)
 end
 
-function bandstructure(h::Hamiltonian{<:Any,L}, mesh::Mesh{L}; method = defaultmethod(h), minprojection = 0.5) where {L}
+function bandstructure(h::Union{Hamiltonian,ParametricHamiltonian}, mesh::Mesh;
+                       method = defaultmethod(h), cut = missing, kw...)
     # ishermitian(h) || throw(ArgumentError("Hamiltonian must be hermitian"))
     matrix = similarmatrix(h, method)
-    d = Diagonalizer(method, codiagonalizer(h, matrix, mesh), minprojection)
-    matrixf(φs...) = bloch!(matrix, h, φs)
+    codiag = codiagonalizer(h, matrix, mesh, cut)
+    d = DiagonalizeHelper(method, codiag; kw...)
+    matrixf(φs) = bloch!(matrix, applycut(cut, h, φs)...)
     return _bandstructure(matrixf, matrix, mesh, d)
 end
 
 function bandstructure(matrixf::Function, mesh::Mesh;
                        matrix = _samplematrix(matrixf, mesh),
-                       method = defaultmethod(matrix), minprojection = 0.5)
-    d = Diagonalizer(method, codiagonalizer(matrixf, matrix, mesh), minprojection)
+                       method = defaultmethod(matrix), kw...)
+    codiag = codiagonalizer(matrixf, matrix, mesh)
+    d = DiagonalizeHelper(method, codiag; kw...)
     return _bandstructure(matrixf, matrix, mesh, d)
 end
 
-_samplematrix(matrixf, mesh) = matrixf(Tuple(first(vertices(mesh)))...)
+_samplematrix(matrixf, mesh) = matrixf(Tuple(first(vertices(mesh))))
 
-function _bandstructure(matrixf::Function, matrix´::AbstractMatrix{M}, mesh::MD, d::Diagonalizer) where {M,D,T,MD<:Mesh{D,T}}
+function _bandstructure(matrixf::Function, matrix´::AbstractMatrix{M}, mesh::MD, d::DiagonalizeHelper) where {M,D,T,MD<:Mesh{D,T}}
     nϵ = 0                           # Temporary, to be reassigned
     ϵks = Matrix{T}(undef, 0, 0)     # Temporary, to be reassigned
     ψks = Array{M,3}(undef, 0, 0, 0) # Temporary, to be reassigned
@@ -194,7 +221,7 @@ function _bandstructure(matrixf::Function, matrix´::AbstractMatrix{M}, mesh::MD
 
     p = Progress(nk, "Step 1/2 - Diagonalising: ")
     for (n, ϕs) in enumerate(vertices(mesh))
-        matrix = matrixf(Tuple(ϕs)...)
+        matrix = matrixf(Tuple(ϕs))
         # (ϵk, ψk) = diagonalize(Hermitian(matrix), d)  ## This is faster (!)
         (ϵk, ψk) = diagonalize(matrix, d.method)
         resolve_degeneracies!(ϵk, ψk, ϕs, matrix, d.codiag)
@@ -286,3 +313,26 @@ function findmostparallel(ψks::Array{M,3}, destk, srcb, srck) where {M}
     end
     return maxproj, destb
 end
+
+#######################################################################
+# Brillouin zone cuts
+#######################################################################
+
+applycut(cut::Missing, h, ϕs) = _h_phases(h, toSVector(ϕs))
+
+applycut(cut::Function, h, ϕs) = _h_phases(h, toSVector(cut(ϕs...)))
+
+@inline _h_phases(h::Hamiltonian{LA,L}, ϕs::SVector{L}) where {LA,L} = (h, ϕs)
+
+# @inline _h_phases(h::Hamiltonian{LA,L}, ϕs::SVector{L´}) where {LA,L,L´} =
+#     (h, ϕs[SVector{L}((L´-L+1):L´)])  # selects the last L elements of ϕs
+
+@inline function _h_phases(ph::ParametricHamiltonian, pϕs)
+    pnames = parameters(ph)
+    ps, ϕs = extract_parameters_phases(pnames, pϕs)
+    h = ph(; ps...)
+    return (h, ϕs)
+end
+
+extract_parameters_phases(pnames::NTuple{N,NameType}, ϕs::SVector{M}) where {N,M} =
+    (NamedTuple{pnames}(ntuple(i->ϕs[i], Val(N))), ntuple(i->ϕs[i+N], Val(M-N)))
