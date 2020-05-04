@@ -185,9 +185,9 @@ function codiagonalizer(h::Union{Hamiltonian,ParametricHamiltonian}, matrix, mes
     delta = iszero(delta) ? degtol : delta
     cmatrixf(meshϕs, n) =
         if n <= nv
-            bloch!(matrix, applycut(cut, h, meshϕs)..., dn -> im * veldirs[n]' * dn)
+            bloch!(matrix, h, applycut(cut, meshϕs), dn -> im * veldirs[n]' * dn)
         elseif n - nv <= nm # resort to finite differences
-            bloch!(matrix, applycut(cut, h, meshϕs + delta * meshdirs[n - nv])...)
+            bloch!(matrix, h, applycut(cut, meshϕs + delta * meshdirs[n - nv]))
         else # use a fixed random matrix
             randomfill!(matrix)
         end

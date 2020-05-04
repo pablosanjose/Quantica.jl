@@ -190,6 +190,8 @@ matrixtype(ph::ParametricHamiltonian) = matrixtype(parent(ph))
 
 blockeltype(ph::ParametricHamiltonian) = blockeltype(parent(ph))
 
+bravais(ph::ParametricHamiltonian) = bravais(ph.hamiltonian.lattice)
+
 Base.parent(ph::ParametricHamiltonian) = ph.h
 
 Base.copy(ph::ParametricHamiltonian) =
@@ -197,6 +199,23 @@ Base.copy(ph::ParametricHamiltonian) =
 
 Base.size(ph::ParametricHamiltonian, n...) = size(ph.h, n...)
 
-bravais(ph::ParametricHamiltonian) = bravais(ph.hamiltonian.lattice)
-
 Base.eltype(ph::ParametricHamiltonian) = eltype(ph.h)
+
+#######################################################################
+# bloch! for parametric
+#######################################################################
+
+bloch(ph::ParametricHamiltonian, args...) = bloch!(similarmatrix(ph), ph, args...)
+
+bloch!(matrix, ph::ParametricHamiltonian, pϕs = (), axis = 0) =
+    bloch!(matrix, h_phases(ph, toSVector(pϕs))..., axis)
+
+@inline function h_phases(ph::ParametricHamiltonian, pϕs)
+    pnames = parameters(ph)
+    ps, ϕs = extract_parameters_phases(pnames, pϕs)
+    h = ph(; ps...)
+    return (h, ϕs)
+end
+
+extract_parameters_phases(pnames::NTuple{N,NameType}, ϕs::SVector{M}) where {N,M} =
+    (NamedTuple{pnames}(ntuple(i->ϕs[i], Val(N))), ntuple(i->ϕs[i+N], Val(M-N)))

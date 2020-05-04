@@ -197,7 +197,7 @@ function bandstructure(h::Union{Hamiltonian,ParametricHamiltonian}, mesh::Mesh;
     matrix = similarmatrix(h, method)
     codiag = codiagonalizer(h, matrix, mesh, cut)
     d = DiagonalizeHelper(method, codiag; kw...)
-    matrixf(φs) = bloch!(matrix, applycut(cut, h, φs)...)
+    matrixf(φs) = bloch!(matrix, h, applycut(cut, φs))
     return _bandstructure(matrixf, matrix, mesh, d)
 end
 
@@ -210,6 +210,10 @@ function bandstructure(matrixf::Function, mesh::Mesh;
 end
 
 _samplematrix(matrixf, mesh) = matrixf(Tuple(first(vertices(mesh))))
+
+@inline applycut(cut::Missing, ϕs) = toSVector(ϕs)
+
+@inline applycut(cut::Function, ϕs) = toSVector(cut(ϕs...))
 
 function _bandstructure(matrixf::Function, matrix´::AbstractMatrix{M}, mesh::MD, d::DiagonalizeHelper) where {M,D,T,MD<:Mesh{D,T}}
     nϵ = 0                           # Temporary, to be reassigned
@@ -315,26 +319,3 @@ function findmostparallel(ψks::Array{M,3}, destk, srcb, srck) where {M}
     end
     return maxproj, destb
 end
-
-#######################################################################
-# Brillouin zone cuts
-#######################################################################
-
-applycut(cut::Missing, h, ϕs) = _h_phases(h, toSVector(ϕs))
-
-applycut(cut::Function, h, ϕs) = _h_phases(h, toSVector(cut(ϕs...)))
-
-@inline _h_phases(h::Hamiltonian{LA,L}, ϕs::SVector{L}) where {LA,L} = (h, ϕs)
-
-# @inline _h_phases(h::Hamiltonian{LA,L}, ϕs::SVector{L´}) where {LA,L,L´} =
-#     (h, ϕs[SVector{L}((L´-L+1):L´)])  # selects the last L elements of ϕs
-
-@inline function _h_phases(ph::ParametricHamiltonian, pϕs)
-    pnames = parameters(ph)
-    ps, ϕs = extract_parameters_phases(pnames, pϕs)
-    h = ph(; ps...)
-    return (h, ϕs)
-end
-
-extract_parameters_phases(pnames::NTuple{N,NameType}, ϕs::SVector{M}) where {N,M} =
-    (NamedTuple{pnames}(ntuple(i->ϕs[i], Val(N))), ntuple(i->ϕs[i+N], Val(M-N)))

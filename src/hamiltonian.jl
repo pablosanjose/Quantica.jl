@@ -918,6 +918,11 @@ velocity operator along this axis), `∂H(ϕs) = ∑ -im * dn[axis] * exp(-im * 
 Generalization that applies a prefactor `dnfunc(dn) * exp(im * ϕs' * dn)` to the `dn`
 harmonic.
 
+    bloch(ph::ParametricHamiltonian, pϕs, [axis])
+
+Same as above, but with `pϕs = (p₁,...,pᵢ, ϕ₁, ..., ϕⱼ)`, with `p` values for
+`parameters(ph)` and `ϕ` Bloch phases.
+
     h |> bloch(ϕs, ...)
 
 Functional forms of `bloch`, equivalent to `bloch(h, ϕs, ...)`
@@ -930,7 +935,7 @@ Functional forms of `bloch`, equivalent to `bloch(h, ϕs, ...)`
 # Examples
 
 ```jldoctest
-julia> h = LatticePresets.honeycomb() |> hamiltonian(onsite(1) + hopping(2)) |> bloch((.2,.3))
+julia> h = LatticePresets.honeycomb() |> hamiltonian(onsite(1) + hopping(2)) |> bloch((0.2, 0.3))
 2×2 SparseArrays.SparseMatrixCSC{Complex{Float64},Int64} with 4 stored entries:
   [1, 1]  =  12.7216+0.0im
   [2, 1]  =  5.87081+0.988379im
@@ -942,10 +947,10 @@ julia> h = LatticePresets.honeycomb() |> hamiltonian(onsite(1) + hopping(2)) |> 
     `bloch!`, `optimize!`, `similarmatrix`
 """
 bloch(ϕs, axis = 0) = h -> bloch(h, ϕs, axis)
-bloch(h::Hamiltonian{<:Lattice}, args...) = bloch!(similarmatrix(h), h, args...)
+bloch(h::Hamiltonian, args...) = bloch!(similarmatrix(h), h, args...)
 
 """
-    bloch!(matrix, h::Hamiltonian, ϕs, ...)
+    bloch!(matrix, h::Hamiltonian, ϕs, [axis])
 
 In-place version of `bloch`. Overwrite `matrix` with the Bloch Hamiltonian matrix of `h` for
 the specified Bloch phases `ϕs = (ϕ₁,ϕ₂,...)` (see `bloch` for definition and API).  A
@@ -954,35 +959,54 @@ conventient way to obtain a `matrix` is to use `similarmatrix(h,...)`, which wil
 be of the same type (e.g. it can be dense with `Number` eltype for a sparse `h` with
 `SMatrix` block eltype).
 
+    bloch!(matrix, ph::ParametricHamiltonian, pϕs, [axis])
+
+Same as above, but with `pϕs = (p₁,...,pᵢ, ϕ₁, ..., ϕⱼ)`, with `p` values for
+`parameters(ph)` and `ϕ` Bloch phases.
+
 # Examples
 
 ```jldoctest
 julia> h = LatticePresets.honeycomb() |> hamiltonian(hopping(2I), orbitals = (Val(2), Val(1)));
 
-julia> bloch!(similarmatrix(h), h, (0.2, 0.3))
+julia> bloch!(similarmatrix(h), h, (0, 0))
 2×2 SparseMatrixCSC{StaticArrays.SArray{Tuple{2,2},Complex{Float64},2,4},Int64} with 4 stored entries:
-  [1, 1]  =  [11.7216+0.0im 0.0+0.0im; 0.0+0.0im 11.7216+0.0im]
-  [2, 1]  =  [5.87081+0.988379im 0.0+0.0im; 0.0+0.0im 0.0+0.0im]
-  [1, 2]  =  [5.87081-0.988379im 0.0+0.0im; 0.0+0.0im 0.0+0.0im]
-  [2, 2]  =  [11.7216+0.0im 0.0+0.0im; 0.0+0.0im 0.0+0.0im]
+  [1, 1]  =  [12.0+0.0im 0.0+0.0im; 0.0+0.0im 12.0+0.0im]
+  [2, 1]  =  [6.0+0.0im 0.0+0.0im; 0.0+0.0im 0.0+0.0im]
+  [1, 2]  =  [6.0+0.0im 0.0+0.0im; 0.0+0.0im 0.0+0.0im]
+  [2, 2]  =  [12.0+0.0im 0.0+0.0im; 0.0+0.0im 0.0+0.0im]
 
-julia> bloch!(similarmatrix(h, AbstractMatrix{ComplexF64}), h, (0.2, 0.3))
-  3×3 SparseMatrixCSC{Complex{Float64},Int64} with 9 stored entries:
-    [1, 1]  =  11.7216+0.0im
-    [2, 1]  =  0.0+0.0im
-    [3, 1]  =  5.87081+0.988379im
-    [1, 2]  =  0.0+0.0im
-    [2, 2]  =  11.7216+0.0im
-    [3, 2]  =  0.0+0.0im
-    [1, 3]  =  5.87081-0.988379im
-    [2, 3]  =  0.0+0.0im
-    [3, 3]  =  11.7216+0.0im
+julia> bloch!(similarmatrix(h, AbstractMatrix{ComplexF64}), h, (0, 0))
+3×3 SparseMatrixCSC{Complex{Float64},Int64} with 9 stored entries:
+  [1, 1]  =  12.0+0.0im
+  [2, 1]  =  0.0+0.0im
+  [3, 1]  =  6.0+0.0im
+  [1, 2]  =  0.0+0.0im
+  [2, 2]  =  12.0+0.0im
+  [3, 2]  =  0.0+0.0im
+  [1, 3]  =  6.0+0.0im
+  [2, 3]  =  0.0+0.0im
+  [3, 3]  =  12.0+0.0im
+
+julia> ph = parametric(h, @hopping!((t; α) -> α * t));
+
+julia> bloch!(similarmatrix(ph, AbstractMatrix{ComplexF64}), ph, (2, 0, 0))
+3×3 SparseMatrixCSC{Complex{Float64},Int64} with 9 stored entries:
+  [1, 1]  =  24.0+0.0im
+  [2, 1]  =  0.0+0.0im
+  [3, 1]  =  12.0+0.0im
+  [1, 2]  =  0.0+0.0im
+  [2, 2]  =  24.0+0.0im
+  [3, 2]  =  0.0+0.0im
+  [1, 3]  =  12.0+0.0im
+  [2, 3]  =  0.0+0.0im
+  [3, 3]  =  24.0+0.0im
 ```
 
 # See also:
     `bloch`, `optimize!`, `similarmatrix`
 """
-bloch!(matrix, h, ϕs = (), axis = 0) = _bloch!(matrix, h, toSVector(ϕs), axis)
+bloch!(matrix, h::Hamiltonian, ϕs = (), axis = 0) = _bloch!(matrix, h, toSVector(ϕs), axis)
 
 function _bloch!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,L,M}, ϕs, axis::Number) where {L,M}
     rawmatrix = parent(matrix)
