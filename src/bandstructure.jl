@@ -134,7 +134,9 @@ reads `v = (p₁,..., pᵢ, ϕ₁,..., ϕⱼ)`.
 
 Compute the bandstructure of the Hamiltonian matrix `m = matrixf(ϕs)`, with `ϕs` evaluated
 on the vertices of `mesh`. No `cut` option is allowed in this case. If needed, include it in
-the definition of `matrixf`.
+the definition of `matrixf`. Note that `ϕs` is either a `Tuple` or an `SVector`, but it is
+not splatted into `matrixf`, i.e. `matrixf(x) = ...` or `matrixf(x, y) = ...` will not work,
+use `matrixf((x,)) = ...` or `matrixf((x, y)) = ...` instead.
 
 # Options
 
