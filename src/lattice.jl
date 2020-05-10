@@ -322,7 +322,6 @@ end
 ismasked(s::Supercell{L,L´,<:OffsetArray})  where {L,L´} = true
 ismasked(s::Supercell{L,L´,Missing})  where {L,L´} = false
 
-isinmask(s::Supercell, inds...) = isinmask(s.mask, inds...)
 isinmask(mask::Missing, inds...) = true
 isinmask(mask::OffsetArray, inds...) = checkbounds(Bool, mask, inds...) && mask[inds...]
 
@@ -406,9 +405,9 @@ Base.summary(::Superlattice{E,L,T,L´}) where {E,L,T,L´} =
 # apply f to trues in mask. Arguments are s = sublat, oldi = old site, dn, newi = new site
 function foreach_supersite(f::F, lat::Superlattice) where {F<:Function}
     newi = 0
-    for s in 1:nsublats(lat), oldi in siterange(lat, s)
+    @inbounds for s in 1:nsublats(lat), oldi in siterange(lat, s)
         for dn in CartesianIndices(lat.supercell)
-            if isinmask(lat.supercell, oldi, Tuple(dn)...)
+            if isinmask(lat.supercell.mask, oldi, Tuple(dn)...)
                 newi += 1
                 f(s, oldi, toSVector(Int, Tuple(dn)), newi)
             end
