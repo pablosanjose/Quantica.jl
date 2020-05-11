@@ -183,6 +183,35 @@ function appendslice!(dest::AbstractArray, src::AbstractArray{T,N}, Rsrc::Cartes
 end
 
 ######################################################################
+# convert a matrix/number block to a matrix/inlinematrix string
+######################################################################
+
+_isreal(x) = all(o -> imag(o) ≈ 0, x)
+_isimag(x) = all(o -> real(o) ≈ 0, x)
+
+matrixstring(row, x) = string("Onsite[$row] : ", _matrixstring(x))
+matrixstring(row, col, x) = string("Hopping[$row, $col] : ", _matrixstring(x))
+
+matrixstring_inline(row, x) = string("Onsite[$row] : ", _matrixstring_inline(x))
+matrixstring_inline(row, col, x) = string("Hopping[$row, $col] : ", _matrixstring_inline(x))
+
+_matrixstring(x::Number) = numberstring(x)
+_matrixstring_inline(x::Number) = numberstring(x)
+function _matrixstring(s::SMatrix)
+    ss = repr("text/plain", s)
+    pos = findfirst(isequal('\n'), ss)
+    return pos === nothing ? ss : ss[pos:end]
+end
+
+function _matrixstring_inline(s::SMatrix{N}) where {N}
+    stxt = numberstring.(transpose(s))
+    stxt´ = vcat(stxt, SMatrix{1,N}(ntuple(_->";", Val(N))))
+    return string("[", stxt´[1:end-1]..., "]")
+end
+
+numberstring(x) = _isreal(x) ? string(" ", real(x)) : _isimag(x) ? string(" ", imag(x), "im") : string(" ", x)
+
+######################################################################
 # Permutations (taken from Combinatorics.jl)
 ######################################################################
 

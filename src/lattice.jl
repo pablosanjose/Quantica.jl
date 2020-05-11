@@ -186,6 +186,8 @@ siteindex(u::Unitcell, sublat, idx) = idx + u.offsets[sublat]
 
 siterange(u::Unitcell, sublat) = (1+u.offsets[sublat]):u.offsets[sublat+1]
 
+enumeratesites(u::Unitcell, sublat) = ((i, sites(u)[i]) for i in siterange(u, sublat))
+
 nsites(u::Unitcell) = length(u.sites)
 nsites(u::Unitcell, sublat) = sublatsites(u)[sublat]
 
@@ -199,11 +201,22 @@ function sublat(u::Unitcell, siteidx)
     return l
 end
 
+# function boundingbox(u::Unitcell{E,T}) where {E,T}
+#     min´ = max´ = first(u.sites)
+#     for r in u.sites
+#         min´ = min.(min´, r)
+#         max´ = max.(max´, r)
+#     end
+#     return min´, max´
+# end
+
 sublatsites(u::Unitcell) = diff(u.offsets)
 
 nsublats(u::Unitcell) = length(u.names)
 
 sublats(u::Unitcell) = 1:nsublats(u)
+
+sublatname(u::Unitcell, s) = u.names[s]
 
 transform!(u::Unitcell, f::Function) = (u.sites .= f.(u.sites); u)
 
@@ -465,6 +478,19 @@ siteindex(lat::AbstractLattice, sublat, idx) = siteindex(lat.unitcell, sublat, i
 offsets(lat::AbstractLattice) = offsets(lat.unitcell)
 
 sublatsites(lat::AbstractLattice) = sublatsites(lat.unitcell)
+
+enumeratesites(lat::AbstractLattice, sublat) = enumeratesites(lat.unitcell, sublat)
+
+sublatname(lat::AbstractLattice, s = sublats(lat)) = sublatname(lat.unitcell, s)
+
+# function boundingbox(lat::AbstractLattice{E,L}, dns = (zero(SVector{L,Int}),)) where {E,L}
+#     minn, maxn = min0, max0 = boundingbox(lat.unitcell)
+#     for dn in dns
+#         minn = min.(minn, min0 + bravais(lat) * dn)
+#         maxn = max.(maxn, max0 + bravais(lat) * dn)
+#     end
+#     return minn, maxn
+# end
 
 nsites(lat::AbstractLattice) = nsites(lat.unitcell)
 nsites(lat::AbstractLattice, sublat) = nsites(lat.unitcell, sublat)
