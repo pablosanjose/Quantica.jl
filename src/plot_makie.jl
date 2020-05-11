@@ -5,21 +5,6 @@ import .Makie.AbstractPlotting: plot!, plot, to_value
 #######################################################################
 # Tools
 #######################################################################
-function meandist(h::Hamiltonian)
-    distsum = 0.0
-    num = 0
-    ss = Quantica.sites(h.lattice)
-    br = h.lattice.bravais.matrix
-    for (dn, row, col) in Quantica.nonzero_indices(h)
-        if row != col
-            num += 1
-            rsrc = ss[col]
-            rdst = ss[row] + br * dn
-            distsum += norm(rsrc - rdst)
-        end
-    end
-    return iszero(num) ? 0.0 : distsum / num
-end
 
 function matrixidx(h::AbstractSparseMatrix, row, col)
     for ptr in nzrange(h, col)
@@ -76,7 +61,7 @@ function plot!(plot::HamiltonianPlot)
     colors = Iterators.cycle(plot[:colors][])
     sublats = Quantica.sublats(lat)
 
-    mdist = meandist(h)
+    mdist = Quantica.meandist(h)
     mdist > 0 || (mdist = 1)
     plot[:siteradius][] *= mdist/2
     plot[:linkradius][] *= mdist/2
@@ -227,21 +212,8 @@ function popuptext(sceneplot, layer, idx, h)
         har = h.harmonics[haridx]
     end
     element = round.(har.h[row, col], digits = sceneplot[:digits][])
-    isreal = all(o -> imag(o) ≈ 0, element)
-    txt = isreal ? matrixstring(real.(element)) : matrixstring(element)
-    if col_or_zero == 0
-        txt´ = string("Onsite[$col] : ", txt)
-    else
-        txt´ = string("Hopping[$row, $col] : ", txt)
-    end
-    return txt´
-end
-
-matrixstring(x::Number) = string(x)
-function matrixstring(s::SMatrix)
-    ss = repr("text/plain", s)
-    pos = findfirst(isequal('\n'), ss)
-    return pos === nothing ? ss : ss[pos:end]
+    txt = iszero(col_or_zero) ? matrixstring(col, element) : matrixstring(row, col, element)
+    return txt
 end
 
 #######################################################################
