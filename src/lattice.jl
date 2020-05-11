@@ -335,8 +335,8 @@ end
 ismasked(s::Supercell{L,L´,<:OffsetArray})  where {L,L´} = true
 ismasked(s::Supercell{L,L´,Missing})  where {L,L´} = false
 
-isinmask(mask::Missing, inds...) = true
-isinmask(mask::OffsetArray, inds...) = checkbounds(Bool, mask, inds...) && mask[inds...]
+isinmask(mask::Missing, inds::Vararg{Int,N}) where {N} = true
+isinmask(mask::OffsetArray, inds::Vararg{Int,N}) where {N} = checkbounds(Bool, mask, inds...) && mask[inds...]
 
 issemibounded(sc::Supercell) = !iszero(sc.semibounded)
 
