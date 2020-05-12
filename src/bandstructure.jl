@@ -7,7 +7,7 @@ struct Spectrum{E,T,A<:AbstractMatrix{T}}
 end
 
 """
-    spectrum(h; method = defaultmethod(h))
+    spectrum(h; method = defaultmethod(h), transform = missing)
 
 Compute the spectrum of a 0D Hamiltonian `h` (or alternatively of the bounded unit cell of a
 finite dimensional `h`) using one of the following `method`s
@@ -17,6 +17,9 @@ finite dimensional `h`) using one of the following `method`s
     LinearAlgebraPackage()     LinearAlgebra.eigen!
     ArpackPackage()            Arpack.eigs (must be `using Arpack`)
 
+The option `transform = ε -> f(ε)` allows to transform eigenvalues by `f` in the returned
+spectrum (useful for performing shifts or other postprocessing).
+
 The energies and eigenstates in the resulting `s::Spectrum` object can be accessed with
 `energies(s)` and `states(s)`
 
@@ -24,11 +27,13 @@ The energies and eigenstates in the resulting `s::Spectrum` object can be access
     `energies`, `states`, `bandstructure`
 
 """
-function spectrum(h; method = defaultmethod(h))
+function spectrum(h; method = defaultmethod(h), transform = missing)
     matrix = similarmatrix(h, method)
     bloch!(matrix, h)
     (ϵk, ψk) = diagonalize(matrix, method)
-    return Spectrum(ϵk, ψk)
+    s = Spectrum(ϵk, ψk)
+    transform === missing || transform!(s, transform)
+    return s
 end
 
 """
@@ -134,7 +139,7 @@ end
 # bandstructure
 #######################################################################
 """
-    bandstructure(h::Hamiltonian, mesh::Mesh; minprojection = 0.5, method = defaultmethod(h))
+    bandstructure(h::Hamiltonian, mesh::Mesh; minprojection = 0.5, method = defaultmethod(h), transform = missing)
 
 Compute the bandstructure of Bloch Hamiltonian `bloch(h, ϕs)`, with `ϕs` evaluated on the
 vertices of `mesh`. It is assumed that `h` is hermitian.
@@ -166,6 +171,9 @@ Options passed to the `method` will be forwarded to the diagonalization function
 `method = ArpackPackage(nev = 8, sigma = 1im)` will use `Arpack.eigs(matrix; nev = 8,
 sigma = 1im)` to compute the bandstructure.
 
+The option `transform = ε -> f(ε)` allows to transform eigenvalues by `f` in the returned
+bandstructure (useful for performing shifts or other postprocessing).
+
 # Example
 ```
 julia> h = LatticePresets.honeycomb() |> unitcell(3) |> hamiltonian(hopping(-1, range = 1/√3));
@@ -187,19 +195,25 @@ function bandstructure(h::Hamiltonian{<:Any,L,M}; resolution = 13, kw...) where 
     return bandstructure(h, mesh; kw...)
 end
 
-function bandstructure(h::Hamiltonian{<:Any,L}, mesh::Mesh{L}; method = defaultmethod(h), minprojection = 0.5) where {L}
+function bandstructure(h::Hamiltonian{<:Any,L}, mesh::Mesh{L};
+    method = defaultmethod(h), minprojection = 0.5, transform = missing) where {L}
     # ishermitian(h) || throw(ArgumentError("Hamiltonian must be hermitian"))
     matrix = similarmatrix(h, method)
     d = Diagonalizer(method, codiagonalizer(h, matrix, mesh), minprojection)
     matrixf(φs...) = bloch!(matrix, h, φs)
-    return _bandstructure(matrixf, matrix, mesh, d)
+    b = _bandstructure(matrixf, matrix, mesh, d)
+    transform === missing || transform!(b, transform)
+    return b
 end
 
 function bandstructure(matrixf::Function, mesh::Mesh;
                        matrix = _samplematrix(matrixf, mesh),
-                       method = defaultmethod(matrix), minprojection = 0.5)
+                       method = defaultmethod(matrix),
+                       minprojection = 0.5, transform = missing)
     d = Diagonalizer(method, codiagonalizer(matrixf, matrix, mesh), minprojection)
-    return _bandstructure(matrixf, matrix, mesh, d)
+    b = _bandstructure(matrixf, matrix, mesh, d)
+    transform === missing || transform!(b, transform)
+    return b
 end
 
 _samplematrix(matrixf, mesh) = matrixf(Tuple(first(vertices(mesh)))...)
