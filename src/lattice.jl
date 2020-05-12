@@ -113,9 +113,9 @@ sanitize_semibounded(sb::NTuple{L,Bool}, ::SMatrix{E,L}) where {E,L} = SVector{L
 sanitize_semibounded(sb, ::SMatrix{E,L}) where {E,L} =
     SVector{L,Bool}(ntuple(i -> i in sb, Val(L)))
 
-transform(b::Bravais{E,0}, f::F) where {E,F<:Function} = b
+transform(f::F, b::Bravais{E,0}) where {E,F<:Function} = b
 
-function transform(b::Bravais{E,L,T}, f::F) where {E,L,T,F<:Function}
+function transform(f::F, b::Bravais{E,L,T}) where {E,L,T,F<:Function}
     svecs = let z = zero(SVector{E,T})
         ntuple(i -> f(b.matrix[:, i]) - f(z), Val(L))
     end
@@ -218,7 +218,7 @@ sublats(u::Unitcell) = 1:nsublats(u)
 
 sublatname(u::Unitcell, s) = u.names[s]
 
-transform!(u::Unitcell, f::Function) = (u.sites .= f.(u.sites); u)
+transform!(f::Function, u::Unitcell) = (u.sites .= f.(u.sites); u)
 
 Base.copy(u::Unitcell) = Unitcell(copy(u.sites), u.names, copy(u.offsets))
 
@@ -516,13 +516,13 @@ sites(lat::AbstractLattice) = sites(lat.unitcell)
 sites(lat::AbstractLattice, s) = sites(lat.unitcell, s)
 
 """
-    transform!(lat::Lattice, f::Function)
+    transform!(f::Function, lat::Lattice)
 
 Transform the site positions of `lat` by applying `f` to them in place.
 """
-function transform!(lat::Lattice, f::Function)
-    transform!(lat.unitcell, f)
-    bravais´ = transform(lat.bravais, f)
+function transform!(f::Function, lat::Lattice)
+    transform!(f, lat.unitcell)
+    bravais´ = transform(f, lat.bravais)
     return Lattice(bravais´, lat.unitcell)
 end
 

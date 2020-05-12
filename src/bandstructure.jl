@@ -7,7 +7,7 @@ struct Spectrum{E,T,A<:AbstractMatrix{T}}
 end
 
 """
-    spectrum(h; method = defaultmethod(h))
+    spectrum(h; method = defaultmethod(h), transform = missing)
 
 Compute the spectrum of a 0D Hamiltonian `h` (or alternatively of the bounded unit cell of a
 finite dimensional `h`) using one of the following `method`s
@@ -17,6 +17,9 @@ finite dimensional `h`) using one of the following `method`s
     LinearAlgebraPackage()     LinearAlgebra.eigen!
     ArpackPackage()            Arpack.eigs (must be `using Arpack`)
 
+The option `transform = ε -> f(ε)` allows to transform eigenvalues by `f` in the returned
+spectrum (useful for performing shifts or other postprocessing).
+
 The energies and eigenstates in the resulting `s::Spectrum` object can be accessed with
 `energies(s)` and `states(s)`
 
@@ -24,11 +27,13 @@ The energies and eigenstates in the resulting `s::Spectrum` object can be access
     `energies`, `states`, `bandstructure`
 
 """
-function spectrum(h; method = defaultmethod(h))
+function spectrum(h; method = defaultmethod(h), transform = missing)
     matrix = similarmatrix(h, method)
     bloch!(matrix, h)
     (ϵk, ψk) = diagonalize(matrix, method)
-    return Spectrum(ϵk, ψk)
+    s = Spectrum(ϵk, ψk)
+    transform === missing || transform!(transform, s)
+    return s
 end
 
 """
@@ -50,6 +55,13 @@ Return the states of `s` as the columns of a `Matrix`
     `spectrum`, `energies`
 """
 states(s::Spectrum) = s.states
+
+"""
+    transform!(f::Function, s::Spectrum)
+
+Transform the energies of `s` by applying `f` to them in place.
+"""
+transform!(f, s::Spectrum) = (map!(f, s.energies, s.energies); s)
 
 #######################################################################
 # Bandstructure
@@ -108,11 +120,26 @@ states(bs::Bandstructure, i) = states(bands(bs)[i])
 
 states(b::Band) = reshape(b.states, b.dimstates)
 
+"""
+    transform!(f::Function, b::Bandstructure)
+
+Transform the energies of all bands in `b` by applying `f` to them in place.
+"""
+function transform!(f, bs::Bandstructure)
+    for band in bands(bs)
+        vs = vertices(band)
+        for (i, v) in enumerate(vs)
+            vs[i] = SVector((tuplemost(Tuple(v))..., f(last(v))))
+        end
+    end
+    return bs
+end
+
 #######################################################################
 # bandstructure
 #######################################################################
 """
-    bandstructure(h::Hamiltonian, mesh::Mesh; cut = missing, minprojection = 0.5, method = defaultmethod(h))
+bandstructure(h::Hamiltonian, mesh::Mesh; cut = missing, minprojection = 0.5, method = defaultmethod(h), transform = missing)
 
 Compute the bandstructure of Bloch Hamiltonian `bloch(h, ϕs)`, with `ϕs` evaluated on the
 vertices of `mesh`.
@@ -162,6 +189,9 @@ Options passed to the `method` will be forwarded to the diagonalization function
 `method = ArpackPackage(nev = 8, sigma = 1im)` will use `Arpack.eigs(matrix; nev = 8,
 sigma = 1im)` to compute the bandstructure.
 
+The option `transform = ε -> f(ε)` allows to transform eigenvalues by `f` in the returned
+bandstructure (useful for performing shifts or other postprocessing).
+
 # Examples
 ```
 julia> h = LatticePresets.honeycomb() |> unitcell(3) |> hamiltonian(hopping(-1, range = 1/√3));
@@ -193,21 +223,27 @@ function bandstructure(h::Hamiltonian{<:Any,L,M}; resolution = 13, kw...) where 
 end
 
 function bandstructure(h::Union{Hamiltonian,ParametricHamiltonian}, mesh::Mesh;
-                       method = defaultmethod(h), cut = missing, kw...)
+                       method = defaultmethod(h), cut = missing, transform = missing, kw...)
     # ishermitian(h) || throw(ArgumentError("Hamiltonian must be hermitian"))
     matrix = similarmatrix(h, method)
     codiag = codiagonalizer(h, matrix, mesh, cut)
     d = DiagonalizeHelper(method, codiag; kw...)
     matrixf(φs) = bloch!(matrix, h, applycut(cut, φs))
-    return _bandstructure(matrixf, matrix, mesh, d)
+    b = _bandstructure(matrixf, matrix, mesh, d)
+    transform === missing || transform!(transform, b)
+    return b
 end
 
+# Should perhaps RFC to be merged with the above
 function bandstructure(matrixf::Function, mesh::Mesh;
                        matrix = _samplematrix(matrixf, mesh),
-                       method = defaultmethod(matrix), kw...)
+                       method = defaultmethod(matrix),
+                       minprojection = 0.5, transform = missing, kw...)
     codiag = codiagonalizer(matrixf, matrix, mesh)
     d = DiagonalizeHelper(method, codiag; kw...)
-    return _bandstructure(matrixf, matrix, mesh, d)
+    b = _bandstructure(matrixf, matrix, mesh, d)
+    transform === missing || transform!(transform, b)
+    return b
 end
 
 _samplematrix(matrixf, mesh) = matrixf(Tuple(first(vertices(mesh))))

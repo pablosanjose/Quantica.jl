@@ -71,10 +71,10 @@ function twisted_bilayer_graphene(;
     htop = hamiltonian(lattop, modelintra; kw...) |> unitcell(sctop)
     hbot = hamiltonian(latbot, modelintra; kw...) |> unitcell(scbot)
     let R = @SMatrix[cos(θ/2) -sin(θ/2) 0; sin(θ/2) cos(θ/2) 0; 0 0 1]
-        transform!(htop, r -> R * r)
+        transform!(r -> R * r, htop)
     end
     let R = @SMatrix[cos(θ/2) sin(θ/2) 0; -sin(θ/2) cos(θ/2) 0; 0 0 1]
-        transform!(hbot, r -> R * r)
+        transform!(r -> R * r, hbot)
     end
     modelinter = hopping((r,dr) -> (
         hopintra * exp(-3*(norm(dr)/a0 - 1))  *  dot(dr, SVector(1,1,0))^2/sum(abs2, dr) -
