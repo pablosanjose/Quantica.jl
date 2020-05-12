@@ -188,8 +188,8 @@ end
 """
     hamiltonian(lat, model; orbitals, type)
 
-Create a `Hamiltonian` by additively applying `model::TighbindingModel` to the lattice `lat`
-(see `hopping` and `onsite` for details on building tightbinding models).
+Create a `Hamiltonian` by applying `model::TighbindingModel` to the lattice `lat` (see
+`hopping` and `onsite` for details on building tightbinding models).
 
 The number of orbitals on each sublattice can be specified by the keyword `orbitals`
 (otherwise all sublattices have one orbital by default). The following, and obvious
@@ -255,6 +255,7 @@ julia> h[(3,3)][[1,2],[1,2]] .= Ref(@SMatrix[1 2; 2 1])
 2×2 view(::SparseArrays.SparseMatrixCSC{StaticArrays.SArray{Tuple{2,2},Complex{Float64},2,4},Int64}, [1, 2], [1, 2]) with eltype StaticArrays.SArray{Tuple{2,2},Complex{Float64},2,4}:
  [1.0+0.0im 2.0+0.0im; 2.0+0.0im 1.0+0.0im]  [1.0+0.0im 2.0+0.0im; 2.0+0.0im 1.0+0.0im]
  [1.0+0.0im 2.0+0.0im; 2.0+0.0im 1.0+0.0im]  [1.0+0.0im 2.0+0.0im; 2.0+0.0im 1.0+0.0im]```
+```
 
 # See also:
     `onsite`, `hopping`, `bloch`, `bloch!`
