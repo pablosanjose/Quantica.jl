@@ -1,25 +1,10 @@
 using .Makie
-using GeometryTypes
+using GeometryTypes: Cylinder
 import .Makie.AbstractPlotting: plot!, plot, to_value
 
 #######################################################################
 # Tools
 #######################################################################
-function meandist(h::Hamiltonian)
-    distsum = 0.0
-    num = 0
-    ss = Quantica.sites(h.lattice)
-    br = h.lattice.bravais.matrix
-    for (dn, row, col) in Quantica.nonzero_indices(h)
-        if row != col
-            num += 1
-            rsrc = ss[col]
-            rdst = ss[row] + br * dn
-            distsum += norm(rsrc - rdst)
-        end
-    end
-    return iszero(num) ? 0.0 : distsum / num
-end
 
 function matrixidx(h::AbstractSparseMatrix, row, col)
     for ptr in nzrange(h, col)
@@ -66,7 +51,7 @@ end
             ((0.960,0.600,.327), (0.410,0.067,0.031),(0.940,0.780,0.000),
             (0.640,0.760,0.900),(0.310,0.370,0.650),(0.600,0.550,0.810),
             (0.150,0.051,0.100),(0.870,0.530,0.640),(0.720,0.130,0.250))),
-        light = Vec{3,Float32}[[0, 0, 10], [0, 10, 0], [10, 0, 0], [10, 10, 10], [-10, -10, -10]]
+        light = Vec3f0[[0, 0, 10], [0, 10, 0], [10, 0, 0], [10, 10, 10], [-10, -10, -10]]
     )
 end
 
@@ -76,7 +61,7 @@ function plot!(plot::HamiltonianPlot)
     colors = Iterators.cycle(plot[:colors][])
     sublats = Quantica.sublats(lat)
 
-    mdist = meandist(h)
+    mdist = Quantica.meandist(h)
     mdist > 0 || (mdist = 1)
     plot[:siteradius][] *= mdist/2
     plot[:linkradius][] *= mdist/2
@@ -171,7 +156,7 @@ function plotlinks_hi!(plot, links, color)
     rotvectors = [r2 - r1 for (r1, r2) in links]
     radius = plot[:linkradius][]
     scales = [Vec3f0(radius, radius, norm(r2 - r1)/2) for (r1, r2) in links]
-    cylinder = GeometryTypes.Cylinder(Point3f0(0., 0., -1.0), Point3f0(0., 0, 1.0), Float32(1))
+    cylinder = Cylinder(Point3f0(0., 0., -1.0), Point3f0(0., 0, 1.0), Float32(1))
     meshscatter!(plot, positions;
         color = color, marker = cylinder, markersize = scales, rotations = rotvectors,
         light = plot[:light][])
@@ -227,21 +212,8 @@ function popuptext(sceneplot, layer, idx, h)
         har = h.harmonics[haridx]
     end
     element = round.(har.h[row, col], digits = sceneplot[:digits][])
-    isreal = all(o -> imag(o) ≈ 0, element)
-    txt = isreal ? matrixstring(real.(element)) : matrixstring(element)
-    if col_or_zero == 0
-        txt´ = string("Onsite[$col] : ", txt)
-    else
-        txt´ = string("Hopping[$row, $col] : ", txt)
-    end
-    return txt´
-end
-
-matrixstring(x::Number) = string(x)
-function matrixstring(s::SMatrix)
-    ss = repr("text/plain", s)
-    pos = findfirst(isequal('\n'), ss)
-    return pos === nothing ? ss : ss[pos:end]
+    txt = iszero(col_or_zero) ? matrixstring(col, element) : matrixstring(row, col, element)
+    return txt
 end
 
 #######################################################################

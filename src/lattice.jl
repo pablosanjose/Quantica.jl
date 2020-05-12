@@ -186,18 +186,37 @@ siteindex(u::Unitcell, sublat, idx) = idx + u.offsets[sublat]
 
 siterange(u::Unitcell, sublat) = (1+u.offsets[sublat]):u.offsets[sublat+1]
 
+enumeratesites(u::Unitcell, sublat) = ((i, sites(u)[i]) for i in siterange(u, sublat))
+
 nsites(u::Unitcell) = length(u.sites)
 nsites(u::Unitcell, sublat) = sublatsites(u)[sublat]
 
 offsets(u::Unitcell) = u.offsets
 
-sublat(u::Unitcell, siteidx) = Int(findlast(o -> o < siteidx, u.offsets))
+function sublat(u::Unitcell, siteidx)
+    l = length(u.offsets)
+    for s in 2:l
+        @inbounds u.offsets[s] + 1 > siteidx && return s - 1
+    end
+    return l
+end
+
+# function boundingbox(u::Unitcell{E,T}) where {E,T}
+#     min´ = max´ = first(u.sites)
+#     for r in u.sites
+#         min´ = min.(min´, r)
+#         max´ = max.(max´, r)
+#     end
+#     return min´, max´
+# end
 
 sublatsites(u::Unitcell) = diff(u.offsets)
 
 nsublats(u::Unitcell) = length(u.names)
 
 sublats(u::Unitcell) = 1:nsublats(u)
+
+sublatname(u::Unitcell, s) = u.names[s]
 
 transform!(u::Unitcell, f::Function) = (u.sites .= f.(u.sites); u)
 
@@ -316,9 +335,8 @@ end
 ismasked(s::Supercell{L,L´,<:OffsetArray})  where {L,L´} = true
 ismasked(s::Supercell{L,L´,Missing})  where {L,L´} = false
 
-isinmask(s::Supercell, inds...) = isinmask(s.mask, inds...)
-isinmask(mask::Missing, inds...) = true
-isinmask(mask::OffsetArray, inds...) = checkbounds(Bool, mask, inds...) && mask[inds...]
+isinmask(mask::Missing, inds::Vararg{<:Any,N}) where {N} = true
+isinmask(mask::OffsetArray, inds::Vararg{<:Any,N}) where {N} = checkbounds(Bool, mask, inds...) && mask[inds...]
 
 issemibounded(sc::Supercell) = !iszero(sc.semibounded)
 
@@ -400,9 +418,9 @@ Base.summary(::Superlattice{E,L,T,L´}) where {E,L,T,L´} =
 # apply f to trues in mask. Arguments are s = sublat, oldi = old site, dn, newi = new site
 function foreach_supersite(f::F, lat::Superlattice) where {F<:Function}
     newi = 0
-    for s in 1:nsublats(lat), oldi in siterange(lat, s)
+    @inbounds for s in 1:nsublats(lat), oldi in siterange(lat, s)
         for dn in CartesianIndices(lat.supercell)
-            if isinmask(lat.supercell, oldi, Tuple(dn)...)
+            if isinmask(lat.supercell.mask, oldi, Tuple(dn)...)
                 newi += 1
                 f(s, oldi, toSVector(Int, Tuple(dn)), newi)
             end
@@ -459,6 +477,19 @@ siteindex(lat::AbstractLattice, sublat, idx) = siteindex(lat.unitcell, sublat, i
 offsets(lat::AbstractLattice) = offsets(lat.unitcell)
 
 sublatsites(lat::AbstractLattice) = sublatsites(lat.unitcell)
+
+enumeratesites(lat::AbstractLattice, sublat) = enumeratesites(lat.unitcell, sublat)
+
+sublatname(lat::AbstractLattice, s = sublats(lat)) = sublatname(lat.unitcell, s)
+
+# function boundingbox(lat::AbstractLattice{E,L}, dns = (zero(SVector{L,Int}),)) where {E,L}
+#     minn, maxn = min0, max0 = boundingbox(lat.unitcell)
+#     for dn in dns
+#         minn = min.(minn, min0 + bravais(lat) * dn)
+#         maxn = max.(maxn, max0 + bravais(lat) * dn)
+#     end
+#     return minn, maxn
+# end
 
 nsites(lat::AbstractLattice) = nsites(lat.unitcell)
 nsites(lat::AbstractLattice, sublat) = nsites(lat.unitcell, sublat)

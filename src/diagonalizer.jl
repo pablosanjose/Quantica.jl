@@ -4,24 +4,18 @@
 #######################################################################
 abstract type AbstractDiagonalizeMethod end
 
-struct Diagonalizer{S<:AbstractDiagonalizeMethod,C}
+struct DiagonalizeHelper{S<:AbstractDiagonalizeMethod,C}
     method::S
     codiag::C
     minprojection::Float64
 end
 
+DiagonalizeHelper(method, codiag; minprojection = 0.5) =
+    DiagonalizeHelper(method, codiag, minprojection)
+
 ## Diagonalize methods ##
 
-function defaultmethod(h::Union{Hamiltonian,AbstractMatrix})
-    if eltype(h) <: Number
-        # method = issparse(h) ? ArpackPackage() : LinearAlgebraPackage()
-        method = LinearAlgebraPackage()
-    else
-        # method = KrylovKitPackage()
-        throw(ArgumentError("Methods for generic Hamiltonian eltypes not yet implemented. Consider using `flatten` on your Hamiltonian."))
-    end
-    return method
-end
+defaultmethod(h::Union{Hamiltonian,ParametricHamiltonian,AbstractMatrix}) = LinearAlgebraPackage()
 
 checkloaded(package::Symbol) = isdefined(Main, package) ||
     throw(ArgumentError("Package $package not loaded, need to be `using $package`."))
@@ -38,7 +32,7 @@ function diagonalize(matrix, method::LinearAlgebraPackage)
     return ϵ, ψ
 end
 
-similarmatrix(h, ::LinearAlgebraPackage) = Matrix(similarmatrix(h))
+similarmatrix(h, ::LinearAlgebraPackage) = similarmatrix(h, Matrix{blockeltype(h)})
 
 ## Arpack ##
 struct ArpackPackage{K<:NamedTuple} <: AbstractDiagonalizeMethod
@@ -52,7 +46,7 @@ function diagonalize(matrix, method::ArpackPackage)
     return ϵ, ψ
 end
 
-similarmatrix(h, ::ArpackPackage) = similarmatrix(h)
+similarmatrix(h, ::ArpackPackage) = similarmatrix(h, SparseMatrixCSC{blockeltype(h)})
 
 ## IterativeSolvers ##
 
@@ -85,7 +79,7 @@ function diagonalize(matrix::AbstractMatrix{M}, method::KrylovKitPackage) where 
     return ϵ´, ψ´
 end
 
-similarmatrix(h, ::KrylovKitPackage) = similarmatrix(h)
+similarmatrix(h, ::KrylovKitPackage) = similarmatrix(h, SparseMatrixCSC{blockeltype(h)})
 
 #######################################################################
 # shift and invert methods
@@ -170,51 +164,56 @@ end
 
 ## Codiagonalizer
 ## Uses velocity operators along different directions. If not enough, use finite differences
-struct Codiagonalizer{S,T,F<:Function}
+## along mesh directions
+struct Codiagonalizer{T,F<:Function}
     cmatrixf::F
     matrixindices::UnitRange{Int}
-    directions::Vector{S}
     degtol::T
     rangesA::Vector{UnitRange{Int}} # Prealloc buffer for degeneray ranges
     rangesB::Vector{UnitRange{Int}} # Prealloc buffer for degeneray ranges
     perm::Vector{Int}               # Prealloc for sortperm!
 end
 
-function codiagonalizer(h::Hamiltonian, matrix, mesh::Mesh{L}; kw...) where {L}
-    directions = velocitydirections(Val(L); kw...)
-    ndirs = length(directions)
-    matrixindices = 1:(2 * ndirs + 1)
-    degtol = sqrt(eps(realtype(h)))
+function codiagonalizer(h::Union{Hamiltonian,ParametricHamiltonian}, matrix, mesh, cut; kw...)
+    veldirs = velocitydirections(parent(h); kw...)
+    meshdirs = meshdirections(mesh; kw...)
+    nv = length(veldirs)
+    nm = length(meshdirs)
+    matrixindices = 1:(nv + nm + 1)
+    degtol = sqrt(eps(real(blockeltype(h))))
     delta = meshdelta(mesh)
     delta = iszero(delta) ? degtol : delta
-    cmatrixf(ϕs, n) =
-        if n <= ndirs
-            bloch!(matrix, h, ϕs, dn -> im * directions[n]' * dn)
-        elseif n <= 2ndirs # resort to finite differences
-            bloch!(matrix, h, ϕs + delta * directions[n - ndirs])
+    cmatrixf(meshϕs, n) =
+        if n <= nv
+            bloch!(matrix, h, applycut(cut, meshϕs), dn -> im * veldirs[n]' * dn)
+        elseif n - nv <= nm # resort to finite differences
+            bloch!(matrix, h, applycut(cut, meshϕs + delta * meshdirs[n - nv]))
         else # use a fixed random matrix
             randomfill!(matrix)
         end
-    return Codiagonalizer(cmatrixf, matrixindices, directions, degtol, UnitRange{Int}[], UnitRange{Int}[], Int[])
+    return Codiagonalizer(cmatrixf, matrixindices, degtol, UnitRange{Int}[], UnitRange{Int}[], Int[])
 end
 
-function codiagonalizer(matrixf::Function, matrix::AbstractMatrix{T}, mesh::Mesh{L}; kw...) where {L,T}
-    directions = velocitydirections(Val(L); kw...)
-    ndirs = length(directions)
-    matrixindices = 1:(ndirs + 1)
+function codiagonalizer(matrixf::Function, matrix::AbstractMatrix{T}, mesh; kw...) where {T}
+    meshdirs = meshdirections(mesh; kw...)
+    nm = length(meshdirs)
+    matrixindices = 1:(nm + 1)
     degtol = sqrt(eps(real(eltype(T))))
     delta = meshdelta(mesh)
     delta = iszero(delta) ? degtol : delta
-    cmatrixf(ϕs, n) =
-        if n <= ndirs # finite differences
-            matrixf((ϕs + delta * directions[n])...)
+    cmatrixf(meshϕs, n) =
+        if n <= nm # finite differences
+            matrixf(meshϕs + delta * meshdirs[n])
         else # use a fixed random matrix
             randomfill!(matrix)
         end
-    return Codiagonalizer(cmatrixf, matrixindices, directions, degtol, UnitRange{Int}[], UnitRange{Int}[], Int[])
+    return Codiagonalizer(cmatrixf, matrixindices, degtol, UnitRange{Int}[], UnitRange{Int}[], Int[])
 end
 
-function velocitydirections(::Val{L}; direlements = 0:1, onlypositive = true) where {L}
+velocitydirections(::Hamiltonian{LA,L}; kw...) where {LA,L} = _directions(Val(L); kw...)
+meshdirections(::Mesh{L}; kw...) where {L} = _directions(Val(L); kw...)
+
+function _directions(::Val{L}; direlements = 0:1, onlypositive = true) where {L}
     directions = vec(SVector{L,Int}.(Iterators.product(ntuple(_ -> direlements, Val(L))...)))
     onlypositive && filter!(ispositive, directions)
     unique!(normalize, directions)

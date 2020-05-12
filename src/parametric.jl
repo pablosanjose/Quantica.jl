@@ -1,13 +1,14 @@
 #######################################################################
 # ParametricHamiltonian
 #######################################################################
-struct ParametricHamiltonian{N,M<:NTuple{N,ElementModifier},P<:NTuple{N,Any},H<:Hamiltonian}
+struct ParametricHamiltonian{P,N,M<:NTuple{N,ElementModifier},D<:NTuple{N,Any},H<:Hamiltonian}
     baseh::H
     h::H
     modifiers::M                   # N modifiers
-    ptrdata::P                     # P is an NTuple{N,Vector{Vector{ptrdata}}}, one per harmonic
+    ptrdata::D                     # P is an NTuple{N,Vector{Vector{ptrdata}}}, one per harmonic
     allptrs::Vector{Vector{Int}}   # ptrdata may be a nzval ptr, a (ptr,r) or a (ptr, r, dr)
-end                                # allptrs are modified ptrs in each harmonic
+    parameters::NTuple{P,NameType} # allptrs are modified ptrs in each harmonic
+end
 
 function Base.show(io::IO, ::MIME"text/plain", pham::ParametricHamiltonian{N}) where {N}
     i = get(io, :indent, "")
@@ -47,9 +48,9 @@ ParametricHamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
   Harmonic size    : 200 × 200
   Orbitals         : ((:a,), (:a,))
   Element type     : scalar (Complex{Float64})
-  Onsites          : 200
-  Hoppings         : 640
-  Coordination     : 3.2
+  Onsites          : 0
+  Hoppings         : 600
+  Coordination     : 3.0
   Parameters       : (:μ,)
 
 julia> ph(μ = 2)
@@ -59,8 +60,8 @@ Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
   Orbitals         : ((:a,), (:a,))
   Element type     : scalar (Complex{Float64})
   Onsites          : 200
-  Hoppings         : 640
-  Coordination     : 3.2
+  Hoppings         : 600
+  Coordination     : 3.0
 ```
 # See also
     `@onsite!`, `@hopping!`
@@ -72,7 +73,8 @@ function parametric(h::Hamiltonian, ts::ElementModifier...)
     ptrdata = parametric_ptrdata!.(Ref(allptrs), Ref(h), ts´)
     foreach(sort!, allptrs)
     foreach(unique!, allptrs)
-    return ParametricHamiltonian(h, copy(h), ts´, ptrdata, allptrs)
+    params = parameters(ts...)
+    return ParametricHamiltonian(h, copy(h), ts´, ptrdata, allptrs, params)
 end
 
 parametric(ts::ElementModifier...) = h -> parametric(h, ts...)
@@ -89,7 +91,7 @@ function parametric_ptrdata!(allptrs, h::Hamiltonian{LA,L,M,<:AbstractSparseMatr
             row = rows[ptr]
             selected = selector(lat, (row, col), (dn, zero(dn)))
             if selected
-                push!(ptrdata, ptrdatum(t, lat,  ptr, (row, col)))
+                push!(ptrdata, ptrdatum(t, lat, ptr, (row, col), dn))
                 push!(allptrs_har, ptr)
             end
         end
@@ -112,13 +114,13 @@ function empty_ptrdata(h, t::HoppingModifier)
 end
 
 # Uniform case
-ptrdatum(t::UniformModifier, lat, ptr, (row, col)) = ptr
+ptrdatum(t::UniformModifier, lat, ptr, (row, col), dn) = ptr
 
 # Non-uniform case
-ptrdatum(t::OnsiteModifier, lat, ptr, (row, col)) = (ptr, sites(lat)[col])
+ptrdatum(t::OnsiteModifier, lat, ptr, (row, col), dn) = (ptr, sites(lat)[col])
 
-function ptrdatum(t::HoppingModifier, lat, ptr, (row, col))
-    r, dr = _rdr(sites(lat)[col], sites(lat)[row])
+function ptrdatum(t::HoppingModifier, lat, ptr, (row, col), dn)
+    r, dr = _rdr(sites(lat)[col], sites(lat)[row] + bravais(lat) * dn)
     return (ptr, r, dr)
 end
 
@@ -171,18 +173,49 @@ function checkconsistency(ph::ParametricHamiltonian, fullcheck = true)
     return nothing
 end
 
+# ParametricHamiltonian's are already optimized upon creation
+optimize!(ph::ParametricHamiltonian) = ph
+
 """
     parameters(ph::ParametricHamiltonian)
 
 Return the names of the parameter that `ph` depends on
 """
-parameters(ph::ParametricHamiltonian) = mergetuples(parameters.(ph.modifiers)...)
+parameters(ph::ParametricHamiltonian) = ph.parameters
+
+# This is not inferred, but it is only needed when calling parametric
+parameters(ms::ElementModifier...) = mergetuples(parameters.(ms)...)
+
+matrixtype(ph::ParametricHamiltonian) = matrixtype(parent(ph))
+
+blockeltype(ph::ParametricHamiltonian) = blockeltype(parent(ph))
+
+bravais(ph::ParametricHamiltonian) = bravais(ph.hamiltonian.lattice)
+
+Base.parent(ph::ParametricHamiltonian) = ph.h
 
 Base.copy(ph::ParametricHamiltonian) =
     ParametricHamiltonian(copy(ph.baseh), copy(ph.h), ph.modifiers, copy(h.ptrdata), copy(h.allptrs))
 
 Base.size(ph::ParametricHamiltonian, n...) = size(ph.h, n...)
 
-bravais(ph::ParametricHamiltonian) = bravais(ph.hamiltonian.lattice)
-
 Base.eltype(ph::ParametricHamiltonian) = eltype(ph.h)
+
+#######################################################################
+# bloch! for parametric
+#######################################################################
+
+bloch(ph::ParametricHamiltonian, args...) = bloch!(similarmatrix(ph), ph, args...)
+
+bloch!(matrix, ph::ParametricHamiltonian, pϕs = (), axis = 0) =
+    bloch!(matrix, h_phases(ph, toSVector(pϕs))..., axis)
+
+@inline function h_phases(ph::ParametricHamiltonian, pϕs)
+    pnames = parameters(ph)
+    ps, ϕs = extract_parameters_phases(pnames, pϕs)
+    h = ph(; ps...)
+    return (h, ϕs)
+end
+
+extract_parameters_phases(pnames::NTuple{N,NameType}, ϕs::SVector{M}) where {N,M} =
+    (NamedTuple{pnames}(ntuple(i->ϕs[i], Val(N))), ntuple(i->ϕs[i+N], Val(M-N)))

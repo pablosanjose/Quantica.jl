@@ -1,7 +1,7 @@
 name = "Quantica"
 uuid = "ae5ea0c6-3f5e-46a2-bc28-a7c4c7a4773c"
 authors = ["Pablo San-Jose"]
-version = "0.1.0"
+version = "0.2.0"
 
 [deps]
 ExprTools = "e2ba6199-217a-4e67-a87a-7c52f15ade04"
@@ -19,13 +19,13 @@ StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 [compat]
 ExprTools = "^0.1"
 GeometryTypes = "^0.8"
-LinearMaps = "^2.6"
-NearestNeighbors = "^0.4"
-OffsetArrays = "^1.0"
-ProgressMeter = "^1.2"
-Requires = "^1.0"
-StaticArrays = "^0.12"
-julia = "^1.4"
+LinearMaps = "2.6"
+NearestNeighbors = "0.4"
+OffsetArrays = "1.0"
+ProgressMeter = "1.2"
+Requires = "1.0"
+StaticArrays = "0.12.3, 0.13"
+julia = "1.4"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
