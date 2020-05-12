@@ -18,12 +18,14 @@ Plots the the Hamiltonian lattice projected along `axes` using VegaLite.
 """
 function VegaLite.vlplot(b::Bandstructure; labels = ("φ/2π", "ε"), scaling = (1/2π, 1), size = 640, points = false)
     labelx, labely = labels
-    sizes = make_it_two(size)
     table = bandtable(b, make_it_two(scaling))
+    sizes = make_it_two(size)
+    corners = _corners(table)
+    (domainx, domainy), _ = domain_size(corners, size)
     p = table |> vltheme(sizes, points) + @vlplot(
         mark = :line,
-        x = {:phi, title = labelx},
-        y = {:energy, title = labely},
+        x = {:x, scale = {domain = domainx, nice = false}, title = labelx},
+        y = {:y, scale = {domain = domainy, nice = false}, title = labely},
         color = "band:n",
         selection = {grid = {type = :interval, bind = :scales}})
     return p
@@ -31,7 +33,7 @@ end
 
 function bandtable(b::Bandstructure{1}, (scalingx, scalingy) = (1, 1))
     ks = vertices(b.kmesh)
-    table = [(phi = v[1] * scalingx, energy = v[2] * scalingy, band = i, tooltip = string(v))
+    table = [(x = v[1] * scalingx, y = v[2] * scalingy, band = i, tooltip = string(v))
              for (i, bnd) in enumerate(bands(b)) for v in vertices(bnd)]
     return table
 end
@@ -45,13 +47,13 @@ function VegaLite.vlplot(h::Hamiltonian{LA};
         @vlplot(:rule, color = :sublat, opacity = {:opacity, legend = nothing},
             transform = [{filter = "datum.islink"}],
             selection = {grid2 = {type = :interval, bind = :scales}},
-            encoding = {x = :x1, y = :y1, x2 = :x2, y2 = :y2}) +
+            encoding = {x = :x, y = :y, x2 = :x2, y2 = :y2}) +
         @vlplot(:circle, color = :sublat, opacity = {:opacity, legend = nothing},
             selection = {grid1 = {type = :interval, bind = :scales}},
             transform = [{filter = "!datum.islink"}],
             encoding = {
-                x = {:x1, scale = {domain = domainx, nice = false}, axis = {grid = false}, title = labels[1]},
-                y = {:y1, scale = {domain = domainy, nice = false}, axis = {grid = false}, title = labels[2]}
+                x = {:x, scale = {domain = domainx, nice = false}, axis = {grid = false}, title = labels[1]},
+                y = {:y, scale = {domain = domainy, nice = false}, axis = {grid = false}, title = labels[2]}
             })
     return p
 end
@@ -61,7 +63,7 @@ function linkstable(h::Hamiltonian, (a1, a2) = (1, 2))
     T = numbertype(lat)
     slats = sublats(lat)
     rs = sites(lat)
-    table = NamedTuple{(:x1, :y1, :x2, :y2, :sublat, :tooltip, :opacity, :islink),
+    table = NamedTuple{(:x, :y, :x2, :y2, :sublat, :tooltip, :opacity, :islink),
                        Tuple{T,T,T,T,NameType,String,Float64,Bool}}[]
     h0 = h.harmonics[1].h
     rows = Int[] # list of plotted destination sites for dn != 0
@@ -71,7 +73,7 @@ function linkstable(h::Hamiltonian, (a1, a2) = (1, 2))
             if iszero(har.dn)
                 for (i, r) in enumeratesites(lat, ssrc)
                     x = get(r, a1, zero(T)); y = get(r, a2, zero(T))
-                    push!(table, (x1 = x, y1 = y, x2 = x, y2 = y,
+                    push!(table, (x = x, y = y, x2 = x, y2 = y,
                                 sublat = sublatname(lat, ssrc), tooltip = matrixstring_inline(i, h0[i, i]),
                                 opacity = 1.0, islink = false))
                 end
@@ -86,7 +88,7 @@ function linkstable(h::Hamiltonian, (a1, a2) = (1, 2))
                     if !iszero(har.dn) && !in(row, rows)
                         x = get(rdst, a1, zero(T)); y = get(rdst, a2, zero(T))
                         push!(table,
-                            (x1 = x, y1 = y, x2 = x, y2 = y,
+                            (x = x, y = y, x2 = x, y2 = y,
                             sublat = sublatname(lat, sdst), tooltip = matrixstring_inline(row, h0[row, row]),
                             opacity = 0.5, islink = false))
                         push!(rows, row)
@@ -96,7 +98,7 @@ function linkstable(h::Hamiltonian, (a1, a2) = (1, 2))
                     x´ = get(rdst, a1, zero(T)); y´ = get(rdst, a2, zero(T))
                     # Exclude links perpendicular to the screen
                     rdst ≈ rsrc || push!(table,
-                        (x1 = x, y1 = y, x2 = x´, y2 = y´,
+                        (x = x, y = y, x2 = x´, y2 = y´,
                         sublat = sublatname(lat, ssrc), tooltip = matrixstring_inline(row, col, har.h[row, col]),
                         opacity = iszero(har.dn) ? 1.0 : 0.5, islink = true))
                 end
@@ -118,10 +120,10 @@ function vltheme((sizex, sizey), points = false)
 end
 
 function _corners(table)
-    min´ = max´ = (first(table).x2, first(table).y2)
+    min´ = max´ = (first(table).x, first(table).y)
     for row in table
-        min´ = min.(min´, (row.x2, row.y2))
-        max´ = max.(max´, (row.x2, row.y2))
+        min´ = min.(min´, (row.x, row.y))
+        max´ = max.(max´, (row.x, row.y))
     end
     return min´, max´
 end
