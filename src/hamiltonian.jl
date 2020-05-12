@@ -1227,7 +1227,7 @@ end
 flatten(h::HamiltonianHarmonic, orbs, lat) =
     HamiltonianHarmonic(h.dn, _flatten(h.h, length.(orbs), lat))
 
-function _flatten(src::SparseMatrixCSC{<:SMatrix{N,N,T}}, norbs::NTuple{S,<:Any}, lat, ::Type{T´} = T) where {N,T,S,T´}
+function _flatten(src::SparseMatrixCSC{<:SMatrix{N,N,T}}, norbs::NTuple{S,Any}, lat, ::Type{T´} = T) where {N,T,S,T´}
     offsets´ = flatoffsets(lat.unitcell.offsets, norbs)
     dim´ = last(offsets´)
 
@@ -1252,7 +1252,7 @@ function _flatten(src::SparseMatrixCSC{<:SMatrix{N,N,T}}, norbs::NTuple{S,<:Any}
     return matrix
 end
 
-function _flatten(src::DenseMatrix{<:SMatrix{N,N,T}}, norbs::NTuple{S,<:Any}, lat, ::Type{T´} = T) where {N,T,S,T´}
+function _flatten(src::DenseMatrix{<:SMatrix{N,N,T}}, norbs::NTuple{S,Any}, lat, ::Type{T´} = T) where {N,T,S,T´}
     offsets´ = flatoffsets(lat.unitcell.offsets, norbs)
     dim´ = last(offsets´)
     matrix = similar(src, T´, dim´, dim´)

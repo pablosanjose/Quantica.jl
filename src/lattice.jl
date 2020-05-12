@@ -43,7 +43,7 @@ sublat(sites::Vector{<:SVector}; name = :_, kw...) =
     Sublat(sites, nametype(name))
 sublat(vs::Union{Tuple,AbstractVector{<:Number}}...; kw...) = sublat(toSVectors(vs...); kw...)
 
-# transform!(s::S, f::F) where {S <: Sublat,F <: Function} = (s.sites .= f.(s.sites); s)
+toSVectors(vs...) = [promote(toSVector.(vs)...)...]
 
 #######################################################################
 # Bravais
