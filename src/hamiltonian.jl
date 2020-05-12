@@ -347,13 +347,13 @@ end
 # External API #
 
 """
-    transform!(h::Hamiltonian, f::Function)
+    transform!(f::Function, h::Hamiltonian)
 
 Transform the site positions of the Hamiltonian's lattice in place without modifying the
 Hamiltonian harmonics.
 """
-function transform!(h::Hamiltonian, f::Function)
-    transform!(h.lattice, f)
+function transform!(f, h::Hamiltonian)
+    transform!(f, h.lattice)
     return h
 end
 

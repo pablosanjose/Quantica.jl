@@ -32,7 +32,7 @@ function spectrum(h; method = defaultmethod(h), transform = missing)
     bloch!(matrix, h)
     (ϵk, ψk) = diagonalize(matrix, method)
     s = Spectrum(ϵk, ψk)
-    transform === missing || transform!(s, transform)
+    transform === missing || transform!(transform, s)
     return s
 end
 
@@ -57,11 +57,11 @@ Return the states of `s` as the columns of a `Matrix`
 states(s::Spectrum) = s.states
 
 """
-    transform!(s::Spectrum, f::Function)
+    transform!(f::Function, s::Spectrum)
 
 Transform the energies of `s` by applying `f` to them in place.
 """
-transform!(s::Spectrum, f) = map!(f, s.energies)
+transform!(f, s::Spectrum) = map!(f, s.energies)
 
 #######################################################################
 # Bandstructure
@@ -121,11 +121,11 @@ states(bs::Bandstructure, i) = states(bands(bs)[i])
 states(b::Band) = reshape(b.states, b.dimstates)
 
 """
-    transform!(b::Bandstructure, f::Function)
+    transform!(f::Function, b::Bandstructure)
 
 Transform the energies of all bands in `b` by applying `f` to them in place.
 """
-function transform!(bs::Bandstructure, f)
+function transform!(f, bs::Bandstructure)
     for band in bands(bs)
         vs = vertices(band)
         for (i, v) in enumerate(vs)
@@ -230,10 +230,11 @@ function bandstructure(h::Union{Hamiltonian,ParametricHamiltonian}, mesh::Mesh;
     d = DiagonalizeHelper(method, codiag; kw...)
     matrixf(φs) = bloch!(matrix, h, applycut(cut, φs))
     b = _bandstructure(matrixf, matrix, mesh, d)
-    transform === missing || transform!(b, transform)
+    transform === missing || transform!(transform, b)
     return b
 end
 
+# Should perhaps RFC to be merged with the above
 function bandstructure(matrixf::Function, mesh::Mesh;
                        matrix = _samplematrix(matrixf, mesh),
                        method = defaultmethod(matrix),
@@ -241,7 +242,7 @@ function bandstructure(matrixf::Function, mesh::Mesh;
     codiag = codiagonalizer(matrixf, matrix, mesh)
     d = DiagonalizeHelper(method, codiag; kw...)
     b = _bandstructure(matrixf, matrix, mesh, d)
-    transform === missing || transform!(b, transform)
+    transform === missing || transform!(transform, b)
     return b
 end
 
