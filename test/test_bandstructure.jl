@@ -31,15 +31,18 @@ end
     @test length(bands(b)) == 2
 end
 
-@testset "bandstructures cuts" begin
-    h = LatticePresets.honeycomb() |> hamiltonian(hopping(-1, range = 1/√3))
+@testset "bandstructures cuts & transforms" begin
+    h = LatticePresets.honeycomb() |> hamiltonian(onsite(2) + hopping(-1, range = 1/√3))
     mesh1D = marchingmesh(range(0, 2π, length = 13))
-    b = bandstructure(h, mesh1D, cut = φ -> (φ, 0))
-    @test length(bands(b)) == 2
-    b = bandstructure(h, mesh1D, cut = φ -> (φ, -φ))
-    @test length(bands(b)) == 2
+    b = bandstructure(h, mesh1D, cut = φ -> (φ, -φ), transform = inv)
+    b´ = transform!(inv, bandstructure(h, mesh1D, cut = φ -> (φ, -φ)))
+    @test length(bands(b)) == length(bands(b´)) == 2
+    @test vertices(bands(b)[1]) == vertices(bands(b´)[1])
+    h´ = unitcell(h)
+    s1 = spectrum(h´, transform = inv)
+    s2 = transform!(inv,spectrum(h´))
+    @test energies(s1) == energies(s2)
 end
-
 
 @testset "parametric bandstructures" begin
     ph = LatticePresets.linear() |> hamiltonian(hopping(-I), orbitals = Val(2)) |> unitcell(2) |>

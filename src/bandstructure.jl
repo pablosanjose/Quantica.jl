@@ -61,7 +61,7 @@ states(s::Spectrum) = s.states
 
 Transform the energies of `s` by applying `f` to them in place.
 """
-transform!(f, s::Spectrum) = map!(f, s.energies)
+transform!(f, s::Spectrum) = (map!(f, s.energies, s.energies); s)
 
 #######################################################################
 # Bandstructure
