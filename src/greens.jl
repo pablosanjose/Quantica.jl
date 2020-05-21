@@ -241,7 +241,7 @@ function addsimplex!(matrix, g0, gjs, simplexdata)
     vol = simplexdata.volume
     for c in CartesianIndices(matrix)
         (row, col) = Tuple(c)
-        x = g0 * φ0[row] * φ0[col]'
+        x = g0 * (φ0[row] * φ0[col]')
         for (φ, gj) in zip(φs, gjs)
             x += (φ[row]*φ[col]' - φ0[row]*φ0[col]') * gj
         end
