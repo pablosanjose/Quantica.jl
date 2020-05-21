@@ -53,6 +53,7 @@ julia> m = similarmatrix(g); g(m, 0.2)
 greens(h, solver) = GreensFunction(h, greensolver(solver))
 greens(solver::Function) = h -> greens(h, solver(h))
 
+# Needed to make similarmatrix work with GreensFunction
 matrixtype(g::GreensFunction) = Matrix{eltype(g.h)}
 Base.parent(g::GreensFunction) = g.h
 optimize!(g::GreensFunction) = g
