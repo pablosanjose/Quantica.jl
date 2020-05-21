@@ -212,7 +212,7 @@ where `T` is the number type of `lat`.
 
     lat |> hamiltonian(model; kw...)
 
-Functional `hamiltonian` form equivalent to `hamiltonian(lat, model[, funcmodel]; kw...)`.
+Curried form of `hamiltonian` equivalent to `hamiltonian(lat, model[, funcmodel]; kw...)`.
 
 # Indexing
 
@@ -736,7 +736,7 @@ flux Φ through the loop, if `factor = exp(im * 2π * Φ/Φ₀)`.
 
     h |> wrap(axis; kw...)
 
-Functional form equivalent to `wrap(h, axis; kw...)`.
+Curried form equivalent to `wrap(h, axis; kw...)`.
 
 # Examples
 
@@ -821,7 +821,7 @@ end
 """
     similarmatrix(h::Hamiltonian)
 
-Create an uninitialized matrix of the same type and size    of the Hamiltonian's matrix,
+Create an uninitialized matrix of the same type and size of the Hamiltonian's matrix,
 calling `optimize!(h)` first to produce an optimal work matrix in the sparse case.
 
     similarmatrix(h::Hamiltonian, T::Type{<:AbstractMatrix})
@@ -831,6 +831,10 @@ Specifies the desired type `T` of the uninitialized matrix.
     similarmatrix(h::Hamiltonian, method::AbstractDiagonalizeMethod)
 
 Adapts the type of the matrix (e.g. dense/sparse) to the specified `method`
+
+    similarmatrix(x::Union{ParametricHamiltonian, GreensFunction}, ...)
+
+Equivalent to the above, but adapted to the more general type of `x`.
 """
 function similarmatrix(h, ::Type{A´} = matrixtype(h)) where {A´<:AbstractMatrix}
     optimize!(h)
@@ -944,7 +948,7 @@ Same as above, but with `pϕs = (p₁,...,pᵢ, ϕ₁, ..., ϕⱼ)`, with `p` va
 
     h |> bloch(ϕs, ...)
 
-Functional forms of `bloch`, equivalent to `bloch(h, ϕs, ...)`
+Curried forms of `bloch`, equivalent to `bloch(h, ϕs, ...)`
 
 # Notes
 
@@ -1187,7 +1191,7 @@ hopping/onsite matrices are preserved as structural zeros upon flattening.
 
     h |> flatten()
 
-Functional form equivalent to `flatten(h)` of `h |> flatten` (included for consistency with
+Curried form equivalent to `flatten(h)` of `h |> flatten` (included for consistency with
 the rest of the API).
 
 # Examples

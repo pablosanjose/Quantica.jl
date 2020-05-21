@@ -71,11 +71,12 @@ The order of the Chebyshev expansion is `order`. The `bandbrange = (ϵmin, ϵmax
 the full bandwidth of `hamiltonian`. If `missing` it is computed automatically using `ArnoldiMethods` (must be loaded).
 
 # Examples
+
 ```
 julia> h = LatticePresets.cubic() |> hamiltonian(hopping(1)) |> unitcell(region = RegionPresets.sphere(10));
 
 julia> momentaKPM(bloch(h), bandrange = (-6,6))
-Quantica.MomentaKPM{Float64}([0.9594929736144973, -0.005881595972403821, -0.4933354572913581, 0.00359537502632597, 0.09759451291347333, -0.0008081453185250322, -0.00896262538765363, 0.00048205637037715177, -0.0003705198310034668, 9.64901673962623e-20, 9.110915988898614e-18], (0.0, 6.030150753768845))
+Quantica.MomentaKPM{Complex{Float64},Tuple{Float64,Float64}}(Complex{Float64}[0.9594929736144989 + 0.0im, 0.00651662540445511 - 1.3684099632763213e-18im, 0.4271615999695687 + 0.0im, 0.011401934070884771 - 8.805365601448575e-19im, 0.2759482493684239 + 0.0im, 0.001128522288518446 + 4.914851192831956e-19im, 0.08738420162067032 + 0.0im, 0.0007921516166325597 + 2.0605151351830466e-19im, 0.00908824008889868 + 0.0im, -5.638793856739318e-20 - 2.2295921941414733e-35im, 1.2112238859024637e-16 + 0.0im], (0.0, 6.030150753768845))
 ```
 """
 function momentaKPM(h::Hamiltonian, A = _defaultA(eltype(h)); bandrange = missing, kw...)

@@ -16,6 +16,9 @@ toSVector(::Type{T}, ::Tuple{}) where {T} = SVector{0,T}()
 # Dynamic dispatch
 toSVector(v::AbstractVector) = SVector(Tuple(v))
 
+unitvector(::Type{SVector{L,T}}, i) where {L,T} =
+    SVector{L,T}(ntuple(j -> j == i ? one(T) : zero(T), Val(L)))
+
 ensuretuple(s::Tuple) = s
 ensuretuple(s) = (s,)
 
@@ -31,9 +34,26 @@ filltuple(x, ::NTuple{N,Any}) where {N} = ntuple(_ -> x, Val(N))
 @inline tuplejoin(x, y) = (x..., y...)
 @inline tuplejoin(x, y, z...) = (x..., tuplejoin(y, z...)...)
 
+tuplesplice(s::NTuple{N,T}, ind, el) where {N,T} = ntuple(i -> i === ind ? T(el) : s[i], Val(N))
+
 tupleproduct(p1, p2) = tupleproduct(ensuretuple(p1), ensuretuple(p2))
 tupleproduct(p1::NTuple{M,Any}, p2::NTuple{N,Any}) where {M,N} =
     ntuple(i -> (p1[1+fld(i-1, N)], p2[1+mod(i-1, N)]), Val(M * N))
+
+tupleswapfront(tup::NTuple{L}, (i, j)) where {L} =
+    i < j ? swap(swap(tup, i => 1), j => 2) : swap(swap(tup, j => 2), i => 1)
+
+swap(tup::NTuple{L}, (i, i´)) where {L} =
+    ntuple(l -> tup[ifelse(l == i´, i, ifelse(l == i, i´, l))], Val(L))
+
+tuplepairs(::Val{V}) where {V} = tuplepairs((), ntuple(identity, Val(V)))
+tuplepairs(c::Tuple, ::Tuple{}) = c
+
+function tuplepairs(c::Tuple, r::NTuple{V}) where {V}
+    t = Base.tail(r)
+    c´ = (c..., tuple.(first(r), t)...)
+    return tuplepairs(c´, t)
+end
 
 mergetuples(ts...) = keys(merge(tonamedtuple.(ts)...))
 tonamedtuple(ts::Val{T}) where {T} = NamedTuple{T}(filltuple(0,T))
@@ -119,7 +139,8 @@ function ispositive(ndist)
     return result
 end
 
-# isnonnegative(ndist) = iszero(ndist) || ispositive(ndist)
+chop(x::T, x0 = one(T)) where {T<:Real} = ifelse(abs(x) < √eps(T(x0)), zero(T), x)
+chop(x::C, x0 = one(R)) where {R<:Real,C<:Complex{R}} = chop(real(x), x0) + im*chop(imag(x), x0)
 
 ############################################################################################
 
@@ -157,7 +178,7 @@ tuplesort((a,b)::Tuple{<:Number,<:Number}) = a > b ? (b, a) : (a, b)
 tuplesort(t::Tuple) = t
 tuplesort(::Missing) = missing
 
-# Like copyto! but with potentially different tensor orders (adapted from Base.copyto!)
+# Like copyto! but with potentially different tensor orders (adapted from Base.copyto!, see #33588)
 function copyslice!(dest::AbstractArray{T1,N1}, Rdest::CartesianIndices{N1},
                     src::AbstractArray{T2,N2}, Rsrc::CartesianIndices{N2}, by = identity) where {T1,T2,N1,N2}
     isempty(Rdest) && return dest
