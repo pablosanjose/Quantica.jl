@@ -71,6 +71,7 @@ struct SimplexData{D,E,T,C<:SMatrix,DD,SA<:SubArray}
     zvelocity::SVector{D,T}
     edgecoeffs::NTuple{E,Tuple{T,C}} # s*det(Λ)/w.w and Λc for each edge
     dωzs::NTuple{E,NTuple{2,SVector{D,T}}}
+    defaultdη::SVector{D,T}
     φ0::SA
     φs::NTuple{D,SA}
 end
@@ -112,9 +113,10 @@ function SimplexData(simplex::NTuple{V}, band, indsedges) where {V}
     volume = abs(det(Δks))
     edgecoeffs = edgecoeff.(indsedges, Ref(zvelocity))
     dωzs = sectionpoint.(indsedges, Ref(zvelocity))
+    defaultdη = dummydη(zvelocity)
     φ0 = vertexstate(first(simplex), band)
     φs = vertexstate.(Base.tail(simplex), Ref(band))
-    return SimplexData(ε0, εmin, εmax, k0, Δks, volume, zvelocity, edgecoeffs, dωzs, φ0, φs)
+    return SimplexData(ε0, εmin, εmax, k0, Δks, volume, zvelocity, edgecoeffs, dωzs, defaultdη, φ0, φs)
 end
 
 # Base.tail(t) .- first(t) but avoiding rounding errors in difference
@@ -127,8 +129,8 @@ function edgecoeff(indsedge, zvelocity::SVector{D}) where {D}
     edgevec = first(basis)
     cutvecs = (v -> dot(zvelocity, edgevec) * v - dot(zvelocity, v) * edgevec).(othervecs)
     Λc = hcat(cutvecs...)
-    Λ = hcat(Λc, zvelocity)
-    s = sign(det(hcat(othervecs..., edgevec)))
+    Λ = hcat(zvelocity, Λc)
+    s = sign(det(hcat(basis...)))
     coeff = s * (det(Λ)/dot(zvelocity, zvelocity))
     return coeff, Λc
 end
@@ -149,6 +151,19 @@ function sectionpoint((i, j), zvelocity::SVector{D,T}) where {D,T}
     dzdω = z10 / d
     dz0 = z0 - z10 * dot(zvelocity, z0) / d
     return dzdω, dz0   # The section z is dω * dzdω + dz0
+end
+
+# A vector, not parallel to zvelocity, and with all nonzero components and none equal
+function dummydη(zvelocity::SVector{D,T}) where {D,T}
+    (D == 1 || iszero(zvelocity)) && return SVector(ntuple(i->T(i), Val(D)))
+    rng = MersenneTwister(0)
+    while true
+        dη = rand(rng, SVector{D,T})
+        isparallel = dot(dη, zvelocity)^2 ≈ dot(zvelocity, zvelocity) * dot(dη, dη)
+        isvalid = allunique(dη) && !isparallel
+        isvalid && return dη
+    end
+    throw(error("Unexpected error finding dummy dη"))
 end
 
 function vertexstate(ind, band)
@@ -181,25 +196,26 @@ function green_simplex(ω, dn, data::SimplexData{L}, indsedges) where {L}
     dη = data.Δks' * dn
     phase = cis(dot(dn, data.k0))
     dω = ω - data.ε0
-    gz = simplexterm.(dω, Ref(dη), data.edgecoeffs, data.dωzs, indsedges)
+    gz = simplexterm.(dω, Ref(dη), Ref(data), data.edgecoeffs, data.dωzs, indsedges)
     g0z, gjz = first.(gz), last.(gz)
     g0 = im^(L-1) * phase * sum(g0z)
     gj = -im^L * phase * sum(gjz)
     return g0, gj
 end
 
-function simplexterm(dω, dη::SVector{D,T}, coeffs, (dzdω, dz0), (i, j)) where {D,T}
+function simplexterm(dω, dη::SVector{D,T}, data, coeffs, (dzdω, dz0), (i, j)) where {D,T}
+    bailout = Complex(zero(T)), Complex.(zero(dη))
     z = dω * dzdω + dz0
+    # Edges with divergent sections do not contribute
+    all(isfinite, z) || return bailout
     z0 = unitvector(SVector{D,T},i-1)
     z1 = unitvector(SVector{D,T},j-1)
     coeff, Λc = coeffs
-    # If dη is zero (DOS) use any non-problematic but simplex-constant vector
-    dη´ = iszero(dη) ? Λc[:,1]*ifelse(signbit(Λc[1,1]),1,-1) : dη
+    # If dη is zero (DOS) use a precomputed (non-problematic) simplex-constant vector
+    dη´ = iszero(dη) ? data.defaultdη : dη
     d = dot(dη´, z)
     d0 = dot(dη´, z0)
     d1 = dot(dη´, z1)
-    # Edges with divergent sections do not contribute
-    (!isfinite(d) || d ≈ 0) && return Complex(zero(T)), Complex.(zero(dη))
     s = sign(dot(dη´, dzdω))
     coeff0 = coeff / prod(Λc' * dη´)
     coeffj = isempty(Λc) ? zero(dη) : (Λc ./ ((dη´)' * Λc)) * sumvec(Λc)
@@ -233,9 +249,9 @@ function gjz_asymptotic(D, g0z, coeffj, coeff0, (z, z0, z1), (s, d, d0, d1))
     return gjz
 end
 
-cosint_c(x::Real) = cosint(abs(x)) + im*pi*(x<=0)
+cosint_c(x::Real) = ifelse(iszero(abs(x)), zero(x), cosint(abs(x))) + im*pi*(x<=0)
 
-cosint_a(x::Real) = log(abs(x)) + im*pi*(x<=0)
+cosint_a(x::Real) = ifelse(iszero(abs(x)), zero(x), log(abs(x))) + im*pi*(x<=0)
 
 function addsimplex!(matrix, g0, gjs, simplexdata)
     φ0 = simplexdata.φ0
