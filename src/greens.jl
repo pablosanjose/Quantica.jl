@@ -183,7 +183,9 @@ function green_simplex(ω, dn, data::SimplexData{L}, indsedges) where {L}
     dω = ω - data.ε0
     gz = simplexterm.(dω, Ref(dη), data.edgecoeffs, data.dωzs, indsedges)
     g0z, gjz = first.(gz), last.(gz)
-    return im^(L-1) * phase * sum(g0z), -im^L * phase * sum(gjz)
+    g0 = im^(L-1) * phase * sum(g0z)
+    gj = -im^L * phase * sum(gjz)
+    return g0, gj
 end
 
 function simplexterm(dω, dη::SVector{D,T}, coeffs, (dzdω, dz0), (i, j)) where {D,T}
@@ -192,12 +194,12 @@ function simplexterm(dω, dη::SVector{D,T}, coeffs, (dzdω, dz0), (i, j)) where
     z1 = unitvector(SVector{D,T},j-1)
     coeff, Λc = coeffs
     # If dη is zero (DOS) use any non-problematic but simplex-constant vector
-    dη´ = iszero(dη) ? Λc[:,1]*sign(Λc[1,1]) : dη
+    dη´ = iszero(dη) ? Λc[:,1]*ifelse(signbit(Λc[1,1]),1,-1) : dη
     d = dot(dη´, z)
     d0 = dot(dη´, z0)
     d1 = dot(dη´, z1)
     # Edges with divergent sections do not contribute
-    (!isfinite(d) || d0 ≈ d || d1 ≈ d) && return Complex(zero(T)), Complex.(zero(dη))
+    (!isfinite(d) || d ≈ 0) && return Complex(zero(T)), Complex.(zero(dη))
     s = sign(dot(dη´, dzdω))
     coeff0 = coeff / prod(Λc' * dη´)
     coeffj = isempty(Λc) ? zero(dη) : (Λc ./ ((dη´)' * Λc)) * sumvec(Λc)

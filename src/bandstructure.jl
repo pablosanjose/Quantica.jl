@@ -131,7 +131,7 @@ Return the states of each vertex of the i-th band in `bs`, in the form of a `Mat
 """
 states(bs::Bandstructure, i) = states(bands(bs)[i])
 
-states(b::Band) = reshape(b.states, b.dimstates)
+states(b::Band) = reshape(b.states, b.dimstates, :)
 
 """
     transform!(f::Function, b::Bandstructure)
