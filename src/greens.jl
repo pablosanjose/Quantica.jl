@@ -216,6 +216,8 @@ function simplexterm(dω, dη::SVector{D,T}, data, coeffs, (dzdω, dz0), (i, j))
     d = dot(dη´, z)
     d0 = dot(dη´, z0)
     d1 = dot(dη´, z1)
+    # Skip if singularity in formula
+    (d ≈ d0 || d ≈ d1) && return bailout
     s = sign(dot(dη´, dzdω))
     coeff0 = coeff / prod(Λc' * dη´)
     coeffj = isempty(Λc) ? zero(dη) : (Λc ./ ((dη´)' * Λc)) * sumvec(Λc)
