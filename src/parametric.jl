@@ -105,12 +105,12 @@ empty_ptrdata(h, t::UniformModifier)  = [Int[] for _ in h.harmonics]
 # Non-uniform case, one vector of (ptr, r, dr) per harmonic
 function empty_ptrdata(h, t::OnsiteModifier)
     S = positiontype(h.lattice)
-    return [Tuple{Int,S}[] for _ in h.harmonics]
+    return Vector{Tuple{Int,S}}[Tuple{Int,S}[] for _ in h.harmonics]
 end
 
 function empty_ptrdata(h, t::HoppingModifier)
     S = positiontype(h.lattice)
-    return [Tuple{Int,S,S}[] for _ in h.harmonics]
+    return Vector{Tuple{Int,S,S}}[Tuple{Int,S,S}[] for _ in h.harmonics]
 end
 
 # Uniform case
