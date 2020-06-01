@@ -262,7 +262,9 @@ end
                     @hopping!((t, r, dr; λ, k) -> -λ*im*sK(dr+k); sublats = :B=>:B))
     @test bloch(ph(λ=1, k=SA[1,0]), (π/2, -π/2)) == bloch(ph, (1, SA[1,0], π/2, -π/2)) ≈ [-4 1; 1 4]
     # Issue 61, type stability
-    @inferred LatticePresets.honeycomb() |> hamiltonian(onsite(0)) |> parametric(@onsite!((o;μ) -> o- μ))
+    h = LatticePresets.honeycomb() |> hamiltonian(onsite(0))
+    @inferred parametric(h, @onsite!((o;μ) -> o- μ))
+    @inferred parametric(h, @onsite!(o->2o), @hopping!((t)->2t), @onsite!((o, r)->o+r[1]))
 end
 
 @testset "boolean masks" begin

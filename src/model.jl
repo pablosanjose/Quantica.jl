@@ -596,6 +596,10 @@ resolve(o::OnsiteModifier, lat) = OnsiteModifier(o.f, resolve(o.selector, lat))
 
 resolve(h::HoppingModifier, lat) = HoppingModifier(h.f, resolve(h.selector, lat))
 
+resolve(t::Tuple, lat) = _resolve(lat, t...)
+_resolve(lat, t, ts...) = (resolve(t, lat), _resolve(lat, ts...)...)
+_resolve(lat) = ()
+
 # Intended for resolved ElementModifier{N} only. The N is the number of arguments accepted.
 @inline (o!::UniformOnsiteModifier)(o, r; kw...) = o!(o; kw...)
 @inline (o!::UniformOnsiteModifier)(o, r, dr; kw...) = o!(o; kw...)
