@@ -488,12 +488,12 @@ findblock(s, sr) = findfirst(r -> s in r, sr)
 #######################################################################
 abstract type ElementModifier{N,F,S} end
 
-struct ParametricFunction{N,M,F}
+struct ParametricFunction{N,F,P<:Val}
     f::F
-    params::NTuple{M,Symbol}
+    params::P
 end
 
-ParametricFunction{N}(f::F, p::NTuple{M,Symbol}) where {N,M,F} = ParametricFunction{N,M,F}(f, p)
+ParametricFunction{N}(f::F, p::P) where {N,F,P} = ParametricFunction{N,F,P}(f, p)
 
 (pf::ParametricFunction)(args...; kw...) = pf.f(args...; kw...)
 
@@ -537,12 +537,12 @@ include any parameters that `body` depends on that the user may want to tune.
 """
 macro onsite!(kw, f)
     f, N, params = get_f_N_params(f, "Only @onsite!(args -> body; kw...) syntax supported")
-    return esc(:(Quantica.OnsiteModifier(Quantica.ParametricFunction{$N}($f, $params), Quantica.onsiteselector($kw))))
+    return esc(:(Quantica.OnsiteModifier(Quantica.ParametricFunction{$N}($f, $(Val(params))), Quantica.onsiteselector($kw))))
 end
 
 macro onsite!(f)
     f, N, params = get_f_N_params(f, "Only @onsite!(args -> body; kw...) syntax supported")
-    return esc(:(Quantica.OnsiteModifier(Quantica.ParametricFunction{$N}($f, $params), Quantica.onsiteselector())))
+    return esc(:(Quantica.OnsiteModifier(Quantica.ParametricFunction{$N}($f, $(Val(params))), Quantica.onsiteselector())))
 end
 
 """
@@ -559,12 +559,12 @@ and include any parameters that `body` depends on that the user may want to tune
 """
 macro hopping!(kw, f)
     f, N, params = get_f_N_params(f, "Only @hopping!(args -> body; kw...) syntax supported")
-    return esc(:(Quantica.HoppingModifier(Quantica.ParametricFunction{$N}($f, $params), Quantica.hoppingselector($kw))))
+    return esc(:(Quantica.HoppingModifier(Quantica.ParametricFunction{$N}($f, $(Val(params))), Quantica.hoppingselector($kw))))
 end
 
 macro hopping!(f)
     f, N, params = get_f_N_params(f, "Only @hopping!(args -> body; kw...) syntax supported")
-    return esc(:(Quantica.HoppingModifier(Quantica.ParametricFunction{$N}($f, $params), Quantica.hoppingselector())))
+    return esc(:(Quantica.HoppingModifier(Quantica.ParametricFunction{$N}($f, $(Val(params))), Quantica.hoppingselector())))
 end
 
 # Extracts normalized f, number of arguments and kwarg names from an anonymous function f
