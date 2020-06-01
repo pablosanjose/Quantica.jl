@@ -516,12 +516,15 @@ const UniformHoppingModifier = HoppingModifier{1}
 const UniformOnsiteModifier = OnsiteModifier{1}
 
 """
-    parameters(p::ElementModifier)
+    parameters(p::ElementModifier...)
 
-Return the parameter names for an `ElementModifier` created with `@onsite!` or `@hopping!`
+Return the parameter names for one or several  `ElementModifier` created with `@onsite!` or
+`@hopping!`
 """
-parameters(pf::ParametricFunction) = pf.params
-parameters(m::ElementModifier) = parameters(m.f)
+parameters(ms::ElementModifier...) = mergetuples(_parameters.(ms)...)
+_parameters(m::ElementModifier) = _parameters(m.f)
+_parameters(pf::ParametricFunction) = pf.params
+
 
 """
     @onsite!(args -> body; kw...)

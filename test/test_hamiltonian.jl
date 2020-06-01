@@ -265,6 +265,7 @@ end
     h = LatticePresets.honeycomb() |> hamiltonian(onsite(0))
     @inferred parametric(h, @onsite!((o;μ) -> o- μ))
     @inferred parametric(h, @onsite!(o->2o), @hopping!((t)->2t), @onsite!((o, r)->o+r[1]))
+    @inferred parametric(h, @onsite!((o, r)->o*r[1]), @hopping!((t; p)->p*t), @onsite!((o; μ)->o-μ))
 end
 
 @testset "boolean masks" begin

@@ -71,7 +71,6 @@ function parametric(h::Hamiltonian, ts::ElementModifier...)
     optimize!(h)  # to avoid ptrs getting out of sync if optimize! later
     allptrs = Vector{Int}[Int[] for _ in h.harmonics]
     ptrdata = parametric_ptrdata_tuple!(allptrs, h, ts´)
-    parametric_ptrdata!(allptrs, h, last(ts´))
     foreach(sort!, allptrs)
     foreach(unique!, allptrs)
     params = parameters(ts...)
@@ -188,9 +187,6 @@ optimize!(ph::ParametricHamiltonian) = ph
 Return the names of the parameter that `ph` depends on
 """
 parameters(ph::ParametricHamiltonian) = ph.parameters
-
-# This is not inferred, but it is only needed when calling parametric
-parameters(ms::ElementModifier...) = mergetuples(parameters.(ms)...)
 
 matrixtype(ph::ParametricHamiltonian) = matrixtype(parent(ph))
 
