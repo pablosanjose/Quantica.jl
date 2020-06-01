@@ -488,12 +488,12 @@ findblock(s, sr) = findfirst(r -> s in r, sr)
 #######################################################################
 abstract type ElementModifier{N,F,S} end
 
-struct ParametricFunction{N,M,F}
+struct ParametricFunction{N,F,P<:Val}
     f::F
-    params::NTuple{M,Symbol}
+    params::P
 end
 
-ParametricFunction{N}(f::F, p::NTuple{M,Symbol}) where {N,M,F} = ParametricFunction{N,M,F}(f, p)
+ParametricFunction{N}(f::F, p::P) where {N,F,P} = ParametricFunction{N,F,P}(f, p)
 
 (pf::ParametricFunction)(args...; kw...) = pf.f(args...; kw...)
 
@@ -516,12 +516,15 @@ const UniformHoppingModifier = HoppingModifier{1}
 const UniformOnsiteModifier = OnsiteModifier{1}
 
 """
-    parameters(p::ElementModifier)
+    parameters(p::ElementModifier...)
 
-Return the parameter names for an `ElementModifier` created with `@onsite!` or `@hopping!`
+Return the parameter names for one or several  `ElementModifier` created with `@onsite!` or
+`@hopping!`
 """
-parameters(pf::ParametricFunction) = pf.params
-parameters(m::ElementModifier) = parameters(m.f)
+parameters(ms::ElementModifier...) = mergetuples(_parameters.(ms)...)
+_parameters(m::ElementModifier) = _parameters(m.f)
+_parameters(pf::ParametricFunction) = pf.params
+
 
 """
     @onsite!(args -> body; kw...)
@@ -537,12 +540,12 @@ include any parameters that `body` depends on that the user may want to tune.
 """
 macro onsite!(kw, f)
     f, N, params = get_f_N_params(f, "Only @onsite!(args -> body; kw...) syntax supported")
-    return esc(:(Quantica.OnsiteModifier(Quantica.ParametricFunction{$N}($f, $params), Quantica.onsiteselector($kw))))
+    return esc(:(Quantica.OnsiteModifier(Quantica.ParametricFunction{$N}($f, $(Val(params))), Quantica.onsiteselector($kw))))
 end
 
 macro onsite!(f)
     f, N, params = get_f_N_params(f, "Only @onsite!(args -> body; kw...) syntax supported")
-    return esc(:(Quantica.OnsiteModifier(Quantica.ParametricFunction{$N}($f, $params), Quantica.onsiteselector())))
+    return esc(:(Quantica.OnsiteModifier(Quantica.ParametricFunction{$N}($f, $(Val(params))), Quantica.onsiteselector())))
 end
 
 """
@@ -559,12 +562,12 @@ and include any parameters that `body` depends on that the user may want to tune
 """
 macro hopping!(kw, f)
     f, N, params = get_f_N_params(f, "Only @hopping!(args -> body; kw...) syntax supported")
-    return esc(:(Quantica.HoppingModifier(Quantica.ParametricFunction{$N}($f, $params), Quantica.hoppingselector($kw))))
+    return esc(:(Quantica.HoppingModifier(Quantica.ParametricFunction{$N}($f, $(Val(params))), Quantica.hoppingselector($kw))))
 end
 
 macro hopping!(f)
     f, N, params = get_f_N_params(f, "Only @hopping!(args -> body; kw...) syntax supported")
-    return esc(:(Quantica.HoppingModifier(Quantica.ParametricFunction{$N}($f, $params), Quantica.hoppingselector())))
+    return esc(:(Quantica.HoppingModifier(Quantica.ParametricFunction{$N}($f, $(Val(params))), Quantica.hoppingselector())))
 end
 
 # Extracts normalized f, number of arguments and kwarg names from an anonymous function f
@@ -595,6 +598,10 @@ get_kwname(x::Expr) = x.head === :kw ? x.args[1] : x.head  # x.head == :...
 resolve(o::OnsiteModifier, lat) = OnsiteModifier(o.f, resolve(o.selector, lat))
 
 resolve(h::HoppingModifier, lat) = HoppingModifier(h.f, resolve(h.selector, lat))
+
+resolve(t::Tuple, lat) = _resolve(lat, t...)
+_resolve(lat, t, ts...) = (resolve(t, lat), _resolve(lat, ts...)...)
+_resolve(lat) = ()
 
 # Intended for resolved ElementModifier{N} only. The N is the number of arguments accepted.
 @inline (o!::UniformOnsiteModifier)(o, r; kw...) = o!(o; kw...)

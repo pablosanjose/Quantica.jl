@@ -24,6 +24,7 @@ tupletopair(s::Tuple) = Pair(s...)
 tuplemost(t::NTuple{N,Any}) where {N} = ntuple(i -> t[i], Val(N-1))
 
 filltuple(x, ::Val{L}) where {L} = ntuple(_ -> x, Val(L))
+filltuple(x, ::NTuple{N,Any}) where {N} = ntuple(_ -> x, Val(N))
 
 @inline tuplejoin() = ()
 @inline tuplejoin(x) = x
@@ -34,9 +35,8 @@ tupleproduct(p1, p2) = tupleproduct(ensuretuple(p1), ensuretuple(p2))
 tupleproduct(p1::NTuple{M,Any}, p2::NTuple{N,Any}) where {M,N} =
     ntuple(i -> (p1[1+fld(i-1, N)], p2[1+mod(i-1, N)]), Val(M * N))
 
-mergetuples(ts::Tuple...) = keys(merge(tonamedtuple.(ts)...))
-tonamedtuple(ts::NTuple{N,Any}) where {N} = NamedTuple{ts}(filltuple(0,Val(N)))
-
+mergetuples(ts...) = keys(merge(tonamedtuple.(ts)...))
+tonamedtuple(ts::Val{T}) where {T} = NamedTuple{T}(filltuple(0,T))
 
 _rdr(r1, r2) = (0.5 * (r1 + r2), r2 - r1)
 

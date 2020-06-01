@@ -67,10 +67,10 @@ Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
     `@onsite!`, `@hopping!`
 """
 function parametric(h::Hamiltonian, ts::ElementModifier...)
-    ts´ = resolve.(ts, Ref(h.lattice))
+    ts´ = resolve(ts, h.lattice)
     optimize!(h)  # to avoid ptrs getting out of sync if optimize! later
-    allptrs = [Int[] for _ in h.harmonics]
-    ptrdata = parametric_ptrdata!.(Ref(allptrs), Ref(h), ts´)
+    allptrs = Vector{Int}[Int[] for _ in h.harmonics]
+    ptrdata = parametric_ptrdata_tuple!(allptrs, h, ts´)
     foreach(sort!, allptrs)
     foreach(unique!, allptrs)
     params = parameters(ts...)
@@ -78,6 +78,11 @@ function parametric(h::Hamiltonian, ts::ElementModifier...)
 end
 
 parametric(ts::ElementModifier...) = h -> parametric(h, ts...)
+
+parametric_ptrdata_tuple!(allptrs, h, ts´::Tuple) = _parametric_ptrdata!(allptrs, h, ts´...)
+_parametric_ptrdata!(allptrs, h, t, ts...) =
+    (parametric_ptrdata!(allptrs, h, t), _parametric_ptrdata!(allptrs, h, ts...)...)
+_parametric_ptrdata!(allptrs, h) = ()
 
 function parametric_ptrdata!(allptrs, h::Hamiltonian{LA,L,M,<:AbstractSparseMatrix}, t::ElementModifier) where {LA,L,M}
     harmonic_ptrdata = empty_ptrdata(h, t)
@@ -100,17 +105,17 @@ function parametric_ptrdata!(allptrs, h::Hamiltonian{LA,L,M,<:AbstractSparseMatr
 end
 
 # Uniform case, one vector of nzval ptr per harmonic
-empty_ptrdata(h, t::UniformModifier)  = [Int[] for _ in h.harmonics]
+empty_ptrdata(h, t::UniformModifier)  = Vector{Int}[Int[] for _ in h.harmonics]
 
 # Non-uniform case, one vector of (ptr, r, dr) per harmonic
 function empty_ptrdata(h, t::OnsiteModifier)
     S = positiontype(h.lattice)
-    return [Tuple{Int,S}[] for _ in h.harmonics]
+    return Vector{Tuple{Int,S}}[Tuple{Int,S}[] for _ in h.harmonics]
 end
 
 function empty_ptrdata(h, t::HoppingModifier)
     S = positiontype(h.lattice)
-    return [Tuple{Int,S,S}[] for _ in h.harmonics]
+    return Vector{Tuple{Int,S,S}}[Tuple{Int,S,S}[] for _ in h.harmonics]
 end
 
 # Uniform case
@@ -182,9 +187,6 @@ optimize!(ph::ParametricHamiltonian) = ph
 Return the names of the parameter that `ph` depends on
 """
 parameters(ph::ParametricHamiltonian) = ph.parameters
-
-# This is not inferred, but it is only needed when calling parametric
-parameters(ms::ElementModifier...) = mergetuples(parameters.(ms)...)
 
 matrixtype(ph::ParametricHamiltonian) = matrixtype(parent(ph))
 
