@@ -139,8 +139,8 @@ function iterateKPM!(ket0::A, ket1::A, kini::A, adjh::Adjoint, (center, halfwidt
                     tmp[:,:,threadid()] += β * adjoint(nzv[ptr]) * ket1[rv[ptr],k]
                     #tmp += β * adjoint(nzv[ptr]) * ket1[rv[ptr],k]
                 end
-                #ket0[col, k] = tmp[:,:,threadid()]
-                ket0[col, k] = tmp
+                ket0[col, k] = tmp[:,:,threadid()]
+                #ket0[col, k] = tmp
                 #μ[threadid()] += dot(tmp, kini[col, k])
                 μ[threadid()] += dot(tmp[:,:,threadid()], kini[col, k])
                 
