@@ -131,8 +131,8 @@ function iterateKPM!(ket0::A, ket1::A, kini::A, adjh::Adjoint, (center, halfwidt
     μ = zeros(T,Threads.nthreads())   
     tmp = zeros(T,size(ket0[1,1], 1),size(ket0[1,1], 2),nthreads())
     for k in 1:size(ket0, 2)
-        @spawn begin
         for col in 1:size(h, 2)
+            @spawn begin
             @inbounds begin
                 #tmp= α * ket1[col, k] - ket0[col, k]
                 tmp[:,:,threadid()] = α * ket1[col, k] - ket0[col, k]
@@ -145,7 +145,7 @@ function iterateKPM!(ket0::A, ket1::A, kini::A, adjh::Adjoint, (center, halfwidt
                 #μ[threadid()] += dot(tmp, kini[col, k])
                 μ[threadid()] += dot(tmp[:,:,threadid()], kini[col, k])
             end        
-        end
+            end
         end
     end
     return sum(μ)
