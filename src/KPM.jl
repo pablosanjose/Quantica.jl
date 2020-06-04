@@ -1,10 +1,14 @@
 #######################################################################
 # Kernel Polynomial Method : momenta
 #######################################################################
+using Base.Threads
+import Base.Threads.@spawn
+
 struct MomentaKPM{T,B<:Tuple}
     μlist::Vector{T}
     bandbracket::B
 end
+
 struct KPMBuilder{A,H<:AbstractMatrix,T,K,B}
     A::A
     h::H
@@ -108,8 +112,8 @@ function addmomentaKPM!(b::KPMBuilder{<:AbstractMatrix,<:AbstractSparseMatrix}, 
     μlist[1] += proj(ket1, ket)
     ProgressMeter.next!(pmeter; showvalues = ())
     for n in 2:(order+1)
-        ProgressMeter.next!(pmeter; showvalues = ())
-        μ = iterateKPM!(ket0, ket1, ket, h´, bandbracket)
+            ProgressMeter.next!(pmeter; showvalues = ())
+            μ = iterateKPM!(ket0, ket1, ket, h´, bandbracket)
         μlist[n] += μ
         n + 1 > order + 1 && break
         ket0, ket1 = ket1, ket0
@@ -122,22 +126,27 @@ function iterateKPM!(ket0::A, ket1::A, kini::A, adjh::Adjoint, (center, halfwidt
     nzv = nonzeros(h)
     rv = rowvals(h)
     T = eltype(S)
-    μ = zero(T)
     α = T(-2 * center / halfwidth)
     β = T(2 / halfwidth)
-    for k in 1:size(ket0, 2)
-        for col in 1:size(h, 2)
-            @inbounds begin
-                tmp = α * ket1[col, k] - ket0[col, k]
-                for ptr in nzrange(h, col)
-                    tmp += β * adjoint(nzv[ptr]) * ket1[rv[ptr],k]
-                end
-                ket0[col, k] = tmp
-                μ += dot(tmp, kini[col, k])
+    μ = zeros(T,Threads.nthreads())   
+    #tmp = zeros(T,size(ket0[1,1], 1),size(ket0[1,1], 2),nthreads())
+    @spawn for k in 1:size(ket0, 2)
+     for col in 1:size(h, 2)
+        @inbounds begin
+            tmp= α * ket1[col, k] - ket0[col, k]
+            #tmp[:,:,threadid()] = α * ket1[col, k] - ket0[col, k]
+            for ptr in nzrange(h, col)
+                #tmp[:,:,threadid()] += β * adjoint(nzv[ptr]) * ket1[rv[ptr],k]
+                tmp += β * adjoint(nzv[ptr]) * ket1[rv[ptr],k]
             end
+            #ket0[col, k] = tmp[:,:,threadid()]
+            ket0[col, k] = tmp
+            μ[threadid()] += dot(tmp, kini[col, k])
+            #μ[threadid()] += dot(tmp[:,:,threadid()], kini[col, k])
+        end        
         end
     end
-    return μ
+    return sum(μ)
 end
 
 function addmomentaKPM!(b::KPMBuilder{<:UniformScaling, <:AbstractSparseMatrix}, pmeter)
