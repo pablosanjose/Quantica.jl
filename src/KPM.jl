@@ -168,11 +168,12 @@ function iterateKPM!(ket0::A, ket1::A, adjh::Adjoint, (center, halfwidth)) where
     nzv = nonzeros(h)
     rv = rowvals(h)
     T = eltype(S)
-    μ = μ´ = zero(T)
+    #μ = μ´ = zero(T)
+    μ = μ´ = zeros(T,Threads.nthreads())
     α = T(-2 * center / halfwidth)
     β = T(2 / halfwidth)
     for k in 1:size(ket0, 2)
-        for col in 1:size(h, 2)
+        @threads for col in 1:size(h, 2)
             @inbounds begin
                 k1 = ket1[col, k]
                 tmp = α * k1 - ket0[col, k]
@@ -180,12 +181,12 @@ function iterateKPM!(ket0::A, ket1::A, adjh::Adjoint, (center, halfwidth)) where
                     tmp += β * adjoint(nzv[ptr]) * ket1[rv[ptr],k]
                 end
                 ket0[col, k] = tmp
-                μ  += dot(k1, k1)
-                μ´ += dot(tmp, k1)
+                μ[threadid()]  += dot(k1, k1)
+                μ´[threadid()] += dot(tmp, k1)
             end
         end
     end
-    return μ, μ´
+    return sum(μ), sum(μ´)
 end
 
 # This is equivalent to tr(ket1'*ket2) for matrices, and ket1'*ket2 for vectors
