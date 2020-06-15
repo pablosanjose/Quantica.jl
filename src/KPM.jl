@@ -109,10 +109,10 @@ function addmomentaKPM!(b::KPMBuilder{<:AbstractMatrix,<:AbstractSparseMatrix}, 
     fill!(ket0, zero(eltype(ket0)))
     mul!(ket1, A´, ket)
     μlist[1] += proj(ket1, ket)
-    ProgressMeter.next!(pmeter; showvalues = ())
+    #ProgressMeter.next!(pmeter; showvalues = ())
     for n in 2:(order+1)
-        ProgressMeter.next!(pmeter; showvalues = ())
-        μ = iterateKPM!(ket0, ket1, ket, h´, bandbracket)
+            #ProgressMeter.next!(pmeter; showvalues = ())
+            μ = iterateKPM!(ket0, ket1, ket, h´, bandbracket)
         μlist[n] += μ
         n + 1 > order + 1 && break
         ket0, ket1 = ket1, ket0
@@ -131,7 +131,7 @@ function iterateKPM!(ket0::A, ket1::A, kini::A, adjh::Adjoint, (center, halfwidt
     for k in 1:size(ket0, 2)
         @threads for col in 1:size(h, 2)
             @inbounds begin
-                tmp = α * ket1[col, k] - ket0[col, k]
+                tmp= α * ket1[col, k] - ket0[col, k]
                 for ptr in nzrange(h, col)
                     tmp += β * adjoint(nzv[ptr]) * ket1[rv[ptr],k]
                 end
