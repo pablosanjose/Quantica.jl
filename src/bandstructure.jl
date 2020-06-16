@@ -142,7 +142,7 @@ end
     bandstructure(h::Hamiltonian; points = 13, kw...)
 
 Compute the bandstructure of `h` on a mesh over `h`'s full Brillouin zone, with `points`
-points along each axis, spanning the interval [-π,π].
+points along each axis, spanning the interval [-π,π] along each reciprocal axis.
 
     bandstructure(h::Hamiltonian, spec::MeshSpec; lift = missing, kw...)
 
