@@ -138,26 +138,26 @@ buildlift(::MeshSpec, bravais) = missing
 struct MarchingMeshSpec{L,R,T,M<:NTuple{L,Tuple{Number,Number}}} <: MeshSpec{L}
     minmaxaxes::M
     axes::SMatrix{L,L,T}
-    resolution::R
+    points::R
 end
 
 """
-    marchingmesh(minmaxaxes...; axes = 1.0 * I, resolution = 13)
+    marchingmesh(minmaxaxes...; axes = 1.0 * I, points = 13)
 
 Create a `MeshSpec` for a L-dimensional marching-tetrahedra `Mesh` over a parallelepiped
 with axes given by the columns of `axes`. The points along axis `i` are distributed between
 `first(minmaxaxes[i])` and `last(minmaxaxes[i])`. The number of points on each axis is given
-by `resolution`, or `resolution[i]` if several are given.
+by `points`, or `points[i]` if several are given.
 
 # Examples
 
 ```jldoctest
-julia> buildmesh(marchingmesh((-π, π), (0,2π); resolution = 25))
+julia> buildmesh(marchingmesh((-π, π), (0,2π); points = 25))
 Mesh{2}: mesh of a 2-dimensional manifold
   Vertices   : 625
   Edges      : 1776
 
-julia> buildmesh(marchingmesh((-π, π), (0,2π); resolution = (10,10)))
+julia> buildmesh(marchingmesh((-π, π), (0,2π); points = (10,10)))
 Mesh{2}: mesh of a 2-dimensional manifold
   Vertices   : 100
   Edges      : 261
@@ -169,13 +169,13 @@ Mesh{2}: mesh of a 2-dimensional manifold
 # External links
 - Marching tetrahedra (https://en.wikipedia.org/wiki/Marching_tetrahedra) in Wikipedia
 """
-marchingmesh(minmaxaxes::Vararg{Tuple,L}; axes = 1.0 * I, resolution = 13) where {L} =
-    MarchingMeshSpec(minmaxaxes, SMatrix{L,L}(axes), resolution)
+marchingmesh(minmaxaxes::Vararg{Tuple,L}; axes = 1.0 * I, points = 13) where {L} =
+    MarchingMeshSpec(minmaxaxes, SMatrix{L,L}(axes), points)
 
 marchingmesh(; kw...) = throw(ArgumentError("Need a finite number of ranges to define a marching mesh"))
 
 function buildmesh(m::MarchingMeshSpec{D}, bravais = missing) where {D}
-    ranges = ((b, r)->range(b...; length = r)).(m.minmaxaxes, m.resolution)
+    ranges = ((b, r)->range(b...; length = r)).(m.minmaxaxes, m.points)
     npoints = length.(ranges)
     cs = CartesianIndices(ntuple(n -> 1:npoints[n], Val(D)))
     ls = LinearIndices(cs)
@@ -217,22 +217,22 @@ struct LinearMeshSpec{N,L,T,R} <: MeshSpec{1}
     vertices::SVector{N,SVector{L,T}}
     samelength::Bool
     closed::Bool
-    resolution::R
+    points::R
 end
 
 """
-    linearmesh(nodes...; resolution = 13, samelength = false, closed = false)
+    linearmesh(nodes...; points = 13, samelength = false, closed = false)
 
 Create a `MeshSpec` for a one-dimensional `Mesh` connecting the `nodes` with straight
-segments, each containing `resolution` points (endpoints included). If a different
-resolution for each of the `N` segments is required, use `resolution::NTuple{N,Int}`.
+segments, each containing a number `points` of points (endpoints included). If a different
+number of points for each of the `N` segments is required, use `points::NTuple{N,Int}`.
 If `samelength` each segment has equal length in mesh coordinates. If `closed` the last node
 is connected to the first node.
 
 # Examples
 
 ```jldoctest
-julia> buildmesh(linearmesh(:Γ, :K, :M, :Γ; resolution = (101, 30, 30)))
+julia> buildmesh(linearmesh(:Γ, :K, :M, :Γ; points = (101, 30, 30)))
 Mesh{1}: mesh of a 1-dimensional manifold
   Vertices   : 159
   Edges      : 158
@@ -241,8 +241,8 @@ Mesh{1}: mesh of a 1-dimensional manifold
 # See also
     `marchingmesh`, `buildmesh`
 """
-linearmesh(nodes...; resolution = 13, samelength::Bool = false, closed::Bool = false) =
-    LinearMeshSpec(sanitize_BZpts(nodes), samelength, closed, resolution)
+linearmesh(nodes...; points = 13, samelength::Bool = false, closed::Bool = false) =
+    LinearMeshSpec(sanitize_BZpts(nodes), samelength, closed, points)
 
 function sanitize_BZpts(pts)
     pts´ = parse_BZpoint.(pts)
@@ -304,7 +304,7 @@ end
 buildmesh(s::LinearMeshSpec{N,L,T}) where {N,L,T} = buildmesh(s, SMatrix{L,L,T}(I))
 
 function buildmesh(s::LinearMeshSpec{N}, br) where {N}
-    ranges = ((i, r) -> range(i, i+1, length = r)).(ntuple(identity, Val(N-1)), s.resolution)
+    ranges = ((i, r) -> range(i, i+1, length = r)).(ntuple(identity, Val(N-1)), s.points)
     verts = SVector.(first(ranges))
     for r in Base.tail(ranges)
         pop!(verts)

@@ -1,22 +1,22 @@
 @testset "basic bandstructures" begin
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(-1, range = 1/√3))
-    b = bandstructure(h, resolution = 13)
+    b = bandstructure(h, points = 13)
     @test length(bands(b)) == 1
 
     h = LatticePresets.honeycomb() |>
         hamiltonian(onsite(0.5, sublats = :A) + onsite(-0.5, sublats = :B) +
                     hopping(-1, range = 1/√3))
-    b = bandstructure(h, resolution = (13, 23))
+    b = bandstructure(h, points = (13, 23))
     @test length(bands(b)) == 2
 
     h = LatticePresets.cubic() |> hamiltonian(hopping(1)) |> unitcell(2)
-    b = bandstructure(h, resolution = (5, 9, 5))
+    b = bandstructure(h, points = (5, 9, 5))
     @test length(bands(b)) == 8
 
-    b = bandstructure(h, linearmesh(:Γ, :X, resolution = 4))
+    b = bandstructure(h, linearmesh(:Γ, :X, points = 4))
     @test length(bands(b)) == 8
 
-    b = bandstructure(h, linearmesh(:Γ, :X, (0, π), :Z, :Γ, resolution = 4))
+    b = bandstructure(h, linearmesh(:Γ, :X, (0, π), :Z, :Γ, points = 4))
     @test length(bands(b)) == 8
 end
 
@@ -57,8 +57,8 @@ end
 @testset "parametric bandstructures" begin
     ph = LatticePresets.linear() |> hamiltonian(hopping(-I), orbitals = Val(2)) |> unitcell(2) |>
          parametric(@onsite!((o; k) -> o + k*I), @hopping!((t; k)-> t - k*I))
-    mesh2D = marchingmesh((0, 1), (0, 2π), resolution = 25)
-    mesh1D = marchingmesh((0, 2π), resolution = 25)
+    mesh2D = marchingmesh((0, 1), (0, 2π), points = 25)
+    mesh1D = marchingmesh((0, 2π), points = 25)
     b = bandstructure(ph, mesh2D)
     @test length(bands(b)) == 2
     b = bandstructure(ph, mesh2D, lift = (k, φ) -> (k + φ/2π, φ))

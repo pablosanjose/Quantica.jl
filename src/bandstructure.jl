@@ -139,9 +139,9 @@ end
 # bandstructure
 #######################################################################
 """
-    bandstructure(h::Hamiltonian; resolution = 13, kw...)
+    bandstructure(h::Hamiltonian; points = 13, kw...)
 
-Compute the bandstructure of `h` on a mesh over `h`'s full Brillouin zone, with `resolution`
+Compute the bandstructure of `h` on a mesh over `h`'s full Brillouin zone, with `points`
 points along each axis, spanning the interval [-π,π].
 
     bandstructure(h::Hamiltonian, spec::MeshSpec; lift = missing, kw...)
@@ -207,7 +207,7 @@ bandstructure (useful for performing shifts or other postprocessing).
 ```
 julia> h = LatticePresets.honeycomb() |> hamiltonian(hopping(-1, range = 1/√3)) |> unitcell(3);
 
-julia> bandstructure(h; resolution = 25, method = LinearAlgebraPackage())
+julia> bandstructure(h; points = 25, method = LinearAlgebraPackage())
 Bandstructure{2}: collection of 2D bands
   Bands        : 8
   Element type : scalar (Complex{Float64})
@@ -223,8 +223,8 @@ Bandstructure{1}: collection of 1D bands
     Vertices   : 37
     Edges      : 36
 
-julia> bandstructure(h, marchingmesh((0, 2π); resolution = 25); lift = φ -> (φ, 0))
-       # Equivalent to bandstructure(h, linearmesh(:Γ, :X; resolution = 11))
+julia> bandstructure(h, marchingmesh((0, 2π); points = 25); lift = φ -> (φ, 0))
+       # Equivalent to bandstructure(h, linearmesh(:Γ, :X; points = 11))
 Bandstructure{1}: collection of 1D bands
   Bands        : 18
   Element type : scalar (Complex{Float64})
@@ -236,8 +236,8 @@ Bandstructure{1}: collection of 1D bands
 # See also
     `marchingmesh`, `linearmesh`
 """
-function bandstructure(h::Hamiltonian; resolution = 13, kw...)
-    meshspec = marchingmesh(filltuple((-π, π), Val(latdim(h)))...; resolution = resolution)
+function bandstructure(h::Hamiltonian; points = 13, kw...)
+    meshspec = marchingmesh(filltuple((-π, π), Val(latdim(h)))...; points = points)
     return bandstructure(h, meshspec; kw...)
 end
 
