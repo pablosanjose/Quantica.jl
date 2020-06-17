@@ -104,36 +104,37 @@ _defaultA(::Type{S}) where {N,T,S<:SMatrix{N,N,T}} = one(T) * I
 # onto the start ket, |psi_0>
 function addmomentaKPM!(b::KPMBuilder{<:AbstractMatrix,<:AbstractSparseMatrix}, pmeter)
     μlist, ket, ket0, ket1 = b.μlist, b.ket, b.ket0, b.ket1
-    h´, A´, bandbracket = b.h', b.A', b.bandbracket
+    h, A, bandbracket = b.h, b.A, b.bandbracket
     order = length(μlist) - 1
-    mul!(ket0, A´, ket)
-    mulscaled!(ket1, h´, ket0, bandbracket)
+    mul!(ket0, A', ket)
+    mulscaled!(ket1, h', ket0, bandbracket)
     μlist[1] += proj(ket0, ket)
     μlist[2] += proj(ket1, ket)
     for n in 3:(order+1)
         ProgressMeter.next!(pmeter; showvalues = ())
-        iterateKPM!(ket0, h´, ket1, bandbracket)
+        iterateKPM!(ket0, h, ket1, bandbracket)
         μlist[n] += proj(ket0, ket)
         ket0, ket1 = ket1, ket0
     end
     return μlist
 end
 
-function addmomentaKPM!(b::KPMBuilder{<:UniformScaling, <:AbstractSparseMatrix}, pmeter)
+function addmomentaKPM!(b::KPMBuilder{<:UniformScaling, <:AbstractSparseMatrix,T}, pmeter) where {T}
     μlist, ket, ket0, ket1, = b.μlist, b.ket, b.ket0, b.ket1
-    h´, A, bandbracket = b.h', b.A, b.bandbracket
+    h, A, bandbracket = b.h, b.A, b.bandbracket
     order = length(μlist) - 1
     ket0 .= ket
-    mulscaled!(ket1, h´, ket0, bandbracket)
+    mulscaled!(ket1, h', ket0, bandbracket)
     μlist[1] += μ0 = 1.0
     μlist[2] += μ1 = proj(ket1, ket0)
+    thread_buffers = (zeros(T, Threads.nthreads()), zeros(T, Threads.nthreads()))
     for n in 3:2:(order+1)
         ProgressMeter.next!(pmeter; showvalues = ())
         ProgressMeter.next!(pmeter; showvalues = ()) # twice because of 2-step
-        μlist[n] += 2 * proj(ket1, ket1) - μ0
+        proj11, proj10 = iterateKPM!(ket0, h, ket1, bandbracket, thread_buffers)
+        μlist[n] += 2 * proj11 - μ0
         n + 1 > order + 1 && break
-        iterateKPM!(ket0, h´, ket1, bandbracket)
-        μlist[n + 1] += 2 * proj(ket1, ket0) - μ1
+        μlist[n + 1] += 2 * proj10 - μ1
         ket0, ket1 = ket1, ket0
     end
     A.λ ≈ 1 || (μlist .*= A.λ)
@@ -147,13 +148,55 @@ function mulscaled!(y, h, x, (center, halfwidth))
     return y
 end
 
-function iterateKPM!(ket0, h, ket1, (center, halfwidth))
+function iterateKPM!(ket0, h, ket1, (center, halfwidth), buff = ())
     α = 2/halfwidth
     β = 2center/halfwidth
     mul!(ket0, h, ket1, α, -1)
     @. ket0 = ket0 - β * ket1
-    return ket0
+    return proj_or_nothing(buff, ket0, ket1)
 end
+
+proj_or_nothing(::Tuple{}, ket0, ket1) = nothing
+proj_or_nothing(buff, ket0, ket1) = (proj(ket1, ket1), proj(ket1, ket0))
+
+# function iterateKPM!(ket0, h, ket1, (center, halfwidth), thread_buffers = ())
+#     nz = nonzeros(h)
+#     rv = rowvals(h)
+#     α = -2 * center / halfwidth
+#     β = 2 / halfwidth
+#     reset_buffers!(thread_buffers)
+#     @threads for row in 1:size(ket0, 1)
+#         ptrs = nzrange(h, row)
+#         @inbounds for col in 1:size(ket0, 2)
+#             k1 = ket1[row, col]
+#             tmp = α * k1 - ket0[row, col]
+#             for ptr in ptrs
+#                 tmp += β * adjoint(nz[ptr]) * ket1[rv[ptr], col]
+#             end
+#             # |k0⟩ → (⟨k1|2h - ⟨k0|)' = 2h'|k1⟩ - |k0⟩
+#             ket0[row, col] = tmp
+#             update_buffers!(thread_buffers, k1, tmp)
+#         end
+#     end
+#     return sum_buffers(thread_buffers)
+# end
+
+# reset_buffers!(::Tuple{}) = nothing
+# function reset_buffers!((q, q´))
+#     fill!(q, zero(eltype(q)))
+#     fill!(q´, zero(eltype(q´)))
+#     return nothing
+# end
+
+# @inline update_buffers!(::Tuple{}, k1, tmp) = nothing
+# @inline function update_buffers!((q, q´), k1, tmp)
+#     q[threadid()]  += dot(k1, k1)
+#     q´[threadid()] += dot(tmp, k1)
+#     return nothing
+# end
+
+# @inline sum_buffers(::Tuple{}) = nothing
+# @inline sum_buffers((q, q´)) = (sum(q), sum(q´))
 
 # This is equivalent to tr(ket1'*ket2) for matrices, and ket1'*ket2 for vectors
 proj(ket1, ket2) = dot(vec(ket1), vec(ket2))
