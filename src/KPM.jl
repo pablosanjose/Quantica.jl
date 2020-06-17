@@ -112,7 +112,7 @@ function addmomentaKPM!(b::KPMBuilder{<:AbstractMatrix,<:AbstractSparseMatrix}, 
     μlist[2] += proj(ket1, ket)
     for n in 3:(order+1)
         ProgressMeter.next!(pmeter; showvalues = ())
-        iterateKPM!(ket0, h, ket1, bandbracket)
+        iterateKPM!(ket0, h', ket1, bandbracket)
         μlist[n] += proj(ket0, ket)
         ket0, ket1 = ket1, ket0
     end
@@ -127,11 +127,13 @@ function addmomentaKPM!(b::KPMBuilder{<:UniformScaling, <:AbstractSparseMatrix,T
     mulscaled!(ket1, h', ket0, bandbracket)
     μlist[1] += μ0 = 1.0
     μlist[2] += μ1 = proj(ket1, ket0)
+    # This is not used in the currently activated codepath (BLAS mul!), but is needed in the
+    # commented out @threads codepath
     thread_buffers = (zeros(T, Threads.nthreads()), zeros(T, Threads.nthreads()))
     for n in 3:2:(order+1)
         ProgressMeter.next!(pmeter; showvalues = ())
         ProgressMeter.next!(pmeter; showvalues = ()) # twice because of 2-step
-        proj11, proj10 = iterateKPM!(ket0, h, ket1, bandbracket, thread_buffers)
+        proj11, proj10 = iterateKPM!(ket0, h', ket1, bandbracket, thread_buffers)
         μlist[n] += 2 * proj11 - μ0
         n + 1 > order + 1 && break
         μlist[n + 1] += 2 * proj10 - μ1
@@ -141,17 +143,17 @@ function addmomentaKPM!(b::KPMBuilder{<:UniformScaling, <:AbstractSparseMatrix,T
     return μlist
 end
 
-function mulscaled!(y, h, x, (center, halfwidth))
-    mul!(y, h, x)
+function mulscaled!(y, h´, x, (center, halfwidth))
+    mul!(y, h´, x)
     invhalfwidth = 1/halfwidth
     @. y = (y - center * x) * invhalfwidth
     return y
 end
 
-function iterateKPM!(ket0, h, ket1, (center, halfwidth), buff = ())
+function iterateKPM!(ket0, h´, ket1, (center, halfwidth), buff = ())
     α = 2/halfwidth
     β = 2center/halfwidth
-    mul!(ket0, h, ket1, α, -1)
+    mul!(ket0, h´, ket1, α, -1)
     @. ket0 = ket0 - β * ket1
     return proj_or_nothing(buff, ket0, ket1)
 end
@@ -159,7 +161,8 @@ end
 proj_or_nothing(::Tuple{}, ket0, ket1) = nothing
 proj_or_nothing(buff, ket0, ket1) = (proj(ket1, ket1), proj(ket1, ket0))
 
-# function iterateKPM!(ket0, h, ket1, (center, halfwidth), thread_buffers = ())
+# function iterateKPM!(ket0, h´, ket1, (center, halfwidth), thread_buffers = ())
+#     h = parent(h´)
 #     nz = nonzeros(h)
 #     rv = rowvals(h)
 #     α = -2 * center / halfwidth
