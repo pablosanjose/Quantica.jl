@@ -48,6 +48,20 @@ end
 
 similarmatrix(h, ::ArpackPackage) = similarmatrix(h, SparseMatrixCSC{blockeltype(h)})
 
+## ArnoldiMethod ##
+struct ArnoldiMethodPackage{K<:NamedTuple} <: AbstractDiagonalizeMethod
+    kw::K
+end
+
+ArnoldiMethodPackage(; kw...) = (checkloaded(:ArnoldiMethod); ArnoldiMethodPackage(values(kw)))
+
+function diagonalize(matrix, method::ArnoldiMethodPackage)
+    ϵ, ψ = Main.ArnoldiMethod.partialschur(matrix; (method.kw)...)
+    return ϵ, ψ
+end
+
+similarmatrix(h, ::ArnoldiMethodPackage) = similarmatrix(h, SparseMatrixCSC{blockeltype(h)})
+
 ## IterativeSolvers ##
 
 struct KrylovKitPackage{K<:NamedTuple} <: AbstractDiagonalizeMethod

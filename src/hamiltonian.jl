@@ -837,6 +837,8 @@ function similarmatrix(h, ::Type{A´} = matrixtype(h)) where {A´<:AbstractMatri
     return _similarmatrix(parent(h), matrixtype(h), A´)
 end
 
+similarmatrix(h, ::Missing) = similarmatrix(h)
+
 # We only provide the type combinastions that make sense
 _similarmatrix(h, ::Type{A}, ::Type{A´}) where {A´,A<:A´} =
     similar(h.harmonics[1].h)
