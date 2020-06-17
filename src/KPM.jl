@@ -28,8 +28,7 @@ function KPMBuilder(h::AbstractMatrix{Tv}, A = _defaultA(Tv); ket = missing, ord
     missingket = ket === missing
     ket´ = missingket ? ketundef(h) : ket
     iscompatibleket(h, ket´) || throw(ArgumentError("ket is incompatible with Hamiltonian"))
-    builder = KPMBuilder(A, h, bandbracket, order, missingket,
-        μlist, ket´, similar(ket´), similar(ket´))
+    builder = KPMBuilder(A, h, bandbracket, order, missingket, μlist, ket´, similar(ket´), similar(ket´))
     return builder
 end
 
@@ -93,7 +92,8 @@ function momentaKPM(h::AbstractMatrix, A = _defaultA(eltype(h)); randomkets = 1,
         pmeter = Progress(b.order, "Computing moments: ")
         addmomentaKPM!(b, pmeter)
     end
-    return MomentaKPM(jackson!(b.μlist), b.bandbracket)
+    jackson!(b.μlist)
+    return MomentaKPM(b.μlist, b.bandbracket)
 end
 
 _defaultA(::Type{T}) where {T<:Number} = one(T) * I
@@ -106,86 +106,53 @@ function addmomentaKPM!(b::KPMBuilder{<:AbstractMatrix,<:AbstractSparseMatrix}, 
     μlist, ket, ket0, ket1 = b.μlist, b.ket, b.ket0, b.ket1
     h´, A´, bandbracket = b.h', b.A', b.bandbracket
     order = length(μlist) - 1
-    fill!(ket0, zero(eltype(ket0)))
-    mul!(ket1, A´, ket)
-    μlist[1] += proj(ket1, ket)
-    ProgressMeter.next!(pmeter; showvalues = ())
-    for n in 2:(order+1)
+    mul!(ket0, A´, ket)
+    mulscaled!(ket1, h´, ket0, bandbracket)
+    μlist[1] += proj(ket0, ket)
+    μlist[2] += proj(ket1, ket)
+    for n in 3:(order+1)
         ProgressMeter.next!(pmeter; showvalues = ())
-        μ = iterateKPM!(ket0, ket1, ket, h´, bandbracket)
-        μlist[n] += μ
-        n + 1 > order + 1 && break
+        iterateKPM!(ket0, h´, ket1, bandbracket)
+        μlist[n] += proj(ket0, ket)
         ket0, ket1 = ket1, ket0
     end
     return μlist
 end
 
-function iterateKPM!(ket0::A, ket1::A, kini::A, adjh::Adjoint, (center, halfwidth)) where {S,A<:AbstractArray{S}}
-    h = adjh.parent
-    nzv = nonzeros(h)
-    rv = rowvals(h)
-    T = eltype(S)
-    α = T(-2 * center / halfwidth)
-    β = T(2 / halfwidth)
-    μ = zeros(T, Threads.nthreads())   
-    for k in 1:size(ket0, 2)
-        @threads for col in 1:size(h, 2)
-            @inbounds begin
-                tmp= α * ket1[col, k] - ket0[col, k]
-                for ptr in nzrange(h, col)
-                    tmp += β * adjoint(nzv[ptr]) * ket1[rv[ptr],k]
-                end
-                ket0[col, k] = tmp
-                μ[threadid()] += dot(tmp, kini[col, k])
-            end
-        end
-    end
-    return sum(μ)
-end
-
 function addmomentaKPM!(b::KPMBuilder{<:UniformScaling, <:AbstractSparseMatrix}, pmeter)
-    μlist, ket, ket0, ket1 = b.μlist, b.ket, b.ket0, b.ket1
+    μlist, ket, ket0, ket1, = b.μlist, b.ket, b.ket0, b.ket1
     h´, A, bandbracket = b.h', b.A, b.bandbracket
     order = length(μlist) - 1
-    fill!(ket0, zero(eltype(ket0)))
-    ket1 .= ket
-    for n in 1:2:(order+1)
+    ket0 .= ket
+    mulscaled!(ket1, h´, ket0, bandbracket)
+    μlist[1] += μ0 = 1.0
+    μlist[2] += μ1 = proj(ket1, ket0)
+    for n in 3:2:(order+1)
         ProgressMeter.next!(pmeter; showvalues = ())
         ProgressMeter.next!(pmeter; showvalues = ()) # twice because of 2-step
-        μ, μ´ = iterateKPM!(ket0, ket1, h´, bandbracket)
-        μlist[n] += μ
+        μlist[n] += 2 * proj(ket1, ket1) - μ0
         n + 1 > order + 1 && break
-        μlist[n + 1] += μ´
+        iterateKPM!(ket0, h´, ket1, bandbracket)
+        μlist[n + 1] += 2 * proj(ket1, ket0) - μ1
         ket0, ket1 = ket1, ket0
     end
     A.λ ≈ 1 || (μlist .*= A.λ)
     return μlist
 end
 
-function iterateKPM!(ket0::A, ket1::A, adjh::Adjoint, (center, halfwidth)) where {S,A<:AbstractArray{S}}
-    h = adjh.parent
-    nzv = nonzeros(h)
-    rv = rowvals(h)
-    T = eltype(S)
-    μ = zeros(T, Threads.nthreads())
-    μ´ = zeros(T, Threads.nthreads())
-    α = T(-2 * center / halfwidth)
-    β = T(2 / halfwidth)
-    for k in 1:size(ket0, 2)
-        @threads for col in 1:size(h, 2)
-            @inbounds begin
-                k1 = ket1[col, k]
-                tmp = α * k1 - ket0[col, k]
-                for ptr in nzrange(h, col)
-                    tmp += β * adjoint(nzv[ptr]) * ket1[rv[ptr],k]
-                end
-                ket0[col, k] = tmp
-                μ[threadid()]  += dot(k1, k1)
-                μ´[threadid()] += dot(tmp, k1)
-            end
-        end
-    end
-    return sum(μ), sum(μ´)
+function mulscaled!(y, h, x, (center, halfwidth))
+    mul!(y, h, x)
+    invhalfwidth = 1/halfwidth
+    @. y = (y - center * x) * invhalfwidth
+    return y
+end
+
+function iterateKPM!(ket0, h, ket1, (center, halfwidth))
+    α = 2/halfwidth
+    β = 2center/halfwidth
+    mul!(ket0, h, ket1, α, -1)
+    @. ket0 = ket0 - β * ket1
+    return ket0
 end
 
 # This is equivalent to tr(ket1'*ket2) for matrices, and ket1'*ket2 for vectors
