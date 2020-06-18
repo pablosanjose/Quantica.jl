@@ -168,9 +168,9 @@ reads `v = (p₁,..., pᵢ, ϕ₁,..., ϕⱼ)`, with `p` the values assigned to 
     bandstructure(matrixf::Function, mesh::Mesh; kw...)
 
 Compute the bandstructure of the Hamiltonian matrix `m = matrixf(ϕ)`, with `ϕ` evaluated on
-the vertices `v` of the `mesh`. Note that `ϕ` is either a `Tuple` or an `SVector`, but it is
-not splatted into `matrixf`, i.e. `matrixf(x) = ...` or `matrixf(x, y) = ...` will not work,
-use `matrixf((x,)) = ...` or `matrixf((x, y)) = ...` instead.
+the vertices `v` of the `mesh`. Note that `ϕ` in `matrixf(ϕ)` is an unsplatted container.
+Hence, i.e. `matrixf(x) = ...` or `matrixf(x, y) = ...` will not work, use `matrixf((x,)) =
+...` or `matrixf((x, y)) = ...` instead.
 
 # Options
 
