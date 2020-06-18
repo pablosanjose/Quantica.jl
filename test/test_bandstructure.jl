@@ -24,7 +24,7 @@ end
     hc = LatticePresets.honeycomb() |> hamiltonian(hopping(-1, sublats = :A=>:B, plusadjoint = true))
     matrix = similarmatrix(hc, LinearAlgebraPackage())
     hf((x,)) = bloch!(matrix, hc, (x, -x))
-    mesh = marchingmesh((0, 1))
+    mesh = buildmesh(marchingmesh((0, 1)))
     b = bandstructure(hf, mesh)
     @test length(bands(b)) == 2
 
@@ -32,7 +32,7 @@ end
     hp2 = parametric(hc2, @hopping!((t; s) -> s*t))
     matrix2 = similarmatrix(hc2, LinearAlgebraPackage())
     hf2((s, x)) = bloch!(matrix2, hp2(s = s), (x, x))
-    mesh2 = marchingmesh((0, 1), (0, 1))
+    mesh2 = buildmesh(marchingmesh((0, 1), (0, 1)))
     b = bandstructure(hf2, mesh2)
     @test length(bands(b)) == 2
 end

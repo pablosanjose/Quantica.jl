@@ -128,9 +128,43 @@ abstract type MeshSpec{L} end
 Base.show(io::IO, spec::MeshSpec{L}) where {L} =
     print(io, "MeshSpec{$L} : specifications for building a $(L)D mesh.")
 
-#fallback
-buildlift(::MeshSpec, bravais) = missing
+"""
+    buildlift(s::MeshSpec{L}, h::Union{Hamiltonian,ParametricHamiltonian})
 
+Build a lift function that maps a `Mesh` built with `buildmesh(s, h)` to the
+Brillouin/parameter space of `h` (see `bandstructure` for details).
+
+# See also
+    `buildmesh`, `marchingmesh`, `linearmesh`
+"""
+buildlift(s::MeshSpec, h::Union{Hamiltonian,ParametricHamiltonian}) =
+    buildlift(s, bravais_parameters(h))
+
+"""
+    buildmesh(s::MeshSpec, h::Union{Hamiltonian,ParametricHamiltonian})
+
+Build a `Mesh` from the spec `s`, using properties of `h` as needed. The use of `h` depends
+on the spec. For a `LinearMeshSpec` with `samelength = false`, the Bravais matrix of `h` is
+needed to work out the length of each mesh segment in the Brillouin zone, while for other
+specs such as `MarchingMeshSpec`, `h` is not needed and may be omitted (see example).
+
+# Examples
+
+```jldoctest
+julia> buildmesh(marchingmesh((-π, π), (0, 2π), points = 10))
+Mesh{2}: mesh of a 2-dimensional manifold
+  Vertices   : 100
+  Edges      : 261
+```
+
+# See also
+    `buildlift`, `marchingmesh`, `linearmesh`
+"""
+buildmesh(s::MeshSpec, h::Union{Hamiltonian,ParametricHamiltonian}) =
+    buildmesh(s, bravais_parameters(h))
+
+bravais_parameters(h::Hamiltonian) = bravais(h)
+bravais_parameters(ph::ParametricHamiltonian{P}) where {P} = _blockdiag(SMatrix{P,P}(I), bravais(ph))
 
 #######################################################################
 # MarchingMeshSpec
@@ -174,7 +208,7 @@ marchingmesh(minmaxaxes::Vararg{Tuple,L}; axes = 1.0 * I, points = 13) where {L}
 
 marchingmesh(; kw...) = throw(ArgumentError("Need a finite number of ranges to define a marching mesh"))
 
-function buildmesh(m::MarchingMeshSpec{D}, bravais = missing) where {D}
+function buildmesh(m::MarchingMeshSpec{D}, bravais::SMatrix = SMatrix{D,D}(I)) where {D}
     ranges = ((b, r)->range(b...; length = r)).(m.minmaxaxes, m.points)
     npoints = length.(ranges)
     cs = CartesianIndices(ntuple(n -> 1:npoints[n], Val(D)))
@@ -242,10 +276,14 @@ Mesh{1}: mesh of a 1-dimensional manifold
     `marchingmesh`, `buildmesh`
 """
 linearmesh(nodes...; points = 13, samelength::Bool = false, closed::Bool = false) =
-    LinearMeshSpec(sanitize_BZpts(nodes), samelength, closed, points)
+    LinearMeshSpec(sanitize_BZpts(nodes, closed), samelength, closed, points)
 
-function sanitize_BZpts(pts)
+function sanitize_BZpts(pts, closed)
     pts´ = parse_BZpoint.(pts)
+    if closed
+        all(isapprox.(first(pts´), last(pts´))) ||
+            throw(ArgumentError("Closed linear meshes should have equal first and last nodes."))
+    end
     dim = maximum(length.(pts´))
     pts´´ = SVector(padright.(pts´, Val(dim)))
     return pts´´
@@ -301,9 +339,7 @@ function idx_to_node(s, br)
     return nodefunc
 end
 
-buildmesh(s::LinearMeshSpec{N,L,T}) where {N,L,T} = buildmesh(s, SMatrix{L,L,T}(I))
-
-function buildmesh(s::LinearMeshSpec{N}, br) where {N}
+function buildmesh(s::LinearMeshSpec{N}, br::SMatrix) where {N}
     ranges = ((i, r) -> range(i, i+1, length = r)).(ntuple(identity, Val(N-1)), s.points)
     verts = SVector.(first(ranges))
     for r in Base.tail(ranges)

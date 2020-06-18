@@ -203,7 +203,7 @@ sigma = 1im)` to compute the bandstructure.
 bandstructure (useful for performing shifts or other postprocessing).
 
 # Examples
-```
+```jldoctest
 julia> h = LatticePresets.honeycomb() |> hamiltonian(hopping(-1, range = 1/√3)) |> unitcell(3);
 
 julia> bandstructure(h; points = 25, method = LinearAlgebraPackage())
@@ -241,14 +241,10 @@ function bandstructure(h::Hamiltonian; points = 13, kw...)
 end
 
 function bandstructure(h::Union{Hamiltonian,ParametricHamiltonian}, spec::MeshSpec; lift = missing, kw...)
-    br = bravais_parameters(h)
-    mesh = buildmesh(spec, br)
-    lift´ = lift === missing ? buildlift(spec, br) : lift
+    mesh = buildmesh(spec, h)
+    lift´ = lift === missing ? buildlift(spec, h) : lift
     return bandstructure(h, mesh; lift = lift´, kw...)
 end
-
-bravais_parameters(h::Hamiltonian) = bravais(h)
-bravais_parameters(ph::ParametricHamiltonian{P}) where {P} = _blockdiag(SMatrix{P,P}(I), bravais(ph))
 
 function bandstructure(h::Union{Hamiltonian,ParametricHamiltonian}, mesh::Mesh;
                        method = defaultmethod(h), lift = missing, transform = missing, kw...)
