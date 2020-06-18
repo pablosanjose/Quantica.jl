@@ -29,12 +29,13 @@ The Quantica.jl package provides an expressive API to build arbitrary quantum sy
 Some of this functionality require loading one or more third-party packages, which include the following:
 - KPM: `FFTW`, `ArnoldiMethod`
 - Bandstructures: `Arpack`, `ArnoldiMethod`, `KrylovKit`
+
 The user is told when this is needed. We do this to reduce dependencies and launch time with packages whose functionality is not essential for the use of Quantica.jl
 
 Other functions become available after loading specific third-party packages:
 - Makie: enables `plot(::Hamiltonian)` and `plot(::Bandstructure)` (for 1D and 2D bandstructures)
 - VegaLite: enables `vlplot(::Hamiltonian)` and `vlplot(::Bandstructure)` (for 1D bandstructures)
 
-!!! tip "Funding"
+### Funding
 
     This work has been partly funded by the Spanish Ministry of Economy and Competitiveness under Grant Nos. FIS2015-65706-P, PCI2018-093026, and the CSIC Intramural Project 201760I086.
