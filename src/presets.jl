@@ -19,8 +19,8 @@ triangular(; a0 = 1, kw...) =
 
 honeycomb(; a0 = 1, kw...) =
     lattice(a0 * bravais((cos(pi/3), sin(pi/3)), (-cos(pi/3), sin(pi/3)); kw...),
-        sublat((0.0, -0.5/sqrt(3.0)), name = :A),
-        sublat((0.0,  0.5/sqrt(3.0)), name = :B); kw...)
+        sublat((0.0, -0.5*a0/sqrt(3.0)), name = :A),
+        sublat((0.0,  0.5*a0/sqrt(3.0)), name = :B); kw...)
 
 cubic(; a0 = 1, kw...) =
     lattice(a0 * bravais((1., 0., 0.), (0., 1., 0.), (0., 0., 1.); kw...),
@@ -43,6 +43,13 @@ end # module
 module HamiltonianPresets
 
 using Quantica, LinearAlgebra
+
+function graphene(; a0 = 0.246, range = a0/sqrt(3), t0 = 2.7)
+    lat = LatticePresets.honeycomb(a0 = a0)
+    # h = hamiltonian(lat, hopping((r, dr) -> t0 * exp(-3*(norm(dr)/a0 - 1)), range = 1.01*range), orbitals = size(t0, 1))
+    h = hamiltonian(lat, hopping(-I, range = range), orbitals = size(t0, 1))
+    return h
+end
 
 function twisted_bilayer_graphene(;
     twistindex = 1, twistindices = (twistindex, 1), a0 = 0.246, interlayerdistance = 1.36a0,

@@ -261,12 +261,12 @@ Create a `MeshSpec` for a one-dimensional `Mesh` connecting the `nodes` with str
 segments, each containing a number `points` of points (endpoints included). If a different
 number of points for each of the `N` segments is required, use `points::NTuple{N,Int}`.
 If `samelength` each segment has equal length in mesh coordinates. If `closed` the last node
-is connected to the first node.
+is connected to the first node (must be equal)
 
 # Examples
 
 ```jldoctest
-julia> buildmesh(linearmesh(:Γ, :K, :M, :Γ; points = (101, 30, 30)))
+julia> buildmesh(linearmesh(:Γ, :K, :M, :Γ; points = (101, 30, 30)), HamiltonianPresets.graphene())
 Mesh{1}: mesh of a 1-dimensional manifold
   Vertices   : 159
   Edges      : 158
