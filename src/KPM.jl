@@ -1,6 +1,8 @@
 #######################################################################
 # Kernel Polynomial Method : momenta
 #######################################################################
+using Base.Threads
+
 struct MomentaKPM{T,B<:Tuple}
     mulist::Vector{T}
     bandbracket::B
