@@ -168,8 +168,7 @@ reads `v = (p₁,..., pᵢ, ϕ₁,..., ϕⱼ)`, with `p` the values assigned to 
     bandstructure(matrixf::Function, mesh::Mesh; kw...)
 
 Compute the bandstructure of the Hamiltonian matrix `m = matrixf(ϕ)`, with `ϕ` evaluated on
-the vertices `v` of `mesh`. No `lift` option is allowed in this case. If needed, include it
-in the definition of `matrixf`. Note that `ϕ` is either a `Tuple` or an `SVector`, but it is
+the vertices `v` of the `mesh`. Note that `ϕ` is either a `Tuple` or an `SVector`, but it is
 not splatted into `matrixf`, i.e. `matrixf(x) = ...` or `matrixf(x, y) = ...` will not work,
 use `matrixf((x,)) = ...` or `matrixf((x, y)) = ...` instead.
 
@@ -251,34 +250,34 @@ end
 bravais_parameters(h::Hamiltonian) = bravais(h)
 bravais_parameters(ph::ParametricHamiltonian{P}) where {P} = _blockdiag(SMatrix{P,P}(I), bravais(ph))
 
-bandstructure(h::Function, spec::MeshSpec; kw...) =
-    bandstructure(h, buildmesh(spec); kw...)
-
 function bandstructure(h::Union{Hamiltonian,ParametricHamiltonian}, mesh::Mesh;
                        method = defaultmethod(h), lift = missing, transform = missing, kw...)
     # ishermitian(h) || throw(ArgumentError("Hamiltonian must be hermitian"))
     matrix = similarmatrix(h, method)
     codiag = codiagonalizer(h, matrix, mesh, lift)
     d = DiagonalizeHelper(method, codiag; kw...)
-    matrixf(φs) = bloch!(matrix, h, applylift(lift, φs))
+    matrixf(ϕs) = bloch!(matrix, h, applylift(lift, ϕs))
     b = _bandstructure(matrixf, matrix, mesh, d)
     transform === missing || transform!(transform, b)
     return b
 end
 
-# Should perhaps RFC to be merged with the above
 function bandstructure(matrixf::Function, mesh::Mesh;
-                       matrix = _samplematrix(matrixf, mesh),
-                       method = defaultmethod(matrix),
-                       minprojection = 0.5, transform = missing, kw...)
-    codiag = codiagonalizer(matrixf, matrix, mesh)
-    d = DiagonalizeHelper(method, codiag; kw...)
-    b = _bandstructure(matrixf, matrix, mesh, d)
+                       method = missing, lift = missing, minprojection = 0.5, transform = missing, kw...)
+    matrixf´ = _wraplift(matrixf, lift)
+    matrix = _samplematrix(matrixf´, mesh)
+    method´ = method === missing ? defaultmethod(matrix) : method
+    codiag = codiagonalizer(matrixf´, matrix, mesh)
+    d = DiagonalizeHelper(method´, codiag; kw...)
+    b = _bandstructure(matrixf´, matrix, mesh, d)
     transform === missing || transform!(transform, b)
     return b
 end
 
 _samplematrix(matrixf, mesh) = matrixf(Tuple(first(vertices(mesh))))
+
+_wraplift(matrixf, lift::Missing) = matrixf
+_wraplift(matrixf, lift) = ϕs -> matrixf(applylift(lift, ϕs))
 
 @inline applylift(lift::Missing, ϕs) = toSVector(ϕs)
 
