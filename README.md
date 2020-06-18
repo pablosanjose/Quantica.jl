@@ -15,15 +15,15 @@ The Quantica.jl package provides an expressive API to build arbitrary quantum sy
 - Compute electronic structures and expectation values using Kernel Polynomial methods
 
 # Exported API
-- `lattice`, `sublat`, `bravais`: build `Lattice`'s
-- `dims`, `sites`: inspect `Lattices`
-- `hopping`, `onsite`: build a `TightbindingModel`
-- `hamiltonian`: build a `Hamiltonian` from `TightbindingModel` and a `Lattice`
-- `parametric`, `@onsite!`, `@hopping!`, `parameters`: build a `ParametricHamiltonian`
-- `supercell`, `unitcell`, `flatten`, `wrap`, `transform!`, `combine`: build derived `Lattice`'s or `Hamiltonian`'s
-- `marchingmesh`, `linearmesh`: define a `MeshSpec` to build a bandstructure discretization mesh
-- `bandstructure`, `spectrum`: compute the generalized bandstructure of a `Hamiltonian` or a `ParametricHamiltonian`
-- `bands`, `energies`, `states`: inspect `Spectrum` and `Bandstructure` objects
+- `lattice`, `sublat`, `bravais`: build lattices
+- `dims`, `sites`: inspect lattices
+- `hopping`, `onsite`: build tightbinding models
+- `hamiltonian`: build a Hamiltonian from tightbinding model and a lattice
+- `parametric`, `@onsite!`, `@hopping!`, `parameters`: build a parametric Hamiltonian
+- `supercell`, `unitcell`, `flatten`, `wrap`, `transform!`, `combine`: build derived lattices or Hamiltonians
+- `marchingmesh`, `linearmesh`: define a specification to build a bandstructure discretization mesh
+- `bandstructure`, `spectrum`: compute the generalized bandstructure of a Hamiltonian or a `ParametricHamiltonian`
+- `bands`, `energies`, `states`: inspect spectrum and bandstructure objects
 - `momentaKPM`, `dosKPM`, `averageKPM`, `densityKPM`, `bandrangeKPM`: Kernel Polynomial Method
 
 Some of this functionality require loading one or more third-party packages, which include the following:
