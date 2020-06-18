@@ -1,6 +1,8 @@
 #######################################################################
 # Kernel Polynomial Method : momenta
 #######################################################################
+using Base.Threads
+
 struct MomentaKPM{T,B<:Tuple}
     mulist::Vector{T}
     bandbracket::B
@@ -168,44 +170,44 @@ function momentaKPM(h::AbstractMatrix, A = _defaultA(eltype(h)); randomkets = 1,
 proj(ket1, ket2) = dot(vec(ket1), vec(ket2))
 
 # function iterateKPM!(ket0, h´, ket1, (center, halfwidth), thread_buffers = ())
- #     h = parent(h´)
- #     nz = nonzeros(h)
- #     rv = rowvals(h)
- #     α = -2 * center / halfwidth
- #     β = 2 / halfwidth
- #     reset_buffers!(thread_buffers)
- #     @threads for row in 1:size(ket0, 1)
- #         ptrs = nzrange(h, row)
- #         @inbounds for col in 1:size(ket0, 2)
- #             k1 = ket1[row, col]
- #             tmp = α * k1 - ket0[row, col]
- #             for ptr in ptrs
- #                 tmp += β * adjoint(nz[ptr]) * ket1[rv[ptr], col]
- #             end
- #             # |k0⟩ → (⟨k1|2h - ⟨k0|)' = 2h'|k1⟩ - |k0⟩
- #             ket0[row, col] = tmp
- #             update_buffers!(thread_buffers, k1, tmp)
- #         end
- #     end
- #     return sum_buffers(thread_buffers)
- # end
+#     h = parent(h´)
+#     nz = nonzeros(h)
+#     rv = rowvals(h)
+#     α = -2 * center / halfwidth
+#     β = 2 / halfwidth
+#     reset_buffers!(thread_buffers)
+#     @threads for row in 1:size(ket0, 1)
+#         ptrs = nzrange(h, row)
+#         @inbounds for col in 1:size(ket0, 2)
+#             k1 = ket1[row, col]
+#             tmp = α * k1 - ket0[row, col]
+#             for ptr in ptrs
+#                 tmp += β * adjoint(nz[ptr]) * ket1[rv[ptr], col]
+#             end
+#             # |k0⟩ → (⟨k1|2h - ⟨k0|)' = 2h'|k1⟩ - |k0⟩
+#             ket0[row, col] = tmp
+#             update_buffers!(thread_buffers, k1, tmp)
+#         end
+#     end
+#     return sum_buffers(thread_buffers)
+# end
 
- # reset_buffers!(::Tuple{}) = nothing
- # function reset_buffers!((q, q´))
- #     fill!(q, zero(eltype(q)))
- #     fill!(q´, zero(eltype(q´)))
- #     return nothing
- # end
+# reset_buffers!(::Tuple{}) = nothing
+# function reset_buffers!((q, q´))
+#     fill!(q, zero(eltype(q)))
+#     fill!(q´, zero(eltype(q´)))
+#     return nothing
+# end
 
- # @inline update_buffers!(::Tuple{}, k1, tmp) = nothing
- # @inline function update_buffers!((q, q´), k1, tmp)
- #     q[threadid()]  += dot(k1, k1)
- #     q´[threadid()] += dot(tmp, k1)
- #     return nothing
- # end
+# @inline update_buffers!(::Tuple{}, k1, tmp) = nothing
+# @inline function update_buffers!((q, q´), k1, tmp)
+#     q[threadid()]  += dot(k1, k1)
+#     q´[threadid()] += dot(tmp, k1)
+#     return nothing
+# end
 
- # @inline sum_buffers(::Tuple{}) = nothing
- # @inline sum_buffers((q, q´)) = (sum(q), sum(q´))
+# @inline sum_buffers(::Tuple{}) = nothing
+# @inline sum_buffers((q, q´)) = (sum(q), sum(q´))
 
 function randomize!(v::AbstractVector{T}) where {T}
     v .= _randomize.(v)
