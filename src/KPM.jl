@@ -84,128 +84,128 @@ end
 
 function momentaKPM(h::AbstractMatrix, A = _defaultA(eltype(h)); randomkets = 1, kw...)
     b = KPMBuilder(h, A; kw...)
-     if b.missingket
-         pmeter = Progress(b.order * randomkets, "Averaging moments: ")
-         for n in 1:randomkets
-             randomize!(b.ket)
-             addmomentaKPM!(b, pmeter)
-         end
-         b.mulist ./= randomkets
-     else
-         pmeter = Progress(b.order, "Computing moments: ")
-         addmomentaKPM!(b, pmeter)
-     end
-     jackson!(b.mulist)
-     return MomentaKPM(b.mulist, b.bandbracket)
- end
+    if b.missingket
+        pmeter = Progress(b.order * randomkets, "Averaging moments: ")
+        for n in 1:randomkets
+            randomize!(b.ket)
+            addmomentaKPM!(b, pmeter)
+        end
+        b.mulist ./= randomkets
+    else
+        pmeter = Progress(b.order, "Computing moments: ")
+        addmomentaKPM!(b, pmeter)
+    end
+    jackson!(b.mulist)
+    return MomentaKPM(b.mulist, b.bandbracket)
+end
 
- _defaultA(::Type{T}) where {T<:Number} = one(T) * I
- _defaultA(::Type{S}) where {N,T,S<:SMatrix{N,N,T}} = one(T) * I
+_defaultA(::Type{T}) where {T<:Number} = one(T) * I
+_defaultA(::Type{S}) where {N,T,S<:SMatrix{N,N,T}} = one(T) * I
 
- # This iterates bras <psi_n| = <psi_0|AT_n(h) instead of kets (faster CSC multiplication)
- # In practice we iterate their conjugate |psi_n> = T_n(h') A'|psi_0>, and do the projection
- # onto the start ket, |psi_0>
- function addmomentaKPM!(b::KPMBuilder{<:AbstractMatrix,<:AbstractSparseMatrix}, pmeter)
-     mulist, ket, ket0, ket1 = b.mulist, b.ket, b.ket0, b.ket1
-     h, A, bandbracket = b.h, b.A, b.bandbracket
-     order = length(mulist) - 1
-     mul!(ket0, A', ket)
-     mulscaled!(ket1, h', ket0, bandbracket)
-     mulist[1] += proj(ket0, ket)
-     mulist[2] += proj(ket1, ket)
-     for n in 3:(order+1)
-         ProgressMeter.next!(pmeter; showvalues = ())
-         iterateKPM!(ket0, h', ket1, bandbracket)
-         mulist[n] += proj(ket0, ket)
-         ket0, ket1 = ket1, ket0
-     end
-     return mulist
- end
+# This iterates bras <psi_n| = <psi_0|AT_n(h) instead of kets (faster CSC multiplication)
+# In practice we iterate their conjugate |psi_n> = T_n(h') A'|psi_0>, and do the projection
+# onto the start ket, |psi_0>
+function addmomentaKPM!(b::KPMBuilder{<:AbstractMatrix,<:AbstractSparseMatrix}, pmeter)
+    mulist, ket, ket0, ket1 = b.mulist, b.ket, b.ket0, b.ket1
+    h, A, bandbracket = b.h, b.A, b.bandbracket
+    order = length(mulist) - 1
+    mul!(ket0, A', ket)
+    mulscaled!(ket1, h', ket0, bandbracket)
+    mulist[1] += proj(ket0, ket)
+    mulist[2] += proj(ket1, ket)
+    for n in 3:(order+1)
+        ProgressMeter.next!(pmeter; showvalues = ())
+        iterateKPM!(ket0, h', ket1, bandbracket)
+        mulist[n] += proj(ket0, ket)
+        ket0, ket1 = ket1, ket0
+    end
+    return mulist
+end
 
- function addmomentaKPM!(b::KPMBuilder{<:UniformScaling, <:AbstractSparseMatrix,T}, pmeter) where {T}
-     mulist, ket, ket0, ket1, = b.mulist, b.ket, b.ket0, b.ket1
-     h, A, bandbracket = b.h, b.A, b.bandbracket
-     order = length(mulist) - 1
-     ket0 .= ket
-     mulscaled!(ket1, h', ket0, bandbracket)
-     mulist[1] += μ0 = 1.0
-     mulist[2] += μ1 = proj(ket1, ket0)
-     # This is not used in the currently activated codepath (BLAS mul!), but is needed in the
-     # commented out @threads codepath
-     thread_buffers = (zeros(T, Threads.nthreads()), zeros(T, Threads.nthreads()))
-     for n in 3:2:(order+1)
-         ProgressMeter.next!(pmeter; showvalues = ())
-         ProgressMeter.next!(pmeter; showvalues = ()) # twice because of 2-step
-         proj11, proj10 = iterateKPM!(ket0, h', ket1, bandbracket, thread_buffers)
-         mulist[n] += 2 * proj11 - μ0
-         n + 1 > order + 1 && break
-         mulist[n + 1] += 2 * proj10 - μ1
-         ket0, ket1 = ket1, ket0
-     end
-     A.λ ≈ 1 || (mulist .*= A.λ)
-     return mulist
- end
+function addmomentaKPM!(b::KPMBuilder{<:UniformScaling, <:AbstractSparseMatrix,T}, pmeter) where {T}
+    mulist, ket, ket0, ket1, = b.mulist, b.ket, b.ket0, b.ket1
+    h, A, bandbracket = b.h, b.A, b.bandbracket
+    order = length(mulist) - 1
+    ket0 .= ket
+    mulscaled!(ket1, h', ket0, bandbracket)
+    mulist[1] += μ0 = 1.0
+    mulist[2] += μ1 = proj(ket1, ket0)
+    # This is not used in the currently activated codepath (BLAS mul!), but is needed in the
+    # commented out @threads codepath
+    thread_buffers = (zeros(T, Threads.nthreads()), zeros(T, Threads.nthreads()))
+    for n in 3:2:(order+1)
+        ProgressMeter.next!(pmeter; showvalues = ())
+        ProgressMeter.next!(pmeter; showvalues = ()) # twice because of 2-step
+        proj11, proj10 = iterateKPM!(ket0, h', ket1, bandbracket, thread_buffers)
+        mulist[n] += 2 * proj11 - μ0
+        n + 1 > order + 1 && break
+        mulist[n + 1] += 2 * proj10 - μ1
+        ket0, ket1 = ket1, ket0
+    end
+    A.λ ≈ 1 || (mulist .*= A.λ)
+    return mulist
+end
 
- function mulscaled!(y, h´, x, (center, halfwidth))
-     mul!(y, h´, x)
-     invhalfwidth = 1/halfwidth
-     @. y = (y - center * x) * invhalfwidth
-     return y
- end
+function mulscaled!(y, h´, x, (center, halfwidth))
+    mul!(y, h´, x)
+    invhalfwidth = 1/halfwidth
+    @. y = (y - center * x) * invhalfwidth
+    return y
+end
 
- function iterateKPM!(ket0, h´, ket1, (center, halfwidth), buff = ())
-     α = 2/halfwidth
-     β = 2center/halfwidth
-     mul!(ket0, h´, ket1, α, -1)
-     @. ket0 = ket0 - β * ket1
-     return proj_or_nothing(buff, ket0, ket1)
- end
+function iterateKPM!(ket0, h´, ket1, (center, halfwidth), buff = ())
+    α = 2/halfwidth
+    β = 2center/halfwidth
+    mul!(ket0, h´, ket1, α, -1)
+    @. ket0 = ket0 - β * ket1
+    return proj_or_nothing(buff, ket0, ket1)
+end
 
- proj_or_nothing(::Tuple{}, ket0, ket1) = nothing
- proj_or_nothing(buff, ket0, ket1) = (proj(ket1, ket1), proj(ket1, ket0))
+proj_or_nothing(::Tuple{}, ket0, ket1) = nothing
+proj_or_nothing(buff, ket0, ket1) = (proj(ket1, ket1), proj(ket1, ket0))
 
 # This is equivalent to tr(ket1'*ket2) for matrices, and ket1'*ket2 for vectors
 proj(ket1, ket2) = dot(vec(ket1), vec(ket2))
 
 # function iterateKPM!(ket0, h´, ket1, (center, halfwidth), thread_buffers = ())
- #     h = parent(h´)
- #     nz = nonzeros(h)
- #     rv = rowvals(h)
- #     α = -2 * center / halfwidth
- #     β = 2 / halfwidth
- #     reset_buffers!(thread_buffers)
- #     @threads for row in 1:size(ket0, 1)
- #         ptrs = nzrange(h, row)
- #         @inbounds for col in 1:size(ket0, 2)
- #             k1 = ket1[row, col]
- #             tmp = α * k1 - ket0[row, col]
- #             for ptr in ptrs
- #                 tmp += β * adjoint(nz[ptr]) * ket1[rv[ptr], col]
- #             end
- #             # |k0⟩ → (⟨k1|2h - ⟨k0|)' = 2h'|k1⟩ - |k0⟩
- #             ket0[row, col] = tmp
- #             update_buffers!(thread_buffers, k1, tmp)
- #         end
- #     end
- #     return sum_buffers(thread_buffers)
- # end
+#     h = parent(h´)
+#     nz = nonzeros(h)
+#     rv = rowvals(h)
+#     α = -2 * center / halfwidth
+#     β = 2 / halfwidth
+#     reset_buffers!(thread_buffers)
+#     @threads for row in 1:size(ket0, 1)
+#         ptrs = nzrange(h, row)
+#         @inbounds for col in 1:size(ket0, 2)
+#             k1 = ket1[row, col]
+#             tmp = α * k1 - ket0[row, col]
+#             for ptr in ptrs
+#                 tmp += β * adjoint(nz[ptr]) * ket1[rv[ptr], col]
+#             end
+#             # |k0⟩ → (⟨k1|2h - ⟨k0|)' = 2h'|k1⟩ - |k0⟩
+#             ket0[row, col] = tmp
+#             update_buffers!(thread_buffers, k1, tmp)
+#         end
+#     end
+#     return sum_buffers(thread_buffers)
+# end
 
- # reset_buffers!(::Tuple{}) = nothing
- # function reset_buffers!((q, q´))
- #     fill!(q, zero(eltype(q)))
- #     fill!(q´, zero(eltype(q´)))
- #     return nothing
- # end
+# reset_buffers!(::Tuple{}) = nothing
+# function reset_buffers!((q, q´))
+#     fill!(q, zero(eltype(q)))
+#     fill!(q´, zero(eltype(q´)))
+#     return nothing
+# end
 
- # @inline update_buffers!(::Tuple{}, k1, tmp) = nothing
- # @inline function update_buffers!((q, q´), k1, tmp)
- #     q[threadid()]  += dot(k1, k1)
- #     q´[threadid()] += dot(tmp, k1)
- #     return nothing
- # end
+# @inline update_buffers!(::Tuple{}, k1, tmp) = nothing
+# @inline function update_buffers!((q, q´), k1, tmp)
+#     q[threadid()]  += dot(k1, k1)
+#     q´[threadid()] += dot(tmp, k1)
+#     return nothing
+# end
 
- # @inline sum_buffers(::Tuple{}) = nothing
- # @inline sum_buffers((q, q´)) = (sum(q), sum(q´))
+# @inline sum_buffers(::Tuple{}) = nothing
+# @inline sum_buffers((q, q´)) = (sum(q), sum(q´))
 
 function randomize!(v::AbstractVector{T}) where {T}
     v .= _randomize.(v)
