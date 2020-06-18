@@ -164,7 +164,10 @@ function momentaKPM(h::AbstractMatrix, A = _defaultA(eltype(h)); randomkets = 1,
  proj_or_nothing(::Tuple{}, ket0, ket1) = nothing
  proj_or_nothing(buff, ket0, ket1) = (proj(ket1, ket1), proj(ket1, ket0))
 
- # function iterateKPM!(ket0, h´, ket1, (center, halfwidth), thread_buffers = ())
+# This is equivalent to tr(ket1'*ket2) for matrices, and ket1'*ket2 for vectors
+proj(ket1, ket2) = dot(vec(ket1), vec(ket2))
+
+# function iterateKPM!(ket0, h´, ket1, (center, halfwidth), thread_buffers = ())
  #     h = parent(h´)
  #     nz = nonzeros(h)
  #     rv = rowvals(h)
@@ -203,9 +206,6 @@ function momentaKPM(h::AbstractMatrix, A = _defaultA(eltype(h)); randomkets = 1,
 
  # @inline sum_buffers(::Tuple{}) = nothing
  # @inline sum_buffers((q, q´)) = (sum(q), sum(q´))
-
-# This is equivalent to tr(ket1'*ket2) for matrices, and ket1'*ket2 for vectors
-proj(ket1, ket2) = dot(vec(ket1), vec(ket2))
 
 function randomize!(v::AbstractVector{T}) where {T}
     v .= _randomize.(v)
