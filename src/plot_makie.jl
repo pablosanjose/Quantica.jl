@@ -2,6 +2,17 @@ using .Makie
 using GeometryTypes: Cylinder
 import .Makie.AbstractPlotting: plot!, plot, to_value
 
+"""
+    plot(h::Hamiltonian)
+
+Plot a representation of a Hamiltonian `h` using Makie
+
+    plot(b::Bandstructure)
+
+Plot the bandstructure `b` of a 1D or 2D Hamiltonian using Makie.
+"""
+plot
+
 #######################################################################
 # Tools
 #######################################################################
@@ -30,7 +41,6 @@ end
 #######################################################################
 # plot(::Hamiltonian)
 #######################################################################
-
 function plot(h::Hamiltonian{<:Lattice}; resolution = (1000, 1000), kw...)
     scene = hamiltonianplot(h; resolution = resolution, scale_plot = false, kw...)
     plot = scene[end]
