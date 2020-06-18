@@ -16,7 +16,7 @@ Plots the the Hamiltonian lattice projected along `axes` using VegaLite.
     - `scaling`: `(scalex, scaley)` scalings for the x (Bloch phase) and y (energy) variables
     - `axes`: lattice axes to project onto the plot x-y plane
 """
-function VegaLite.vlplot(b::Bandstructure; labels = ("φ/2π", "ε"), scaling = (1/2π, 1), size = 640, points = false)
+function VegaLite.vlplot(b::Bandstructure; labels = ("φ", "ε"), scaling = (1, 1), size = 640, points = false)
     labelx, labely = labels
     table = bandtable(b, make_it_two(scaling))
     sizes = make_it_two(size)

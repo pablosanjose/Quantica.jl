@@ -139,48 +139,58 @@ end
 # bandstructure
 #######################################################################
 """
-bandstructure(h::Hamiltonian, mesh::Mesh; cut = missing, minprojection = 0.5, method = defaultmethod(h), transform = missing)
+    bandstructure(h::Hamiltonian; points = 13, kw...)
 
-Compute the bandstructure of Bloch Hamiltonian `bloch(h, ϕs)`, with `ϕs` evaluated on the
-vertices of `mesh`.
+Compute the bandstructure of `h` on a mesh over `h`'s full Brillouin zone, with `points`
+points along each axis, spanning the interval [-π,π] along each reciprocal axis.
 
-    bandstructure(h::Hamiltonian; resolution = 13, kw...)
+    bandstructure(h::Hamiltonian, spec::MeshSpec; lift = missing, kw...)
 
-Same as above with a uniform `mesh` of marching tetrahedra (generalized to the lattice
-dimensions of the Hamiltonian), with points `range(-π, π, length = resolution)` along each
-Bravais axis. Note that `resolution` denotes the number of points along each Bloch axis,
-including endpoints (can be a tuple for axis-dependent points).
+Call `bandstructure(h, mesh; lift = lift, kw...)` with `mesh = buildmesh(spec, h)` and `lift
+= buildlift(spec, h)` if not provided. See `MeshSpec` for available mesh specs. If the `lift
+= missing` and the dimensions of the mesh do not match the Hamiltonian's, a `lift` function
+is used that lifts the mesh onto the dimensions `h` by appending vertex coordinates with
+zeros.
 
-    bandstructure(ph::ParametricHamiltonian, mesh; kw...)
+    bandstructure(h::Hamiltonian, mesh::Mesh; lift = missing, kw...)
+
+Compute the bandstructure `bandstructure(h, mesh; kw...)` of Bloch Hamiltonian `bloch(h,
+ϕ)`, with `ϕ = v` taken on each vertex `v` of `mesh` (or `ϕ = lift(v...)` if a `lift`
+function is provided).
+
+    bandstructure(ph::ParametricHamiltonian, ...; kw...)
 
 Compute the bandstructure of a `ph` with `i` parameters (see `parameters(ph)`), where `mesh`
 is interpreted as a discretization of parameter space ⊗ Brillouin zone, so that each vertex
 reads `v = (p₁,..., pᵢ, ϕ₁,..., ϕⱼ)`, with `p` the values assigned to `parameters(ph)` and
-`ϕ` the Bloch phases.
+`ϕᵢ` the Bloch phases.
 
     bandstructure(matrixf::Function, mesh::Mesh; kw...)
 
-Compute the bandstructure of the Hamiltonian matrix `m = matrixf(ϕs)`, with `ϕs` evaluated
-on the vertices of `mesh`. No `cut` option is allowed in this case. If needed, include it in
-the definition of `matrixf`. Note that `ϕs` is either a `Tuple` or an `SVector`, but it is
-not splatted into `matrixf`, i.e. `matrixf(x) = ...` or `matrixf(x, y) = ...` will not work,
-use `matrixf((x,)) = ...` or `matrixf((x, y)) = ...` instead.
+Compute the bandstructure of the Hamiltonian matrix `m = matrixf(ϕ)`, with `ϕ` evaluated on
+the vertices `v` of the `mesh`. Note that `ϕ` in `matrixf(ϕ)` is an unsplatted container.
+Hence, i.e. `matrixf(x) = ...` or `matrixf(x, y) = ...` will not work, use `matrixf((x,)) =
+...` or `matrixf((x, y)) = ...` instead.
 
 # Options
 
-The option `cut`, when not `missing`, is a function `cut = (mesh_coordinates...) -> φs`,
-where `φs` are Bloch phases if sampling a `h::Hamiltonian`, or `(params..., φs...)` if
-sampling a `ph::ParametricHamiltonian`, and `params` are values for `parameters(ph)`. This
+The default options are
+
+    (lift = missing, minprojection = 0.5, method = defaultmethod(h), transform = missing)
+
+`lift`: when not `missing`, `lift` is a function `lift = (vs...) -> ϕ`, where `vs` are the
+coordinates of a mesh vertex and `ϕ` are Bloch phases if sampling a `h::Hamiltonian`, or
+`(paramsⱼ..., ϕᵢ...)` if sampling a `ph::ParametricHamiltonian`, and `params` are values for
+`parameters(ph)`. It represents a mapping from a mesh and a Brillouin/parameter space. This
 allows to compute a bandstructure along a cut in the Brillouin zone/parameter space, see
 below for examples.
 
-The option `minprojection` determines the minimum projection between eigenstates to connect
+`minprojection`: determines the minimum projection between eigenstates to connect
 them into a common subband.
 
-The option `method` is chosen automatically if unspecified, and
-can be one of the following
+`method`: it is chosen automatically if unspecified, and can be one of the following
 
-    method                    diagonalization function
+    method                     diagonalization function
     --------------------------------------------------------------
     LinearAlgebraPackage()     LinearAlgebra.eigen!
     ArpackPackage()            Arpack.eigs (must be `using Arpack`)
@@ -189,68 +199,85 @@ Options passed to the `method` will be forwarded to the diagonalization function
 `method = ArpackPackage(nev = 8, sigma = 1im)` will use `Arpack.eigs(matrix; nev = 8,
 sigma = 1im)` to compute the bandstructure.
 
-The option `transform = ε -> f(ε)` allows to transform eigenvalues by `f` in the returned
+`transform`: the option `transform = ε -> f(ε)` allows to transform eigenvalues by `f` in the returned
 bandstructure (useful for performing shifts or other postprocessing).
 
 # Examples
-```
-julia> h = LatticePresets.honeycomb() |> unitcell(3) |> hamiltonian(hopping(-1, range = 1/√3));
+```jldoctest
+julia> h = LatticePresets.honeycomb() |> hamiltonian(hopping(-1, range = 1/√3)) |> unitcell(3);
 
-julia> bandstructure(h; resolution = 25, method = LinearAlgebraPackage())
-Bandstructure: bands for a 2D hamiltonian
+julia> bandstructure(h; points = 25, method = LinearAlgebraPackage())
+Bandstructure{2}: collection of 2D bands
   Bands        : 8
   Element type : scalar (Complex{Float64})
   Mesh{2}: mesh of a 2-dimensional manifold
     Vertices   : 625
-    Edges      : 3552
+    Edges      : 1776
 
-julia> bandstructure(h, marchingmesh(range(0, 2π, length = 11)); cut = φ -> (φ, 0))
-       ## Computes a `Γ-X` cut of the bandstructure
+julia> bandstructure(h, linearmesh(:Γ, :X, :Y, :Γ))
+Bandstructure{1}: collection of 1D bands
+  Bands        : 17
+  Element type : scalar (Complex{Float64})
+  Mesh{1}: mesh of a 1-dimensional manifold
+    Vertices   : 37
+    Edges      : 36
+
+julia> bandstructure(h, marchingmesh((0, 2π); points = 25); lift = φ -> (φ, 0))
+       # Equivalent to bandstructure(h, linearmesh(:Γ, :X; points = 11))
 Bandstructure{1}: collection of 1D bands
   Bands        : 18
   Element type : scalar (Complex{Float64})
   Mesh{1}: mesh of a 1-dimensional manifold
-    Vertices   : 11
-    Edges      : 10
+    Vertices   : 25
+    Edges      : 24
 ```
 
 # See also
-    `marchingmesh`
+    `marchingmesh`, `linearmesh`
 """
-function bandstructure(h::Hamiltonian{<:Any,L,M}; resolution = 13, kw...) where {L,M}
-    mesh = marchingmesh(filltuple(range(-π, π, length = resolution), Val(L))...)
-    return bandstructure(h, mesh; kw...)
+function bandstructure(h::Hamiltonian; points = 13, kw...)
+    meshspec = marchingmesh(filltuple((-π, π), Val(latdim(h)))...; points = points)
+    return bandstructure(h, meshspec; kw...)
+end
+
+function bandstructure(h::Union{Hamiltonian,ParametricHamiltonian}, spec::MeshSpec; lift = missing, kw...)
+    mesh = buildmesh(spec, h)
+    lift´ = lift === missing ? buildlift(spec, h) : lift
+    return bandstructure(h, mesh; lift = lift´, kw...)
 end
 
 function bandstructure(h::Union{Hamiltonian,ParametricHamiltonian}, mesh::Mesh;
-                       method = defaultmethod(h), cut = missing, transform = missing, kw...)
+                       method = defaultmethod(h), lift = missing, transform = missing, kw...)
     # ishermitian(h) || throw(ArgumentError("Hamiltonian must be hermitian"))
     matrix = similarmatrix(h, method)
-    codiag = codiagonalizer(h, matrix, mesh, cut)
+    codiag = codiagonalizer(h, matrix, mesh, lift)
     d = DiagonalizeHelper(method, codiag; kw...)
-    matrixf(φs) = bloch!(matrix, h, applycut(cut, φs))
+    matrixf(ϕs) = bloch!(matrix, h, applylift(lift, ϕs))
     b = _bandstructure(matrixf, matrix, mesh, d)
     transform === missing || transform!(transform, b)
     return b
 end
 
-# Should perhaps RFC to be merged with the above
 function bandstructure(matrixf::Function, mesh::Mesh;
-                       matrix = _samplematrix(matrixf, mesh),
-                       method = defaultmethod(matrix),
-                       minprojection = 0.5, transform = missing, kw...)
-    codiag = codiagonalizer(matrixf, matrix, mesh)
-    d = DiagonalizeHelper(method, codiag; kw...)
-    b = _bandstructure(matrixf, matrix, mesh, d)
+                       method = missing, lift = missing, minprojection = 0.5, transform = missing, kw...)
+    matrixf´ = _wraplift(matrixf, lift)
+    matrix = _samplematrix(matrixf´, mesh)
+    method´ = method === missing ? defaultmethod(matrix) : method
+    codiag = codiagonalizer(matrixf´, matrix, mesh)
+    d = DiagonalizeHelper(method´, codiag; kw...)
+    b = _bandstructure(matrixf´, matrix, mesh, d)
     transform === missing || transform!(transform, b)
     return b
 end
 
 _samplematrix(matrixf, mesh) = matrixf(Tuple(first(vertices(mesh))))
 
-@inline applycut(cut::Missing, ϕs) = toSVector(ϕs)
+_wraplift(matrixf, lift::Missing) = matrixf
+_wraplift(matrixf, lift) = ϕs -> matrixf(applylift(lift, ϕs))
 
-@inline applycut(cut::Function, ϕs) = toSVector(cut(ϕs...))
+@inline applylift(lift::Missing, ϕs) = toSVector(ϕs)
+
+@inline applylift(lift::Function, ϕs) = toSVector(lift(ϕs...))
 
 function _bandstructure(matrixf::Function, matrix´::AbstractMatrix{M}, mesh::MD, d::DiagonalizeHelper) where {M,D,T,MD<:Mesh{D,T}}
     nϵ = 0                           # Temporary, to be reassigned
@@ -267,7 +294,7 @@ function _bandstructure(matrixf::Function, matrix´::AbstractMatrix{M}, mesh::MD
         matrix = matrixf(Tuple(ϕs))
         # (ϵk, ψk) = diagonalize(Hermitian(matrix), d)  ## This is faster (!)
         (ϵk, ψk) = diagonalize(matrix, d.method)
-        resolve_degeneracies!(ϵk, ψk, ϕs, matrix, d.codiag)
+        resolve_degeneracies!(ϵk, ψk, ϕs, d.codiag)
         if n == 1  # With first vertex can now know the number of eigenvalues... Reassign
             nϵ = size(ϵk, 1)
             ϵks = Matrix{T}(undef, nϵ, nk)
