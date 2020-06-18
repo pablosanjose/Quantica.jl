@@ -192,7 +192,7 @@ matrixtype(ph::ParametricHamiltonian) = matrixtype(parent(ph))
 
 blockeltype(ph::ParametricHamiltonian) = blockeltype(parent(ph))
 
-bravais(ph::ParametricHamiltonian) = bravais(ph.hamiltonian.lattice)
+bravais(ph::ParametricHamiltonian) = bravais(ph.baseh.lattice)
 
 Base.parent(ph::ParametricHamiltonian) = ph.h
 

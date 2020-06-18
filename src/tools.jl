@@ -82,7 +82,7 @@ displayvectors(mat::SMatrix{E,L,<:AbstractFloat}; kw...) where {E,L} =
 displayvectors(mat::SMatrix{E,L,<:Integer}; kw...) where {E,L} =
     ntuple(l -> Tuple(mat[:,l]), Val(L))
 
-# pseudoinverse of s times an integer n, so that it is an integer matrix (for accuracy)
+# pseudoinverse of supercell s times an integer n, so that it is an integer matrix (for accuracy)
 pinvmultiple(s::SMatrix{L,0}) where {L} = (SMatrix{0,0,Int}(), 0)
 function pinvmultiple(s::SMatrix{L,L´}) where {L,L´}
     L < L´ && throw(DimensionMismatch("Supercell dimensions $(L´) cannot exceed lattice dimensions $L"))
@@ -93,6 +93,12 @@ function pinvmultiple(s::SMatrix{L,L´}) where {L,L´}
     pinverse = inv(qrfact.R) * qrfact.Q'
     return round.(Int, n * inv(qrfact.R) * qrfact.Q'), round(Int, n)
 end
+
+pinverse(m::SMatrix) = (f -> inv(f.R) * f.Q')(qr(m))
+
+_blockdiag(s1::SMatrix{M}, s2::SMatrix{N}) where {N,M} = hcat(
+    ntuple(j->vcat(s1[:,j], zero(s2[:,j])), Val(M))...,
+    ntuple(j->vcat(zero(s1[:,j]), s2[:,j]), Val(N))...)
 
 function isgrowing(vs::AbstractVector, i0 = 1)
     i0 > length(vs) && return true
@@ -298,80 +304,6 @@ function Base.factorial(n::T, k::T) where T<:Integer
 end
 
 Base.factorial(n::Integer, k::Integer) = factorial(promote(n, k)...)
-
-# ######################################################################
-# # SparseMatrixIJV
-# ######################################################################
-
-# struct SparseMatrixIJV{Tv,Ti<:Integer} <: AbstractSparseMatrix{Tv,Ti}
-#     I::Vector{Ti}
-#     J::Vector{Ti}
-#     V::Vector{Tv}
-#     m::Ti
-#     n::Ti
-#     klasttouch::Vector{Ti}
-#     csrrowptr::Vector{Ti}
-#     csrcolval::Vector{Ti}
-#     csrnzval::Vector{Tv}
-#     csccolptr::Vector{Ti}
-#     cscrowval::Vector{Ti}
-#     cscnzval::Vector{Tv}
-# end
-
-# SparseMatrixIJV{Tv}(m::Ti, n::Ti) where {Tv,Ti} = SparseMatrixIJV{Tv,Ti}(m,n)
-
-# function SparseMatrixIJV{Tv,Ti}(m::Integer, n::Integer; hintnnz = 0) where {Tv,Ti}
-#     I = Ti[]
-#     J = Ti[]
-#     V = Tv[]
-#     klasttouch = Vector{Ti}(undef, n)
-#     csrrowptr = Vector{Ti}(undef, m + 1)
-#     csrcolval = Vector{Ti}()
-#     csrnzval = Vector{Tv}()
-#     csccolptr = Vector{Ti}(undef, n + 1)
-#     cscrowval = Vector{Ti}()
-#     cscnzval = Vector{Tv}()
-
-#     if hintnnz > 0
-#         sizehint!(I, hintnnz)
-#         sizehint!(J, hintnnz)
-#         sizehint!(V, hintnnz)
-#         sizehint!(csrcolval, hintnnz)
-#         sizehint!(csrnzval, hintnnz)
-#         sizehint!(cscrowval, hintnnz)
-#         sizehint!(cscnzval, hintnnz)
-#     end
-
-#     return SparseMatrixIJV{Tv,Ti}(I, J, V, m, n, klasttouch, csrrowptr, csrcolval, csrnzval,
-#                                                              csccolptr, cscrowval, cscnzval)
-# end
-
-# Base.summary(::SparseMatrixIJV{Tv,Ti}) where {Tv,Ti} =
-#     "SparseMatrixIJV{$Tv,$Ti} : Sparse matrix builder using the IJV format"
-
-# function Base.show(io::IO, ::MIME"text/plain", s::SparseMatrixIJV)
-#     i = get(io, :indent, "")
-#     print(io, i, summary(s), "\n", "$i  Nonzero elements : $(length(s.I))")
-# end
-
-# function Base.push!(s::SparseMatrixIJV, (i, j, v))
-#     push!(s.I, i)
-#     push!(s.J, j)
-#     push!(s.V, v)
-#     return s
-# end
-
-# function SparseArrays.sparse(s::SparseMatrixIJV)
-#     numnz = length(s.I)
-#     resize!(s.csrcolval, numnz)
-#     resize!(s.csrnzval,  numnz)
-#     resize!(s.cscrowval, numnz)
-#     resize!(s.cscnzval,  numnz)
-#     return SparseArrays.sparse!(s.I, s.J, s.V, s.m, s.n, +, s.klasttouch,
-#         s.csrrowptr, s.csrcolval, s.csrnzval, s.csccolptr, s.cscrowval, s.cscnzval)
-# end
-
-# Base.size(s::SparseMatrixIJV) = (s.m, s.n)
 
 ############################################################################################
 ######## fast sparse copy #  Revise after #33589 is merged #################################

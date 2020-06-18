@@ -137,7 +137,7 @@ end
 # resolve_degeneracies
 #######################################################################
 # Tries to make states continuous at crossings. Here, ϵ needs to be sorted
-function resolve_degeneracies!(ϵ, ψ, ϕs, matrix, codiag)
+function resolve_degeneracies!(ϵ, ψ, ϕs, codiag)
     issorted(ϵ, by = real) || sorteigs!(codiag.perm, ϵ, ψ)
     hasapproxruns(ϵ, codiag.degtol) || return ϵ, ψ
     ranges, ranges´ = codiag.rangesA, codiag.rangesB
@@ -188,22 +188,22 @@ struct Codiagonalizer{T,F<:Function}
     perm::Vector{Int}               # Prealloc for sortperm!
 end
 
-function codiagonalizer(h::Union{Hamiltonian,ParametricHamiltonian}, matrix, mesh, cut; kw...)
+function codiagonalizer(h::Union{Hamiltonian,ParametricHamiltonian}, matrix, mesh, lift; kw...)
     veldirs = velocitydirections(parent(h); kw...)
-    meshdirs = meshdirections(mesh; kw...)
+    veldirs_with_params = padparams.(veldirs, Ref(h))
     nv = length(veldirs)
-    nm = length(meshdirs)
-    matrixindices = 1:(nv + nm + 1)
+    matrixindices = 1:(nv + nv + 1)
     degtol = sqrt(eps(real(blockeltype(h))))
-    delta = meshdelta(mesh)
+    delta = meshdelta(mesh, lift)
     delta = iszero(delta) ? degtol : delta
+    aom = anyoldmatrix(matrix)
     cmatrixf(meshϕs, n) =
         if n <= nv
-            bloch!(matrix, h, applycut(cut, meshϕs), dn -> im * veldirs[n]' * dn)
-        elseif n - nv <= nm # resort to finite differences
-            bloch!(matrix, h, applycut(cut, meshϕs + delta * meshdirs[n - nv]))
-        else # use a fixed random matrix
-            randomfill!(matrix)
+            bloch!(matrix, h, applylift(lift, meshϕs), dn -> im * veldirs[n]' * dn)
+        elseif n - nv <= nv # resort to finite differences
+            bloch!(matrix, h, applylift(lift, meshϕs) + delta * veldirs_with_params[n - nv])
+        else # use a fixed arbitrary matrix
+            aom
         end
     return Codiagonalizer(cmatrixf, matrixindices, degtol, UnitRange{Int}[], UnitRange{Int}[], Int[])
 end
@@ -215,17 +215,22 @@ function codiagonalizer(matrixf::Function, matrix::AbstractMatrix{T}, mesh; kw..
     degtol = sqrt(eps(real(eltype(T))))
     delta = meshdelta(mesh)
     delta = iszero(delta) ? degtol : delta
+    aom = anyoldmatrix(matrix)
     cmatrixf(meshϕs, n) =
         if n <= nm # finite differences
             matrixf(meshϕs + delta * meshdirs[n])
-        else # use a fixed random matrix
-            randomfill!(matrix)
+        else # use a fixed arbitrary matrix
+            aom
         end
     return Codiagonalizer(cmatrixf, matrixindices, degtol, UnitRange{Int}[], UnitRange{Int}[], Int[])
 end
 
 velocitydirections(::Hamiltonian{LA,L}; kw...) where {LA,L} = _directions(Val(L); kw...)
+
 meshdirections(::Mesh{L}; kw...) where {L} = _directions(Val(L); kw...)
+
+padparams(v, ::Hamiltonian) = v
+padparams(v::SVector{L,T}, ::ParametricHamiltonian{P}) where {L,T,P} = vcat(zero(SVector{P,T}), v)
 
 function _directions(::Val{L}; direlements = 0:1, onlypositive = true) where {L}
     directions = vec(SVector{L,Int}.(Iterators.product(ntuple(_ -> direlements, Val(L))...)))
@@ -235,20 +240,22 @@ function _directions(::Val{L}; direlements = 0:1, onlypositive = true) where {L}
     return directions
 end
 
-meshdelta(mesh::Mesh{<:Any,T}) where {T} = T(0.1) * first(minmax_edge_length(mesh))
+meshdelta(mesh::Mesh{<:Any,T}, lift = missing) where {T} =
+    T(0.1) * norm(applylift(lift, first(minmax_edge(mesh))))
 
-function randomfill!(matrix::SparseMatrixCSC, seed = 1234)
-    Random.seed!(seed)
-    rand!(nonzeros(matrix))  ## CAREFUL: this will be non-hermitian
-    return matrix
+# function anyoldmatrix(matrix::SparseMatrixCSC{Tv,Ti}) where {Tv,Ti}
+#     n = size(matrix, 1)
+#     ri = one(Ti):Ti(n)
+#     rv = Tv.(im .* (1:n))
+#     s = sparse(ri, ri, rv, n, n)
+#     return s
+# end
+
+function anyoldmatrix(matrix::SparseMatrixCSC, rng = MersenneTwister(1))
+    s = copy(matrix)
+    rand!(rng, nonzeros(s))
+    return s
 end
 
-function randomfill!(matrix::AbstractArray{T}, seed = 1234) where {T}
-    Random.seed!(seed)
-    fill!(matrix, zero(T))
-    for i in 1:minimum(size(matrix))
-        r = rand(T)
-        @inbounds matrix[i, i] = r + r'
-    end
-    return matrix
-end
+# anyoldmatrix(m::M) where {T,M<:DenseArray{T}} = M(Diagonal(T.(im .* (1:size(m,1)))))
+anyoldmatrix(m::DenseArray, rng = MersenneTwister(1)) = rand!(rng, copy(m))

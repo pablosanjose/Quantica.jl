@@ -21,7 +21,8 @@ export sublat, bravais, lattice, dims, sites, supercell, unitcell,
        hopping, onsite, @onsite!, @hopping!, parameters,
        hamiltonian, parametric, bloch, bloch!, optimize!, similarmatrix,
        flatten, wrap, transform!, combine,
-       spectrum, bandstructure, marchingmesh, defaultmethod, bands, vertices,
+       spectrum, bandstructure, marchingmesh, linearmesh, buildmesh, buildlift,
+       defaultmethod, bands, vertices,
        energies, states,
        momentaKPM, dosKPM, averageKPM, densityKPM, bandrangeKPM
 
