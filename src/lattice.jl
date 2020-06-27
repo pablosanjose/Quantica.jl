@@ -608,7 +608,7 @@ with factors along the diagonal)
 
     lat |> supercell(v...; kw...)
 
-Functional syntax, equivalent to `supercell(lat, v...; kw...)
+Curried syntax, equivalent to `supercell(lat, v...; kw...)
 
     supercell(h::Hamiltonian, v...; kw...)
 
@@ -814,7 +814,7 @@ the first time.
 
     lat_or_h |> unitcell(v...; kw...)
 
-Functional syntax, equivalent to `unitcell(lat_or_h, v...; kw...)
+Curried syntax, equivalent to `unitcell(lat_or_h, v...; kw...)
 
 # Examples
 

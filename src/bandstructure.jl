@@ -84,13 +84,16 @@ struct Bandstructure{D,M,B<:Band{M},MD<:Mesh{D}}   # D is dimension of parameter
 end
 
 function Base.show(io::IO, b::Bandstructure{D,M}) where {D,M}
-    ioindent = IOContext(io, :indent => string("  "))
-    print(io,
-"Bandstructure{$D}: collection of $(D)D bands
-  Bands        : $(length(b.bands))
-  Element type : $(displayelements(M))")
+    i = get(io, :indent, "")
+    ioindent = IOContext(io, :indent => string(i, "  "))
+    print(io, i, summary(b), "\n",
+"$i  Bands        : $(length(b.bands))
+$i  Element type : $(displayelements(M))")
     print(ioindent, "\n", b.kmesh)
 end
+
+Base.summary(b::Bandstructure{D,M}) where {D,M} =
+    "Bandstructure{$D}: collection of $(D)D bands"
 
 # API #
 """
@@ -111,6 +114,16 @@ vertices(bs::Bandstructure, i) = vertices(bands(bs)[i])
 vertices(b::Band) = vertices(b.mesh)
 
 """
+    energies(b::Bandstructure)
+
+Return the sorted unique energies of `b` as a `Vector`
+
+# See also
+    `bandstructure`, `states`
+"""
+energies(bs::Bandstructure) = unique!(sort!([last(v) for b in bands(bs) for v in vertices(b)]))
+
+"""
     states(bs::Bandstructure, i)
 
 Return the states of each vertex of the i-th band in `bs`, in the form of a `Matrix` of size
@@ -118,7 +131,7 @@ Return the states of each vertex of the i-th band in `bs`, in the form of a `Mat
 """
 states(bs::Bandstructure, i) = states(bands(bs)[i])
 
-states(b::Band) = reshape(b.states, b.dimstates)
+states(b::Band) = reshape(b.states, b.dimstates, :)
 
 """
     transform!(f::Function, b::Bandstructure)
@@ -172,11 +185,15 @@ the vertices `v` of the `mesh`. Note that `ϕ` in `matrixf(ϕ)` is an unsplatted
 Hence, i.e. `matrixf(x) = ...` or `matrixf(x, y) = ...` will not work, use `matrixf((x,)) =
 ...` or `matrixf((x, y)) = ...` instead.
 
+    h |> bandstructure([mesh,]; kw...)
+
+Curried form of the above equivalent to `bandstructure(h, [mesh]; kw...)`.
+
 # Options
 
 The default options are
 
-    (lift = missing, minprojection = 0.5, method = defaultmethod(h), transform = missing)
+    (lift = missing, minoverlap = 0.5, method = defaultmethod(h), transform = missing)
 
 `lift`: when not `missing`, `lift` is a function `lift = (vs...) -> ϕ`, where `vs` are the
 coordinates of a mesh vertex and `ϕ` are Bloch phases if sampling a `h::Hamiltonian`, or
@@ -185,7 +202,7 @@ coordinates of a mesh vertex and `ϕ` are Bloch phases if sampling a `h::Hamilto
 allows to compute a bandstructure along a cut in the Brillouin zone/parameter space, see
 below for examples.
 
-`minprojection`: determines the minimum projection between eigenstates to connect
+The option `minoverlap` determines the minimum overlap between eigenstates to connect
 them into a common subband.
 
 `method`: it is chosen automatically if unspecified, and can be one of the following
@@ -259,7 +276,7 @@ function bandstructure(h::Union{Hamiltonian,ParametricHamiltonian}, mesh::Mesh;
 end
 
 function bandstructure(matrixf::Function, mesh::Mesh;
-                       method = missing, lift = missing, minprojection = 0.5, transform = missing, kw...)
+                       method = missing, lift = missing, minoverlap = 0.5, transform = missing, kw...)
     matrixf´ = _wraplift(matrixf, lift)
     matrix = _samplematrix(matrixf´, mesh)
     method´ = method === missing ? defaultmethod(matrix) : method
@@ -284,7 +301,7 @@ function _bandstructure(matrixf::Function, matrix´::AbstractMatrix{M}, mesh::MD
     ϵks = Matrix{T}(undef, 0, 0)     # Temporary, to be reassigned
     ψks = Array{M,3}(undef, 0, 0, 0) # Temporary, to be reassigned
 
-    dimh = size(matrix´, 1)
+    lenψ = size(matrix´, 1)
     nk = nvertices(mesh)
     # function to apply to eigenvalues when building bands (depends on momenta type)
     by = _maybereal(T)
@@ -298,12 +315,12 @@ function _bandstructure(matrixf::Function, matrix´::AbstractMatrix{M}, mesh::MD
         if n == 1  # With first vertex can now know the number of eigenvalues... Reassign
             nϵ = size(ϵk, 1)
             ϵks = Matrix{T}(undef, nϵ, nk)
-            ψks = Array{M,3}(undef, dimh, nϵ, nk)
+            ψks = Array{M,3}(undef, lenψ, nϵ, nk)
         end
         copyslice!(ϵks, CartesianIndices((1:nϵ, n:n)),
                    ϵk,  CartesianIndices((1:nϵ,)), by)
-        copyslice!(ψks, CartesianIndices((1:dimh, 1:nϵ, n:n)),
-                   ψk,  CartesianIndices((1:dimh, 1:nϵ)), identity)
+        copyslice!(ψks, CartesianIndices((1:lenψ, 1:nϵ, n:n)),
+                   ψk,  CartesianIndices((1:lenψ, 1:nϵ)))
         ProgressMeter.next!(p; showvalues = ())
     end
 
@@ -318,7 +335,7 @@ function _bandstructure(matrixf::Function, matrix´::AbstractMatrix{M}, mesh::MD
         src === nothing && break
         resize!(pending, 1)
         pending[1] = src # source CartesianIndex for band search
-        band = extractband(mesh, pending, ϵks, ψks, vertindices, d.minprojection)
+        band = extractband(mesh, pending, ϵks, ψks, vertindices, d.minoverlap)
         nverts = nvertices(band.mesh)
         nverts > D && push!(bands, band) # avoid bands with no simplices
         pcounter += nverts
@@ -330,11 +347,11 @@ end
 _maybereal(::Type{<:Complex}) = identity
 _maybereal(::Type{<:Real}) = real
 
-function extractband(kmesh::Mesh{D,T}, pending, ϵks::AbstractArray{T}, ψks::AbstractArray{M}, vertindices, minprojection) where {D,T,M}
-    dimh, nϵ, nk = size(ψks)
+function extractband(kmesh::Mesh{D,T}, pending, ϵks::AbstractArray{T}, ψks::AbstractArray{M}, vertindices, minoverlap) where {D,T,M}
+    lenψ, nϵ, nk = size(ψks)
     kverts = vertices(kmesh)
     states = eltype(ψks)[]
-    sizehint!(states, nk * dimh)
+    sizehint!(states, nk * lenψ)
     verts = SVector{D+1,T}[]
     sizehint!(verts, nk)
     adjmat = SparseMatrixBuilder{Bool}()
@@ -343,11 +360,11 @@ function extractband(kmesh::Mesh{D,T}, pending, ϵks::AbstractArray{T}, ψks::Ab
         ϵ, k = Tuple(c) # c == CartesianIndex(ϵ::Int, k::Int)
         vertex = vcat(kverts[k], SVector(ϵks[c]))
         push!(verts, vertex)
-        appendslice!(states, ψks, CartesianIndices((1:dimh, ϵ:ϵ, k:k)))
+        appendslice!(states, ψks, CartesianIndices((1:lenψ, ϵ:ϵ, k:k)))
         for edgek in edges(kmesh, k)
             k´ = edgedest(kmesh, edgek)
             proj, ϵ´ = findmostparallel(ψks, k´, ϵ, k)
-            if proj >= minprojection
+            if proj >= minoverlap
                 if iszero(vertindices[ϵ´, k´]) # unclassified
                     push!(pending, CartesianIndex(ϵ´, k´))
                     vertindices[ϵ´, k´] = length(pending) # this is clever!
@@ -362,7 +379,7 @@ function extractband(kmesh::Mesh{D,T}, pending, ϵks::AbstractArray{T}, ψks::Ab
         @inbounds vi > 0 && (vertindices[i] = -1) # mark as classified in a different band
     end
     mesh = Mesh(verts, sparse(adjmat))
-    return Band(mesh, states, dimh)
+    return Band(mesh, states, lenψ)
 end
 
 function findmostparallel(ψks::Array{M,3}, destk, srcb, srck) where {M}

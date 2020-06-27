@@ -14,6 +14,7 @@ ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Requires = "ae029012-a4dd-5104-9daa-d747884805df"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 
 [compat]
@@ -24,6 +25,7 @@ NearestNeighbors = "0.4"
 OffsetArrays = "1.0"
 ProgressMeter = "1.2"
 Requires = "1.0"
+SpecialFunctions = "0.10"
 StaticArrays = "0.12.3, 0.13"
 julia = "1.4"
 
