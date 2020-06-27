@@ -193,7 +193,7 @@ Curried form of the above equivalent to `bandstructure(h, [mesh]; kw...)`.
 
 The default options are
 
-    (lift = missing, minprojection = 0.5, method = defaultmethod(h), transform = missing)
+    (lift = missing, minoverlap = 0.5, method = defaultmethod(h), transform = missing)
 
 `lift`: when not `missing`, `lift` is a function `lift = (vs...) -> ϕ`, where `vs` are the
 coordinates of a mesh vertex and `ϕ` are Bloch phases if sampling a `h::Hamiltonian`, or
@@ -276,7 +276,7 @@ function bandstructure(h::Union{Hamiltonian,ParametricHamiltonian}, mesh::Mesh;
 end
 
 function bandstructure(matrixf::Function, mesh::Mesh;
-                       method = missing, lift = missing, minprojection = 0.5, transform = missing, kw...)
+                       method = missing, lift = missing, minoverlap = 0.5, transform = missing, kw...)
     matrixf´ = _wraplift(matrixf, lift)
     matrix = _samplematrix(matrixf´, mesh)
     method´ = method === missing ? defaultmethod(matrix) : method
