@@ -17,7 +17,7 @@ The Quantica.jl package provides an expressive API to build arbitrary quantum sy
 # Exported API
 - `lattice`, `sublat`, `bravais`: build lattices
 - `dims`, `sites`: inspect lattices
-- `hopping`, `onsite`: build tightbinding models
+- `hopping`, `onsite`, `siteselector`, `hopselector`: build tightbinding models
 - `hamiltonian`: build a Hamiltonian from tightbinding model and a lattice
 - `parametric`, `@onsite!`, `@hopping!`, `parameters`: build a parametric Hamiltonian
 - `supercell`, `unitcell`, `flatten`, `wrap`, `transform!`, `combine`: build derived lattices or Hamiltonians
@@ -25,6 +25,7 @@ The Quantica.jl package provides an expressive API to build arbitrary quantum sy
 - `bandstructure`, `spectrum`: compute the generalized bandstructure of a Hamiltonian or a ParametricHamiltonian
 - `bands`, `energies`, `states`: inspect spectrum and bandstructure objects
 - `momentaKPM`, `dosKPM`, `averageKPM`, `densityKPM`, `bandrangeKPM`: Kernel Polynomial Method
+- `greens`, `greensolver`: build Green's functions of a Hamiltonian
 
 Some of this functionality require loading one or more third-party packages, which include the following:
 - KPM: `FFTW`, `ArnoldiMethod`

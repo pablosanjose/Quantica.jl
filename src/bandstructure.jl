@@ -264,11 +264,11 @@ function bandstructure(h::Union{Hamiltonian,ParametricHamiltonian}, spec::MeshSp
 end
 
 function bandstructure(h::Union{Hamiltonian,ParametricHamiltonian}, mesh::Mesh;
-                       method = defaultmethod(h), lift = missing, transform = missing, kw...)
+                       method = defaultmethod(h), lift = missing, minoverlap = 0.5, transform = missing)
     # ishermitian(h) || throw(ArgumentError("Hamiltonian must be hermitian"))
     matrix = similarmatrix(h, method)
     codiag = codiagonalizer(h, matrix, mesh, lift)
-    d = DiagonalizeHelper(method, codiag; kw...)
+    d = DiagonalizeHelper(method, codiag, minoverlap)
     matrixf(ϕs) = bloch!(matrix, h, applylift(lift, ϕs))
     b = _bandstructure(matrixf, matrix, mesh, d)
     transform === missing || transform!(transform, b)
@@ -276,12 +276,12 @@ function bandstructure(h::Union{Hamiltonian,ParametricHamiltonian}, mesh::Mesh;
 end
 
 function bandstructure(matrixf::Function, mesh::Mesh;
-                       method = missing, lift = missing, minoverlap = 0.5, transform = missing, kw...)
+                       method = missing, lift = missing, minoverlap = 0.5, transform = missing)
     matrixf´ = _wraplift(matrixf, lift)
     matrix = _samplematrix(matrixf´, mesh)
     method´ = method === missing ? defaultmethod(matrix) : method
     codiag = codiagonalizer(matrixf´, matrix, mesh)
-    d = DiagonalizeHelper(method´, codiag; kw...)
+    d = DiagonalizeHelper(method´, codiag, minoverlap)
     b = _bandstructure(matrixf´, matrix, mesh, d)
     transform === missing || transform!(transform, b)
     return b

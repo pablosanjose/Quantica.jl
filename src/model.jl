@@ -574,12 +574,12 @@ include any parameters that `body` depends on that the user may want to tune.
 """
 macro onsite!(kw, f)
     f, N, params = get_f_N_params(f, "Only @onsite!(args -> body; kw...) syntax supported")
-    return esc(:(Quantica.OnsiteModifier(Quantica.ParametricFunction{$N}($f, $(Val(params))), Quantica.onsiteselector($kw))))
+    return esc(:(Quantica.OnsiteModifier(Quantica.ParametricFunction{$N}($f, $(Val(params))), Quantica.siteselector($kw))))
 end
 
 macro onsite!(f)
     f, N, params = get_f_N_params(f, "Only @onsite!(args -> body; kw...) syntax supported")
-    return esc(:(Quantica.OnsiteModifier(Quantica.ParametricFunction{$N}($f, $(Val(params))), Quantica.onsiteselector())))
+    return esc(:(Quantica.OnsiteModifier(Quantica.ParametricFunction{$N}($f, $(Val(params))), Quantica.siteselector())))
 end
 
 """
@@ -596,12 +596,12 @@ and include any parameters that `body` depends on that the user may want to tune
 """
 macro hopping!(kw, f)
     f, N, params = get_f_N_params(f, "Only @hopping!(args -> body; kw...) syntax supported")
-    return esc(:(Quantica.HoppingModifier(Quantica.ParametricFunction{$N}($f, $(Val(params))), Quantica.hoppingselector($kw))))
+    return esc(:(Quantica.HoppingModifier(Quantica.ParametricFunction{$N}($f, $(Val(params))), Quantica.hopselector($kw))))
 end
 
 macro hopping!(f)
     f, N, params = get_f_N_params(f, "Only @hopping!(args -> body; kw...) syntax supported")
-    return esc(:(Quantica.HoppingModifier(Quantica.ParametricFunction{$N}($f, $(Val(params))), Quantica.hoppingselector())))
+    return esc(:(Quantica.HoppingModifier(Quantica.ParametricFunction{$N}($f, $(Val(params))), Quantica.hopselector())))
 end
 
 # Extracts normalized f, number of arguments and kwarg names from an anonymous function f
