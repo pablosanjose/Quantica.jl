@@ -146,11 +146,8 @@ points along each axis, spanning the interval [-π,π] along each reciprocal axi
 
     bandstructure(h::Hamiltonian, spec::MeshSpec; lift = missing, kw...)
 
-Call `bandstructure(h, mesh; lift = lift, kw...)` with `mesh = buildmesh(spec, h)` and `lift
-= buildlift(spec, h)` if not provided. See `MeshSpec` for available mesh specs. If the `lift
-= missing` and the dimensions of the mesh do not match the Hamiltonian's, a `lift` function
-is used that lifts the mesh onto the dimensions `h` by appending vertex coordinates with
-zeros.
+Call `bandstructure(h, mesh; lift = lift´, kw...)` with `mesh = buildmesh(spec, h)` and
+`lift´ = buildlift(spec, h, lift)`. See `MeshSpec` for available mesh specs.
 
     bandstructure(h::Hamiltonian, mesh::Mesh; lift = missing, kw...)
 
@@ -158,19 +155,20 @@ Compute the bandstructure `bandstructure(h, mesh; kw...)` of Bloch Hamiltonian `
 ϕ)`, with `ϕ = v` taken on each vertex `v` of `mesh` (or `ϕ = lift(v...)` if a `lift`
 function is provided).
 
-    bandstructure(ph::ParametricHamiltonian, ...; kw...)
+    bandstructure(ph::ParametricHamiltonian, ...; lift = missing, kw...)
 
-Compute the bandstructure of a `ph` with `i` parameters (see `parameters(ph)`), where `mesh`
-is interpreted as a discretization of parameter space ⊗ Brillouin zone, so that each vertex
-reads `v = (p₁,..., pᵢ, ϕ₁,..., ϕⱼ)`, with `p` the values assigned to `parameters(ph)` and
-`ϕᵢ` the Bloch phases.
+Compute the bandstructure of a `ph` with `i` parameters (see `parameters(ph)`), where the
+`mesh` is interpreted as a discretization of parameter space ⊗ Brillouin zone, so that each
+vertex `v` defines `(p₁,..., pᵢ, ϕ₁,..., ϕⱼ) = v`, with `p` the values assigned to
+`parameters(ph)` and `ϕᵢ` the Bloch phases. If a `lift` function is provided the mapping
+reads `(p₁,..., pᵢ, ϕ₁,..., ϕⱼ) = lift(v...)` instead
 
     bandstructure(matrixf::Function, mesh::Mesh; kw...)
 
 Compute the bandstructure of the Hamiltonian matrix `m = matrixf(ϕ)`, with `ϕ` evaluated on
-the vertices `v` of the `mesh`. Note that `ϕ` in `matrixf(ϕ)` is an unsplatted container.
-Hence, i.e. `matrixf(x) = ...` or `matrixf(x, y) = ...` will not work, use `matrixf((x,)) =
-...` or `matrixf((x, y)) = ...` instead.
+the vertices `v` (or `lift(v)`) of the `mesh`. Note that `ϕ` in `matrixf(ϕ)` is an
+unsplatted argument. Hence, i.e. `matrixf(x) = ...` or `matrixf(x, y) = ...` will not work,
+use `matrixf((x,)) = ...` or `matrixf((x, y)) = ...` instead.
 
 # Options
 
@@ -222,14 +220,14 @@ Bandstructure{1}: collection of 1D bands
     Vertices   : 37
     Edges      : 36
 
-julia> bandstructure(h, marchingmesh((0, 2π); points = 25); lift = φ -> (φ, 0))
-       # Equivalent to bandstructure(h, linearmesh(:Γ, :X; points = 11))
+julia> ph = HamiltonianPresets.graphene() |> parametric(@onsite!((o, r; E) -> o + E' * r));
+       bandstructure(ph, linearmesh((0,0), (1,1)), lift = (vx,vy) -> (SA[vx,vy], 0, 0))
 Bandstructure{1}: collection of 1D bands
-  Bands        : 18
-  Element type : scalar (Complex{Float64})
+  Bands        : 2
+  Element type : scalar (ComplexF64)
   Mesh{1}: mesh of a 1-dimensional manifold
-    Vertices   : 25
-    Edges      : 24
+    Vertices   : 13
+    Edges      : 12
 ```
 
 # See also
@@ -242,7 +240,7 @@ end
 
 function bandstructure(h::Union{Hamiltonian,ParametricHamiltonian}, spec::MeshSpec; lift = missing, kw...)
     mesh = buildmesh(spec, h)
-    lift´ = lift === missing ? buildlift(spec, h) : lift
+    lift´ = buildlift(spec, h, lift)
     return bandstructure(h, mesh; lift = lift´, kw...)
 end
 
@@ -275,9 +273,9 @@ _samplematrix(matrixf, mesh) = matrixf(Tuple(first(vertices(mesh))))
 _wraplift(matrixf, lift::Missing) = matrixf
 _wraplift(matrixf, lift) = ϕs -> matrixf(applylift(lift, ϕs))
 
-@inline applylift(lift::Missing, ϕs) = toSVector(ϕs)
+@inline applylift(lift::Missing, ϕs) = ϕs
 
-@inline applylift(lift::Function, ϕs) = toSVector(lift(ϕs...))
+@inline applylift(lift::Function, ϕs) = lift(Tuple(ϕs)...)
 
 function _bandstructure(matrixf::Function, matrix´::AbstractMatrix{M}, mesh::MD, d::DiagonalizeHelper) where {M,D,T,MD<:Mesh{D,T}}
     nϵ = 0                           # Temporary, to be reassigned
@@ -290,11 +288,11 @@ function _bandstructure(matrixf::Function, matrix´::AbstractMatrix{M}, mesh::MD
     by = _maybereal(T)
 
     p = Progress(nk, "Step 1/2 - Diagonalising: ")
-    for (n, ϕs) in enumerate(vertices(mesh))
-        matrix = matrixf(Tuple(ϕs))
+    for (n, vs) in enumerate(vertices(mesh))
+        matrix = matrixf(Tuple(vs))
         # (ϵk, ψk) = diagonalize(Hermitian(matrix), d)  ## This is faster (!)
         (ϵk, ψk) = diagonalize(matrix, d.method)
-        resolve_degeneracies!(ϵk, ψk, ϕs, d.codiag)
+        resolve_degeneracies!(ϵk, ψk, vs, d.codiag)
         if n == 1  # With first vertex can now know the number of eigenvalues... Reassign
             nϵ = size(ϵk, 1)
             ϵks = Matrix{T}(undef, nϵ, nk)

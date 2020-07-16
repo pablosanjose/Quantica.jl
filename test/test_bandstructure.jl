@@ -69,4 +69,10 @@ end
     @test length(bands(b)) == 4
     b = bandstructure(ph, mesh1D, lift = φ -> (φ, -φ))
     @test length(bands(b)) == 4
+
+    ph = HamiltonianPresets.graphene() |> parametric(@onsite!((o, r; E) -> o + E' * r))
+    b = bandstructure(ph, linearmesh((0,0), (1,1)), lift = (vx,vy) -> (SA[vx,vy], 0, 0))
+    @test length(bands(b)) == 2
+    b = bandstructure(ph, marchingmesh((0,1), (0,1), (3,3), points = (13,13,1)), lift = (vx,vy, k) -> (SA[vx,vy], k, k))
+    @test length(bands(b)) == 2
 end

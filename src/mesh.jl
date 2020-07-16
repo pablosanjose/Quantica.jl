@@ -9,10 +9,6 @@ struct Mesh{D,T,V<:AbstractArray{SVector{D,T}}} <: AbstractMesh{D}   # D is dime
     adjmat::SparseMatrixCSC{Bool,Int}   # Undirected graph: both dest > src and dest < src
 end
 
-# const Mesh{D,T} = Mesh{D,T,Vector{SVector{D,T}},Vector{Tuple{Int,Vararg{Int,D}}}}
-
-# Mesh{D,T}() where {D,T} = Mesh(SVector{D,T}[], sparse(Int[], Int[], Bool[]), NTuple{D+1,Int}[])
-
 function Base.show(io::IO, mesh::Mesh{D}) where {D}
     i = get(io, :indent, "")
     print(io,
@@ -129,16 +125,22 @@ Base.show(io::IO, spec::MeshSpec{L}) where {L} =
     print(io, "MeshSpec{$L} : specifications for building a $(L)D mesh.")
 
 """
-    buildlift(s::MeshSpec{L}, h::Union{Hamiltonian,ParametricHamiltonian})
+    buildlift(s::MeshSpec{L}, h::Union{Hamiltonian,ParametricHamiltonian}, postlift = missing)
 
-Build a lift function that maps a `Mesh` built with `buildmesh(s, h)` to the
-Brillouin/parameter space of `h` (see `bandstructure` for details).
+Build a `lift` function that maps the vertices `v` of the `Mesh` built with `buildmesh(s,
+h)` to the Brillouin/parameter space of `h`, `(p₁,..., pᵢ, ϕ₁,..., ϕⱼ) = lift(v...)` (see
+`bandstructure` for details).
+
+If `postlift` is non-missing, a `lift´ = postlift(lift(v...)...)` is returned instead.
+`postlift` is useful when the user needs to perform a custom mapping to the default given by
+a `MeshSpec`, e.g. when `h` is a `ParametricHamiltonian` with non-scalar parameters that are
+connected non-trivially to the mesh coordinates.
+
 
 # See also
     `buildmesh`, `marchingmesh`, `linearmesh`
 """
-buildlift(s::MeshSpec, h::Union{Hamiltonian,ParametricHamiltonian}) =
-    buildlift(s, bravais_parameters(h))
+function buildlift end
 
 """
     buildmesh(s::MeshSpec, h::Union{Hamiltonian,ParametricHamiltonian})
@@ -160,28 +162,28 @@ Mesh{2}: mesh of a 2-dimensional manifold
 # See also
     `buildlift`, `marchingmesh`, `linearmesh`
 """
-buildmesh(s::MeshSpec, h::Union{Hamiltonian,ParametricHamiltonian}) =
-    buildmesh(s, bravais_parameters(h))
-
-bravais_parameters(h::Hamiltonian) = bravais(h)
-bravais_parameters(ph::ParametricHamiltonian{P}) where {P} = _blockdiag(SMatrix{P,P}(I), bravais(ph))
+function buildmesh end
 
 #######################################################################
 # MarchingMeshSpec
 #######################################################################
-struct MarchingMeshSpec{L,R,T,M<:NTuple{L,Tuple{Number,Number}}} <: MeshSpec{L}
+struct MarchingMeshSpec{L,R,T<:Number,M<:NTuple{L,Tuple{Number,Number}}} <: MeshSpec{L}
     minmaxaxes::M
     axes::SMatrix{L,L,T}
     points::R
 end
 
 """
-    marchingmesh(minmaxaxes...; axes = 1.0 * I, points = 13)
+    marchingmesh(minmaxaxes::Vararg{Tuple{Number,Number},L}; axes = 1.0 * I, points = 13)
 
-Create a `MeshSpec` for a L-dimensional marching-tetrahedra `Mesh` over a parallelepiped
+Create a `spec::MeshSpec` for a L-dimensional marching-tetrahedra `Mesh` over a parallelepiped
 with axes given by the columns of `axes`. The points along axis `i` are distributed between
 `first(minmaxaxes[i])` and `last(minmaxaxes[i])`. The number of points on each axis is given
 by `points`, or `points[i]` if several are given.
+
+The mapping `lift = buildlift(spec, h, postlift)` that maps the marching `mesh =
+buildmesh(spec, h)` vertices to the parameter/bloch phase space of a `Hamiltonian` or
+`ParametricHamiltonian` `h` is the identity, or `postlift` if provided.
 
 # Examples
 
@@ -203,13 +205,13 @@ Mesh{2}: mesh of a 2-dimensional manifold
 # External links
 - Marching tetrahedra (https://en.wikipedia.org/wiki/Marching_tetrahedra) in Wikipedia
 """
-marchingmesh(minmaxaxes::Vararg{Tuple,L}; axes = 1.0 * I, points = 13) where {L} =
+marchingmesh(minmaxaxes::Vararg{Tuple{Number,Number},L}; axes = 1.0 * I, points = 13) where {L} =
     MarchingMeshSpec(minmaxaxes, SMatrix{L,L}(axes), points)
 
-marchingmesh(; kw...) = throw(ArgumentError("Need a finite number of ranges to define a marching mesh"))
+marchingmesh(; kw...) = throw(ArgumentError("Need a finite number of axes to define a marching mesh"))
 
-function buildmesh(m::MarchingMeshSpec{D}, bravais::SMatrix = SMatrix{D,D}(I)) where {D}
-    ranges = ((b, r)->range(b...; length = r)).(m.minmaxaxes, m.points)
+function buildmesh(s::MarchingMeshSpec{D}, h) where {D}
+    ranges = ((b, r) -> range(b...; length = r)).(s.minmaxaxes, s.points)
     npoints = length.(ranges)
     cs = CartesianIndices(ntuple(n -> 1:npoints[n], Val(D)))
     ls = LinearIndices(cs)
@@ -223,31 +225,30 @@ function buildmesh(m::MarchingMeshSpec{D}, bravais::SMatrix = SMatrix{D,D}(I)) w
     utets = [cumsum(pushfirst!(perm, zero(CartesianIndex{D}))) for perm in perms]
 
     # We don't use generators because their non-inferreble eltype causes problems elsewhere
-    verts = [m.axes * SVector(getindex.(ranges, Tuple(c))) for c in cs]
+    verts = [s.axes * SVector(getindex.(ranges, Tuple(c))) for c in cs]
 
-    s = SparseMatrixBuilder{Bool}(length(cs), length(cs))
+    sp = SparseMatrixBuilder{Bool}(length(cs), length(cs))
     for c in cs
         for u in uedges
             dest = c + u    # dest > src
-            dest in cs && pushtocolumn!(s, ls[dest], true)
+            dest in cs && pushtocolumn!(sp, ls[dest], true)
             dest = c - u    # dest < src
-            dest in cs && pushtocolumn!(s, ls[dest], true)
+            dest in cs && pushtocolumn!(sp, ls[dest], true)
         end
-        finalizecolumn!(s)
+        finalizecolumn!(sp)
     end
-    adjmat = sparse(s)
+    adjmat = sparse(sp)
 
     return Mesh(verts, adjmat)
 end
 
-buildlift(::MarchingMeshSpec{L}, bravais::SMatrix{E,L}) where {E,L} = missing
-buildlift(::MarchingMeshSpec{L´}, bravais::SMatrix{E,L}) where {E,L,L´} =
-    (pt...) -> padright(pt, Val(L))
+buildlift(::MarchingMeshSpec, ::Union{Hamiltonian,ParametricHamiltonian}, postlift = missing) =
+    postlift
 
 #######################################################################
 # LinearMeshSpec
 #######################################################################
-struct LinearMeshSpec{N,L,T,R} <: MeshSpec{1}
+struct LinearMeshSpec{N,L,T<:Number,R} <: MeshSpec{1}
     vertices::SVector{N,SVector{L,T}}
     samelength::Bool
     closed::Bool
@@ -255,13 +256,17 @@ struct LinearMeshSpec{N,L,T,R} <: MeshSpec{1}
 end
 
 """
-    linearmesh(nodes...; points = 13, samelength = false, closed = false)
+    linearmesh(nodes...; points = 13, samelength = true, closed = false)
 
-Create a `MeshSpec` for a one-dimensional `Mesh` connecting the `nodes` with straight
-segments, each containing a number `points` of points (endpoints included). If a different
-number of points for each of the `N` segments is required, use `points::NTuple{N,Int}`.
-If `samelength` each segment has equal length in mesh coordinates. If `closed` the last node
-is connected to the first node (must be equal)
+Create a `MeshSpec` for a one-dimensional `Mesh` connecting the `nodes::NTuple{L,Number}`
+with straight segments, where `L` is the embedding mesh dimension. The following named
+`nodes` can also be used: `:Γ, :X, :Y, :Z, :K, :Kp, :M` (see `Quantica.BZpoints`).
+
+Each segment in the linear mesh contains a number `points` of points (endpoints included).
+If a different number of points for each of the `N` segments is required, use
+`points::NTuple{N,Int}`. If `samelength == true` each segment is normalized to have equal
+length in mesh coordinates. If `closed == true` the last node is connected to the first node
+(they must be equal).
 
 # Examples
 
@@ -275,7 +280,7 @@ Mesh{1}: mesh of a 1-dimensional manifold
 # See also
     `marchingmesh`, `buildmesh`
 """
-linearmesh(nodes...; points = 13, samelength::Bool = false, closed::Bool = false) =
+linearmesh(nodes...; points = 13, samelength::Bool = true, closed::Bool = false) =
     LinearMeshSpec(sanitize_BZpts(nodes, closed), samelength, closed, points)
 
 function sanitize_BZpts(pts, closed)
@@ -289,13 +294,14 @@ function sanitize_BZpts(pts, closed)
     return pts´´
 end
 
-parse_BZpoint(p::SVector) = float.(p)
 parse_BZpoint(p::Tuple) = SVector(float.(p))
+
 function parse_BZpoint(p::Symbol)
     pt = get(BZpoints, p, missing)
     pt === missing && throw(ArgumentError("Unknown Brillouin zone point $p, use one of $(keys(BZpoints))"))
     return SVector(float.(pt))
 end
+
 const BZpoints =
     ( Γ  = (0,)
     , X  = (pi,)
@@ -306,7 +312,11 @@ const BZpoints =
     , M  = (pi, 0)
     )
 
-linearmesh_nodes(l, br) = cumsum(SVector(0, segment_lengths(l, br)...))
+linearmesh_nodes(l, h) = cumsum(SVector(0, segment_lengths(l, h)...))
+
+segment_lengths(s::LinearMeshSpec, h::Hamiltonian) = segment_lengths(s, bravais(h))
+segment_lengths(s::LinearMeshSpec, ph::ParametricHamiltonian{P}) where {P} =
+    segment_lengths(s, _blockdiag(SMatrix{P,P}(I), bravais(ph)))
 
 function segment_lengths(s::LinearMeshSpec{N,LS,TS}, br::SMatrix{E,LB,TB}) where {TS,TB,N,E,LS,LB}
     T = promote_type(TS, TB)
@@ -322,8 +332,8 @@ function segment_lengths(s::LinearMeshSpec{N,LS,TS}, br::SMatrix{E,LB,TB}) where
     return ls
 end
 
-function idx_to_node(s, br)
-    nodes = SVector.(linearmesh_nodes(s, br))
+function idx_to_node(s, h)
+    nodes = SVector.(linearmesh_nodes(s, h))
     nmax = length(nodes)
     nodefunc = nvec -> begin
         n = only(nvec)
@@ -339,7 +349,7 @@ function idx_to_node(s, br)
     return nodefunc
 end
 
-function buildmesh(s::LinearMeshSpec{N}, br::SMatrix) where {N}
+function buildmesh(s::LinearMeshSpec{N}, h) where {N}
     ranges = ((i, r) -> range(i, i+1, length = r)).(ntuple(identity, Val(N-1)), s.points)
     verts = SVector.(first(ranges))
     for r in Base.tail(ranges)
@@ -348,27 +358,27 @@ function buildmesh(s::LinearMeshSpec{N}, br::SMatrix) where {N}
     end
     s.closed && pop!(verts)
     nv = length(verts)
-    nodefunc = idx_to_node(s, br)
+    nodefunc = idx_to_node(s, h)
     verts .= nodefunc.(verts)
     adjmat = sparse(vcat(1:nv-1, 2:nv), vcat(2:nv, 1:nv-1), true, nv, nv)
     s.closed && (adjmat[end, 1] = adjmat[1, end] = true)
     return Mesh(verts, adjmat)
 end
 
-function buildlift(s::LinearMeshSpec, br::SMatrix{E,L}) where {E,L}
-    ls = segment_lengths(s, br)
-    nodes = linearmesh_nodes(s, br)
-    verts = padright.(s.vertices, Val(L))
+function buildlift(s::LinearMeshSpec{N,L}, h, postlift = missing) where {N,L}
+    ls = segment_lengths(s, h)
+    nodes = linearmesh_nodes(s, h)
+    verts = s.vertices
     l = sum(ls)
-    liftfunc = x -> begin
+    lift = x -> begin
         xc = clamp(only(x), 0, l)
         for (i, node) in enumerate(nodes)
             if node > xc
                 p = verts[i-1] + (xc - nodes[i-1])/ls[i-1] * (verts[i]-verts[i-1])
-                return p
+                return applylift(postlift, p)
             end
         end
-        return last(verts)
+        return applylift(postlift, last(verts))
     end
-    return liftfunc
+    return lift
 end

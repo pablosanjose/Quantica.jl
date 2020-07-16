@@ -210,7 +210,7 @@ Base.eltype(ph::ParametricHamiltonian) = eltype(ph.h)
 bloch(ph::ParametricHamiltonian, args...) = bloch!(similarmatrix(ph), ph, args...)
 
 bloch!(matrix, ph::ParametricHamiltonian, pϕs = (), axis = 0) =
-    bloch!(matrix, h_phases(ph, toSVector(pϕs))..., axis)
+    bloch!(matrix, h_phases(ph, pϕs)..., axis)
 
 @inline function h_phases(ph::ParametricHamiltonian, pϕs)
     pnames = parameters(ph)
@@ -219,5 +219,6 @@ bloch!(matrix, ph::ParametricHamiltonian, pϕs = (), axis = 0) =
     return (h, ϕs)
 end
 
-extract_parameters_phases(pnames::NTuple{N,NameType}, ϕs::SVector{M}) where {N,M} =
-    (NamedTuple{pnames}(ntuple(i->ϕs[i], Val(N))), ntuple(i->ϕs[i+N], Val(M-N)))
+extract_parameters_phases(pnames::NTuple{N,NameType}, pϕs::NTuple{M,Any}) where {N,M} =
+    (NamedTuple{pnames}(ntuple(i -> pϕs[i], Val(N))),
+     ntuple(i -> pϕs[i+N], Val(M-N)))

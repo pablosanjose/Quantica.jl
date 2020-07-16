@@ -96,9 +96,9 @@ end
 
 pinverse(m::SMatrix) = (f -> inv(f.R) * f.Q')(qr(m))
 
-_blockdiag(s1::SMatrix{M}, s2::SMatrix{N}) where {N,M} = hcat(
-    ntuple(j->vcat(s1[:,j], zero(s2[:,j])), Val(M))...,
-    ntuple(j->vcat(zero(s1[:,j]), s2[:,j]), Val(N))...)
+_blockdiag(s1::SMatrix{M,M´}, s2::SMatrix{N,N´}) where {M,M´,N,N´} = hcat(
+    ntuple(j->vcat(s1[:,j], zero(SVector{N,Bool})), Val(M´))...,
+    ntuple(j->vcat(zero(SVector{M,Bool}), s2[:,j]), Val(N´))...)
 
 function isgrowing(vs::AbstractVector, i0 = 1)
     i0 > length(vs) && return true

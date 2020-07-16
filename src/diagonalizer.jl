@@ -241,15 +241,7 @@ function _directions(::Val{L}; direlements = 0:1, onlypositive = true) where {L}
 end
 
 meshdelta(mesh::Mesh{<:Any,T}, lift = missing) where {T} =
-    T(0.1) * norm(applylift(lift, first(minmax_edge(mesh))))
-
-# function anyoldmatrix(matrix::SparseMatrixCSC{Tv,Ti}) where {Tv,Ti}
-#     n = size(matrix, 1)
-#     ri = one(Ti):Ti(n)
-#     rv = Tv.(im .* (1:n))
-#     s = sparse(ri, ri, rv, n, n)
-#     return s
-# end
+    T(0.1) * norm(first(minmax_edge(mesh)))
 
 function anyoldmatrix(matrix::SparseMatrixCSC, rng = MersenneTwister(1))
     s = copy(matrix)
@@ -257,5 +249,4 @@ function anyoldmatrix(matrix::SparseMatrixCSC, rng = MersenneTwister(1))
     return s
 end
 
-# anyoldmatrix(m::M) where {T,M<:DenseArray{T}} = M(Diagonal(T.(im .* (1:size(m,1)))))
 anyoldmatrix(m::DenseArray, rng = MersenneTwister(1)) = rand!(rng, copy(m))
