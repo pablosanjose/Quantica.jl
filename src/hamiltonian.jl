@@ -1067,6 +1067,9 @@ function add_harmonics!(zerobloch, h::Hamiltonian{<:Lattice,L}, ϕs::SVector{L},
     return zerobloch
 end
 
+add_harmonics!(_, h::Hamiltonian{<:Lattice,L}, ϕs::SVector{L´}, _) where {L,L´} =
+    throw(DimensionMismatch("Tried applying $(L´) Bloch phases to a $(L)D Hamiltonian"))
+
 ############################################################################################
 ######## _copy! and _add! call specialized methods in tools.jl #############################
 ############################################################################################

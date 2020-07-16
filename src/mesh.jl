@@ -136,7 +136,6 @@ If `postlift` is non-missing, a `lift´ = postlift(lift(v...)...)` is returned i
 a `MeshSpec`, e.g. when `h` is a `ParametricHamiltonian` with non-scalar parameters that are
 connected non-trivially to the mesh coordinates.
 
-
 # See also
     `buildmesh`, `marchingmesh`, `linearmesh`
 """
@@ -181,10 +180,6 @@ with axes given by the columns of `axes`. The points along axis `i` are distribu
 `first(minmaxaxes[i])` and `last(minmaxaxes[i])`. The number of points on each axis is given
 by `points`, or `points[i]` if several are given.
 
-The mapping `lift = buildlift(spec, h, postlift)` that maps the marching `mesh =
-buildmesh(spec, h)` vertices to the parameter/bloch phase space of a `Hamiltonian` or
-`ParametricHamiltonian` `h` is the identity, or `postlift` if provided.
-
 # Examples
 
 ```jldoctest
@@ -210,7 +205,7 @@ marchingmesh(minmaxaxes::Vararg{Tuple{Number,Number},L}; axes = 1.0 * I, points 
 
 marchingmesh(; kw...) = throw(ArgumentError("Need a finite number of axes to define a marching mesh"))
 
-function buildmesh(s::MarchingMeshSpec{D}, h) where {D}
+function buildmesh(s::MarchingMeshSpec{D}, h = missing) where {D}
     ranges = ((b, r) -> range(b...; length = r)).(s.minmaxaxes, s.points)
     npoints = length.(ranges)
     cs = CartesianIndices(ntuple(n -> 1:npoints[n], Val(D)))
@@ -226,7 +221,7 @@ function buildmesh(s::MarchingMeshSpec{D}, h) where {D}
 
     # We don't use generators because their non-inferreble eltype causes problems elsewhere
     verts = [s.axes * SVector(getindex.(ranges, Tuple(c))) for c in cs]
-
+    
     sp = SparseMatrixBuilder{Bool}(length(cs), length(cs))
     for c in cs
         for u in uedges
@@ -248,8 +243,8 @@ buildlift(::MarchingMeshSpec, ::Union{Hamiltonian,ParametricHamiltonian}, postli
 #######################################################################
 # LinearMeshSpec
 #######################################################################
-struct LinearMeshSpec{N,L,T<:Number,R} <: MeshSpec{1}
-    vertices::SVector{N,SVector{L,T}}
+struct LinearMeshSpec{N,V<:NTuple{N,Union{Symbol,SVector{L,<:Number} where L}},R} <: MeshSpec{1}
+    vertices::V
     samelength::Bool
     closed::Bool
     points::R
@@ -283,23 +278,38 @@ Mesh{1}: mesh of a 1-dimensional manifold
 linearmesh(nodes...; points = 13, samelength::Bool = true, closed::Bool = false) =
     LinearMeshSpec(sanitize_BZpts(nodes, closed), samelength, closed, points)
 
+function sanitize_BZpts(pts::NTuple{N,Symbol}, closed) where {N}
+    closed && first(pts) != last(pts) && _throwclosed()
+    return pts
+end
+
+# If there is at least one Tuple in pts
 function sanitize_BZpts(pts, closed)
-    pts´ = parse_BZpoint.(pts)
+    dimval = _finddim(Val(0), pts...)
+    pts´ = parse_BZpoint.(pts, dimval)
     if closed
-        all(isapprox.(first(pts´), last(pts´))) ||
-            throw(ArgumentError("Closed linear meshes should have equal first and last nodes."))
+        all(isapprox.(first(pts´), last(pts´))) || _throwclosed()
     end
     dim = maximum(length.(pts´))
-    pts´´ = SVector(padright.(pts´, Val(dim)))
+    pts´´ = padright.(pts´, Val(dim))
     return pts´´
 end
 
-parse_BZpoint(p::Tuple) = SVector(float.(p))
+_finddim(::Val{L}, pt::Symbol, pts...) where {L} = _finddim(Val(L), pts...)
+_finddim(::Val{0}, pt::NTuple{L,Number}, pts...) where {L} = _finddim(Val(L), pts...)
+_finddim(::Val{L}, pt::NTuple{L,Number}, pts...) where {L} = _finddim(Val(L), pts...)
+_finddim(::Val{L}, pt, pts...) where {L} = throw(ErrorException("Unexpected linearmesh node or of inconsistent dimension"))
+_finddim(val::Val) = val
 
-function parse_BZpoint(p::Symbol)
+# Do not enforce dimension if there is already a dimension (in case there is a postlift involved)
+parse_BZpoint(p::Tuple, ::Val) = SVector(float.(p))
+parse_BZpoint(p::SVector, ::Val) = p
+
+function parse_BZpoint(p::Symbol, dim::Val)
     pt = get(BZpoints, p, missing)
     pt === missing && throw(ArgumentError("Unknown Brillouin zone point $p, use one of $(keys(BZpoints))"))
-    return SVector(float.(pt))
+    pt´ = padright(SVector(float.(pt)), dim)
+    return pt´
 end
 
 const BZpoints =
@@ -312,6 +322,11 @@ const BZpoints =
     , M  = (pi, 0)
     )
 
+_throwclosed() =
+    throw(ArgumentError("Closed linear meshes should have equal first and last nodes."))
+
+#####
+
 linearmesh_nodes(l, h) = cumsum(SVector(0, segment_lengths(l, h)...))
 
 segment_lengths(s::LinearMeshSpec, h::Hamiltonian) = segment_lengths(s, bravais(h))
@@ -320,11 +335,11 @@ segment_lengths(s::LinearMeshSpec, ph::ParametricHamiltonian{P}) where {P} =
 
 function segment_lengths(s::LinearMeshSpec{N,LS,TS}, br::SMatrix{E,LB,TB}) where {TS,TB,N,E,LS,LB}
     T = promote_type(TS, TB)
-    verts = padright.(s.vertices, Val(LB))
-    dϕs = ntuple(i -> verts[i + 1] - verts[i], Val(N-1))
     if s.samelength
         ls = filltuple(T(1/(N-1)), Val(N-1))
     else
+        verts = padright.(s.vertices, Val(LB))
+        dϕs = ntuple(i -> verts[i + 1] - verts[i], Val(N-1))
         ibr = pinverse(br)'
         ls = (dϕ -> norm(ibr * dϕ)).(dϕs)
         ls = ls ./ sum(ls)
@@ -350,25 +365,27 @@ function idx_to_node(s, h)
 end
 
 function buildmesh(s::LinearMeshSpec{N}, h) where {N}
-    ranges = ((i, r) -> range(i, i+1, length = r)).(ntuple(identity, Val(N-1)), s.points)
+    s´ = resolve(s, h)
+    ranges = ((i, r) -> range(i, i+1, length = r)).(ntuple(identity, Val(N-1)), s´.points)
     verts = SVector.(first(ranges))
     for r in Base.tail(ranges)
         pop!(verts)
         append!(verts, SVector.(r))
     end
-    s.closed && pop!(verts)
+    s´.closed && pop!(verts)
     nv = length(verts)
-    nodefunc = idx_to_node(s, h)
+    nodefunc = idx_to_node(s´, h)
     verts .= nodefunc.(verts)
     adjmat = sparse(vcat(1:nv-1, 2:nv), vcat(2:nv, 1:nv-1), true, nv, nv)
-    s.closed && (adjmat[end, 1] = adjmat[1, end] = true)
+    s´.closed && (adjmat[end, 1] = adjmat[1, end] = true)
     return Mesh(verts, adjmat)
 end
 
 function buildlift(s::LinearMeshSpec{N,L}, h, postlift = missing) where {N,L}
-    ls = segment_lengths(s, h)
-    nodes = linearmesh_nodes(s, h)
-    verts = s.vertices
+    s´ = resolve(s, h)
+    ls = segment_lengths(s´, h)
+    nodes = linearmesh_nodes(s´, h)
+    verts = s´.vertices
     l = sum(ls)
     lift = x -> begin
         xc = clamp(only(x), 0, l)
@@ -382,3 +399,8 @@ function buildlift(s::LinearMeshSpec{N,L}, h, postlift = missing) where {N,L}
     end
     return lift
 end
+
+# Resolves any symbolic nodes in LinearMeshSpec using lattice dimensions
+resolve(s::LinearMeshSpec, h::ParametricHamiltonian) = resolve(s, parent(h))
+resolve(s::LinearMeshSpec, h::Hamiltonian{LA,L}) where {LA,L} =
+    LinearMeshSpec(parse_BZpoint.(s.vertices, Val(L)), s.samelength, s.closed, s.points)

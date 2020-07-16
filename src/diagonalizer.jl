@@ -190,7 +190,6 @@ end
 
 function codiagonalizer(h::Union{Hamiltonian,ParametricHamiltonian}, matrix, mesh, lift; kw...)
     veldirs = velocitydirections(parent(h); kw...)
-    veldirs_with_params = padparams.(veldirs, Ref(h))
     nv = length(veldirs)
     matrixindices = 1:(nv + nv + 1)
     degtol = sqrt(eps(real(blockeltype(h))))
@@ -201,7 +200,7 @@ function codiagonalizer(h::Union{Hamiltonian,ParametricHamiltonian}, matrix, mes
         if n <= nv
             bloch!(matrix, h, applylift(lift, meshϕs), dn -> im * veldirs[n]' * dn)
         elseif n - nv <= nv # resort to finite differences
-            bloch!(matrix, h, applylift(lift, meshϕs) + delta * veldirs_with_params[n - nv])
+            bloch!(matrix, h, shiftphases(applylift(lift, meshϕs), Tuple(delta * veldirs[n - nv])))
         else # use a fixed arbitrary matrix
             aom
         end
@@ -229,8 +228,8 @@ velocitydirections(::Hamiltonian{LA,L}; kw...) where {LA,L} = _directions(Val(L)
 
 meshdirections(::Mesh{L}; kw...) where {L} = _directions(Val(L); kw...)
 
-padparams(v, ::Hamiltonian) = v
-padparams(v::SVector{L,T}, ::ParametricHamiltonian{P}) where {L,T,P} = vcat(zero(SVector{P,T}), v)
+shiftphases(pφs::NTuple{N,Any}, shifts::NTuple{L,Number}) where {N,L} =
+    ntuple(i -> i <= N - L ? pφs[i] : pφs[i] + shifts[i - (N - L)], Val(N))
 
 function _directions(::Val{L}; direlements = 0:1, onlypositive = true) where {L}
     directions = vec(SVector{L,Int}.(Iterators.product(ntuple(_ -> direlements, Val(L))...)))

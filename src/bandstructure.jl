@@ -273,7 +273,7 @@ _samplematrix(matrixf, mesh) = matrixf(Tuple(first(vertices(mesh))))
 _wraplift(matrixf, lift::Missing) = matrixf
 _wraplift(matrixf, lift) = ϕs -> matrixf(applylift(lift, ϕs))
 
-@inline applylift(lift::Missing, ϕs) = ϕs
+@inline applylift(lift::Missing, ϕs) = Tuple(ϕs)
 
 @inline applylift(lift::Function, ϕs) = lift(Tuple(ϕs)...)
 

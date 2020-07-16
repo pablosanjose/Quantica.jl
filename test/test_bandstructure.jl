@@ -1,5 +1,5 @@
 @testset "basic bandstructures" begin
-    h = LatticePresets.honeycomb() |> hamiltonian(hopping(-1, range = 1/√3))
+    h = HamiltonianPresets.graphene()
     b = bandstructure(h, points = 13)
     @test length(bands(b)) == 1
 
@@ -16,7 +16,7 @@
     b = bandstructure(h, linearmesh(:Γ, :X, points = 4))
     @test length(bands(b)) == 8
 
-    b = bandstructure(h, linearmesh(:Γ, :X, (0, π), :Z, :Γ, points = 4))
+    b = bandstructure(h, linearmesh(:Γ, :X, (0, π, 0), :Z, :Γ, points = 4))
     @test length(bands(b)) == 8
 end
 
@@ -50,7 +50,8 @@ end
     @test energies(s1) == energies(s2)
     # automatic lift from 2D to 3D
     h = LatticePresets.cubic() |> hamiltonian(hopping(1)) |> unitcell(2)
-    b = bandstructure(h, marchingmesh((0, 2pi), (0, 2pi)))
+    @test_throws DimensionMismatch bandstructure(h, marchingmesh((0, 2pi), (0, 2pi)))
+    b = bandstructure(h, marchingmesh((0, 2pi), (0, 2pi), (0, 0), points = (10, 10, 1)))
     @test length(bands(b)) == 8
 end
 
