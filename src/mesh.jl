@@ -333,12 +333,11 @@ segment_lengths(s::LinearMeshSpec, h::Hamiltonian) = segment_lengths(s, bravais(
 segment_lengths(s::LinearMeshSpec, ph::ParametricHamiltonian{P}) where {P} =
     segment_lengths(s, _blockdiag(SMatrix{P,P}(I), bravais(ph)))
 
-function segment_lengths(s::LinearMeshSpec{N,LS,TS}, br::SMatrix{E,LB,TB}) where {TS,TB,N,E,LS,LB}
-    T = promote_type(TS, TB)
+function segment_lengths(s::LinearMeshSpec{N}, br::SMatrix{E,L}) where {N,E,L}
     if s.samelength
-        ls = filltuple(T(1/(N-1)), Val(N-1))
+        ls = filltuple(1/(N-1), Val(N-1))
     else
-        verts = padright.(s.vertices, Val(LB))
+        verts = padright.(s.vertices, Val(L))
         dϕs = ntuple(i -> verts[i + 1] - verts[i], Val(N-1))
         ibr = pinverse(br)'
         ls = (dϕ -> norm(ibr * dϕ)).(dϕs)
