@@ -689,7 +689,10 @@ function _supercell(lat::AbstractLattice{E,L}, scmatrix::SMatrix{L,L´,Int}, reg
         dntup = Tuple(dn)
         dnvec = toSVector(Int, dntup)
         in_supercell = in_supercell_func(dnvec)
-        in_supercell || (mask[:, dntup...] .= false; continue)
+        if !in_supercell
+            mask[:, dntup...] .= false
+            continue
+        end
         r0 = brmatrix * dnvec
         for (i, site) in enumerate(lat.unitcell.sites)
             r = site + r0

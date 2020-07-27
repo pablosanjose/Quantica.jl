@@ -28,6 +28,11 @@ using Quantica: Hamiltonian, ParametricHamiltonian
     @test isassigned(h, (10,0))
 end
 
+@testset "hamiltonian unitcell" begin
+    h = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = 1/√3)) |> unitcell((1,-1), region = r -> abs(r[2])<2)
+    @test Quantica.nhoppings(h) == 22
+end
+
 @testset "similarmatrix" begin
     types = (ComplexF16, ComplexF32, ComplexF64)
     lat = LatticePresets.honeycomb()

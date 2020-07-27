@@ -37,7 +37,7 @@ end
     end
 end
 
-@testset "unitcell" begin
+@testset "lattice unitcell" begin
     presets = (LatticePresets.linear, LatticePresets.square, LatticePresets.triangular,
                LatticePresets.honeycomb, LatticePresets.cubic, LatticePresets.fcc,
                LatticePresets.bcc)
@@ -54,10 +54,10 @@ end
     @test unitcell(LatticePresets.honeycomb(), region = RegionPresets.circle(10, (10,0))) isa Lattice{2,0}
     @test unitcell(LatticePresets.honeycomb(), (2,1), region = RegionPresets.circle(10)) isa Lattice{2,1}
     @test unitcell(LatticePresets.bcc(), (2,1,0), region = RegionPresets.circle(10)) isa Lattice{3,1}
-    @test unitcell(LatticePresets.cubic(), (2,1,0), region = RegionPresets.sphere(10, (10,20,30))) isa Lattice{3,1}
+    @test unitcell(LatticePresets.cubic(), (2,1,0), region = RegionPresets.sphere(10, (10,2,1))) isa Lattice{3,1}
 end
 
-@testset "supercell" begin
+@testset "lattice supercell" begin
     presets = (LatticePresets.linear, LatticePresets.square, LatticePresets.triangular,
                LatticePresets.honeycomb, LatticePresets.cubic, LatticePresets.fcc,
                LatticePresets.bcc)

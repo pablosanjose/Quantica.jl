@@ -87,14 +87,18 @@ pinvmultiple(s::SMatrix{L,0}) where {L} = (SMatrix{0,0,Int}(), 0)
 function pinvmultiple(s::SMatrix{L,L´}) where {L,L´}
     L < L´ && throw(DimensionMismatch("Supercell dimensions $(L´) cannot exceed lattice dimensions $L"))
     qrfact = qr(s)
-    n = det(qrfact.R)
     # Cannot check det(s) ≈ 0 because s can be non-square
-    abs(n) ≈ 0 && throw(ErrorException("Supercell appears to be singular"))
+    det(qrfact.R) ≈ 0 && throw(ErrorException("Supercell appears to be singular"))
     pinverse = inv(qrfact.R) * qrfact.Q'
-    return round.(Int, n * inv(qrfact.R) * qrfact.Q'), round(Int, n)
+    n = round.(Int, det(s's))
+    npinverse = round.(Int, n * pinverse)
+    return npinverse, n
 end
 
-pinverse(m::SMatrix) = (f -> inv(f.R) * f.Q')(qr(m))
+function pinverse(m::SMatrix)
+    qrm = qr(m)
+    return inv(qrm.R) * qrm.Q'
+end
 
 _blockdiag(s1::SMatrix{M}, s2::SMatrix{N}) where {N,M} = hcat(
     ntuple(j->vcat(s1[:,j], zero(s2[:,j])), Val(M))...,
