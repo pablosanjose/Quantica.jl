@@ -3,23 +3,55 @@
 #######################################################################
 abstract type Selector{M,S} end
 
-struct OnsiteSelector{M,S} <: Selector{M,S}
+struct SiteSelector{M,S} <: Selector{M,S}
     region::M
     sublats::S  # NTuple{N,NameType} (unresolved) or Vector{Int} (resolved on a lattice)
 end
 
-struct HoppingSelector{M,S,D,T} <: Selector{M,S}
+struct HopSelector{M,S,D,T} <: Selector{M,S}
     region::M
     sublats::S  # NTuple{N,Pair{NameType,NameType}} (unres) or Vector{Pair{Int,Int}} (res)
     dns::D
     range::T
 end
 
-onsiteselector(; region = missing, sublats = missing) =
-    OnsiteSelector(region, sanitize_sublats(sublats))
+"""
+    siteselector(; region = missing, sublats = missing)
 
-hoppingselector(; region = missing, sublats = missing, dn = missing, range = missing) =
-    HoppingSelector(region, sanitize_sublatpairs(sublats), sanitize_dn(dn), sanitize_range(range))
+Return a `SiteSelector` object that can be used to select sites in a lattice contained
+within the specified region and sublattices. Only sites at position `r` in sublattice with
+name `s::NameType` will be selected if `region(r) && s in sublats` is true. Any missing
+`region` or `sublat` will not be used to constraint the selection.
+
+The keyword `sublats` allows the following formats:
+
+    sublats = :A           # Onsite on sublat :A only
+    sublats = (:A,)        # Same as above
+    sublats = (:A, :B)     # Onsite on sublat :A and :B
+"""
+siteselector(; region = missing, sublats = missing) =
+    SiteSelector(region, sanitize_sublats(sublats))
+
+"""
+    hopselector(; region = missing, sublats = missing, dn = missing, range = missing)
+
+Return a `HopSelector` object that can be used to select hops between two sites in a
+lattice. Only hops between two sites at positions `r₁ = r - dr/2` and `r₂ = r + dr`,
+belonging to unit cells at integer distance `dn´` and to sublattices `s₁` and `s₂` will be
+selected if: `region(r, dr) && s in sublats && dn´ in dn && norm(dr) <= range`. If any of
+these is `missing` it will not be used to constraint the selection.
+
+The keyword `dn` can be a `Tuple`/`Vector`/`SVector` of `Int`s, or a tuple thereof. The
+keyword `sublats` allows the following formats:
+
+    sublats = :A => :B                 # Hopping from :A to :B sublattices
+    sublats = (:A => :B,)              # Same as above
+    sublats = (:A => :B, :C => :D)     # Hopping from :A to :B or :C to :D
+    sublats = (:A, :C) .=> (:B, :D)    # Broadcasted pairs, same as above
+    sublats = (:A, :C) => (:B, :D)     # Direct product, (:A=>:B, :A=:D, :C=>:B, :C=>D)
+"""
+hopselector(; region = missing, sublats = missing, dn = missing, range = missing) =
+    HopSelector(region, sanitize_sublatpairs(sublats), sanitize_dn(dn), sanitize_range(range))
 
 sanitize_sublats(s::Missing) = missing
 sanitize_sublats(s::Integer) = (nametype(s),)
@@ -51,9 +83,9 @@ _sanitize_dn(dn::Vector) = SVector{length(dn),Int}(dn)
 sanitize_range(::Missing) = missing
 sanitize_range(range::Real) = isfinite(range) ? float(range) + sqrt(eps(float(range))) : float(range)
 
-sublats(s::OnsiteSelector{<:Any,Missing}, lat::AbstractLattice) = collect(1:nsublats(lat))
+sublats(lat::AbstractLattice, s::SiteSelector{<:Any,Missing}) = collect(1:nsublats(lat))
 
-function sublats(s::OnsiteSelector{<:Any,<:Tuple}, lat::AbstractLattice)
+function sublats(lat::AbstractLattice, s::SiteSelector{<:Any,<:Tuple})
     names = lat.unitcell.names
     ss = Int[]
     for name in s.sublats
@@ -63,7 +95,7 @@ function sublats(s::OnsiteSelector{<:Any,<:Tuple}, lat::AbstractLattice)
     return ss
 end
 
-function sublats(s::HoppingSelector{<:Any,<:Tuple}, lat::AbstractLattice)
+function sublats(lat::AbstractLattice, s::HopSelector{<:Any,<:Tuple})
     names = lat.unitcell.names
     ss = Pair{Int,Int}[]
     for (nsrc, ndst) in s.sublats
@@ -74,17 +106,17 @@ function sublats(s::HoppingSelector{<:Any,<:Tuple}, lat::AbstractLattice)
     return ss
 end
 
-sublats(s::HoppingSelector{<:Any,Missing}, lat::AbstractLattice) =
+sublats(lat::AbstractLattice, s::HopSelector{<:Any,Missing}) =
     tupletopair.(vec(collect(Iterators.product(1:nsublats(lat), 1:nsublats(lat)))))
 
 # selector already resolved for a lattice
-sublats(s::Selector{<:Any,<:Vector}, lat) = s.sublats
+sublats(lat, s::Selector{<:Any,<:Vector}) = s.sublats
 
 # API
 
-resolve(s::HoppingSelector, lat::AbstractLattice) =
-    HoppingSelector(s.region, sublats(s, lat), _checkdims(s.dns, lat), s.range)
-resolve(s::OnsiteSelector, lat::AbstractLattice) = OnsiteSelector(s.region, sublats(s, lat))
+resolve(s::HopSelector, lat::AbstractLattice) =
+    HopSelector(s.region, sublats(lat, s), _checkdims(s.dns, lat), s.range)
+resolve(s::SiteSelector, lat::AbstractLattice) = SiteSelector(s.region, sublats(lat, s))
 
 _checkdims(dns::Missing, lat::AbstractLattice{E,L}) where {E,L} = dns
 _checkdims(dns::Tuple{Vararg{SVector{L,Int}}}, lat::AbstractLattice{E,L}) where {E,L} = dns
@@ -92,16 +124,18 @@ _checkdims(dns, lat::AbstractLattice{E,L}) where {E,L} =
     throw(DimensionMismatch("Specified cell distance `dn` does not match lattice dimension $L"))
 
 # are sites at (i,j) and (dni, dnj) or (dn, 0) selected?
-(s::OnsiteSelector)(lat::AbstractLattice, (i, j)::Tuple, (dni, dnj)::Tuple{SVector, SVector}) =
+(s::SiteSelector)(lat::AbstractLattice, (i, j)::Tuple, (dni, dnj)::Tuple{SVector, SVector}) =
     isonsite((i, j), (dni, dnj)) && isinregion(i, dni, s.region, lat) && isinsublats(sublat(lat, i), s.sublats)
 
-(s::HoppingSelector)(lat::AbstractLattice, inds, dns) =
+(s::HopSelector)(lat::AbstractLattice, inds, dns) =
     !isonsite(inds, dns) && isinregion(inds, dns, s.region, lat) && isindns(dns, s.dns) &&
     isinrange(inds, s.range, lat) && isinsublats(tupletopair(sublat.(Ref(lat), inds)), s.sublats)
 
 isonsite((i, j), (dni, dnj)) = i == j && dni == dnj
 
+isinregion(i::Int, ::Missing, lat) = true
 isinregion(i::Int, dn, ::Missing, lat) = true
+isinregion(i::Int, region::Function, lat) = region(sites(lat)[i])
 isinregion(i::Int, dn, region::Function, lat) = region(sites(lat)[i] + bravais(lat) * dn)
 
 isinregion(is::Tuple{Int,Int}, dns, ::Missing, lat) = true
@@ -129,26 +163,26 @@ isinrange((row, col)::Tuple{Int,Int}, range::Number, lat) =
     norm(sites(lat)[col] - sites(lat)[row]) <= range
 
 # merge non-missing fields of s´ into s
-merge_non_missing(s::OnsiteSelector, s´::OnsiteSelector) =
-    OnsiteSelector(merge_non_missing.(
+merge_non_missing(s::SiteSelector, s´::SiteSelector) =
+    SiteSelector(merge_non_missing.(
         (s.region,  s.sublats),
         (s´.region, s´.sublats))...)
-merge_non_missing(s::HoppingSelector, s´::HoppingSelector) =
-    HoppingSelector(merge_non_missing.(
+merge_non_missing(s::HopSelector, s´::HopSelector) =
+    HopSelector(merge_non_missing.(
         (s.region,  s.sublats,  s.dns,  s.range),
         (s´.region, s´.sublats, s´.dns, s´.range))...)
 merge_non_missing(o, o´::Missing) = o
 merge_non_missing(o, o´) = o´
 
-Base.adjoint(s::OnsiteSelector) = s
-function Base.adjoint(s::HoppingSelector)
+Base.adjoint(s::SiteSelector) = s
+function Base.adjoint(s::HopSelector)
     # is_unconstrained_selector(s) &&
     #     @warn("Taking the adjoint of an unconstrained hopping is likely unintended")
     region´ = _adjoint(s.region)
     sublats´ = _adjoint.(s.sublats)
     dns´ = _adjoint.(s.dns)
     range = s.range
-    return HoppingSelector(region´, sublats´, dns´, range)
+    return HopSelector(region´, sublats´, dns´, range)
 end
 
 _adjoint(::Missing) = missing
@@ -156,8 +190,8 @@ _adjoint(f::Function) = (r, dr) -> f(r, -dr)
 _adjoint(t::Pair) = reverse(t)
 _adjoint(t::SVector) = -t
 
-# is_unconstrained_selector(s::HoppingSelector{Missing,Missing,Missing}) = true
-# is_unconstrained_selector(s::HoppingSelector) = false
+# is_unconstrained_selector(s::HopSelector{Missing,Missing,Missing}) = true
+# is_unconstrained_selector(s::HopSelector) = false
 
 #######################################################################
 # Tightbinding types
@@ -170,13 +204,13 @@ struct TightbindingModel{N,T<:Tuple{Vararg{TightbindingModelTerm,N}}}
     terms::T
 end
 
-struct OnsiteTerm{F,S<:OnsiteSelector,C} <: AbstractOnsiteTerm
+struct OnsiteTerm{F,S<:SiteSelector,C} <: AbstractOnsiteTerm
     o::F
     selector::S
     coefficient::C
 end
 
-struct HoppingTerm{F,S<:HoppingSelector,C} <: AbstractHoppingTerm
+struct HoppingTerm{F,S<:HopSelector,C} <: AbstractHoppingTerm
     t::F
     selector::S
     coefficient::C
@@ -209,19 +243,19 @@ end
 #######################################################################
 # TightbindingModelTerm API
 #######################################################################
-OnsiteTerm(t::OnsiteTerm, os::OnsiteSelector) =
+OnsiteTerm(t::OnsiteTerm, os::SiteSelector) =
     OnsiteTerm(t.o, os, t.coefficient)
 
 (o::OnsiteTerm{<:Function})(r,dr) = o.coefficient * o.o(r)
 (o::OnsiteTerm)(r,dr) = o.coefficient * o.o
 
-HoppingTerm(t::HoppingTerm, os::HoppingSelector) =
+HoppingTerm(t::HoppingTerm, os::HopSelector) =
     HoppingTerm(t.t, os, t.coefficient)
 
 (h::HoppingTerm{<:Function})(r, dr) = h.coefficient * h.t(r, dr)
 (h::HoppingTerm)(r, dr) = h.coefficient * h.t
 
-sublats(t::TightbindingModelTerm, lat) = sublats(t.selector, lat)
+sublats(t::TightbindingModelTerm, lat) = sublats(lat, t.selector)
 
 sublats(m::TightbindingModel) = (t -> t.selector.sublats).(terms(m))
 
@@ -269,9 +303,9 @@ applied to all such terms.
 
 # Keyword arguments
 
-Only sites at position `r` in sublattice with name `s::NameType` will be selected if
-`region(r) && s in sublats` is true. Any missing `region` or `sublat` will not be used to
-constraint the selection.
+Keywords are the same as for `siteselector`. Only sites at position `r` in sublattice with
+name `s::NameType` will be selected if `region(r) && s in sublats` is true. Any missing
+`region` or `sublat` will not be used to constraint the selection.
 
 The keyword `sublats` allows the following formats:
 
@@ -324,7 +358,7 @@ Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
 # See also:
     `hopping`
 """
-onsite(o; kw...) = onsite(o, onsiteselector(; kw...))
+onsite(o; kw...) = onsite(o, siteselector(; kw...))
 
 onsite(o, selector::Selector) = TightbindingModel(OnsiteTerm(o, selector, 1))
 
@@ -364,11 +398,11 @@ applied to all such terms.
 
 # Keyword arguments
 
-Only hoppings between two sites at positions `r₁ = r - dr/2` and `r₂ = r + dr`, belonging to
-unit cells at integer distance `dn´` and to sublattices `s₁` and `s₂` will be selected if:
-`region(r, dr) && s in sublats && dn´ in dn && norm(dr) <= range`. If any of these is
-`missing` it will not be used to constraint the selection. Note that the default `range` is
-1, not `missing`.
+Most keywords are the same as for `hopselector`. Only hoppings between two sites at
+positions `r₁ = r - dr/2` and `r₂ = r + dr`, belonging to unit cells at integer distance
+`dn´` and to sublattices `s₁` and `s₂` will be selected if: `region(r, dr) && s in sublats
+&& dn´ in dn && norm(dr) <= range`. If any of these is `missing` it will not be used to
+constraint the selection. Note that the default `range` is 1, not `missing`.
 
 The keyword `dn` can be a `Tuple`/`Vector`/`SVector` of `Int`s, or a tuple thereof. The
 keyword `sublats` allows the following formats:
@@ -429,7 +463,7 @@ Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
     `onsite`
 """
 function hopping(t; plusadjoint = false, range = 1, kw...)
-    hop = hopping(t, hoppingselector(; range = range, kw...))
+    hop = hopping(t, hopselector(; range = range, kw...))
     return plusadjoint ? hop + hop' : hop
 end
 hopping(t, selector) = TightbindingModel(HoppingTerm(t, selector, 1))
@@ -540,12 +574,12 @@ include any parameters that `body` depends on that the user may want to tune.
 """
 macro onsite!(kw, f)
     f, N, params = get_f_N_params(f, "Only @onsite!(args -> body; kw...) syntax supported")
-    return esc(:(Quantica.OnsiteModifier(Quantica.ParametricFunction{$N}($f, $(Val(params))), Quantica.onsiteselector($kw))))
+    return esc(:(Quantica.OnsiteModifier(Quantica.ParametricFunction{$N}($f, $(Val(params))), Quantica.siteselector($kw))))
 end
 
 macro onsite!(f)
     f, N, params = get_f_N_params(f, "Only @onsite!(args -> body; kw...) syntax supported")
-    return esc(:(Quantica.OnsiteModifier(Quantica.ParametricFunction{$N}($f, $(Val(params))), Quantica.onsiteselector())))
+    return esc(:(Quantica.OnsiteModifier(Quantica.ParametricFunction{$N}($f, $(Val(params))), Quantica.siteselector())))
 end
 
 """
@@ -562,12 +596,12 @@ and include any parameters that `body` depends on that the user may want to tune
 """
 macro hopping!(kw, f)
     f, N, params = get_f_N_params(f, "Only @hopping!(args -> body; kw...) syntax supported")
-    return esc(:(Quantica.HoppingModifier(Quantica.ParametricFunction{$N}($f, $(Val(params))), Quantica.hoppingselector($kw))))
+    return esc(:(Quantica.HoppingModifier(Quantica.ParametricFunction{$N}($f, $(Val(params))), Quantica.hopselector($kw))))
 end
 
 macro hopping!(f)
     f, N, params = get_f_N_params(f, "Only @hopping!(args -> body; kw...) syntax supported")
-    return esc(:(Quantica.HoppingModifier(Quantica.ParametricFunction{$N}($f, $(Val(params))), Quantica.hoppingselector())))
+    return esc(:(Quantica.HoppingModifier(Quantica.ParametricFunction{$N}($f, $(Val(params))), Quantica.hopselector())))
 end
 
 # Extracts normalized f, number of arguments and kwarg names from an anonymous function f

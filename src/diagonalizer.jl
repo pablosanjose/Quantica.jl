@@ -7,11 +7,8 @@ abstract type AbstractDiagonalizeMethod end
 struct DiagonalizeHelper{S<:AbstractDiagonalizeMethod,C}
     method::S
     codiag::C
-    minprojection::Float64
+    minoverlap::Float64
 end
-
-DiagonalizeHelper(method, codiag; minprojection = 0.5) =
-    DiagonalizeHelper(method, codiag, minprojection)
 
 ## Diagonalize methods ##
 
