@@ -58,6 +58,15 @@ end
 mergetuples(ts...) = keys(merge(tonamedtuple.(ts)...))
 tonamedtuple(ts::Val{T}) where {T} = NamedTuple{T}(filltuple(0,T))
 
+function deletemultiple_nocheck(dn::SVector{N}, axes::NTuple{M,Int}) where {N,M}
+    ind = first(axes)
+    dn´ = deleteat(dn, ind)
+    taxes = Base.tail(axes)
+    axes´ = taxes .- (taxes .> ind)
+    return deletemultiple_nocheck(dn´, axes´)
+end
+deletemultiple_nocheck(dn::SVector, axes::Tuple{}) = dn
+
 _rdr(r1, r2) = (0.5 * (r1 + r2), r2 - r1)
 
 # zerotuple(::Type{T}, ::Val{L}) where {T,L} = ntuple(_ -> zero(T), Val(L))

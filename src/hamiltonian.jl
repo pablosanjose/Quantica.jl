@@ -358,16 +358,22 @@ function transform!(f, h::Hamiltonian)
 end
 
 # Indexing #
-
+"""
+"""
 Base.push!(h::Hamiltonian{<:Any,L}, dn::NTuple{L,Int}) where {L} = push!(h, SVector(dn...))
 Base.push!(h::Hamiltonian{<:Any,L}, dn::Vararg{Int,L}) where {L} = push!(h, SVector(dn...))
-function Base.push!(h::Hamiltonian{<:Any,L,M,A}, dn::SVector{L,Int}) where {L,M,A}
-    for hh in h.harmonics
+function Base.push!(h::Hamiltonian{<:Any,L}, dn::SVector{L,Int}) where {L} 
+    get_or_push!(h.harmonics, dn, size(h))
+    return h
+end
+
+function get_or_push!(harmonics::Vector{H}, dn::SVector{L,Int}, dims) where {L,M,A,H<:HamiltonianHarmonic{L,M,A}}
+    for hh in harmonics
         hh.dn == dn && return hh
     end
-    hh = HamiltonianHarmonic{L,M,A}(dn, size(h)...)
-    push!(h.harmonics, hh)
-    return h
+    hh = HamiltonianHarmonic{L,M,A}(dn, dims...)
+    push!(harmonics, hh)
+    return hh
 end
 
 Base.getindex(h::Hamiltonian, dn::NTuple) = getindex(h, SVector(dn))
@@ -728,15 +734,22 @@ end
 # wrap
 #######################################################################
 """
-    wrap(h::Hamiltonian, axis::Int; factor = 1)
+    wrap(h::Hamiltonian, axes; phases = missing)
 
-Build a new Hamiltonian wherein the Bravais `axis` is wrapped into a loop. If a `factor` is
-given, the wrapped hoppings will be multiplied by said factor. This is useful to represent a
-flux Φ through the loop, if `factor = exp(im * 2π * Φ/Φ₀)`.
+Build a new Hamiltonian from `h` reducing its dimensions from `L` to `L - length(axes)` by
+wrapping the specified Bravais `axes` into a loop. `axes` can be an integer ∈ 1:L or a tuple
+of such integers. If `phases` are given (with `length(axes) == length(phases)`), the wrapped
+hoppings at a cell distance `dn` along `axes` will be multiplied by a factor
+`cis(-dot(phases, dn))`. This is useful, for example, to represent a flux Φ through a loop,
+using a single `axes = 1` and `phases = 2π * Φ/Φ₀`.
 
-    h |> wrap(axis; kw...)
+    wrap(h::Hamiltonian; kw...)
 
-Curried form equivalent to `wrap(h, axis; kw...)`.
+Wrap all axes of `h`, yielding a compactified zero-dimensional Hamiltonian.
+
+    h |> wrap(axes; kw...)
+
+Curried form equivalent to `wrap(h, axes; kw...)`.
 
 # Examples
 
@@ -753,43 +766,38 @@ Hamiltonian{<:Lattice} : Hamiltonian on a 1D Lattice in 2D space
   Coordination     : 3.0
 ```
 """
-function wrap(h::Hamiltonian{<:Lattice,L}, axis; factor = 1) where {L}
-    1 <= axis <= L || throw(ArgumentError("wrap axis should be between 1 and the lattice dimension $L"))
-    lattice´ = _wrap(h.lattice, axis)
-    harmonics´ = _wrap(h.harmonics, axis, factor)
+wrap(h::Hamiltonian, axis::Int; kw...) = wrap(h, (axis,); kw...)
+
+wrap(h::Hamiltonian{<:Lattice,L}; kw...) where {L} = wrap(h, ntuple(identity, Val(L)); kw...)
+
+function wrap(h::Hamiltonian{<:Lattice,L}, axes::NTuple{N,Int}; phases = missing) where {L,N}
+    all(axis -> 1 <= axis <= L, axes) && allunique(axes) || throw(ArgumentError("wrap axes should be unique and between 1 and the lattice dimension $L"))
+    lattice´ = _wrap(h.lattice, axes)
+    phases´ = (phases === missing) ? filltuple(0, Val(N)) : phases
+    harmonics´ = _wrap(h.harmonics, axes, phases´, size(h))
     return Hamiltonian(lattice´, harmonics´, h.orbitals)
 end
 
-wrap(axis; kw...) = h -> wrap(h, axis; kw...)
+wrap(axes::Union{Integer,Tuple}; kw...) = h -> wrap(h, axes; kw...)
 
-_wrap(lat::Lattice, axis) = Lattice(_wrap(lat.bravais, axis), lat.unitcell)
+_wrap(lat::Lattice, axes) = Lattice(_wrap(lat.bravais, axes), lat.unitcell)
 
-function _wrap(br::Bravais{E,L}, axis) where {E,L}
-    mask = deleteat(SVector{L}(1:L), axis)
+function _wrap(br::Bravais{E,L}, axes) where {E,L}
+    mask = deletemultiple_nocheck(SVector{L}(1:L), axes)
     return Bravais(br.matrix[:, mask], br.semibounded[mask])
 end
 
-function _wrap(harmonics::Vector{HamiltonianHarmonic{L,M,A}}, axis, factor) where {L,M,A}
-    harmonics´ = HamiltonianHarmonic{L-1,M,A}[]
+function _wrap(harmonics::Vector{HamiltonianHarmonic{L,M,A}}, axes::NTuple{N,Int}, phases::NTuple{N,Number}, sizeh) where {L,M,A,N}
+    harmonics´ = HamiltonianHarmonic{L-N,M,A}[]
     for har in harmonics
         dn = har.dn
-        dn´ = deleteat(dn, axis)
-        factor´ = iszero(dn[axis]) ? 1 : factor
-        add_or_push!(harmonics´, dn´, har.h, factor´)
+        dn´ = deletemultiple_nocheck(dn, axes)
+        phase = -sum(phases .* dn[SVector(axes)])
+        newh = get_or_push!(harmonics´, dn´, sizeh)
+        # map!(+, newh, newh, factor * har.h) # TODO: activate after resolving #37375
+        newh.h .+= cis(phase) .* har.h
     end
     return harmonics´
-end
-
-function add_or_push!(hs::Vector{<:HamiltonianHarmonic}, dn, matrix::AbstractMatrix, factor)
-    for h in hs
-        if h.dn == dn
-            h.h .+= factor .* matrix
-            return h
-        end
-    end
-    newh = HamiltonianHarmonic(dn, matrix)
-    push!(hs, newh)
-    return newh
 end
 
 #######################################################################
