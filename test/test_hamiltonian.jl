@@ -33,6 +33,15 @@ end
     @test Quantica.nhoppings(h) == 22
 end
 
+@testset "hamiltonian wrap" begin
+    h = LatticePresets.bcc() |> hamiltonian(hopping((r, dr) -> 1/norm(dr), range = 10))
+    wh = wrap(h, phases = (1,2,3))
+    @test bloch(wh) ≈ bloch(h, (1,2,3))
+    h = LatticePresets.bcc() |> hamiltonian(hopping((r, dr) -> 1/norm(dr), range = 10)) |> unitcell(3)
+    wh = wrap(h, phases = (1,2,3))
+    @test bloch(wh) ≈ bloch(h, (1,2,3))
+end
+
 @testset "similarmatrix" begin
     types = (ComplexF16, ComplexF32, ComplexF64)
     lat = LatticePresets.honeycomb()
