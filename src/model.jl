@@ -223,7 +223,7 @@ terms(t::TightbindingModel) = t.terms
 
 TightbindingModel(ts::TightbindingModelTerm...) = TightbindingModel(ts)
 
-(m::TightbindingModel)(r, dr) = sum(t -> t(r, dr), m.terms)
+# (m::TightbindingModel)(r, dr) = sum(t -> t(r, dr), m.terms)
 
 # External API #
 
@@ -287,8 +287,8 @@ end
 Create an `TightbindingModel` with a single `OnsiteTerm` that applies an onsite energy `o`
 to a `Lattice` when creating a `Hamiltonian` with `hamiltonian`.
 
-The onsite energy `o` can be a number, a matrix (preferably `SMatrix`), a `UniformScaling`
-(e.g. `3*I`) or a function of the form `r -> ...` for a position-dependent onsite energy.
+The onsite energy `o` can be a number, an `SMatrix`, a `UniformScaling` (e.g. `3*I`) or a
+function of the form `r -> ...` for a position-dependent onsite energy.
 
 The dimension of `o::AbstractMatrix` must match the orbital dimension of applicable
 sublattices (see also `orbitals` option for `hamiltonian`). If `o::UniformScaling` it will
@@ -376,11 +376,10 @@ _onlyonsites(s) = ()
 Create an `TightbindingModel` with a single `HoppingTerm` that applies a hopping `t` to a
 `Lattice` when creating a `Hamiltonian` with `hamiltonian`.
 
-The hopping amplitude `t` can be a number, a matrix (preferably `SMatrix`), a
-`UniformScaling` (e.g. `3*I`) or a function of the form `(r, dr) -> ...` for a
-position-dependent hopping (`r` is the bond center, and `dr` the bond vector). If `sublats`
-is specified as a sublattice name pair, or tuple thereof, `hopping` is only applied between
-sublattices with said names.
+The hopping amplitude `t` can be a number, an `SMatrix`, a `UniformScaling` (e.g. `3*I`) or
+a function of the form `(r, dr) -> ...` for a position-dependent hopping (`r` is the bond
+center, and `dr` the bond vector). If `sublats` is specified as a sublattice name pair, or
+tuple thereof, `hopping` is only applied between sublattices with said names.
 
 The dimension of `t::AbstractMatrix` must match the orbital dimension of applicable
 sublattices (see also `orbitals` option for `hamiltonian`). If `t::UniformScaling` it will
@@ -647,3 +646,139 @@ _resolve(lat) = ()
 @inline (h!::UniformHoppingModifier)(t, r, dr; kw...) = h!(t; kw...)
 @inline (h!::UniformHoppingModifier)(t; kw...) = h!.f(t; kw...)
 @inline (h!::HoppingModifier)(t, r, dr; kw...) = h!.f(t, r, dr; kw...)
+
+#######################################################################
+# kets
+#######################################################################
+
+struct KetModel{M<:TightbindingModel}
+    model::M
+    normalized::Bool
+    maporbitals::Bool
+end
+
+function Base.show(io::IO, k::KetModel{M}) where {N,M<:TightbindingModel{N}}
+    ioindent = IOContext(io, :indent => "  ")
+    print(io, "KetModel{$N}: model with $N terms
+  Normalized   : $(k.normalized)
+  Map orbitals : $(k.maporbitals)")
+    foreach(t -> print(ioindent, "\n", t), k.model.terms)
+end
+
+"""
+    ket(a; region = missing, sublats = missing, normalized = true, maporbitals = false)
+
+Create an `KetModel` of amplitude `a` on the specified `region` and `sublats`. The amplitude
+`a` can be a number, an `SVector`, or a function of the form `r -> ...` for a
+position-dependent amplitude.
+
+Unless `maporbitals = true`, the dimension of `a::AbstractVector` must match the orbital
+dimension of applicable sublattices (see also `orbitals` option for `hamiltonian`).
+
+One or more `k::KetModel` can be converted to a `Vector` or `Matrix` representation
+corresponding to Hamiltonian `h` with `Vector(k, h)` and `Matrix(k, h)`, see `Vector` and
+`Matrix`.
+
+# Keyword arguments
+
+Keyword `normalized` indicates whether to force normalization of the ket when the `KetModel`
+is applied to a specific Hamiltonian.
+
+If keyword `maporbitals == true` and `a` is a scalar or a scalar function, `a` will be
+applied to each orbital independently. This is particularly useful in multiorbital systems
+with random amplitudes, e.g. `a = randn()`. If `a` is not a scalar, a `convert` error will
+be thrown.
+
+Keywords `region` and `sublats` are the same as for `siteselector`. Only sites at position
+`r` in sublattice with name `s::NameType` will be selected if `region(r) && s in sublats` is
+true. Any missing `region` or `sublat` will not be used to constraint the selection.
+
+The keyword `sublats` allows the following formats:
+
+    sublats = :A           # Onsite on sublat :A only
+    sublats = (:A,)        # Same as above
+    sublats = (:A, :B)     # Onsite on sublat :A and :B
+
+# Ket algebra
+
+`KetModel`s created with `ket` can added or substracted
+together or be multiplied by scalars to build more elaborate `KetModel`s, e.g.
+`ket(1) - 3 * ket(2, region = r -> norm(r) < 10)`
+
+# Examples
+
+```jldoctest
+julia> k = ket(1, sublats=:A) - ket(1, sublats=:B)
+KetModel{2}: model with 2 terms
+  Normalized : false
+  OnsiteTerm{Int64}:
+    Sublattices      : (:A,)
+    Coefficient      : 1
+  OnsiteTerm{Int64}:
+    Sublattices      : (:B,)
+    Coefficient      : -1
+```
+
+# See also:
+    `onsite`, `Vector`, `Matrix`
+"""
+ket(f; normalized = true, maporbitals = false, kw...) = KetModel(onsite(f; kw...), normalized, maporbitals)
+
+Base.:*(x, k::KetModel) = KetModel(k.model * x, k.normalized, k.maporbitals)
+Base.:*(k::KetModel, x) = KetModel(x * k.model, k.normalized, k.maporbitals)
+Base.:-(k::KetModel) = KetModel(-k.model, k.normalized, k.maporbitals)
+Base.:-(k1::KetModel, k2::KetModel) = KetModel(k1.model - k2.model, k1.normalized && k2.normalized, k1.maporbitals && k2.maporbitals)
+Base.:+(k1::KetModel, k2::KetModel) = KetModel(k1.model + k2.model, k1.normalized && k2.normalized, k1.maporbitals && k2.maporbitals)
+
+generate_amplitude(km::KetModel, term, r, M::Type{<:Number}, orbs) = toeltype(term(r, r), M, orbs)
+
+function generate_amplitude(km::KetModel, term, r, M::Type{<:SVector}, orbs::NTuple{N}) where {N}
+    if km.maporbitals
+        t = toeltype(SVector(ntuple(_ -> term(r, r), Val(N))), M, orbs)
+    else
+        t = toeltype(term(r, r), M, orbs)
+    end
+    return t
+end
+
+### StochasticTraceKets ###
+
+struct StochasticTraceKets{K<:KetModel}
+    ketmodel::K
+    repetitions::Int
+    orthogonal::Bool
+end
+
+function Base.show(io::IO, k::StochasticTraceKets)
+    ioindent = IOContext(io, :indent => "  ")
+    print(io, "StochasticTraceKets:
+  Repetitions  : $(k.repetitions)
+  Orthogonal   : $(k.orthogonal)\n")
+    show(ioindent, k.ketmodel)
+end
+
+"""
+    randomkets(n, f::Function = r -> cis(2pi*rand()); orthogonal = false, maporbitals = false, kw...)
+
+Create a `StochasticTraceKets` object to use in stochastic trace evaluation of KPM methods.
+The ket amplitudes at point `r` is given by function `f(r)`. In order to produce an accurate
+estimate of traces ∑⟨ket|A|ket⟩/n ≈ Tr[A] (sum over the `n` random kets), `f` must be a
+random function satisfying `⟨f⟩ = 0`, `⟨ff⟩ = 0` and `⟨f'f⟩ = 1`. The default `f` produces a
+uniform random phase. To apply it to an N-orbital system, `f` must in general be adapted to
+produce the desired random `SVector{N}` (unless `maporbitals = true`), with the above
+statistical properties for each orbital.
+
+For example, to have independent, complex, normally-distributed random components of two
+orbitals use `randomkets(n, r -> randn(SVector{2,ComplexF64}))`, or alternatively
+`randomkets(n, r -> randn(ComplexF64), maporbitals = true)`.
+
+If `orthogonal == true` the random kets are made orthogonal after sampling. This option is
+currently only available for scalar ket eltype. The remaining keywords `kw` are passed to
+`ket` and can be used to constrain the random amplitude to a subset of sites. `normalized`,
+however, is always `false`.
+
+# See also:
+    `ket`
+"""
+randomkets(n::Int, f = r -> cis(2pi*rand()); orthogonal = false, kw...) =
+    StochasticTraceKets(ket(f; normalized = false, kw...), n, orthogonal)

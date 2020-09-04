@@ -100,7 +100,7 @@ module RegionPresets
 
 using StaticArrays
 
-struct Region{E,F}
+struct Region{E,F} <: Function
     f::F
 end
 

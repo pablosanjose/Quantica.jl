@@ -76,14 +76,6 @@ latdim(h::Hamiltonian{LA}) where {E,L,LA<:AbstractLattice{E,L}} = L
 matrixtype(::Hamiltonian{LA,L,M,A}) where {LA,L,M,A} = A
 blockeltype(::Hamiltonian{<:Any,<:Any,M}) where {M} = eltype(M)
 
-# find SVector type that can hold all orbital amplitudes in any lattice sites
-orbitaltype(orbs, type::Type{Tv} = Complex{T}) where {T,Tv} =
-    _orbitaltype(SVector{1,Tv}, orbs...)
-_orbitaltype(::Type{S}, ::NTuple{D,NameType}, os...) where {N,Tv,D,S<:SVector{N,Tv}} =
-    (M = max(N,D); _orbitaltype(SVector{M,Tv}, os...))
-_orbitaltype(t::Type{SVector{N,Tv}}) where {N,Tv} = t
-_orbitaltype(t::Type{SVector{1,Tv}}) where {Tv} = Tv
-
 # find SMatrix type that can hold all matrix elements between lattice sites
 blocktype(orbs, type::Type{Tv}) where {Tv} =
     _blocktype(orbitaltype(orbs, Tv))
@@ -103,6 +95,17 @@ promote_blocktype(T::Type) = T
 blockdim(h::Hamiltonian) = blockdim(blocktype(h))
 blockdim(::Type{S}) where {N,S<:SMatrix{N,N}} = N
 blockdim(::Type{T}) where {T<:Number} = 1
+
+# find SVector type that can hold all orbital amplitudes in any lattice sites
+orbitaltype(orbs, type::Type{Tv} = Complex{T}) where {T,Tv} =
+    _orbitaltype(SVector{1,Tv}, orbs...)
+_orbitaltype(::Type{S}, ::NTuple{D,NameType}, os...) where {N,Tv,D,S<:SVector{N,Tv}} =
+    (M = max(N,D); _orbitaltype(SVector{M,Tv}, os...))
+_orbitaltype(t::Type{SVector{N,Tv}}) where {N,Tv} = t
+_orbitaltype(t::Type{SVector{1,Tv}}) where {Tv} = Tv
+
+orbitaltype(h::Hamiltonian{LA,L,M}) where {N,T,LA,L,M<:SMatrix{N,N,T}} = SVector{N,T}
+orbitaltype(h::Hamiltonian{LA,L,M}) where {LA,L,M<:Number} = M
 
 function nhoppings(ham::Hamiltonian)
     count = 0
@@ -600,14 +603,25 @@ function applyterm!(builder::IJVBuilder{L}, term::HoppingTerm, termsublats) wher
     return nothing
 end
 
+# For use in Hamiltonian building
 toeltype(t::Number, ::Type{T}, t1::NTuple{1}, t2::NTuple{1}) where {T<:Number} = T(t)
+toeltype(t::Number, ::Type{S}, t1::NTuple{1}, t2::NTuple{1}) where {S<:SMatrix} =
+    padtotype(t, S)
 toeltype(t::SMatrix{N1,N2}, ::Type{S}, t1::NTuple{N1}, t2::NTuple{N2}) where {N1,N2,S<:SMatrix} =
     padtotype(t, S)
+
 toeltype(u::UniformScaling, ::Type{T}, t1::NTuple{1}, t2::NTuple{1}) where {T<:Number} = T(u.λ)
 toeltype(u::UniformScaling, ::Type{S}, t1::NTuple{N1}, t2::NTuple{N2}) where {N1,N2,S<:SMatrix} =
     padtotype(SMatrix{N1,N2}(u), S)
-toeltype(t::Array, s, t1, t2) = throw(ArgumentError("Array input in model, please use StaticArrays instead (e.g. SA[1 0; 0 1] instead of [1 0; 0 1])"))
-toeltype(t, s, t1, t2) = throw(DimensionMismatch("Dimension mismatch between model and Hamiltonian. Did you correctly specify the `orbitals` in hamiltonian? Consider also using `I` to cover non-uniform orbital dimensions"))
+
+# For use in ket building
+toeltype(t::Number, ::Type{T}, t1::NTuple{1}) where {T<:Number} = T(t)
+toeltype(t::Number, ::Type{S}, t1::NTuple{1}) where {S<:SVector} = padtotype(t, S)
+toeltype(t::SVector{N}, ::Type{S}, t1::NTuple{N}) where {N,S<:SVector} = padtotype(t, S)
+
+# Fallback to catch mismatched or undesired block types
+toeltype(t::Array, x...) = throw(ArgumentError("Array input in model, please use StaticArrays instead (e.g. SA[1 0; 0 1] instead of [1 0; 0 1])"))
+toeltype(t, x...) = throw(DimensionMismatch("Dimension mismatch between model and Hamiltonian. Does the `orbitals` kwarg in your `hamiltonian` match your model?"))
 
 dniter(dns::Missing, ::Val{L}) where {L} = BoxIterator(zero(SVector{L,Int}))
 dniter(dns, ::Val) = dns
@@ -630,6 +644,89 @@ checkinfinite(selector) =
     throw(ErrorException("Tried to implement an infinite-range hopping on an unbounded lattice"))
 
 isselfhopping((i, j), (s1, s2), dn) = i == j && s1 == s2 && iszero(dn)
+
+#######################################################################
+# Matrix(::KetModel, ::Hamiltonian), and Vector
+#######################################################################
+"""
+  Vector(km::KetModel, h::Hamiltonian)
+
+Construct a `Vector` representation of `km` applied to Hamiltonian `h`.
+"""
+Base.Vector(km::KetModel, h::Hamiltonian) = vec(Matrix(km, h))
+
+"""
+  Matrix(km::KetModel, h::Hamiltonian; orthogonal = false)
+  Matrix(kms::NTuple{N,KetModel}, h::Hamiltonian, orthogonal = false)
+  Matrix(kms::AbstractMatrix, h::Hamiltonian; orthogonal = false)
+  Matrix(kms::StochasticTraceKets, h::Hamiltonian; orthogonal = false)
+
+Construct an `M×N` `Matrix` representation of the `N` kets `kms` applied to `M×M`
+Hamiltonian `h`. If `orthogonal = true`, the columns are made orthogonal through a
+Gram-Schmidt process. If `kms::StochasticTraceKets` for `n` random kets (constructed with
+`randomkets(n)`), a normalization `1/√n` required for stochastic traces is included.
+"""
+Base.Matrix(km::KetModel, h::Hamiltonian) = Matrix((km,), h)
+
+function Base.Matrix(km::AbstractMatrix, h::Hamiltonian; orthogonal = false)
+    eltype(km) == orbitaltype(h) && size(km, 1) == size(h, 2) || throw(ArgumentError("ket vector or matrix is incompatible with Hamiltonian"))
+    kmat = Matrix(km)
+    orthogonal && make_orthogonal!(kmat, kms)
+    return kmat
+end
+
+function Base.Matrix(rk::StochasticTraceKets, h::Hamiltonian)
+    ketmodels = Base.Iterators.repeated(rk.ketmodel, rk.repetitions)
+    kmat = Matrix(ketmodels, h; orthogonal = rk.orthogonal)
+    normk = sqrt(1/size(kmat,2))
+    kmat .*= normk  # normalized for stochastic traces
+    return kmat
+end
+
+function Base.Matrix(kms, h::Hamiltonian; orthogonal = false)
+    M = orbitaltype(h)
+    kmat = Matrix{M}(undef, size(h, 2), length(kms))
+    for (j, km) in enumerate(kms)
+        kvec = view(kmat, :, j)
+        ket!(kvec, km, h)
+    end
+    orthogonal && make_orthogonal!(kmat, kms)
+    return kmat
+end
+
+function ket!(k, km::KetModel, h)
+    M = eltype(k)
+    fill!(k, zero(M))
+    hsites = sites(h.lattice)
+    for term in km.model.terms
+        region = term.selector.region
+        ss = sublats(term, h.lattice)
+        for s in ss
+            orbs = h.orbitals[s]
+            is = siterange(h.lattice, s)
+            for i in is
+                isinregion(i, region, h.lattice) || continue
+                r = hsites[i]
+                k[i] += generate_amplitude(km, term, r, M, orbs)
+            end
+        end
+    end
+    km.normalized && normalize!(k)
+    return k
+end
+
+function make_orthogonal!(kmat::AbstractMatrix{<:Number}, kms)
+    q, r = qr!(kmat)
+    kmat .= Matrix(q)
+    for (j, km) in enumerate(kms)
+        if !km.normalized
+            kmat[:,j] .*= r[j, j]
+        end
+    end
+    return kmat
+end
+
+make_orthogonal!(kmat, kms) = throw(ArgumentError("The orthogonalize option is only available for kets of scalar eltype, not for $(eltype(kmat))."))
 
 #######################################################################
 # unitcell/supercell for Hamiltonians
