@@ -91,8 +91,12 @@ padright(t::NTuple{N´,Any}, ::Val{N}) where {N´,N} = ntuple(i -> i > N´ ? 0 :
 # Pad element type to a "larger" type
 @inline padtotype(s::SMatrix{E,L}, ::Type{S}) where {E,L,E2,L2,S<:SMatrix{E2,L2}} =
     S(SMatrix{E2,E}(I) * s * SMatrix{L,L2}(I))
+@inline padtotype(s::StaticVector, ::Type{S}) where {N,T,S<:SVector{N,T}} =
+    padright(T.(s), Val(N))
 @inline padtotype(x::Number, ::Type{S}) where {E,L,S<:SMatrix{E,L}} =
     S(x * (SMatrix{E,1}(I) * SMatrix{1,L}(I)))
+@inline padtotype(s::Number, ::Type{S}) where {N,T,S<:SVector{N,T}} =
+    padright(SA[T(s)], Val(N))
 @inline padtotype(x::Number, ::Type{T}) where {T<:Number} = T(x)
 @inline padtotype(u::UniformScaling, ::Type{T}) where {T<:Number} = T(u.λ)
 @inline padtotype(u::UniformScaling, ::Type{S}) where {S<:SMatrix} = S(u)

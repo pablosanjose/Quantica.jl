@@ -24,7 +24,8 @@ The Quantica.jl package provides an expressive API to build arbitrary quantum sy
 - `marchingmesh`, `linearmesh`: define a specification to build a bandstructure discretization mesh
 - `bandstructure`, `spectrum`: compute the generalized bandstructure of a Hamiltonian or a ParametricHamiltonian
 - `bands`, `energies`, `states`: inspect spectrum and bandstructure objects
-- `momentaKPM`, `dosKPM`, `averageKPM`, `densityKPM`, `bandrangeKPM`: Kernel Polynomial Method
+- `momentaKPM`, `dosKPM`, `averageKPM`, `densityKPM`, `bandrangeKPM`: Kernel Polynomial Method (KPM)
+- `ket`, `randomkets`: define ket models for use in e.g. KPM routines
 - `greens`, `greensolver`: build Green's functions of a Hamiltonian
 
 Some of this functionality require loading one or more third-party packages, which include the following:

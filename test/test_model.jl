@@ -8,7 +8,6 @@ using Quantica: TightbindingModel, OnsiteTerm, HoppingTerm, padtotype, Selector,
     @test (t -> t(r, r)).(model.terms) == (1, -2I)
     model = -onsite(@SMatrix[1 0; 1 1]) - 2hopping(2I)
     @test (t -> t(r, r)).(model.terms) == (-@SMatrix[1 0; 1 1], -4I)
-    @test model(r, r) == @SMatrix[-5 0; -1 -5]
 end
 
 @testset "onsite terms" begin
@@ -60,4 +59,19 @@ end
         hop´ = hopping(t´, sublats = s´, dn = dn´, range = rn)
         @test hop' === hop´
     end
+end
+
+@testset "kets" begin
+    h = LatticePresets.honeycomb() |> hamiltonian(hopping(I), orbitals = (Val(3), Val(1)))
+    k = Matrix(randomkets(2; sublats = :B), h)
+    @test sum(e -> count(iszero, e), k) == 10
+    k = Matrix(randomkets(1; region = r -> r[2] < 0, maporbitals = true), h)
+    @test sum(e -> count(iszero, e), k) == 3
+    k = Matrix(randomkets(2, r->randn()SA[1,]; sublats = :B), h)
+    @test sum(e -> count(!iszero, e), k) == 2
+    k = Matrix(randomkets(2; sublats = :B, maporbitals = true), h)
+    @test sum(e -> count(!iszero, e), k) == 2
+    km = ket(r -> randn() * SA[1, -1, 0], sublats = :A)  + ket(r -> randn(), sublats =:B)
+    k = Matrix(km, h)
+    @test sum(e -> count(!iszero, e), k) == 3
 end
