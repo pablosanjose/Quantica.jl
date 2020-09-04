@@ -243,7 +243,7 @@ end
 dosKPM(μ::MomentaKPM; resolution = 2) = real.(densityKPM(μ; resolution = resolution))
 
 dos_normalization_factor(kets::StochasticTraceKets, h) = nsites(h)
-dos_normalization_factor(kets, h) = 1xwxw
+dos_normalization_factor(kets, h) = 1
 
 """
     densityKPM(h::Hamiltonian, A; resolution = 2, kets = randomkets(1), kw...)
