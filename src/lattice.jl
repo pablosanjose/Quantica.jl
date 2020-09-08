@@ -503,24 +503,6 @@ ismasked(lat::Superlattice) = ismasked(lat.supercell)
 maskranges(lat::Superlattice) = (1:nsites(lat), lat.supercell.cells.indices...)
 maskranges(lat::Lattice) = (1:nsites(lat),)
 
-# External API #
-
-"""
-    sitepositions(lat::AbstractLattice; kw...)
-
-Build a container with the positions of sites in `lat`'s unitcell. Only sites specified by
-`siteselector(kw...)` are selected.
-"""
-sitepositions(lat::AbstractLattice; kw...) = sitepositions(lat, siteselector(kw...))
-
-"""
-    siteindices(lat::AbstractLattice; kw...)
-
-Build a container with the unique indices of sites in `lat`'s unitcell. Only sites specified
-by `siteselector(kw...)` are selected.
-"""
-siteindices(lat::AbstractLattice; kw...) = siteindices(lat, siteselector(kw...))
-
 """
     transform!(f::Function, lat::Lattice)
 

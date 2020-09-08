@@ -350,6 +350,28 @@ end
 # External API #
 
 """
+    sitepositions(lat::AbstractLattice; kw...)
+    sitepositions(h::Hamiltonian; kw...)
+
+Build a container with the positions of sites in the lattice unitcell. Only sites specified
+by `siteselector(kw...)` are selected.
+
+"""
+sitepositions(lat::AbstractLattice; kw...) = sitepositions(lat, siteselector(;kw...))
+sitepositions(h::Hamiltonian; kw...) = sitepositions(h.lattice, siteselector(;kw...))
+
+"""
+    siteindices(lat::AbstractLattice; kw...)
+    siteindices(lat::Hamiltonian; kw...)
+
+Build a container with the unique indices of sites in the lattice unitcell. Only sites
+specified by `siteselector(kw...)` are selected.
+
+"""
+siteindices(lat::AbstractLattice; kw...) = siteindices(lat, siteselector(;kw...))
+siteindices(h::Hamiltonian; kw...) = siteindices(h.lattice, siteselector(;kw...))
+
+"""
     transform!(f::Function, h::Hamiltonian)
 
 Transform the site positions of the Hamiltonian's lattice in place without modifying the

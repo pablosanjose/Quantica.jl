@@ -230,8 +230,11 @@ isinsublats(s, sublats) =
 # Here we can have (1, 2:3), apart from ((1,2) .=> (3,4), 1=>2) and ((1,2) => (3,4), 1=>2)
 isinindices(i::Integer, ::Missing) = true
 isinindices(i::Integer, j::Integer) = i == j
+isinindices(i::Integer, r::AbstractUnitRange) = i in r
+isinindices(i::Integer, r::AbstractArray) = i in r
+isinindices(i::Integer, r::NTuple{N,Integer}) where {N} = i in r
 isinindices(i::Integer, inds) = any(is -> i in is, inds)
-isinindices(is::Pair, inds) = isinindices(Tuple(is), inds)
+isinindices((i,j)::Pair, inds) = isinindices((i,j), inds)
 isinindices(is::Tuple, ::Missing) = true
 # Here is => js could be (1,2) => (3,4) or 1:2 => 3:4, not simply 1 => 3
 isinindices((i, j)::Tuple, (is, js)::Pair) = i in is && j in js
@@ -288,17 +291,17 @@ _adjoint(t::SVector) = -t
 # sitepositions
 #######################################################################
 
-sitepositions(lat::AbstractArray, s::SiteSelector) = sitepositions(resolve(s, lat))
+sitepositions(lat::AbstractLattice, s::SiteSelector) = sitepositions(resolve(s, lat))
 
-sitepositions(rs::ResolvedSelector{<:SiteSelector}) = (s for (i, s) in enumerate(allsitepositions(rs.lattice)) if i in rs.selector)
+sitepositions(rs::ResolvedSelector{<:SiteSelector}) = (s for (i, s) in enumerate(allsitepositions(rs.lattice)) if i in rs)
 
 #######################################################################
 # siteindices
 #######################################################################
 
-siteindices(lat::AbstractArray, s::SiteSelector) = siteindices(resolve(s, lat))
+siteindices(lat::AbstractLattice, s::SiteSelector) = siteindices(resolve(s, lat))
 
-siteindices(rs::ResolvedSelector{<:SiteSelector}) = (i for i in eachindex(allsitepositions(rs.lattice)) if i in rs.selector)
+siteindices(rs::ResolvedSelector{<:SiteSelector}) = (i for i in eachindex(allsitepositions(rs.lattice)) if i in rs)
 
 #######################################################################
 # Tightbinding types
