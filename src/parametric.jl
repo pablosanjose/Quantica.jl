@@ -94,7 +94,7 @@ function parametric_ptrdata!(allptrs, h::Hamiltonian{LA,L,M,<:AbstractSparseMatr
         rows = rowvals(matrix)
         for col in 1:size(matrix, 2), ptr in nzrange(matrix, col)
             row = rows[ptr]
-            selected = selector(lat, (row, col), (dn, zero(dn)))
+            selected = ((row, col), (dn, zero(dn))) in selector
             if selected
                 push!(ptrdata, ptrdatum(t, lat, ptr, (row, col), dn))
                 push!(allptrs_har, ptr)
@@ -122,10 +122,10 @@ end
 ptrdatum(t::UniformModifier, lat, ptr, (row, col), dn) = ptr
 
 # Non-uniform case
-ptrdatum(t::OnsiteModifier, lat, ptr, (row, col), dn) = (ptr, sites(lat)[col])
+ptrdatum(t::OnsiteModifier, lat, ptr, (row, col), dn) = (ptr, allsitepositions(lat)[col])
 
 function ptrdatum(t::HoppingModifier, lat, ptr, (row, col), dn)
-    r, dr = _rdr(sites(lat)[col], sites(lat)[row] + bravais(lat) * dn)
+    r, dr = _rdr(allsitepositions(lat)[col], allsitepositions(lat)[row] + bravais(lat) * dn)
     return (ptr, r, dr)
 end
 

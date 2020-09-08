@@ -179,14 +179,12 @@ function uniquename(allnames, name, i)
     return newname in allnames ? uniquename(allnames, name, i + 1) : newname
 end
 
-sites(u::Unitcell) = u.sites
-sites(u::Unitcell, s::Int) = view(u.sites, siterange(u, s))
-
-siteindex(u::Unitcell, sublat, idx) = idx + u.offsets[sublat]
+sitepositions(u::Unitcell) = u.sites
+sitepositions(u::Unitcell, s::Int) = view(u.sites, siterange(u, s))
 
 siterange(u::Unitcell, sublat) = (1+u.offsets[sublat]):u.offsets[sublat+1]
 
-enumeratesites(u::Unitcell, sublat) = ((i, sites(u)[i]) for i in siterange(u, sublat))
+enumeratesites(u::Unitcell, sublat) = ((i, sitepositions(u)[i]) for i in siterange(u, sublat))
 
 nsites(u::Unitcell) = length(u.sites)
 nsites(u::Unitcell, sublat) = sublatsites(u)[sublat]
@@ -472,7 +470,7 @@ sublats(lat::AbstractLattice) = sublats(lat.unitcell)
 
 siterange(lat::AbstractLattice, sublat) = siterange(lat.unitcell, sublat)
 
-siteindex(lat::AbstractLattice, sublat, idx) = siteindex(lat.unitcell, sublat, idx)
+allsitepositions(lat::AbstractLattice) = sitepositions(lat.unitcell)
 
 offsets(lat::AbstractLattice) = offsets(lat.unitcell)
 
@@ -508,12 +506,20 @@ maskranges(lat::Lattice) = (1:nsites(lat),)
 # External API #
 
 """
-    sites(lat[, sublat::Int])
+    sitepositions(lat::AbstractLattice; kw...)
 
-Extract the positions of all sites in a lattice, or in a specific sublattice
+Build a container with the positions of sites in `lat`'s unitcell. Only sites specified by
+`siteselector(kw...)` are selected.
 """
-sites(lat::AbstractLattice) = sites(lat.unitcell)
-sites(lat::AbstractLattice, s) = sites(lat.unitcell, s)
+sitepositions(lat::AbstractLattice; kw...) = sitepositions(lat, siteselector(kw...))
+
+"""
+    siteindices(lat::AbstractLattice; kw...)
+
+Build a container with the unique indices of sites in `lat`'s unitcell. Only sites specified
+by `siteselector(kw...)` are selected.
+"""
+siteindices(lat::AbstractLattice; kw...) = siteindices(lat, siteselector(kw...))
 
 """
     transform!(f::Function, lat::Lattice)
@@ -694,7 +700,7 @@ function _supercell(lat::AbstractLattice{E,L}, scmatrix::SMatrix{L,L´,Int}, reg
             continue
         end
         r0 = brmatrix * dnvec
-        for (i, site) in enumerate(lat.unitcell.sites)
+        for (i, site) in enumerate(allsitepositions(lat))
             r = site + r0
             mask[i, dntup...] = in_supercell && regionfunc(r)
         end
@@ -737,7 +743,7 @@ function supercell_cells(lat::Lattice{E,L}, regionfunc, in_supercell_func, seed)
             throw(ArgumentError("`region` seems unbounded (after $TOOMANYITERS iterations)"))
         in_supercell = in_supercell_func(toSVector(Int, dn))
         r0 = bravais * toSVector(Int, dn)
-        for site in lat.unitcell.sites
+        for site in allsitepositions(lat)
             r = r0 + site
             found = in_supercell && regionfunc(r)
             if found || !foundfirst
@@ -873,8 +879,8 @@ function supercell_offsets(lat::Superlattice)
 end
 
 function supercell_sites(lat::Superlattice)
-    newsites = similar(lat.unitcell.sites, nsites(lat.supercell))
-    oldsites = lat.unitcell.sites
+    oldsites = allsitepositions(lat)
+    newsites = similar(oldsites, nsites(lat.supercell))
     bravais = lat.bravais.matrix
     foreach_supersite((s, oldi, dn, newi) -> newsites[newi] = bravais * dn + oldsites[oldi], lat)
     return newsites

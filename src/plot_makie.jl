@@ -107,7 +107,7 @@ function plot!(plot::HamiltonianPlot)
 end
 
 function plotsites!(plot, lat, srange, dn, n, color)
-    allsites = Quantica.sites(lat)
+    allsites = Quantica.allsitepositions(lat)
     br = lat.bravais.matrix
     sites = [padright(allsites[i] + br * dn, Val(3)) for i in srange]
     plot[:tooltips][] && (tt = [(site, 0, n) for site in srange])
@@ -137,7 +137,7 @@ end
 function plotlinks!(plot, lat, itr, dn, n, color)
     links = Pair{SVector{3,Float32},SVector{3,Float32}}[]
     plot[:tooltips][] && (tt = Tuple{Int,Int,Int}[])
-    sites = Quantica.sites(lat)
+    sites = Quantica.allsitepositions(lat)
     br = lat.bravais.matrix
     for (row, col) in itr
         iszero(dn) && row == col && continue

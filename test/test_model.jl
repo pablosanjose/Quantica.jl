@@ -1,4 +1,75 @@
-using Quantica: TightbindingModel, OnsiteTerm, HoppingTerm, padtotype, Selector, sublats
+using Quantica: TightbindingModel, OnsiteTerm, HoppingTerm, padtotype, Selector, sublats, resolve, isinindices, isinsublats
+
+@testset "selectors" begin
+    @test  isinsublats(1, 1)
+    @test !isinsublats(2, 1)
+    @test  isinsublats(1, (1,2))
+    @test !isinsublats(3, (1,2))
+    # @test  isinsublats(3, (1, 3:4))  # Unsupported
+    # @test !isinsublats(2, (1, 3:4))  # Unsupported
+    @test !isinsublats(3, [1:2, 5:6])
+
+    @test  isinsublats(1=>2, 1=>2)
+    @test !isinsublats(1=>2, 1=>3)
+    @test  isinsublats(1=>2, (1=>2, 3=>4))
+    @test !isinsublats(1=>2, (1=>3, 2=>1))
+    @test  isinsublats(1=>3, 1:2=>3:4)
+    @test !isinsublats(1=>2, 1:2=>3:4)
+    @test  isinsublats(1=>2, (1:2=>3:4, 1=>2))
+    @test !isinsublats(3=>4, (1:2=>3:4, 1=>2))
+    @test  isinsublats(1=>2, (1:2=>3:4, (1,2) .=> (2,1)))
+    @test  isinsublats(1=>3, (1:2=>3:4, 1:2 .=> (2,1)))
+    @test !isinsublats(3=>4, (1:2=>3:4, 1:2 .=> (2,1), 4=>3))
+
+    @test  isinindices(1, 1)
+    @test !isinindices(2, 1)
+    @test  isinindices(1, (1,2))
+    @test !isinindices(3, (1,2))
+    @test  isinindices(3, (1, 3:4))
+    @test !isinindices(2, (1, 3:4))
+    @test !isinindices(3, [1:2, 5:6])
+
+    @test  isinindices(1=>2, 1=>2)
+    @test !isinindices(1=>2, 1=>3)
+    @test  isinindices(1=>2, (1=>2, 3=>4))
+    @test !isinindices(1=>2, (1=>3, 2=>1))
+    @test  isinindices(1=>3, 1:2=>3:4)
+    @test !isinindices(1=>2, 1:2=>3:4)
+    @test  isinindices(1=>2, (1:2=>3:4, 1=>2))
+    @test !isinindices(3=>4, (1:2=>3:4, 1=>2))
+    @test  isinindices(1=>2, (1:2=>3:4, (1,2) .=> (2,1)))
+    @test  isinindices(1=>3, (1:2=>3:4, 1:2 .=> (2,1)))
+    @test !isinindices(3=>4, (1:2=>3:4, 1:2 .=> (2,1), 4=>3))
+
+    lat = LatticePresets.honeycomb() |> unitcell(2)
+    rs = (r->true, missing)
+    ss = (:A, (:A, :B), missing)
+    inds = (1, (1, 3), (1, 3:4), missing)
+    for r in rs, s in ss, i in inds
+        sel = siteselector(region = r, sublats = s, indices = i)
+        rsel = resolve(sel, lat)
+        @test 1 in rsel
+        if s === :A || i !== missing
+            @test !in(5, rsel)
+        end
+    end
+
+    lat = LatticePresets.honeycomb() |> unitcell(2)
+    rs =   ((r,dr)->true, missing)
+    ss =   (:A=>:B, (:A=>:B, :B=>:C), (:A,:B)=>(:B,:A), ((:A,:B)=>(:B,:A), :A=>:C), ((:A,:B)=>(:B,:A), (:C,:D).=>(:C,:D)), ((:A,)=>(:A,), (:C,:D).=>(:C,:D), :C=>:C), missing)
+    inds = (1=>2, (1=>2, 1=>4), 1:2=>3:4, (1:2=>3:4, 1=>2), (1:2=>3:4, (1,2) .=> (2,1)), (1:2=>3:4, 1:2 .=> (2,1), 4=>3), missing)
+    for r in rs, s in ss, i in inds
+        sel = hopselector(region = r, sublats = s, indices = i)
+        rsel = resolve(sel, lat)
+        conds = s in (:A=>:B, (:A=>:B, :B=>:C))
+        condi = i in (1=>2,)
+        if (conds !== missing && conds) || (condi !== missing && condi)
+            @test !in(1=>4, rsel)
+        else
+            @test in(1=>4, rsel)
+        end
+    end
+end
 
 @testset "term algebra" begin
     r = SVector(0, 0)
@@ -13,14 +84,17 @@ end
 @testset "onsite terms" begin
     rs = (r->true, missing)
     ss = (:A, (:A, :B), missing)
-    for r in rs, s in ss
-        model0 = onsite(1, region = r, sublats = s) + hopping(1)
+    inds = (1, (1, 2), (1:2, 3), missing)
+    for r in rs, s in ss, i in inds
+        model0 = onsite(1, region = r, sublats = s, indices = i) + hopping(1)
         model1 = onsite(1) + hopping(1)
         model2 = onsite(1, sublats = s) + hopping(1)
         model3 = onsite(1, region = r) + hopping(1)
-        @test onsite(model1, region = r, sublats = s) + hopping(model1) === model0
-        @test onsite(model2, region = r, sublats = s) + hopping(model2) === model0
-        @test onsite(model3, region = r, sublats = s) + hopping(model3) === model0
+        model4 = onsite(1, indices = i) + hopping(1)
+        @test onsite(model1, region = r, sublats = s, indices = i) + hopping(model1) === model0
+        @test onsite(model2, region = r, sublats = s, indices = i) + hopping(model2) === model0
+        @test onsite(model3, region = r, sublats = s, indices = i) + hopping(model3) === model0
+        @test onsite(model4, region = r, sublats = s, indices = i) + hopping(model3) === model0
     end
 end
 
@@ -28,29 +102,25 @@ end
     rs = ((r, dr) -> true, missing)
     ss = (:A => :B, :A => (:A,:B), (:A,:B) .=> (:A,:B), (:A,:B) => (:A,:B), missing)
     dns = ((0,1), ((0,1),(1,0)), SVector(0,1), (SVector(0,1), (0,3)), [1, 2], ([1.0,2], (0,4.0)), missing)
+    inds = ((1 => 2, ), [1 => 2], (1 => 2, 3 => 4), (1:2 => 3:4, 1 => 2), (1:2 .=> 3:4, 1 => 2), missing)
     ranges = (Inf, 1)  # no missing here, because hopping range default is 1.0
     for r in rs, s in ss, dn in dns, rn in ranges
-        model0 = hopping(1, region = r, sublats = s, dn = dn, range = rn) + onsite(1)
+        model0 = hopping(1, region = r, sublats = s, dn = dn, range = rn, indices = inds) + onsite(1)
         model1 = hopping(1, region = r, sublats = s, dn = dn) + onsite(1)
         model2 = hopping(1, region = r, sublats = s) + onsite(1)
         model3 = hopping(1, region = r, range = rn) + onsite(1)
         model4 = hopping(1) + onsite(1)
-        @test hopping(model1, region = r, sublats = s, dn = dn, range = rn) + onsite(model1) === model0
-        @test hopping(model2, region = r, sublats = s, dn = dn, range = rn) + onsite(model2) === model0
-        @test hopping(model3, region = r, sublats = s, dn = dn, range = rn) + onsite(model3) === model0
-        @test hopping(model4, region = r, sublats = s, dn = dn, range = rn) + onsite(model4) === model0
+        @test hopping(model1, region = r, sublats = s, dn = dn, range = rn, indices = inds) + onsite(model1) === model0
+        @test hopping(model2, region = r, sublats = s, dn = dn, range = rn, indices = inds) + onsite(model2) === model0
+        @test hopping(model3, region = r, sublats = s, dn = dn, range = rn, indices = inds) + onsite(model3) === model0
+        @test hopping(model4, region = r, sublats = s, dn = dn, range = rn, indices = inds) + onsite(model4) === model0
     end
-
-    sublats(hopping(1, sublats = (:A,:B) => (:A,:B))) == ((:A => :A, :A => :B, :B => :A, :B => :B),)
-    sublats(hopping(1, sublats = (:A,:B) .=> (:A,:B))) == ((:A => :A, :B => :B),)
-    sublats(hopping(1, sublats = :A => (:A,:B))) == ((:A => :A, :A => :B),)
-    sublats(hopping(1, sublats = (:C => :C, (:A,:B) => (:A,:B)))) == ((:C => :C, :A => :A, :A => :B, :B => :A, :B => :B),)
 end
 
 @testset "hopping adjoint" begin
     ts  = (1, 1im, @SMatrix[0 -im; im 0], @SMatrix[0 -im])
-    ss  = (:A => :B, :A => (:A,:B), (:A,:B) .=> (:A,:B), (:A,:B) => (:A,:B), missing)
-    ss´ = (:B => :A, (:A,:B) => :A, (:A,:B) .=> (:A,:B), (:A,:B,:A,:B) .=> (:A,:A,:B,:B), missing)
+    ss  = (:A => :B, :A => (:A,:B), (:A,:B) .=> (:A,:B), (:A,:B) => (:B,:A), missing)
+    ss´ = (:B => :A, (:A,:B) => :A, (:A,:B) .=> (:A,:B), (:B,:A) => (:A,:B), missing)
     dns = ((0,1), ((0,1),(1,0)),    SVector(0,1),  (SVector(0,1), (0,3)),    [1, 2], ([1.0,2], (0,4.0)),   missing)
     dns´= ((0,-1), ((0,-1),(-1,0)), SVector(0,-1), (SVector(0,-1), (0,-3)), -[1, 2], (-[1.0,2], (0,-4.0)), missing)
     ranges = (Inf, 1)
