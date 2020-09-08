@@ -1,3 +1,5 @@
+using Quantica.RegionPresets: Region
+
 #######################################################################
 # Onsite/Hopping selectors
 #######################################################################
@@ -135,11 +137,11 @@ isonsite((i, j), (dni, dnj)) = i == j && dni == dnj
 
 isinregion(i::Int, ::Missing, lat) = true
 isinregion(i::Int, dn, ::Missing, lat) = true
-isinregion(i::Int, region::Function, lat) = region(sites(lat)[i])
-isinregion(i::Int, dn, region::Function, lat) = region(sites(lat)[i] + bravais(lat) * dn)
+isinregion(i::Int, region::Union{Function,Region}, lat) = region(sites(lat)[i])
+isinregion(i::Int, dn, region::Union{Function,Region}, lat) = region(sites(lat)[i] + bravais(lat) * dn)
 
 isinregion(is::Tuple{Int,Int}, dns, ::Missing, lat) = true
-function isinregion((row, col)::Tuple{Int,Int}, (dnrow, dncol), region::Function, lat)
+function isinregion((row, col)::Tuple{Int,Int}, (dnrow, dncol), region::Union{Function,Region}, lat)
     br = bravais(lat)
     r, dr = _rdr(sites(lat)[col] + br * dncol, sites(lat)[row] + br * dnrow)
     return region(r, dr)
