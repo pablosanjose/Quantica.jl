@@ -183,7 +183,8 @@ Base.in(((i, j), (dni, dnj))::Tuple, rs::ResolvedSelector{<:SiteSelector}) =
     isinregion(i, dni, rs.selector.region, rs.lattice) &&
     isinsublats(sublat(rs.lattice, i), rs.selector.sublats)
 
-@inline function Base.in(is::Tuple{Integer,Integer}, rs::ResolvedSelector{<:HopSelector, LA}) where {E,L,LA<:AbstractLattice{E,L}}
+Base.in((j, i)::Pair{<:Integer,<:Integer}, rs::ResolvedSelector{<:HopSelector}) = (i, j) in rs
+function Base.in(is::Tuple{Integer,Integer}, rs::ResolvedSelector{<:HopSelector, LA}) where {E,L,LA<:AbstractLattice{E,L}}
     dn0 = zero(SVector{L,Int})
     return (is, (dn0, dn0)) in rs
 end
