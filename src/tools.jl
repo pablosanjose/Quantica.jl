@@ -22,7 +22,7 @@ unitvector(::Type{SVector{L,T}}, i) where {L,T} =
 ensuretuple(s::Tuple) = s
 ensuretuple(s) = (s,)
 
-tupletopair(s::Tuple) = Pair(first(s), last(s))
+indstopair(s::Tuple) = Pair(last(s), first(s))
 
 tuplemost(t::NTuple{N,Any}) where {N} = ntuple(i -> t[i], Val(N-1))
 

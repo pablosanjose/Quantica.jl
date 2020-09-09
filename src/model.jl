@@ -24,16 +24,6 @@ struct ResolvedSelector{S<:Selector,L<:AbstractLattice} <: Selector
     lattice::L
 end
 
-function sublats(rs::ResolvedSelector{<:SiteSelector})
-    subs = sublats(rs.lattice)
-    return [s for s in subs if isinsublats(s, rs.selector.sublats)]
-end
-
-function sublats(rs::ResolvedSelector{<:HopSelector})
-    subs = sublats(rs.lattice)
-    return [s => d for s in subs for d in subs if isinsublats(s => d, rs.selector.sublats)]
-end
-
 """
     siteselector(; region = missing, sublats = missing, indices = missing)
 
@@ -193,23 +183,25 @@ Base.in(((i, j), (dni, dnj))::Tuple, rs::ResolvedSelector{<:SiteSelector}) =
     isinregion(i, dni, rs.selector.region, rs.lattice) &&
     isinsublats(sublat(rs.lattice, i), rs.selector.sublats)
 
-@inline function Base.in(is::Union{Pair,Tuple{Integer,Integer}}, rs::ResolvedSelector{<:HopSelector, LA}) where {E,L,LA<:AbstractLattice{E,L}}
+@inline function Base.in(is::Tuple{Integer,Integer}, rs::ResolvedSelector{<:HopSelector, LA}) where {E,L,LA<:AbstractLattice{E,L}}
     dn0 = zero(SVector{L,Int})
-    return (Tuple(is), (dn0, dn0)) in rs
+    return (is, (dn0, dn0)) in rs
 end
 
 Base.in((inds, dns), rs::ResolvedSelector{<:HopSelector}) =
-    !isonsite(inds, dns) && isinindices(inds, rs.selector.indices) &&
+    !isonsite(inds, dns) && isinindices(indstopair(inds), rs.selector.indices) &&
     isinregion(inds, dns, rs.selector.region, rs.lattice) && isindns(dns, rs.selector.dns) &&
     isinrange(inds, rs.selector.range, rs.lattice) &&
-    isinsublats(tupletopair(sublat.(Ref(rs.lattice), inds)), rs.selector.sublats)
+    isinsublats(indstopair(sublat.(Ref(rs.lattice), inds)), rs.selector.sublats)
 
 isonsite((i, j), (dni, dnj)) = i == j && dni == dnj
 
 isinregion(i::Int, ::Missing, lat) = true
 isinregion(i::Int, dn, ::Missing, lat) = true
-isinregion(i::Int, region::Union{Function,Region}, lat) = region(allsitepositions(lat)[i])
-isinregion(i::Int, dn, region::Union{Function,Region}, lat) = region(allsitepositions(lat)[i] + bravais(lat) * dn)
+isinregion(i::Int, region::Union{Function,Region}, lat) =
+    region(allsitepositions(lat)[i])
+isinregion(i::Int, dn, region::Union{Function,Region}, lat) =
+    region(allsitepositions(lat)[i] + bravais(lat) * dn)
 
 isinregion(is::Tuple{Int,Int}, dns, ::Missing, lat) = true
 function isinregion((row, col)::Tuple{Int,Int}, (dnrow, dncol), region::Union{Function,Region}, lat)
@@ -217,6 +209,16 @@ function isinregion((row, col)::Tuple{Int,Int}, (dnrow, dncol), region::Union{Fu
     r, dr = _rdr(allsitepositions(lat)[col] + br * dncol, allsitepositions(lat)[row] + br * dnrow)
     return region(r, dr)
 end
+
+isindns((dnrow, dncol)::Tuple{SVector,SVector}, dns) = isindns(dnrow - dncol, dns)
+isindns(dn::SVector{L,Int}, dns::Tuple{Vararg{SVector{L,Int}}}) where {L} = dn in dns
+isindns(dn::SVector, dns::Missing) = true
+isindns(dn, dns) =
+    throw(ArgumentError("Cell distance dn in selector is incompatible with Lattice."))
+
+isinrange(inds, ::Missing, lat) = true
+isinrange((row, col)::Tuple{Int,Int}, range::Number, lat) =
+    norm(allsitepositions(lat)[col] - allsitepositions(lat)[row]) <= range
 
 # There are no sublat ranges, so supporting (:A, (:B, :C)) is not necessary
 isinsublats(s::Integer, ::Missing) = true
@@ -232,23 +234,11 @@ isinindices(i::Integer, r::NTuple{N,Integer}) where {N} = i in r
 isinindices(i::Integer, inds::Tuple) = any(is -> i in is, inds)
 isinindices(i::Integer, r) = i in r
 
-isinindices((i,j)::Pair, inds) = isinindices((i, j), inds)
-isinindices(is::Tuple, ::Missing) = true
+isinindices(is::Pair, ::Missing) = true
 # Here is => js could be (1,2) => (3,4) or 1:2 => 3:4, not simply 1 => 3
-isinindices((i, j)::Tuple, (is, js)::Pair) = i in is && j in js
+isinindices((j, i)::Pair, (js, is)::Pair) = i in is && j in js
 # Here we support ((1,2) .=> (3,4), 3=>4) or ((1,2) .=> 3:4, 3=>4)
-isinindices(ind::Tuple, indpairs) = any(is -> isinindices(ind, is), indpairs)
-
-isindns((dnrow, dncol)::Tuple{SVector,SVector}, dns) = isindns(dnrow - dncol, dns)
-isindns(dn::SVector{L,Int}, dns::Tuple{Vararg{SVector{L,Int}}}) where {L} = dn in dns
-isindns(dn::SVector, dns::Missing) = true
-isindns(dn, dns) =
-    throw(ArgumentError("Cell distance dn in selector is incompatible with Lattice."))
-
-isinrange(inds, ::Missing, lat) = true
-isinrange((row, col)::Tuple{Int,Int}, range::Number, lat) =
-    norm(allsitepositions(lat)[col] - allsitepositions(lat)[row]) <= range
-
+isinindices(pair::Pair, pairs) = any(p -> isinindices(pair, p), pairs)
 
 # merge non-missing fields of s´ into s
 merge_non_missing(s::SiteSelector, s´::SiteSelector) =
@@ -284,20 +274,53 @@ _adjoint(t::SVector) = -t
 # is_unconstrained_selector(s::HopSelector) = false
 
 #######################################################################
-# sitepositions
+# site, sublat, dn generators
 #######################################################################
 
-sitepositions(lat::AbstractLattice, s::SiteSelector) = sitepositions(resolve(s, lat))
+sitepositions(lat::AbstractLattice, s::SiteSelector) =
+    sitepositions(resolve(s, lat))
+sitepositions(rs::ResolvedSelector{<:SiteSelector}) =
+    (s for (i, s) in enumerate(allsitepositions(rs.lattice)) if i in rs)
 
-sitepositions(rs::ResolvedSelector{<:SiteSelector}) = (s for (i, s) in enumerate(allsitepositions(rs.lattice)) if i in rs)
+siteindices(lat::AbstractLattice, s::SiteSelector) =
+    siteindices(resolve(s, lat))
+siteindices(rs::ResolvedSelector{<:SiteSelector}) =
+    (i for i in siteindex_candidates(rs) if i in rs)
+siteindices(rs::ResolvedSelector{<:SiteSelector}, sublat) =
+    (i for i in siteindex_candidates(rs, sublat) if i in rs)
 
-#######################################################################
-# siteindices
-#######################################################################
+siteindex_candidates(rs) = eachindex(allsitepositions(rs.lattice))
+siteindex_candidates(rs, sublat) =
+    _siteindex_candidates(rs.selector.indices, siterange(rs.lattice, sublat))
+# indices can be missing, 1, 2:3, (1,2,3) or (1, 2:3)
+# we also support (1, (2,3)), useful for source_candidates below
+_siteindex_candidates(::Missing, sr) = sr
+_siteindex_candidates(i::Integer, sr) = ifelse(i in sr, (i,), ())
+_siteindex_candidates(inds::AbstractUnitRange, sr) = intersect(inds, sr)
+_siteindex_candidates(inds::NTuple{N,Integer}, sr) where {N} = filter(in(sr), inds)
+_siteindex_candidates(inds::Tuple, sr) = Iterators.flatten(_siteindex_candidates.(inds))
 
-siteindices(lat::AbstractLattice, s::SiteSelector) = siteindices(resolve(s, lat))
+source_candidates(rs::ResolvedSelector{<:HopSelector}, sublat) =
+    _source_candidates(rs.selector.indices, siterange(rs.lattice, sublat))
+_source_candidates(::Missing, sr) = sr
+_source_candidates(inds, sr) = _siteindex_candidates(first.(inds), sr)
 
-siteindices(rs::ResolvedSelector{<:SiteSelector}) = (i for i in eachindex(allsitepositions(rs.lattice)) if i in rs)
+sublats(rs::ResolvedSelector{<:SiteSelector{Missing}}) = sublats(rs.lattice)
+
+function sublats(rs::ResolvedSelector{<:SiteSelector})
+    subs = sublats(rs.lattice)
+    return (s for s in subs if isinsublats(s, rs.selector.sublats))
+end
+
+function sublats(rs::ResolvedSelector{<:HopSelector})
+    subs = sublats(rs.lattice)
+    return (s => d for s in subs for d in subs if isinsublats(s => d, rs.selector.sublats))
+end
+
+dniter(rs::ResolvedSelector{S,LA}) where {S,E,L,LA<:Lattice{E,L}} =
+    dniter(rs.selector.dns, Val(L))
+dniter(dns::Missing, ::Val{L}) where {L} = BoxIterator(zero(SVector{L,Int}))
+dniter(dns, ::Val) = dns
 
 #######################################################################
 # Tightbinding types

@@ -583,18 +583,14 @@ applyterm!(builder::IJVBuilder, term::Union{OnsiteTerm, HoppingTerm}) =
 
 function applyterm!(builder::IJVBuilder{L}, term::OnsiteTerm) where {L}
     lat = builder.lat
+    dn0 = zero(SVector{L,Int})
+    ijv = builder[dn0]
+    allpos = allsitepositions(lat)
     rsel = resolve(term.selector, lat)
-    for s in sublats(rsel)
-        is = siterange(lat, s)
-        dn0 = zero(SVector{L,Int})
-        ijv = builder[dn0]
-        offset = lat.unitcell.offsets[s]
-        for i in is
-            i in rsel || continue
-            r = allsitepositions(lat)[i]
-            v = toeltype(term(r, r), eltype(builder), builder.orbs[s], builder.orbs[s])
-            push!(ijv, (i, i, v))
-        end
+    for s in sublats(rsel), i in siteindices(rsel, s)
+        r = allpos[i]
+        v = toeltype(term(r, r), eltype(builder), builder.orbs[s], builder.orbs[s])
+        push!(ijv, (i, i, v))
     end
     return nothing
 end
@@ -602,19 +598,18 @@ end
 function applyterm!(builder::IJVBuilder{L}, term::HoppingTerm) where {L}
     lat = builder.lat
     rsel = resolve(term.selector, lat)
-    sel = rsel.selector
-    L > 0 && checkinfinite(sel)
+    L > 0 && checkinfinite(rsel)
+    allpos = allsitepositions(lat)
     for (s2, s1) in sublats(rsel)  # Each is a Pair s2 => s1
-        is, js = siterange(lat, s1), siterange(lat, s2)
-        dns = dniter(sel.dns, Val(L))
+        dns = dniter(rsel)
         for dn in dns
             foundlink = false
             ijv = builder[dn]
-            for j in js
-                sitej = allsitepositions(lat)[j]
+            for j in source_candidates(rsel, s2)
+                sitej = allpos[j]
                 rsource = sitej - lat.bravais.matrix * dn
-                itargets = targets(builder, sel.range, rsource, s1)
-                for i in itargets
+                is = targets(builder, rsel.selector.range, rsource, s1)
+                for i in is
                     ((i, j), (dn, zero(dn))) in rsel || continue
                     foundlink = true
                     rtarget = allsitepositions(lat)[i]
@@ -649,9 +644,6 @@ toeltype(t::SVector{N}, ::Type{S}, t1::NTuple{N}) where {N,S<:SVector} = padtoty
 toeltype(t::Array, x...) = throw(ArgumentError("Array input in model, please use StaticArrays instead (e.g. SA[1 0; 0 1] instead of [1 0; 0 1])"))
 toeltype(t, x...) = throw(DimensionMismatch("Dimension mismatch between model and Hamiltonian. Does the `orbitals` kwarg in your `hamiltonian` match your model?"))
 
-dniter(dns::Missing, ::Val{L}) where {L} = BoxIterator(zero(SVector{L,Int}))
-dniter(dns, ::Val) = dns
-
 function targets(builder, range::Real, rsource, s1)
     !isfinite(range) && return targets(builder, missing, rsource, s1)
     if !isassigned(builder.kdtrees, s1)
@@ -665,11 +657,9 @@ end
 
 targets(builder, range::Missing, rsource, s1) = siterange(builder.lat, s1)
 
-checkinfinite(selector) =
-    selector.dns === missing && (selector.range === missing || !isfinite(selector.range)) &&
+checkinfinite(rs) =
+    rs.selector.dns === missing && (rs.selector.range === missing || !isfinite(rs.selector.range)) &&
     throw(ErrorException("Tried to implement an infinite-range hopping on an unbounded lattice"))
-
-isselfhopping((i, j), (s1, s2), dn) = i == j && s1 == s2 && iszero(dn)
 
 #######################################################################
 # Matrix(::KetModel, ::Hamiltonian), and Vector

@@ -37,11 +37,19 @@ end
     end
 end
 
-
 @testset "siteindices/sitepositions" begin
     lat = LatticePresets.honeycomb() |> unitcell(region = RegionPresets.circle(10))
     @test sum(sitepositions(lat, sublats = :A)) ≈ -sum(sitepositions(lat, sublats = :B))
     @test length(collect(siteindices(lat, sublats = :A))) == nsites(lat) ÷ 2
+    
+    lat = LatticePresets.honeycomb() |> unitcell(2)
+    @test collect(siteindices(lat)) == 1:8
+    @test collect(siteindices(lat; indices = 10)) == Int[]
+    @test collect(siteindices(lat; indices = 5:10)) == 5:8
+    @test collect(siteindices(lat; indices = 5:10)) == 5:8
+    @test collect(siteindices(lat; indices = 5:10)) == 5:8
+    @test collect(siteindices(lat; indices = (1, 5:10))) == [1, 5 ,6, 7, 8]
+    @test collect(siteindices(lat; indices = (1, 10))) == [1]
 end
 
 @testset "lattice unitcell" begin
