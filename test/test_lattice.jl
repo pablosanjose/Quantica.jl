@@ -42,7 +42,6 @@ end
     lat = LatticePresets.honeycomb() |> unitcell(region = RegionPresets.circle(10))
     @test sum(sitepositions(lat, sublats = :A)) ≈ -sum(sitepositions(lat, sublats = :B))
     @test length(collect(siteindices(lat, sublats = :A))) == nsites(lat) ÷ 2
-    @test siteindices(lat)
 end
 
 @testset "lattice unitcell" begin

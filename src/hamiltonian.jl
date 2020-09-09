@@ -354,7 +354,7 @@ end
     sitepositions(h::Hamiltonian; kw...)
 
 Build a generator of the positions of sites in the lattice unitcell. Only sites specified
-by `siteselector(kw...)` are selected.
+by `siteselector(kw...)` are selected, see `siteselector` for details.
 
 """
 sitepositions(lat::AbstractLattice; kw...) = sitepositions(lat, siteselector(;kw...))
@@ -365,7 +365,7 @@ sitepositions(h::Hamiltonian; kw...) = sitepositions(h.lattice, siteselector(;kw
     siteindices(lat::Hamiltonian; kw...)
 
 Build a generator of the unique indices of sites in the lattice unitcell. Only sites
-specified by `siteselector(kw...)` are selected.
+specified by `siteselector(kw...)` are selected, see `siteselector` for details.
 
 """
 siteindices(lat::AbstractLattice; kw...) = siteindices(lat, siteselector(;kw...))
@@ -383,8 +383,6 @@ function transform!(f, h::Hamiltonian)
 end
 
 # Indexing #
-"""
-"""
 Base.push!(h::Hamiltonian{<:Any,L}, dn::NTuple{L,Int}) where {L} = push!(h, SVector(dn...))
 Base.push!(h::Hamiltonian{<:Any,L}, dn::Vararg{Int,L}) where {L} = push!(h, SVector(dn...))
 function Base.push!(h::Hamiltonian{<:Any,L}, dn::SVector{L,Int}) where {L} 

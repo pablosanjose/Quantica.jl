@@ -5,13 +5,13 @@ using Quantica.RegionPresets: Region
 #######################################################################
 abstract type Selector end
 
-struct SiteSelector{S,M,I} <: Selector
+struct SiteSelector{S,I,M} <: Selector
     region::M
     sublats::S  # NTuple{N,NameType} (unresolved) or Vector{Int} (resolved on a lattice)
     indices::I  # Once resolved, this should be an Integer container
 end
 
-struct HopSelector{S,M,D,T,I} <: Selector
+struct HopSelector{S,I,D,T,M} <: Selector
     region::M
     sublats::S  # NTuple{N,Pair{NameType,NameType}} (unres) or Vector{Pair{Int,Int}} (res)
     dns::D
@@ -224,24 +224,20 @@ isinsublats(s::Integer, sublats) = s in sublats
 isinsublats(ss::Pair, ::Missing) = true
 isinsublats((i, j)::Pair, (is, js)::Pair) = i in is && j in js
 isinsublats(pair::Pair, sublats) = any(is -> isinsublats(pair, is), sublats)
-isinsublats(s, sublats) =
-    throw(ArgumentError("Sublattices $s in selector cannot be resolved."))
 
 # Here we can have (1, 2:3), apart from ((1,2) .=> (3,4), 1=>2) and ((1,2) => (3,4), 1=>2)
 isinindices(i::Integer, ::Missing) = true
 isinindices(i::Integer, j::Integer) = i == j
-isinindices(i::Integer, r::AbstractUnitRange) = i in r
-isinindices(i::Integer, r::AbstractArray) = i in r
 isinindices(i::Integer, r::NTuple{N,Integer}) where {N} = i in r
-isinindices(i::Integer, inds) = any(is -> i in is, inds)
-isinindices((i,j)::Pair, inds) = isinindices((i,j), inds)
+isinindices(i::Integer, inds::Tuple) = any(is -> i in is, inds)
+isinindices(i::Integer, r) = i in r
+
+isinindices((i,j)::Pair, inds) = isinindices((i, j), inds)
 isinindices(is::Tuple, ::Missing) = true
 # Here is => js could be (1,2) => (3,4) or 1:2 => 3:4, not simply 1 => 3
 isinindices((i, j)::Tuple, (is, js)::Pair) = i in is && j in js
 # Here we support ((1,2) .=> (3,4), 3=>4) or ((1,2) .=> 3:4, 3=>4)
 isinindices(ind::Tuple, indpairs) = any(is -> isinindices(ind, is), indpairs)
-isinindices(ind, inds) =
-    throw(ArgumentError("Indices $ind in selector cannot be resolved."))
 
 isindns((dnrow, dncol)::Tuple{SVector,SVector}, dns) = isindns(dnrow - dncol, dns)
 isindns(dn::SVector{L,Int}, dns::Tuple{Vararg{SVector{L,Int}}}) where {L} = dn in dns
