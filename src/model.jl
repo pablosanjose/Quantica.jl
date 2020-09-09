@@ -198,6 +198,7 @@ isonsite((i, j), (dni, dnj)) = i == j && dni == dnj
 
 isinregion(i::Int, ::Missing, lat) = true
 isinregion(i::Int, dn, ::Missing, lat) = true
+
 isinregion(i::Int, region::Union{Function,Region}, lat) =
     region(allsitepositions(lat)[i])
 isinregion(i::Int, dn, region::Union{Function,Region}, lat) =
