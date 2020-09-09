@@ -353,7 +353,7 @@ end
     sitepositions(lat::AbstractLattice; kw...)
     sitepositions(h::Hamiltonian; kw...)
 
-Build a container with the positions of sites in the lattice unitcell. Only sites specified
+Build a generator of the positions of sites in the lattice unitcell. Only sites specified
 by `siteselector(kw...)` are selected.
 
 """
@@ -364,7 +364,7 @@ sitepositions(h::Hamiltonian; kw...) = sitepositions(h.lattice, siteselector(;kw
     siteindices(lat::AbstractLattice; kw...)
     siteindices(lat::Hamiltonian; kw...)
 
-Build a container with the unique indices of sites in the lattice unitcell. Only sites
+Build a generator of the unique indices of sites in the lattice unitcell. Only sites
 specified by `siteselector(kw...)` are selected.
 
 """

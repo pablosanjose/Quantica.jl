@@ -37,6 +37,14 @@ end
     end
 end
 
+
+@testset "siteindices/sitepositions" begin
+    lat = LatticePresets.honeycomb() |> unitcell(region = RegionPresets.circle(10))
+    @test sum(sitepositions(lat, sublats = :A)) ≈ -sum(sitepositions(lat, sublats = :B))
+    @test length(collect(siteindices(lat, sublats = :A))) == nsites(lat) ÷ 2
+    @test siteindices(lat)
+end
+
 @testset "lattice unitcell" begin
     presets = (LatticePresets.linear, LatticePresets.square, LatticePresets.triangular,
                LatticePresets.honeycomb, LatticePresets.cubic, LatticePresets.fcc,
