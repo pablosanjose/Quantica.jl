@@ -592,7 +592,7 @@ function applyterm!(builder::IJVBuilder{L}, term::OnsiteTerm) where {L}
         ijv = builder[dn0]
         offset = lat.unitcell.offsets[s]
         for i in is
-            isinregion(i, dn0, rsel.selector.region, lat) || continue
+            i in rsel || continue
             r = allsitepositions(lat)[i]
             v = toeltype(term(r, r), eltype(builder), builder.orbs[s], builder.orbs[s])
             push!(ijv, (i, i, v))
@@ -617,8 +617,7 @@ function applyterm!(builder::IJVBuilder{L}, term::HoppingTerm) where {L}
                 rsource = sitej - lat.bravais.matrix * dn
                 itargets = targets(builder, sel.range, rsource, s1)
                 for i in itargets
-                    isselfhopping((i, j), (s1, s2), dn) && continue
-                    isinregion((i, j), (dn, zero(dn)), sel.region, lat) || continue
+                    ((i, j), (dn, zero(dn))) in rsel || continue
                     foundlink = true
                     rtarget = allsitepositions(lat)[i]
                     r, dr = _rdr(rsource, rtarget)
@@ -714,7 +713,7 @@ end
 
 function Base.Matrix(kms, h::Hamiltonian; orthogonal = false)
     M = orbitaltype(h)
-    kmat = Matrix{M}(undef, size(h, 2), length(kms))
+    kmat = zeros(M, size(h, 2), length(kms))
     for (j, km) in enumerate(kms)
         kvec = view(kmat, :, j)
         ket!(kvec, km, h)
@@ -734,7 +733,7 @@ function ket!(k, km::KetModel, h)
             orbs = h.orbitals[s]
             is = siterange(h.lattice, s)
             for i in is
-                isinregion(i, term.selector.region, h.lattice) || continue
+                i in rs || continue
                 r = hsites[i]
                 k[i] += generate_amplitude(km, term, r, M, orbs)
             end
