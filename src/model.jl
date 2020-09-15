@@ -104,8 +104,10 @@ The keyword `indices` accepts a single `src => dest` pair or a collection thereo
     indices = [1:10 => 20:25, 3 => 30]  # Direct product, any hopping from sites 1:10 to sites 20:25, or from 3 to 30
 
 """
-hopselector(; region = missing, sublats = missing, dn = missing, range = missing, indices = missing) =
+function hopselector(; region = missing, sublats = missing, dn = missing, range = missing, indices = missing)
+    dn === missing && (range === missing || !isfinite(range)) && @warn "Both `dn` and `range` kwargs in `hopselector` are unconstrained, which will result in unbounded hopping distances."
     HopSelector(region, sublats, sanitize_dn(dn), sanitize_range(range), indices)
+end
 
 # hopselector(; region = missing, sublats = missing, dn = missing, range = missing, indices = missing) =
 #     HopSelector(region, sanitize_sublatpairs(sublats), sanitize_dn(dn), sanitize_range(range), sanitize_index_pairs(indices))
@@ -508,7 +510,7 @@ _onlyonsites(s, t::HoppingTerm, args...) = (_onlyonsites(s, args...)...,)
 _onlyonsites(s) = ()
 
 """
-    hopping(t; region = missing, sublats = missing, indices = missing, dn = missing, range = 1, plusadjoint = false)
+    hopping(t; region = missing, sublats = missing, indices = missing, dn = missing, range = missing, plusadjoint = false)
 
 Create an `TightbindingModel` with a single `HoppingTerm` that applies a hopping `t` to a
 `Lattice` when creating a `Hamiltonian` with `hamiltonian`.
@@ -538,7 +540,7 @@ Most keywords are the same as for `hopselector`. Only hoppings between two sites
 positions `r₁ = r - dr/2` and `r₂ = r + dr`, belonging to unit cells at integer distance
 `dn´` and to sublattices `s₁` and `s₂` will be selected if: `region(r, dr) && s in sublats
 && dn´ in dn && norm(dr) <= range`. If any of these is `missing` it will not be used to
-constraint the selection. Note that the default `range` is 1, not `missing`.
+constraint the selection.
 
 The keyword `dn` can be a `Tuple`/`Vector`/`SVector` of `Int`s, or a tuple thereof. The
 keyword `sublats` allows the following formats:
@@ -598,8 +600,8 @@ Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
 # See also:
     `onsite`
 """
-function hopping(t; plusadjoint = false, range = 1, kw...)
-    hop = hopping(t, hopselector(; range = range, kw...))
+function hopping(t; plusadjoint = false, kw...)
+    hop = hopping(t, hopselector(; kw...))
     return plusadjoint ? hop + hop' : hop
 end
 hopping(t, selector) = TightbindingModel(HoppingTerm(t, selector, 1))
