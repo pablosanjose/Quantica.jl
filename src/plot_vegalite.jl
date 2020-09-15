@@ -62,7 +62,7 @@ function linkstable(h::Hamiltonian, (a1, a2) = (1, 2))
     lat = h.lattice
     T = numbertype(lat)
     slats = sublats(lat)
-    rs = sites(lat)
+    rs = allsitepositions(lat)
     table = NamedTuple{(:x, :y, :x2, :y2, :sublat, :tooltip, :opacity, :islink),
                        Tuple{T,T,T,T,NameType,String,Float64,Bool}}[]
     h0 = h.harmonics[1].h

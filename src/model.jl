@@ -3,74 +3,121 @@ using Quantica.RegionPresets: Region
 #######################################################################
 # Onsite/Hopping selectors
 #######################################################################
-abstract type Selector{M,S} end
+abstract type Selector end
 
-struct SiteSelector{M,S} <: Selector{M,S}
+struct SiteSelector{S,I,M} <: Selector
     region::M
     sublats::S  # NTuple{N,NameType} (unresolved) or Vector{Int} (resolved on a lattice)
+    indices::I  # Once resolved, this should be an Integer container
 end
 
-struct HopSelector{M,S,D,T} <: Selector{M,S}
+struct HopSelector{S,I,D,T,M} <: Selector
     region::M
     sublats::S  # NTuple{N,Pair{NameType,NameType}} (unres) or Vector{Pair{Int,Int}} (res)
     dns::D
     range::T
+    indices::I # Once resolved, this should be a Pair{Integer,Integer} container
+end
+
+struct ResolvedSelector{S<:Selector,L<:AbstractLattice} <: Selector
+    selector::S
+    lattice::L
 end
 
 """
-    siteselector(; region = missing, sublats = missing)
+    siteselector(; region = missing, sublats = missing, indices = missing)
 
 Return a `SiteSelector` object that can be used to select sites in a lattice contained
-within the specified region and sublattices. Only sites at position `r` in sublattice with
-name `s::NameType` will be selected if `region(r) && s in sublats` is true. Any missing
-`region` or `sublat` will not be used to constraint the selection.
+within the specified region and sublattices. Only sites with index `i`, at position `r` and
+belonging to a sublattice with name `s::NameType` will be selected if
+
+    `region(r) && s in sublats && i in indices`
+
+Any missing `region`, `sublat` or `indices` will not be used to constraint the selection.
 
 The keyword `sublats` allows the following formats:
 
-    sublats = :A           # Onsite on sublat :A only
-    sublats = (:A,)        # Same as above
-    sublats = (:A, :B)     # Onsite on sublat :A and :B
+    sublats = :A                    # Sites on sublat :A only
+    sublats = (:A,)                 # Same as above
+    sublats = (:A, :B)              # Sites on sublat :A and :B
+
+The keyword `indices` accepts a single integer, or a collection thereof. If several
+collections are given, they are flattened into a single one. Possible combinations:
+
+    indices = 1                     # Site 1 only
+    indices = (1, )                 # Same as above
+    indices = (1, 2, 3)             # Sites 1, 2 or 3
+    indices = [1, 2, 3]             # Same as above
+    indices = 1:3                   # Same as above
+    indices = (1:3, 7, 8)           # Sites 1, 2, 3, 7 or 8
 """
-siteselector(; region = missing, sublats = missing) =
-    SiteSelector(region, sanitize_sublats(sublats))
+siteselector(; region = missing, sublats = missing, indices = missing) =
+    SiteSelector(region, sublats, indices)
+
+# siteselector(; region = missing, sublats = missing, indices = missing) =
+#     SiteSelector(region, sanitize_sublats(sublats), sanitize_indices(indices))
+
+# sanitize_sublats(::Missing) = missing
+# sanitize_sublats(s::Integer) = (nametype(s),)
+# sanitize_sublats(s::NameType) = (s,)
+# sanitize_sublats(s::Tuple) = nametype.(s)
+# sanitize_sublats(s::Tuple{}) = ()
+# sanitize_sublats(n) = throw(ErrorException(
+#     "`sublats` for `onsite` must be either `missing`, a sublattice name or a tuple of names, see `onsite` for details"))
+
+# sanitize_indices(::Missing) = missing
+# sanitize_indices(i::Integer) = (i,)
+# sanitize_indices(is::NTuple{N,Integer}) where {N} = is
+# sanitize_indices(is::AbstractVector{<:Integer}) = is
+# sanitize_indices(is::AbstractUnitRange{<:Integer}) = is
+# sanitize_indices(is) = Iterators.flatten(is)
 
 """
-    hopselector(; region = missing, sublats = missing, dn = missing, range = missing)
+    hopselector(; region = missing, sublats = missing, indices = missing, dn = missing, range = missing)
 
 Return a `HopSelector` object that can be used to select hops between two sites in a
-lattice. Only hops between two sites at positions `r₁ = r - dr/2` and `r₂ = r + dr`,
-belonging to unit cells at integer distance `dn´` and to sublattices `s₁` and `s₂` will be
-selected if: `region(r, dr) && s in sublats && dn´ in dn && norm(dr) <= range`. If any of
-these is `missing` it will not be used to constraint the selection.
+lattice. Only hops between two sites, with indices `ipair = src => dst`, at positions `r₁ =
+r - dr/2` and `r₂ = r + dr`, belonging to unit cells at integer distance `dn´` and to
+sublattices `s₁` and `s₂` will be selected if:
 
-The keyword `dn` can be a `Tuple`/`Vector`/`SVector` of `Int`s, or a tuple thereof. The
-keyword `sublats` allows the following formats:
+    `region(r, dr) && s in sublats && dn´ in dn && norm(dr) <= range && ipair in indices`
 
-    sublats = :A => :B                 # Hopping from :A to :B sublattices
-    sublats = (:A => :B,)              # Same as above
-    sublats = (:A => :B, :C => :D)     # Hopping from :A to :B or :C to :D
-    sublats = (:A, :C) .=> (:B, :D)    # Broadcasted pairs, same as above
-    sublats = (:A, :C) => (:B, :D)     # Direct product, (:A=>:B, :A=:D, :C=>:B, :C=>D)
+If any of these is `missing` it will not be used to constraint the selection.
+
+The keyword `dn` can be a `Tuple`/`Vector`/`SVector` of `Int`s, or a tuple thereof.
+
+The keyword `sublats` allows the following formats:
+
+    sublats = :A => :B                  # Hopping from :A to :B sublattices, but not from :B to :A
+    sublats = (:A => :B,)               # Same as above
+    sublats = (:A => :B, :C => :D)      # Hopping from :A to :B or :C to :D
+    sublats = (:A, :C) .=> (:B, :D)     # Broadcasted pairs, same as above
+    sublats = (:A, :C) => (:B, :D)      # Direct product, (:A=>:B, :A=:D, :C=>:B, :C=>D)
+
+The keyword `indices` accepts a single `src => dest` pair or a collection thereof. Any `src
+== dest` will be neglected. Possible combinations:
+
+    indices = 1 => 2                    # Hopping from site 1 to 2, but not from 2 to 1
+    indices = (1 => 2, 2 => 1)          # Hoppings from 1 to 2 or from 2 to 1
+    indices = [1 => 2, 2 => 1]          # Same as above
+    indices = [(1, 2) .=> (2, 1)]       # Broadcasted pairs, same as above
+    indices = [1:10 => 20:25, 3 => 30]  # Direct product, any hopping from sites 1:10 to sites 20:25, or from 3 to 30
+
 """
-hopselector(; region = missing, sublats = missing, dn = missing, range = missing) =
-    HopSelector(region, sanitize_sublatpairs(sublats), sanitize_dn(dn), sanitize_range(range))
+hopselector(; region = missing, sublats = missing, dn = missing, range = missing, indices = missing) =
+    HopSelector(region, sublats, sanitize_dn(dn), sanitize_range(range), indices)
 
-sanitize_sublats(s::Missing) = missing
-sanitize_sublats(s::Integer) = (nametype(s),)
-sanitize_sublats(s::NameType) = (s,)
-sanitize_sublats(s::Tuple) = nametype.(s)
-sanitize_sublats(s::Tuple{}) = ()
-sanitize_sublats(n) = throw(ErrorException(
-    "`sublats` for `onsite` must be either `missing`, a sublattice name or a tuple of names, see `onsite` for details"))
+# hopselector(; region = missing, sublats = missing, dn = missing, range = missing, indices = missing) =
+#     HopSelector(region, sanitize_sublatpairs(sublats), sanitize_dn(dn), sanitize_range(range), sanitize_index_pairs(indices))
 
-sanitize_sublatpairs(s::Missing) = missing
-sanitize_sublatpairs(p::Pair{<:Union{NameType,Integer}, <:Union{NameType,Integer}}) =
-    (ensurenametype(p),)
-sanitize_sublatpairs(pp::Pair) =
-    ensurenametype.(tupletopair.(tupleproduct(first(pp), last(pp))))
-sanitize_sublatpairs(ps::Tuple) = tuplejoin(sanitize_sublatpairs.(ps)...)
-sanitize_sublatpairs(s) = throw(ErrorException(
-    "`sublats` for `hopping` must be either `missing` or a series of sublattice `Pair`s, see `hopping` for details"))
+# sanitize_sublatpairs(s::Missing) = missing
+# sanitize_sublatpairs(p::Pair{<:Union{NameType,Integer}, <:Union{NameType,Integer}}) =
+#     (ensurenametype(p),)
+# sanitize_sublatpairs(pp::Pair) =
+#     ensurenametype.(tupletopair.(tupleproduct(first(pp), last(pp))))
+# sanitize_sublatpairs(ps::Tuple) = tuplejoin(sanitize_sublatpairs.(ps)...)
+# sanitize_sublatpairs(s) = throw(ErrorException(
+#     "`sublats` for `hopping` must be either `missing` or a series of sublattice `Pair`s, see `hopping` for details"))
 
 ensurenametype((s1, s2)::Pair) = nametype(s1) => nametype(s2)
 
@@ -85,74 +132,85 @@ _sanitize_dn(dn::Vector) = SVector{length(dn),Int}(dn)
 sanitize_range(::Missing) = missing
 sanitize_range(range::Real) = isfinite(range) ? float(range) + sqrt(eps(float(range))) : float(range)
 
-sublats(lat::AbstractLattice, s::SiteSelector{<:Any,Missing}) = collect(1:nsublats(lat))
-
-function sublats(lat::AbstractLattice, s::SiteSelector{<:Any,<:Tuple})
-    names = lat.unitcell.names
-    ss = Int[]
-    for name in s.sublats
-        i = findfirst(isequal(name), names)
-        i !== nothing && push!(ss, i)
-    end
-    return ss
-end
-
-function sublats(lat::AbstractLattice, s::HopSelector{<:Any,<:Tuple})
-    names = lat.unitcell.names
-    ss = Pair{Int,Int}[]
-    for (nsrc, ndst) in s.sublats
-        isrc = findfirst(isequal(nsrc), names)
-        idst = findfirst(isequal(ndst), names)
-        isrc !== nothing && idst !== nothing && push!(ss, isrc => idst)
-    end
-    return ss
-end
-
-sublats(lat::AbstractLattice, s::HopSelector{<:Any,Missing}) =
-    tupletopair.(vec(collect(Iterators.product(1:nsublats(lat), 1:nsublats(lat)))))
-
-# selector already resolved for a lattice
-sublats(lat, s::Selector{<:Any,<:Vector}) = s.sublats
+# sanitize_index_pairs(::Missing) = missing
+# sanitize_index_pairs(singlepair::Pair{T,T}) where {T<:Integer} = (singlepair,)
+# sanitize_index_pairs(singlepair::Pair) = Iterators.product(last(singlepair), first(singlepair))
+# sanitize_index_pairs(pairs) = Iterators.flatten(sanitize_index_pairs.(pairs))
 
 # API
 
-resolve(s::HopSelector, lat::AbstractLattice) =
-    HopSelector(s.region, sublats(lat, s), _checkdims(s.dns, lat), s.range)
-resolve(s::SiteSelector, lat::AbstractLattice) = SiteSelector(s.region, sublats(lat, s))
+function resolve(s::SiteSelector, lat::AbstractLattice)
+    s = SiteSelector(s.region, resolve_sublats(s.sublats, lat), s.indices)
+    return ResolvedSelector(s, lat)
+end
 
-_checkdims(dns::Missing, lat::AbstractLattice{E,L}) where {E,L} = dns
-_checkdims(dns::Tuple{Vararg{SVector{L,Int}}}, lat::AbstractLattice{E,L}) where {E,L} = dns
-_checkdims(dns, lat::AbstractLattice{E,L}) where {E,L} =
+function resolve(s::HopSelector, lat::AbstractLattice)
+    s = HopSelector(s.region, resolve_sublat_pairs(s.sublats, lat), check_dn_dims(s.dns, lat), s.range, s.indices)
+    return ResolvedSelector(s, lat)
+end
+
+resolve_sublats(::Missing, lat) = missing # must be resolved to iterate over sublats
+resolve_sublats(s, lat) = resolve_sublat_name.(s, Ref(lat))
+
+function resolve_sublat_name(name::Union{NameType,Integer}, lat)
+    i = findfirst(isequal(name), lat.unitcell.names)
+    return i === nothing ? 0 : i
+end
+
+resolve_sublat_name(s, lat) =
+    throw(ErrorException( "Unexpected format $s for `sublats`, see `onsite` for supported options"))
+
+resolve_sublat_pairs(::Missing, lat) = missing
+resolve_sublat_pairs(s::Tuple, lat) = resolve_sublat_pairs.(s, Ref(lat))
+resolve_sublat_pairs((src, dst)::Pair, lat) = resolve_sublat_name.(src, Ref(lat)) => resolve_sublat_name.(dst, Ref(lat))
+
+resolve_sublat_pairs(s, lat) =
+    throw(ErrorException( "Unexpected format $s for `sublats`, see `hopping` for supported options"))
+
+check_dn_dims(dns::Missing, lat::AbstractLattice{E,L}) where {E,L} = dns
+check_dn_dims(dns::Tuple{Vararg{SVector{L,Int}}}, lat::AbstractLattice{E,L}) where {E,L} = dns
+check_dn_dims(dns, lat::AbstractLattice{E,L}) where {E,L} =
     throw(DimensionMismatch("Specified cell distance `dn` does not match lattice dimension $L"))
 
 # are sites at (i,j) and (dni, dnj) or (dn, 0) selected?
-(s::SiteSelector)(lat::AbstractLattice, (i, j)::Tuple, (dni, dnj)::Tuple{SVector, SVector}) =
-    isonsite((i, j), (dni, dnj)) && isinregion(i, dni, s.region, lat) && isinsublats(sublat(lat, i), s.sublats)
+@inline function Base.in(i::Integer, rs::ResolvedSelector{<:SiteSelector, LA}) where {E,L,LA<:AbstractLattice{E,L}}
+    dn0 = zero(SVector{L,Int})
+    return ((i, i), (dn0, dn0)) in rs
+end
 
-(s::HopSelector)(lat::AbstractLattice, inds, dns) =
-    !isonsite(inds, dns) && isinregion(inds, dns, s.region, lat) && isindns(dns, s.dns) &&
-    isinrange(inds, s.range, lat) && isinsublats(tupletopair(sublat.(Ref(lat), inds)), s.sublats)
+Base.in(((i, j), (dni, dnj))::Tuple, rs::ResolvedSelector{<:SiteSelector}) =
+    isonsite((i, j), (dni, dnj)) && isinindices(i, rs.selector.indices) &&
+    isinregion(i, dni, rs.selector.region, rs.lattice) &&
+    isinsublats(sublat(rs.lattice, i), rs.selector.sublats)
+
+Base.in((j, i)::Pair{<:Integer,<:Integer}, rs::ResolvedSelector{<:HopSelector}) = (i, j) in rs
+function Base.in(is::Tuple{Integer,Integer}, rs::ResolvedSelector{<:HopSelector, LA}) where {E,L,LA<:AbstractLattice{E,L}}
+    dn0 = zero(SVector{L,Int})
+    return (is, (dn0, dn0)) in rs
+end
+
+Base.in((inds, dns), rs::ResolvedSelector{<:HopSelector}) =
+    !isonsite(inds, dns) && isinindices(indstopair(inds), rs.selector.indices) &&
+    isinregion(inds, dns, rs.selector.region, rs.lattice) && isindns(dns, rs.selector.dns) &&
+    isinrange(inds, rs.selector.range, rs.lattice) &&
+    isinsublats(indstopair(sublat.(Ref(rs.lattice), inds)), rs.selector.sublats)
 
 isonsite((i, j), (dni, dnj)) = i == j && dni == dnj
 
 isinregion(i::Int, ::Missing, lat) = true
 isinregion(i::Int, dn, ::Missing, lat) = true
-isinregion(i::Int, region::Union{Function,Region}, lat) = region(sites(lat)[i])
-isinregion(i::Int, dn, region::Union{Function,Region}, lat) = region(sites(lat)[i] + bravais(lat) * dn)
+
+isinregion(i::Int, region::Union{Function,Region}, lat) =
+    region(allsitepositions(lat)[i])
+isinregion(i::Int, dn, region::Union{Function,Region}, lat) =
+    region(allsitepositions(lat)[i] + bravais(lat) * dn)
 
 isinregion(is::Tuple{Int,Int}, dns, ::Missing, lat) = true
 function isinregion((row, col)::Tuple{Int,Int}, (dnrow, dncol), region::Union{Function,Region}, lat)
     br = bravais(lat)
-    r, dr = _rdr(sites(lat)[col] + br * dncol, sites(lat)[row] + br * dnrow)
+    r, dr = _rdr(allsitepositions(lat)[col] + br * dncol, allsitepositions(lat)[row] + br * dnrow)
     return region(r, dr)
 end
-
-isinsublats(s::Int, ::Missing) = true
-isinsublats(s::Int, sublats::Vector{Int}) = s in sublats
-isinsublats(ss::Pair{Int,Int}, ::Missing) = true
-isinsublats(ss::Pair{Int,Int}, sublats::Vector{Pair{Int,Int}}) = ss in sublats
-isinsublats(s, sublats) =
-    throw(ArgumentError("Sublattices $sublats in selector are not resolved."))
 
 isindns((dnrow, dncol)::Tuple{SVector,SVector}, dns) = isindns(dnrow - dncol, dns)
 isindns(dn::SVector{L,Int}, dns::Tuple{Vararg{SVector{L,Int}}}) where {L} = dn in dns
@@ -162,17 +220,37 @@ isindns(dn, dns) =
 
 isinrange(inds, ::Missing, lat) = true
 isinrange((row, col)::Tuple{Int,Int}, range::Number, lat) =
-    norm(sites(lat)[col] - sites(lat)[row]) <= range
+    norm(allsitepositions(lat)[col] - allsitepositions(lat)[row]) <= range
+
+# There are no sublat ranges, so supporting (:A, (:B, :C)) is not necessary
+isinsublats(s::Integer, ::Missing) = true
+isinsublats(s::Integer, sublats) = s in sublats
+isinsublats(ss::Pair, ::Missing) = true
+isinsublats((i, j)::Pair, (is, js)::Pair) = i in is && j in js
+isinsublats(pair::Pair, sublats) = any(is -> isinsublats(pair, is), sublats)
+
+# Here we can have (1, 2:3), apart from ((1,2) .=> (3,4), 1=>2) and ((1,2) => (3,4), 1=>2)
+isinindices(i::Integer, ::Missing) = true
+isinindices(i::Integer, j::Integer) = i == j
+isinindices(i::Integer, r::NTuple{N,Integer}) where {N} = i in r
+isinindices(i::Integer, inds::Tuple) = any(is -> i in is, inds)
+isinindices(i::Integer, r) = i in r
+
+isinindices(is::Pair, ::Missing) = true
+# Here is => js could be (1,2) => (3,4) or 1:2 => 3:4, not simply 1 => 3
+isinindices((j, i)::Pair, (js, is)::Pair) = i in is && j in js
+# Here we support ((1,2) .=> (3,4), 3=>4) or ((1,2) .=> 3:4, 3=>4)
+isinindices(pair::Pair, pairs) = any(p -> isinindices(pair, p), pairs)
 
 # merge non-missing fields of s´ into s
 merge_non_missing(s::SiteSelector, s´::SiteSelector) =
     SiteSelector(merge_non_missing.(
-        (s.region,  s.sublats),
-        (s´.region, s´.sublats))...)
+        (s.region,  s.sublats, s.indices),
+        (s´.region, s´.sublats, s´.indices))...)
 merge_non_missing(s::HopSelector, s´::HopSelector) =
     HopSelector(merge_non_missing.(
-        (s.region,  s.sublats,  s.dns,  s.range),
-        (s´.region, s´.sublats, s´.dns, s´.range))...)
+        (s.region,  s.sublats,  s.dns,  s.range, s.indices),
+        (s´.region, s´.sublats, s´.dns, s´.range, s´.indices))...)
 merge_non_missing(o, o´::Missing) = o
 merge_non_missing(o, o´) = o´
 
@@ -184,16 +262,73 @@ function Base.adjoint(s::HopSelector)
     sublats´ = _adjoint.(s.sublats)
     dns´ = _adjoint.(s.dns)
     range = s.range
-    return HopSelector(region´, sublats´, dns´, range)
+    indices´ = _adjoint.(s.indices)
+    return HopSelector(region´, sublats´, dns´, range, indices´)
 end
 
 _adjoint(::Missing) = missing
 _adjoint(f::Function) = (r, dr) -> f(r, -dr)
 _adjoint(t::Pair) = reverse(t)
+_adjoint(t::Tuple) = _adjoint.(t)
+_adjoint(t::AbstractVector) = _adjoint.(t)
 _adjoint(t::SVector) = -t
 
 # is_unconstrained_selector(s::HopSelector{Missing,Missing,Missing}) = true
 # is_unconstrained_selector(s::HopSelector) = false
+
+#######################################################################
+# site, sublat, dn generators
+#######################################################################
+
+sitepositions(lat::AbstractLattice, s::SiteSelector) =
+    sitepositions(resolve(s, lat))
+sitepositions(rs::ResolvedSelector{<:SiteSelector}) =
+    (s for (i, s) in enumerate(allsitepositions(rs.lattice)) if i in rs)
+
+siteindices(lat::AbstractLattice, s::SiteSelector) =
+    siteindices(resolve(s, lat))
+siteindices(rs::ResolvedSelector{<:SiteSelector}) =
+    (i for i in siteindex_candidates(rs) if i in rs)
+siteindices(rs::ResolvedSelector{<:SiteSelector}, sublat) =
+    (i for i in siteindex_candidates(rs, sublat) if i in rs)
+
+# Given a sublattice, which site indices should be checked by selector?
+siteindex_candidates(rs) = eachindex(allsitepositions(rs.lattice))
+siteindex_candidates(rs, sublat) =
+    _siteindex_candidates(rs.selector.indices, siterange(rs.lattice, sublat))
+# indices can be missing, 1, 2:3, (1,2,3) or (1, 2:3)
+# we also support (1, (2,3)) and [1, 2, 3], useful for source_candidates below
+_siteindex_candidates(::Missing, sr) = sr
+_siteindex_candidates(i::Integer, sr) = ifelse(i in sr, (i,), ())
+_siteindex_candidates(inds::AbstractUnitRange, sr) = intersect(inds, sr)
+_siteindex_candidates(inds::NTuple{N,Integer}, sr) where {N} = filter(in(sr), inds)
+_siteindex_candidates(inds::AbstractVector{<:Integer}, sr) = filter(in(sr), inds)
+_siteindex_candidates(inds, sr) = Iterators.flatten(_siteindex_candidates.(inds, Ref(sr)))
+
+source_candidates(rs::ResolvedSelector{<:HopSelector}, sublat) =
+    _source_candidates(rs.selector.indices, siterange(rs.lattice, sublat))
+_source_candidates(::Missing, sr) = sr
+_source_candidates(inds, sr) = _siteindex_candidates(_recursivefirst(inds), sr)
+
+_recursivefirst(p::Pair) = first(p)
+_recursivefirst(p) = _recursivefirst.(p)
+
+sublats(rs::ResolvedSelector{<:SiteSelector{Missing}}) = sublats(rs.lattice)
+
+function sublats(rs::ResolvedSelector{<:SiteSelector})
+    subs = sublats(rs.lattice)
+    return (s for s in subs if isinsublats(s, rs.selector.sublats))
+end
+
+function sublats(rs::ResolvedSelector{<:HopSelector})
+    subs = sublats(rs.lattice)
+    return (s => d for s in subs for d in subs if isinsublats(s => d, rs.selector.sublats))
+end
+
+dniter(rs::ResolvedSelector{S,LA}) where {S,E,L,LA<:Lattice{E,L}} =
+    dniter(rs.selector.dns, Val(L))
+dniter(dns::Missing, ::Val{L}) where {L} = BoxIterator(zero(SVector{L,Int}))
+dniter(dns, ::Val) = dns
 
 #######################################################################
 # Tightbinding types
@@ -257,7 +392,7 @@ HoppingTerm(t::HoppingTerm, os::HopSelector) =
 (h::HoppingTerm{<:Function})(r, dr) = h.coefficient * h.t(r, dr)
 (h::HoppingTerm)(r, dr) = h.coefficient * h.t
 
-sublats(t::TightbindingModelTerm, lat) = sublats(lat, t.selector)
+sublats(t::TightbindingModelTerm, lat) = resolve_sublats(t.selector, lat)
 
 sublats(m::TightbindingModel) = (t -> t.selector.sublats).(terms(m))
 
@@ -373,7 +508,7 @@ _onlyonsites(s, t::HoppingTerm, args...) = (_onlyonsites(s, args...)...,)
 _onlyonsites(s) = ()
 
 """
-    hopping(t; region = missing, sublats = missing, dn = missing, range = 1, plusadjoint = false)
+    hopping(t; region = missing, sublats = missing, indices = missing, dn = missing, range = 1, plusadjoint = false)
 
 Create an `TightbindingModel` with a single `HoppingTerm` that applies a hopping `t` to a
 `Lattice` when creating a `Hamiltonian` with `hamiltonian`.
@@ -521,7 +656,7 @@ findblock(s, sr) = findfirst(r -> s in r, sr)
 #######################################################################
 # @onsite! and @hopping!
 #######################################################################
-abstract type ElementModifier{N,F,S} end
+abstract type ElementModifier{N,S,F} end
 
 struct ParametricFunction{N,F,P<:Val}
     f::F
@@ -532,19 +667,15 @@ ParametricFunction{N}(f::F, p::P) where {N,F,P} = ParametricFunction{N,F,P}(f, p
 
 (pf::ParametricFunction)(args...; kw...) = pf.f(args...; kw...)
 
-struct OnsiteModifier{N,F<:ParametricFunction{N},S<:Selector} <: ElementModifier{N,F,S}
+struct OnsiteModifier{N,S<:Selector,F<:ParametricFunction{N}} <: ElementModifier{N,S,F}
     f::F
     selector::S
 end
 
-OnsiteModifier(f, selector) = OnsiteModifier(f, selector, false)
-
-struct HoppingModifier{N,F<:ParametricFunction{N},S<:Selector} <: ElementModifier{N,F,S}
+struct HoppingModifier{N,S<:Selector,F<:ParametricFunction{N}} <: ElementModifier{N,S,F}
     f::F
     selector::S
 end
-
-HoppingModifier(f, selector) = HoppingModifier(f, selector, false)
 
 const UniformModifier = ElementModifier{1}
 const UniformHoppingModifier = HoppingModifier{1}
@@ -639,6 +770,8 @@ end
 
 get_kwname(x::Symbol) = x
 get_kwname(x::Expr) = x.head === :kw ? x.args[1] : x.head  # x.head == :...
+
+resolve(s::ResolvedSelector, lat) = s
 
 resolve(o::OnsiteModifier, lat) = OnsiteModifier(o.f, resolve(o.selector, lat))
 
