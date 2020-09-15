@@ -29,6 +29,10 @@ using Quantica: Hamiltonian, ParametricHamiltonian
 
     h = LatticePresets.honeycomb() |> hamiltonian(onsite(1.0, sublats = :A), orbitals = (Val(1), Val(2)))
     @test Quantica.nonsites(h) == 1
+
+    h = LatticePresets.square() |> unitcell(3) |> hamiltonian(hopping(1, indices = (1:8 .=> 2:9, 9=>1), range = 3, plusadjoint = true))
+    @test Quantica.nhoppings(h) == 48
+
 end
 
 @testset "hamiltonian unitcell" begin

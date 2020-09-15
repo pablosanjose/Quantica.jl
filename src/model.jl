@@ -270,6 +270,7 @@ _adjoint(::Missing) = missing
 _adjoint(f::Function) = (r, dr) -> f(r, -dr)
 _adjoint(t::Pair) = reverse(t)
 _adjoint(t::Tuple) = _adjoint.(t)
+_adjoint(t::AbstractVector) = _adjoint.(t)
 _adjoint(t::SVector) = -t
 
 # is_unconstrained_selector(s::HopSelector{Missing,Missing,Missing}) = true
@@ -291,21 +292,26 @@ siteindices(rs::ResolvedSelector{<:SiteSelector}) =
 siteindices(rs::ResolvedSelector{<:SiteSelector}, sublat) =
     (i for i in siteindex_candidates(rs, sublat) if i in rs)
 
+# Given a sublattice, which site indices should be checked by selector?
 siteindex_candidates(rs) = eachindex(allsitepositions(rs.lattice))
 siteindex_candidates(rs, sublat) =
     _siteindex_candidates(rs.selector.indices, siterange(rs.lattice, sublat))
 # indices can be missing, 1, 2:3, (1,2,3) or (1, 2:3)
-# we also support (1, (2,3)), useful for source_candidates below
+# we also support (1, (2,3)) and [1, 2, 3], useful for source_candidates below
 _siteindex_candidates(::Missing, sr) = sr
 _siteindex_candidates(i::Integer, sr) = ifelse(i in sr, (i,), ())
 _siteindex_candidates(inds::AbstractUnitRange, sr) = intersect(inds, sr)
 _siteindex_candidates(inds::NTuple{N,Integer}, sr) where {N} = filter(in(sr), inds)
-_siteindex_candidates(inds::Tuple, sr) = Iterators.flatten(_siteindex_candidates.(inds))
+_siteindex_candidates(inds::AbstractVector{<:Integer}, sr) = filter(in(sr), inds)
+_siteindex_candidates(inds, sr) = Iterators.flatten(_siteindex_candidates.(inds, Ref(sr)))
 
 source_candidates(rs::ResolvedSelector{<:HopSelector}, sublat) =
     _source_candidates(rs.selector.indices, siterange(rs.lattice, sublat))
 _source_candidates(::Missing, sr) = sr
-_source_candidates(inds, sr) = _siteindex_candidates(first.(inds), sr)
+_source_candidates(inds, sr) = _siteindex_candidates(_recursivefirst(inds), sr)
+
+_recursivefirst(p::Pair) = first(p)
+_recursivefirst(p) = _recursivefirst.(p)
 
 sublats(rs::ResolvedSelector{<:SiteSelector{Missing}}) = sublats(rs.lattice)
 
