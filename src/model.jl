@@ -73,7 +73,7 @@ siteselector(; region = missing, sublats = missing, indices = missing) =
 # sanitize_indices(is) = Iterators.flatten(is)
 
 """
-    hopselector(; region = missing, sublats = missing, dn = missing, range = missing, indices = missing)
+    hopselector(; region = missing, sublats = missing, indices = missing, dn = missing, range = missing)
 
 Return a `HopSelector` object that can be used to select hops between two sites in a
 lattice. Only hops between two sites, with indices `ipair = src => dst`, at positions `r₁ =
@@ -508,7 +508,7 @@ _onlyonsites(s, t::HoppingTerm, args...) = (_onlyonsites(s, args...)...,)
 _onlyonsites(s) = ()
 
 """
-    hopping(t; region = missing, sublats = missing, dn = missing, range = 1, plusadjoint = false)
+    hopping(t; region = missing, sublats = missing, indices = missing, dn = missing, range = 1, plusadjoint = false)
 
 Create an `TightbindingModel` with a single `HoppingTerm` that applies a hopping `t` to a
 `Lattice` when creating a `Hamiltonian` with `hamiltonian`.
