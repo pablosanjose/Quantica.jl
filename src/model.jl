@@ -570,6 +570,11 @@ of `args -> body` may be `(o; params...) -> ...` or `(o, r; params...) -> ...` i
 modification is position (`r`) dependent. Keyword arguments `params` are optional, and
 include any parameters that `body` depends on that the user may want to tune.
 
+Note: unlike `onsite` and `hopping`, `ElementModifier`s cannot be combined (i.e. you cannot
+do `@onsite!(...) + @hopping!(...)`). `ElementModifier`s are not model terms but
+transformations of an existing Hamiltonian that are meant to be applied sequentially (the
+order of application usually matters).
+
 # See also:
     `@hopping!`, `parametric`
 """
@@ -591,6 +596,11 @@ to hoppings energies specified by `kw` (see `hopping` for details on possible `k
 form of `args -> body` may be `(t; params...) -> ...` or `(t, r, dr; params...) -> ...` if
 the modification is position (`r`, `dr`) dependent. Keyword arguments `params` are optional,
 and include any parameters that `body` depends on that the user may want to tune.
+
+Note: unlike `onsite` and `hopping`, `ElementModifier`s cannot be combined (i.e. you cannot
+do `@onsite!(...) + @hopping!(...)`). `ElementModifier`s are not model terms but
+transformations of an existing Hamiltonian that are meant to be applied sequentially (the
+order of application usually matters).
 
 # See also:
     `@onsite!`, `parametric`
