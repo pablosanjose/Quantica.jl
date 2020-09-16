@@ -1,14 +1,16 @@
 using Quantica: TightbindingModel, OnsiteTerm, HoppingTerm, padtotype, Selector, sublats, resolve, isinindices, isinsublats
 
 @testset "selectors" begin
+    @test  isinsublats(1, missing)
     @test  isinsublats(1, 1)
     @test !isinsublats(2, 1)
     @test  isinsublats(1, (1,2))
     @test !isinsublats(3, (1,2))
-    # @test  isinsublats(3, (1, 3:4))  # Unsupported
-    # @test !isinsublats(2, (1, 3:4))  # Unsupported
-    @test !isinsublats(3, [1:2, 5:6])
+    # @test  isinsublats(3, (1, 3:4))   # Unsupported
+    # @test !isinsublats(2, (1, 3:4))   # Unsupported
+    # @test !isinsublats(3, [1:2, 5:6]) # Unsupported
 
+    @test  isinsublats(1=>2, missing)
     @test  isinsublats(1=>2, 1=>2)
     @test !isinsublats(1=>2, 1=>3)
     @test  isinsublats(1=>2, (1=>2, 3=>4))

@@ -644,13 +644,16 @@ toeltype(t::SVector{N}, ::Type{S}, t1::NTuple{N}) where {N,S<:SVector} = padtoty
 toeltype(t::Array, x...) = throw(ArgumentError("Array input in model, please use StaticArrays instead (e.g. SA[1 0; 0 1] instead of [1 0; 0 1])"))
 toeltype(t, x...) = throw(DimensionMismatch("Dimension mismatch between model and Hamiltonian. Does the `orbitals` kwarg in your `hamiltonian` match your model?"))
 
-function targets(builder, range::Real, rsource, s1)
-    !isfinite(range) && return targets(builder, missing, rsource, s1)
+# Although range can be (rmin, rmax) we return all targets within rmax.
+# Those below rmin get filtered later by `in rsel`
+function targets(builder, range, rsource, s1)
+    rmax = maximum(range)
+    !isfinite(rmax) && return targets(builder, missing, rsource, s1)
     if !isassigned(builder.kdtrees, s1)
         sitepos = sitepositions(builder.lat.unitcell, s1)
         (builder.kdtrees[s1] = KDTree(sitepos))
     end
-    targetlist = inrange(builder.kdtrees[s1], rsource, range)
+    targetlist = inrange(builder.kdtrees[s1], rsource, rmax)
     targetlist .+= builder.lat.unitcell.offsets[s1]
     return targetlist
 end
@@ -658,7 +661,7 @@ end
 targets(builder, range::Missing, rsource, s1) = siterange(builder.lat, s1)
 
 checkinfinite(rs) =
-    rs.selector.dns === missing && (rs.selector.range === missing || !isfinite(rs.selector.range)) &&
+    rs.selector.dns === missing && (rs.selector.range === missing || !isfinite(maximum(rs.selector.range))) &&
     throw(ErrorException("Tried to implement an infinite-range hopping on an unbounded lattice"))
 
 #######################################################################

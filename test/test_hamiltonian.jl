@@ -33,6 +33,14 @@ using Quantica: Hamiltonian, ParametricHamiltonian
     h = LatticePresets.square() |> unitcell(3) |> hamiltonian(hopping(1, indices = (1:8 .=> 2:9, 9=>1), range = 3, plusadjoint = true))
     @test Quantica.nhoppings(h) == 48
 
+    h = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = (1, 1)))
+    @test Quantica.nhoppings(h) == 12
+
+    h = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = (1, 2/√3)))
+    @test Quantica.nhoppings(h) == 18
+
+    h = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = (2, 1)))
+    @test Quantica.nhoppings(h) == 0
 end
 
 @testset "hamiltonian unitcell" begin
