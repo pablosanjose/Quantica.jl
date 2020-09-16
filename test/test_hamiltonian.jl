@@ -36,8 +36,8 @@ using Quantica: Hamiltonian, ParametricHamiltonian
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = (1, 1)))
     @test Quantica.nhoppings(h) == 12
 
-    h = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = (1, 2)))
-    @test Quantica.nhoppings(h) == 27
+    h = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = (1, 2/√3)))
+    @test Quantica.nhoppings(h) == 18
 
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = (2, 1)))
     @test Quantica.nhoppings(h) == 0
