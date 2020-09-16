@@ -54,24 +54,6 @@ collections are given, they are flattened into a single one. Possible combinatio
 siteselector(; region = missing, sublats = missing, indices = missing) =
     SiteSelector(region, sublats, indices)
 
-# siteselector(; region = missing, sublats = missing, indices = missing) =
-#     SiteSelector(region, sanitize_sublats(sublats), sanitize_indices(indices))
-
-# sanitize_sublats(::Missing) = missing
-# sanitize_sublats(s::Integer) = (nametype(s),)
-# sanitize_sublats(s::NameType) = (s,)
-# sanitize_sublats(s::Tuple) = nametype.(s)
-# sanitize_sublats(s::Tuple{}) = ()
-# sanitize_sublats(n) = throw(ErrorException(
-#     "`sublats` for `onsite` must be either `missing`, a sublattice name or a tuple of names, see `onsite` for details"))
-
-# sanitize_indices(::Missing) = missing
-# sanitize_indices(i::Integer) = (i,)
-# sanitize_indices(is::NTuple{N,Integer}) where {N} = is
-# sanitize_indices(is::AbstractVector{<:Integer}) = is
-# sanitize_indices(is::AbstractUnitRange{<:Integer}) = is
-# sanitize_indices(is) = Iterators.flatten(is)
-
 """
     hopselector(; region = missing, sublats = missing, indices = missing, dn = missing, range = missing)
 
@@ -103,21 +85,13 @@ The keyword `indices` accepts a single `src => dest` pair or a collection thereo
     indices = [(1, 2) .=> (2, 1)]       # Broadcasted pairs, same as above
     indices = [1:10 => 20:25, 3 => 30]  # Direct product, any hopping from sites 1:10 to sites 20:25, or from 3 to 30
 
+The keyword `range` can be a number `range = max_range` or an interval `range = (min_range,
+max_range)`. In the latter case, only links with `min_range <= norm(dr) <= max_range` are
+selected.
+
 """
 hopselector(; region = missing, sublats = missing, dn = missing, range = missing, indices = missing) =
     HopSelector(region, sublats, sanitize_dn(dn), sanitize_range(range), indices)
-
-# hopselector(; region = missing, sublats = missing, dn = missing, range = missing, indices = missing) =
-#     HopSelector(region, sanitize_sublatpairs(sublats), sanitize_dn(dn), sanitize_range(range), sanitize_index_pairs(indices))
-
-# sanitize_sublatpairs(s::Missing) = missing
-# sanitize_sublatpairs(p::Pair{<:Union{NameType,Integer}, <:Union{NameType,Integer}}) =
-#     (ensurenametype(p),)
-# sanitize_sublatpairs(pp::Pair) =
-#     ensurenametype.(tupletopair.(tupleproduct(first(pp), last(pp))))
-# sanitize_sublatpairs(ps::Tuple) = tuplejoin(sanitize_sublatpairs.(ps)...)
-# sanitize_sublatpairs(s) = throw(ErrorException(
-#     "`sublats` for `hopping` must be either `missing` or a series of sublattice `Pair`s, see `hopping` for details"))
 
 ensurenametype((s1, s2)::Pair) = nametype(s1) => nametype(s2)
 
@@ -130,12 +104,8 @@ _sanitize_dn(dn::SVector{N}) where {N} = SVector{N,Int}(dn)
 _sanitize_dn(dn::Vector) = SVector{length(dn),Int}(dn)
 
 sanitize_range(::Missing) = missing
-sanitize_range(range::Real) = isfinite(range) ? float(range) + sqrt(eps(float(range))) : float(range)
-
-# sanitize_index_pairs(::Missing) = missing
-# sanitize_index_pairs(singlepair::Pair{T,T}) where {T<:Integer} = (singlepair,)
-# sanitize_index_pairs(singlepair::Pair) = Iterators.product(last(singlepair), first(singlepair))
-# sanitize_index_pairs(pairs) = Iterators.flatten(sanitize_index_pairs.(pairs))
+sanitize_range(range::Real) = ifelse(isfinite(range), float(range) + sqrt(eps(float(range))), float(range))
+sanitize_range((rmin, rmax)::Tuple{Real,Real}) = (-sanitize_range(-rmin), sanitize_range(rmax))
 
 # API
 
@@ -192,7 +162,7 @@ end
 Base.in((inds, dns), rs::ResolvedSelector{<:HopSelector}) =
     !isonsite(inds, dns) && isinindices(indstopair(inds), rs.selector.indices) &&
     isinregion(inds, dns, rs.selector.region, rs.lattice) && isindns(dns, rs.selector.dns) &&
-    isinrange(inds, rs.selector.range, rs.lattice) &&
+    isinrange(inds, dns, rs.selector.range, rs.lattice) &&
     isinsublats(indstopair(sublat.(Ref(rs.lattice), inds)), rs.selector.sublats)
 
 isonsite((i, j), (dni, dnj)) = i == j && dni == dnj
@@ -218,9 +188,11 @@ isindns(dn::SVector, dns::Missing) = true
 isindns(dn, dns) =
     throw(ArgumentError("Cell distance dn in selector is incompatible with Lattice."))
 
-isinrange(inds, ::Missing, lat) = true
-isinrange((row, col)::Tuple{Int,Int}, range::Number, lat) =
-    norm(allsitepositions(lat)[col] - allsitepositions(lat)[row]) <= range
+isinrange(inds, dns, ::Missing, lat) = true
+isinrange((row, col), (dnrow, dncol), range, lat) =
+    _isinrange(allsitepositions(lat)[col] - allsitepositions(lat)[row] + bravais(lat) * (dncol - dnrow), range)
+_isinrange(p, rmax::Real) = p'p <= rmax^2
+_isinrange(p, (rmin, rmax)::Tuple{Real,Real}) =  rmin^2 <= p'p <= rmax^2
 
 # There are no sublat ranges, so supporting (:A, (:B, :C)) is not necessary
 isinsublats(s::Integer, ::Missing) = true
@@ -481,7 +453,7 @@ TightbindingModel{2}: model with 2 terms
     Hopping range    : 1.0
     Coefficient      : -2
 
-julia> LatticePresets.honeycomb() |> hamiltonian(onsite(r->@SMatrix[1 2; 3 4]), orbitals = Val(2))
+julia> LatticePresets.honeycomb() |> hamiltonian(onsite(r -> @SMatrix[1 2; 3 4]), orbitals = Val(2))
 Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
   Bloch harmonics  : 1 (SparseMatrixCSC, sparse)
   Harmonic size    : 2 × 2
@@ -538,7 +510,11 @@ Most keywords are the same as for `hopselector`. Only hoppings between two sites
 positions `r₁ = r - dr/2` and `r₂ = r + dr`, belonging to unit cells at integer distance
 `dn´` and to sublattices `s₁` and `s₂` will be selected if: `region(r, dr) && s in sublats
 && dn´ in dn && norm(dr) <= range`. If any of these is `missing` it will not be used to
-constraint the selection. Note that the default `range` is 1, not `missing`.
+constraint the selection.
+
+The keyword `range` defaults to `1` (instead of `missing`). `range` also allows a form
+`range = (min_range, max_range)`, in which case the corresponding selection condition
+becomes `min_range <= norm(dr) <= max_range`.
 
 The keyword `dn` can be a `Tuple`/`Vector`/`SVector` of `Int`s, or a tuple thereof. The
 keyword `sublats` allows the following formats:
