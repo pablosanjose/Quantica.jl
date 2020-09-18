@@ -472,6 +472,9 @@ siterange(lat::AbstractLattice, sublat) = siterange(lat.unitcell, sublat)
 
 allsitepositions(lat::AbstractLattice) = sitepositions(lat.unitcell)
 
+siteposition(i, lat::AbstractLattice) = allsitepositions(lat)[i]
+siteposition(i, dn::SVector, lat::AbstractLattice) = siteposition(i, lat) + bravais(lat) * dn
+
 offsets(lat::AbstractLattice) = offsets(lat.unitcell)
 
 sublatsites(lat::AbstractLattice) = sublatsites(lat.unitcell)

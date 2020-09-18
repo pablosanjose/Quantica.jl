@@ -194,6 +194,12 @@ isinrange((row, col), (dnrow, dncol), range, lat) =
 _isinrange(p, rmax::Real) = p'p <= rmax^2
 _isinrange(p, (rmin, rmax)::Tuple{Real,Real}) =  rmin^2 <= p'p <= rmax^2
 
+is_below_min_range(inds, dns, rsel::ResolvedSelector) =
+    is_below_min_range(inds, dns, rsel.selector.range, rsel.lattice)
+is_below_min_range((i, j), (dni, dnj), (rmin, rmax)::Tuple, lat) =
+    norm(siteposition(i, dni, lat) - siteposition(j, dnj, lat)) < rmin
+is_below_min_range(inds, dn, range, lat) = false
+
 # There are no sublat ranges, so supporting (:A, (:B, :C)) is not necessary
 isinsublats(s::Integer, ::Missing) = true
 isinsublats(s::Integer, sublats) = s in sublats
