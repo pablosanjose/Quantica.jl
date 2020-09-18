@@ -26,25 +26,31 @@ nrange(n::Int) = NeighborRange(n)
 function nrange(n, lat::AbstractLattice{E,L}) where {E,L}
     sites = allsitepositions(lat)
     T = eltype(first(sites))
-    dns = non_negative_dn_shell(Val(L))
+    dns = BoxIterator(zero(SVector{L,Int}))
     br = bravais(lat)
     # 640 is a heuristic cutoff for kdtree vs brute-force search
-    if length(sites) * length(dns) <= 640
+    if length(sites) <= 128
         dists = fill(T(Inf), n)
-        for dn in dns, (i, ri) in enumerate(sites)
-            for (j, rj) in enumerate(sites)
+        for dn in dns
+            iszero(dn) || ispositive(dn) || continue
+            for (i, ri) in enumerate(sites), (j, rj) in enumerate(sites)
                 j <= i && iszero(dn) && continue
                 r = ri - rj + br * dn
                 _update_dists!(dists, r'r)
             end
+            isfinite(last(dists)) || acceptcell!(dns, dn)
         end
-        dist = sqrt(maximum(dists))
+        dist = sqrt(last(dists))
     else
         tree = KDTree(sites)
         dist = T(Inf)
-        for dn in dns, r0 in sites
-            r = r0 + br * dn
-            dist = min(dist, _nrange(n, tree, r, nsites(lat)))
+        for dn in dns
+            iszero(dn) || ispositive(dn) || continue
+            for r0 in sites
+                r = r0 + br * dn
+                dist = min(dist, _nrange(n, tree, r, nsites(lat)))
+            end
+            isfinite(dist) || acceptcell!(dns, dn)
         end
     end
     return dist

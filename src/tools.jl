@@ -156,14 +156,6 @@ function ispositive(ndist)
     return result
 end
 
-function non_negative_dn_shell(::Val{L}) where {L}
-    dns = CartesianIndices(filltuple(-1:1, Val(L))) .|> Tuple .|> SVector{L,Int} |> vec
-    filter!(t -> iszero(t) || ispositive(t), dns)
-    return dns
-end
-
-non_negative_dn_shell(::Val{0}) = (SVector{0,Int}(),)
-
 chop(x::T, x0 = one(T)) where {T<:Real} = ifelse(abs(x) < √eps(T(x0)), zero(T), x)
 chop(x::C, x0 = one(R)) where {R<:Real,C<:Complex{R}} = chop(real(x), x0) + im*chop(imag(x), x0)
 

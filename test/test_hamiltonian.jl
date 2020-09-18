@@ -44,6 +44,9 @@ using Quantica: Hamiltonian, ParametricHamiltonian, nhoppings
 
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = (30, 30)))
     @test Quantica.nhoppings(h) == 12
+
+    h = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = (10, 10.1)))
+    @test Quantica.nhoppings(h) == 48
 end
 
 @testset "hamiltonian unitcell" begin
@@ -354,4 +357,6 @@ end
     @test hamiltonian(lat, hopping(1, range = nrange(2))) |> nhoppings == 18
     @test hamiltonian(lat, hopping(1, range = nrange(3))) |> nhoppings == 24
     @test hamiltonian(lat, hopping(1, range = (nrange(2), nrange(3)))) |> nhoppings == 18
+    @test hamiltonian(lat, hopping(1, range = (nrange(20), nrange(20)))) |> nhoppings == 18
+    @test hamiltonian(lat, hopping(1, range = (nrange(20), nrange(21)))) |> nhoppings == 30
 end
