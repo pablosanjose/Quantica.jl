@@ -603,22 +603,24 @@ function applyterm!(builder::IJVBuilder{L}, term::HoppingTerm) where {L}
     for (s2, s1) in sublats(rsel)  # Each is a Pair s2 => s1
         dns = dniter(rsel)
         for dn in dns
-            foundlink = false
+            keepgoing = false
             ijv = builder[dn]
             for j in source_candidates(rsel, s2)
                 sitej = allpos[j]
                 rsource = sitej - lat.bravais.matrix * dn
                 is = targets(builder, rsel.selector.range, rsource, s1)
                 for i in is
+                    # Make sure we don't stop searching until we reach minimum range
+                    is_below_min_range((i, j), (dn, zero(dn)), rsel) && (keepgoing = true)
                     ((i, j), (dn, zero(dn))) in rsel || continue
-                    foundlink = true
+                    keepgoing = true
                     rtarget = allsitepositions(lat)[i]
                     r, dr = _rdr(rsource, rtarget)
                     v = toeltype(term(r, dr), eltype(builder), builder.orbs[s1], builder.orbs[s2])
                     push!(ijv, (i, j, v))
                 end
             end
-            foundlink && acceptcell!(dns, dn)
+            keepgoing && acceptcell!(dns, dn)
         end
     end
     return nothing
