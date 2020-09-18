@@ -1,5 +1,5 @@
 using LinearAlgebra: diag, norm
-using Quantica: Hamiltonian, ParametricHamiltonian
+using Quantica: Hamiltonian, ParametricHamiltonian, nhoppings
 
 @testset "basic hamiltonians" begin
     presets = (LatticePresets.linear, LatticePresets.square, LatticePresets.triangular,
@@ -21,31 +21,31 @@ using Quantica: Hamiltonian, ParametricHamiltonian
     # Inf range
     h = LatticePresets.square() |> unitcell(region = RegionPresets.square(5)) |>
         hamiltonian(hopping(1, range = Inf))
-    @test Quantica.nhoppings(h) == 600
+    @test nhoppings(h) == 600
 
     h = LatticePresets.square() |> hamiltonian(hopping(1, dn = (10,0), range = Inf))
-    @test Quantica.nhoppings(h) == 1
+    @test nhoppings(h) == 1
     @test isassigned(h, (10,0))
 
     h = LatticePresets.honeycomb() |> hamiltonian(onsite(1.0, sublats = :A), orbitals = (Val(1), Val(2)))
     @test Quantica.nonsites(h) == 1
 
     h = LatticePresets.square() |> unitcell(3) |> hamiltonian(hopping(1, indices = (1:8 .=> 2:9, 9=>1), range = 3, plusadjoint = true))
-    @test Quantica.nhoppings(h) == 48
+    @test nhoppings(h) == 48
 
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = (1, 1)))
-    @test Quantica.nhoppings(h) == 12
+    @test nhoppings(h) == 12
 
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = (1, 2/√3)))
-    @test Quantica.nhoppings(h) == 18
+    @test nhoppings(h) == 18
 
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = (2, 1)))
-    @test Quantica.nhoppings(h) == 0
+    @test nhoppings(h) == 0
 end
 
 @testset "hamiltonian unitcell" begin
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = 1/√3)) |> unitcell((1,-1), region = r -> abs(r[2])<2)
-    @test Quantica.nhoppings(h) == 22
+    @test nhoppings(h) == 22
 end
 
 @testset "hamiltonian wrap" begin
@@ -153,7 +153,6 @@ end
     @test !ishermitian(hamiltonian(lat, hopping(im, sublats = :A=>:B)))
     @test !ishermitian(hamiltonian(lat, hopping(1, sublats = :A=>:B)))
     @test !ishermitian(hamiltonian(lat, hopping(1, sublats = :A=>:B, dn = (-1,0))))
-    @test ishermitian(hamiltonian(lat, hopping(1, sublats = :A=>:B, dn = (1,0))))
     @test !ishermitian(hamiltonian(lat, hopping(im)))
     @test ishermitian(hamiltonian(lat, hopping(1)))
 
@@ -281,12 +280,12 @@ end
     # Issue #54. Parametric Haldane model
     sK(dr::SVector) = sK(atan(dr[2],dr[1]))
     sK(ϕ) = 2*mod(round(Int, 6*ϕ/(2π)), 2) - 1
-    ph = LatticePresets.honeycomb() |> hamiltonian(hopping(1)) |>
+    ph = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = 1)) |>
          parametric(@hopping!((t, r, dr; λ) ->  λ*im*sK(dr); sublats = :A=>:A),
                     @hopping!((t, r, dr; λ) -> -λ*im*sK(dr); sublats = :B=>:B))
     @test bloch(ph(λ=1), (π/2, -π/2)) == bloch(ph, (1, π/2, -π/2)) ≈ [4 1; 1 -4]
     # Non-numeric parameters
-    ph = LatticePresets.honeycomb() |> hamiltonian(hopping(1)) |>
+    ph = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = 1)) |>
          parametric(@hopping!((t, r, dr; λ, k) ->  λ*im*sK(dr+k); sublats = :A=>:A),
                     @hopping!((t, r, dr; λ, k) -> -λ*im*sK(dr+k); sublats = :B=>:B))
     @test bloch(ph(λ=1, k=SA[1,0]), (π/2, -π/2)) == bloch(ph, (1, SA[1,0], π/2, -π/2)) ≈ [-4 1; 1 4]
@@ -341,4 +340,15 @@ end
 
     @test Quantica.nsites(h) == 130
     @test Quantica.nsites(h3) == 64
+end
+
+@testset "nrange" begin
+    lat = LatticePresets.honeycomb(a0 = 2)
+    @test nrange(1, lat) ≈ 2/√3
+    @test nrange(2, lat) ≈ 2
+    @test nrange(3, lat) ≈ 4/√3
+    @test hamiltonian(lat, hopping(1)) |> nhoppings == 6
+    @test hamiltonian(lat, hopping(1, range = nrange(2))) |> nhoppings == 18
+    @test hamiltonian(lat, hopping(1, range = nrange(3))) |> nhoppings == 24
+    @test hamiltonian(lat, hopping(1, range = (nrange(2), nrange(3)))) |> nhoppings == 18
 end

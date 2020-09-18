@@ -1,6 +1,80 @@
 using Quantica.RegionPresets: Region
 
 #######################################################################
+# NeighborRange
+#######################################################################
+struct NeighborRange
+    n::Int
+end
+
+"""
+    nrange(n::Int)
+
+Create a `NeighborRange` that represents a hopping range to distances corresponding to the
+n-th nearest neighbors in a given lattice. Such distance is obtained by finding the n-th
+closest pairs of sites in a lattice, irrespective of their sublattice.
+
+    nrange(n::Int, lat::AbstractLattice)
+
+Obtain the actual nth-nearest-neighbot distance between sites in lattice `lat`.
+
+# See also:
+    `hopping`
+"""
+nrange(n::Int) = NeighborRange(n)
+
+function nrange(n, lat::AbstractLattice{E,L}) where {E,L}
+    sites = allsitepositions(lat)
+    T = eltype(first(sites))
+    dns = non_negative_dn_shell(Val(L))
+    br = bravais(lat)
+    # 640 is a heuristic cutoff for kdtree vs brute-force search
+    if length(sites) * length(dns) <= 640
+        dists = fill(T(Inf), n)
+        for dn in dns, (i, ri) in enumerate(sites)
+            for (j, rj) in enumerate(sites)
+                j <= i && iszero(dn) && continue
+                r = ri - rj + br * dn
+                _update_dists!(dists, r'r)
+            end
+        end
+        dist = sqrt(maximum(dists))
+    else
+        tree = KDTree(sites)
+        dist = T(Inf)
+        for dn in dns, r0 in sites
+            r = r0 + br * dn
+            dist = min(dist, _nrange(n, tree, r, nsites(lat)))
+        end
+    end
+    return dist
+end
+
+function _update_dists!(dists, dist::Real)
+    len = length(dists)
+    for (n, d) in enumerate(dists)
+        isapprox(dist, d) && break
+        if dist < d
+            dists[n+1:len] .= dists[n:len-1]
+            dists[n] = dist
+            break
+        end
+    end
+    return dists
+end
+
+function _nrange(n, tree, r::AbstractVector{T}, nmax) where {T}
+    for m in n:nmax
+        _, dists = knn(tree, r, 1 + m, true)
+        popfirst!(dists)
+        unique_sorted_approx!(dists)
+        length(dists) == n && return maximum(dists)
+    end
+    return T(Inf)
+end
+
+
+#######################################################################
 # Onsite/Hopping selectors
 #######################################################################
 abstract type Selector end
@@ -55,7 +129,7 @@ siteselector(; region = missing, sublats = missing, indices = missing) =
     SiteSelector(region, sublats, indices)
 
 """
-    hopselector(; region = missing, sublats = missing, indices = missing, dn = missing, range = missing)
+    hopselector(; range = missing, dn = missing, sublats = missing, indices = missing, region = missing)
 
 Return a `HopSelector` object that can be used to select hops between two sites in a
 lattice. Only hops between two sites, with indices `ipair = src => dst`, at positions `r₁ =
@@ -65,6 +139,14 @@ sublattices `s₁` and `s₂` will be selected if:
     `region(r, dr) && s in sublats && dn´ in dn && norm(dr) <= range && ipair in indices`
 
 If any of these is `missing` it will not be used to constraint the selection.
+
+The keyword `range` admits the following possibilities
+
+    max_range                   # i.e. `norm(dr) <= max_range`
+    (min_range, max_range)      # i.e. `min_range <= norm(dr) <= max_range`
+
+Both `max_range` and `min_range` can be a `Real` or a `NeighborRange` created with
+`nrange(n)`. The latter represents the distance of `n`-th nearest neighbors.
 
 The keyword `dn` can be a `Tuple`/`Vector`/`SVector` of `Int`s, or a tuple thereof.
 
@@ -85,10 +167,6 @@ The keyword `indices` accepts a single `src => dest` pair or a collection thereo
     indices = [(1, 2) .=> (2, 1)]       # Broadcasted pairs, same as above
     indices = [1:10 => 20:25, 3 => 30]  # Direct product, any hopping from sites 1:10 to sites 20:25, or from 3 to 30
 
-The keyword `range` can be a number `range = max_range` or an interval `range = (min_range,
-max_range)`. In the latter case, only links with `min_range <= norm(dr) <= max_range` are
-selected.
-
 """
 hopselector(; region = missing, sublats = missing, dn = missing, range = missing, indices = missing) =
     HopSelector(region, sublats, sanitize_dn(dn), sanitize_range(range), indices)
@@ -104,8 +182,11 @@ _sanitize_dn(dn::SVector{N}) where {N} = SVector{N,Int}(dn)
 _sanitize_dn(dn::Vector) = SVector{length(dn),Int}(dn)
 
 sanitize_range(::Missing) = missing
-sanitize_range(range::Real) = ifelse(isfinite(range), float(range) + sqrt(eps(float(range))), float(range))
-sanitize_range((rmin, rmax)::Tuple{Real,Real}) = (-sanitize_range(-rmin), sanitize_range(rmax))
+sanitize_range(r) = _shift_eps(r, 1)
+sanitize_range(r::NTuple{2,Any}) = (_shift_eps(first(r), -1), _shift_eps(last(r), 1))
+
+_shift_eps(r::Real, m) = ifelse(isfinite(r), float(r) + m * sqrt(eps(float(r))), float(r))
+_shift_eps(r, m) = r
 
 # API
 
@@ -115,12 +196,17 @@ function resolve(s::SiteSelector, lat::AbstractLattice)
 end
 
 function resolve(s::HopSelector, lat::AbstractLattice)
-    s = HopSelector(s.region, resolve_sublat_pairs(s.sublats, lat), check_dn_dims(s.dns, lat), s.range, s.indices)
+    s = HopSelector(s.region, resolve_sublat_pairs(s.sublats, lat), check_dn_dims(s.dns, lat), resolve_range(s.range, lat), s.indices)
     return ResolvedSelector(s, lat)
 end
 
 resolve_sublats(::Missing, lat) = missing # must be resolved to iterate over sublats
 resolve_sublats(s, lat) = resolve_sublat_name.(s, Ref(lat))
+
+resolve_range(r::Tuple, lat) = sanitize_range(_resolve_range.(r, Ref(lat)))
+resolve_range(r, lat) = sanitize_range(_resolve_range(r, lat))
+_resolve_range(r::NeighborRange, lat) = nrange(r.n, lat)
+_resolve_range(r, lat) = r
 
 function resolve_sublat_name(name::Union{NameType,Integer}, lat)
     i = findfirst(isequal(name), lat.unitcell.names)
@@ -371,6 +457,11 @@ sublats(m::TightbindingModel) = (t -> t.selector.sublats).(terms(m))
 displayparameter(::Type{<:Function}) = "Function"
 displayparameter(::Type{T}) where {T} = "$T"
 
+displayrange(r::Real) = round(r, digits = 6)
+displayrange(::Missing) = "any"
+displayrange(nr::NeighborRange) = "NeighborRange($(nr.n))"
+displayrange(rs::Tuple) = "($(displayrange(first(rs))), $(displayrange(last(rs))))"
+
 function Base.show(io::IO, o::OnsiteTerm{F}) where {F}
     i = get(io, :indent, "")
     print(io,
@@ -385,7 +476,7 @@ function Base.show(io::IO, h::HoppingTerm{F}) where {F}
 "$(i)HoppingTerm{$(displayparameter(F))}:
 $(i)  Sublattice pairs : $(h.selector.sublats === missing ? "any" : h.selector.sublats)
 $(i)  dn cell distance : $(h.selector.dns === missing ? "any" : h.selector.dns)
-$(i)  Hopping range    : $(round(h.selector.range, digits = 6))
+$(i)  Hopping range    : $(displayrange(h.selector.range))
 $(i)  Coefficient      : $(h.coefficient)")
 end
 
@@ -480,7 +571,7 @@ _onlyonsites(s, t::HoppingTerm, args...) = (_onlyonsites(s, args...)...,)
 _onlyonsites(s) = ()
 
 """
-    hopping(t; region = missing, sublats = missing, indices = missing, dn = missing, range = 1, plusadjoint = false)
+    hopping(t; range = nrange(1), dn = missing, sublats = missing, indices = missing, region = missing, plusadjoint = false)
 
 Create an `TightbindingModel` with a single `HoppingTerm` that applies a hopping `t` to a
 `Lattice` when creating a `Hamiltonian` with `hamiltonian`.
@@ -512,9 +603,15 @@ positions `r₁ = r - dr/2` and `r₂ = r + dr`, belonging to unit cells at inte
 && dn´ in dn && norm(dr) <= range`. If any of these is `missing` it will not be used to
 constraint the selection.
 
-The keyword `range` defaults to `1` (instead of `missing`). `range` also allows a form
-`range = (min_range, max_range)`, in which case the corresponding selection condition
-becomes `min_range <= norm(dr) <= max_range`.
+The keyword `range` admits the following possibilities
+
+    max_range                   # i.e. `norm(dr) <= max_range`
+    (min_range, max_range)      # i.e. `min_range <= norm(dr) <= max_range`
+
+Both `max_range` and `min_range` can be a `Real` or a `NeighborRange` created with
+`nrange(n)`. The latter represents the distance of `n`-th nearest neighbors. Note that the
+`range` default for `hopping` (unlike for the more general `hopselector`) is `nrange(1)`,
+i.e. first-nearest-neighbors.
 
 The keyword `dn` can be a `Tuple`/`Vector`/`SVector` of `Int`s, or a tuple thereof. The
 keyword `sublats` allows the following formats:
@@ -572,9 +669,9 @@ Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
 ```
 
 # See also:
-    `onsite`
+    `onsite`, `nrange`
 """
-function hopping(t; plusadjoint = false, range = 1, kw...)
+function hopping(t; plusadjoint = false, range = nrange(1), kw...)
     hop = hopping(t, hopselector(; range = range, kw...))
     return plusadjoint ? hop + hop' : hop
 end
