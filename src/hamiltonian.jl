@@ -331,22 +331,6 @@ nsublats(h::Hamiltonian) = nsublats(h.lattice)
 
 norbitals(h::Hamiltonian) = length.(h.orbitals)
 
-function meandist(h::Hamiltonian)
-    distsum = 0.0
-    num = 0
-    ss = allsitepositions(h.lattice)
-    br = h.lattice.bravais.matrix
-    for (dn, row, col) in nonzero_indices(h)
-        if row != col
-            num += 1
-            rsrc = ss[col]
-            rdst = ss[row] + br * dn
-            distsum += norm(rsrc - rdst)
-        end
-    end
-    return iszero(num) ? 0.0 : distsum / num
-end
-
 # External API #
 
 """
