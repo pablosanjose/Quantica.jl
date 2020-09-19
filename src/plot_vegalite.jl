@@ -93,7 +93,8 @@ function linkstable(h::Hamiltonian, (a1, a2) = (1, 2))
                             opacity = 0.5, islink = false))
                         push!(rows, row)
                     end
-                    rdst = (rsrc + rdst)/2
+                    # draw half-links but only intracell
+                    iszero(har.dn) && (rdst = (rsrc + rdst)/2)
                     x  = get(rsrc, a1, zero(T)); y  = get(rsrc, a2, zero(T))
                     x´ = get(rdst, a1, zero(T)); y´ = get(rdst, a2, zero(T))
                     # Exclude links perpendicular to the screen
