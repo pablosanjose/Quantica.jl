@@ -38,6 +38,22 @@ function lighten(rgba, v = 0.66)
     darken(rgba, -v)
 end
 
+function mindist(h::Hamiltonian)
+    distmin = zero(Float64)
+    num = 0
+    ss = allsitepositions(h.lattice)
+    br = h.lattice.bravais.matrix
+    for (dn, row, col) in nonzero_indices(h)
+        if row != col
+            num += 1
+            rsrc = ss[col]
+            rdst = ss[row] + br * dn
+            distmin = min(distmin, Float64(norm(rsrc - rdst)))
+        end
+    end
+    return distmin
+end
+
 #######################################################################
 # plot(::Hamiltonian)
 #######################################################################
@@ -54,7 +70,7 @@ end
         allintra = false, allcells = true, showsites = true, showlinks = true,
         shadedsites = false, shadedlinks = false, dimming = 0.75,
         siteradius = 0.2, siteborder = 3, siteborderdarken = 1.0, linkdarken = 0.0,
-        linkthickness = 6, linkoffset = missing, linkradius = 0.1,
+        linkthickness = 6, linkoffset = 0.000, linkradius = 0.1,
         tooltips = true, digits = 3,
         _tooltips_rowcolhar = Vector{Tuple{Int,Int,Int}}[],
         colors = map(t -> RGBAf0(t...),
@@ -71,23 +87,11 @@ function plot!(plot::HamiltonianPlot)
     colors = Iterators.cycle(plot[:colors][])
     sublats = Quantica.sublats(lat)
 
-    mdist = Quantica.meandist(h)
+    mdist = Quantica.mindist(h)
     mdist > 0 || (mdist = 1)
     plot[:siteradius][] *= mdist/2
     plot[:linkradius][] *= mdist/2
-
-    lo = plot[:linkoffset][]
-    plot[:linkoffset][] =
-        lo === missing ? √max(1-(plot[:linkradius][]/plot[:siteradius][])^2, 0) : lo * mdist
-
-    # plot sites
-    plot[:showsites][] &&
-        for (n, har) in enumerate(h.harmonics), (ssrc, csrc) in zip(sublats, colors)
-            iszero(har.dn) || plot[:allcells][] || break
-            csrc´ = iszero(har.dn) ? csrc : transparent(csrc, 1 - plot[:dimming][])
-            itr = siterange(lat, ssrc)
-            plotsites!(plot, lat, itr, har.dn, n, csrc´)
-        end
+    plot[:linkoffset][] *= mdist/2
 
     # plot links
     plot[:showlinks][] &&
@@ -101,6 +105,15 @@ function plot!(plot::HamiltonianPlot)
                     plotlinks!(plot, lat, itr, har.dn, n, csrc´)
                 end
             end
+        end
+
+    # plot sites
+    plot[:showsites][] &&
+        for (n, har) in enumerate(h.harmonics), (ssrc, csrc) in zip(sublats, colors)
+            iszero(har.dn) || plot[:allcells][] || break
+            csrc´ = iszero(har.dn) ? csrc : transparent(csrc, 1 - plot[:dimming][])
+            itr = siterange(lat, ssrc)
+            plotsites!(plot, lat, itr, har.dn, n, csrc´)
         end
 
     return plot
@@ -121,6 +134,7 @@ end
 function plotsites_lo!(plot, sites, color)
     scatter!(plot, sites;
         color = color,
+        markerspace = SceneSpace,
         markersize = 2 * plot[:siteradius][],
         strokewidth = plot[:siteborder][],
         strokecolor = darken(color, plot[:siteborderdarken][]))
@@ -130,6 +144,7 @@ end
 function plotsites_hi!(plot, sites, color)
     meshscatter!(plot, sites;
         color = color,
+        markerspace = SceneSpace,
         markersize = plot[:siteradius][], light = plot[:light][])
     return nothing
 end
@@ -144,7 +159,7 @@ function plotlinks!(plot, lat, itr, dn, n, color)
         rdst = padright(sites[row] + br * dn, Val(3))
         rsrc = padright(sites[col], Val(3))
         rdst = iszero(dn) ? (rdst + rsrc) / 2 : rdst
-        rsrc = rsrc + plot[:siteradius][] * plot[:linkoffset][] * normalize(rdst - rsrc)
+        rsrc = rsrc + (plot[:siteradius][] + plot[:linkoffset][]) * normalize(rdst - rsrc)
         push!(links, rsrc => rdst)
         plot[:tooltips][] && push!(tt, (row, col, n))
     end
