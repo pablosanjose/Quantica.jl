@@ -41,7 +41,7 @@ end
     lat = LatticePresets.honeycomb() |> unitcell(region = RegionPresets.circle(10))
     @test sum(sitepositions(lat, sublats = :A)) ≈ -sum(sitepositions(lat, sublats = :B))
     @test length(collect(siteindices(lat, sublats = :A))) == nsites(lat) ÷ 2
-    
+
     lat = LatticePresets.honeycomb() |> unitcell(2)
     @test collect(siteindices(lat)) == 1:8
     @test collect(siteindices(lat; indices = 10)) == Int[]
@@ -50,6 +50,17 @@ end
     @test collect(siteindices(lat; indices = 5:10)) == 5:8
     @test collect(siteindices(lat; indices = (1, 5:10))) == [1, 5 ,6, 7, 8]
     @test collect(siteindices(lat; indices = (1, 10))) == [1]
+end
+
+@testset "lattice combine" begin
+    lat0 = transform!(r -> SA[r[2], -r[1]], LatticePresets.honeycomb()) |> unitcell((1,1), (-1,1))
+    br = bravais(lat0)
+    cell_1 = lat0 |>
+        unitcell(region = r -> -1.01/√3 <= r[1] <= 4/√3 && 0 <= r[2] <= 3.5)
+    cell_2 = transform!(r -> r + br * SA[2.2, -1], copy(cell_1))
+    cell_p = lattice(sublat(br * SA[1.6,0.73], br * SA[1.6,1.27]))
+    cells = combine(cell_1, cell_2, cell_p)
+    @test Quantica.nsites.(Ref(cells), 1:5) == [14, 14, 14, 14, 2]
 end
 
 @testset "lattice unitcell" begin

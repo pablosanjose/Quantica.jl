@@ -554,19 +554,18 @@ function Base.isequal(b1::Bravais{E,L}, b2::Bravais{E,L}) where {E,L}
     return true
 end
 
+# should be cumsum([diff.(offset)...]) but non-allocating
 function combined_offsets(us::Unitcell...)
     nsubs = sum(nsublats, us)
     offsets = Vector{Int}(undef, nsubs + 1)
-    lastoffset = 0
-    idx = 1
+    offsets[1] = 0
+    idx = 2
     for u in us
-        for idx´ in 1:(length(u.offsets) - 1)
-            offsets[idx] = lastoffset + u.offsets[idx´]
+        for idx´ in 2:length(u.offsets)
+            offsets[idx] = offsets[idx-1] + u.offsets[idx´] - u.offsets[idx´-1]
             idx += 1
         end
-        lastoffset = u.offsets[end]
     end
-    offsets[end] = lastoffset + last(us).offsets[end]
     return offsets
 end
 
