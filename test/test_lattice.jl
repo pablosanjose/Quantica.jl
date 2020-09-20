@@ -63,11 +63,11 @@ end
 end
 
 @testset "lattice combine" begin
-    lat0 = transform!(r -> SA[r[2], -r[1]], LatticePresets.honeycomb()) |> unitcell((1,1), (-1,1))
+    lat0 = transform!(LatticePresets.honeycomb(), r -> SA[r[2], -r[1]]) |> unitcell((1,1), (-1,1))
     br = bravais(lat0)
     cell_1 = lat0 |>
         unitcell(region = r -> -1.01/√3 <= r[1] <= 4/√3 && 0 <= r[2] <= 3.5)
-    cell_2 = transform!(r -> r + br * SA[2.2, -1], copy(cell_1))
+    cell_2 = transform!(copy(cell_1), r -> r + br * SA[2.2, -1])
     cell_p = lattice(sublat(br * SA[1.6,0.73], br * SA[1.6,1.27]))
     cells = combine(cell_1, cell_2, cell_p)
     @test Quantica.nsites.(Ref(cells), 1:5) == [14, 14, 14, 14, 2]
