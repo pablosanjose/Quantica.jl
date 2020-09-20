@@ -18,7 +18,7 @@ using ExprTools
 using SparseArrays: getcolptr, AbstractSparseMatrix
 
 export sublat, bravais, lattice, dims, supercell, unitcell,
-       hopping, onsite, @onsite!, @hopping!, parameters, siteselector, hopselector,
+       hopping, onsite, @onsite!, @hopping!, parameters, siteselector, hopselector, nrange,
        sitepositions, siteindices,
        ket, randomkets,
        hamiltonian, parametric, bloch, bloch!, optimize!, similarmatrix,

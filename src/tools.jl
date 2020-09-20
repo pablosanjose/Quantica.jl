@@ -159,6 +159,21 @@ end
 chop(x::T, x0 = one(T)) where {T<:Real} = ifelse(abs(x) < √eps(T(x0)), zero(T), x)
 chop(x::C, x0 = one(R)) where {R<:Real,C<:Complex{R}} = chop(real(x), x0) + im*chop(imag(x), x0)
 
+function unique_sorted_approx!(v::AbstractVector{T}) where {T}
+    i = 1
+    xprev = first(v)
+    for j in 2:length(v)
+        if v[j] ≈ xprev
+            xprev = v[j]
+        else
+            i += 1
+            xprev = v[i] = v[j]
+        end
+    end
+    resize!(v, i)
+    return v
+end
+
 ############################################################################################
 
 function pushapproxruns!(runs::AbstractVector{<:UnitRange}, list::AbstractVector{T},
