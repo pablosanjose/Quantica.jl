@@ -113,7 +113,7 @@ sanitize_semibounded(sb::NTuple{L,Bool}, ::SMatrix{E,L}) where {E,L} = SVector{L
 sanitize_semibounded(sb, ::SMatrix{E,L}) where {E,L} =
     SVector{L,Bool}(ntuple(i -> i in sb, Val(L)))
 
-transform(f::F, b::Bravais{E,0}) where {E,F<:Function} = b
+transform(b::Bravais{E,0}, f::F) where {E,F<:Function} = b
 
 function transform(b::Bravais{E,L,T}, f::F) where {E,L,T,F<:Function}
     svecs = let z = zero(SVector{E,T})
