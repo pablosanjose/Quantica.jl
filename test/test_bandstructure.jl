@@ -41,12 +41,12 @@ end
     h = LatticePresets.honeycomb() |> hamiltonian(onsite(2) + hopping(-1, range = 1/√3))
     mesh1D = marchingmesh((0, 2π))
     b = bandstructure(h, mesh1D, lift = φ -> (φ, -φ), transform = inv)
-    b´ = transform!(inv, bandstructure(h, mesh1D, lift = φ -> (φ, -φ)))
+    b´ = transform!(bandstructure(h, mesh1D, lift = φ -> (φ, -φ)), inv)
     @test length(bands(b)) == length(bands(b´)) == 2
     @test vertices(bands(b)[1]) == vertices(bands(b´)[1])
     h´ = unitcell(h)
     s1 = spectrum(h´, transform = inv)
-    s2 = transform!(inv,spectrum(h´))
+    s2 = transform!(spectrum(h´), inv)
     @test energies(s1) == energies(s2)
     # automatic lift from 2D to 3D
     h = LatticePresets.cubic() |> hamiltonian(hopping(1)) |> unitcell(2)

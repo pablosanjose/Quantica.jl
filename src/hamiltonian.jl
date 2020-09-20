@@ -356,14 +356,24 @@ siteindices(lat::AbstractLattice; kw...) = siteindices(lat, siteselector(;kw...)
 siteindices(h::Hamiltonian; kw...) = siteindices(h.lattice, siteselector(;kw...))
 
 """
-    transform!(f::Function, h::Hamiltonian)
+    transform!(h::Hamiltonian, f::Function)
 
 Transform the site positions of the Hamiltonian's lattice in place without modifying the
 Hamiltonian harmonics.
+
+    transform!(h::Hamiltonian, bravais::Bravais)
+
+Replace the Bravais matrix of `h`'s lattice with `bravais` in place.
+
 """
-function transform!(f, h::Hamiltonian)
-    transform!(f, h.lattice)
+function transform!(h::Hamiltonian, f::Function)
+    transform!(h.lattice, f)
     return h
+end
+
+function transform!(h::Hamiltonian, br::Bravais)
+    transform!(h.lattice, br)
+    return h´
 end
 
 # Indexing #

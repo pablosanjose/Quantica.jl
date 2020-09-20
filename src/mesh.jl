@@ -53,7 +53,7 @@ function minmax_edge(m::Mesh{D,T}) where {D,T<:Real}
     return minedge, maxedge
 end
 
-transform!(f::Function, m::Mesh) = (map!(f, vertices(m), vertices(m)); m)
+transform!(m::Mesh, f::Function) = (map!(f, vertices(m), vertices(m)); m)
 
 ######################################################################
 # Compute N-simplices (N = number of vertices)

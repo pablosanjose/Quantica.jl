@@ -1,5 +1,5 @@
 using Quantica: nsites, Sublat, Bravais, Lattice, Superlattice
-using Random
+using Random, LinearAlgebra
 
 @testset "bravais" begin
     @test bravais() isa Bravais{0,0,Float64,0}
@@ -25,6 +25,16 @@ end
         @test lattice(b, s, type = t, dim = Val(e)) isa Lattice{e,min(l,e),t}
         @test lattice(b, s, type = t, dim = e) isa Lattice{e,min(l,e),t}
     end
+end
+
+@testset "lattice transform!" begin
+    lat = LatticePresets.honeycomb()
+    transform!(lat, r -> 2r)
+    @test norm(bravais(lat)[:,1]) ≈ 2 && norm(bravais(lat)[:,2]) ≈ 2
+    transform!(lat, r -> SA[r[2], -r[1]])
+    @test all(r -> r[2] ≈ 0, Quantica.allsitepositions(lat))
+    transform!(lat, bravais((1,0), (0, 1)))
+    @test bravais(lat) == SA[1 0; 0 1]
 end
 
 @testset "lattice presets" begin

@@ -63,6 +63,12 @@ end
     @test bloch(wh) ≈ bloch(h, (1,2,3))
 end
 
+@testset "hamiltonian transform!" begin
+    h = LatticePresets.square() |> hamiltonian(hopping(1))
+    transform!(h, r->2r)
+    @test bravais(h) ≈ SA[2 0; 0 2]
+end
+
 @testset "similarmatrix" begin
     types = (ComplexF16, ComplexF32, ComplexF64)
     lat = LatticePresets.honeycomb()

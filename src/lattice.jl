@@ -115,7 +115,7 @@ sanitize_semibounded(sb, ::SMatrix{E,L}) where {E,L} =
 
 transform(f::F, b::Bravais{E,0}) where {E,F<:Function} = b
 
-function transform(f::F, b::Bravais{E,L,T}) where {E,L,T,F<:Function}
+function transform(b::Bravais{E,L,T}, f::F) where {E,L,T,F<:Function}
     svecs = let z = zero(SVector{E,T})
         ntuple(i -> f(b.matrix[:, i]) - f(z), Val(L))
     end
@@ -216,7 +216,7 @@ sublats(u::Unitcell) = 1:nsublats(u)
 
 sublatname(u::Unitcell, s) = u.names[s]
 
-transform!(f::Function, u::Unitcell) = (u.sites .= f.(u.sites); u)
+transform!(u::Unitcell, f::Function) = (u.sites .= f.(u.sites); u)
 
 Base.copy(u::Unitcell) = Unitcell(copy(u.sites), u.names, copy(u.offsets))
 
@@ -226,7 +226,7 @@ Base.isequal(u1::Unitcell, u2::Unitcell) =
 #######################################################################
 # Lattice
 #######################################################################
-struct Lattice{E,L,T<:AbstractFloat,B<:Bravais{E,L,T},U<:Unitcell{E,T}} <: AbstractLattice{E,L,T}
+mutable struct Lattice{E,L,T<:AbstractFloat,B<:Bravais{E,L,T},U<:Unitcell{E,T}} <: AbstractLattice{E,L,T}
     bravais::B
     unitcell::U
 end
@@ -507,15 +507,21 @@ maskranges(lat::Superlattice) = (1:nsites(lat), lat.supercell.cells.indices...)
 maskranges(lat::Lattice) = (1:nsites(lat),)
 
 """
-    transform!(f::Function, lat::Lattice)
+    transform!(lat::Lattice, f::Function)
 
 Transform the site positions of `lat` by applying `f` to them in place.
+
+    transform!(lat::Lattice, bravais::Bravais)
+
+Replace the Bravais matrix of `lat` with `bravais` in place.
 """
-function transform!(f::Function, lat::Lattice)
-    transform!(f, lat.unitcell)
-    bravais´ = transform(f, lat.bravais)
-    return Lattice(bravais´, lat.unitcell)
+function transform!(lat::Lattice, f::Function)
+    transform!(lat.unitcell, f)
+    transform!(lat, transform(lat.bravais, f))
+    return lat
 end
+
+transform!(lat::Lattice, br::Bravais) = (lat.bravais = br)
 
 """
     combine(lats::Lattice...)

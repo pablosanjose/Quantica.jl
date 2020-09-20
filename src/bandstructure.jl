@@ -32,7 +32,7 @@ function spectrum(h; method = defaultmethod(h), transform = missing)
     bloch!(matrix, h)
     (ϵk, ψk) = diagonalize(matrix, method)
     s = Spectrum(ϵk, ψk)
-    transform === missing || transform!(transform, s)
+    transform === missing || transform!(s, transform)
     return s
 end
 
@@ -57,11 +57,11 @@ Return the states of `s` as the columns of a `Matrix`
 states(s::Spectrum) = s.states
 
 """
-    transform!(f::Function, s::Spectrum)
+    transform!(s::Spectrum, f::Function)
 
 Transform the energies of `s` by applying `f` to them in place.
 """
-transform!(f, s::Spectrum) = (map!(f, s.energies, s.energies); s)
+transform!(s::Spectrum, f::Function) = (map!(f, s.energies, s.energies); s)
 
 #######################################################################
 # Bandstructure
@@ -134,11 +134,11 @@ states(bs::Bandstructure, i) = states(bands(bs)[i])
 states(b::Band) = reshape(b.states, b.dimstates, :)
 
 """
-    transform!(f::Function, b::Bandstructure)
+    transform!(b::Bandstructure, f::Function)
 
 Transform the energies of all bands in `b` by applying `f` to them in place.
 """
-function transform!(f, bs::Bandstructure)
+function transform!(bs::Bandstructure, f::Function)
     for band in bands(bs)
         vs = vertices(band)
         for (i, v) in enumerate(vs)
@@ -271,7 +271,7 @@ function bandstructure(h::Union{Hamiltonian,ParametricHamiltonian}, mesh::Mesh;
     d = DiagonalizeHelper(method, codiag, minoverlap)
     matrixf(ϕs) = bloch!(matrix, h, applylift(lift, ϕs))
     b = _bandstructure(matrixf, matrix, mesh, d)
-    transform === missing || transform!(transform, b)
+    transform === missing || transform!(b, transform)
     return b
 end
 
@@ -283,7 +283,7 @@ function bandstructure(matrixf::Function, mesh::Mesh;
     codiag = codiagonalizer(matrixf´, matrix, mesh)
     d = DiagonalizeHelper(method´, codiag, minoverlap)
     b = _bandstructure(matrixf´, matrix, mesh, d)
-    transform === missing || transform!(transform, b)
+    transform === missing || transform!(b, transform)
     return b
 end
 
