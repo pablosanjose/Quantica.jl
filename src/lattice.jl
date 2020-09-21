@@ -232,11 +232,11 @@ corresponds to a bounded lattice with no Bravais vectors.
 A keyword `names` can be used to rename `sublats`. Given names can be replaced to ensure
 that all sublattice names are unique.
 
-    lattice(lat::AbstractLattice; kw...)
+    lattice(lat::AbstractLattice; bravais = missing, dim = missing, type = missing, names = missing)
 
-Create a new lattice by applying the provided `kw` to `lat`. For performance, allocations
-will be avoided if possible (it depends on `kw`), so the result can share memory of `lat`.
-To avoid that, do `lattice(copy(lat); kw...)`.
+Create a new lattice by applying any non-missing `kw` to `lat`. For performance, allocations
+will be avoided if possible (depends on `kw`), so the result can share memory of `lat`. To
+avoid that, do `lattice(copy(lat); kw...)`.
 
 See also `LatticePresets` for built-in lattices.
 
