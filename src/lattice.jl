@@ -3,8 +3,8 @@ abstract type AbstractLattice{E,L,T} end
 #######################################################################
 # Sublat (sublattice)
 #######################################################################
-struct Sublat{E,T}
-    sites::Vector{SVector{E,T}}
+struct Sublat{E,T,V<:AbstractVector{SVector{E,T}}}
+    sites::V
     name::NameType
 end
 
@@ -39,11 +39,17 @@ Sublat{2,Float64} : sublattice of Float64-typed sites in 2D space
   Name     : :A
 ```
 """
-sublat(sites::Vector{<:SVector}; name = :_, kw...) =
+sublat(sites::AbstractVector{<:SVector}; name = :_, kw...) =
     Sublat(sites, nametype(name))
 sublat(vs::Union{Tuple,AbstractVector{<:Number}}...; kw...) = sublat(toSVectors(vs...); kw...)
 
 toSVectors(vs...) = [promote(toSVector.(vs)...)...]
+
+dims(::NTuple{N,Sublat{E,T}}) where {N,E,T} = E
+
+sublatnames(ss::NTuple{N,Sublat{E,T}}) where {N,E,T} = (s -> s.name).(ss)
+
+Base.eltype(::NTuple{N,Sublat{E,T}}) where {N,E,T} = T
 
 #######################################################################
 # Unitcell
@@ -54,27 +60,32 @@ struct Unitcell{E,T,N}
     offsets::Vector{Int}        # Linear site number offsets for each sublat
 end                             # so that diff(offset) == sublatsites
 
-
 Unitcell(sublats::Sublat...; kw...) = Unitcell(promote(sublats...); kw...)
-Unitcell(sublats::NTuple{N,Sublat{E,T}};
-    dim = Val(E), type = float(T), names = [s.name for s in sublats], kw...) where {N,E,T} =
-    _Unitcell(sublats, dim, type, names)
+
+Unitcell(s; dim = Val(dims(s)), type = float(eltype(s)), names = sublatnames(s)) =
+    _unitcell(s, dim, type, names)
 
 # Dynamic dispatch
-_Unitcell(sublats, dim::Integer, type, names) = _Unitcell(sublats, Val(dim), type, names)
+_unitcell(sublats, dim::Integer, type, names) = _unitcell(sublats, Val(dim), type, names)
 
-function _Unitcell(sublats::NTuple{N,Sublat}, dim::Val{E}, type::Type{T}, names) where {N,E,T}
+function _unitcell(sublats::NTuple{N,Sublat}, dim::Val{E}, type::Type{T}, names) where {N,E,T}
     sites = SVector{E,T}[]
     offsets = [0]  # length(offsets) == length(sublats) + 1
     for s in eachindex(sublats)
         for site in sublats[s].sites
-            push!(sites, padright(site, Val(E)))
+            push!(sites, padtotype(site, SVector{E,T}))
         end
         push!(offsets, length(sites))
     end
     names´ = uniquenames(sanitize_names(names, Val(N)))
     return Unitcell(sites, names´, offsets)
 end
+
+_unitcell(u::Unitcell{E,T,N}, dim::Val{E}, type::Type{T}, names) where {E,T,N} =
+    Unitcell(u.sites, uniquenames(sanitize_names(names, Val(N))), u.offsets)
+
+_unitcell(u::Unitcell{E,T,N}, dim::Val{E2}, type::Type{T2}, names) where {E,T,E2,T2,N} =
+    Unitcell(padtotype.(u.sites, SVector{E2,T2}), uniquenames(sanitize_names(names, Val(N))), u.offsets)
 
 sanitize_names(name::Union{NameType,Int}, ::Val{N}) where {N} = ntuple(_ -> NameType(name), Val(N))
 sanitize_names(names::AbstractVector, ::Val{N}) where {N} = ntuple(i -> NameType(names[i]), Val(N))
@@ -116,15 +127,6 @@ function sublat(u::Unitcell, siteidx)
     return l
 end
 
-# function boundingbox(u::Unitcell{E,T}) where {E,T}
-#     min´ = max´ = first(u.sites)
-#     for r in u.sites
-#         min´ = min.(min´, r)
-#         max´ = max.(max´, r)
-#     end
-#     return min´, max´
-# end
-
 sublatsites(u::Unitcell) = diff(u.offsets)
 
 nsublats(u::Unitcell) = length(u.names)
@@ -133,7 +135,13 @@ sublats(u::Unitcell) = 1:nsublats(u)
 
 sublatname(u::Unitcell, s) = u.names[s]
 
+sublatnames(u::Unitcell) = u.names
+
 transform!(f::Function, u::Unitcell) = (u.sites .= f.(u.sites); u)
+
+dims(::Unitcell{E}) where {E} = E
+
+Base.eltype(::Unitcell{E,T}) where {E,T} = T
 
 Base.copy(u::Unitcell) = Unitcell(copy(u.sites), u.names, copy(u.offsets))
 
@@ -255,15 +263,21 @@ Lattice{3,2,Float64} : 2D lattice in 3D space
     `LatticePresets`, `bravais`, `sublat`, `supercell`, `intracell`
 """
 function lattice(ss::Sublat...; bravais = (), kw...)
-    ucell = Unitcell(ss...; kw...)
-    br = Bravais(bravais, ucell)
-    return lattice(br, ucell)
+    u = Unitcell(ss...; kw...)
+    b = Bravais(bravais, u)
+    return lattice(u, b)
 end
 
-function lattice(bravais::B, unitcell::U) where {E2,L2,E,T,B<:Bravais{E2,L2},U<:Unitcell{E,T}}
+function lattice(unitcell::U, bravais::B) where {E2,L2,E,T,B<:Bravais{E2,L2},U<:Unitcell{E,T}}
     L = min(E,L2) # L should not exceed E
     bravais´ = convert(Bravais{E,L,T}, bravais)
     return Lattice(bravais´, unitcell)
+end
+
+function lattice(lat::Lattice; bravais = bravais(lat), kw...)
+    u = Unitcell(lat.unitcell; kw...)
+    b = Bravais(bravais, u)
+    return lattice(u, b)
 end
 
 #######################################################################

@@ -1,4 +1,4 @@
-using Quantica: nsites, Sublat, Bravais, Lattice, Superlattice
+using Quantica: nsites, Sublat, Bravais, Lattice, Superlattice, allsitepositions
 using Random
 using LinearAlgebra: I
 
@@ -19,6 +19,21 @@ end
         @test lattice(s; bravais = br, type = t, dim = Val(e)) isa Lattice{e,min(l,e),t}
         @test lattice(s; bravais = br, type = t, dim = e) isa Lattice{e,min(l,e),t}
     end
+    lat = lattice(sublat((0,0,0)), sublat((1,1,1f0)); bravais = SMatrix{3,3}(I))
+    lat2 = lattice(lat, bravais = ())
+    @test lat2 isa Lattice{3,0}
+    @test allsitepositions(lat) === allsitepositions(lat2)
+    lat2 = lattice(lat, bravais = (), names = :A)
+    @test lat2 isa Lattice{3,0}
+    @test allsitepositions(lat) === allsitepositions(lat2)
+    lat2 = lattice(lat, dim = Val(2))
+    @test lat2 isa Lattice{2,2} # must be L <= E
+    @test allsitepositions(lat) !== allsitepositions(lat2)
+    lat2 = lattice(lat, type = Float64)
+    @test lat2 isa Lattice{3,3}
+    @test allsitepositions(lat) !== allsitepositions(lat2)
+    lat2 = lattice(lat, dim = Val(2), bravais = SA[1 2; 3 4])
+    @test bravais(lat2) == SA[1 2; 3 4]
 end
 
 @testset "lattice presets" begin
