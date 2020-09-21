@@ -71,7 +71,7 @@ Base.parent(h::Hamiltonian) = h
 
 # Internal API #
 
-latdim(h::Hamiltonian{LA}) where {E,L,LA<:AbstractLattice{E,L}} = L
+latdim(h::Hamiltonian) = last(dims(h))
 
 matrixtype(::Hamiltonian{LA,L,M,A}) where {LA,L,M,A} = A
 blockeltype(::Hamiltonian{<:Any,<:Any,M}) where {M} = eltype(M)
@@ -322,8 +322,6 @@ end
 
 bravais(h::Hamiltonian) = bravais(h.lattice)
 
-issemibounded(h::Hamiltonian) = issemibounded(h.lattice)
-
 nsites(h::Hamiltonian) = isempty(h.harmonics) ? 0 : nsites(first(h.harmonics))
 nsites(h::HamiltonianHarmonic) = size(h.h, 1)
 
@@ -332,6 +330,16 @@ nsublats(h::Hamiltonian) = nsublats(h.lattice)
 norbitals(h::Hamiltonian) = length.(h.orbitals)
 
 # External API #
+
+"""
+    dims(lat_or_ham) -> (E, L)
+
+Return a tuple `(E, L)` of the embedding `E` and lattice dimensions `L` of `AbstractLattice`
+or `Hamiltonian` `lat_or_ham`
+"""
+
+dims(lat::AbstractLattice{E,L}) where {E,L} = E, L
+dims(h::Hamiltonian) = dims(h.lattice)
 
 """
     sitepositions(lat::AbstractLattice; kw...)
@@ -591,7 +599,7 @@ function applyterm!(builder::IJVBuilder{L}, term::HoppingTerm) where {L}
             ijv = builder[dn]
             for j in source_candidates(rsel, s2)
                 sitej = allpos[j]
-                rsource = sitej - lat.bravais.matrix * dn
+                rsource = sitej - bravais(lat) * dn
                 is = targets(builder, rsel.selector.range, rsource, s1)
                 for i in is
                     # Make sure we don't stop searching until we reach minimum range
@@ -880,7 +888,7 @@ _wrap(lat::Lattice, axes) = Lattice(_wrap(lat.bravais, axes), lat.unitcell)
 
 function _wrap(br::Bravais{E,L}, axes) where {E,L}
     mask = deletemultiple_nocheck(SVector{L}(1:L), axes)
-    return Bravais(br.matrix[:, mask], br.semibounded[mask])
+    return Bravais(br.matrix[:, mask])
 end
 
 function _wrap(harmonics::Vector{HamiltonianHarmonic{L,M,A}}, axes::NTuple{N,Int}, phases::NTuple{N,Number}, sizeh) where {L,M,A,N}

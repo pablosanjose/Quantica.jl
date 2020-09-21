@@ -1,12 +1,6 @@
 using Quantica: nsites, Sublat, Bravais, Lattice, Superlattice
 using Random
-
-@testset "bravais" begin
-    @test bravais() isa Bravais{0,0,Float64,0}
-    @test bravais((1, 2), (3, 3)) isa Bravais{2,2,Int,4}
-    @test bravais(@SMatrix[1.0 2; 3 3]) isa Bravais{2,2,Float64,4}
-    @test bravais((1,0), semibounded = false) isa Bravais{2,1,Int,2}
-end
+using LinearAlgebra: I
 
 @testset "sublat" begin
     sitelist = [(3,3), (3,3.), [3,3.], SA[3, 3], SA[3, 3f0], SA[3f0, 3.]]
@@ -21,9 +15,9 @@ end
 @testset "lattice" begin
     s = sublat((1, 2))
     for t in (Float32, Float64), e in 1:4, l = 1:4
-        b = bravais(ntuple(_ -> (1,), l)...)
-        @test lattice(b, s, type = t, dim = Val(e)) isa Lattice{e,min(l,e),t}
-        @test lattice(b, s, type = t, dim = e) isa Lattice{e,min(l,e),t}
+        br = SMatrix{l,l,Float64}(I)
+        @test lattice(s; bravais = br, type = t, dim = Val(e)) isa Lattice{e,min(l,e),t}
+        @test lattice(s; bravais = br, type = t, dim = e) isa Lattice{e,min(l,e),t}
     end
 end
 
@@ -32,8 +26,8 @@ end
     presets = (LatticePresets.linear, LatticePresets.square, LatticePresets.triangular,
                LatticePresets.honeycomb, LatticePresets.cubic, LatticePresets.fcc,
                LatticePresets.bcc)
-    for a0 in a0s, s in (true, false), t in (Float32, Float64), e in 1:4, preset in presets
-        @test preset(; a0 = a0, semibounded = s, type = t, dim = e) isa Lattice{e,<:Any,t}
+    for a0 in a0s, t in (Float32, Float64), e in 1:4, preset in presets
+        @test preset(; a0 = a0, type = t, dim = e) isa Lattice{e,<:Any,t}
     end
 end
 

@@ -42,7 +42,7 @@ function mindist(h::Hamiltonian)
     distmin = zero(Float64)
     num = 0
     ss = allsitepositions(h.lattice)
-    br = h.lattice.bravais.matrix
+    br = bravais(h.lattice)
     for (dn, row, col) in nonzero_indices(h)
         if row != col
             num += 1
@@ -121,7 +121,7 @@ end
 
 function plotsites!(plot, lat, srange, dn, n, color)
     allsites = Quantica.allsitepositions(lat)
-    br = lat.bravais.matrix
+    br = bravais(lat)
     sites = [padright(allsites[i] + br * dn, Val(3)) for i in srange]
     plot[:tooltips][] && (tt = [(site, 0, n) for site in srange])
     if !isempty(sites)
@@ -153,7 +153,7 @@ function plotlinks!(plot, lat, itr, dn, n, color)
     links = Pair{SVector{3,Float32},SVector{3,Float32}}[]
     plot[:tooltips][] && (tt = Tuple{Int,Int,Int}[])
     sites = Quantica.allsitepositions(lat)
-    br = lat.bravais.matrix
+    br = bravais(lat)
     for (row, col) in itr
         iszero(dn) && row == col && continue
         rdst = padright(sites[row] + br * dn, Val(3))

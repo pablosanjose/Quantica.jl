@@ -15,11 +15,11 @@ The Quantica.jl package provides an expressive API to build arbitrary quantum sy
 - Compute electronic structures and expectation values using Kernel Polynomial methods
 
 # Exported API
-- `lattice`, `sublat`, `bravais`: build lattices
-- `dims`, `sitepositions`, `siteindices`: inspect lattices
+- `lattice`, `sublat`: build lattices
 - `hopping`, `onsite`, `siteselector`, `hopselector`, `nrange`: build tightbinding models
 - `hamiltonian`: build a Hamiltonian from tightbinding model and a lattice
 - `parametric`, `@onsite!`, `@hopping!`, `parameters`: build a parametric Hamiltonian
+- `dims`, `sitepositions`, `siteindices`, `bravais`: inspect lattices and Hamiltonians
 - `supercell`, `unitcell`, `flatten`, `wrap`, `transform!`, `combine`: build derived lattices or Hamiltonians
 - `marchingmesh`, `linearmesh`: define a specification to build a bandstructure discretization mesh
 - `bandstructure`, `spectrum`: compute the generalized bandstructure of a Hamiltonian or a ParametricHamiltonian

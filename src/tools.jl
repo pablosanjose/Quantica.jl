@@ -1,10 +1,10 @@
 toSMatrix() = SMatrix{0,0,Float64}()
-toSMatrix(ss::NTuple{N,Number}...) where {N} = toSMatrix(SVector{N}.(ss)...)
-toSMatrix(ss::SVector{N}...) where {N} = hcat(ss...)
-toSMatrix(::Type{T}, ss...) where {T} = _toSMatrix(T, toSMatrix(ss...))
+toSMatrix(s) = toSMatrix(tuple(s))
+toSMatrix(ss::NTuple{M,NTuple{N,Number}}) where {N,M} = toSMatrix(SVector{N}.(ss))
+toSMatrix(ss::NTuple{M,SVector{N}}) where {N,M} = hcat(ss...)
+toSMatrix(::Type{T}, ss) where {T} = _toSMatrix(T, toSMatrix(ss))
 _toSMatrix(::Type{T}, s::SMatrix{N,M}) where {N,M,T} = convert(SMatrix{N,M,T}, s)
 # Dynamic dispatch
-toSMatrix(ss::AbstractVector...) = toSMatrix(Tuple.(ss)...)
 toSMatrix(s::AbstractMatrix) = SMatrix{size(s,1), size(s,2)}(s)
 
 toSVector(::Tuple{}) = SVector{0,Float64}()
