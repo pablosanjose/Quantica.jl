@@ -29,6 +29,8 @@ end
     for a0 in a0s, t in (Float32, Float64), e in 1:4, preset in presets
         @test preset(; a0 = a0, type = t, dim = e) isa Lattice{e,<:Any,t}
     end
+    @test LatticePresets.cubic(bravais = (1,0)) isa Lattice{3,1}
+    @test LatticePresets.cubic(bravais = ((1,0), (0,1)), dim = Val(2)) isa Lattice{2,2}
 end
 
 @testset "siteindices/sitepositions" begin
