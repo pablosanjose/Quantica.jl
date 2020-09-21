@@ -263,7 +263,7 @@ julia> h[(3,3)][[1,2],[1,2]] .= Ref(@SMatrix[1 2; 2 1])
 # See also:
     `onsite`, `hopping`, `bloch`, `bloch!`
 """
-hamiltonian(lat, ts...; orbitals = missing, kw...) =
+hamiltonian(lat::AbstractLattice, ts...; orbitals = missing, kw...) =
     _hamiltonian(lat, sanitize_orbs(orbitals, lat.unitcell.names), ts...; kw...)
 _hamiltonian(lat::AbstractLattice, orbs; kw...) = _hamiltonian(lat, orbs, TightbindingModel(); kw...)
 _hamiltonian(lat::AbstractLattice, orbs, m::TightbindingModel; type::Type = Complex{numbertype(lat)}, kw...) =

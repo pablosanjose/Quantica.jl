@@ -14,13 +14,16 @@ Base.convert(::Type{T}, l::Bravais) where T<:Bravais = T(l)
 
 # Constructors for conversion
 
-Sublat{E,T}(s::Sublat, name = s.name) where {E,T} =
+Sublat{E,T,V}(s::Sublat, name = s.name) where {E,T,V<:Vector} =
     Sublat([padright(site, zero(T), Val(E)) for site in s.sites], name)
 
 # We need this to promote different sublats into common dimensionality and type to combine
 # into a lattice, while neglecting orbital dimension
 Base.promote(ss::Sublat{E,T}...) where {E,T} = ss
-Base.promote_rule(::Type{Sublat{E1,T1}}, ::Type{Sublat{E2,T2}}) where {E1,E2,T1,T2} =
-    Sublat{max(E1, E2), promote_type(T1, T2)}
+function Base.promote_rule(::Type{Sublat{E1,T1,Vector{SVector{E1,T1}}}}, ::Type{Sublat{E2,T2,Vector{SVector{E2,T2}}}}) where {E1,E2,T1,T2}
+    E´ = max(E1, E2)
+    T´ = promote_type(T1, T2)
+    return Sublat{E´, T´, Vector{SVector{E´,T´}}}
+end
 
 Bravais{E,L,T}(b::Bravais) where {E,L,T} = Bravais(padtotype(b.matrix, SMatrix{E,L,T}))
