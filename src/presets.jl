@@ -7,32 +7,28 @@ module LatticePresets
 using Quantica
 using Quantica: NameType
 
-linear(; a0 = 1, semibounded = false, kw...) =
-    lattice(a0 * bravais((1.,); kw...), sublat((0.,)); kw...)
+linear(; a0 = 1, kw...) =
+    lattice(sublat((0.,)); bravais = a0 .* (1,), kw...)
 
 square(; a0 = 1, kw...) =
-    lattice(a0 * bravais((1., 0.), (0., 1.); kw...), sublat((0., 0.)); kw...)
+    lattice(sublat((0., 0.)); bravais = a0 * SA[1. 0.; 0. 1.]', kw...)
 
 triangular(; a0 = 1, kw...) =
-    lattice(a0 * bravais(( cos(pi/3), sin(pi/3)),(-cos(pi/3), sin(pi/3)); kw...),
-        sublat((0., 0.)); kw...)
+    lattice(sublat((0., 0.)); bravais = a0 * SA[cos(pi/3) sin(pi/3); -cos(pi/3) sin(pi/3)]', kw...)
 
 honeycomb(; a0 = 1, kw...) =
-    lattice(a0 * bravais((cos(pi/3), sin(pi/3)), (-cos(pi/3), sin(pi/3)); kw...),
-        sublat((0.0, -0.5*a0/sqrt(3.0)), name = :A),
-        sublat((0.0,  0.5*a0/sqrt(3.0)), name = :B); kw...)
+    lattice(sublat((0.0, -0.5*a0/sqrt(3.0)), name = :A),
+            sublat((0.0,  0.5*a0/sqrt(3.0)), name = :B);
+            bravais = a0 * SA[cos(pi/3) sin(pi/3); -cos(pi/3) sin(pi/3)]', kw...)
 
 cubic(; a0 = 1, kw...) =
-    lattice(a0 * bravais((1., 0., 0.), (0., 1., 0.), (0., 0., 1.); kw...),
-        sublat((0., 0., 0.)); kw...)
+    lattice(sublat((0., 0., 0.)); bravais = a0 * SA[1. 0. 0.; 0. 1. 0.; 0. 0. 1.]', kw...)
 
 fcc(; a0 = 1, kw...) =
-    lattice(a0 * bravais(@SMatrix([-1. -1. 0.; 1. -1. 0.; 0. 1. -1.])'/sqrt(2.); kw...),
-        sublat((0., 0., 0.)); kw...)
+    lattice(sublat((0., 0., 0.)); bravais = (a0/sqrt(2.)) * SA[-1. -1. 0.; 1. -1. 0.; 0. 1. -1.]', kw...)
 
 bcc(; a0 = 1, kw...) =
-    lattice(a0 * bravais((1., 0., 0.), (0., 1., 0.), (0.5, 0.5, 0.5); kw...),
-        sublat((0., 0., 0.)); kw...)
+    lattice(sublat((0., 0., 0.)); bravais = a0 * SA[1. 0. 0.; 0. 1. 0.; 0.5 0.5 0.5]', kw...)
 
 end # module
 
@@ -62,25 +58,25 @@ function twisted_bilayer_graphene(;
     sBbot = sublat((0.0,  0.5a0/sqrt(3.0), - interlayerdistance / 2); name = :Bb)
     sAtop = sublat((0.0, -0.5a0/sqrt(3.0),   interlayerdistance / 2); name = :At)
     sBtop = sublat((0.0,  0.5a0/sqrt(3.0),   interlayerdistance / 2); name = :Bt)
-    brbot = a0 * bravais(( cos(pi/3), sin(pi/3), 0), (-cos(pi/3), sin(pi/3), 0))
-    brtop = a0 * bravais((-cos(pi/3), sin(pi/3), 0), ( cos(pi/3), sin(pi/3), 0))
+    brbot = a0 * SA[ cos(pi/3) sin(pi/3) 0; -cos(pi/3) sin(pi/3) 0]'
+    brtop = a0 * SA[-cos(pi/3) sin(pi/3) 0;  cos(pi/3) sin(pi/3) 0]'
     # Supercell matrices sc.
     # The one here is a [1 0; -1 1] rotation of the one in Phys. Rev. B 86, 155449 (2012)
     if gcd(r, 3) == 1
-        scbot = @SMatrix[m -(m+r); (m+r) 2m+r] * @SMatrix[1 0; -1 1]
-        sctop = @SMatrix[m+r -m; m 2m+r] * @SMatrix[1 0; -1 1]
+        scbot = SA[m -(m+r); (m+r) 2m+r] * SA[1 0; -1 1]
+        sctop = SA[m+r -m; m 2m+r] * SA[1 0; -1 1]
     else
-        scbot = @SMatrix[m+r÷3 -r÷3; r÷3 m+2r÷3] * @SMatrix[1 0; -1 1]
-        sctop = @SMatrix[m+2r÷3 r÷3; -r÷3 m+r÷3] * @SMatrix[1 0; -1 1]
+        scbot = SA[m+r÷3 -r÷3; r÷3 m+2r÷3] * SA[1 0; -1 1]
+        sctop = SA[m+2r÷3 r÷3; -r÷3 m+r÷3] * SA[1 0; -1 1]
     end
     latbot = lattice(brbot, sAbot, sBbot)
     lattop = lattice(brtop, sAtop, sBtop)
     htop = hamiltonian(lattop, modelintra; kw...) |> unitcell(sctop)
     hbot = hamiltonian(latbot, modelintra; kw...) |> unitcell(scbot)
-    let R = @SMatrix[cos(θ/2) -sin(θ/2) 0; sin(θ/2) cos(θ/2) 0; 0 0 1]
+    let R = SA[cos(θ/2) -sin(θ/2) 0; sin(θ/2) cos(θ/2) 0; 0 0 1]
         transform!(r -> R * r, htop)
     end
-    let R = @SMatrix[cos(θ/2) sin(θ/2) 0; -sin(θ/2) cos(θ/2) 0; 0 0 1]
+    let R = SA[cos(θ/2) sin(θ/2) 0; -sin(θ/2) cos(θ/2) 0; 0 0 1]
         transform!(r -> R * r, hbot)
     end
     modelinter = hopping((r,dr) -> (
