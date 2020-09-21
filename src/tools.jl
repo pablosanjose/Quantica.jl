@@ -393,4 +393,4 @@ function _fast_sparse_muladd!(dst::AbstractMatrix{T}, src::SparseMatrixCSC, α =
     return dst
 end
 
-rclamp(r1::UnitRange, r2::UnitRange) = clamp(minimum(r1), extrema(r2)...):clamp(maximum(r1), extrema(r2)...)
+rclamp(r1::UnitRange, r2::UnitRange) = isempty(r1) ? r1 : clamp(minimum(r1), extrema(r2)...):clamp(maximum(r1), extrema(r2)...)
