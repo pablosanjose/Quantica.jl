@@ -133,18 +133,11 @@ function _corners(table)
 end
 
 function domain_size(corners, size, (rangex, rangey))
-    sizex, sizey = make_it_two(size)
     domainx = iclamp((corners[1][1], corners[2][1]), rangex)
     domainy = iclamp((corners[1][2], corners[2][2]), rangey)
     dx = domainx[2]-domainx[1]
     dy = domainy[2]-domainy[1]
-    if dx > dy
-        sizex = size
-        sizey = size * dy/dx
-    else
-        sizex = size * dx/dy
-        sizey = size
-    end
+    sizex, sizey = compute_sizes(size, (dx, dy))
     return (domainx, domainy), (sizex, sizey)
 end
 
@@ -154,3 +147,16 @@ sanitize_plotrange(ranges::NTuple{2,Tuple{Number, Number}}) = ranges
 
 make_it_two(x::Number) = (x, x)
 make_it_two(x::Tuple{Number,Number}) = x
+
+function compute_sizes(size::Number, (dx, dy))
+    if dx > dy
+        sizex = size
+        sizey = size * dy/dx
+    else
+        sizex = size * dx/dy
+        sizey = size
+    end
+    return sizex, sizey
+end
+
+compute_sizes(ss::Tuple{Number,Number}, d) = ss
