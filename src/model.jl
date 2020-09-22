@@ -400,6 +400,8 @@ siteindex_candidates(rs, sublat) =
 # indices can be missing, 1, 2:3, (1,2,3) or (1, 2:3)
 # we also support (1, (2,3)) and [1, 2, 3], useful for source_candidates below
 _siteindex_candidates(::Missing, sr) = sr
+# Better not exclude candidates with not, since that can lead to collecting a huge range
+_siteindex_candidates(::Not, sr) = sr
 _siteindex_candidates(i::Integer, sr) = ifelse(i in sr, (i,), ())
 _siteindex_candidates(inds::AbstractUnitRange, sr) = intersect(inds, sr)
 _siteindex_candidates(inds::NTuple{N,Integer}, sr) where {N} = filter(in(sr), inds)
@@ -409,6 +411,7 @@ _siteindex_candidates(inds, sr) = Iterators.flatten(_siteindex_candidates.(inds,
 source_candidates(rs::ResolvedSelector{<:HopSelector}, sublat) =
     _source_candidates(rs.selector.indices, siterange(rs.lattice, sublat))
 _source_candidates(::Missing, sr) = sr
+_source_candidates(::Not, sr) = sr
 _source_candidates(inds, sr) = _siteindex_candidates(_recursivefirst(inds), sr)
 
 _recursivefirst(p::Pair) = first(p)
