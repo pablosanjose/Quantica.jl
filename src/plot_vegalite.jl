@@ -10,7 +10,7 @@ Plots the 1D bandstructure `b` using VegaLite.
 Plots the the Hamiltonian lattice projected along `axes` using VegaLite.
 
 # Options:
-    - `size`: the `(width, height)` of the plot (or `width == height` if a single number)
+    - `size`: the `(width, height)` of the plot (or `max(width, height)` if a single number)
     - `points`: whether to plot points on line plots
     - `labels`: labels for the x and y plot axes
     - `scaling`: `(scalex, scaley)` scalings for the x (Bloch phase) and y (energy) variables
