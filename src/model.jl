@@ -88,7 +88,7 @@ abstract type Selector end
 struct SiteSelector{S,I,M} <: Selector
     region::M
     sublats::S  # NTuple{N,NameType} (unresolved) or Vector{Int} (resolved on a lattice)
-    indices::I  # Once resolved, this should be an Integer container
+    indices::I  # Once resolved, this should be an Union{Integer,Not} container
 end
 
 struct HopSelector{S,I,D,T,M} <: Selector
@@ -103,6 +103,20 @@ struct ResolvedSelector{S<:Selector,L<:AbstractLattice} <: Selector
     selector::S
     lattice::L
 end
+
+struct Not{T} # Symbolizes an excluded elements
+    i::T
+end
+
+"""
+    not(i)
+
+Wrapper indicating the negation or complement of `i`, typically used to encode excluded site
+indices. See `siteselector` and `hopselector` for applications.
+
+"""
+not(i) = Not(i)
+not(i...) = Not(i)
 
 """
     siteselector(; region = missing, sublats = missing, indices = missing)
@@ -130,6 +144,14 @@ collections are given, they are flattened into a single one. Possible combinatio
     indices = [1, 2, 3]             # Same as above
     indices = 1:3                   # Same as above
     indices = (1:3, 7, 8)           # Sites 1, 2, 3, 7 or 8
+
+Additionally, indices or sublattices can be wrapped in `not` to exclude them (see `not`):
+
+    sublats = not(:A)               # Any sublat different from :A
+    sublats = not(:A, :B)           # Any sublat different from :A and :B
+    indices = not(8)                # Any site index different from 8
+    indices = not(1, 3:4)           # Any site index different from 1, 3 or 4
+    indices = (not(3:4), 4:6)       # Any site different from 3 and 4, *or* equal to 4, 5 or 6
 """
 siteselector(; region = missing, sublats = missing, indices = missing) =
     SiteSelector(region, sublats, indices)
@@ -173,6 +195,13 @@ The keyword `indices` accepts a single `src => dest` pair or a collection thereo
     indices = [(1, 2) .=> (2, 1)]       # Broadcasted pairs, same as above
     indices = [1:10 => 20:25, 3 => 30]  # Direct product, any hopping from sites 1:10 to sites 20:25, or from 3 to 30
 
+Additionally, indices or sublattices can be wrapped in `not` to exclude them (see `not`):
+
+    sublats = not(:A => :B, :B => :A)   # Any sublat pairs different from :A => :B or :B => :A
+    sublats = not(:A) => :B             # Any sublat pair s1 => s2 with s1 different from :A and s2 equal to :B
+    indices = not(8 => 9)               # Any site indices different from 8 => 9
+    indices = 1 => not(3:4)             # Any site pair 1 => s with s different from 3, 4
+
 """
 hopselector(; region = missing, sublats = missing, dn = missing, range = missing, indices = missing) =
     HopSelector(region, sublats, sanitize_dn(dn), sanitize_range(range), indices)
@@ -207,6 +236,7 @@ function resolve(s::HopSelector, lat::AbstractLattice)
 end
 
 resolve_sublats(::Missing, lat) = missing # must be resolved to iterate over sublats
+resolve_sublats(n::Not, lat) = Not(resolve_sublats(n.i, lat))
 resolve_sublats(s, lat) = resolve_sublat_name.(s, Ref(lat))
 
 resolve_range(r::Tuple, lat) = sanitize_range(_resolve_range.(r, Ref(lat)))
@@ -223,8 +253,11 @@ resolve_sublat_name(s, lat) =
     throw(ErrorException( "Unexpected format $s for `sublats`, see `onsite` for supported options"))
 
 resolve_sublat_pairs(::Missing, lat) = missing
+resolve_sublat_pairs(n::Not, lat) = Not(resolve_sublat_pairs(n.i, lat))
 resolve_sublat_pairs(s::Tuple, lat) = resolve_sublat_pairs.(s, Ref(lat))
-resolve_sublat_pairs((src, dst)::Pair, lat) = resolve_sublat_name.(src, Ref(lat)) => resolve_sublat_name.(dst, Ref(lat))
+resolve_sublat_pairs((src, dst)::Pair, lat) = _resolve_sublat_pairs(src, lat) => _resolve_sublat_pairs(dst, lat)
+_resolve_sublat_pairs(n::Not, lat) = Not(_resolve_sublat_pairs(n.i, lat))
+_resolve_sublat_pairs(p, lat) = resolve_sublat_name.(p, Ref(lat))
 
 resolve_sublat_pairs(s, lat) =
     throw(ErrorException( "Unexpected format $s for `sublats`, see `hopping` for supported options"))
@@ -292,23 +325,21 @@ is_below_min_range((i, j), (dni, dnj), (rmin, rmax)::Tuple, lat) =
     norm(siteposition(i, dni, lat) - siteposition(j, dnj, lat)) < rmin
 is_below_min_range(inds, dn, range, lat) = false
 
-# There are no sublat ranges, so supporting (:A, (:B, :C)) is not necessary
-isinsublats(s::Integer, ::Missing) = true
-isinsublats(s::Integer, sublats) = s in sublats
-isinsublats(ss::Pair, ::Missing) = true
-isinsublats((i, j)::Pair, (is, js)::Pair) = i in is && j in js
-isinsublats(pair::Pair, sublats) = any(is -> isinsublats(pair, is), sublats)
+# Sublats are resolved, so they are equivalent to indices
+isinsublats(i, j) = isinindices(i,j)
 
-# Here we can have (1, 2:3), apart from ((1,2) .=> (3,4), 1=>2) and ((1,2) => (3,4), 1=>2)
+# Here we can have (1, 2:3)
+isinindices(i::Integer, n::Not) = !isinindices(i, n.i)
 isinindices(i::Integer, ::Missing) = true
 isinindices(i::Integer, j::Integer) = i == j
 isinindices(i::Integer, r::NTuple{N,Integer}) where {N} = i in r
-isinindices(i::Integer, inds::Tuple) = any(is -> i in is, inds)
+isinindices(i::Integer, inds::Tuple) = any(is -> isinindices(i, is), inds)
 isinindices(i::Integer, r) = i in r
-
+# Here we cover ((1,2) .=> (3,4), 1=>2) and ((1,2) => (3,4), 1=>2)
+isinindices(is::Pair, n::Not) = !isinindices(is, n.i)
 isinindices(is::Pair, ::Missing) = true
 # Here is => js could be (1,2) => (3,4) or 1:2 => 3:4, not simply 1 => 3
-isinindices((j, i)::Pair, (js, is)::Pair) = i in is && j in js
+isinindices((j, i)::Pair, (js, is)::Pair) = isinindices(i, is) && isinindices(j, js)
 # Here we support ((1,2) .=> (3,4), 3=>4) or ((1,2) .=> 3:4, 3=>4)
 isinindices(pair::Pair, pairs) = any(p -> isinindices(pair, p), pairs)
 
@@ -369,6 +400,8 @@ siteindex_candidates(rs, sublat) =
 # indices can be missing, 1, 2:3, (1,2,3) or (1, 2:3)
 # we also support (1, (2,3)) and [1, 2, 3], useful for source_candidates below
 _siteindex_candidates(::Missing, sr) = sr
+# Better not exclude candidates with not, since that can lead to collecting a huge range
+_siteindex_candidates(::Not, sr) = sr
 _siteindex_candidates(i::Integer, sr) = ifelse(i in sr, (i,), ())
 _siteindex_candidates(inds::AbstractUnitRange, sr) = intersect(inds, sr)
 _siteindex_candidates(inds::NTuple{N,Integer}, sr) where {N} = filter(in(sr), inds)
@@ -378,6 +411,7 @@ _siteindex_candidates(inds, sr) = Iterators.flatten(_siteindex_candidates.(inds,
 source_candidates(rs::ResolvedSelector{<:HopSelector}, sublat) =
     _source_candidates(rs.selector.indices, siterange(rs.lattice, sublat))
 _source_candidates(::Missing, sr) = sr
+_source_candidates(::Not, sr) = sr
 _source_candidates(inds, sr) = _siteindex_candidates(_recursivefirst(inds), sr)
 
 _recursivefirst(p::Pair) = first(p)
