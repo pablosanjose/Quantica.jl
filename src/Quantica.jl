@@ -19,7 +19,7 @@ using SparseArrays: getcolptr, AbstractSparseMatrix
 
 export sublat, bravais, lattice, dims, supercell, unitcell,
        hopping, onsite, @onsite!, @hopping!, parameters, siteselector, hopselector, nrange,
-       sitepositions, siteindices,
+       sitepositions, siteindices, not,
        ket, randomkets,
        hamiltonian, parametric, bloch, bloch!, optimize!, similarmatrix,
        flatten, wrap, transform!, combine,

@@ -1,28 +1,7 @@
 using Quantica: TightbindingModel, OnsiteTerm, HoppingTerm, padtotype, Selector, sublats, resolve, isinindices, isinsublats
 
-@testset "selectors" begin
-    @test  isinsublats(1, missing)
-    @test  isinsublats(1, 1)
-    @test !isinsublats(2, 1)
-    @test  isinsublats(1, (1,2))
-    @test !isinsublats(3, (1,2))
-    # @test  isinsublats(3, (1, 3:4))   # Unsupported
-    # @test !isinsublats(2, (1, 3:4))   # Unsupported
-    # @test !isinsublats(3, [1:2, 5:6]) # Unsupported
-
-    @test  isinsublats(1=>2, missing)
-    @test  isinsublats(1=>2, 1=>2)
-    @test !isinsublats(1=>2, 1=>3)
-    @test  isinsublats(1=>2, (1=>2, 3=>4))
-    @test !isinsublats(1=>2, (1=>3, 2=>1))
-    @test  isinsublats(1=>3, 1:2=>3:4)
-    @test !isinsublats(1=>2, 1:2=>3:4)
-    @test  isinsublats(1=>2, (1:2=>3:4, 1=>2))
-    @test !isinsublats(3=>4, (1:2=>3:4, 1=>2))
-    @test  isinsublats(1=>2, (1:2=>3:4, (1,2) .=> (2,1)))
-    @test  isinsublats(1=>3, (1:2=>3:4, 1:2 .=> (2,1)))
-    @test !isinsublats(3=>4, (1:2=>3:4, 1:2 .=> (2,1), 4=>3))
-
+@testset "selector membership" begin
+    @test  isinindices(1, missing)
     @test  isinindices(1, 1)
     @test !isinindices(2, 1)
     @test  isinindices(1, (1,2))
@@ -30,6 +9,20 @@ using Quantica: TightbindingModel, OnsiteTerm, HoppingTerm, padtotype, Selector,
     @test  isinindices(3, (1, 3:4))
     @test !isinindices(2, (1, 3:4))
     @test !isinindices(3, [1:2, 5:6])
+
+    @test !isinindices(1, not(missing))
+    @test !isinindices(1, not(1))
+    @test  isinindices(2, not(1))
+    @test !isinindices(1, not(1,2))
+    @test  isinindices(3, not(1,2))
+    @test !isinindices(3, not(1, 3:4))
+    @test  isinindices(2, not(1, 3:4))
+    @test  isinindices(3, not([1:2, 5:6]))
+
+    @test  isinsublats(3, (not(1,2), 3))
+    @test  isinsublats(3, (not(1,2), 4))
+    @test !isinsublats(2, (not(1,2), 3))
+    @test  isinsublats(3, (not(1,2), 3))
 
     @test  isinindices(1=>2, 1=>2)
     @test !isinindices(1=>2, 1=>3)
@@ -43,6 +36,24 @@ using Quantica: TightbindingModel, OnsiteTerm, HoppingTerm, padtotype, Selector,
     @test  isinindices(1=>3, (1:2=>3:4, 1:2 .=> (2,1)))
     @test !isinindices(3=>4, (1:2=>3:4, 1:2 .=> (2,1), 4=>3))
 
+    @test !isinindices(1=>2, not(1=>2))
+    @test  isinindices(1=>2, not(1=>3))
+    @test !isinindices(1=>2, not(1=>2, 3=>4))
+    @test  isinindices(1=>2, not(1=>3, 2=>1))
+    @test !isinindices(1=>3, not(1:2=>3:4))
+    @test  isinindices(1=>2, not(1:2=>3:4))
+    @test !isinindices(1=>2, not(1:2=>3:4, 1=>2))
+    @test  isinindices(3=>4, not(1:2=>3:4, 1=>2))
+    @test !isinindices(1=>2, not(1:2=>3:4, (1,2) .=> (2,1)))
+    @test !isinindices(1=>3, not(1:2=>3:4, 1:2 .=> (2,1)))
+    @test  isinindices(3=>4, not(1:2=>3:4, 1:2 .=> (2,1), 4=>3))
+
+    @test  isinindices(3=>4, not(1:2)=>3:4)
+    @test !isinindices(1=>4, (not(1:2)=>3:4, 1:2 .=> (2,1), 4=>3))
+    @test  isinindices(3=>4, (not(1:2)=>3:4, 1:2 .=> (2,1), 4=>3))
+end
+
+@testset "selector usage" begin
     lat = LatticePresets.honeycomb() |> unitcell(2)
     rs = (r->true, missing)
     ss = (:A, (:A, :B), missing)
@@ -71,6 +82,11 @@ using Quantica: TightbindingModel, OnsiteTerm, HoppingTerm, padtotype, Selector,
             @test in(1=>4, rsel)
         end
     end
+
+    h  = hamiltonian(lat, hopping(1, sublats = not(:A => :B)))
+    h´ = hamiltonian(lat, hopping(1, sublats = :A => :B))
+    @test !ishermitian(h) && !ishermitian(h´)
+    @test bloch(h) == transpose(bloch(h´))
 end
 
 @testset "term algebra" begin
