@@ -1,11 +1,11 @@
 using .VegaLite
 
 """
-    vlplot(b::Bandstructure{1}; size = 640, points = false, labels = ("φ/2π", "ε"), scaling = (1/2π, 1))
+    vlplot(b::Bandstructure{1}; size = 640, points = false, labels = ("φ/2π", "ε"), scaling = (1/2π, 1), range = missing)
 
 Plots the 1D bandstructure `b` using VegaLite.
 
-    vlplot(h::Hamiltonian; size = 800, labels = ("x", "y"), axes::Tuple{Int,Int} = (1,2))
+    vlplot(h::Hamiltonian; size = 800, labels = ("x", "y"), axes::Tuple{Int,Int} = (1,2), range = missing)
 
 Plots the the Hamiltonian lattice projected along `axes` using VegaLite.
 
@@ -14,14 +14,16 @@ Plots the the Hamiltonian lattice projected along `axes` using VegaLite.
     - `points`: whether to plot points on line plots
     - `labels`: labels for the x and y plot axes
     - `scaling`: `(scalex, scaley)` scalings for the x (Bloch phase) and y (energy) variables
+    - `range`: `(ymin, ymax)` or `((xmin, xmax), (ymin, ymax))` to constrain plot range
     - `axes`: lattice axes to project onto the plot x-y plane
 """
-function VegaLite.vlplot(b::Bandstructure; labels = ("φ", "ε"), scaling = (1, 1), size = 640, points = false)
+function VegaLite.vlplot(b::Bandstructure; labels = ("φ", "ε"), scaling = (1, 1), size = 640, points = false, range = missing)
     labelx, labely = labels
     table = bandtable(b, make_it_two(scaling))
     sizes = make_it_two(size)
     corners = _corners(table)
-    (domainx, domainy), _ = domain_size(corners, size)
+    range´ = sanitize_plotrange(range)
+    (domainx, domainy), _ = domain_size(corners, size, range´)
     p = table |> vltheme(sizes, points) + @vlplot(
         mark = :line,
         x = {:x, scale = {domain = domainx, nice = false}, title = labelx},
@@ -39,10 +41,11 @@ function bandtable(b::Bandstructure{1}, (scalingx, scalingy) = (1, 1))
 end
 
 function VegaLite.vlplot(h::Hamiltonian{LA};
-                         labels = ("x","y"), size = 800, axes::Tuple{Int,Int} = (1,2)) where {E,LA<:Lattice{E}}
+                         labels = ("x","y"), size = 800, axes::Tuple{Int,Int} = (1,2), range = missing) where {E,LA<:Lattice{E}}
     table = linkstable(h, axes)
     corners = _corners(table)
-    (domainx, domainy), sizes = domain_size(corners, size)
+    range´ = sanitize_plotrange(range)
+    (domainx, domainy), sizes = domain_size(corners, size, range´)
     p = table |> vltheme(sizes) +
         @vlplot(:rule, color = :sublat, opacity = {:opacity, legend = nothing},
             transform = [{filter = "datum.islink"}],
@@ -129,10 +132,10 @@ function _corners(table)
     return min´, max´
 end
 
-function domain_size(corners, size)
+function domain_size(corners, size, (rangex, rangey))
     sizex, sizey = make_it_two(size)
-    domainx = (corners[1][1], corners[2][1])
-    domainy = (corners[1][2], corners[2][2])
+    domainx = iclamp((corners[1][1], corners[2][1]), rangex)
+    domainy = iclamp((corners[1][2], corners[2][2]), rangey)
     dx = domainx[2]-domainx[1]
     dy = domainy[2]-domainy[1]
     if dx > dy
@@ -144,6 +147,10 @@ function domain_size(corners, size)
     end
     return (domainx, domainy), (sizex, sizey)
 end
+
+sanitize_plotrange(::Missing) = (missing, missing)
+sanitize_plotrange(yrange::Tuple{Number, Number}) = (missing, yrange)
+sanitize_plotrange(ranges::NTuple{2,Tuple{Number, Number}}) = ranges
 
 make_it_two(x::Number) = (x, x)
 make_it_two(x::Tuple{Number,Number}) = x
