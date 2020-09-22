@@ -133,9 +133,9 @@ function pinverse(m::SMatrix)
     return inv(qrm.R) * qrm.Q'
 end
 
-_blockdiag(s1::SMatrix{M}, s2::SMatrix{N}) where {N,M} = hcat(
-    ntuple(j->vcat(s1[:,j], zero(s2[:,j])), Val(M))...,
-    ntuple(j->vcat(zero(s1[:,j]), s2[:,j]), Val(N))...)
+_blockdiag(s1::SMatrix{E1,L1,T1}, s2::SMatrix{E2,L2,T2}) where {E1,L1,T1,E2,L2,T2} = hcat(
+    ntuple(j->vcat(s1[:,j], zero(SVector{E2,T2})), Val(L1))...,
+    ntuple(j->vcat(zero(SVector{E1,T1}), s2[:,j]), Val(L2))...)
 
 function isgrowing(vs::AbstractVector, i0 = 1)
     i0 > length(vs) && return true
@@ -394,3 +394,6 @@ function _fast_sparse_muladd!(dst::AbstractMatrix{T}, src::SparseMatrixCSC, α =
 end
 
 rclamp(r1::UnitRange, r2::UnitRange) = isempty(r1) ? r1 : clamp(minimum(r1), extrema(r2)...):clamp(maximum(r1), extrema(r2)...)
+
+iclamp(minmax, r::Missing) = minmax
+iclamp((x1, x2), (xmin, xmax)) = (max(x1, xmin), min(x2, xmax))
