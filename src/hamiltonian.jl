@@ -757,6 +757,7 @@ end
 function unitcell(ham::Hamiltonian{LA,L}; modifiers = ()) where {E,L,T,L´,LA<:Superlattice{E,L,T,L´}}
     lat = ham.lattice
     sc = lat.supercell
+    isc = inv_supercell(bravais(lat), sc.matrix)
     modifiers´ = resolve.(ensuretuple(modifiers), Ref(lat))
     mapping = OffsetArray{Int}(undef, sc.sites, sc.cells.indices...) # store supersite indices newi
     mapping .= 0
@@ -765,13 +766,13 @@ function unitcell(ham::Hamiltonian{LA,L}; modifiers = ()) where {E,L,T,L´,LA<:S
     B = blocktype(ham)
     S = typeof(SparseMatrixBuilder{B}(dim, dim))
     harmonic_builders = HamiltonianHarmonic{L´,B,S}[]
-    pinvint = pinvmultiple(sc.matrix)
+    # pinvint = pinvmultiple(sc.matrix)
     foreach_supersite(lat) do s, source_i, source_dn, newcol
         for oldh in ham.harmonics
             rows = rowvals(oldh.h)
             vals = nonzeros(oldh.h)
             target_dn = source_dn + oldh.dn
-            super_dn = new_dn(target_dn, pinvint)
+            super_dn = new_dn(target_dn, isc)
             wrapped_dn = wrap_dn(target_dn, super_dn, sc.matrix)
             newh = get_or_push!(harmonic_builders, super_dn, dim, newcol)
             for p in nzrange(oldh.h, source_i)
@@ -800,6 +801,9 @@ function get_or_push!(hs::Vector{<:HamiltonianHarmonic{L,B,<:SparseMatrixBuilder
     push!(hs, newh)
     return newh
 end
+
+inv_supercell(br, sc::SMatrix{L,L´}) where {L,L´} = inv(extended_supercell(br, sc))[SVector{L´}(1:L´), :]
+new_dn(oldn, isc) = floor.(Int, isc * oldn)
 
 wrap_dn(olddn::SVector, newdn::SVector, supercell::SMatrix) = olddn - supercell * newdn
 
