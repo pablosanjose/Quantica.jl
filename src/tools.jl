@@ -2,10 +2,12 @@ toSMatrix() = SMatrix{0,0,Float64}()
 toSMatrix(s) = toSMatrix(tuple(s))
 toSMatrix(ss::NTuple{M,NTuple{N,Number}}) where {N,M} = toSMatrix(SVector{N}.(ss))
 toSMatrix(ss::NTuple{M,SVector{N}}) where {N,M} = hcat(ss...)
-toSMatrix(::Type{T}, ss) where {T} = _toSMatrix(T, toSMatrix(ss))
+
+toSMatrix(::Type{T}, ss) where {T<:Number} = _toSMatrix(T, toSMatrix(ss))
 _toSMatrix(::Type{T}, s::SMatrix{N,M}) where {N,M,T} = convert(SMatrix{N,M,T}, s)
 # Dynamic dispatch
 toSMatrix(s::AbstractMatrix) = SMatrix{size(s,1), size(s,2)}(s)
+toSMatrix(s::AbstractVector) = toSMatrix(Tuple(s))
 
 toSVector(::Tuple{}) = SVector{0,Float64}()
 toSVector(v::SVector) = v
@@ -127,6 +129,8 @@ function pinvmultiple(s::SMatrix{L,L´}) where {L,L´}
     npinverse = round.(Int, n * pinverse)
     return npinverse, n
 end
+
+pinverse(::SMatrix{E,0,T}) where {E,T} = SMatrix{0,E,T}() # BUG: workaround StaticArrays bug SMatrix{E,0,T}()'
 
 function pinverse(m::SMatrix)
     qrm = qr(m)

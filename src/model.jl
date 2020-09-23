@@ -273,12 +273,16 @@ check_dn_dims(dns, lat::AbstractLattice{E,L}) where {E,L} =
     return ((i, i), (dn0, dn0)) in rs
 end
 
-Base.in(((i, j), (dni, dnj))::Tuple, rs::ResolvedSelector{<:SiteSelector}) =
-    isonsite((i, j), (dni, dnj)) && isinindices(i, rs.selector.indices) &&
+@inline Base.in(((i, j), (dni, dnj))::Tuple{Tuple,Tuple}, rs::ResolvedSelector{<:SiteSelector}) =
+    isonsite((i, j), (dni, dnj)) && (i, dni) in rs
+
+Base.in((i, dni)::Tuple{Integer,SVector}, rs::ResolvedSelector{<:SiteSelector}) =
+    isinindices(i, rs.selector.indices) &&
     isinregion(i, dni, rs.selector.region, rs.lattice) &&
     isinsublats(sublat(rs.lattice, i), rs.selector.sublats)
 
 Base.in((j, i)::Pair{<:Integer,<:Integer}, rs::ResolvedSelector{<:HopSelector}) = (i, j) in rs
+
 function Base.in(is::Tuple{Integer,Integer}, rs::ResolvedSelector{<:HopSelector, LA}) where {E,L,LA<:AbstractLattice{E,L}}
     dn0 = zero(SVector{L,Int})
     return (is, (dn0, dn0)) in rs
@@ -390,8 +394,12 @@ siteindices(lat::AbstractLattice, s::SiteSelector) =
     siteindices(resolve(s, lat))
 siteindices(rs::ResolvedSelector{<:SiteSelector}) =
     (i for i in siteindex_candidates(rs) if i in rs)
-siteindices(rs::ResolvedSelector{<:SiteSelector}, sublat) =
+siteindices(rs::ResolvedSelector{<:SiteSelector}, sublat::Int) =
     (i for i in siteindex_candidates(rs, sublat) if i in rs)
+siteindices(rs::ResolvedSelector{<:SiteSelector}, sublat, dn) =
+    (i for i in siteindex_candidates(rs, sublat) if (i, dn) in rs)
+siteindices(rs::ResolvedSelector{<:SiteSelector}, dn::SVector) =
+    (i for i in siteindex_candidates(rs) if (i, dn) in rs)
 
 # Given a sublattice, which site indices should be checked by selector?
 siteindex_candidates(rs) = eachindex(allsitepositions(rs.lattice))
@@ -829,12 +837,12 @@ order of application usually matters).
     `@hopping!`, `parametric`
 """
 macro onsite!(kw, f)
-    f, N, params = get_f_N_params(f, "Only @onsite!(args -> body; kw...) syntax supported")
+    f, N, params = get_f_N_params(f, "Only @onsite!(args -> body; kw...) syntax supported. Mind the `;`.")
     return esc(:(Quantica.OnsiteModifier(Quantica.ParametricFunction{$N}($f, $(Val(params))), Quantica.siteselector($kw))))
 end
 
 macro onsite!(f)
-    f, N, params = get_f_N_params(f, "Only @onsite!(args -> body; kw...) syntax supported")
+    f, N, params = get_f_N_params(f, "Only @onsite!(args -> body; kw...) syntax supported.  Mind the `;`.")
     return esc(:(Quantica.OnsiteModifier(Quantica.ParametricFunction{$N}($f, $(Val(params))), Quantica.siteselector())))
 end
 
@@ -856,12 +864,12 @@ order of application usually matters).
     `@onsite!`, `parametric`
 """
 macro hopping!(kw, f)
-    f, N, params = get_f_N_params(f, "Only @hopping!(args -> body; kw...) syntax supported")
+    f, N, params = get_f_N_params(f, "Only @hopping!(args -> body; kw...) syntax supported Mind the `;`.")
     return esc(:(Quantica.HoppingModifier(Quantica.ParametricFunction{$N}($f, $(Val(params))), Quantica.hopselector($kw))))
 end
 
 macro hopping!(f)
-    f, N, params = get_f_N_params(f, "Only @hopping!(args -> body; kw...) syntax supported")
+    f, N, params = get_f_N_params(f, "Only @hopping!(args -> body; kw...) syntax supported Mind the `;`.")
     return esc(:(Quantica.HoppingModifier(Quantica.ParametricFunction{$N}($f, $(Val(params))), Quantica.hopselector())))
 end
 

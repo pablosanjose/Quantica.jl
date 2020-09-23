@@ -328,7 +328,6 @@ Base.isequal(s1::Supercell, s2::Supercell) =
     isequal(s1.cells, s2.cells) && isequal(s1.mask, s2.mask)
 
 ## Boolean masking
-
 (Base.:&)(s1::Supercell, s2::Supercell) = boolean_mask_supercell(Base.:&, s1, s2)
 (Base.:|)(s1::Supercell, s2::Supercell) = boolean_mask_supercell(Base.:|, s1, s2)
 (Base.xor)(s1::Supercell, s2::Supercell) = boolean_mask_supercell(Base.xor, s1, s2)
@@ -403,7 +402,6 @@ function foreach_supersite(f::F, lat::Superlattice) where {F<:Function}
 end
 
 ## Boolean masking
-
 (Base.:&)(s1::Superlattice, s2::Superlattice) = boolean_mask_superlattice(Base.:&, s1, s2)
 (Base.:|)(s1::Superlattice, s2::Superlattice) = boolean_mask_superlattice(Base.:|, s1, s2)
 (Base.xor)(s1::Superlattice, s2::Superlattice) = boolean_mask_superlattice(Base.xor, s1, s2)
@@ -455,15 +453,6 @@ sublatsites(lat::AbstractLattice) = sublatsites(lat.unitcell)
 enumeratesites(lat::AbstractLattice, sublat) = enumeratesites(lat.unitcell, sublat)
 
 sublatname(lat::AbstractLattice, s = sublats(lat)) = sublatname(lat.unitcell, s)
-
-# function boundingbox(lat::AbstractLattice{E,L}, dns = (zero(SVector{L,Int}),)) where {E,L}
-#     minn, maxn = min0, max0 = boundingbox(lat.unitcell)
-#     for dn in dns
-#         minn = min.(minn, min0 + bravais(lat) * dn)
-#         maxn = max.(maxn, max0 + bravais(lat) * dn)
-#     end
-#     return minn, maxn
-# end
 
 nsites(lat::AbstractLattice) = nsites(lat.unitcell)
 nsites(lat::AbstractLattice, sublat) = nsites(lat.unitcell, sublat)
@@ -546,17 +535,18 @@ end
 # supercell
 #######################################################################
 """
-    supercell(lat::AbstractLattice{E,L}, v::NTuple{L,Integer}...; region = missing, seed = missing)
-    supercell(lat::AbstractLattice{E,L}, sc::SMatrix{L,L´,Int}; region = missing, seed = missing)
+    supercell(lat::AbstractLattice{E,L}, v::NTuple{L,Integer}...; seed = missing, kw...)
+    supercell(lat::AbstractLattice{E,L}, sc::SMatrix{L,L´,Int}; seed = missing, kw...)
 
 Generates a `Superlattice` from an `L`-dimensional lattice `lat` with Bravais vectors
 `br´= br * sc`, where `sc::SMatrix{L,L´,Int}` is the integer supercell matrix with the `L´`
 vectors `v`s as columns. If no `v` are given, the superlattice will be bounded.
 
-Only sites at position `r` such that `region(r) == true` will be included in the supercell.
-The search for included sites will start from point `seed::Union{Tuple,SVector}`, or the
-origin if missing. If `region` is missing, a Bravais unit cell perpendicular to the `v` axes
-will be selected for the `L-L´` non-periodic directions.
+Only sites selected by `siteselector(; kw...)` will be included in the supercell (see
+`siteselector` for details on the available keywords `kw`). The search for included sites
+will start from point `seed::Union{Tuple,SVector}`, or the origin if `seed = missing`. If no
+keyword `region` is given in `kw`, a Bravais unit cell perpendicular to the `v` axes will be
+selected for the `L-L´` non-periodic directions.
 
     supercell(lattice::AbstractLattice{E,L}, factor::Integer; kw...)
 
@@ -611,97 +601,95 @@ Superlattice{2,2,Float64,2} : 2D lattice in 2D space, filling a 2D supercell
 ```
 
 # See also:
-    `unitcell`
+    `unitcell`, `siteselector`
 """
-supercell(v::Union{SMatrix,Tuple,SVector,Integer}...; kw...) = lat -> supercell(lat, v...; kw...)
+supercell(v...; kw...) = lat -> supercell(lat, v...; kw...)
 
-supercell(lat::AbstractLattice{E,L}, v::Tuple{} = (); kw...) where {E,L} =
-    supercell(lat, SMatrix{L,0,Int}(); kw...)
-supercell(lat::AbstractLattice{E,L}, factors::Vararg{<:Integer,L}; kw...) where {E,L} =
-    _supercell(lat, factors...)
-supercell(lat::AbstractLattice{E,L}, factors::Vararg{<:Integer,L´}; kw...) where {E,L,L´} =
-    throw(ArgumentError("Provide either a single scaling factor or one for each of the $L lattice dimensions"))
-supercell(lat::AbstractLattice{E,L}, factor::Integer; kw...) where {E,L} =
-    _supercell(lat, ntuple(_ -> factor, Val(L))...)
-supercell(lat::AbstractLattice, vecs::NTuple{L,Integer}...; region = missing, seed = missing) where {L} =
-    _supercell(lat, toSMatrix(Int, vecs), region, seed)
-supercell(lat::AbstractLattice, s::SMatrix; region = missing, seed = missing) =
-    _supercell(lat, s, region, seed)
-
-function _supercell(lat::AbstractLattice{E,L}, factors::Vararg{Integer,L}) where {E,L}
-    scmatrix = SMatrix{L,L,Int}(Diagonal(SVector(factors)))
-    sites = 1:nsites(lat)
-    cells = CartesianIndices((i -> 0 : i - 1).(factors))
-    mask = missing
-    supercell = Supercell(scmatrix, sites, cells, mask)
-    return Superlattice(lat.bravais, lat.unitcell, supercell)
+function supercell(lat::Lattice{E,L}, v...; seed = missing, kw...) where {E,L}
+    scmatrix = sanitize_supercell(Val(L), v...)
+    pararegion, perpregion = supercell_regions(lat, scmatrix)
+    perpselector = siteselector(; region = perpregion, kw...)  # user kw can override region
+    return _superlat(lat, scmatrix, pararegion, perpselector, seed)
 end
 
-function _supercell(lat::AbstractLattice{E,L}, scmatrix::SMatrix{L,L´,Int}, region, seed) where {E,L,L´}
-    brmatrix = bravais(lat)
-    regionfunc = region === missing ? ribbonfunc(brmatrix, scmatrix) : region
-    in_supercell_func = is_perp_dir(scmatrix)
-    cells = supercell_cells(lat, regionfunc, in_supercell_func, seed)
+# Fast-path methods
+supercell(lat::Lattice{E,L}, factors::Vararg{Integer,L}) where {E,L} =
+    _superlat_fastpath(lat, factors)
+supercell(lat::Lattice{E,L}, factor::Integer) where {E,L} =
+    _superlat_fastpath(lat, filltuple(factor, Val(L)))
+supercell(lat::Lattice) = _superlat_fastpath(lat, ())
+
+sanitize_supercell(::Val{L}) where {L} = SMatrix{L,0,Int}()
+sanitize_supercell(::Val{L}, ::Tuple{}) where {L} = SMatrix{L,0,Int}()
+sanitize_supercell(::Val{L}, v::NTuple{L,Int}...) where {L} = toSMatrix(Int, v)
+sanitize_supercell(::Val{L}, s::SMatrix{L}) where {L} = toSMatrix(Int, s)
+sanitize_supercell(::Val{L}, v::Integer) where {L} = SMatrix{L,L,Int}(v*I)
+sanitize_supercell(::Val{L}, ss::Integer...) where {L} = SMatrix{L,L,Int}(Diagonal(SVector(ss)))
+sanitize_supercell(::Val{L}, v) where {L} =
+    throw(ArgumentError("Improper supercell specification $v for an $L lattice dimensions, see `supercell`"))
+
+function supercell_regions(lat::Lattice{E,L,T}, sc::SMatrix{L,L´}) where {E,L,T,L´}
+    br = bravais(lat)
+    extsc = extended_supercell(br, sc)
+    projector = pinverse(br * extsc) # E need not be equal to L, hence pseudoinverse
+    siteshift = ntuple(Val(L)) do i
+        minimum((projector * r)[i] for r in allsitepositions(lat)) - sqrt(eps(T))
+    end
+    pararegion(r) = all(i -> 0 <= (projector * r)[i] - siteshift[i] < 1, 1:L´)
+    perpregion(r) = all(i -> 0 <= (projector * r)[i] - siteshift[i] < 1, (1+L´):L)
+    return pararegion, perpregion
+end
+
+# supplements supercell with most orthogonal bravais axes
+function extended_supercell(bravais, supercell::SMatrix{L,L´}) where {L,L´}
+    L == L´ && return supercell
+    bravais_new = bravais * supercell
+    # νnorm are the L projections of old bravais on new bravais axis subspace
+    ν = bravais' * bravais_new  # L×L´
+    νnorm = SVector(ntuple(row -> norm(ν[row,:]), Val(L)))
+    νorder = sortperm(νnorm)
+    ext_axes = hcat(ntuple(i -> unitvector(SVector{L,Int}, νorder[i]), Val(L-L´))...)
+    ext_supercell = hcat(supercell, ext_axes)
+    return ext_supercell
+end
+
+function _superlat(lat, scmatrix, pararegion, selector_perp, seed)
+    br = bravais(lat)
+    rsel = resolve(selector_perp, lat)
+    cells = _cell_iter(lat, pararegion, rsel, seed)
     ns = nsites(lat)
-    mask = OffsetArray(BitArray(undef, ns, size(cells)...), 1:ns, cells.indices...)
+    mask = OffsetArray(falses(ns, size(cells)...), 1:ns, cells.indices...)
     @inbounds for dn in cells
         dntup = Tuple(dn)
-        dnvec = toSVector(Int, dntup)
-        in_supercell = in_supercell_func(dnvec)
-        if !in_supercell
-            mask[:, dntup...] .= false
-            continue
-        end
-        r0 = brmatrix * dnvec
-        for (i, site) in enumerate(allsitepositions(lat))
-            r = site + r0
-            mask[i, dntup...] = in_supercell && regionfunc(r)
+        dnvec = toSVector(dntup)
+        for i in siteindices(rsel, dnvec)
+            r = siteposition(i, dnvec, lat)
+            # site i is already in perpregion through rsel. Is it also in pararegion?
+            mask[i, dntup...] = pararegion(r)
         end
     end
     supercell = Supercell(scmatrix, 1:ns, cells, all(mask) ? missing : mask)
     return Superlattice(lat.bravais, lat.unitcell, supercell)
 end
 
-# This is true whenever old ndist is perpendicular to new lattice
-is_perp_dir(supercell) = let invs = pinvmultiple(supercell); dn -> iszero(new_dn(dn, invs)); end
-
-new_dn(oldndist, (pinvs, n)) = fld.(pinvs * oldndist, n)
-new_dn(oldndist, ::Tuple{<:SMatrix{0,0},Int}) = SVector{0,Int}()
-
-function ribbonfunc(bravais::SMatrix{E,L,T}, supercell::SMatrix{L,L´}) where {E,L,T,L´}
-    L <= L´ && return r -> true
-    # real-space supercell axes + all space
-    s = hcat(bravais * supercell, SMatrix{E,E,T}(I))
-    q = qr(s).Q
-    # last vecs in Q are orthogonal to axes
-    os = ntuple(i -> SVector(q[:,i+L´]), Val(E-L´))
-    # range of projected bravais, including zero
-    ranges = (o -> extrema(vcat(SVector(zero(T)), bravais' * o)) .- sqrt(eps(T))).(os)
-    # projector * r gives the projection of r on orthogonal vectors
-    projector = hcat(os...)'
-    # ribbon defined by r's with projection within ranges for all orthogonal vectors
-    regionfunc(r) = all(first.(ranges) .<= Tuple(projector * r) .< last.(ranges))
-    return regionfunc
-end
-
-function supercell_cells(lat::Lattice{E,L}, regionfunc, in_supercell_func, seed) where {E,L}
-    br = bravais(lat)
-    seed´ = seed === missing ? zero(SVector{L,Int}) : seedcell(SVector{E}(seed), br)
+function _cell_iter(lat::Lattice{E,L}, pararegion, rsel_perp, seed) where {E,L}
+    seed´ = seed === missing ? zero(SVector{L,Int}) : seedcell(SVector{E}(seed), bravais(lat))
     iter = BoxIterator(seed´)
     foundfirst = false
     counter = 0
-    for dn in iter
+    br = bravais(lat)
+    for dnvec in iter
         found = false
         counter += 1; counter == TOOMANYITERS &&
             throw(ArgumentError("`region` seems unbounded (after $TOOMANYITERS iterations)"))
-        in_supercell = in_supercell_func(toSVector(Int, dn))
-        r0 = br * toSVector(Int, dn)
-        for site in allsitepositions(lat)
-            r = r0 + site
-            found = in_supercell && regionfunc(r)
-            if found || !foundfirst
-                acceptcell!(iter, dn)
-                foundfirst = found
+        foundfirst || acceptcell!(iter, dnvec)
+        for i in siteindices(rsel_perp, dnvec)
+            r = siteposition(i, dnvec, lat)
+            # site i is already in perpregion through rsel. Is it also in pararegion?
+            found_in_cell = pararegion(r)
+            if found_in_cell
+                acceptcell!(iter, dnvec)
+                foundfirst = true
                 break
             end
         end
@@ -713,22 +701,35 @@ end
 seedcell(seed::NTuple{N,Any}, brmat) where {N} = seedcell(SVector{N}(seed), brmat)
 seedcell(seed::SVector{E}, brmat::SMatrix{E}) where {E} = round.(Int, brmat \ seed)
 
+function _superlat_fastpath(lat::Lattice{E,L}, factors) where {E,L}
+    scmatrix = sanitize_supercell(Val(L), factors...)
+    sites = 1:nsites(lat)
+    cells = _cells_fastpath(Val(L), factors)
+    mask = missing
+    supercell = Supercell(scmatrix, sites, cells, mask)
+    return Superlattice(lat.bravais, lat.unitcell, supercell)
+end
+
+_cells_fastpath(::Val, factors) = CartesianIndices((i -> 0 : i - 1).(factors))
+_cells_fastpath(::Val{L}, factors::Tuple{}) where {L} = CartesianIndices(filltuple(0:0, Val(L)))
+
 #######################################################################
 # unitcell
 #######################################################################
 """
-    unitcell(lat::Lattice{E,L}, v::NTuple{L,Integer}...; region = missing, seed = missing)
-    unitcell(lat::Lattice{E,L}, uc::SMatrix{L,L´,Int}; region = missing, seed = missing)
+    unitcell(lat::Lattice{E,L}, v::NTuple{L,Integer}...; seed = missing, kw...)
+    unitcell(lat::Lattice{E,L}, uc::SMatrix{L,L´,Int}; seed = missing, kw...)
 
 Generates a `Lattice` from an `L`-dimensional lattice `lat` and a larger unit cell, such
 that its Bravais vectors are `br´= br * uc`. Here `uc::SMatrix{L,L´,Int}` is the integer
 unitcell matrix, with the `L´` vectors `v`s as columns. If no `v` are given, the new lattice
 will be bounded.
 
-Only sites at position `r` such that `region(r) == true` will be included in the new
-unitcell. The search for included sites will start from point `seed::Union{Tuple,SVector}`,
-or the origin if missing. If `region` is missing, a Bravais unitcell perpendicular to the
-`v` axes will be selected for the `L-L´` non-periodic directions.
+Only sites selected by `siteselector(; kw...)` will be included in the supercell (see
+`siteselector` for details on the available keywords `kw`). The search for included sites
+will start from point `seed::Union{Tuple,SVector}`, or the origin if `seed = missing`. If no
+keyword `region` is given in `kw`, a Bravais unit cell perpendicular to the `v` axes will be
+selected for the `L-L´` non-periodic directions.
 
     unitcell(lattice::Lattice{E,L}, factor::Integer; kw...)
 
@@ -793,7 +794,7 @@ Lattice{2,2,Float64} : 2D lattice in 2D space
 ```
 
 # See also:
-    `supercell`
+    `supercell`, `siteselector`
 """
 unitcell(v::Union{SMatrix,Tuple,SVector,Integer}...; kw...) = lat -> unitcell(lat, v...; kw...)
 unitcell(lat::Lattice, args...; kw...) = unitcell(supercell(lat, args...; kw...))

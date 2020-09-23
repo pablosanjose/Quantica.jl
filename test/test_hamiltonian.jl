@@ -1,5 +1,5 @@
 using LinearAlgebra: diag, norm
-using Quantica: Hamiltonian, ParametricHamiltonian, nhoppings
+using Quantica: Hamiltonian, ParametricHamiltonian, nhoppings, nonsites, nsites, allsitepositions
 
 @testset "basic hamiltonians" begin
     presets = (LatticePresets.linear, LatticePresets.square, LatticePresets.triangular,
@@ -50,8 +50,29 @@ using Quantica: Hamiltonian, ParametricHamiltonian, nhoppings
 end
 
 @testset "hamiltonian unitcell" begin
-    h = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = 1/√3)) |> unitcell((1,-1), region = r -> abs(r[2])<2)
+    h = LatticePresets.honeycomb() |> hamiltonian(hopping(1)) |> unitcell((1,-1), region = r -> abs(r[2])<2)
     @test nhoppings(h) == 22
+    h = LatticePresets.square() |> hamiltonian(hopping(1)) |> unitcell(3) |> unitcell((1,0), indices = not(1))
+    @test nsites(h) == 8
+    h = LatticePresets.square() |> hamiltonian(hopping(1, range = √2)) |> unitcell(5) |> unitcell((1,0), indices = 1:2:25)
+    @test nhoppings(h) == 38
+    @test nsites(h) == 13
+    h = LatticePresets.square() |> hamiltonian(hopping(1, range = √2)) |> unitcell(5) |> unitcell(indices = 2:2:25)
+    @test nhoppings(h) == 32
+    @test nsites(h) == 12
+    lat = LatticePresets.honeycomb()
+    h = lat |> hamiltonian(hopping(1)) |> unitcell
+    @test allsitepositions(h.lattice) == allsitepositions(lat)
+    h = lat |> hamiltonian(hopping(1)) |> unitcell((1,1))
+    @test allsitepositions(h.lattice) == allsitepositions(lat)
+    h = lat |> hamiltonian(hopping(1)) |> unitcell((1,-1))
+    @test allsitepositions(h.lattice) == allsitepositions(lat)
+    lat = LatticePresets.honeycomb(dim = Val(3)) |> unitcell(3) |> unitcell((1,1), indices = not(1))
+    h = lat |> hamiltonian(hopping(1)) |> unitcell
+    @test allsitepositions(h.lattice) == allsitepositions(lat)
+    @test nsites(h) == 17
+    h = unitcell(h, indices = not(1))
+    @test nsites(h) == 16
 end
 
 @testset "hamiltonian wrap" begin
@@ -172,6 +193,9 @@ end
 @testset "unitcell modifiers" begin
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(1) + onsite(0)) |> unitcell(2, modifiers = (@onsite!((o, r) -> 1), @hopping!(h -> 1)))
     @test diag(bloch(h)) == ComplexF64[1, 1, 1, 1, 1, 1, 1, 1]
+    h = LatticePresets.honeycomb() |> hamiltonian(hopping(1) + onsite(0)) |> unitcell(2) |> unitcell(2, modifiers = @onsite!(o -> 1; indices = 3), indices = not(2))
+    @test nonsites(h) == 4
+    @test nsites(h) == 28
 end
 
 @testset "@onsite!" begin
