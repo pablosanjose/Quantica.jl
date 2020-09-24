@@ -143,6 +143,12 @@ Base.isequal(h1::Hamiltonian, h2::Hamiltonian) =
     isequal(h1.lattice, h2.lattice) && isequal(h1.harmonics, h2.harmonics) &&
     isequal(h1.orbitals, h2.orbitals)
 
+# Dual numbers #
+
+DualNumbers.Dual(h::Hamiltonian) = Hamiltonian(h.lattice, Dual.(h.harmonics), h.orbitals)
+
+DualNumbers.Dual(h::HamiltonianHarmonic) = HamiltonianHarmonic(h.dn, dualarray(h.h))
+
 # Iterators #
 
 function nonzero_indices(h::Hamiltonian, rowrange = 1:size(h, 1), colrange = 1:size(h, 2))

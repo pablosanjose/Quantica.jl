@@ -11,7 +11,7 @@ function __init__()
 end
 
 using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
-      ProgressMeter, LinearMaps, Random, SpecialFunctions
+      ProgressMeter, LinearMaps, Random, SpecialFunctions, DualNumbers
 
 using ExprTools
 
