@@ -244,6 +244,8 @@ function appendslice!(dest::AbstractArray, src::AbstractArray{T,N}, Rsrc::Cartes
     return dest
 end
 
+dualarray(a) = map(x->Dual.(x, 0), a)
+
 ######################################################################
 # convert a matrix/number block to a matrix/inlinematrix string
 ######################################################################

@@ -185,25 +185,29 @@ struct Codiagonalizer{T,F<:Function}
     perm::Vector{Int}               # Prealloc for sortperm!
 end
 
-function codiagonalizer(h::Union{Hamiltonian,ParametricHamiltonian}, matrix, mesh, lift; kw...)
-    veldirs = velocitydirections(parent(h); kw...)
-    veldirs_with_params = padparams.(veldirs, Ref(h))
-    nv = length(veldirs)
+function codiagonalizer(h::Union{Hamiltonian,ParametricHamiltonian}, matrix::AbstractMatrix, mesh, lift; kw...)
+    hdual = Dual(h)
+    matrixdual = dualarray(matrix)
+    meshdirs = meshdirections(mesh)
+    nv = length(meshdirs)
     matrixindices = 1:(nv + nv + 1)
     degtol = sqrt(eps(real(blockeltype(h))))
-    delta = meshdelta(mesh, lift)
+    delta = meshdelta(mesh)
     delta = iszero(delta) ? degtol : delta
-    aom = anyoldmatrix(matrix)
+    anyold = anyoldmatrix(matrix)
     cmatrixf(meshϕs, n) =
         if n <= nv
-            bloch!(matrix, h, applylift(lift, meshϕs), dn -> im * veldirs[n]' * dn)
+            dualϕs = _dualϕs(meshϕs, n)
+            dualpart.(bloch!(matrixdual, hdual, applylift(lift, dualϕs)))
         elseif n - nv <= nv # resort to finite differences
-            bloch!(matrix, h, applylift(lift, meshϕs) + delta * veldirs_with_params[n - nv])
+            bloch!(matrix, h, applylift(lift, meshϕs + delta * meshdirs[n - nv]))
         else # use a fixed arbitrary matrix
-            aom
+            anyold
         end
     return Codiagonalizer(cmatrixf, matrixindices, degtol, UnitRange{Int}[], UnitRange{Int}[], Int[])
 end
+
+_dualϕs(meshϕs::SVector{N,T}, n) where {N,T} = Dual.(meshϕs, ntuple(i -> ifelse(i == n, T(1), T(0)), Val(N)))
 
 function codiagonalizer(matrixf::Function, matrix::AbstractMatrix{T}, mesh; kw...) where {T}
     meshdirs = meshdirections(mesh; kw...)
@@ -212,22 +216,17 @@ function codiagonalizer(matrixf::Function, matrix::AbstractMatrix{T}, mesh; kw..
     degtol = sqrt(eps(real(eltype(T))))
     delta = meshdelta(mesh)
     delta = iszero(delta) ? degtol : delta
-    aom = anyoldmatrix(matrix)
+    anyold = anyoldmatrix(matrix)
     cmatrixf(meshϕs, n) =
         if n <= nm # finite differences
             matrixf(meshϕs + delta * meshdirs[n])
         else # use a fixed arbitrary matrix
-            aom
+            anyold
         end
     return Codiagonalizer(cmatrixf, matrixindices, degtol, UnitRange{Int}[], UnitRange{Int}[], Int[])
 end
 
-velocitydirections(::Hamiltonian{LA,L}; kw...) where {LA,L} = _directions(Val(L); kw...)
-
 meshdirections(::Mesh{L}; kw...) where {L} = _directions(Val(L); kw...)
-
-padparams(v, ::Hamiltonian) = v
-padparams(v::SVector{L,T}, ::ParametricHamiltonian{P}) where {L,T,P} = vcat(zero(SVector{P,T}), v)
 
 function _directions(::Val{L}; direlements = 0:1, onlypositive = true) where {L}
     directions = vec(SVector{L,Int}.(Iterators.product(ntuple(_ -> direlements, Val(L))...)))
@@ -237,8 +236,7 @@ function _directions(::Val{L}; direlements = 0:1, onlypositive = true) where {L}
     return directions
 end
 
-meshdelta(mesh::Mesh{<:Any,T}, lift = missing) where {T} =
-    T(0.1) * norm(applylift(lift, first(minmax_edge(mesh))))
+meshdelta(mesh::Mesh{<:Any,T}) where {T} = T(0.1) * norm(first(minmax_edge(mesh)))
 
 # function anyoldmatrix(matrix::SparseMatrixCSC{Tv,Ti}) where {Tv,Ti}
 #     n = size(matrix, 1)
