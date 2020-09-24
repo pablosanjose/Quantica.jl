@@ -59,14 +59,16 @@ transform!(f::Function, m::Mesh) = (map!(f, vertices(m), vertices(m)); m)
 # Compute N-simplices (N = number of vertices)
 ######################################################################
 function simplices(mesh::Mesh{D}, ::Val{N} = Val(D+1)) where {D,N}
-    N > 0 || throw(ArgumentError("Need a positive number of vertices for simplices"))
+    N > 0 || throw(ArgumentError("Need a positive number of simplex vertices"))
     N == 1 && return Tuple.(1:nvertices(mesh))
     simps = NTuple{N,Int}[]
-    buffer = (NTuple{N,Int}[], NTuple{N,Int}[], Int[])
-    for src in eachindex(vertices(mesh))
-        append!(simps, _simplices(buffer, mesh, src))
+    if nvertices(mesh) >= N
+        buffer = (NTuple{N,Int}[], NTuple{N,Int}[], Int[])
+        for src in eachindex(vertices(mesh))
+            append!(simps, _simplices(buffer, mesh, src))
+        end
+        N > 2 && alignnormals!(simps, vertices(mesh))
     end
-    N > 2 && alignnormals!(simps, vertices(mesh))
     return simps
 end
 

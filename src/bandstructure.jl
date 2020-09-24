@@ -328,14 +328,17 @@ function _bandstructure(matrixf::Function, matrix´::AbstractMatrix{M}, mesh::MD
     pcounter = 0
     bands = Band{M,Vector{M},Mesh{D+1,T,Vector{SVector{D+1,T}}},Vector{NTuple{D+1,Int}}}[]
     vertindices = zeros(Int, nϵ, nk) # 0 == unclassified, -1 == different band, > 0 vertex index
-    pending = CartesianIndex{2}[]
+    pending = Tuple{Int,CartesianIndex{2}}[] # (originating vertex index, (ϵ, k))
+    dests = Int[]; srcs = Int[]       # To build adjacency matrices
     sizehint!(pending, nk)
     while true
         src = findfirst(iszero, vertindices)
         src === nothing && break
         resize!(pending, 1)
-        pending[1] = src # source CartesianIndex for band search
-        band = extractband(mesh, pending, ϵks, ψks, vertindices, d.minoverlap)
+        resize!(dests, 0)
+        resize!(srcs, 0)
+        pending[1] = (0, src) # source CartesianIndex for band search, with no originating vertex
+        band = extractband(mesh, ϵks, ψks, vertindices, d.minoverlap, pending, dests, srcs)
         nverts = nvertices(band.mesh)
         nverts > D && push!(bands, band) # avoid bands with no simplices
         pcounter += nverts
@@ -347,38 +350,46 @@ end
 _maybereal(::Type{<:Complex}) = identity
 _maybereal(::Type{<:Real}) = real
 
-function extractband(kmesh::Mesh{D,T}, pending, ϵks::AbstractArray{T}, ψks::AbstractArray{M}, vertindices, minoverlap) where {D,T,M}
+function extractband(kmesh::Mesh{D,T}, ϵks::AbstractArray{T}, ψks::AbstractArray{M}, vertindices, minoverlap, pending, dests, srcs) where {D,T,M}
     lenψ, nϵ, nk = size(ψks)
     kverts = vertices(kmesh)
     states = eltype(ψks)[]
     sizehint!(states, nk * lenψ)
     verts = SVector{D+1,T}[]
+    lenverts = 0
     sizehint!(verts, nk)
     adjmat = SparseMatrixBuilder{Bool}()
-    vertindices[first(pending)] = 1 # pending starts with a single vertex
-    for c in pending
-        ϵ, k = Tuple(c) # c == CartesianIndex(ϵ::Int, k::Int)
-        vertex = vcat(kverts[k], SVector(ϵks[c]))
+    srcidx = 0  # represents the index of the last added vertex (used to search for the nexts)
+    while !isempty(pending)
+        origin, src = pop!(pending) # origin is the vertex index that originated this src, 0 if none (first)
+        ϵ, k = Tuple(src) # src == CartesianIndex(ϵ::Int, k::Int)
+        vertex = vcat(kverts[k], SVector(ϵks[src]))
         push!(verts, vertex)
+        srcidx += 1 # Always equals length(verts)
+        vertindices[ϵ, k] = srcidx
         appendslice!(states, ψks, CartesianIndices((1:lenψ, ϵ:ϵ, k:k)))
+        if origin != 0
+            append!(dests, (origin, srcidx))
+            append!(srcs, (srcidx, origin))
+        end
+        added_vertices = 0
         for edgek in edges(kmesh, k)
             k´ = edgedest(kmesh, edgek)
             proj, ϵ´ = findmostparallel(ψks, k´, ϵ, k)
-            if proj >= minoverlap
-                if iszero(vertindices[ϵ´, k´]) # unclassified
-                    push!(pending, CartesianIndex(ϵ´, k´))
-                    vertindices[ϵ´, k´] = length(pending) # this is clever!
-                end
-                indexk´ = vertindices[ϵ´, k´]
-                indexk´ > 0 && pushtocolumn!(adjmat, indexk´, true)
+            # if unclassified and sufficiently parallel add it to pending list
+            if proj >= minoverlap && iszero(vertindices[ϵ´, k´])
+                push!(pending, (srcidx, CartesianIndex(ϵ´, k´)))
+                added_vertices += 1
             end
         end
-        finalizecolumn!(adjmat)
+        # In 1D we avoid backsteps, to keep nicely continuous bands
+        D == 1 && added_vertices == 0 && break
     end
     for (i, vi) in enumerate(vertindices)
         @inbounds vi > 0 && (vertindices[i] = -1) # mark as classified in a different band
     end
-    mesh = Mesh(verts, sparse(adjmat))
+    adjmat = sparse(dests, srcs, true)
+    mesh = Mesh(verts, adjmat)
     return Band(mesh, states, lenψ)
 end
 
