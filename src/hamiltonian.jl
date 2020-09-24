@@ -377,7 +377,7 @@ end
 # Indexing #
 Base.push!(h::Hamiltonian{<:Any,L}, dn::NTuple{L,Int}) where {L} = push!(h, SVector(dn...))
 Base.push!(h::Hamiltonian{<:Any,L}, dn::Vararg{Int,L}) where {L} = push!(h, SVector(dn...))
-function Base.push!(h::Hamiltonian{<:Any,L}, dn::SVector{L,Int}) where {L} 
+function Base.push!(h::Hamiltonian{<:Any,L}, dn::SVector{L,Int}) where {L}
     get_or_push!(h.harmonics, dn, size(h))
     return h
 end
@@ -669,77 +669,90 @@ Construct a `Vector` representation of `km` applied to Hamiltonian `h`.
 Base.Vector(km::KetModel, h::Hamiltonian) = vec(Matrix(km, h))
 
 """
-  Matrix(km::KetModel, h::Hamiltonian; orthogonal = false)
-  Matrix(kms::NTuple{N,KetModel}, h::Hamiltonian, orthogonal = false)
-  Matrix(kms::AbstractMatrix, h::Hamiltonian; orthogonal = false)
-  Matrix(kms::StochasticTraceKets, h::Hamiltonian; orthogonal = false)
+  Matrix(km::KetModel, h::Hamiltonian)
+  Matrix(kms::NTuple{N,KetModel}, h::Hamiltonian)
+  Matrix(kms::AbstractMatrix, h::Hamiltonian)
+  Matrix(kms::StochasticTraceKets, h::Hamiltonian)
 
 Construct an `M×N` `Matrix` representation of the `N` kets `kms` applied to `M×M`
-Hamiltonian `h`. If `orthogonal = true`, the columns are made orthogonal through a
-Gram-Schmidt process. If `kms::StochasticTraceKets` for `n` random kets (constructed with
+Hamiltonian `h`. If `kms::StochasticTraceKets` for `n` random kets (constructed with
 `randomkets(n)`), a normalization `1/√n` required for stochastic traces is included.
 """
 Base.Matrix(km::KetModel, h::Hamiltonian) = Matrix((km,), h)
 
-function Base.Matrix(km::AbstractMatrix, h::Hamiltonian; orthogonal = false)
-    eltype(km) == orbitaltype(h) && size(km, 1) == size(h, 2) || throw(ArgumentError("ket vector or matrix is incompatible with Hamiltonian"))
+function Base.Matrix(km::AbstractMatrix, h::Hamiltonian)
+    check_compatible_kets(km, h)
     kmat = Matrix(km)
-    orthogonal && make_orthogonal!(kmat, kms)
     return kmat
 end
 
-function Base.Matrix(rk::StochasticTraceKets, h::Hamiltonian)
-    ketmodels = Base.Iterators.repeated(rk.ketmodel, rk.repetitions)
-    kmat = Matrix(ketmodels, h; orthogonal = rk.orthogonal)
-    normk = sqrt(1/size(kmat,2))
-    kmat .*= normk  # normalized for stochastic traces
+# kmodels should be a Union{NTuple{N,KetModel},StochasticTraceKets}
+function Base.Matrix(kmodels, h::Hamiltonian)
+    kmodels´ = resolve(kmodels, h.lattice)
+    allpos = allsitepositions(h.lattice)
+    z = guess_zero_element(kmodels, first(allpos), h)
+    kmat = [generate_amplitude(km, i, r, z) for (i, r) in enumerate(allpos), km in kmodels´]
+    check_compatible_kets(kmat, h)
+    maybe_normalize!(kmat, kmodels)
     return kmat
 end
 
-function Base.Matrix(kms, h::Hamiltonian; orthogonal = false)
-    M = orbitaltype(h)
-    kmat = zeros(M, size(h, 2), length(kms))
-    for (j, km) in enumerate(kms)
-        kvec = view(kmat, :, j)
-        ket!(kvec, km, h)
-    end
-    orthogonal && make_orthogonal!(kmat, kms)
+resolve(ks::NTuple{N,KetModel}) where {N} = resolve.(ks)
+
+guess_zero_element(k::StochasticTraceKets, r, h) = guess_zero_element(k.ketmodel, r, h)
+guess_zero_element(ks::NTuple{N,KetModel}, r, h) where {N} = guess_zero_element(first(ks), r, h)
+guess_zero_element(km::KetModel{<:Any,Val{false}}, r, h) = zero(first(km.model.terms)(r,r))
+guess_zero_element(km::KetModel{<:Any,Val{true}}, r, h) = zero(orbitaltype(h))
+
+function maybe_normalize!(kmat, kms::StochasticTraceKets)
+    kms.ketmodel.normalized && normalize_columns!(kmat)
+    kmat .*= sqrt(1/size(kmat,2))
     return kmat
 end
 
-function ket!(k, km::KetModel, h)
-    M = eltype(k)
-    fill!(k, zero(M))
-    hsites = allsitepositions(h.lattice)
-    for term in km.model.terms
-        rs = resolve(term.selector, h.lattice)
-        ss = sublats(rs)
-        for s in ss
-            orbs = h.orbitals[s]
-            is = siterange(h.lattice, s)
-            for i in is
-                i in rs || continue
-                r = hsites[i]
-                k[i] += generate_amplitude(km, term, r, M, orbs)
-            end
-        end
-    end
-    km.normalized && normalize!(k)
-    return k
-end
-
-function make_orthogonal!(kmat::AbstractMatrix{<:Number}, kms)
-    q, r = qr!(kmat)
-    kmat .= Matrix(q)
-    for (j, km) in enumerate(kms)
-        if !km.normalized
-            kmat[:,j] .*= r[j, j]
-        end
+function maybe_normalize!(kmat, kms::Tuple{KetModel})
+    for (i, km) in enumerate(kms)
+        km.normalized && normalize_columns!(kmat, i)
     end
     return kmat
 end
 
-make_orthogonal!(kmat, kms) = throw(ArgumentError("The orthogonalize option is only available for kets of scalar eltype, not for $(eltype(kmat))."))
+normalize_columns!(kmat) = normalize_columns!(kmat, axes(kmat, 2))
+
+function normalize_columns!(kmat, cols)
+    for col in cols
+        normalize!(view(kmat, :, col))
+    end
+    return kmat
+end
+
+check_compatible_kets(kmat::AbstractMatrix, h::Hamiltonian) =
+    comp_eltypes(h, kmat) && size(kmat, 1) == size(h, 2) ||
+        throw(ArgumentError("ket vector or matrix is incompatible with Hamiltonian"))
+
+comp_eltypes(h::Hamiltonian, k::AbstractMatrix) = comp_eltypes(blocktype(h), eltype(k))
+comp_eltypes(::Type{<:Number}, ::Type{<:Number}) = true
+comp_eltypes(::Type{<:Number}, ::Type{<:SMatrix{1}}) = true
+comp_eltypes(::Type{<:SMatrix{N,M}}, ::Type{<:SVector{M}}) where {N,M} = true
+comp_eltypes(::Type{<:SMatrix{N,M}}, ::Type{<:SMatrix{M}}) where {N,M}  = true
+comp_eltypes(t1, t2) = false
+
+### generate_amplitude (asssumes resolved selectors) ###
+
+function generate_amplitude(ketmodel::KetModel, i, r, zero)
+    amplitude = zero
+    for term in ketmodel.model.terms
+        i in term.selector || continue
+        t = term(r, r)
+        amplitude += maybe_maporbitals(ketmodel.maporbitals, zero, term, r)
+    end
+    return amplitude
+end
+
+maybe_maporbitals(::Val{false}, zero, term, r) = term(r, r)
+maybe_maporbitals(::Val{true}, zero::Number, term, r) = Number(term(r, r))
+maybe_maporbitals(::Val{true}, zero::SVector{N}, term, r) where {N} = SVector{N}(ntuple(_ -> Number(term(r, r)), Val(N)))
+maybe_maporbitals(::Val{true}, zero::SMatrix{N,M}, term, r) where {N,M} = SMatrix{N,M}(ntuple(_ -> Number(term(r, r)), Val(N*M)))
 
 #######################################################################
 # unitcell/supercell for Hamiltonians
