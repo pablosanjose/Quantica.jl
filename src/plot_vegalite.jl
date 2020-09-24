@@ -26,8 +26,8 @@ function VegaLite.vlplot(b::Bandstructure; labels = ("φ", "ε"), scaling = (1, 
     (domainx, domainy), _ = domain_size(corners, size, range´)
     p = table |> vltheme(sizes, points) + @vlplot(
         mark = :line,
-        x = {:x, scale = {domain = domainx, nice = false}, title = labelx},
-        y = {:y, scale = {domain = domainy, nice = false}, title = labely},
+        x = {:x, scale = {domain = domainx, nice = false}, title = labelx, sort = nothing},
+        y = {:y, scale = {domain = domainy, nice = false}, title = labely, sort = nothing},
         color = "band:n",
         selection = {grid = {type = :interval, bind = :scales}})
     return p
