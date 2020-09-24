@@ -520,7 +520,7 @@ displayrange(::Missing) = "any"
 displayrange(nr::NeighborRange) = "NeighborRange($(nr.n))"
 displayrange(rs::Tuple) = "($(displayrange(first(rs))), $(displayrange(last(rs))))"
 
-function Base.show(io::IO, o::OnsiteTerm{F}) where {F}
+function Base.show(io::IO, o::OnsiteTerm{F,<:SiteSelector}) where {F}
     i = get(io, :indent, "")
     print(io,
 "$(i)OnsiteTerm{$(displayparameter(F))}:
@@ -528,7 +528,7 @@ $(i)  Sublattices      : $(o.selector.sublats === missing ? "any" : o.selector.s
 $(i)  Coefficient      : $(o.coefficient)")
 end
 
-function Base.show(io::IO, h::HoppingTerm{F}) where {F}
+function Base.show(io::IO, h::HoppingTerm{F,<:HopSelector}) where {F}
     i = get(io, :indent, "")
     print(io,
 "$(i)HoppingTerm{$(displayparameter(F))}:
@@ -1006,8 +1006,10 @@ ket(f; normalized = true, maporbitals::Bool = false, kw...) = KetModel(onsite(f;
 Base.:*(x, k::KetModel) = KetModel(k.model * x, k.normalized, k.maporbitals)
 Base.:*(k::KetModel, x) = KetModel(x * k.model, k.normalized, k.maporbitals)
 Base.:-(k::KetModel) = KetModel(-k.model, k.normalized, k.maporbitals)
-Base.:-(k1::KetModel, k2::KetModel) = KetModel(k1.model - k2.model, k1.normalized && k2.normalized, k1.maporbitals && k2.maporbitals)
-Base.:+(k1::KetModel, k2::KetModel) = KetModel(k1.model + k2.model, k1.normalized && k2.normalized, k1.maporbitals && k2.maporbitals)
+Base.:-(k1::KetModel, k2::KetModel) = KetModel(k1.model - k2.model, k1.normalized && k2.normalized, _andVal(k1.maporbitals, k2.maporbitals))
+Base.:+(k1::KetModel, k2::KetModel) = KetModel(k1.model + k2.model, k1.normalized && k2.normalized, _andVal(k1.maporbitals, k2.maporbitals))
+
+_andVal(::Val{A},::Val{B}) where {A,B} = Val(A && B)
 
 resolve(k::KetModel, lat::AbstractLattice) = KetModel(resolve(k.model, lat), k.normalized, k.maporbitals)
 

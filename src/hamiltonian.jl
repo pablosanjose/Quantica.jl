@@ -308,7 +308,7 @@ Base.size(h::HamiltonianHarmonic) = size(h.h)
 flatsize(h::Hamiltonian, n) = first(flatsize(h)) # h is always square
 
 function flatsize(h::Hamiltonian)
-    n = sum(sublatsites(h.lattice) .* length.(h.orbitals))
+    n = sum(sublatlengths(h.lattice) .* length.(h.orbitals))
     return (n, n)
 end
 
@@ -633,6 +633,7 @@ toeltype(u::UniformScaling, ::Type{S}, t1::NTuple{N1}, t2::NTuple{N2}) where {N1
 toeltype(t::Number, ::Type{T}, t1::NTuple{1}) where {T<:Number} = T(t)
 toeltype(t::Number, ::Type{S}, t1::NTuple{1}) where {S<:SVector} = padtotype(t, S)
 toeltype(t::SVector{N}, ::Type{S}, t1::NTuple{N}) where {N,S<:SVector} = padtotype(t, S)
+toeltype(t::SMatrix{N}, ::Type{S}, t1::NTuple{N}) where {N,S<:SMatrix} = padtotype(t, S)
 
 # Fallback to catch mismatched or undesired block types
 toeltype(t::Array, x...) = throw(ArgumentError("Array input in model, please use StaticArrays instead (e.g. SA[1 0; 0 1] instead of [1 0; 0 1])"))
@@ -688,21 +689,36 @@ end
 
 # kmodels should be a Union{NTuple{N,KetModel},StochasticTraceKets}
 function Base.Matrix(kmodels, h::Hamiltonian)
-    kmodels´ = resolve(kmodels, h.lattice)
+    kmodels´ = resolve_tuple(kmodels, h.lattice)
     allpos = allsitepositions(h.lattice)
-    z = guess_zero_element(kmodels, first(allpos), h)
-    kmat = [generate_amplitude(km, i, r, z) for (i, r) in enumerate(allpos), km in kmodels´]
+    T = guess_eltype(kmodels´, allpos, h)
+    orbs = h.orbitals
+    kmat = [generate_amplitude(km, i, allpos[i], T, orbs[s]) for (i, s) in sitesublats(h.lattice), km in kmodels´]
     check_compatible_kets(kmat, h)
     maybe_normalize!(kmat, kmodels)
     return kmat
 end
 
-resolve(ks::NTuple{N,KetModel}) where {N} = resolve.(ks)
+resolve_tuple(ks::NTuple{N,KetModel}, lat) where {N} = resolve.(ks, Ref(lat))
+resolve_tuple(ks::StochasticTraceKets, lat) = resolve(ks, lat)
 
-guess_zero_element(k::StochasticTraceKets, r, h) = guess_zero_element(k.ketmodel, r, h)
-guess_zero_element(ks::NTuple{N,KetModel}, r, h) where {N} = guess_zero_element(first(ks), r, h)
-guess_zero_element(km::KetModel{<:Any,Val{false}}, r, h) = zero(first(km.model.terms)(r,r))
-guess_zero_element(km::KetModel{<:Any,Val{true}}, r, h) = zero(orbitaltype(h))
+function guess_eltype(kms, allpos, h)
+    km = first(kms)
+    term = first(km.model.terms)
+    rsel = term.selector
+    s = first(sublats(rsel))
+    i = first(siteindices(rsel, s))
+    r = allpos[i]
+    t = term(r, r)
+    z = zero(orbitaltype(h))
+    T = _guess_eltype(km.maporbitals, t, z)
+    return T
+end
+
+_guess_eltype(::Val{true}, t::Number, z) = typeof(t * z)
+_guess_eltype(::Val{false}, t::Number, z) = typeof(t * z)
+_guess_eltype(::Val{false}, t::SVector{<:Any,T}, z::SVector) where {T} = typeof(zero(T) * z)
+_guess_eltype(::Val{false}, t::SMatrix{M,N,T}, z::SVector{M2,T2}) where {M,N,M2,T,T2} = typeof(SMatrix{M2,N}(zero(T) * zero(T2) * I))
 
 function maybe_normalize!(kmat, kms::StochasticTraceKets)
     kms.ketmodel.normalized && normalize_columns!(kmat)
@@ -713,15 +729,6 @@ end
 function maybe_normalize!(kmat, kms::Tuple{KetModel})
     for (i, km) in enumerate(kms)
         km.normalized && normalize_columns!(kmat, i)
-    end
-    return kmat
-end
-
-normalize_columns!(kmat) = normalize_columns!(kmat, axes(kmat, 2))
-
-function normalize_columns!(kmat, cols)
-    for col in cols
-        normalize!(view(kmat, :, col))
     end
     return kmat
 end
@@ -739,20 +746,21 @@ comp_eltypes(t1, t2) = false
 
 ### generate_amplitude (asssumes resolved selectors) ###
 
-function generate_amplitude(ketmodel::KetModel, i, r, zero)
-    amplitude = zero
-    for term in ketmodel.model.terms
-        i in term.selector || continue
-        t = term(r, r)
-        amplitude += maybe_maporbitals(ketmodel.maporbitals, zero, term, r)
+function generate_amplitude(ketmodel::KetModel, i, r, T, orbs)
+    amplitude = sum(ketmodel.model.terms) do term
+        i in term.selector ? maybe_maporbitals(ketmodel.maporbitals, T, orbs, term, r) : zero(T)
     end
     return amplitude
 end
 
-maybe_maporbitals(::Val{false}, zero, term, r) = term(r, r)
-maybe_maporbitals(::Val{true}, zero::Number, term, r) = Number(term(r, r))
-maybe_maporbitals(::Val{true}, zero::SVector{N}, term, r) where {N} = SVector{N}(ntuple(_ -> Number(term(r, r)), Val(N)))
-maybe_maporbitals(::Val{true}, zero::SMatrix{N,M}, term, r) where {N,M} = SMatrix{N,M}(ntuple(_ -> Number(term(r, r)), Val(N*M)))
+function maybe_maporbitals(::Val{false}, T, orbs, term, r)
+    return toeltype(term(r, r), T, orbs)
+end
+
+function maybe_maporbitals(::Val{true}, T, orbs::NTuple{N}, term, r) where {N}
+    x = SVector{N}(ntuple(_ -> Number(term(r, r)), Val(N)))
+    return toeltype(x, T, orbs)
+end
 
 #######################################################################
 # unitcell/supercell for Hamiltonians
