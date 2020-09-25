@@ -258,8 +258,8 @@ _isimag(x) = all(o -> real(o) ≈ 0, x)
 matrixstring(row, x) = string("Onsite[$row] : ", _matrixstring(x))
 matrixstring(row, col, x) = string("Hopping[$row, $col] : ", _matrixstring(x))
 
-matrixstring_inline(row, x) = string("Onsite[$row] : ", _matrixstring_inline(x))
-matrixstring_inline(row, col, x) = string("Hopping[$row, $col] : ", _matrixstring_inline(x))
+matrixstring_inline(row, x, digits) = string("Onsite[$row] : ", _matrixstring_inline(round.(x, sigdigits = digits)))
+matrixstring_inline(row, col, x, digits) = string("Hopping[$row, $col] : ", _matrixstring_inline(round.(x, sigdigits = digits)))
 
 _matrixstring(x::Number) = numberstring(x)
 _matrixstring_inline(x::Number) = numberstring(x)
