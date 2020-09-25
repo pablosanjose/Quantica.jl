@@ -232,7 +232,7 @@ function copyslice!(dest::AbstractArray{T1,N1}, Rdest::CartesianIndices{N1},
     return dest
 end
 
-function appendslice!(dest::AbstractArray, src::AbstractArray{T,N}, Rsrc::CartesianIndices{N}) where {T,N}
+function append_slice!(dest::AbstractArray, src::AbstractArray{T,N}, Rsrc::CartesianIndices{N}) where {T,N}
     checkbounds(src, first(Rsrc))
     checkbounds(src, last(Rsrc))
     Rdest = (length(dest) + 1):(length(dest) + length(Rsrc))

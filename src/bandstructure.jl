@@ -362,16 +362,18 @@ function extractband(kmesh::Mesh{D,T}, ϵks::AbstractArray{T}, ψks::AbstractArr
     srcidx = 0  # represents the index of the last added vertex (used to search for the nexts)
     while !isempty(pending)
         origin, src = pop!(pending) # origin is the vertex index that originated this src, 0 if none (first)
+        srcidx = vertindices[src]
+        if srcidx != 0
+            append_adjacent!(dests, srcs, origin, srcidx)
+            continue
+        end
         ϵ, k = Tuple(src) # src == CartesianIndex(ϵ::Int, k::Int)
         vertex = vcat(kverts[k], SVector(ϵks[src]))
         push!(verts, vertex)
-        srcidx += 1 # Always equals length(verts)
+        srcidx = length(verts)
         vertindices[ϵ, k] = srcidx
-        appendslice!(states, ψks, CartesianIndices((1:lenψ, ϵ:ϵ, k:k)))
-        if origin != 0
-            append!(dests, (origin, srcidx))
-            append!(srcs, (srcidx, origin))
-        end
+        append_slice!(states, ψks, CartesianIndices((1:lenψ, ϵ:ϵ, k:k)))
+        append_adjacent!(dests, srcs, origin, srcidx)
         added_vertices = 0
         for edgek in edges(kmesh, k)
             k´ = edgedest(kmesh, edgek)
@@ -391,6 +393,14 @@ function extractband(kmesh::Mesh{D,T}, ϵks::AbstractArray{T}, ψks::AbstractArr
     adjmat = sparse(dests, srcs, true)
     mesh = Mesh(verts, adjmat)
     return Band(mesh, states, lenψ)
+end
+
+function append_adjacent!(dests, srcs, origin, srcidx)
+    if origin != 0 && srcidx != 0
+        append!(dests, (origin, srcidx))
+        append!(srcs, (srcidx, origin))
+    end
+    return nothing
 end
 
 function findmostparallel(ψks::Array{M,3}, destk, srcb, srck) where {M}
