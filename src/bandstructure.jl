@@ -379,7 +379,7 @@ function extractband(kmesh::Mesh{D,T}, ϵks::AbstractArray{T}, ψks::AbstractArr
             k´ = edgedest(kmesh, edgek)
             proj, ϵ´ = findmostparallel(ψks, k´, ϵ, k)
             # if unclassified and sufficiently parallel add it to pending list
-            if proj >= minoverlap && iszero(vertindices[ϵ´, k´])
+            if proj >= minoverlap && !iszero(ϵ´) && iszero(vertindices[ϵ´, k´])
                 push!(pending, (srcidx, CartesianIndex(ϵ´, k´)))
                 added_vertices += 1
             end
