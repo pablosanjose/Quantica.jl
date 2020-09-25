@@ -244,7 +244,9 @@ function appendslice!(dest::AbstractArray, src::AbstractArray{T,N}, Rsrc::Cartes
     return dest
 end
 
-dualarray(a) = map(x->Dual.(x, 0), a)
+dualarray(a::DenseMatrix) = map(x->Dual.(x, 0), a)
+# Need to preserve stored zeros, so we have to treat sparse case as special
+dualarray(s::SparseMatrixCSC) = SparseMatrixCSC(s.m, s.n, s.colptr, s.rowval, map(x->Dual.(x, 0), s.nzval))
 
 ######################################################################
 # convert a matrix/number block to a matrix/inlinematrix string
