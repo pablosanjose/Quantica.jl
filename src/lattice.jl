@@ -49,8 +49,6 @@ dims(::NTuple{N,Sublat{E,T}}) where {N,E,T} = E
 
 sublatnames(ss::NTuple{N,Sublat{E,T}}) where {N,E,T} = (s -> s.name).(ss)
 
-Base.eltype(::NTuple{N,Sublat{E,T}}) where {N,E,T} = T
-
 #######################################################################
 # Unitcell
 #######################################################################
@@ -62,7 +60,7 @@ end                             # so that diff(offset) == sublatsites
 
 Unitcell(sublats::Sublat...; kw...) = Unitcell(promote(sublats...); kw...)
 
-Unitcell(s; dim = Val(dims(s)), type = float(eltype(s)), names = sublatnames(s)) =
+Unitcell(s; dim = Val(dims(s)), type = float(numbertype(s)), names = sublatnames(s)) =
     _unitcell(s, dim, type, names)
 
 # Dynamic dispatch
@@ -140,8 +138,6 @@ sublatnames(u::Unitcell) = u.names
 transform!(f::Function, u::Unitcell) = (u.sites .= f.(u.sites); u)
 
 dims(::Unitcell{E}) where {E} = E
-
-Base.eltype(::Unitcell{E,T}) where {E,T} = T
 
 Base.copy(u::Unitcell) = Unitcell(copy(u.sites), u.names, copy(u.offsets))
 
@@ -433,6 +429,9 @@ Base.isequal(l1::Superlattice, l2::Superlattice) =
     isequal(l1.supercell, l2.supercell)
 
 numbertype(::AbstractLattice{E,L,T}) where {E,L,T} = T
+numbertype(::NTuple{N,Sublat{E,T}}) where {N,E,T} = T
+numbertype(::Unitcell{E,T}) where {E,T} = T
+
 positiontype(::AbstractLattice{E,L,T}) where {E,L,T} = SVector{E,T}
 dntype(::AbstractLattice{E,L}) where {E,L} = SVector{L,Int}
 

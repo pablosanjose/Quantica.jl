@@ -188,9 +188,9 @@ struct Codiagonalizer{T,F<:Function}
 end
 
 # lift = missing is assumed when h is a Function that generates matrices, instead of a Hamiltonian or ParametricHamiltonian
-function codiagonalizer(h, matrix::AbstractMatrix, mesh, lift; kw...)
-    dirs = codiag_directions(h)
-    degtol = sqrt(eps(real(blockeltype(h))))
+function codiagonalizer(h, matrix::AbstractMatrix{T}, mesh, lift) where {T}
+    dirs = codiag_directions(h, mesh)
+    degtol = sqrt(eps(real(eltype(T))))
     delta = meshdelta(mesh)
     delta = iszero(delta) ? degtol : delta
     comatrix, matrixindices = codiag_function(h, matrix, lift, dirs, delta)
@@ -216,26 +216,27 @@ function codiag_function(h::Union{Hamiltonian,ParametricHamiltonian}, matrix, li
     return comatrix, matrixindices
 end
 
-function codiag_function(matrixf::Function, matrix, lift, dirs, delta)
+# In the Function case we cannot know what directions to scan (arguments of matrixf). Also,
+# we cannot be sure that dual numbers propagate. We thus restrict to finite differences in the mesh
+function codiag_function(matrixf::Function, matrix, lift, meshdirs, delta)
     anyold = anyoldmatrix(matrix)
-    ndirs = length(dirs)
-    matrixindices = 1:(ndirs + ndirs + 1)
+    ndirs = length(meshdirs)
+    matrixindices = 1:(ndirs + 1)
     comatrix(meshϕs, n) =
-        if n <= ndirs # automatic differentiation using dual numbers
-            ϕs´ = dualϕs(applylift(lift, meshϕs), dirs[n])
-            dualpart.(matrixf(ϕs´))
-        elseif n - ndirs <= ndirs # finite differences
-            matrixf(applylift(lift, meshϕs) + delta * meshdirs[n])
+        if n <= ndirs # finite differences
+            matrixf(applylift(lift, meshϕs + delta * meshdirs[n]))
         else # use a fixed arbitrary matrix
             anyold
         end
     return comatrix, matrixindices
 end
 
-codiag_directions(h) = codiag_directions(_valdim(h))
+codiag_directions(h::Union{Hamiltonian,ParametricHamiltonian}, mesh) = codiag_directions(_valdim(h))
+codiag_directions(::Function, mesh) = codiag_directions(_valdim(mesh))
 
 @inline _valdim(::Hamiltonian{<:Any,L}) where {L} = Val(L)
 @inline _valdim(ph::ParametricHamiltonian{N}) where {N} = Val(N+latdim(ph.h))
+@inline _valdim(::Mesh{N}) where {N} = Val(N)
 
 function codiag_directions(::Val{L}, direlements = 0:1, onlypositive = true) where {L}
     directions = vec(SVector{L,Int}.(Iterators.product(ntuple(_ -> direlements, Val(L))...)))
@@ -252,7 +253,7 @@ maybe_dual(liftedϕ, ε) = liftedϕ
 
 deltaϕs(liftedϕs, dir) = liftedϕs + dir
 
-meshdelta(mesh::Mesh{<:Any,T}) where {T} = T(0.5) * norm(first(minmax_edge(mesh)))
+meshdelta(mesh::Mesh{<:Any,T}) where {T} = T(0.1) * norm(first(minmax_edge(mesh)))
 
 function anyoldmatrix(matrix::SparseMatrixCSC, rng = MersenneTwister(1))
     s = copy(matrix)
