@@ -193,7 +193,7 @@ Curried form of the above equivalent to `bandstructure(h, [mesh]; kw...)`.
 
 The default options are
 
-    (lift = missing, minoverlap = 0.5, method = defaultmethod(h), transform = missing)
+    (lift = missing, minoverlap = 0, method = defaultmethod(h), transform = missing)
 
 `lift`: when not `missing`, `lift` is a function `lift = (vs...) -> ϕ`, where `vs` are the
 coordinates of a mesh vertex and `ϕ` are Bloch phases if sampling a `h::Hamiltonian`, or
@@ -264,25 +264,25 @@ function bandstructure(h::Union{Hamiltonian,ParametricHamiltonian}, spec::MeshSp
 end
 
 function bandstructure(h::Union{Hamiltonian,ParametricHamiltonian}, mesh::Mesh;
-                       method = defaultmethod(h), lift = missing, minoverlap = 0.5, transform = missing)
+                       method = defaultmethod(h), lift = missing, minoverlap = 0, transform = missing)
     # ishermitian(h) || throw(ArgumentError("Hamiltonian must be hermitian"))
     matrix = similarmatrix(h, method)
     codiag = codiagonalizer(h, matrix, mesh, lift)
-    d = DiagonalizeHelper(method, codiag, minoverlap)
+    diag = diagonalizer(method, codiag, minoverlap)
     matrixf(ϕs) = bloch!(matrix, h, applylift(lift, ϕs))
-    b = _bandstructure(matrixf, matrix, mesh, d)
+    b = _bandstructure(matrixf, matrix, mesh, diag)
     transform === missing || transform!(transform, b)
     return b
 end
 
 function bandstructure(matrixf::Function, mesh::Mesh;
-                       method = missing, lift = missing, minoverlap = 0.5, transform = missing)
+                       method = missing, lift = missing, minoverlap = 0, transform = missing)
     matrixf´ = _wraplift(matrixf, lift)
     matrix = _samplematrix(matrixf´, mesh)
     method´ = method === missing ? defaultmethod(matrix) : method
-    codiag = codiagonalizer(matrixf´, matrix, mesh)
-    d = DiagonalizeHelper(method´, codiag, minoverlap)
-    b = _bandstructure(matrixf´, matrix, mesh, d)
+    codiag = codiagonalizer(matrixf´, matrix, mesh, missing)
+    diag = diagonalizer(method´, codiag, minoverlap)
+    b = _bandstructure(matrixf´, matrix, mesh, diag)
     transform === missing || transform!(transform, b)
     return b
 end
@@ -296,7 +296,7 @@ _wraplift(matrixf, lift) = ϕs -> matrixf(applylift(lift, ϕs))
 
 @inline applylift(lift::Function, ϕs) = toSVector(lift(ϕs...))
 
-function _bandstructure(matrixf::Function, matrix´::AbstractMatrix{M}, mesh::MD, d::DiagonalizeHelper) where {M,D,T,MD<:Mesh{D,T}}
+function _bandstructure(matrixf::Function, matrix´::AbstractMatrix{M}, mesh::MD, d::Diagonalizer) where {M,D,T,MD<:Mesh{D,T}}
     nϵ = 0                           # Temporary, to be reassigned
     ϵks = Matrix{T}(undef, 0, 0)     # Temporary, to be reassigned
     ψks = Array{M,3}(undef, 0, 0, 0) # Temporary, to be reassigned
@@ -328,14 +328,17 @@ function _bandstructure(matrixf::Function, matrix´::AbstractMatrix{M}, mesh::MD
     pcounter = 0
     bands = Band{M,Vector{M},Mesh{D+1,T,Vector{SVector{D+1,T}}},Vector{NTuple{D+1,Int}}}[]
     vertindices = zeros(Int, nϵ, nk) # 0 == unclassified, -1 == different band, > 0 vertex index
-    pending = CartesianIndex{2}[]
+    pending = Tuple{Int,CartesianIndex{2}}[] # (originating vertex index, (ϵ, k))
+    dests = Int[]; srcs = Int[]       # To build adjacency matrices
     sizehint!(pending, nk)
     while true
         src = findfirst(iszero, vertindices)
         src === nothing && break
         resize!(pending, 1)
-        pending[1] = src # source CartesianIndex for band search
-        band = extractband(mesh, pending, ϵks, ψks, vertindices, d.minoverlap)
+        resize!(dests, 0)
+        resize!(srcs, 0)
+        pending[1] = (0, src) # source CartesianIndex for band search, with no originating vertex
+        band = extractband(mesh, ϵks, ψks, vertindices, d.minoverlap, pending, dests, srcs)
         nverts = nvertices(band.mesh)
         nverts > D && push!(bands, band) # avoid bands with no simplices
         pcounter += nverts
@@ -347,39 +350,57 @@ end
 _maybereal(::Type{<:Complex}) = identity
 _maybereal(::Type{<:Real}) = real
 
-function extractband(kmesh::Mesh{D,T}, pending, ϵks::AbstractArray{T}, ψks::AbstractArray{M}, vertindices, minoverlap) where {D,T,M}
+function extractband(kmesh::Mesh{D,T}, ϵks::AbstractArray{T}, ψks::AbstractArray{M}, vertindices, minoverlap, pending, dests, srcs) where {D,T,M}
     lenψ, nϵ, nk = size(ψks)
     kverts = vertices(kmesh)
     states = eltype(ψks)[]
     sizehint!(states, nk * lenψ)
     verts = SVector{D+1,T}[]
+    lenverts = 0
     sizehint!(verts, nk)
     adjmat = SparseMatrixBuilder{Bool}()
-    vertindices[first(pending)] = 1 # pending starts with a single vertex
-    for c in pending
-        ϵ, k = Tuple(c) # c == CartesianIndex(ϵ::Int, k::Int)
-        vertex = vcat(kverts[k], SVector(ϵks[c]))
+    srcidx = 0  # represents the index of the last added vertex (used to search for the nexts)
+    while !isempty(pending)
+        origin, src = pop!(pending) # origin is the vertex index that originated this src, 0 if none (first)
+        srcidx = vertindices[src]
+        if srcidx != 0
+            append_adjacent!(dests, srcs, origin, srcidx)
+            continue
+        end
+        ϵ, k = Tuple(src) # src == CartesianIndex(ϵ::Int, k::Int)
+        vertex = vcat(kverts[k], SVector(ϵks[src]))
         push!(verts, vertex)
-        appendslice!(states, ψks, CartesianIndices((1:lenψ, ϵ:ϵ, k:k)))
+        srcidx = length(verts)
+        vertindices[ϵ, k] = srcidx
+        append_slice!(states, ψks, CartesianIndices((1:lenψ, ϵ:ϵ, k:k)))
+        append_adjacent!(dests, srcs, origin, srcidx)
+        added_vertices = 0
         for edgek in edges(kmesh, k)
             k´ = edgedest(kmesh, edgek)
             proj, ϵ´ = findmostparallel(ψks, k´, ϵ, k)
-            if proj >= minoverlap
-                if iszero(vertindices[ϵ´, k´]) # unclassified
-                    push!(pending, CartesianIndex(ϵ´, k´))
-                    vertindices[ϵ´, k´] = length(pending) # this is clever!
-                end
-                indexk´ = vertindices[ϵ´, k´]
-                indexk´ > 0 && pushtocolumn!(adjmat, indexk´, true)
+            # if unclassified and sufficiently parallel add it to pending list
+            if proj >= minoverlap && !iszero(ϵ´) && iszero(vertindices[ϵ´, k´])
+                push!(pending, (srcidx, CartesianIndex(ϵ´, k´)))
+                added_vertices += 1
             end
         end
-        finalizecolumn!(adjmat)
+        # In 1D we avoid backsteps, to keep nicely continuous bands
+        D == 1 && added_vertices == 0 && break
     end
     for (i, vi) in enumerate(vertindices)
         @inbounds vi > 0 && (vertindices[i] = -1) # mark as classified in a different band
     end
-    mesh = Mesh(verts, sparse(adjmat))
+    adjmat = sparse(dests, srcs, true)
+    mesh = Mesh(verts, adjmat)
     return Band(mesh, states, lenψ)
+end
+
+function append_adjacent!(dests, srcs, origin, srcidx)
+    if origin != 0 && srcidx != 0
+        append!(dests, (origin, srcidx))
+        append!(srcs, (srcidx, origin))
+    end
+    return nothing
 end
 
 function findmostparallel(ψks::Array{M,3}, destk, srcb, srck) where {M}

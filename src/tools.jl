@@ -232,7 +232,7 @@ function copyslice!(dest::AbstractArray{T1,N1}, Rdest::CartesianIndices{N1},
     return dest
 end
 
-function appendslice!(dest::AbstractArray, src::AbstractArray{T,N}, Rsrc::CartesianIndices{N}) where {T,N}
+function append_slice!(dest::AbstractArray, src::AbstractArray{T,N}, Rsrc::CartesianIndices{N}) where {T,N}
     checkbounds(src, first(Rsrc))
     checkbounds(src, last(Rsrc))
     Rdest = (length(dest) + 1):(length(dest) + length(Rsrc))
@@ -243,6 +243,10 @@ function appendslice!(dest::AbstractArray, src::AbstractArray{T,N}, Rsrc::Cartes
     end
     return dest
 end
+
+dualarray(a::DenseMatrix) = map(x->Dual.(x, 0), a)
+# Need to preserve stored zeros, so we have to treat sparse case as special
+dualarray(s::SparseMatrixCSC) = SparseMatrixCSC(s.m, s.n, s.colptr, s.rowval, map(x->Dual.(x, 0), s.nzval))
 
 ######################################################################
 # convert a matrix/number block to a matrix/inlinematrix string

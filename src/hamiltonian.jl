@@ -71,7 +71,7 @@ Base.parent(h::Hamiltonian) = h
 
 # Internal API #
 
-latdim(h::Hamiltonian) = last(dims(h))
+latdim(h::Hamiltonian) = last(dims(h.lattice))
 
 matrixtype(::Hamiltonian{LA,L,M,A}) where {LA,L,M,A} = A
 blockeltype(::Hamiltonian{<:Any,<:Any,M}) where {M} = eltype(M)
@@ -142,6 +142,12 @@ _nnzdiag(s::Matrix) = count(!iszero, s[i,i] for i in 1:minimum(size(s)))
 Base.isequal(h1::Hamiltonian, h2::Hamiltonian) =
     isequal(h1.lattice, h2.lattice) && isequal(h1.harmonics, h2.harmonics) &&
     isequal(h1.orbitals, h2.orbitals)
+
+# Dual numbers #
+
+DualNumbers.Dual(h::Hamiltonian) = Hamiltonian(h.lattice, Dual.(h.harmonics), h.orbitals)
+
+DualNumbers.Dual(h::HamiltonianHarmonic) = HamiltonianHarmonic(h.dn, dualarray(h.h))
 
 # Iterators #
 

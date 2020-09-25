@@ -5,7 +5,7 @@ struct ParametricHamiltonian{P,N,M<:NTuple{N,ElementModifier},D<:NTuple{N,Any},H
     baseh::H
     h::H
     modifiers::M                   # N modifiers
-    ptrdata::D                     # P is an NTuple{N,Vector{Vector{ptrdata}}}, one per harmonic
+    ptrdata::D                     # D is an NTuple{N,Vector{Vector{ptrdata}}}, one per harmonic
     allptrs::Vector{Vector{Int}}   # ptrdata may be a nzval ptr, a (ptr,r) or a (ptr, r, dr)
     parameters::NTuple{P,NameType} # allptrs are modified ptrs in each harmonic
 end
@@ -202,6 +202,9 @@ Base.copy(ph::ParametricHamiltonian) =
 Base.size(ph::ParametricHamiltonian, n...) = size(ph.h, n...)
 
 Base.eltype(ph::ParametricHamiltonian) = eltype(ph.h)
+
+DualNumbers.Dual(p::ParametricHamiltonian) =
+    ParametricHamiltonian(Dual(p.baseh), Dual(p.h), p.modifiers, p.ptrdata, p.allptrs, p.parameters)
 
 #######################################################################
 # bloch! for parametric
