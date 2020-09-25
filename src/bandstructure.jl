@@ -193,7 +193,7 @@ Curried form of the above equivalent to `bandstructure(h, [mesh]; kw...)`.
 
 The default options are
 
-    (lift = missing, minoverlap = 0.5, method = defaultmethod(h), transform = missing)
+    (lift = missing, minoverlap = 0, method = defaultmethod(h), transform = missing)
 
 `lift`: when not `missing`, `lift` is a function `lift = (vs...) -> ϕ`, where `vs` are the
 coordinates of a mesh vertex and `ϕ` are Bloch phases if sampling a `h::Hamiltonian`, or
@@ -264,11 +264,11 @@ function bandstructure(h::Union{Hamiltonian,ParametricHamiltonian}, spec::MeshSp
 end
 
 function bandstructure(h::Union{Hamiltonian,ParametricHamiltonian}, mesh::Mesh;
-                       method = defaultmethod(h), lift = missing, minoverlap = 0.5, transform = missing)
+                       method = defaultmethod(h), lift = missing, minoverlap = 0, transform = missing)
     # ishermitian(h) || throw(ArgumentError("Hamiltonian must be hermitian"))
     matrix = similarmatrix(h, method)
     codiag = codiagonalizer(h, matrix, mesh, lift)
-    d = DiagonalizeHelper(method, codiag, minoverlap)
+    d = diagonalizer(method, codiag, minoverlap)
     matrixf(ϕs) = bloch!(matrix, h, applylift(lift, ϕs))
     b = _bandstructure(matrixf, matrix, mesh, d)
     transform === missing || transform!(transform, b)
@@ -276,12 +276,12 @@ function bandstructure(h::Union{Hamiltonian,ParametricHamiltonian}, mesh::Mesh;
 end
 
 function bandstructure(matrixf::Function, mesh::Mesh;
-                       method = missing, lift = missing, minoverlap = 0.5, transform = missing)
+                       method = missing, lift = missing, minoverlap = 0, transform = missing)
     matrixf´ = _wraplift(matrixf, lift)
     matrix = _samplematrix(matrixf´, mesh)
     method´ = method === missing ? defaultmethod(matrix) : method
-    codiag = codiagonalizer(matrixf´, matrix, mesh)
-    d = DiagonalizeHelper(method´, codiag, minoverlap)
+    codiag = codiagonalizer(matrixf´, matrix, mesh, missing)
+    d = diagonalizer(method´, codiag, minoverlap)
     b = _bandstructure(matrixf´, matrix, mesh, d)
     transform === missing || transform!(transform, b)
     return b
@@ -296,7 +296,7 @@ _wraplift(matrixf, lift) = ϕs -> matrixf(applylift(lift, ϕs))
 
 @inline applylift(lift::Function, ϕs) = toSVector(lift(ϕs...))
 
-function _bandstructure(matrixf::Function, matrix´::AbstractMatrix{M}, mesh::MD, d::DiagonalizeHelper) where {M,D,T,MD<:Mesh{D,T}}
+function _bandstructure(matrixf::Function, matrix´::AbstractMatrix{M}, mesh::MD, d::Diagonalizer) where {M,D,T,MD<:Mesh{D,T}}
     nϵ = 0                           # Temporary, to be reassigned
     ϵks = Matrix{T}(undef, 0, 0)     # Temporary, to be reassigned
     ψks = Array{M,3}(undef, 0, 0, 0) # Temporary, to be reassigned

@@ -71,7 +71,7 @@ Base.parent(h::Hamiltonian) = h
 
 # Internal API #
 
-latdim(h::Hamiltonian) = last(dims(h))
+latdim(h::Hamiltonian) = last(dims(h.lattice))
 
 matrixtype(::Hamiltonian{LA,L,M,A}) where {LA,L,M,A} = A
 blockeltype(::Hamiltonian{<:Any,<:Any,M}) where {M} = eltype(M)

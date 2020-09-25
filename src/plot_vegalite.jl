@@ -1,7 +1,7 @@
 using .VegaLite
 
 """
-    vlplot(b::Bandstructure{1}; size = 640, points = false, labels = ("φ/2π", "ε"), scaling = (1/2π, 1), range = missing)
+    vlplot(b::Bandstructure{1}; size = 640, points = false, labels = ("φ/2π", "ε"), scaling = (1/2π, 1), range = missing, bands = missing)
 
 Plots the 1D bandstructure `b` using VegaLite.
 
@@ -17,9 +17,9 @@ Plots the the Hamiltonian lattice projected along `axes` using VegaLite.
     - `range`: `(ymin, ymax)` or `((xmin, xmax), (ymin, ymax))` to constrain plot range
     - `axes`: lattice axes to project onto the plot x-y plane
 """
-function VegaLite.vlplot(b::Bandstructure; labels = ("φ", "ε"), scaling = (1, 1), size = 640, points = false, range = missing)
+function VegaLite.vlplot(b::Bandstructure; labels = ("φ", "ε"), scaling = (1, 1), size = 640, points = false, range = missing, bands = missing)
     labelx, labely = labels
-    table = bandtable(b, make_it_two(scaling))
+    table = bandtable(b, make_it_two(scaling), bands)
     sizes = make_it_two(size)
     corners = _corners(table)
     range´ = sanitize_plotrange(range)
@@ -33,10 +33,12 @@ function VegaLite.vlplot(b::Bandstructure; labels = ("φ", "ε"), scaling = (1, 
     return p
 end
 
-function bandtable(b::Bandstructure{1}, (scalingx, scalingy) = (1, 1))
+function bandtable(b::Bandstructure{1}, (scalingx, scalingy), bandsiter)
+    bandsiter´ = bandsiter === missing ? eachindex(bands(b)) : bandsiter
     ks = vertices(b.kmesh)
+    bnds = bands(b)
     table = [(x = v[1] * scalingx, y = v[2] * scalingy, band = i, tooltip = string(v))
-             for (i, bnd) in enumerate(bands(b)) for v in vertices(bnd)]
+             for i in bandsiter´ for v in vertices(bnds[i])]
     return table
 end
 

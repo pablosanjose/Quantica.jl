@@ -4,11 +4,13 @@
 #######################################################################
 abstract type AbstractDiagonalizeMethod end
 
-struct DiagonalizeHelper{S<:AbstractDiagonalizeMethod,C}
+struct Diagonalizer{S<:AbstractDiagonalizeMethod,C}
     method::S
     codiag::C
     minoverlap::Float64
 end
+
+diagonalizer(method, codiag, minoverlap) = Diagonalizer(method, codiag, Float64(minoverlap))
 
 ## Diagonalize methods ##
 
@@ -141,7 +143,7 @@ function resolve_degeneracies!(ϵ, ψ, ϕs, codiag)
     resize!(ranges, 0)
     pushapproxruns!(ranges, ϵ, 0, codiag.degtol) # 0 is an offset
     for n in codiag.matrixindices
-        v = codiag.cmatrixf(ϕs, n)
+        v = codiag.comatrix(ϕs, n)
         resize!(ranges´, 0)
         for (i, r) in enumerate(ranges)
             subspace = view(ψ, :, r)
@@ -177,7 +179,7 @@ end
 ## Uses velocity operators along different directions. If not enough, use finite differences
 ## along mesh directions
 struct Codiagonalizer{T,F<:Function}
-    cmatrixf::F
+    comatrix::F
     matrixindices::UnitRange{Int}
     degtol::T
     rangesA::Vector{UnitRange{Int}} # Prealloc buffer for degeneray ranges
@@ -185,50 +187,57 @@ struct Codiagonalizer{T,F<:Function}
     perm::Vector{Int}               # Prealloc for sortperm!
 end
 
-function codiagonalizer(h::Union{Hamiltonian,ParametricHamiltonian}, matrix::AbstractMatrix, mesh, lift; kw...)
-    hdual = Dual(h)
-    matrixdual = dualarray(matrix)
-    meshdirs = meshdirections(mesh)
-    nv = length(meshdirs)
-    matrixindices = 1:(nv + nv + 1)
+# lift = missing is assumed when h is a Function that generates matrices, instead of a Hamiltonian or ParametricHamiltonian
+function codiagonalizer(h, matrix::AbstractMatrix, mesh, lift; kw...)
+    dirs = codiag_directions(h)
     degtol = sqrt(eps(real(blockeltype(h))))
     delta = meshdelta(mesh)
     delta = iszero(delta) ? degtol : delta
+    comatrix, matrixindices = codiag_function(h, matrix, lift, dirs, delta)
+    return Codiagonalizer(comatrix, matrixindices, degtol, UnitRange{Int}[], UnitRange{Int}[], Int[])
+end
+
+function codiag_function(h::Union{Hamiltonian,ParametricHamiltonian}, matrix, lift, dirs, delta)
+    hdual = Dual(h)
+    matrixdual = dualarray(matrix)
     anyold = anyoldmatrix(matrix)
-    cmatrixf(meshϕs, n) =
-        if n <= nv
-            dualϕs = _dualϕs(meshϕs, n)
-            dualpart.(bloch!(matrixdual, hdual, applylift(lift, dualϕs)))
-        elseif n - nv <= nv # resort to finite differences
-            bloch!(matrix, h, applylift(lift, meshϕs + delta * meshdirs[n - nv]))
+    ndirs = length(dirs)
+    matrixindices = 1:(ndirs + ndirs + 1)
+    comatrix(meshϕs, n) =
+        if n <= ndirs # automatic differentiation using dual numbers
+            ϕs´ = dualϕs(applylift(lift, meshϕs), dirs[n])
+            dualpart.(bloch!(matrixdual, hdual, ϕs´))
+        elseif n - ndirs <= ndirs # resort to finite differences
+            ϕs´ = deltaϕs(applylift(lift, meshϕs), delta * dirs[n - ndirs])
+            bloch!(matrix, h, ϕs´)
         else # use a fixed arbitrary matrix
             anyold
         end
-    return Codiagonalizer(cmatrixf, matrixindices, degtol, UnitRange{Int}[], UnitRange{Int}[], Int[])
+    return comatrix, matrixindices
 end
 
-_dualϕs(meshϕs::SVector{N,T}, n) where {N,T} = Dual.(meshϕs, ntuple(i -> ifelse(i == n, T(1), T(0)), Val(N)))
-
-function codiagonalizer(matrixf::Function, matrix::AbstractMatrix{T}, mesh; kw...) where {T}
-    meshdirs = meshdirections(mesh; kw...)
-    nm = length(meshdirs)
-    matrixindices = 1:(nm + 1)
-    degtol = sqrt(eps(real(eltype(T))))
-    delta = meshdelta(mesh)
-    delta = iszero(delta) ? degtol : delta
+function codiag_function(matrixf::Function, matrix, lift, dirs, delta)
     anyold = anyoldmatrix(matrix)
-    cmatrixf(meshϕs, n) =
-        if n <= nm # finite differences
-            matrixf(meshϕs + delta * meshdirs[n])
+    ndirs = length(dirs)
+    matrixindices = 1:(ndirs + ndirs + 1)
+    comatrix(meshϕs, n) =
+        if n <= ndirs # automatic differentiation using dual numbers
+            ϕs´ = dualϕs(applylift(lift, meshϕs), dirs[n])
+            dualpart.(matrixf(ϕs´))
+        elseif n - ndirs <= ndirs # finite differences
+            matrixf(applylift(lift, meshϕs) + delta * meshdirs[n])
         else # use a fixed arbitrary matrix
             anyold
         end
-    return Codiagonalizer(cmatrixf, matrixindices, degtol, UnitRange{Int}[], UnitRange{Int}[], Int[])
+    return comatrix, matrixindices
 end
 
-meshdirections(::Mesh{L}; kw...) where {L} = _directions(Val(L); kw...)
+codiag_directions(h) = codiag_directions(_valdim(h))
 
-function _directions(::Val{L}; direlements = 0:1, onlypositive = true) where {L}
+@inline _valdim(::Hamiltonian{<:Any,L}) where {L} = Val(L)
+@inline _valdim(ph::ParametricHamiltonian{N}) where {N} = Val(N+latdim(ph.h))
+
+function codiag_directions(::Val{L}, direlements = 0:1, onlypositive = true) where {L}
     directions = vec(SVector{L,Int}.(Iterators.product(ntuple(_ -> direlements, Val(L))...)))
     onlypositive && filter!(ispositive, directions)
     unique!(normalize, directions)
@@ -236,15 +245,14 @@ function _directions(::Val{L}; direlements = 0:1, onlypositive = true) where {L}
     return directions
 end
 
-meshdelta(mesh::Mesh{<:Any,T}) where {T} = T(0.1) * norm(first(minmax_edge(mesh)))
+dualϕs(liftedϕs, dir) = maybe_dual.(liftedϕs, dir)
 
-# function anyoldmatrix(matrix::SparseMatrixCSC{Tv,Ti}) where {Tv,Ti}
-#     n = size(matrix, 1)
-#     ri = one(Ti):Ti(n)
-#     rv = Tv.(im .* (1:n))
-#     s = sparse(ri, ri, rv, n, n)
-#     return s
-# end
+maybe_dual(liftedϕ::Number, ε) = Dual(liftedϕ, ε)
+maybe_dual(liftedϕ, ε) = liftedϕ
+
+deltaϕs(liftedϕs, dir) = liftedϕs + dir
+
+meshdelta(mesh::Mesh{<:Any,T}) where {T} = T(0.5) * norm(first(minmax_edge(mesh)))
 
 function anyoldmatrix(matrix::SparseMatrixCSC, rng = MersenneTwister(1))
     s = copy(matrix)
@@ -252,5 +260,4 @@ function anyoldmatrix(matrix::SparseMatrixCSC, rng = MersenneTwister(1))
     return s
 end
 
-# anyoldmatrix(m::M) where {T,M<:DenseArray{T}} = M(Diagonal(T.(im .* (1:size(m,1)))))
 anyoldmatrix(m::DenseArray, rng = MersenneTwister(1)) = rand!(rng, copy(m))
