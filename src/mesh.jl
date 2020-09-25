@@ -4,7 +4,7 @@
 
 abstract type AbstractMesh{D} end
 
-struct Mesh{D,T,V<:AbstractArray{SVector{D,T}}} <: AbstractMesh{D}   # D is dimension of parameter space
+struct Mesh{D,T<:Number,V<:AbstractArray{SVector{D,T}}} <: AbstractMesh{D}   # D is dimension of parameter space
     vertices::V                         # Iterable vertex container with SVector{D,T} eltype
     adjmat::SparseMatrixCSC{Bool,Int}   # Undirected graph: both dest > src and dest < src
 end
@@ -205,8 +205,10 @@ Mesh{2}: mesh of a 2-dimensional manifold
 # External links
 - Marching tetrahedra (https://en.wikipedia.org/wiki/Marching_tetrahedra) in Wikipedia
 """
-marchingmesh(minmaxaxes::Vararg{Tuple,L}; axes = 1.0 * I, points = 13) where {L} =
+marchingmesh(minmaxaxes::Vararg{Tuple{Number,Number},L}; axes = 1.0 * I, points = 13) where {L} =
     MarchingMeshSpec(minmaxaxes, SMatrix{L,L}(axes), points)
+
+marchingmesh(minmaxaxes...; kw...) = throw(ArgumentError("Only mesh vertices with Number eltype are supported"))
 
 marchingmesh(; kw...) = throw(ArgumentError("Need a finite number of ranges to define a marching mesh"))
 
