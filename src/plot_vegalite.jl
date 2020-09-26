@@ -5,7 +5,7 @@ using .VegaLite
 
 Plots the 1D bandstructure `b` using VegaLite.
 
-    vlplot(h::Hamiltonian; size = 800, labels = ("x", "y"), axes::Tuple{Int,Int} = (1,2), range = missing)
+    vlplot(h::Hamiltonian; size = 800, labels = ("x", "y"), axes::Tuple{Int,Int} = (1,2), range = missing, digits = 5)
 
 Plots the the Hamiltonian lattice projected along `axes` using VegaLite.
 
@@ -16,6 +16,7 @@ Plots the the Hamiltonian lattice projected along `axes` using VegaLite.
     - `scaling`: `(scalex, scaley)` scalings for the x (Bloch phase) and y (energy) variables
     - `range`: `(ymin, ymax)` or `((xmin, xmax), (ymin, ymax))` to constrain plot range
     - `axes`: lattice axes to project onto the plot x-y plane
+    - `digits`: number of significant digits to show in onsite energy and hopping tooltips
 """
 function VegaLite.vlplot(b::Bandstructure; labels = ("φ", "ε"), scaling = (1, 1), size = 640, points = false, range = missing, bands = missing)
     labelx, labely = labels
@@ -43,8 +44,8 @@ function bandtable(b::Bandstructure{1}, (scalingx, scalingy), bandsiter)
 end
 
 function VegaLite.vlplot(h::Hamiltonian{LA};
-                         labels = ("x","y"), size = 800, axes::Tuple{Int,Int} = (1,2), range = missing) where {E,LA<:Lattice{E}}
-    table = linkstable(h, axes)
+                         labels = ("x","y"), size = 800, axes::Tuple{Int,Int} = (1,2), range = missing, digits = 5) where {E,LA<:Lattice{E}}
+    table = linkstable(h, axes, digits)
     corners = _corners(table)
     range´ = sanitize_plotrange(range)
     (domainx, domainy), sizes = domain_size(corners, size, range´)
@@ -63,7 +64,7 @@ function VegaLite.vlplot(h::Hamiltonian{LA};
     return p
 end
 
-function linkstable(h::Hamiltonian, (a1, a2) = (1, 2))
+function linkstable(h::Hamiltonian, (a1, a2), digits)
     lat = h.lattice
     T = numbertype(lat)
     slats = sublats(lat)
@@ -79,7 +80,7 @@ function linkstable(h::Hamiltonian, (a1, a2) = (1, 2))
                 for (i, r) in enumeratesites(lat, ssrc)
                     x = get(r, a1, zero(T)); y = get(r, a2, zero(T))
                     push!(table, (x = x, y = y, x2 = x, y2 = y,
-                                sublat = sublatname(lat, ssrc), tooltip = matrixstring_inline(i, h0[i, i]),
+                                sublat = sublatname(lat, ssrc), tooltip = matrixstring_inline(i, h0[i, i], digits),
                                 opacity = 1.0, islink = false))
                 end
             end
@@ -94,7 +95,7 @@ function linkstable(h::Hamiltonian, (a1, a2) = (1, 2))
                         x = get(rdst, a1, zero(T)); y = get(rdst, a2, zero(T))
                         push!(table,
                             (x = x, y = y, x2 = x, y2 = y,
-                            sublat = sublatname(lat, sdst), tooltip = matrixstring_inline(row, h0[row, row]),
+                            sublat = sublatname(lat, sdst), tooltip = matrixstring_inline(row, h0[row, row], digits),
                             opacity = 0.5, islink = false))
                         push!(rows, row)
                     end
@@ -105,7 +106,7 @@ function linkstable(h::Hamiltonian, (a1, a2) = (1, 2))
                     # Exclude links perpendicular to the screen
                     rdst ≈ rsrc || push!(table,
                         (x = x, y = y, x2 = x´, y2 = y´,
-                        sublat = sublatname(lat, ssrc), tooltip = matrixstring_inline(row, col, har.h[row, col]),
+                        sublat = sublatname(lat, ssrc), tooltip = matrixstring_inline(row, col, har.h[row, col], digits),
                         opacity = iszero(har.dn) ? 1.0 : 0.5, islink = true))
                 end
             end
