@@ -56,7 +56,7 @@ struct Unitcell{E,T,N}
     sites::Vector{SVector{E,T}}
     names::NTuple{N,NameType}
     offsets::Vector{Int}        # Linear site number offsets for each sublat
-end                             # so that diff(offset) == sublatsites
+end                             # so that diff(offset) == sublatlengths
 
 Unitcell(sublats::Sublat...; kw...) = Unitcell(promote(sublats...); kw...)
 
@@ -113,7 +113,7 @@ siterange(u::Unitcell, sublat) = (1+u.offsets[sublat]):u.offsets[sublat+1]
 enumeratesites(u::Unitcell, sublat) = ((i, sitepositions(u)[i]) for i in siterange(u, sublat))
 
 nsites(u::Unitcell) = length(u.sites)
-nsites(u::Unitcell, sublat) = sublatsites(u)[sublat]
+nsites(u::Unitcell, sublat) = sublatlengths(u)[sublat]
 
 offsets(u::Unitcell) = u.offsets
 
@@ -125,7 +125,7 @@ function sublat(u::Unitcell, siteidx)
     return l
 end
 
-sublatsites(u::Unitcell) = diff(u.offsets)
+sublatlengths(u::Unitcell) = diff(u.offsets)
 
 nsublats(u::Unitcell) = length(u.names)
 
@@ -205,7 +205,7 @@ function Base.show(io::IO, lat::Lattice)
 "$i  Bravais vectors : $(displayvectors(bravais(lat); digits = 6))
 $i  Sublattices     : $(nsublats(lat))
 $i    Names         : $(displaynames(lat))
-$i    Sites         : $(display_as_tuple(sublatsites(lat))) --> $(nsites(lat)) total per unit cell")
+$i    Sites         : $(display_as_tuple(sublatlengths(lat))) --> $(nsites(lat)) total per unit cell")
 end
 
 Base.summary(::Lattice{E,L,T}) where {E,L,T} =
@@ -376,7 +376,7 @@ function Base.show(io::IO, lat::Superlattice)
 "$i  Bravais vectors : $(displayvectors(bravais(lat); digits = 6))
 $i  Sublattices     : $(nsublats(lat))
 $i    Names         : $(displaynames(lat))
-$i    Sites         : $(display_as_tuple(sublatsites(lat))) --> $(nsites(lat)) total per unit cell\n")
+$i    Sites         : $(display_as_tuple(sublatlengths(lat))) --> $(nsites(lat)) total per unit cell\n")
     print(ioindent, lat.supercell)
 end
 
@@ -445,9 +445,11 @@ allsitepositions(lat::AbstractLattice) = sitepositions(lat.unitcell)
 siteposition(i, lat::AbstractLattice) = allsitepositions(lat)[i]
 siteposition(i, dn::SVector, lat::AbstractLattice) = siteposition(i, lat) + bravais(lat) * dn
 
+sitesublats(lat::AbstractLattice) = sitesublats(lat.unitcell)
+
 offsets(lat::AbstractLattice) = offsets(lat.unitcell)
 
-sublatsites(lat::AbstractLattice) = sublatsites(lat.unitcell)
+sublatlengths(lat::AbstractLattice) = sublatlengths(lat.unitcell)
 
 enumeratesites(lat::AbstractLattice, sublat) = enumeratesites(lat.unitcell, sublat)
 

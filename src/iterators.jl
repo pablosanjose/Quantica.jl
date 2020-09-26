@@ -339,3 +339,24 @@ function Base.iterate(s::SparseMatrixReader, state = (1, 1))
 end
 
 enumerate_sparse(s::SparseMatrixCSC) = SparseMatrixReader(s)
+
+#######################################################################
+# SiteSublats
+#######################################################################
+
+struct SiteSublats{G,U}
+    g::G
+    u::U
+end
+
+sitesublats(u) = SiteSublats(((i, s) for s in sublats(u) for i in siterange(u, s)), u)
+
+Base.iterate(s::SiteSublats, x...) = iterate(s.g, x...)
+
+Base.IteratorSize(::SiteSublats) = Base.HasLength()
+
+Base.IteratorEltype(::SiteSublats) = Base.HasEltype()
+
+Base.eltype(::SiteSublats) = Tuple{Int,Int}
+
+Base.length(s::SiteSublats) = nsites(s.u)

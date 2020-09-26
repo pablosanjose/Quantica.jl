@@ -453,13 +453,13 @@ struct TightbindingModel{N,T<:Tuple{Vararg{TightbindingModelTerm,N}}}
     terms::T
 end
 
-struct OnsiteTerm{F,S<:SiteSelector,C} <: AbstractOnsiteTerm
+struct OnsiteTerm{F,S<:Union{SiteSelector, ResolvedSelector{<:SiteSelector}},C} <: AbstractOnsiteTerm
     o::F
     selector::S
     coefficient::C
 end
 
-struct HoppingTerm{F,S<:HopSelector,C} <: AbstractHoppingTerm
+struct HoppingTerm{F,S<:Union{HopSelector, ResolvedSelector{<:HopSelector}},C} <: AbstractHoppingTerm
     t::F
     selector::S
     coefficient::C
@@ -472,7 +472,7 @@ terms(t::TightbindingModel) = t.terms
 
 TightbindingModel(ts::TightbindingModelTerm...) = TightbindingModel(ts)
 
-# (m::TightbindingModel)(r, dr) = sum(t -> t(r, dr), m.terms)
+# (m::TightbindingModel)(r, dr) = sum(t -> t(r, dr), m.terms)  # this does not filter by selector, so it's wrong
 
 # External API #
 
@@ -508,6 +508,10 @@ sublats(t::TightbindingModelTerm, lat) = resolve_sublats(t.selector, lat)
 
 sublats(m::TightbindingModel) = (t -> t.selector.sublats).(terms(m))
 
+resolve(t::OnsiteTerm, lat::AbstractLattice) = OnsiteTerm(t.o, resolve(t.selector, lat), t.coefficient)
+resolve(t::HoppingTerm, lat::AbstractLattice) = HoppingTerm(t.t, resolve(t.selector, lat), t.coefficient)
+resolve(m::TightbindingModel, lat::AbstractLattice) = TightbindingModel(resolve.(m.terms, Ref(lat)))
+
 displayparameter(::Type{<:Function}) = "Function"
 displayparameter(::Type{T}) where {T} = "$T"
 
@@ -516,7 +520,7 @@ displayrange(::Missing) = "any"
 displayrange(nr::NeighborRange) = "NeighborRange($(nr.n))"
 displayrange(rs::Tuple) = "($(displayrange(first(rs))), $(displayrange(last(rs))))"
 
-function Base.show(io::IO, o::OnsiteTerm{F}) where {F}
+function Base.show(io::IO, o::OnsiteTerm{F,<:SiteSelector}) where {F}
     i = get(io, :indent, "")
     print(io,
 "$(i)OnsiteTerm{$(displayparameter(F))}:
@@ -524,7 +528,7 @@ $(i)  Sublattices      : $(o.selector.sublats === missing ? "any" : o.selector.s
 $(i)  Coefficient      : $(o.coefficient)")
 end
 
-function Base.show(io::IO, h::HoppingTerm{F}) where {F}
+function Base.show(io::IO, h::HoppingTerm{F,<:HopSelector}) where {F}
     i = get(io, :indent, "")
     print(io,
 "$(i)HoppingTerm{$(displayparameter(F))}:
@@ -923,11 +927,14 @@ _resolve(lat) = ()
 # kets
 #######################################################################
 
-struct KetModel{M<:TightbindingModel}
+struct KetModel{M<:TightbindingModel,O<:Val}
     model::M
     normalized::Bool
-    maporbitals::Bool
+    maporbitals::O
 end
+
+maporbitals(::KetModel{<:Any,Val{true}}) = true
+maporbitals(::KetModel{<:Any,Val{false}}) = false
 
 function Base.show(io::IO, k::KetModel{M}) where {N,M<:TightbindingModel{N}}
     ioindent = IOContext(io, :indent => "  ")
@@ -994,43 +1001,40 @@ KetModel{2}: model with 2 terms
 # See also:
     `onsite`, `Vector`, `Matrix`
 """
-ket(f; normalized = true, maporbitals = false, kw...) = KetModel(onsite(f; kw...), normalized, maporbitals)
+ket(f; normalized = true, maporbitals::Bool = false, kw...) = KetModel(onsite(f; kw...), normalized, Val(maporbitals))
 
 Base.:*(x, k::KetModel) = KetModel(k.model * x, k.normalized, k.maporbitals)
 Base.:*(k::KetModel, x) = KetModel(x * k.model, k.normalized, k.maporbitals)
 Base.:-(k::KetModel) = KetModel(-k.model, k.normalized, k.maporbitals)
-Base.:-(k1::KetModel, k2::KetModel) = KetModel(k1.model - k2.model, k1.normalized && k2.normalized, k1.maporbitals && k2.maporbitals)
-Base.:+(k1::KetModel, k2::KetModel) = KetModel(k1.model + k2.model, k1.normalized && k2.normalized, k1.maporbitals && k2.maporbitals)
+Base.:-(k1::KetModel, k2::KetModel) = KetModel(k1.model - k2.model, k1.normalized && k2.normalized, _andVal(k1.maporbitals, k2.maporbitals))
+Base.:+(k1::KetModel, k2::KetModel) = KetModel(k1.model + k2.model, k1.normalized && k2.normalized, _andVal(k1.maporbitals, k2.maporbitals))
 
-generate_amplitude(km::KetModel, term, r, M::Type{<:Number}, orbs) = toeltype(term(r, r), M, orbs)
+_andVal(::Val{A},::Val{B}) where {A,B} = Val(A && B)
 
-function generate_amplitude(km::KetModel, term, r, M::Type{<:SVector}, orbs::NTuple{N}) where {N}
-    if km.maporbitals
-        t = toeltype(SVector(ntuple(_ -> term(r, r), Val(N))), M, orbs)
-    else
-        t = toeltype(term(r, r), M, orbs)
-    end
-    return t
-end
+resolve(k::KetModel, lat::AbstractLattice) = KetModel(resolve(k.model, lat), k.normalized, k.maporbitals)
 
 ### StochasticTraceKets ###
 
 struct StochasticTraceKets{K<:KetModel}
     ketmodel::K
     repetitions::Int
-    orthogonal::Bool
 end
 
 function Base.show(io::IO, k::StochasticTraceKets)
     ioindent = IOContext(io, :indent => "  ")
     print(io, "StochasticTraceKets:
-  Repetitions  : $(k.repetitions)
-  Orthogonal   : $(k.orthogonal)\n")
+  Repetitions  : $(k.repetitions)\n")
     show(ioindent, k.ketmodel)
 end
 
+function resolve(k::StochasticTraceKets, lat::AbstractLattice)
+    ketmodel = resolve(k.ketmodel, lat)
+    iter = Base.Iterators.repeated(ketmodel, k.repetitions)
+    return iter
+end
+
 """
-    randomkets(n, f::Function = r -> cis(2pi*rand()); orthogonal = false, maporbitals = false, kw...)
+    randomkets(n, f::Function = r -> cis(2pi*rand()); maporbitals = false, kw...)
 
 Create a `StochasticTraceKets` object to use in stochastic trace evaluation of KPM methods.
 The ket amplitudes at point `r` is given by function `f(r)`. In order to produce an accurate
@@ -1044,13 +1048,13 @@ For example, to have independent, complex, normally-distributed random component
 orbitals use `randomkets(n, r -> randn(SVector{2,ComplexF64}))`, or alternatively
 `randomkets(n, r -> randn(ComplexF64), maporbitals = true)`.
 
-If `orthogonal == true` the random kets are made orthogonal after sampling. This option is
-currently only available for scalar ket eltype. The remaining keywords `kw` are passed to
-`ket` and can be used to constrain the random amplitude to a subset of sites. `normalized`,
-however, is always `false`.
+If `maporbitals == true` the function `f` (which should then return a scalar) is applied
+independently to each orbital. The remaining keywords `kw` are passed to `ket` and can be
+used to constrain the random amplitude to a subset of sites. `normalized`, however, is
+always `false`.
 
 # See also:
     `ket`
 """
-randomkets(n::Int, f = r -> cis(2pi*rand()); orthogonal = false, kw...) =
-    StochasticTraceKets(ket(f; normalized = false, kw...), n, orthogonal)
+randomkets(n::Int, f = r -> cis(2pi*rand()); kw...) =
+    StochasticTraceKets(ket(f; normalized = false, kw...), n)

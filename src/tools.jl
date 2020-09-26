@@ -178,6 +178,15 @@ function unique_sorted_approx!(v::AbstractVector{T}) where {T}
     return v
 end
 
+normalize_columns!(kmat::AbstractMatrix) = normalize_columns!(kmat, axes(kmat, 2))
+
+function normalize_columns!(kmat::AbstractMatrix, cols)
+    for col in cols
+        normalize!(view(kmat, :, col))
+    end
+    return kmat
+end
+
 ############################################################################################
 
 function pushapproxruns!(runs::AbstractVector{<:UnitRange}, list::AbstractVector{T},
