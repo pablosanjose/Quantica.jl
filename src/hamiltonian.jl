@@ -532,7 +532,8 @@ convert_blochmatrix(h, blochtype) = convert_blochmatrix(h, h.harmonics, blochtyp
 convert_blochmatrix(h, harmonics´, ::Missing) = h.blochmatrix
 convert_blochmatrix(h, harmonics´, blochtype::Type{T}) where {T} =
     typeof(h.blochmatrix) <: T ? h.blochmatrix : similarmatrix(blochtype, harmonics´, h.orbitals, h.lattice)
-convert_blochmatrix(h, harmonics´, blochtype) = similarmatrix(blochtype, harmonics´, h.orbitals, h.lattice)
+convert_blochmatrix(h, harmonics´, blochtype::typeof(flatten)) =
+    eltype(h.blochmatrix) <: Number ? h.blochmatrix : similarmatrix(blochtype, harmonics´, h.orbitals, h.lattice)
 
 blochtype!(h::Hamiltonian, blochtype) =
     blochtype!(h, convert_blochmatrix(h, blochtype))

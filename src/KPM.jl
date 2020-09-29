@@ -194,9 +194,13 @@ end
 function bandbracketKPM(h, ::Missing)
     bandbracketKPM(h, bandrangeKPM(h))
 end
+
 bandbracketKPM(h, (ϵmin, ϵmax)::Tuple{T,T}, pad = float(T)(0.01)) where {T} = ((ϵmax + ϵmin) / 2, (ϵmax - ϵmin) / (2 - pad))
 
-bandrangeKPM(h::Hamiltonian) = bandrangeKPM(matrixKPM(h, ArnoldiMethodPackage()))
+function bandrangeKPM(h::Hamiltonian)
+    h´ = hamiltonian(h, blochtype = flatten)
+    return bandrangeKPM(bloch!(h´))
+end
 
 function bandrangeKPM(h::AbstractMatrix{T}) where {T}
     @warn "Computing spectrum bounds... Consider using the `bandrange` option for faster performance."
