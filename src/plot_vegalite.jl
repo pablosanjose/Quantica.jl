@@ -66,7 +66,7 @@ end
 
 function linkstable(h::Hamiltonian, (a1, a2), digits)
     lat = h.lattice
-    T = numbertype(lat)
+    T = coordtype(lat)
     slats = sublats(lat)
     rs = allsitepositions(lat)
     table = NamedTuple{(:x, :y, :x2, :y2, :sublat, :tooltip, :opacity, :islink),

@@ -7,7 +7,7 @@ struct Spectrum{E,T,A<:AbstractMatrix{T}}
 end
 
 """
-    spectrum(h; method = defaultmethod(h), transform = missing)
+    spectrum(h; method = defaultmethod(), transform = missing)
 
 Compute the spectrum of a 0D Hamiltonian `h` (or alternatively of the bounded unit cell of a
 finite dimensional `h`) using one of the following `method`s
@@ -27,9 +27,9 @@ The energies and eigenstates in the resulting `s::Spectrum` object can be access
     `energies`, `states`, `bandstructure`
 
 """
-function spectrum(h; method = defaultmethod(h), transform = missing)
-    matrix = similarmatrix(h, method)
-    bloch!(matrix, h)
+function spectrum(h; method = defaultmethod(), transform = missing)
+    h´ = blochtype!(h, method_blochtype(method, h))
+    matrix = bloch!(h´)
     (ϵk, ψk) = diagonalize(matrix, method)
     s = Spectrum(ϵk, ψk)
     transform === missing || transform!(transform, s)
@@ -193,7 +193,7 @@ Curried form of the above equivalent to `bandstructure(h, [mesh]; kw...)`.
 
 The default options are
 
-    (lift = missing, minoverlap = 0, method = defaultmethod(h), transform = missing)
+    (lift = missing, minoverlap = 0, method = defaultmethod(), transform = missing)
 
 `lift`: when not `missing`, `lift` is a function `lift = (vs...) -> ϕ`, where `vs` are the
 coordinates of a mesh vertex and `ϕ` are Bloch phases if sampling a `h::Hamiltonian`, or
@@ -264,30 +264,28 @@ function bandstructure(h::Union{Hamiltonian,ParametricHamiltonian}, spec::MeshSp
 end
 
 function bandstructure(h::Union{Hamiltonian,ParametricHamiltonian}, mesh::Mesh;
-                       method = defaultmethod(h), lift = missing, minoverlap = 0, transform = missing)
+                       method = defaultmethod(), lift = missing, minoverlap = 0, transform = missing)
     # ishermitian(h) || throw(ArgumentError("Hamiltonian must be hermitian"))
-    matrix = similarmatrix(h, method)
-    codiag = codiagonalizer(h, matrix, mesh, lift)
+    h´ = blochtype!(h, method_blochtype(method, h))
+    codiag = codiagonalizer(h´, mesh, lift)
     diag = diagonalizer(method, codiag, minoverlap)
-    matrixf(ϕs) = bloch!(matrix, h, applylift(lift, ϕs))
-    b = _bandstructure(matrixf, matrix, mesh, diag)
+    matrixf(ϕs) = bloch!(h´, applylift(lift, ϕs))
+    samplebloch = parent(h´).blochmatrix
+    b = _bandstructure(matrixf, samplebloch, mesh, diag)
     transform === missing || transform!(transform, b)
     return b
 end
 
 function bandstructure(matrixf::Function, mesh::Mesh;
-                       method = missing, lift = missing, minoverlap = 0, transform = missing)
+                       method = defaultmethod(), lift = missing, minoverlap = 0, transform = missing)
     matrixf´ = _wraplift(matrixf, lift)
-    matrix = _samplematrix(matrixf´, mesh)
-    method´ = method === missing ? defaultmethod(matrix) : method
-    codiag = codiagonalizer(matrixf´, matrix, mesh, missing)
-    diag = diagonalizer(method´, codiag, minoverlap)
-    b = _bandstructure(matrixf´, matrix, mesh, diag)
+    codiag = codiagonalizer(matrixf´, mesh, missing)
+    diag = diagonalizer(method, codiag, minoverlap)
+    samplebloch = matrixf(Tuple(first(vertices(mesh))))
+    b = _bandstructure(matrixf´, samplebloch, mesh, diag)
     transform === missing || transform!(transform, b)
     return b
 end
-
-_samplematrix(matrixf, mesh) = matrixf(Tuple(first(vertices(mesh))))
 
 _wraplift(matrixf, lift::Missing) = matrixf
 _wraplift(matrixf, lift) = ϕs -> matrixf(applylift(lift, ϕs))
@@ -296,12 +294,12 @@ _wraplift(matrixf, lift) = ϕs -> matrixf(applylift(lift, ϕs))
 
 @inline applylift(lift::Function, ϕs) = toSVector(lift(ϕs...))
 
-function _bandstructure(matrixf::Function, matrix´::AbstractMatrix{M}, mesh::MD, d::Diagonalizer) where {M,D,T,MD<:Mesh{D,T}}
+function _bandstructure(matrixf::Function, samplebloch::AbstractMatrix{M}, mesh::MD, d::Diagonalizer) where {M,D,T,MD<:Mesh{D,T}}
     nϵ = 0                           # Temporary, to be reassigned
     ϵks = Matrix{T}(undef, 0, 0)     # Temporary, to be reassigned
     ψks = Array{M,3}(undef, 0, 0, 0) # Temporary, to be reassigned
 
-    lenψ = size(matrix´, 1)
+    lenψ = size(samplebloch, 1)
     nk = nvertices(mesh)
     # function to apply to eigenvalues when building bands (depends on momenta type)
     by = _maybereal(T)

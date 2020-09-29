@@ -12,8 +12,8 @@ using Quantica: Hamiltonian, ParametricHamiltonian, nhoppings, nonsites, nsites,
         E, L = dims(lat)
         dn0 = ntuple(_ -> 1, Val(L))
         for (t, o) in zip(ts, orbs)
-            @test hamiltonian(lat, onsite(t) + hopping(t; range = 1), orbitals = o, type = type) isa Hamiltonian
-            @test hamiltonian(lat, onsite(t) - hopping(t; dn = dn0), orbitals = o, type = type) isa Hamiltonian
+            @test hamiltonian(lat, onsite(t) + hopping(t; range = 1), orbitals = o, orbtype = type) isa Hamiltonian
+            @test hamiltonian(lat, onsite(t) - hopping(t; dn = dn0), orbitals = o, orbtype = type) isa Hamiltonian
         end
     end
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = 1/√3))
@@ -84,29 +84,34 @@ end
     @test bloch(wh) ≈ bloch(h, (1,2,3))
 end
 
-@testset "similarmatrix" begin
+@testset "blochtype" begin
     types = (ComplexF16, ComplexF32, ComplexF64)
     lat = LatticePresets.honeycomb()
     for T in types
-        h0 = hamiltonian(lat, onsite(I) + hopping(2I; range = 1), orbitals = (Val(1), Val(2)), type = T)
+        h0 = hamiltonian(lat, onsite(I) + hopping(2I; range = 1), orbitals = (Val(1), Val(2)), orbtype = T)
         hf = flatten(h0)
         hm = Matrix(h0)
         hs = (h0, hf, hm)
-        As = (SparseMatrixCSC, SparseMatrixCSC, Matrix)
         Es = (SMatrix{2,2,T,4}, T, SMatrix{2,2,T,4})
+        As = (SparseMatrixCSC, SparseMatrixCSC, Matrix)
         for (h, A, E) in zip(hs, As, Es)
-            sh = similarmatrix(h)
-            @test sh isa A{E}
-            b1 = bloch!(similarmatrix(flatten(h)), flatten(h), (1,1))
-            b2 = bloch!(similarmatrix(h, AbstractMatrix{T}), h, (1,1))
+            @test h.blochmatrix isa A{E}
+            b1 = bloch!(flatten(h), (1,1))
+            b2 = bloch!(hamiltonian(h, blochtype = flatten), (1,1))
             @test isapprox(b1, b2)
             for T´ in types
                 E´s = E <: SMatrix ? (SMatrix{2,2,T´,4}, T´) : (T´,)
                 for E´ in E´s
-                    s1 = similarmatrix(h, Matrix{E´})
-                    s2 = similarmatrix(h, AbstractMatrix{E´})
-                    @test s1 isa Matrix{E´}
-                    @test s2 isa A{E´}
+                    h1 = hamiltonian(h, blochtype = Matrix{E´})
+                    h2 = hamiltonian(h, blochtype = Matrix)
+                    @test bloch!(h1) isa Matrix{E´}
+                    @test bloch!(h2) isa Matrix{E}
+                    if A != Matrix # No conversion between Matrix and SparseMatrixCSC
+                        h2 = hamiltonian(h, blochtype = SparseMatrixCSC{E´})
+                        h4 = hamiltonian(h, blochtype = SparseMatrixCSC)
+                        @test bloch!(h2) isa SparseMatrixCSC{E´}
+                        @test bloch!(h4) isa SparseMatrixCSC{E}
+                    end
                 end
             end
         end

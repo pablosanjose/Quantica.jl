@@ -607,7 +607,7 @@ Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
   Bloch harmonics  : 1 (SparseMatrixCSC, sparse)
   Harmonic size    : 2 × 2
   Orbitals         : ((:a, :a), (:a, :a))
-  Element type     : 2 × 2 blocks (Complex{Float64})
+  Site eltype      : 2 × 2 blocks (Complex{Float64})
   Onsites          : 2
   Hoppings         : 0
   Coordination     : 0.0
@@ -720,7 +720,7 @@ Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
   Bloch harmonics  : 7 (SparseMatrixCSC, sparse)
   Harmonic size    : 2 × 2
   Orbitals         : ((:a,), (:a,))
-  Element type     : scalar (Complex{Float64})
+  Site eltype      : scalar (Complex{Float64})
   Onsites          : 0
   Hoppings         : 18
   Coordination     : 9.0

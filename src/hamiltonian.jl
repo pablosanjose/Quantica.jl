@@ -12,30 +12,34 @@ HamiltonianHarmonic{L,M,A}(dn::SVector{L,Int}, n::Int, m::Int) where {L,M,A<:Spa
 HamiltonianHarmonic{L,M,A}(dn::SVector{L,Int}, n::Int, m::Int) where {L,M,A<:Matrix{M}} =
     HamiltonianHarmonic(dn, zeros(M, n, m))
 
-struct Hamiltonian{LA<:AbstractLattice,L,M,A<:AbstractMatrix,
+struct Hamiltonian{LA<:AbstractLattice,L,M,A<:AbstractMatrix,B<:AbstractMatrix,
                    H<:HamiltonianHarmonic{L,M,A},
                    O<:Tuple{Vararg{Tuple{Vararg{NameType}}}}} # <: AbstractMatrix{M}
     lattice::LA
     harmonics::Vector{H}
     orbitals::O
+    blochmatrix::B
 end
 
-function Hamiltonian(lat, hs::Vector{H}, orbs, n::Int, m::Int) where {L,M,H<:HamiltonianHarmonic{L,M}}
+function Hamiltonian(lat, hs::Vector{H}, orbs, n::Int, m::Int, blochtype = missing) where {L,M,H<:HamiltonianHarmonic{L,M}}
     sort!(hs, by = h -> abs.(h.dn))
     if isempty(hs) || !iszero(first(hs).dn)
         pushfirst!(hs, H(zero(SVector{L,Int}), empty_sparse(M, n, m)))
     end
-    return Hamiltonian(lat, hs, orbs)
+    blochmatrix = similarmatrix(blochtype, hs, orbs, lat)
+    return Hamiltonian(lat, hs, orbs, blochmatrix)
 end
 
 Base.show(io::IO, ham::Hamiltonian) = show(io, MIME("text/plain"), ham)
 function Base.show(io::IO, ::MIME"text/plain", ham::Hamiltonian)
     i = get(io, :indent, "")
     print(io, i, summary(ham), "\n",
-"$i  Bloch harmonics  : $(length(ham.harmonics)) ($(displaymatrixtype(ham)))
+"$i  Orbitals         : $(displayorbitals(ham))
+$i  Site eltype      : $(displayelements(ham))
+$i  Bloch eltype     : $(displayelements(ham.blochmatrix))
+$i  Bloch matrix     : $(displaymatrixtype(typeof(ham.blochmatrix)))
+$i  Bloch harmonics  : $(length(ham.harmonics))
 $i  Harmonic size    : $((n -> "$n × $n")(nsites(ham)))
-$i  Orbitals         : $(displayorbitals(ham))
-$i  Element type     : $(displayelements(ham))
 $i  Onsites          : $(nonsites(ham))
 $i  Hoppings         : $(nhoppings(ham))
 $i  Coordination     : $(nhoppings(ham) / nsites(ham))")
@@ -54,27 +58,215 @@ Base.eltype(::Hamiltonian{<:Any,<:Any,M}) where {M} = M
 Base.isequal(h1::HamiltonianHarmonic, h2::HamiltonianHarmonic) =
     h1.dn == h2.dn && h1.h == h2.h
 
-displaymatrixtype(h::Hamiltonian) = displaymatrixtype(matrixtype(h))
-displaymatrixtype(::Type{<:SparseMatrixCSC}) = "SparseMatrixCSC, sparse"
-displaymatrixtype(::Type{<:Array}) = "Matrix, dense"
+displaymatrixtype(::Type{<:SparseMatrixCSC}) = "SparseMatrixCSC (sparse)"
+displaymatrixtype(::Type{<:Array}) = "Matrix (dense)"
 displaymatrixtype(A::Type{<:AbstractArray}) = string(A)
 displayelements(h::Hamiltonian) = displayelements(blocktype(h))
+displayelements(m::AbstractMatrix) = displayelements(eltype(m))
 displayelements(::Type{S}) where {N,T,S<:SMatrix{N,N,T}} = "$N × $N blocks ($T)"
 displayelements(::Type{T}) where {T} = "scalar ($T)"
+
 displayorbitals(h::Hamiltonian) =
     replace(replace(string(h.orbitals), "Symbol(\"" => ":"), "\")" => "")
 
-SparseArrays.issparse(h::Hamiltonian{LA,L,M,A}) where {LA,L,M,A<:AbstractSparseMatrix} = true
-SparseArrays.issparse(h::Hamiltonian{LA,L,M,A}) where {LA,L,M,A} = false
+#######################################################################
+# flatten
+#######################################################################
+"""
+    flatten(h::Hamiltonian)
 
-Base.parent(h::Hamiltonian) = h
+Flatten a multiorbital Hamiltonian `h` into one with a single orbital per site. The
+associated lattice is flattened also, so that there is one site per orbital for each initial
+site (all at the same position). Note that in the case of sparse Hamiltonians, zeros in
+hopping/onsite matrices are preserved as structural zeros upon flattening.
 
-# Internal API #
+    h |> flatten()
+
+Curried form equivalent to `flatten(h)` or `h |> flatten` (included for consistency with
+the rest of the API).
+
+# Examples
+
+```jldoctest
+julia> h = LatticePresets.honeycomb() |>
+           hamiltonian(hopping(@SMatrix[1; 2], range = 1/√3, sublats = :A =>:B),
+           orbitals = (Val(1), Val(2)))
+Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
+  Bloch harmonics  : 3 (SparseMatrixCSC, sparse)
+  Harmonic size    : 2 × 2
+  Orbitals         : ((:a,), (:a, :a))
+  Site eltype      : 2 × 2 blocks (Complex{Float64})
+  Onsites          : 0
+  Hoppings         : 3
+  Coordination     : 1.5
+
+julia> flatten(h)
+Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
+  Bloch harmonics  : 3 (SparseMatrixCSC, sparse)
+  Harmonic size    : 3 × 3
+  Orbitals         : ((:flat,), (:flat,))
+  Site eltype      : scalar (Complex{Float64})
+  Onsites          : 0
+  Hoppings         : 6
+  Coordination     : 2.0
+```
+"""
+flatten() = h -> flatten(h)
+
+function flatten(h::Hamiltonian)
+    all(isequal(1), norbitals(h)) && return copy(h)
+    harmonics´ = [flatten(har, h.orbitals, h.lattice) for har in h.harmonics]
+    lattice´ = flatten(h.lattice, h.orbitals)
+    orbitals´ = (_ -> (:flat, )).(h.orbitals)
+    n = nsites(lattice´)
+    return Hamiltonian(lattice´, harmonics´, orbitals´, n, n, matrixtype(harmonics´))
+end
+
+flatten(h::HamiltonianHarmonic, orbs, lat) = HamiltonianHarmonic(h.dn, flatten(h.h, orbs, lat))
+
+function flatten(src::SparseMatrixCSC{<:SMatrix{N,N,T}}, orbs, lat, ::Type{T´} = T) where {N,T,T´}
+    norbs = length.(orbs)
+    offsets´ = flatoffsets(lat.unitcell.offsets, norbs)
+    dim´ = last(offsets´)
+
+    builder = SparseMatrixBuilder{T´}(dim´, dim´, nnz(src) * N * N)
+
+    for col in 1:size(src, 2)
+        scol = sublat(lat, col)
+        for j in 1:norbs[scol]
+            for p in nzrange(src, col)
+                row = rowvals(src)[p]
+                srow = sublat(lat, row)
+                rowoffset´ = flatoffset(row, lat, norbs, offsets´)
+                val = nonzeros(src)[p]
+                for i in 1:norbs[srow]
+                    pushtocolumn!(builder, rowoffset´ + i, val[i, j])
+                end
+            end
+            finalizecolumn!(builder, false)
+        end
+    end
+    matrix = sparse(builder)
+    return matrix
+end
+
+function flatten(src::DenseMatrix{<:SMatrix{N,N,T}}, orbs, lat, ::Type{T´} = T) where {N,T,T´}
+    norbs = length.(orbs)
+    offsets´ = flatoffsets(lat.unitcell.offsets, norbs)
+    dim´ = last(offsets´)
+    matrix = similar(src, T´, dim´, dim´)
+
+    for col in 1:size(src, 2), row in 1:size(src, 1)
+        srow, scol = sublat(lat, row), sublat(lat, col)
+        nrow, ncol = norbs[srow], norbs[scol]
+        val = src[row, col]
+        rowoffset´ = flatoffset(row, lat, norbs, offsets´)
+        coloffset´ = flatoffset(col, lat, norbs, offsets´)
+        for j in 1:ncol, i in 1:nrow
+            matrix[rowoffset´ + i, coloffset´ + j] = val[i, j]
+        end
+    end
+    return matrix
+end
+
+flatten(src::AbstractMatrix{<:Number}, x...) = src
+
+function flatten(lat::Lattice, orbs)
+    length(orbs) == nsublats(lat) || throw(ArgumentError("Msmatch between sublattices and orbitals"))
+    unitcell´ = flatten(lat.unitcell, orbs)
+    bravais´ = lat.bravais
+    lat´ = Lattice(bravais´, unitcell´)
+end
+
+function flatten(unitcell::Unitcell, orbs::NTuple{S,Any}) where {S}
+    norbs = length.(orbs)
+    offsets´ = [flatoffsets(unitcell.offsets, norbs)...]
+    ns´ = last(offsets´)
+    sites´ = similar(unitcell.sites, ns´)
+    i = 1
+    for sl in 1:S, site in sitepositions(unitcell, sl), rep in 1:norbs[sl]
+        sites´[i] = site
+        i += 1
+    end
+    names´ = unitcell.names
+    unitcell´ = Unitcell(sites´, names´, offsets´)
+    return unitcell´
+end
+
+#######################################################################
+# similarmatrix
+#######################################################################
+
+similarmatrix(dest_type, hs, orbs, lat) = _similarmatrix(dest_type, matrixtype(hs), hs, orbs, lat)
+
+_similarmatrix(::Missing, src_type, hs, orbs, lat) =
+    similar_merged(hs)
+_similarmatrix(::Type{A}, ::Type{A´}, hs, orbs, lat) where {T<:Number,A<:AbstractSparseMatrix{T},T´<:Number,A´<:AbstractSparseMatrix{T´}} =
+    similar_merged(hs, T)
+_similarmatrix(::Type{A}, ::Type{A´}, hs, orbs, lat) where {N,T<:SMatrix{N,N},A<:AbstractSparseMatrix{T},T´<:SMatrix{N,N},A´<:AbstractSparseMatrix{T´}} =
+    similar_merged(hs, T)
+_similarmatrix(::Type{A}, ::Type{A´}, hs, orbs, lat) where {N,T<:Number,A<:AbstractSparseMatrix{T},T´<:SMatrix{N,N},A´<:AbstractSparseMatrix{T´}} =
+    flatten(similar_merged(hs), orbs, lat, T)
+_similarmatrix(::Type{A}, ::Type{A´}, hs, orbs, lat) where {T<:Number,A<:Matrix{T},T´<:Number,A´<:AbstractMatrix{T´}} =
+    similar(A, size(first(hs).h))
+_similarmatrix(::Type{A}, ::Type{A´}, hs, orbs, lat) where {N,T<:SMatrix{N,N},A<:Matrix{T},T´<:SMatrix{N,N},A´<:AbstractMatrix{T´}} =
+    similar(A, size(first(hs).h))
+_similarmatrix(::Type{A}, ::Type{A´}, hs, orbs, lat) where {N,T<:Number,A<:Matrix{T},T´<:SMatrix{N,N},A´<:AbstractMatrix{T´}} =
+    similar(A, _flatsize(lat, orbs))
+
+_similarmatrix(::typeof(flatten), ::Type{A´}, hs, orbs, lat) where {N,T,S<:SMatrix{N,N,T},A´<:AbstractSparseMatrix{S}} =
+    _similarmatrix(AbstractSparseMatrix{T}, A´, hs, orbs, lat)
+_similarmatrix(::typeof(flatten), ::Type{A´}, hs, orbs, lat) where {N,T,S<:SMatrix{N,N,T},A´<:DenseMatrix{S}} =
+    _similarmatrix(Matrix{T}, A´, hs, orbs, lat)
+_similarmatrix(::typeof(flatten), ::Type{A´}, hs, orbs, lat) where {T<:Number,A´<:AbstractArray{T}} =
+    _similarmatrix(A´, A´, hs, orbs, lat)
+_similarmatrix(::Type{SparseMatrixCSC}, ::Type{A´}, hs, orbs, lat) where {T´,A´<:AbstractMatrix{T´}} =
+    _similarmatrix(SparseMatrixCSC{T´}, A´, hs, orbs, lat)
+_similarmatrix(::Type{Matrix}, ::Type{A´}, hs, orbs, lat) where {T´,A´<:AbstractMatrix{T´}} =
+    _similarmatrix(Matrix{T´}, A´, hs, orbs, lat)
+
+_similarmatrix(dest_type, src_type, hs, orbs, lat) = throw(ArgumentError("Unexpected `blochtype` ($src_type => $dest_type)"))
+
+# ensure we have stored entries for all harmonics in the sparse case
+similar_merged(hs::AbstractVector{H}, ::Type{M´} = M) where {M´,M,H<:HamiltonianHarmonic{<:Any,M,<:AbstractSparseMatrix}} =
+    _similar_merged_sparse(hs, M´)
+similar_merged(hs::AbstractVector{H}, ::Type{M´} = M) where {M´,M,H<:HamiltonianHarmonic{<:Any,M,<:DenseMatrix}} =
+    similar(first(hs).h, M´)
+
+function _similar_merged_sparse(hs::Vector{<:HamiltonianHarmonic{L,M}},::Type{M´} = M) where {L,M,M´}
+    h0 = first(hs)
+    n, m = size(h0.h)
+    iszero(h0.dn) || throw(ArgumentError("First Hamiltonian harmonic is not the fundamental"))
+    nh = length(hs)
+    builder = SparseMatrixBuilder{M´}(n, m)
+    for col in 1:m
+        for i in eachindex(hs)
+            h = hs[i].h
+            for p in nzrange(h, col)
+                v = i == 1 ? nonzeros(h)[p] : zero(M)
+                row = rowvals(h)[p]
+                pushtocolumn!(builder, row, v, false) # skips repeated rows
+            end
+        end
+        pushtocolumn!(builder, col, zero(M), false) # if not present already, add structural zeros to diagonal
+        finalizecolumn!(builder)
+    end
+    ho = sparse(builder)
+    return ho
+end
+# IDEA: could sum and subtract all harmonics instead: sum(h->h.h, hs)
+# Tested, it is slower
+
+#######################################################################
+# Hamiltonian API
+#######################################################################
 
 latdim(h::Hamiltonian) = last(dims(h.lattice))
 
-matrixtype(::Hamiltonian{LA,L,M,A}) where {LA,L,M,A} = A
-blockeltype(::Hamiltonian{<:Any,<:Any,M}) where {M} = eltype(M)
+matrixtype(::AbstractVector{H}) where {A,H<:HamiltonianHarmonic{<:Any,<:Any,A}} = A
+matrixtype(h::Hamiltonian) = matrixtype(h.harmonics)
+
+orbtype(::Hamiltonian{<:Any,<:Any,M}) where {M} = eltype(M)
 
 # find SMatrix type that can hold all matrix elements between lattice sites
 blocktype(orbs, type::Type{Tv}) where {Tv} =
@@ -97,7 +289,7 @@ blockdim(::Type{S}) where {N,S<:SMatrix{N,N}} = N
 blockdim(::Type{T}) where {T<:Number} = 1
 
 # find SVector type that can hold all orbital amplitudes in any lattice sites
-orbitaltype(orbs, type::Type{Tv} = Complex{T}) where {T,Tv} =
+orbitaltype(orbs, type::Type{Tv}) where {Tv} =
     _orbitaltype(SVector{1,Tv}, orbs...)
 _orbitaltype(::Type{S}, ::NTuple{D,NameType}, os...) where {N,Tv,D,S<:SVector{N,Tv}} =
     (M = max(N,D); _orbitaltype(SVector{M,Tv}, os...))
@@ -143,11 +335,16 @@ Base.isequal(h1::Hamiltonian, h2::Hamiltonian) =
     isequal(h1.lattice, h2.lattice) && isequal(h1.harmonics, h2.harmonics) &&
     isequal(h1.orbitals, h2.orbitals)
 
+SparseArrays.issparse(h::Hamiltonian{LA,L,M,A}) where {LA,L,M,A<:AbstractSparseMatrix} = true
+SparseArrays.issparse(h::Hamiltonian{LA,L,M,A}) where {LA,L,M,A} = false
+
+Base.parent(h::Hamiltonian) = h
+
 # Dual numbers #
 
-DualNumbers.Dual(h::Hamiltonian) = Hamiltonian(h.lattice, Dual.(h.harmonics), h.orbitals)
+DualNumbers.Dual(h::Hamiltonian) = Hamiltonian(h.lattice, Dual.(h.harmonics), h.orbitals, dualmatrix(h.blochmatrix))
 
-DualNumbers.Dual(h::HamiltonianHarmonic) = HamiltonianHarmonic(h.dn, dualarray(h.h))
+DualNumbers.Dual(h::HamiltonianHarmonic) = HamiltonianHarmonic(h.dn, dualmatrix(h.h))
 
 # Iterators #
 
@@ -195,17 +392,30 @@ end
 
 # External API #
 """
-    hamiltonian(lat, model; orbitals, type)
+    hamiltonian(lat, model; orbitals = Val(1), orbtype = Complex{Tlat}, blochtype = flatten)
 
 Create a `Hamiltonian` by applying `model::TighbindingModel` to the lattice `lat` (see
 `hopping` and `onsite` for details on building tightbinding models).
 
-The number of orbitals on each sublattice can be specified by the keyword `orbitals`
-(otherwise all sublattices have one orbital by default). The following, and obvious
-combinations, are possible formats for the `orbitals` keyword:
+# Keywords
 
-    orbitals = :a                # all sublattices have 1 orbital named :a
-    orbitals = (:a,)             # same as above
+The number of orbitals on each sublattice can be specified by the keyword `orbitals`
+(otherwise all sublattices have one orbital by default).
+
+The type `B` of Bloch matrices (produced from the Hamiltonian with `bloch`/`bloch!`) can be
+specified by `blochtype = B`. Quantica tries to choose an adequate `B<:blochtype` for
+typical `blochtype`s. The special syntax `blochtype = flatten` (default) is equivalent to
+`blochtype = SparseMatrixCSC{T}`, where `T<:Number` is the Hamiltonian's numeric type, both
+in the single-orbital and multiorbital Hamiltonians. The default Bloch matrix is thus always
+flat (a numeric eltype is necessary for many diagonalization libraries). In contrast,
+`blochtype = SparseMatrixCSC` is equivalent, but with `T<:SMatrix` in the multiorbital case,
+preserving the orbital structure.
+
+The following, and obvious combinations, are possible formats for the `orbitals` keyword:
+
+    orbitals = :up               # all sublattices have 1 orbital named :up
+    orbitals = Val(1)            # same as above, with automatic names (default)
+    orbitals = ((:a, :b),)       # first sublattice has 2 orbital named :a, :b, the rest have one
     orbitals = (:a, :b, 3)       # all sublattices have 3 orbitals named :a and :b and :3
     orbitals = ((:a, :b), (:c,)) # first sublattice has 2 orbitals, second has one
     orbitals = ((:a, :b), :c)    # same as above
@@ -215,13 +425,17 @@ combinations, are possible formats for the `orbitals` keyword:
 
 The matrix sizes of tightbinding `model` must match the orbitals specified. Internally, we
 define a block size `N = max(num_orbitals)`. If `N = 1` (all sublattices with one orbital)
-the the Hamiltonian element type is `type`. Otherwise it is `SMatrix{N,N,type}` blocks,
-padded with the necessary zeros as required. Keyword `type` is `Complex{T}` by default,
-where `T` is the number type of `lat`.
+the the Hamiltonian element type is `orbtype`. Otherwise it is `SMatrix{N,N,orbtype}` blocks,
+padded with the necessary zeros as required. Keyword `orbtype` is `Complex{Tlat}` by default,
+where `Tlat` is the number type of `lat`.
 
     lat |> hamiltonian(model; kw...)
 
 Curried form of `hamiltonian` equivalent to `hamiltonian(lat, model[, funcmodel]; kw...)`.
+
+    hamiltonian(h::Hamiltonian; orbtype = missing, blochtype = missing)
+
+Build a new Hamiltonian with different `orbtype` and/or `blochtype`, otherwise identical to h.
 
 # Indexing
 
@@ -241,7 +455,7 @@ Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
   Bloch harmonics  : 5 (SparseMatrixCSC, sparse)
   Harmonic size    : 2 × 2
   Orbitals         : ((:a, :a), (:a, :a))
-  Element type     : 2 × 2 blocks (Complex{Float64})
+  Site eltype      : 2 × 2 blocks (Complex{Float64})
   Onsites          : 0
   Hoppings         : 6
   Coordination     : 3.0
@@ -251,7 +465,7 @@ Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
   Bloch harmonics  : 6 (SparseMatrixCSC, sparse)
   Harmonic size    : 2 × 2
   Orbitals         : ((:a, :a), (:a, :a))
-  Element type     : 2 × 2 blocks (Complex{Float64})
+  Site eltype      : 2 × 2 blocks (Complex{Float64})
   Onsites          : 0
   Hoppings         : 6
   Coordination     : 3.0
@@ -272,8 +486,8 @@ julia> h[(3,3)][[1,2],[1,2]] .= Ref(@SMatrix[1 2; 2 1])
 hamiltonian(lat::AbstractLattice, ts...; orbitals = missing, kw...) =
     _hamiltonian(lat, sanitize_orbs(orbitals, lat.unitcell.names), ts...; kw...)
 _hamiltonian(lat::AbstractLattice, orbs; kw...) = _hamiltonian(lat, orbs, TightbindingModel(); kw...)
-_hamiltonian(lat::AbstractLattice, orbs, m::TightbindingModel; type::Type = Complex{numbertype(lat)}, kw...) =
-    hamiltonian_sparse(blocktype(orbs, type), lat, orbs, m; kw...)
+_hamiltonian(lat::AbstractLattice, orbs, m::TightbindingModel; orbtype::Type = Complex{coordtype(lat)}, blochtype = missing) =
+    hamiltonian_sparse(blocktype(orbs, orbtype), lat, orbs, m, blochtype)
 
 hamiltonian(t::TightbindingModel...; kw...) = lat -> hamiltonian(lat, t...; kw...)
 
@@ -300,11 +514,37 @@ sanitize_orbs(o::Val{N}) where {N} = ntuple(_ -> :a, Val(N))
 sanitize_orbs(o::NTuple{N,Union{Integer,NameType}}) where {N} = nametype.(o)
 sanitize_orbs(p) = throw(ArgumentError("Wrong format for orbitals, see `hamiltonian`"))
 
-Base.Matrix(h::Hamiltonian) = Hamiltonian(h.lattice, Matrix.(h.harmonics), h.orbitals)
+function hamiltonian(h::Hamiltonian; orbtype = missing, blochtype = missing)
+    harmonics´ = convert_harmonics(h, orbtype)
+    blochmatrix´ = convert_blochmatrix(h, harmonics´, blochtype)
+    return Hamiltonian(h.lattice, harmonics´, h.orbitals, blochmatrix´)
+end
+
+convert_harmonics(h::Hamiltonian, ::Missing) = h.harmonics
+convert_harmonics(h::Hamiltonian, orbtype´) =
+    orbtype(h) <: orbtype´ ? h.harmonics : convert_harmonics.(h.harmonics, orbtype´)
+convert_harmonics(h::HamiltonianHarmonic{L,M}, ::Type{T´}) where {L,T,N,M<:SMatrix{N,N,T},T´} =
+    HamiltonianHarmonic(h.dn, SMatrix{N,N,T´}.(h.h))
+convert_harmonics(h::HamiltonianHarmonic{L,T}, ::Type{T´}) where {L,T<:Number,T´<:Number} =
+    HamiltonianHarmonic(h.dn, T´.(h.h))
+
+convert_blochmatrix(h, blochtype) = convert_blochmatrix(h, h.harmonics, blochtype)
+convert_blochmatrix(h, harmonics´, ::Missing) = h.blochmatrix
+convert_blochmatrix(h, harmonics´, blochtype::Type{T}) where {T} =
+    typeof(h.blochmatrix) <: T ? h.blochmatrix : similarmatrix(blochtype, harmonics´, h.orbitals, h.lattice)
+convert_blochmatrix(h, harmonics´, blochtype) = similarmatrix(blochtype, harmonics´, h.orbitals, h.lattice)
+
+blochtype!(h::Hamiltonian, blochtype) =
+    blochtype!(h, convert_blochmatrix(h, blochtype))
+blochtype!(h::Hamiltonian, blochmatrix::AbstractMatrix) =
+    Hamiltonian(h.lattice, h.harmonics, h.orbitals, blochmatrix)
+
+Base.Matrix(h::Hamiltonian) = Hamiltonian(h.lattice, Matrix.(h.harmonics), h.orbitals, Matrix(h.blochmatrix))
 Base.Matrix(h::HamiltonianHarmonic) = HamiltonianHarmonic(h.dn, Matrix(h.h))
 
-Base.copy(h::Hamiltonian) = Hamiltonian(copy(h.lattice), copy.(h.harmonics), h.orbitals)
+Base.copy(h::Hamiltonian) = Hamiltonian(copy(h.lattice), copy.(h.harmonics), h.orbitals, copy(h.blochmatrix))
 Base.copy(h::HamiltonianHarmonic) = HamiltonianHarmonic(h.dn, copy(h.h))
+copy_harmonics(h::Hamiltonian) = Hamiltonian(h.lattice, copy.(h.harmonics), h.orbitals, h.blochmatrix)
 
 Base.size(h::Hamiltonian, n) = size(first(h.harmonics).h, n)
 Base.size(h::Hamiltonian) = size(first(h.harmonics).h)
@@ -312,9 +552,9 @@ Base.size(h::HamiltonianHarmonic, n) = size(h.h, n)
 Base.size(h::HamiltonianHarmonic) = size(h.h)
 
 flatsize(h::Hamiltonian, n) = first(flatsize(h)) # h is always square
-
-function flatsize(h::Hamiltonian)
-    n = sum(sublatlengths(h.lattice) .* length.(h.orbitals))
+flatsize(h::Hamiltonian) = _flatsize(h.lattice, h.orbitals)
+function _flatsize(lat, orbs)
+    n = sum(sublatlengths(lat) .* length.(orbs))
     return (n, n)
 end
 
@@ -473,7 +713,7 @@ Equivalent of the above for `Superlattice`s
 
 function boolean_mask_hamiltonian(f, s1::Hamiltonian{<:Superlattice}, s2::Hamiltonian{<:Superlattice})
     check_compatible_hsuper(s1, s2)
-    return Hamiltonian(f(s1.lattice, s2.lattice), s1.harmonics, s1.orbitals)
+    return Hamiltonian(f(s1.lattice, s2.lattice), copy(s1.harmonics), s1.orbitals, s1.blochmatrix)
 end
 
 function check_compatible_hsuper(s1, s2)
@@ -561,17 +801,17 @@ end
 #######################################################################
 # hamiltonian_sparse
 #######################################################################
-function hamiltonian_sparse(Mtype, lat, orbs, model)
+function hamiltonian_sparse(Mtype, lat, orbs, model, blochtype)
     builder = IJVBuilder(lat, orbs, Mtype)
-    return hamiltonian_sparse!(builder, lat, orbs, model)
+    return hamiltonian_sparse!(builder, lat, orbs, model, blochtype)
 end
 
-function hamiltonian_sparse!(builder::IJVBuilder{L,M}, lat::AbstractLattice{E,L}, orbs, model) where {E,L,M}
+function hamiltonian_sparse!(builder::IJVBuilder{L,M}, lat::AbstractLattice{E,L}, orbs, model, blochtype) where {E,L,M}
     applyterms!(builder, terms(model)...)
     n = nsites(lat)
     HT = HamiltonianHarmonic{L,M,SparseMatrixCSC{M,Int}}
     harmonics = HT[HT(e.dn, sparse(e.i, e.j, e.v, n, n)) for e in builder.ijvs if !isempty(e)]
-    return Hamiltonian(lat, harmonics, orbs, n, n)
+    return Hamiltonian(lat, harmonics, orbs, n, n, blochtype)
 end
 
 applyterms!(builder, terms...) = foreach(term -> applyterm!(builder, term), terms)
@@ -773,7 +1013,13 @@ end
 #######################################################################
 function supercell(ham::Hamiltonian, args...; kw...)
     slat = supercell(ham.lattice, args...; kw...)
-    return Hamiltonian(slat, ham.harmonics, ham.orbitals)
+    return Hamiltonian(slat, ham.harmonics, ham.orbitals, ham.blochmatrix)
+end
+
+# Fast-path unitcell(ham), does not allocate a new blochmatrix
+function unitcell(ham::Hamiltonian{<:Lattice})
+    iszero(ham.harmonics[1].dn) || throw(error("Unexpected error: first harmonic is not the fundamental"))
+    return Hamiltonian(ham.lattice, [ham.harmonics[1]], ham.orbitals, ham.blochmatrix)
 end
 
 function unitcell(ham::Hamiltonian{<:Lattice}, args...; modifiers = (), kw...)
@@ -793,7 +1039,6 @@ function unitcell(ham::Hamiltonian{LA,L}; modifiers = ()) where {E,L,T,L´,LA<:S
     B = blocktype(ham)
     S = typeof(SparseMatrixBuilder{B}(dim, dim))
     harmonic_builders = HamiltonianHarmonic{L´,B,S}[]
-    # pinvint = pinvmultiple(sc.matrix)
     foreach_supersite(lat) do s, source_i, source_dn, newcol
         for oldh in ham.harmonics
             rows = rowvals(oldh.h)
@@ -815,8 +1060,10 @@ function unitcell(ham::Hamiltonian{LA,L}; modifiers = ()) where {E,L,T,L´,LA<:S
     end
     harmonics = [HamiltonianHarmonic(h.dn, sparse(h.h)) for h in harmonic_builders]
     unitlat = unitcell(lat)
+    n = nsites(unitlat)
     orbs = ham.orbitals
-    return Hamiltonian(unitlat, harmonics, orbs)
+    blochtype = typeof(ham.blochmatrix)
+    return Hamiltonian(unitlat, harmonics, orbs, n, n, blochtype)
 end
 
 function get_or_push!(hs::Vector{<:HamiltonianHarmonic{L,B,<:SparseMatrixBuilder}}, dn, dim, currentcol) where {L,B}
@@ -830,6 +1077,7 @@ function get_or_push!(hs::Vector{<:HamiltonianHarmonic{L,B,<:SparseMatrixBuilder
 end
 
 inv_supercell(br, sc::SMatrix{L,L´}) where {L,L´} = inv(extended_supercell(br, sc))[SVector{L´}(1:L´), :]
+
 new_dn(oldn, isc) = floor.(Int, isc * oldn)
 
 wrap_dn(olddn::SVector, newdn::SVector, supercell::SMatrix) = olddn - supercell * newdn
@@ -895,7 +1143,7 @@ Hamiltonian{<:Lattice} : Hamiltonian on a 1D Lattice in 2D space
   Bloch harmonics  : 3 (SparseMatrixCSC, sparse)
   Harmonic size    : 40 × 40
   Orbitals         : ((:a,), (:a,))
-  Element type     : scalar (Complex{Float64})
+  Site eltype      : scalar (Complex{Float64})
   Onsites          : 0
   Hoppings         : 120
   Coordination     : 3.0
@@ -910,7 +1158,7 @@ function wrap(h::Hamiltonian{<:Lattice,L}, axes::NTuple{N,Int}; phases = missing
     lattice´ = _wrap(h.lattice, axes)
     phases´ = (phases === missing) ? filltuple(0, Val(N)) : phases
     harmonics´ = _wrap(h.harmonics, axes, phases´, size(h))
-    return Hamiltonian(lattice´, harmonics´, h.orbitals)
+    return Hamiltonian(lattice´, harmonics´, h.orbitals, h.blochmatrix)
 end
 
 wrap(axes::Union{Integer,Tuple}; kw...) = h -> wrap(h, axes; kw...)
@@ -961,106 +1209,6 @@ end
 #######################################################################
 # Bloch routines
 #######################################################################
-"""
-    similarmatrix(h::Hamiltonian)
-
-Create an uninitialized matrix of the same type and size of the Hamiltonian's matrix,
-calling `optimize!(h)` first to produce an optimal work matrix in the sparse case.
-
-    similarmatrix(h::Hamiltonian, T::Type{<:AbstractMatrix})
-
-Specifies the desired type `T` of the uninitialized matrix.
-
-    similarmatrix(h::Hamiltonian, method::AbstractDiagonalizeMethod)
-
-Adapts the type of the matrix (e.g. dense/sparse) to the specified `method`
-
-    similarmatrix(x::Union{ParametricHamiltonian, GreensFunction}, ...)
-
-Equivalent to the above, but adapted to the more general type of `x`.
-"""
-function similarmatrix(h, ::Type{A´} = matrixtype(h)) where {A´<:AbstractMatrix}
-    optimize!(h)
-    return _similarmatrix(parent(h), matrixtype(h), A´)
-end
-
-similarmatrix(h, ::Missing) = similarmatrix(h)
-
-# We only provide the type combinastions that make sense
-_similarmatrix(h, ::Type{A}, ::Type{A´}) where {A´,A<:A´} =
-    similar(h.harmonics[1].h)
-
-_similarmatrix(h, ::Type{A}, ::Type{AbstractMatrix{T´}}) where {T<:Number,A<:AbstractMatrix{T},T´<:Number} =
-    similar(h.harmonics[1].h, T´)
-
-_similarmatrix(h, ::Type{A}, ::Type{AbstractMatrix{T´}}) where {N,T<:SMatrix{N,N},A<:AbstractMatrix{T},T´<:SMatrix{N,N}} =
-    similar(h.harmonics[1].h, T´)
-
-_similarmatrix(h, ::Type{A}, ::Type{A´}) where {N,T<:SMatrix{N,N},A<:AbstractMatrix{T},T´<:SMatrix{N,N},A´<:DenseMatrix{T´}} =
-    similar(A´, size(h)...)
-
-_similarmatrix(h, ::Type{A}, ::Type{A´}) where {T<:Number,A<:AbstractMatrix{T},T´<:Number,A´<:DenseMatrix{T´}} =
-    similar(A´, size(h)...)
-
-_similarmatrix(h, ::Type{A}, ::Type{A´}) where {T<:SMatrix,A<:AbstractMatrix{T},T´<:Number,A´<:DenseMatrix{T´}} =
-    similar(A´, flatsize(h)...)
-
-_similarmatrix(h, ::Type{A}, ::Type{AbstractMatrix{T´}}) where {T<:SMatrix,A<:AbstractMatrix{T},T´<:Number} =
-    _flatten(h.harmonics[1].h, length.(h.orbitals), h.lattice, T´)
-
-_similarmatrix(h, ::Type{A}, ::Type{A´}) where {T<:SMatrix,A<:AbstractSparseMatrix{T},T´<:Number,A´<:AbstractSparseMatrix{T´}} =
-    _flatten(h.harmonics[1].h, length.(h.orbitals), h.lattice, T´)
-
-"""
-    optimize!(h::Hamiltonian)
-
-Prepare a sparse Hamiltonian `h` to increase the performance of subsequent calls to
-`bloch(h, ϕs)` and `bloch!(matrix, h, ϕs)` by minimizing memory reshufflings. It also
-adds missing structural zeros to the diagonal to enable shifts by `α*I` (for
-shift-and-invert methods).
-
-No optimization will be performed on non-sparse Hamiltonians, or those defined on
-`Superlattice`s, for which Bloch Hamiltonians are lazily evaluated.
-
-Note that when calling `similarmatrix(h)` on a sparse `h`, `optimize!` is called first.
-
-# See also:
-    `bloch`, `bloch!`
-"""
-function optimize!(ham::Hamiltonian{<:Lattice,L,M,A}) where {L,M,A<:SparseMatrixCSC}
-    h0 = first(ham.harmonics)
-    n, m = size(h0.h)
-    iszero(h0.dn) || throw(ArgumentError("First Hamiltonian harmonic is not the fundamental"))
-    nh = length(ham.harmonics)
-    builder = SparseMatrixBuilder{M}(n, m)
-    for col in 1:m
-        for i in eachindex(ham.harmonics)
-            h = ham.harmonics[i].h
-            for p in nzrange(h, col)
-                v = i == 1 ? nonzeros(h)[p] : zero(M)
-                row = rowvals(h)[p]
-                pushtocolumn!(builder, row, v, false) # skips repeated rows
-            end
-        end
-        pushtocolumn!(builder, col, zero(M), false) # if not present already, add structural zeros to diagonal
-        finalizecolumn!(builder)
-    end
-    ho = sparse(builder)
-    copy!(h0.h, ho) # Inject new structural zeros into zero harmonics
-    return ham
-end
-# IDEA: could sum and subtract all harmonics instead
-# Tested, it is slower
-
-function optimize!(ham::Hamiltonian{<:Lattice,L,M,A}) where {L,M,A<:AbstractMatrix}
-    # @warn "Hamiltonian is not sparse. Nothing changed."
-    return ham
-end
-
-function optimize!(ham::Hamiltonian{<:Superlattice})
-    # @warn "Hamiltonian is defined on a Superlattice. Nothing changed."
-    return ham
-end
 
 """
     bloch(h::Hamiltonian{<:Lattice}, ϕs)
@@ -1068,7 +1216,9 @@ end
 Build the Bloch Hamiltonian matrix of `h`, for Bloch phases `ϕs = (ϕ₁, ϕ₂,...)` (or an
 `SVector(ϕs...)`). In terms of Bloch wavevector `k`, `ϕs = k * bravais(h)`, it is defined as
 `H(ϕs) = ∑exp(-im * ϕs' * dn) h_dn` where `h_dn` are Bloch harmonics connecting unit cells
-at a distance `dR = bravais(h) * dn`.
+at a distance `dR = bravais(h) * dn`. The resulting matrix has a type matching the
+`blochtype` option specified upon creating `h` (e.g. can be flattened, with numerical
+eltype, despite `h` being a multiorbital system).
 
     bloch(h::Hamiltonian{<:Lattice})
 
@@ -1079,15 +1229,10 @@ Build the intra-cell Hamiltonian matrix of `h`, without adding any Bloch harmoni
 A nonzero `axis` produces the derivative of the Bloch matrix respect to `ϕs[axis]` (i.e. the
 velocity operator along this axis), `∂H(ϕs) = ∑ -im * dn[axis] * exp(-im * ϕs' * dn) h_dn`
 
-    bloch(matrix, h::Hamiltonian{<:Lattice}, ϕs::NTuple{L,Real}, dnfunc::Function)
+    bloch(h::Hamiltonian{<:Lattice}, ϕs::NTuple{L,Real}, dnfunc::Function)
 
 Generalization that applies a prefactor `dnfunc(dn) * exp(im * ϕs' * dn)` to the `dn`
 harmonic.
-
-    bloch(ph::ParametricHamiltonian, pϕs, [axis])
-
-Same as above, but with `pϕs = (p₁,...,pᵢ, ϕ₁, ..., ϕⱼ)`, with `p` values for
-`parameters(ph)` and `ϕ` Bloch phases.
 
     h |> bloch(ϕs, ...)
 
@@ -1095,8 +1240,8 @@ Curried forms of `bloch`, equivalent to `bloch(h, ϕs, ...)`
 
 # Notes
 
-`bloch` allocates a new matrix on each call. For a non-allocating version of `bloch`, see
-`bloch!`.
+`bloch` allocates a new, independent matrix on each call (no-aliasing guarantee). For a
+non-allocating version of `bloch`, see `bloch!`.
 
 # Examples
 
@@ -1110,72 +1255,39 @@ julia> h = LatticePresets.honeycomb() |> hamiltonian(onsite(1) + hopping(2)) |> 
 ```
 
 # See also:
-    `bloch!`, `optimize!`, `similarmatrix`
+    `bloch!`, `hamiltonian`
 """
 bloch(ϕs, axis = 0) = h -> bloch(h, ϕs, axis)
-bloch(h::Hamiltonian, args...) = bloch!(similarmatrix(h), h, args...)
+bloch(h::Hamiltonian, args...) = copy(bloch!(h, args...))
 
 """
-    bloch!(matrix, h::Hamiltonian, ϕs, [axis])
+    bloch!(h::Hamiltonian, ϕs, [axis])
 
-In-place version of `bloch`. Overwrite `matrix` with the Bloch Hamiltonian matrix of `h` for
-the specified Bloch phases `ϕs = (ϕ₁,ϕ₂,...)` (see `bloch` for definition and API).  A
-conventient way to obtain a `matrix` is to use `similarmatrix(h,...)`, which will return an
-`AbstractMatrix` of the same type as the Hamiltonian's. Note, however, that matrix need not
-be of the same type (e.g. it can be dense with `Number` eltype for a sparse `h` with
-`SMatrix` block eltype).
-
-    bloch!(matrix, ph::ParametricHamiltonian, pϕs, [axis])
-
-Same as above, but with `pϕs = (p₁,...,pᵢ, ϕ₁, ..., ϕⱼ)`, with `p` values for
-`parameters(ph)` and `ϕ` Bloch phases.
+In-place version of `bloch`, without the no-aliasing guarantee. This should be
+used for performance, but care should be taken about aliasing issues (e.g. two
+`Hamiltonian`s may produce a matrix that shares the same memory). Therefore, the output of
+`bloch!` is meant to be used just after being generated.
 
 # Examples
 
 ```jldoctest
 julia> h = LatticePresets.honeycomb() |> hamiltonian(hopping(2I), orbitals = (Val(2), Val(1)));
 
-julia> bloch!(similarmatrix(h), h, (0, 0))
+julia> bloch!(h, (0, 0))
 2×2 SparseMatrixCSC{StaticArrays.SArray{Tuple{2,2},Complex{Float64},2,4},Int64} with 4 stored entries:
   [1, 1]  =  [12.0+0.0im 0.0+0.0im; 0.0+0.0im 12.0+0.0im]
   [2, 1]  =  [6.0+0.0im 0.0+0.0im; 0.0+0.0im 0.0+0.0im]
   [1, 2]  =  [6.0+0.0im 0.0+0.0im; 0.0+0.0im 0.0+0.0im]
   [2, 2]  =  [12.0+0.0im 0.0+0.0im; 0.0+0.0im 0.0+0.0im]
-
-julia> bloch!(similarmatrix(h, AbstractMatrix{ComplexF64}), h, (0, 0))
-3×3 SparseMatrixCSC{Complex{Float64},Int64} with 9 stored entries:
-  [1, 1]  =  12.0+0.0im
-  [2, 1]  =  0.0+0.0im
-  [3, 1]  =  6.0+0.0im
-  [1, 2]  =  0.0+0.0im
-  [2, 2]  =  12.0+0.0im
-  [3, 2]  =  0.0+0.0im
-  [1, 3]  =  6.0+0.0im
-  [2, 3]  =  0.0+0.0im
-  [3, 3]  =  12.0+0.0im
-
-julia> ph = parametric(h, @hopping!((t; α) -> α * t));
-
-julia> bloch!(similarmatrix(ph, AbstractMatrix{ComplexF64}), ph, (2, 0, 0))
-3×3 SparseMatrixCSC{Complex{Float64},Int64} with 9 stored entries:
-  [1, 1]  =  24.0+0.0im
-  [2, 1]  =  0.0+0.0im
-  [3, 1]  =  12.0+0.0im
-  [1, 2]  =  0.0+0.0im
-  [2, 2]  =  24.0+0.0im
-  [3, 2]  =  0.0+0.0im
-  [1, 3]  =  12.0+0.0im
-  [2, 3]  =  0.0+0.0im
-  [3, 3]  =  24.0+0.0im
 ```
 
 # See also:
-    `bloch`, `optimize!`, `similarmatrix`
+    `bloch`, `hamiltonian`
 """
-bloch!(matrix, h::Hamiltonian, ϕs = (), axis = 0) = _bloch!(matrix, h, toSVector(ϕs), axis)
+bloch!(h::Hamiltonian, ϕs = (), axis = 0) = _bloch!(h, toSVector(ϕs), axis)
 
-function _bloch!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,L,M}, ϕs, axis::Number) where {L,M}
-    rawmatrix = parent(matrix)
+function _bloch!(h::Hamiltonian{<:Lattice,L,M}, ϕs, axis::Number) where {L,M}
+    rawmatrix = parent(h.blochmatrix)
     if iszero(axis)
         _copy!(rawmatrix, first(h.harmonics).h, h) # faster copy!(dense, sparse) specialization
         add_harmonics!(rawmatrix, h, ϕs, dn -> 1)
@@ -1183,12 +1295,12 @@ function _bloch!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,L,M}, ϕs, axi
         fill!(rawmatrix, zero(M)) # There is no guarantee of same structure
         add_harmonics!(rawmatrix, h, ϕs, dn -> -im * dn[axis])
     end
-    return matrix
+    return h.blochmatrix
 end
 
-function _bloch!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,L,M}, ϕs, dnfunc::Function) where {L,M}
+function _bloch!(h::Hamiltonian{<:Lattice,L,M}, ϕs, dnfunc::Function) where {L,M}
     prefactor0 = dnfunc(zero(ϕs))
-    rawmatrix = parent(matrix)
+    rawmatrix = parent(h.blochmatrix)
     if iszero(prefactor0)
         fill!(rawmatrix, zero(eltype(rawmatrix)))
     else
@@ -1196,7 +1308,7 @@ function _bloch!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,L,M}, ϕs, dnf
         rmul!(rawmatrix, prefactor0)
     end
     add_harmonics!(rawmatrix, h, ϕs, dnfunc)
-    return matrix
+    return h.blochmatrix
 end
 
 add_harmonics!(zerobloch, h::Hamiltonian{<:Lattice}, ϕs::SVector{0}, _) = zerobloch
@@ -1322,120 +1434,4 @@ function flatoffsetorbs(i, lat, norbs, offsets´)
     Δi = i - offset
     i´ = offsets´[s] + (Δi - 1) * N
     return i´, N
-end
-
-"""
-    flatten(h::Hamiltonian)
-
-Flatten a multiorbital Hamiltonian `h` into one with a single orbital per site. The
-associated lattice is flattened also, so that there is one site per orbital for each initial
-site (all at the same position). Note that in the case of sparse Hamiltonians, zeros in
-hopping/onsite matrices are preserved as structural zeros upon flattening.
-
-    h |> flatten()
-
-Curried form equivalent to `flatten(h)` of `h |> flatten` (included for consistency with
-the rest of the API).
-
-# Examples
-
-```jldoctest
-julia> h = LatticePresets.honeycomb() |>
-           hamiltonian(hopping(@SMatrix[1; 2], range = 1/√3, sublats = :A =>:B),
-           orbitals = (Val(1), Val(2)))
-Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
-  Bloch harmonics  : 3 (SparseMatrixCSC, sparse)
-  Harmonic size    : 2 × 2
-  Orbitals         : ((:a,), (:a, :a))
-  Element type     : 2 × 2 blocks (Complex{Float64})
-  Onsites          : 0
-  Hoppings         : 3
-  Coordination     : 1.5
-
-julia> flatten(h)
-Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
-  Bloch harmonics  : 3 (SparseMatrixCSC, sparse)
-  Harmonic size    : 3 × 3
-  Orbitals         : ((:flat,), (:flat,))
-  Element type     : scalar (Complex{Float64})
-  Onsites          : 0
-  Hoppings         : 6
-  Coordination     : 2.0
-```
-"""
-flatten() = h -> flatten(h)
-
-function flatten(h::Hamiltonian)
-    all(isequal(1), norbitals(h)) && return copy(h)
-    harmonics´ = [flatten(har, h.orbitals, h.lattice) for har in h.harmonics]
-    lattice´ = flatten(h.lattice, h.orbitals)
-    orbitals´ = (_ -> (:flat, )).(h.orbitals)
-    return Hamiltonian(lattice´, harmonics´, orbitals´)
-end
-
-flatten(h::HamiltonianHarmonic, orbs, lat) =
-    HamiltonianHarmonic(h.dn, _flatten(h.h, length.(orbs), lat))
-
-function _flatten(src::SparseMatrixCSC{<:SMatrix{N,N,T}}, norbs::NTuple{S,Any}, lat, ::Type{T´} = T) where {N,T,S,T´}
-    offsets´ = flatoffsets(lat.unitcell.offsets, norbs)
-    dim´ = last(offsets´)
-
-    builder = SparseMatrixBuilder{T´}(dim´, dim´, nnz(src) * N * N)
-
-    for col in 1:size(src, 2)
-        scol = sublat(lat, col)
-        for j in 1:norbs[scol]
-            for p in nzrange(src, col)
-                row = rowvals(src)[p]
-                srow = sublat(lat, row)
-                rowoffset´ = flatoffset(row, lat, norbs, offsets´)
-                val = nonzeros(src)[p]
-                for i in 1:norbs[srow]
-                    pushtocolumn!(builder, rowoffset´ + i, val[i, j])
-                end
-            end
-            finalizecolumn!(builder, false)
-        end
-    end
-    matrix = sparse(builder)
-    return matrix
-end
-
-function _flatten(src::DenseMatrix{<:SMatrix{N,N,T}}, norbs::NTuple{S,Any}, lat, ::Type{T´} = T) where {N,T,S,T´}
-    offsets´ = flatoffsets(lat.unitcell.offsets, norbs)
-    dim´ = last(offsets´)
-    matrix = similar(src, T´, dim´, dim´)
-
-    for col in 1:size(src, 2), row in 1:size(src, 1)
-        srow, scol = sublat(lat, row), sublat(lat, col)
-        nrow, ncol = norbs[srow], norbs[scol]
-        val = src[row, col]
-        rowoffset´ = flatoffset(row, lat, norbs, offsets´)
-        coloffset´ = flatoffset(col, lat, norbs, offsets´)
-        for j in 1:ncol, i in 1:nrow
-            matrix[rowoffset´ + i, coloffset´ + j] = val[i, j]
-        end
-    end
-    return matrix
-end
-
-function flatten(lat::Lattice, orbs)
-    length(orbs) == nsublats(lat) || throw(ArgumentError("Msmatch between sublattices and orbitals"))
-    unitcell´ = flatten(lat.unitcell, length.(orbs))
-    bravais´ = lat.bravais
-    lat´ = Lattice(bravais´, unitcell´)
-end
-
-function flatten(unitcell::Unitcell, norbs::NTuple{S,Int}) where {S}
-    offsets´ = [flatoffsets(unitcell.offsets, norbs)...]
-    ns´ = last(offsets´)
-    sites´ = similar(unitcell.sites, ns´)
-    i = 1
-    for sl in 1:S, site in sitepositions(unitcell, sl), rep in 1:norbs[sl]
-        sites´[i] = site
-        i += 1
-    end
-    names´ = unitcell.names
-    unitcell´ = Unitcell(sites´, names´, offsets´)
-    return unitcell´
 end

@@ -31,11 +31,10 @@ function KPMBuilder(h, A, kets, order, bandrange)
     return builder
 end
 
-function matrixKPM(h::Hamiltonian{<:Lattice,L}, method = missing) where {L}
+function matrixKPM(h::Hamiltonian{<:Lattice,L}) where {L}
     iszero(L) ||
         throw(ArgumentError("Hamiltonian is defined on an infinite lattice. Reduce it to zero-dimensions with `wrap` or `unitcell`."))
-    m = similarmatrix(h, method)
-    return bloch!(m, h)
+    return bloch!(h)
 end
 
 matrixKPM(A::UniformScaling) = A

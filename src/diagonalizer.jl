@@ -14,8 +14,6 @@ diagonalizer(method, codiag, minoverlap) = Diagonalizer(method, codiag, Float64(
 
 ## Diagonalize methods ##
 
-defaultmethod(h::Union{Hamiltonian,ParametricHamiltonian,AbstractMatrix}) = LinearAlgebraPackage()
-
 checkloaded(package::Symbol) = isdefined(Main, package) ||
     throw(ArgumentError("Package $package not loaded, need to be `using $package`."))
 
@@ -31,7 +29,10 @@ function diagonalize(matrix, method::LinearAlgebraPackage)
     return ϵ, ψ
 end
 
-similarmatrix(h, ::LinearAlgebraPackage) = similarmatrix(h, Matrix{blockeltype(h)})
+defaultmethod() = LinearAlgebraPackage()
+
+method_blochtype(::LinearAlgebraPackage, h) = Matrix{orbtype(h)}
+method_blochtype(::AbstractDiagonalizeMethod, h) = SparseMatrixCSC{orbtype(h)}
 
 ## Arpack ##
 struct ArpackPackage{K<:NamedTuple} <: AbstractDiagonalizeMethod
@@ -45,8 +46,6 @@ function diagonalize(matrix, method::ArpackPackage)
     return ϵ, ψ
 end
 
-similarmatrix(h, ::ArpackPackage) = similarmatrix(h, SparseMatrixCSC{blockeltype(h)})
-
 ## ArnoldiMethod ##
 struct ArnoldiMethodPackage{K<:NamedTuple} <: AbstractDiagonalizeMethod
     kw::K
@@ -58,8 +57,6 @@ function diagonalize(matrix, method::ArnoldiMethodPackage)
     ϵ, ψ = Main.ArnoldiMethod.partialschur(matrix; (method.kw)...)
     return ϵ, ψ
 end
-
-similarmatrix(h, ::ArnoldiMethodPackage) = similarmatrix(h, SparseMatrixCSC{blockeltype(h)})
 
 ## IterativeSolvers ##
 
@@ -91,8 +88,6 @@ function diagonalize(matrix::AbstractMatrix{M}, method::KrylovKitPackage) where 
 
     return ϵ´, ψ´
 end
-
-similarmatrix(h, ::KrylovKitPackage) = similarmatrix(h, SparseMatrixCSC{blockeltype(h)})
 
 #######################################################################
 # shift and invert methods
@@ -188,28 +183,26 @@ struct Codiagonalizer{T,F<:Function}
 end
 
 # lift = missing is assumed when h is a Function that generates matrices, instead of a Hamiltonian or ParametricHamiltonian
-function codiagonalizer(h, matrix::AbstractMatrix{T}, mesh, lift) where {T}
+function codiagonalizer(h, mesh, lift)
     dirs = codiag_directions(h, mesh)
-    degtol = sqrt(eps(real(eltype(T))))
     delta = meshdelta(mesh)
-    delta = iszero(delta) ? degtol : delta
-    comatrix, matrixindices = codiag_function(h, matrix, lift, dirs, delta)
+    degtol = sqrt(eps(delta))
+    anyold = anyoldmatrix(h, mesh)
+    comatrix, matrixindices = codiag_function(h, lift, dirs, delta, anyold)
     return Codiagonalizer(comatrix, matrixindices, degtol, UnitRange{Int}[], UnitRange{Int}[], Int[])
 end
 
-function codiag_function(h::Union{Hamiltonian,ParametricHamiltonian}, matrix, lift, dirs, delta)
+function codiag_function(h::Union{Hamiltonian,ParametricHamiltonian}, lift, dirs, delta, anyold)
     hdual = Dual(h)
-    matrixdual = dualarray(matrix)
-    anyold = anyoldmatrix(matrix)
     ndirs = length(dirs)
     matrixindices = 1:(ndirs + ndirs + 1)
     comatrix(meshϕs, n) =
         if n <= ndirs # automatic differentiation using dual numbers
             ϕs´ = dualϕs(applylift(lift, meshϕs), dirs[n])
-            dualpart.(bloch!(matrixdual, hdual, ϕs´))
+            dualpartmatrix(bloch!(hdual, ϕs´))
         elseif n - ndirs <= ndirs # resort to finite differences
             ϕs´ = deltaϕs(applylift(lift, meshϕs), delta * dirs[n - ndirs])
-            bloch!(matrix, h, ϕs´)
+            bloch!(h, ϕs´)
         else # use a fixed arbitrary matrix
             anyold
         end
@@ -218,8 +211,7 @@ end
 
 # In the Function case we cannot know what directions to scan (arguments of matrixf). Also,
 # we cannot be sure that dual numbers propagate. We thus restrict to finite differences in the mesh
-function codiag_function(matrixf::Function, matrix, lift, meshdirs, delta)
-    anyold = anyoldmatrix(matrix)
+function codiag_function(matrixf::Function, lift, meshdirs, delta, anyold)
     ndirs = length(meshdirs)
     matrixindices = 1:(ndirs + 1)
     comatrix(meshϕs, n) =
@@ -255,10 +247,16 @@ deltaϕs(liftedϕs, dir) = liftedϕs + dir
 
 meshdelta(mesh::Mesh{<:Any,T}) where {T} = T(0.1) * norm(first(minmax_edge(mesh)))
 
-function anyoldmatrix(matrix::SparseMatrixCSC, rng = MersenneTwister(1))
+anyoldmatrix(h::Union{Hamiltonian,ParametricHamiltonian}, mesh, rng = MersenneTwister(1)) =
+    _anyoldmatrix(parent(h).blochmatrix, rng)
+
+anyoldmatrix(matrixf::Function, mesh, rng = MersenneTwister(1)) =
+    _anyoldmatrix(matrixf(Tuple(first(vertices(mesh)))), rng)
+
+function _anyoldmatrix(matrix::SparseMatrixCSC, rng)
     s = copy(matrix)
     rand!(rng, nonzeros(s))
     return s
 end
 
-anyoldmatrix(m::DenseArray, rng = MersenneTwister(1)) = rand!(rng, copy(m))
+_anyoldmatrix(m::DenseArray, rng) = rand!(rng, copy(m))

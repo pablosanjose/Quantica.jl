@@ -27,12 +27,9 @@ functions `f = (...; ps...) -> body`. The resulting `ph::ParamtricHamiltonian` c
 to produced the modified Hamiltonian simply by calling it with those same parameters as
 keyword arguments.
 
-Note 1: for sparse `h`, `parametric` only modifies existing onsites and hoppings in `h`,
+Note: for sparse `h`, `parametric` only modifies existing onsites and hoppings in `h`,
 so be sure to add zero onsites and/or hoppings to `h` if they are originally not present but
 you need to apply modifiers to them.
-
-Note 2: `optimize!(h)` is called prior to building the parametric Hamiltonian. This can lead
-to extra zero onsites and hoppings being stored in sparse `h`s.
 
     h |> parametric(modifiers::ElementModifier...)
 
@@ -47,7 +44,7 @@ ParametricHamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
   Bloch harmonics  : 5 (SparseMatrixCSC, sparse)
   Harmonic size    : 200 × 200
   Orbitals         : ((:a,), (:a,))
-  Element type     : scalar (Complex{Float64})
+  Site eltype      : scalar (Complex{Float64})
   Onsites          : 0
   Hoppings         : 600
   Coordination     : 3.0
@@ -58,7 +55,7 @@ Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
   Bloch harmonics  : 5 (SparseMatrixCSC, sparse)
   Harmonic size    : 200 × 200
   Orbitals         : ((:a,), (:a,))
-  Element type     : scalar (Complex{Float64})
+  Site eltype      : scalar (Complex{Float64})
   Onsites          : 200
   Hoppings         : 600
   Coordination     : 3.0
@@ -68,13 +65,12 @@ Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
 """
 function parametric(h::Hamiltonian, ts::ElementModifier...)
     ts´ = resolve(ts, h.lattice)
-    optimize!(h)  # to avoid ptrs getting out of sync if optimize! later
     allptrs = Vector{Int}[Int[] for _ in h.harmonics]
     ptrdata = parametric_ptrdata_tuple!(allptrs, h, ts´)
     foreach(sort!, allptrs)
     foreach(unique!, allptrs)
     params = parameters(ts...)
-    return ParametricHamiltonian(h, copy(h), ts´, ptrdata, allptrs, params)
+    return ParametricHamiltonian(h, copy_harmonics(h), ts´, ptrdata, allptrs, params)
 end
 
 parametric(ts::ElementModifier...) = h -> parametric(h, ts...)
@@ -178,9 +174,6 @@ function checkconsistency(ph::ParametricHamiltonian, fullcheck = true)
     return nothing
 end
 
-# ParametricHamiltonian's are already optimized upon creation
-optimize!(ph::ParametricHamiltonian) = ph
-
 """
     parameters(ph::ParametricHamiltonian)
 
@@ -190,9 +183,17 @@ parameters(ph::ParametricHamiltonian) = ph.parameters
 
 matrixtype(ph::ParametricHamiltonian) = matrixtype(parent(ph))
 
-blockeltype(ph::ParametricHamiltonian) = blockeltype(parent(ph))
+orbtype(ph::ParametricHamiltonian) = orbtype(parent(ph))
 
 bravais(ph::ParametricHamiltonian) = bravais(ph.baseh.lattice)
+
+function blochtype!(ph::ParametricHamiltonian, blochtype)
+    blochmatrix = convert_blochmatrix(ph.h, blochtype)
+    h´ = blochtype!(ph.h, blochmatrix)
+    baseh´ = blochtype!(ph.baseh, blochmatrix)
+    ph´ = ParametricHamiltonian(h´, baseh´, ph.modifiers, ph.ptrdata, ph.allptrs, ph.parameters)
+    return ph´
+end
 
 Base.parent(ph::ParametricHamiltonian) = ph.h
 
@@ -210,10 +211,10 @@ DualNumbers.Dual(p::ParametricHamiltonian) =
 # bloch! for parametric
 #######################################################################
 
-bloch(ph::ParametricHamiltonian, args...) = bloch!(similarmatrix(ph), ph, args...)
+bloch(ph::ParametricHamiltonian, args...) = copy(bloch!(ph, args...))
 
-bloch!(matrix, ph::ParametricHamiltonian, pϕs = (), axis = 0) =
-    bloch!(matrix, h_phases(ph, toSVector(pϕs))..., axis)
+bloch!(ph::ParametricHamiltonian, pϕs = (), axis = 0) =
+    bloch!(h_phases(ph, toSVector(pϕs))..., axis)
 
 @inline function h_phases(ph::ParametricHamiltonian, pϕs)
     pnames = parameters(ph)

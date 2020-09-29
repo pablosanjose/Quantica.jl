@@ -173,7 +173,7 @@ end
     k = Matrix(km, h)
         @test sum(e -> count(!iszero, e), k) == 3
 
-    h = LatticePresets.honeycomb() |> hamiltonian(hopping(I), orbitals = (Val(3), Val(1)), type = Float64) |> unitcell(3)
+    h = LatticePresets.honeycomb() |> hamiltonian(hopping(I), orbitals = (Val(3), Val(1)), orbtype = Float64) |> unitcell(3)
     k = Matrix(randomkets(2; sublats = :B), h)
         @test eltype(k) isa Type{SVector{3,ComplexF64}}
     k = Matrix(randomkets(4, r -> randn(); sublats = :B, normalized = true, indices = not(18)), h)

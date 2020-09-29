@@ -60,7 +60,7 @@ end                             # so that diff(offset) == sublatlengths
 
 Unitcell(sublats::Sublat...; kw...) = Unitcell(promote(sublats...); kw...)
 
-Unitcell(s; dim = Val(dims(s)), type = float(numbertype(s)), names = sublatnames(s)) =
+Unitcell(s; dim = Val(dims(s)), type = float(coordtype(s)), names = sublatnames(s)) =
     _unitcell(s, dim, type, names)
 
 # Dynamic dispatch
@@ -428,9 +428,9 @@ Base.isequal(l1::Superlattice, l2::Superlattice) =
     isequal(l1.unitcell, l2.unitcell) && isequal(l1.bravais, l2.bravais) &&
     isequal(l1.supercell, l2.supercell)
 
-numbertype(::AbstractLattice{E,L,T}) where {E,L,T} = T
-numbertype(::NTuple{N,Sublat{E,T}}) where {N,E,T} = T
-numbertype(::Unitcell{E,T}) where {E,T} = T
+coordtype(::AbstractLattice{E,L,T}) where {E,L,T} = T
+coordtype(::NTuple{N,Sublat{E,T}}) where {N,E,T} = T
+coordtype(::Unitcell{E,T}) where {E,T} = T
 
 positiontype(::AbstractLattice{E,L,T}) where {E,L,T} = SVector{E,T}
 dntype(::AbstractLattice{E,L}) where {E,L} = SVector{L,Int}
@@ -754,9 +754,7 @@ expanded. See `@onsite!` and `@hopping!` for details
 
 Note: for performance reasons, in sparse hamiltonians only the stored onsites and hoppings
 will be transformed by `ElementModifier`s, so you might want to add zero onsites or hoppings
-when building `h` to have a modifier applied to them later. Note also that additional
-onsites and hoppings may be stored when calling `optimize!` or `bloch`/`bloch!` on `h` for
-the first time.
+when building `h` to have a modifier applied to them later.
 
     lat_or_h |> unitcell(v...; kw...)
 
