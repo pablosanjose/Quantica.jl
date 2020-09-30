@@ -754,9 +754,7 @@ expanded. See `@onsite!` and `@hopping!` for details
 
 Note: for performance reasons, in sparse hamiltonians only the stored onsites and hoppings
 will be transformed by `ElementModifier`s, so you might want to add zero onsites or hoppings
-when building `h` to have a modifier applied to them later. Note also that additional
-onsites and hoppings may be stored when calling `optimize!` or `bloch`/`bloch!` on `h` for
-the first time.
+when building `h` to have a modifier applied to them later.
 
     lat_or_h |> unitcell(v...; kw...)
 

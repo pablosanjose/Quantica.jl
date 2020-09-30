@@ -56,7 +56,6 @@ greens(solver::Function) = h -> greens(h, solver(h))
 # Needed to make similarmatrix work with GreensFunction
 matrixtype(g::GreensFunction) = Matrix{eltype(g.h)}
 Base.parent(g::GreensFunction) = g.h
-optimize!(g::GreensFunction) = g
 
 #######################################################################
 # BandGreenSolver
