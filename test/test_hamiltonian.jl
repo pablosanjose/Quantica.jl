@@ -117,6 +117,58 @@ end
             end
         end
     end
+
+    h = LatticePresets.honeycomb() |> hamiltonian(hopping(I), orbitals = (Val(1), Val(2)))
+    s = similarmatrix(h)
+    @test size(s) == (2,2) && s isa SparseMatrixCSC{<:SMatrix{2,2}}
+    s = similarmatrix(h, flatten)
+    @test size(s) == (3,3) && s isa SparseMatrixCSC{ComplexF64}
+    s = similarmatrix(h, SparseMatrixCSC)
+    @test size(s) == (2,2) && s isa SparseMatrixCSC{<:SMatrix{2,2}}
+    s = similarmatrix(h, SparseMatrixCSC{ComplexF16})
+    @test size(s) == (3,3) && s isa SparseMatrixCSC{ComplexF16}
+    s = similarmatrix(h, Matrix)
+    @test size(s) == (2,2) && s isa Matrix{<:SMatrix{2,2}}
+    s = similarmatrix(h, Matrix{Float64})
+    @test size(s) == (3,3) && s isa Matrix{Float64}
+
+    h = Matrix(h)
+    s = similarmatrix(h)
+    @test size(s) == (2,2) && s isa Matrix{<:SMatrix{2,2}}
+    s = similarmatrix(h, flatten)
+    @test size(s) == (3,3) && s isa Matrix{ComplexF64}
+    @test_throws ArgumentError similarmatrix(h, SparseMatrixCSC)
+    @test_throws ArgumentError similarmatrix(h, SparseMatrixCSC{ComplexF16})
+    s = similarmatrix(h, Matrix)
+    @test size(s) == (2,2) && s isa Matrix{<:SMatrix{2,2}}
+    s = similarmatrix(h, Matrix{Float64})
+    @test size(s) == (3,3) && s isa Matrix{Float64}
+
+    h = LatticePresets.honeycomb() |> hamiltonian(hopping(I))
+    s = similarmatrix(h)
+    @test size(s) == (2,2) && s isa SparseMatrixCSC{ComplexF64}
+    s = similarmatrix(h, flatten)
+    @test size(s) == (2,2) && s isa SparseMatrixCSC{ComplexF64}
+    s = similarmatrix(h, SparseMatrixCSC)
+    @test size(s) == (2,2) && s isa SparseMatrixCSC{ComplexF64}
+    s = similarmatrix(h, SparseMatrixCSC{ComplexF16})
+    @test size(s) == (2,2) && s isa SparseMatrixCSC{ComplexF16}
+    s = similarmatrix(h, Matrix)
+    @test size(s) == (2,2) && s isa Matrix{ComplexF64}
+    s = similarmatrix(h, Matrix{Float64})
+    @test size(s) == (2,2) && s isa Matrix{Float64}
+
+    h = Matrix(h)
+    s = similarmatrix(h)
+    @test size(s) == (2,2) && s isa Matrix{ComplexF64}
+    s = similarmatrix(h, flatten)
+    @test size(s) == (2,2) && s isa Matrix{ComplexF64}
+    @test_throws ArgumentError similarmatrix(h, SparseMatrixCSC)
+    @test_throws ArgumentError similarmatrix(h, SparseMatrixCSC{ComplexF16})
+    s = similarmatrix(h, Matrix)
+    @test size(s) == (2,2) && s isa Matrix{ComplexF64}
+    s = similarmatrix(h, Matrix{Float64})
+    @test size(s) == (2,2) && s isa Matrix{Float64}
 end
 
 @testset "orbitals and sublats" begin
