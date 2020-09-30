@@ -14,8 +14,6 @@ diagonalizer(method, codiag, minoverlap) = Diagonalizer(method, codiag, Float64(
 
 ## Diagonalize methods ##
 
-defaultmethod(h::Union{Hamiltonian,ParametricHamiltonian,AbstractMatrix}) = LinearAlgebraPackage()
-
 checkloaded(package::Symbol) = isdefined(Main, package) ||
     throw(ArgumentError("Package $package not loaded, need to be `using $package`."))
 
@@ -31,8 +29,6 @@ function diagonalize(matrix, method::LinearAlgebraPackage)
     return ϵ, ψ
 end
 
-similarmatrix(h, ::LinearAlgebraPackage) = similarmatrix(h, Matrix{blockeltype(h)})
-
 ## Arpack ##
 struct ArpackPackage{K<:NamedTuple} <: AbstractDiagonalizeMethod
     kw::K
@@ -45,8 +41,6 @@ function diagonalize(matrix, method::ArpackPackage)
     return ϵ, ψ
 end
 
-similarmatrix(h, ::ArpackPackage) = similarmatrix(h, SparseMatrixCSC{blockeltype(h)})
-
 ## ArnoldiMethod ##
 struct ArnoldiMethodPackage{K<:NamedTuple} <: AbstractDiagonalizeMethod
     kw::K
@@ -58,8 +52,6 @@ function diagonalize(matrix, method::ArnoldiMethodPackage)
     ϵ, ψ = Main.ArnoldiMethod.partialschur(matrix; (method.kw)...)
     return ϵ, ψ
 end
-
-similarmatrix(h, ::ArnoldiMethodPackage) = similarmatrix(h, SparseMatrixCSC{blockeltype(h)})
 
 ## IterativeSolvers ##
 
@@ -92,7 +84,12 @@ function diagonalize(matrix::AbstractMatrix{M}, method::KrylovKitPackage) where 
     return ϵ´, ψ´
 end
 
-similarmatrix(h, ::KrylovKitPackage) = similarmatrix(h, SparseMatrixCSC{blockeltype(h)})
+### matrix types
+
+similarmatrix(h, method::AbstractDiagonalizeMethod) = similarmatrix(h, method_matrixtype(method, h))
+
+method_matrixtype(::LinearAlgebraPackage, h) = Matrix{blockeltype(h)}
+method_matrixtype(::AbstractDiagonalizeMethod, h) = flatten
 
 #######################################################################
 # shift and invert methods
@@ -198,7 +195,7 @@ function codiagonalizer(h, matrix::AbstractMatrix{T}, mesh, lift) where {T}
 end
 
 function codiag_function(h::Union{Hamiltonian,ParametricHamiltonian}, matrix, lift, dirs, delta)
-    hdual = Dual(h)
+    hdual = dual_if_parametric(h)
     matrixdual = dualarray(matrix)
     anyold = anyoldmatrix(matrix)
     ndirs = length(dirs)
@@ -215,6 +212,9 @@ function codiag_function(h::Union{Hamiltonian,ParametricHamiltonian}, matrix, li
         end
     return comatrix, matrixindices
 end
+
+dual_if_parametric(ph::ParametricHamiltonian) = Dual(ph)
+dual_if_parametric(h::Hamiltonian) = h
 
 # In the Function case we cannot know what directions to scan (arguments of matrixf). Also,
 # we cannot be sure that dual numbers propagate. We thus restrict to finite differences in the mesh

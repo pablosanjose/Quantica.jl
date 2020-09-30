@@ -7,7 +7,7 @@ struct Spectrum{E,T,A<:AbstractMatrix{T}}
 end
 
 """
-    spectrum(h; method = defaultmethod(h), transform = missing)
+    spectrum(h; method = LinearAlgebraPackage(), transform = missing)
 
 Compute the spectrum of a 0D Hamiltonian `h` (or alternatively of the bounded unit cell of a
 finite dimensional `h`) using one of the following `method`s
@@ -27,8 +27,8 @@ The energies and eigenstates in the resulting `s::Spectrum` object can be access
     `energies`, `states`, `bandstructure`
 
 """
-function spectrum(h; method = defaultmethod(h), transform = missing)
-    matrix = similarmatrix(h, method)
+function spectrum(h; method = LinearAlgebraPackage(), transform = missing)
+    matrix = similarmatrix(h, method_matrixtype(method, h))
     bloch!(matrix, h)
     (ϵk, ψk) = diagonalize(matrix, method)
     s = Spectrum(ϵk, ψk)
@@ -193,7 +193,7 @@ Curried form of the above equivalent to `bandstructure(h, [mesh]; kw...)`.
 
 The default options are
 
-    (lift = missing, minoverlap = 0, method = defaultmethod(h), transform = missing)
+    (lift = missing, minoverlap = 0, method = LinearAlgebraPackage(), transform = missing)
 
 `lift`: when not `missing`, `lift` is a function `lift = (vs...) -> ϕ`, where `vs` are the
 coordinates of a mesh vertex and `ϕ` are Bloch phases if sampling a `h::Hamiltonian`, or
@@ -264,9 +264,9 @@ function bandstructure(h::Union{Hamiltonian,ParametricHamiltonian}, spec::MeshSp
 end
 
 function bandstructure(h::Union{Hamiltonian,ParametricHamiltonian}, mesh::Mesh;
-                       method = defaultmethod(h), lift = missing, minoverlap = 0, transform = missing)
+                       method = LinearAlgebraPackage(), lift = missing, minoverlap = 0, transform = missing)
     # ishermitian(h) || throw(ArgumentError("Hamiltonian must be hermitian"))
-    matrix = similarmatrix(h, method)
+    matrix = similarmatrix(h, method_matrixtype(method, h))
     codiag = codiagonalizer(h, matrix, mesh, lift)
     diag = diagonalizer(method, codiag, minoverlap)
     matrixf(ϕs) = bloch!(matrix, h, applylift(lift, ϕs))
@@ -276,12 +276,11 @@ function bandstructure(h::Union{Hamiltonian,ParametricHamiltonian}, mesh::Mesh;
 end
 
 function bandstructure(matrixf::Function, mesh::Mesh;
-                       method = missing, lift = missing, minoverlap = 0, transform = missing)
+                       method = LinearAlgebraPackage(), lift = missing, minoverlap = 0, transform = missing)
     matrixf´ = _wraplift(matrixf, lift)
     matrix = _samplematrix(matrixf´, mesh)
-    method´ = method === missing ? defaultmethod(matrix) : method
     codiag = codiagonalizer(matrixf´, matrix, mesh, missing)
-    diag = diagonalizer(method´, codiag, minoverlap)
+    diag = diagonalizer(method, codiag, minoverlap)
     b = _bandstructure(matrixf´, matrix, mesh, diag)
     transform === missing || transform!(transform, b)
     return b

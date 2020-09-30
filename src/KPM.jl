@@ -31,10 +31,10 @@ function KPMBuilder(h, A, kets, order, bandrange)
     return builder
 end
 
-function matrixKPM(h::Hamiltonian{<:Lattice,L}, method = missing) where {L}
+function matrixKPM(h::Hamiltonian{<:Lattice,L}, matrixtype = missing) where {L}
     iszero(L) ||
         throw(ArgumentError("Hamiltonian is defined on an infinite lattice. Reduce it to zero-dimensions with `wrap` or `unitcell`."))
-    m = similarmatrix(h, method)
+    m = similarmatrix(h, matrixtype)
     return bloch!(m, h)
 end
 
@@ -197,7 +197,7 @@ function bandbracketKPM(h, ::Missing)
 end
 bandbracketKPM(h, (ϵmin, ϵmax)::Tuple{T,T}, pad = float(T)(0.01)) where {T} = ((ϵmax + ϵmin) / 2, (ϵmax - ϵmin) / (2 - pad))
 
-bandrangeKPM(h::Hamiltonian) = bandrangeKPM(matrixKPM(h, ArnoldiMethodPackage()))
+bandrangeKPM(h::Hamiltonian) = bandrangeKPM(matrixKPM(h, flatten))
 
 function bandrangeKPM(h::AbstractMatrix{T}) where {T}
     @warn "Computing spectrum bounds... Consider using the `bandrange` option for faster performance."

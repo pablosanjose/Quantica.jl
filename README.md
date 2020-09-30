@@ -18,6 +18,7 @@ The Quantica.jl package provides an expressive API to build arbitrary quantum sy
 - `lattice`, `sublat`: build lattices
 - `hopping`, `onsite`, `siteselector`, `hopselector`, `nrange`, `not`: build tightbinding models
 - `hamiltonian`: build a Hamiltonian from tightbinding model and a lattice
+- `bloch`, `bloch!`, `similarmatrix`: build the Bloch matrix of a Hamiltonian
 - `parametric`, `@onsite!`, `@hopping!`, `parameters`: build a parametric Hamiltonian
 - `dims`, `sitepositions`, `siteindices`, `bravais`: inspect lattices and Hamiltonians
 - `supercell`, `unitcell`, `flatten`, `wrap`, `transform!`, `combine`: build derived lattices or Hamiltonians

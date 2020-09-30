@@ -12,8 +12,8 @@ using Quantica: Hamiltonian, ParametricHamiltonian, nhoppings, nonsites, nsites,
         E, L = dims(lat)
         dn0 = ntuple(_ -> 1, Val(L))
         for (t, o) in zip(ts, orbs)
-            @test hamiltonian(lat, onsite(t) + hopping(t; range = 1), orbitals = o, type = type) isa Hamiltonian
-            @test hamiltonian(lat, onsite(t) - hopping(t; dn = dn0), orbitals = o, type = type) isa Hamiltonian
+            @test hamiltonian(lat, onsite(t) + hopping(t; range = 1), orbitals = o, orbtype = type) isa Hamiltonian
+            @test hamiltonian(lat, onsite(t) - hopping(t; dn = dn0), orbitals = o, orbtype = type) isa Hamiltonian
         end
     end
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = 1/√3))
@@ -88,7 +88,7 @@ end
     types = (ComplexF16, ComplexF32, ComplexF64)
     lat = LatticePresets.honeycomb()
     for T in types
-        h0 = hamiltonian(lat, onsite(I) + hopping(2I; range = 1), orbitals = (Val(1), Val(2)), type = T)
+        h0 = hamiltonian(lat, onsite(I) + hopping(2I; range = 1), orbitals = (Val(1), Val(2)), orbtype = T)
         hf = flatten(h0)
         hm = Matrix(h0)
         hs = (h0, hf, hm)
@@ -98,19 +98,77 @@ end
             sh = similarmatrix(h)
             @test sh isa A{E}
             b1 = bloch!(similarmatrix(flatten(h)), flatten(h), (1,1))
-            b2 = bloch!(similarmatrix(h, AbstractMatrix{T}), h, (1,1))
+            b2 = bloch!(similarmatrix(h, flatten), h, (1,1))
             @test isapprox(b1, b2)
             for T´ in types
                 E´s = E <: SMatrix ? (SMatrix{2,2,T´,4}, T´) : (T´,)
                 for E´ in E´s
                     s1 = similarmatrix(h, Matrix{E´})
-                    s2 = similarmatrix(h, AbstractMatrix{E´})
+                    s2 = similarmatrix(h, Matrix)
                     @test s1 isa Matrix{E´}
-                    @test s2 isa A{E´}
+                    @test s2 isa Matrix{E}
+                    if A != Matrix
+                        s1 = similarmatrix(h, SparseMatrixCSC{E´})
+                        s2 = similarmatrix(h, SparseMatrixCSC)
+                        @test s1 isa SparseMatrixCSC{E´}
+                        @test s2 isa SparseMatrixCSC{E}
+                    end
                 end
             end
         end
     end
+
+    h = LatticePresets.honeycomb() |> hamiltonian(hopping(I), orbitals = (Val(1), Val(2)))
+    s = similarmatrix(h)
+    @test size(s) == (2,2) && s isa SparseMatrixCSC{<:SMatrix{2,2}}
+    s = similarmatrix(h, flatten)
+    @test size(s) == (3,3) && s isa SparseMatrixCSC{ComplexF64}
+    s = similarmatrix(h, SparseMatrixCSC)
+    @test size(s) == (2,2) && s isa SparseMatrixCSC{<:SMatrix{2,2}}
+    s = similarmatrix(h, SparseMatrixCSC{ComplexF16})
+    @test size(s) == (3,3) && s isa SparseMatrixCSC{ComplexF16}
+    s = similarmatrix(h, Matrix)
+    @test size(s) == (2,2) && s isa Matrix{<:SMatrix{2,2}}
+    s = similarmatrix(h, Matrix{Float64})
+    @test size(s) == (3,3) && s isa Matrix{Float64}
+
+    h = Matrix(h)
+    s = similarmatrix(h)
+    @test size(s) == (2,2) && s isa Matrix{<:SMatrix{2,2}}
+    s = similarmatrix(h, flatten)
+    @test size(s) == (3,3) && s isa Matrix{ComplexF64}
+    @test_throws ArgumentError similarmatrix(h, SparseMatrixCSC)
+    @test_throws ArgumentError similarmatrix(h, SparseMatrixCSC{ComplexF16})
+    s = similarmatrix(h, Matrix)
+    @test size(s) == (2,2) && s isa Matrix{<:SMatrix{2,2}}
+    s = similarmatrix(h, Matrix{Float64})
+    @test size(s) == (3,3) && s isa Matrix{Float64}
+
+    h = LatticePresets.honeycomb() |> hamiltonian(hopping(I))
+    s = similarmatrix(h)
+    @test size(s) == (2,2) && s isa SparseMatrixCSC{ComplexF64}
+    s = similarmatrix(h, flatten)
+    @test size(s) == (2,2) && s isa SparseMatrixCSC{ComplexF64}
+    s = similarmatrix(h, SparseMatrixCSC)
+    @test size(s) == (2,2) && s isa SparseMatrixCSC{ComplexF64}
+    s = similarmatrix(h, SparseMatrixCSC{ComplexF16})
+    @test size(s) == (2,2) && s isa SparseMatrixCSC{ComplexF16}
+    s = similarmatrix(h, Matrix)
+    @test size(s) == (2,2) && s isa Matrix{ComplexF64}
+    s = similarmatrix(h, Matrix{Float64})
+    @test size(s) == (2,2) && s isa Matrix{Float64}
+
+    h = Matrix(h)
+    s = similarmatrix(h)
+    @test size(s) == (2,2) && s isa Matrix{ComplexF64}
+    s = similarmatrix(h, flatten)
+    @test size(s) == (2,2) && s isa Matrix{ComplexF64}
+    @test_throws ArgumentError similarmatrix(h, SparseMatrixCSC)
+    @test_throws ArgumentError similarmatrix(h, SparseMatrixCSC{ComplexF16})
+    s = similarmatrix(h, Matrix)
+    @test size(s) == (2,2) && s isa Matrix{ComplexF64}
+    s = similarmatrix(h, Matrix{Float64})
+    @test size(s) == (2,2) && s isa Matrix{Float64}
 end
 
 @testset "orbitals and sublats" begin

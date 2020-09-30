@@ -27,12 +27,9 @@ functions `f = (...; ps...) -> body`. The resulting `ph::ParamtricHamiltonian` c
 to produced the modified Hamiltonian simply by calling it with those same parameters as
 keyword arguments.
 
-Note 1: for sparse `h`, `parametric` only modifies existing onsites and hoppings in `h`,
+Note: for sparse `h`, `parametric` only modifies existing onsites and hoppings in `h`,
 so be sure to add zero onsites and/or hoppings to `h` if they are originally not present but
 you need to apply modifiers to them.
-
-Note 2: `optimize!(h)` is called prior to building the parametric Hamiltonian. This can lead
-to extra zero onsites and hoppings being stored in sparse `h`s.
 
     h |> parametric(modifiers::ElementModifier...)
 
@@ -68,7 +65,6 @@ Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
 """
 function parametric(h::Hamiltonian, ts::ElementModifier...)
     ts´ = resolve(ts, h.lattice)
-    optimize!(h)  # to avoid ptrs getting out of sync if optimize! later
     allptrs = Vector{Int}[Int[] for _ in h.harmonics]
     ptrdata = parametric_ptrdata_tuple!(allptrs, h, ts´)
     foreach(sort!, allptrs)
@@ -178,9 +174,6 @@ function checkconsistency(ph::ParametricHamiltonian, fullcheck = true)
     return nothing
 end
 
-# ParametricHamiltonian's are already optimized upon creation
-optimize!(ph::ParametricHamiltonian) = ph
-
 """
     parameters(ph::ParametricHamiltonian)
 
@@ -193,6 +186,8 @@ matrixtype(ph::ParametricHamiltonian) = matrixtype(parent(ph))
 blockeltype(ph::ParametricHamiltonian) = blockeltype(parent(ph))
 
 bravais(ph::ParametricHamiltonian) = bravais(ph.baseh.lattice)
+
+similarmatrix(ph::ParametricHamiltonian, args...) = similarmatrix(ph.h, args...)
 
 Base.parent(ph::ParametricHamiltonian) = ph.h
 
