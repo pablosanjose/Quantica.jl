@@ -89,7 +89,7 @@ end
 similarmatrix(h, method::AbstractDiagonalizeMethod) = similarmatrix(h, method_matrixtype(method, h))
 
 method_matrixtype(::LinearAlgebraPackage, h) = Matrix{blockeltype(h)}
-method_matrixtype(::AbstractDiagonalizeMethod, h) = SparseMatrixCSC{blockeltype(h)}
+method_matrixtype(::AbstractDiagonalizeMethod, h) = flatten
 
 #######################################################################
 # shift and invert methods
