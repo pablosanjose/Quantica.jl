@@ -223,8 +223,12 @@ Options passed to the `method` will be forwarded to the diagonalization function
 `method = ArpackPackage(nev = 8, sigma = 1im)` will use `Arpack.eigs(matrix; nev = 8,
 sigma = 1im)` to compute the bandstructure.
 
-`transform`: the option `transform = ε -> f(ε)` allows to transform eigenvalues by `f` in the returned
-bandstructure (useful for performing shifts or other postprocessing).
+`transform`: the option `transform = ε -> fε(ε)` allows to transform eigenvalues by `fε` in
+the returned bandstructure (useful for performing shifts or other postprocessing). We can
+also do `transform -> (fφ, fε)` to transform also mesh vertices with fφ. Additionally,
+`transform -> isometric` or `transform -> (isometric, fε)` will transform mesh vertices into
+momenta, assuming they represent Bloch phases. This works both in full bandstructures and
+linecuts.
 
 # Examples
 ```jldoctest
