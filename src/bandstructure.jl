@@ -152,6 +152,7 @@ function transform!((fk, fε)::Tuple{Function,Function}, bs::Bandstructure)
         for (i, v) in enumerate(vs)
             vs[i] = SVector((fk(SVector(Base.front(Tuple(v))))..., fε(last(v))))
         end
+        alignnormals!(band.simplices, vs)
     end
     return bs
 end
