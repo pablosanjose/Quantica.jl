@@ -23,13 +23,16 @@ end
 Builds a `ParametricHamiltonian` that can be used to efficiently apply `modifiers` to `h`.
 `modifiers` can be any number of `@onsite!(args -> body; kw...)` and `@hopping!(args -> body;
 kw...)` transformations, each with a set of parameters `ps` given as keyword arguments of
-functions `f = (...; ps...) -> body`. The resulting `ph::ParamtricHamiltonian` can be used
-to produced the modified Hamiltonian simply by calling it with those same parameters as
-keyword arguments.
+functions `f = (...; ps...) -> body`.
 
-Note: for sparse `h`, `parametric` only modifies existing onsites and hoppings in `h`,
-so be sure to add zero onsites and/or hoppings to `h` if they are originally not present but
-you need to apply modifiers to them.
+For sparse `h` (the default), `parametric` only modifies existing onsites and hoppings in
+`h`, so be sure to add zero onsites and/or hoppings to `h` if they are originally not
+present but you need to apply modifiers to them.
+
+    ph(; ps...)
+
+For a `ph::ParametricHamiltonian`, return the corresponding `Hamiltonian` with parameters
+`ps` applied.
 
     h |> parametric(modifiers::ElementModifier...)
 
@@ -207,15 +210,28 @@ DualNumbers.Dual(p::ParametricHamiltonian) =
 
 bloch(ph::ParametricHamiltonian, args...) = bloch!(similarmatrix(ph), ph, args...)
 
-bloch!(matrix, ph::ParametricHamiltonian, pϕs = (), axis = 0) =
-    bloch!(matrix, h_phases(ph, toSVector(pϕs))..., axis)
+bloch!(matrix, ph::ParametricHamiltonian, phiparams, axis = 0) =
+    bloch!(matrix, ph, sanitize_phiparams(phiparams), axis)
 
-@inline function h_phases(ph::ParametricHamiltonian, pϕs)
-    pnames = parameters(ph)
-    ps, ϕs = extract_parameters_phases(pnames, pϕs)
-    h = ph(; ps...)
-    return (h, ϕs)
-end
+# φs_params = (SA[φs...], (; params...))
+bloch!(matrix, ph::ParametricHamiltonian, params::NamedTuple) = bloch!(matrix, ph(; params...))
+bloch!(matrix, ph::ParametricHamiltonian) = bloch!(matrix, ph())
 
-extract_parameters_phases(pnames::NTuple{N,NameType}, ϕs::SVector{M}) where {N,M} =
-    (NamedTuple{pnames}(ntuple(i->ϕs[i], Val(N))), ntuple(i->ϕs[i+N], Val(M-N)))
+# φs_params = (SA[φs...], (; params...))
+bloch!(matrix, ph::ParametricHamiltonian, (φs, params)::Tuple{SVector,NamedTuple}, axis = 0) =
+    bloch!(matrix, ph(; params...), φs, axis)
+
+# normalizes the output to (SVector(phis), params_namedtuple)
+sanitize_phiparams(phi::Number) = (SA[phi], (;))
+sanitize_phiparams(phis::NTuple{N,Number}) where {N} = (SVector(phis), (;))
+sanitize_phiparams(phis::SVector{N,<:Number}) where {N} = (phis, (;))
+sanitize_phiparams(params::NamedTuple) = (SA[], params)
+sanitize_phiparams((phis, params)::Tuple{Tuple,NamedTuple}) = (SVector(phis), params)
+sanitize_phiparams((phis, params)::Tuple{SVector,NamedTuple}) = (phis, params)
+sanitize_phiparams(phisparams::Tuple) =
+    (checkSVector(toSVector(Base.front(phisparams))), checkNamedTuple(last(phisparams)))
+
+checkSVector(s::SVector{<:Any,<:Number}) = s
+checkSVector(s) = throw(ArgumentError("Unexpected Bloch phases"))
+checkNamedTuple(n::NamedTuple) = n
+checkNamedTuple(n) = throw(ArgumentError("Unexpected parameters or Bloch phases"))

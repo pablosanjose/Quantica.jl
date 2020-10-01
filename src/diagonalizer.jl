@@ -10,7 +10,8 @@ struct Diagonalizer{S<:AbstractDiagonalizeMethod,C}
     minoverlap::Float64
 end
 
-diagonalizer(method, codiag, minoverlap) = Diagonalizer(method, codiag, Float64(minoverlap))
+diagonalizer(h, matrix, mesh, method, minoverlap, mapping) =
+    Diagonalizer(method, codiagonalizer(h, matrix, mesh, mapping), Float64(minoverlap))
 
 ## Diagonalize methods ##
 
@@ -130,45 +131,6 @@ function invertandshift(ϵ::Vector{T}, origin) where {T}
 end
 
 #######################################################################
-# resolve_degeneracies
-#######################################################################
-# Tries to make states continuous at crossings. Here, ϵ needs to be sorted
-function resolve_degeneracies!(ϵ, ψ, ϕs, codiag)
-    issorted(ϵ, by = real) || sorteigs!(codiag.perm, ϵ, ψ)
-    hasapproxruns(ϵ, codiag.degtol) || return ϵ, ψ
-    ranges, ranges´ = codiag.rangesA, codiag.rangesB
-    resize!(ranges, 0)
-    pushapproxruns!(ranges, ϵ, 0, codiag.degtol) # 0 is an offset
-    for n in codiag.matrixindices
-        v = codiag.comatrix(ϕs, n)
-        resize!(ranges´, 0)
-        for (i, r) in enumerate(ranges)
-            subspace = view(ψ, :, r)
-            vsubspace = subspace' * v * subspace
-            veigen = eigen!(Hermitian(vsubspace))
-            if hasapproxruns(veigen.values, codiag.degtol)
-                roffset = minimum(r) - 1 # Range offset within the ϵ vector
-                pushapproxruns!(ranges´, veigen.values, roffset, codiag.degtol)
-            end
-            subspace .= subspace * veigen.vectors
-        end
-        ranges, ranges´ = ranges´, ranges
-        isempty(ranges) && break
-    end
-    return ψ
-end
-
-# Could perhaps be better/faster using a generalized CoSort
-function sorteigs!(perm, ϵ::Vector, ψ::Matrix)
-    resize!(perm, length(ϵ))
-    p = sortperm!(perm, ϵ, by = real)
-    # permute!(ϵ, p)
-    sort!(ϵ, by = real)
-    Base.permutecols!!(ψ, p)
-    return ϵ, ψ
-end
-
-#######################################################################
 # Codiagonalizer
 #######################################################################
 
@@ -184,17 +146,18 @@ struct Codiagonalizer{T,F<:Function}
     perm::Vector{Int}               # Prealloc for sortperm!
 end
 
-# lift = missing is assumed when h is a Function that generates matrices, instead of a Hamiltonian or ParametricHamiltonian
-function codiagonalizer(h, matrix::AbstractMatrix{T}, mesh, lift) where {T}
-    dirs = codiag_directions(h, mesh)
+# mapping = missing is assumed when h is a Function that generates matrices, instead of a Hamiltonian or ParametricHamiltonian
+function codiagonalizer(h, matrix::AbstractMatrix{T}, mesh, mapping) where {T}
+    sample_phiparams = map_phiparams(mapping, first(vertices(mesh)))
+    dirs = codiag_directions(sample_phiparams)
     degtol = sqrt(eps(real(eltype(T))))
     delta = meshdelta(mesh)
     delta = iszero(delta) ? degtol : delta
-    comatrix, matrixindices = codiag_function(h, matrix, lift, dirs, delta)
+    comatrix, matrixindices = codiag_function(h, matrix, mapping, dirs, delta)
     return Codiagonalizer(comatrix, matrixindices, degtol, UnitRange{Int}[], UnitRange{Int}[], Int[])
 end
 
-function codiag_function(h::Union{Hamiltonian,ParametricHamiltonian}, matrix, lift, dirs, delta)
+function codiag_function(h::Union{Hamiltonian,ParametricHamiltonian}, matrix, mapping, dirs, delta)
     hdual = dual_if_parametric(h)
     matrixdual = dualarray(matrix)
     anyold = anyoldmatrix(matrix)
@@ -202,11 +165,11 @@ function codiag_function(h::Union{Hamiltonian,ParametricHamiltonian}, matrix, li
     matrixindices = 1:(ndirs + ndirs + 1)
     comatrix(meshϕs, n) =
         if n <= ndirs # automatic differentiation using dual numbers
-            ϕs´ = dualϕs(applylift(lift, meshϕs), dirs[n])
-            dualpart.(bloch!(matrixdual, hdual, ϕs´))
+            ϕsparams = dual_phisparams(map_phiparams(mapping, meshϕs), dirs[n])
+            dualpart.(bloch!(matrixdual, hdual, ϕsparams))
         elseif n - ndirs <= ndirs # resort to finite differences
-            ϕs´ = deltaϕs(applylift(lift, meshϕs), delta * dirs[n - ndirs])
-            bloch!(matrix, h, ϕs´)
+            ϕsparams = delta_phisparams(map_phiparams(mapping, meshϕs), delta * dirs[n - ndirs])
+            bloch!(matrix, h, ϕsparams)
         else # use a fixed arbitrary matrix
             anyold
         end
@@ -218,40 +181,56 @@ dual_if_parametric(h::Hamiltonian) = h
 
 # In the Function case we cannot know what directions to scan (arguments of matrixf). Also,
 # we cannot be sure that dual numbers propagate. We thus restrict to finite differences in the mesh
-function codiag_function(matrixf::Function, matrix, lift, meshdirs, delta)
+# Note that mapping is already wrapped into matrixf in the calling bandstructure(::Function,...)
+function codiag_function(matrixf::Function, matrix, mapping::Missing, meshdirs, delta)
     anyold = anyoldmatrix(matrix)
     ndirs = length(meshdirs)
     matrixindices = 1:(ndirs + 1)
     comatrix(meshϕs, n) =
         if n <= ndirs # finite differences
-            matrixf(applylift(lift, meshϕs + delta * meshdirs[n]))
+            matrixf(meshϕs + delta * meshdirs[n])
         else # use a fixed arbitrary matrix
             anyold
         end
     return comatrix, matrixindices
 end
 
-codiag_directions(h::Union{Hamiltonian,ParametricHamiltonian}, mesh) = codiag_directions(_valdim(h))
-codiag_directions(::Function, mesh) = codiag_directions(_valdim(mesh))
+val_length(::SVector{N}, nt::NamedTuple) where {N} = Val(N+length(nt))
 
-@inline _valdim(::Hamiltonian{<:Any,L}) where {L} = Val(L)
-@inline _valdim(ph::ParametricHamiltonian{N}) where {N} = Val(N+latdim(ph.h))
-@inline _valdim(::Mesh{N}) where {N} = Val(N)
+codiag_directions(phiparams) = codiag_directions(val_length(phiparams...), phiparams)
 
-function codiag_directions(::Val{L}, direlements = 0:1, onlypositive = true) where {L}
+function codiag_directions(::Val{L}, phiparams, direlements = 0:1) where {L}
     directions = vec(SVector{L,Int}.(Iterators.product(ntuple(_ -> direlements, Val(L))...)))
-    onlypositive && filter!(ispositive, directions)
-    unique!(normalize, directions)
-    sort!(directions, by = norm, rev = false)
+    mask_dirs!(directions, phiparams)
+    filter!(ispositive, directions)
+    unique!(directions)
+    sort!(directions, by = norm)
     return directions
 end
 
-dualϕs(liftedϕs, dir) = maybe_dual.(liftedϕs, dir)
+# Zeros out any direction that cannot modify a param because it is not a number
+function mask_dirs!(dirs::Vector{S}, pp) where {L,S<:SVector{L}}
+    valparams = values(last(pp))
+    valids = valparams .!= maybe_sum.(valparams, 1)
+    n = length(first(pp))
+    mask = SVector(ntuple(i -> i <= n || valids[i - n] , Val(L)))
+    map!(dir -> mask .* dir, dirs, dirs)
+    return dirs
+end
 
-maybe_dual(liftedϕ::Number, ε) = Dual(liftedϕ, ε)
-maybe_dual(liftedϕ, ε) = liftedϕ
+dual_phisparams(ϕs::SVector{N}, dir) where {N} = Dual.(ϕs, frontsvec(dir, Val(N)))
+dual_phisparams(params::NamedTuple, dir) = NamedTuple{keys(params)}(maybe_dual.(values(params), tailtuple(dir, Val(length(params)))))
+dual_phisparams((ϕs, params)::Tuple, dir) = (dual_phisparams(ϕs, dir), dual_phisparams(params, dir))
 
-deltaϕs(liftedϕs, dir) = liftedϕs + dir
+maybe_dual(param::Number, ε) = Dual(param, ε)
+maybe_dual(param, ε) = param
+
+delta_phisparams(ϕs::SVector{N}, dir) where {N} = ϕs + frontsvec(dir, Val(N))
+delta_phisparams(params::NamedTuple, dir) = NamedTuple{keys(params)}(maybe_sum.(values(params), tailtuple(dir, Val(length(params)))))
+delta_phisparams((ϕs, params)::Tuple, dir) = (delta_phisparams(ϕs, dir), delta_phisparams(params, dir))
+
+maybe_sum(param::Number, ε) = param + ε
+maybe_sum(param, ε) = param
 
 meshdelta(mesh::Mesh{<:Any,T}) where {T} = T(0.1) * norm(first(minmax_edge(mesh)))
 

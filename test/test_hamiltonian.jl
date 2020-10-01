@@ -352,6 +352,14 @@ end
     @test parametric(h, @onsite!((o, r; b) -> o), @hopping!((t, r, dr; a = 2) -> r[1]*t))(b=1) isa T
     @test parametric(h, @onsite!((o, r; b) -> o*b), @hopping!((t, r, dr; a = 2) -> r[1]*t))(a=1, b=2) isa T
 
+    ph = LatticePresets.linear() |> hamiltonian(hopping(1)) |> parametric(@onsite!((o; k) -> o + k*I))
+    # No onsites, no need to specify k
+    @test ph() isa Hamiltonian
+    ph = LatticePresets.linear() |> hamiltonian(onsite(0)) |> parametric(@onsite!((o; k) -> o + k*I))
+    ph´ = LatticePresets.linear() |> hamiltonian(onsite(0)) |> parametric(@onsite!((o; k = 1) -> o + k*I))
+    @test_throws UndefKeywordError ph()
+    @test bloch(ph, (;k = 1)) == bloch(ph(k = 1)) == bloch(ph´)
+
     # Issue #35
     for orb in (Val(1), Val(2))
         h = LatticePresets.triangular() |> hamiltonian(hopping(I) + onsite(I), orbitals = orb) |> unitcell(10)
@@ -371,12 +379,12 @@ end
     ph = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = 1)) |>
          parametric(@hopping!((t, r, dr; λ) ->  λ*im*sK(dr); sublats = :A=>:A),
                     @hopping!((t, r, dr; λ) -> -λ*im*sK(dr); sublats = :B=>:B))
-    @test bloch(ph(λ=1), (π/2, -π/2)) == bloch(ph, (1, π/2, -π/2)) ≈ [4 1; 1 -4]
+    @test bloch(ph(λ=1), (π/2, -π/2)) == bloch(ph, (π/2, -π/2, (;λ=1))) ≈ [4 1; 1 -4]
     # Non-numeric parameters
     ph = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = 1)) |>
          parametric(@hopping!((t, r, dr; λ, k) ->  λ*im*sK(dr+k); sublats = :A=>:A),
                     @hopping!((t, r, dr; λ, k) -> -λ*im*sK(dr+k); sublats = :B=>:B))
-    @test bloch(ph(λ=1, k=SA[1,0]), (π/2, -π/2)) == bloch(ph, (1, SA[1,0], π/2, -π/2)) ≈ [-4 1; 1 4]
+    @test bloch(ph(λ=1, k=SA[1,0]), (π/2, -π/2)) == bloch(ph, (π/2, -π/2, (;λ = 1, k = SA[1,0]))) ≈ [-4 1; 1 4]
     # Issue 61, type stability
     h = LatticePresets.honeycomb() |> hamiltonian(onsite(0))
     @inferred parametric(h, @onsite!((o;μ) -> o- μ))

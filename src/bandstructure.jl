@@ -137,12 +137,20 @@ states(b::Band) = reshape(b.states, b.dimstates, :)
     transform!(f::Function, b::Bandstructure)
 
 Transform the energies of all bands in `b` by applying `f` to them in place.
+
+    transform!((fk, fε), b::Bandstructure)
+
+Transform Bloch phases and energies of all bands in `b` by applying `fk` and `fε` to them in
+place, respectively. If any of them is `missing`, it will be ignored.
+
 """
-function transform!(f, bs::Bandstructure)
+transform!(f, bs::Bandstructure) = transform!(sanitize_transform(f), bs)
+
+function transform!((fk, fε)::Tuple{Function,Function}, bs::Bandstructure)
     for band in bands(bs)
         vs = vertices(band)
         for (i, v) in enumerate(vs)
-            vs[i] = SVector((tuplemost(Tuple(v))..., f(last(v))))
+            vs[i] = SVector((fk(SVector(Base.front(Tuple(v))))..., fε(last(v))))
         end
     end
     return bs
@@ -154,36 +162,35 @@ end
 """
     bandstructure(h::Hamiltonian; points = 13, kw...)
 
-Compute the bandstructure of `h` on a mesh over `h`'s full Brillouin zone, with `points`
-points along each axis, spanning the interval [-π,π] along each reciprocal axis.
+Compute `bandstructure(h, mesh((-π,π)...; points = points); kw...)` using a mesh over `h`'s
+full Brillouin zone with the specified `points` along each [-π,π] reciprocal axis.
 
-    bandstructure(h::Hamiltonian, spec::MeshSpec; lift = missing, kw...)
+    bandstructure(h::Hamiltonian, nodes...; points = 13, kw...)
 
-Call `bandstructure(h, mesh; lift = lift, kw...)` with `mesh = buildmesh(spec, h)` and `lift
-= buildlift(spec, h)` if not provided. See `MeshSpec` for available mesh specs. If the `lift
-= missing` and the dimensions of the mesh do not match the Hamiltonian's, a `lift` function
-is used that lifts the mesh onto the dimensions `h` by appending vertex coordinates with
-zeros.
+Create a linecut of a bandstructure of `h` along a polygonal line connecting two or more
+`nodes`. Each node is either a `Tuple` or `SVector` of Bloch phases, or a symbolic name for
+a Brillouin zone point (`:Γ`,`:K`, `:K´`, `:M`, `:X`, `:Y` or `:Z`). Each segment in the
+polygon has the specified number of `points`. Different `points` per segments can be
+specified with `points = (p1, p2...)`.
 
-    bandstructure(h::Hamiltonian, mesh::Mesh; lift = missing, kw...)
+    bandstructure(h::Hamiltonian, mesh::Mesh; mapping = missing, kw...)
 
 Compute the bandstructure `bandstructure(h, mesh; kw...)` of Bloch Hamiltonian `bloch(h,
-ϕ)`, with `ϕ = v` taken on each vertex `v` of `mesh` (or `ϕ = lift(v...)` if a `lift`
+ϕ)`, with `ϕ = v` taken on each vertex `v` of `mesh` (or `ϕ = mapping(v...)` if a `mapping`
 function is provided).
 
     bandstructure(ph::ParametricHamiltonian, ...; kw...)
 
-Compute the bandstructure of a `ph` with `i` parameters (see `parameters(ph)`), where `mesh`
-is interpreted as a discretization of parameter space ⊗ Brillouin zone, so that each vertex
-reads `v = (p₁,..., pᵢ, ϕ₁,..., ϕⱼ)`, with `p` the values assigned to `parameters(ph)` and
-`ϕᵢ` the Bloch phases.
+Compute the bandstructure of a `ph`. Unless all parameters have default values, a `mapping`
+is required between mesh vertices and Bloch/parameters for `ph`, see details on `mapping`
+below.
 
     bandstructure(matrixf::Function, mesh::Mesh; kw...)
 
 Compute the bandstructure of the Hamiltonian matrix `m = matrixf(ϕ)`, with `ϕ` evaluated on
 the vertices `v` of the `mesh`. Note that `ϕ` in `matrixf(ϕ)` is an unsplatted container.
-Hence, i.e. `matrixf(x) = ...` or `matrixf(x, y) = ...` will not work, use `matrixf((x,)) =
-...` or `matrixf((x, y)) = ...` instead.
+Hence, i.e. `matrixf(x) = ...` or `matrixf(x, y) = ...` will not work. Use `matrixf((x,)) =
+...`, `matrixf((x, y)) = ...` or matrixf(s::SVector) = ...` instead.
 
     h |> bandstructure([mesh,]; kw...)
 
@@ -193,14 +200,14 @@ Curried form of the above equivalent to `bandstructure(h, [mesh]; kw...)`.
 
 The default options are
 
-    (lift = missing, minoverlap = 0, method = LinearAlgebraPackage(), transform = missing)
+    (mapping = missing, minoverlap = 0, method = LinearAlgebraPackage(), transform = missing)
 
-`lift`: when not `missing`, `lift` is a function `lift = (vs...) -> ϕ`, where `vs` are the
-coordinates of a mesh vertex and `ϕ` are Bloch phases if sampling a `h::Hamiltonian`, or
-`(paramsⱼ..., ϕᵢ...)` if sampling a `ph::ParametricHamiltonian`, and `params` are values for
-`parameters(ph)`. It represents a mapping from a mesh and a Brillouin/parameter space. This
-allows to compute a bandstructure along a cut in the Brillouin zone/parameter space, see
-below for examples.
+`mapping`: when not `missing`, `mapping = v -> p` is a function that map mesh vertices `v`
+to Bloch phases and/or parameters `p`. The structure of `p` is whatever is accepted by
+`bloch(h, p, ...)` (see `bloch`). For `h::Hamiltonian`, `p = ϕs::Union{Tuple,SVector}` are
+Bloch phases. For `h::ParametricHamiltonian`, `p = (ϕs..., (; ps))` or `p = (ϕs, (; ps))`
+combine Bloch phases `ϕs` and keyword parameters `ps` of `ph`. This allows to compute a
+bandstructure along a cut in the Brillouin zone/parameter space of `ph`, see examples below.
 
 The option `minoverlap` determines the minimum overlap between eigenstates to connect
 them into a common subband.
@@ -221,7 +228,7 @@ bandstructure (useful for performing shifts or other postprocessing).
 
 # Examples
 ```jldoctest
-julia> h = LatticePresets.honeycomb() |> hamiltonian(hopping(-1, range = 1/√3)) |> unitcell(3);
+julia> h = LatticePresets.honeycomb() |> hamiltonian(hopping(-1)) |> unitcell(3);
 
 julia> bandstructure(h; points = 25, method = LinearAlgebraPackage())
 Bandstructure{2}: collection of 2D bands
@@ -231,69 +238,97 @@ Bandstructure{2}: collection of 2D bands
     Vertices   : 625
     Edges      : 1776
 
-julia> bandstructure(h, linearmesh(:Γ, :X, :Y, :Γ))
-Bandstructure{1}: collection of 1D bands
-  Bands        : 17
-  Element type : scalar (Complex{Float64})
-  Mesh{1}: mesh of a 1-dimensional manifold
-    Vertices   : 37
-    Edges      : 36
-
-julia> bandstructure(h, marchingmesh((0, 2π); points = 25); lift = φ -> (φ, 0))
-       # Equivalent to bandstructure(h, linearmesh(:Γ, :X; points = 11))
+julia> bandstructure(h, :Γ, :X, :Y, :Γ; points = (10,15,10))
 Bandstructure{1}: collection of 1D bands
   Bands        : 18
   Element type : scalar (Complex{Float64})
   Mesh{1}: mesh of a 1-dimensional manifold
-    Vertices   : 25
-    Edges      : 24
+    Vertices   : 33
+    Edges      : 32
+
+julia> bandstructure(h, mesh((0, 2π); points = 11); mapping = φ -> (φ, 0))
+       # Equivalent to bandstructure(h, :Γ, :X; points = 11)
+Bandstructure{1}: collection of 1D bands
+  Bands        : 18
+  Element type : scalar (Complex{Float64})
+  Mesh{1}: mesh of a 1-dimensional manifold
+    Vertices   : 11
+    Edges      : 10
+
+julia> ph = parametric(h, @hopping!((t; α) -> t * α));
+
+julia> bandstructure(ph, mesh((0, 2π); points = 11); mapping = φ -> (φ, 0, (; α = 2φ)))
+Bandstructure{1}: collection of 1D bands
+  Bands        : 18
+  Element type : scalar (Complex{Float64})
+  Mesh{1}: mesh of a 1-dimensional manifold
+    Vertices   : 11
+    Edges      : 10
 ```
 
 # See also
-    `marchingmesh`, `linearmesh`
+    `mesh`, `bloch`, `parametric`
 """
-function bandstructure(h::Hamiltonian; points = 13, kw...)
-    meshspec = marchingmesh(filltuple((-π, π), Val(latdim(h)))...; points = points)
-    return bandstructure(h, meshspec; kw...)
+function bandstructure(h::Hamiltonian{<:Any, L}; points = 13, kw...) where {L}
+    m = mesh(filltuple((-π, π), Val(L))...; points = points)
+    return bandstructure(h, m; kw...)
 end
 
-function bandstructure(h::Union{Hamiltonian,ParametricHamiltonian}, spec::MeshSpec; lift = missing, kw...)
-    mesh = buildmesh(spec, h)
-    lift´ = lift === missing ? buildlift(spec, h) : lift
-    return bandstructure(h, mesh; lift = lift´, kw...)
+function bandstructure(h::Hamiltonian{<:Any,L}, node1, node2, nodes...; points = 13, transform = missing, kw...) where {L}
+    allnodes = (node1, node2, nodes...)
+    mapping´ = piecewise_mapping(allnodes, Val(L))
+    transform´ = sanitize_transform(transform, h, allnodes)
+    return bandstructure(h, piecewise_mesh(allnodes, points); mapping = mapping´, transform = transform´, kw...)
 end
+
+const BZpoints =
+    ( Γ  = (0,)
+    , X  = (pi,)
+    , Y  = (0, pi)
+    , Z  = (0, 0, pi)
+    , K  = (2pi/3, -2pi/3)
+    , K´ = (4pi/3, 2pi/3)
+    , M  = (pi, 0)
+    )
 
 function bandstructure(h::Union{Hamiltonian,ParametricHamiltonian}, mesh::Mesh;
-                       method = LinearAlgebraPackage(), lift = missing, minoverlap = 0, transform = missing)
+                       method = LinearAlgebraPackage(), minoverlap = 0, mapping = missing, transform = missing)
     # ishermitian(h) || throw(ArgumentError("Hamiltonian must be hermitian"))
     matrix = similarmatrix(h, method_matrixtype(method, h))
-    codiag = codiagonalizer(h, matrix, mesh, lift)
-    diag = diagonalizer(method, codiag, minoverlap)
-    matrixf(ϕs) = bloch!(matrix, h, applylift(lift, ϕs))
+    diag = diagonalizer(h, matrix, mesh, method, minoverlap, mapping)
+    matrixf(ϕsmesh) = bloch!(matrix, h, map_phiparams(mapping, ϕsmesh))
     b = _bandstructure(matrixf, matrix, mesh, diag)
-    transform === missing || transform!(transform, b)
+    if transform !== missing
+        transform´ = sanitize_transform(transform, h)
+        transform!(transform´, b)
+    end
     return b
 end
 
 function bandstructure(matrixf::Function, mesh::Mesh;
-                       method = LinearAlgebraPackage(), lift = missing, minoverlap = 0, transform = missing)
-    matrixf´ = _wraplift(matrixf, lift)
+                       method = LinearAlgebraPackage(),  minoverlap = 0, mapping = missing, transform = missing)
+    matrixf´ = wrapmapping(mapping, matrixf)
     matrix = _samplematrix(matrixf´, mesh)
-    codiag = codiagonalizer(matrixf´, matrix, mesh, missing)
-    diag = diagonalizer(method, codiag, minoverlap)
+    diag = diagonalizer(matrixf´, matrix, mesh, method, minoverlap, missing)
     b = _bandstructure(matrixf´, matrix, mesh, diag)
     transform === missing || transform!(transform, b)
     return b
 end
+@inline map_phiparams(mapping::Missing, ϕsmesh) = sanitize_phiparams(ϕsmesh)
+@inline map_phiparams(mapping::Function, ϕsmesh) = sanitize_phiparams(mapping(ϕsmesh...))
+
+wrapmapping(mapping::Missing, matrixf::Function) = matrixf
+wrapmapping(mapping::Function, matrixf::Function) = ϕsmesh -> matrixf(toSVector(mapping(ϕsmesh...)))
+
+sanitize_transform(::Missing, args...) = (identity, identity)
+sanitize_transform(f::Function, args...) = (identity, f)
+sanitize_transform(f::typeof(isometric), args...) = (isometric(args...), identity)
+sanitize_transform((_,f)::Tuple{typeof(isometric),Function}, args...) = (isometric(args...), f)
+sanitize_transform(fs::Tuple{Function,Function}, args...) = fs
+sanitize_transform((_,f)::Tuple{Missing,Function}, args...) = (identity, f)
+sanitize_transform((f,_)::Tuple{Function,Missing}, args...) = (f, identity)
 
 _samplematrix(matrixf, mesh) = matrixf(Tuple(first(vertices(mesh))))
-
-_wraplift(matrixf, lift::Missing) = matrixf
-_wraplift(matrixf, lift) = ϕs -> matrixf(applylift(lift, ϕs))
-
-@inline applylift(lift::Missing, ϕs) = toSVector(ϕs)
-
-@inline applylift(lift::Function, ϕs) = toSVector(lift(ϕs...))
 
 function _bandstructure(matrixf::Function, matrix´::AbstractMatrix{M}, mesh::MD, d::Diagonalizer) where {M,D,T,MD<:Mesh{D,T}}
     nϵ = 0                           # Temporary, to be reassigned
@@ -337,7 +372,7 @@ function _bandstructure(matrixf::Function, matrix´::AbstractMatrix{M}, mesh::MD
         resize!(dests, 0)
         resize!(srcs, 0)
         pending[1] = (0, src) # source CartesianIndex for band search, with no originating vertex
-        band = extractband(mesh, ϵks, ψks, vertindices, d.minoverlap, pending, dests, srcs)
+        band = extract_band(mesh, ϵks, ψks, vertindices, d.minoverlap, pending, dests, srcs)
         nverts = nvertices(band.mesh)
         nverts > D && push!(bands, band) # avoid bands with no simplices
         pcounter += nverts
@@ -349,7 +384,11 @@ end
 _maybereal(::Type{<:Complex}) = identity
 _maybereal(::Type{<:Real}) = real
 
-function extractband(kmesh::Mesh{D,T}, ϵks::AbstractArray{T}, ψks::AbstractArray{M}, vertindices, minoverlap, pending, dests, srcs) where {D,T,M}
+#######################################################################
+# extract_band
+#######################################################################
+
+function extract_band(kmesh::Mesh{D,T}, ϵks::AbstractArray{T}, ψks::AbstractArray{M}, vertindices, minoverlap, pending, dests, srcs) where {D,T,M}
     lenψ, nϵ, nk = size(ψks)
     kverts = vertices(kmesh)
     states = eltype(ψks)[]
@@ -419,4 +458,43 @@ function findmostparallel(ψks::Array{M,3}, destk, srcb, srck) where {M}
         end
     end
     return maxproj, destb
+end
+
+#######################################################################
+# resolve_degeneracies
+#######################################################################
+# Tries to make states continuous at crossings. Here, ϵ needs to be sorted
+function resolve_degeneracies!(ϵ, ψ, ϕs, codiag)
+    issorted(ϵ, by = real) || sorteigs!(codiag.perm, ϵ, ψ)
+    hasapproxruns(ϵ, codiag.degtol) || return ϵ, ψ
+    ranges, ranges´ = codiag.rangesA, codiag.rangesB
+    resize!(ranges, 0)
+    pushapproxruns!(ranges, ϵ, 0, codiag.degtol) # 0 is an offset
+    for n in codiag.matrixindices
+        v = codiag.comatrix(ϕs, n)
+        resize!(ranges´, 0)
+        for (i, r) in enumerate(ranges)
+            subspace = view(ψ, :, r)
+            vsubspace = subspace' * v * subspace
+            veigen = eigen!(Hermitian(vsubspace))
+            if hasapproxruns(veigen.values, codiag.degtol)
+                roffset = minimum(r) - 1 # Range offset within the ϵ vector
+                pushapproxruns!(ranges´, veigen.values, roffset, codiag.degtol)
+            end
+            subspace .= subspace * veigen.vectors
+        end
+        ranges, ranges´ = ranges´, ranges
+        isempty(ranges) && break
+    end
+    return ψ
+end
+
+# Could perhaps be better/faster using a generalized CoSort
+function sorteigs!(perm, ϵ::Vector, ψ::Matrix)
+    resize!(perm, length(ϵ))
+    p = sortperm!(perm, ϵ, by = real)
+    # permute!(ϵ, p)
+    sort!(ϵ, by = real)
+    Base.permutecols!!(ψ, p)
+    return ϵ, ψ
 end

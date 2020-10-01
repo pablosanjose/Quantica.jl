@@ -22,7 +22,7 @@ The Quantica.jl package provides an expressive API to build arbitrary quantum sy
 - `parametric`, `@onsite!`, `@hopping!`, `parameters`: build a parametric Hamiltonian
 - `dims`, `sitepositions`, `siteindices`, `bravais`: inspect lattices and Hamiltonians
 - `supercell`, `unitcell`, `flatten`, `wrap`, `transform!`, `combine`: build derived lattices or Hamiltonians
-- `marchingmesh`, `linearmesh`: define a specification to build a bandstructure discretization mesh
+- `mesh`, `linearmesh`: define a specification to build a bandstructure discretization mesh
 - `bandstructure`, `spectrum`: compute the generalized bandstructure of a Hamiltonian or a ParametricHamiltonian
 - `bands`, `energies`, `states`: inspect spectrum and bandstructure objects
 - `momentaKPM`, `dosKPM`, `averageKPM`, `densityKPM`, `bandrangeKPM`: Kernel Polynomial Method (KPM)

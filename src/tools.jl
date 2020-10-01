@@ -26,10 +26,12 @@ ensuretuple(s) = (s,)
 
 indstopair(s::Tuple) = Pair(last(s), first(s))
 
-tuplemost(t::NTuple{N,Any}) where {N} = ntuple(i -> t[i], Val(N-1))
-
 filltuple(x, ::Val{L}) where {L} = ntuple(_ -> x, Val(L))
 filltuple(x, ::NTuple{N,Any}) where {N} = ntuple(_ -> x, Val(N))
+
+# toSVector can deal with the L=0 edge case, unlike SVector
+frontsvec(x, ::Val{L}) where {L} = toSVector(ntuple(i->x[i], Val(L)))
+tailtuple(x::SVector{N}, ::Val{L}) where {N,L} = ntuple(i->x[N+i-L], Val(L))
 
 @inline tuplejoin() = ()
 @inline tuplejoin(x) = x
@@ -136,6 +138,8 @@ function pinverse(m::SMatrix)
     qrm = qr(m)
     return inv(qrm.R) * qrm.Q'
 end
+
+# normalize_axis_directions(q::SMatrix{M,N}) where {M,N} = hcat(ntuple(i->q[:,i]*sign(q[i,i]), Val(N))...)
 
 _blockdiag(s1::SMatrix{E1,L1,T1}, s2::SMatrix{E2,L2,T2}) where {E1,L1,T1,E2,L2,T2} = hcat(
     ntuple(j->vcat(s1[:,j], zero(SVector{E2,T2})), Val(L1))...,
