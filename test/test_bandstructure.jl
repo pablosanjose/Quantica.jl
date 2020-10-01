@@ -60,7 +60,6 @@ end
     ph = LatticePresets.linear() |> hamiltonian(onsite(0I) + hopping(-I), orbitals = Val(2)) |> unitcell(2) |>
          parametric(@onsite!((o; k) -> o + k*I), @hopping!((t; k = 2, p = [1,2])-> t - k*I + p'p))
     mesh2D = mesh((0, 1), (0, 2π), points = 25)
-    mesh1D = mesh((0, 2π), points = 25)
     b = bandstructure(ph, mesh2D, mapping = (x, k) -> (x, (;k = k)))
     @test length(bands(b)) == 4
     b = bandstructure(ph, mesh2D, mapping = (x, k) -> ((x,), (;k = k)))
