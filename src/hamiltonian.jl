@@ -396,6 +396,12 @@ end
 Create a `Hamiltonian` by applying `model::TighbindingModel` to the lattice `lat` (see
 `hopping` and `onsite` for details on building tightbinding models).
 
+    lat |> hamiltonian(model; kw...)
+
+Curried form of `hamiltonian` equivalent to `hamiltonian(lat, model; kw...)`.
+
+# Keywords
+
 The number of orbitals on each sublattice can be specified by the keyword `orbitals`
 (otherwise all sublattices have one orbital by default). The following, and obvious
 combinations, are possible formats for the `orbitals` keyword:
@@ -414,10 +420,6 @@ define a block size `N = max(num_orbitals)`. If `N = 1` (all sublattices with on
 the Hamiltonian element type is `orbtype`. Otherwise it is `SMatrix{N,N,orbtype}` blocks,
 padded with the necessary zeros as required. Keyword `orbtype` is `Complex{T}` by default,
 where `T` is the number type of `lat`.
-
-    lat |> hamiltonian(model; kw...)
-
-Curried form of `hamiltonian` equivalent to `hamiltonian(lat, model[, funcmodel]; kw...)`.
 
 # Indexing
 
@@ -1307,14 +1309,17 @@ velocity operator along this axis), `∂H(ϕs) = ∑ -im * dn[axis] * exp(-im * 
 Generalization that applies a prefactor `dnfunc(dn) * exp(im * ϕs' * dn)` to the `dn`
 harmonic.
 
-    bloch(ph::ParametricHamiltonian, pϕs, [axis])
+    bloch(ph::ParametricHamiltonian, [pϕs, [axis]])
 
-Same as above, but with `pϕs = (p₁,...,pᵢ, ϕ₁, ..., ϕⱼ)`, with `p` values for
-`parameters(ph)` and `ϕ` Bloch phases.
+Build the Bloch matrix for `ph`. `pϕs = (ϕs, (;kw...))` or `pϕs = (ϕs..., (;kw...))`
+specifies both Bloch phases `ϕs` and the parameters `kw` passed to `ph(; kw...)`. If there are
+no `ϕs`, the syntax `pϕs = (;kw...)` is also allowed, which is in that case equivalent to
+`bloch(ph(; kw...))`. Similarly, `bloch(ph)` is equivalent to `bloch(ph())`.
 
     h |> bloch(ϕs, ...)
+    ph |> bloch(pϕs, ...)
 
-Curried forms of `bloch`, equivalent to `bloch(h, ϕs, ...)`
+Curried forms of `bloch`, equivalent to `bloch(h, ϕs, ...)` and `bloch(ph, pϕs, ...)`
 
 # Notes
 
@@ -1326,10 +1331,10 @@ Curried forms of `bloch`, equivalent to `bloch(h, ϕs, ...)`
 ```jldoctest
 julia> h = LatticePresets.honeycomb() |> hamiltonian(onsite(1) + hopping(2)) |> bloch((0, 0))
 2×2 SparseMatrixCSC{Complex{Float64},Int64} with 4 stored entries:
-  [1, 1]  =  13.0+0.0im
+  [1, 1]  =  1.0+0.0im
   [2, 1]  =  6.0+0.0im
   [1, 2]  =  6.0+0.0im
-  [2, 2]  =  13.0+0.0im
+  [2, 2]  =  1.0+0.0im
 ```
 
 # See also:
@@ -1339,7 +1344,7 @@ bloch(ϕs, axis = 0) = h -> bloch(h, ϕs, axis)
 bloch(h::Hamiltonian, args...) = bloch!(similarmatrix(h), h, args...)
 
 """
-    bloch!(matrix, h::Hamiltonian, ϕs, [axis])
+    bloch!(matrix, h::Hamiltonian, [ϕs, [axis]])
 
 In-place version of `bloch`. Overwrite `matrix` with the Bloch Hamiltonian matrix of `h` for
 the specified Bloch phases `ϕs = (ϕ₁,ϕ₂,...)` (see `bloch` for definition and API). A
@@ -1348,10 +1353,10 @@ return an `AbstractMatrix` of the same type as the Hamiltonian's. Note, however,
 need not be of the same type (e.g. it can be dense with `Number` eltype for a sparse `h`
 with `SMatrix` block eltype).
 
-    bloch!(matrix, ph::ParametricHamiltonian, pϕs, [axis])
+    bloch!(matrix, ph::ParametricHamiltonian, [pϕs, [axis]])
 
-Same as above, but with `pϕs = (p₁,...,pᵢ, ϕ₁, ..., ϕⱼ)`, with `p` values for
-`parameters(ph)` and `ϕ` Bloch phases.
+Same as above but with `pϕs = (ϕs, (;kw...))`, `pϕs = (ϕs..., (;kw...))` or `pϕs = (;kw...)`
+(see `bloch` for details).
 
 # Examples
 
@@ -1359,45 +1364,49 @@ Same as above, but with `pϕs = (p₁,...,pᵢ, ϕ₁, ..., ϕⱼ)`, with `p` va
 julia> h = LatticePresets.honeycomb() |> hamiltonian(hopping(2I), orbitals = (Val(2), Val(1)));
 
 julia> bloch!(similarmatrix(h), h, (0, 0))
-2×2 SparseMatrixCSC{StaticArrays.SArray{Tuple{2,2},Complex{Float64},2,4},Int64} with 4 stored entries:
-  [1, 1]  =  [12.0+0.0im 0.0+0.0im; 0.0+0.0im 12.0+0.0im]
+2×2 SparseMatrixCSC{StaticArrays.SArray{Tuple{2,2},Complex{Float64},2,4},Int64} with 2 stored entries:
   [2, 1]  =  [6.0+0.0im 0.0+0.0im; 0.0+0.0im 0.0+0.0im]
   [1, 2]  =  [6.0+0.0im 0.0+0.0im; 0.0+0.0im 0.0+0.0im]
-  [2, 2]  =  [12.0+0.0im 0.0+0.0im; 0.0+0.0im 0.0+0.0im]
 
-julia> bloch!(similarmatrix(h, AbstractMatrix{ComplexF64}), h, (0, 0))
+julia> bloch!(similarmatrix(h, flatten), h, (0, 0))
 3×3 SparseMatrixCSC{Complex{Float64},Int64} with 9 stored entries:
-  [1, 1]  =  12.0+0.0im
+  [1, 1]  =  0.0+0.0im
   [2, 1]  =  0.0+0.0im
   [3, 1]  =  6.0+0.0im
   [1, 2]  =  0.0+0.0im
-  [2, 2]  =  12.0+0.0im
+  [2, 2]  =  0.0+0.0im
   [3, 2]  =  0.0+0.0im
   [1, 3]  =  6.0+0.0im
   [2, 3]  =  0.0+0.0im
-  [3, 3]  =  12.0+0.0im
+  [3, 3]  =  0.0+0.0im
 
-julia> ph = parametric(h, @hopping!((t; α) -> α * t));
+julia> ph = parametric(h, @hopping!((t; α, β = 0) -> α * t + β));
 
-julia> bloch!(similarmatrix(ph, AbstractMatrix{ComplexF64}), ph, (2, 0, 0))
+julia> bloch!(similarmatrix(ph, flatten), ph, (0, 0, (; α = 2)))
 3×3 SparseMatrixCSC{Complex{Float64},Int64} with 9 stored entries:
-  [1, 1]  =  24.0+0.0im
+  [1, 1]  =  0.0+0.0im
   [2, 1]  =  0.0+0.0im
   [3, 1]  =  12.0+0.0im
   [1, 2]  =  0.0+0.0im
-  [2, 2]  =  24.0+0.0im
+  [2, 2]  =  0.0+0.0im
   [3, 2]  =  0.0+0.0im
   [1, 3]  =  12.0+0.0im
   [2, 3]  =  0.0+0.0im
-  [3, 3]  =  24.0+0.0im
+  [3, 3]  =  0.0+0.0im
 ```
 
 # See also:
     `bloch`, `similarmatrix`
 """
-bloch!(matrix, h::Hamiltonian, ϕs = (), axis = 0) = _bloch!(matrix, h, toSVector(ϕs), axis)
+bloch!(matrix, h::Hamiltonian, ϕs, axis = 0) = _bloch!(matrix, h, toSVector(ϕs), axis)
+bloch!(matrix, h::Hamiltonian, ϕs::Tuple{SVector,NamedTuple}, args...) = bloch!(matrix, h, first(ϕs), args...)
 
-function _bloch!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,L,M}, ϕs, axis::Number) where {L,M}
+function bloch!(matrix, h::Hamiltonian)
+    _copy!(parent(matrix), first(h.harmonics).h, h) # faster copy!(dense, sparse) specialization
+    return matrix
+end
+
+function _bloch!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,L,M}, ϕs::SVector{L}, axis::Number) where {L,M}
     rawmatrix = parent(matrix)
     if iszero(axis)
         _copy!(rawmatrix, first(h.harmonics).h, h) # faster copy!(dense, sparse) specialization
@@ -1409,7 +1418,7 @@ function _bloch!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,L,M}, ϕs, axi
     return matrix
 end
 
-function _bloch!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,L,M}, ϕs, dnfunc::Function) where {L,M}
+function _bloch!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,L,M}, ϕs::SVector{L}, dnfunc::Function) where {L,M}
     prefactor0 = dnfunc(zero(ϕs))
     rawmatrix = parent(matrix)
     if iszero(prefactor0)
@@ -1422,7 +1431,9 @@ function _bloch!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,L,M}, ϕs, dnf
     return matrix
 end
 
-add_harmonics!(zerobloch, h::Hamiltonian{<:Lattice}, ϕs::SVector{0}, _) = zerobloch
+_bloch!(matrix, h::Hamiltonian{<:Lattice,L}, ϕs::SVector{L´}, axis) where {L,L´} =
+    L == L´ ? throw(ArgumentError("Unexpected `bloch!` signature")) :
+              throw(DimensionMismatch("Mismatch between $L-dimensional Hamiltonian and $L´-dimensional Bloch phases"))
 
 function add_harmonics!(zerobloch, h::Hamiltonian{<:Lattice,L}, ϕs::SVector{L}, dnfunc) where {L}
     ϕs´ = ϕs'

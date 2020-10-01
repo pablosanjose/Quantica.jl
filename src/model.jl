@@ -889,7 +889,7 @@ function get_f_N_params(f, msg)
     else
         params = get_kwname.(kwargs) |> Tuple
         if !isempty(params) && last(params) == :...
-            params = tuplemost(params)  # drop _... kwarg from params
+            params = Base.front(params)  # drop _... kwarg from params
         else
             push!(kwargs, :(_...))  # normalization : append _... to kwargs
         end
