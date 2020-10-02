@@ -192,10 +192,10 @@ function addtooltips!(scene, h)
     sceneplot = scene[end]
     visible = Node(false)
     N = Quantica.blockdim(h)
-    poprect = mapping(scene.events.mouseposition) do mp
+    poprect = lift(scene.events.mouseposition) do mp
         FRect((mp .+ 5), 1,1)
     end
-    textpos = mapping(scene.events.mouseposition) do mp
+    textpos = lift(scene.events.mouseposition) do mp
         Vec3f0((mp .+ 5 .+ (0, -50))..., 0)
     end
     popup = poly!(campixel(scene), poprect, raw = true, color = RGBAf0(1,1,1,0), visible = visible)
