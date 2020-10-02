@@ -73,7 +73,7 @@ end
         linkthickness = 6, linkoffset = 0, linkradius = 0.1,
         tooltips = true, digits = 3,
         _tooltips_rowcolhar = Vector{Tuple{Int,Int,Int}}[],
-        ssao = true,
+        ssao = true, ambient = Vec3f0(0.5), diffuse = Vec3f0(0.5),
         colors = map(t -> RGBAf0(t...),
             ((0.960,0.600,.327), (0.410,0.067,0.031),(0.940,0.780,0.000),
             (0.640,0.760,0.900),(0.310,0.370,0.650),(0.600,0.550,0.810),
@@ -143,7 +143,7 @@ end
 
 function plotsites_hi!(plot, sites, color)
     meshscatter!(plot, sites;
-        ssao = plot[:ssao][],
+        ssao = plot[:ssao][], ambient = plot[:ambient][], diffuse = plot[:diffuse][],
         color = color,
         markerspace = SceneSpace,
         markersize = plot[:siteradius][], light = plot[:light][])
@@ -184,7 +184,7 @@ function plotlinks_hi!(plot, links, color)
     scales = [Vec3f0(radius, radius, norm(r2 - r1)/2) for (r1, r2) in links]
     cylinder = Cylinder(Point3f0(0., 0., -1.0), Point3f0(0., 0, 1.0), Float32(1))
     meshscatter!(plot, positions;
-        ssao = plot[:ssao][],
+        ssao = plot[:ssao][], ambient = plot[:ambient][], diffuse = plot[:diffuse][],
         color = color, marker = cylinder, markersize = scales, rotations = rotvectors,
         light = plot[:light][])
     return nothing
@@ -290,7 +290,7 @@ function plot!(plot::BandPlot2D)
     Theme(
     linewidth = 1,
     wireframe = false,
-    ssao = true,
+    ssao = true, ambient = Vec3f0(0.55), diffuse = Vec3f0(0.4),
     colors = map(t -> RGBAf0(t...),
         ((0.973, 0.565, 0.576), (0.682, 0.838, 0.922), (0.742, 0.91, 0.734),
          (0.879, 0.744, 0.894), (1.0, 0.84, 0.0), (1.0, 1.0, 0.669),
@@ -309,7 +309,8 @@ function plot!(plot::BandPlot3D)
         if isempty(connectivity)
             scatter!(plot, vertices, color = color)
         else
-            mesh!(plot, vertices, connectivity, color = color, transparency = false, ssao = plot[:ssao][])
+            mesh!(plot, vertices, connectivity, color = color, transparency = false,
+            ssao = plot[:ssao][], ambient = plot[:ambient][], diffuse = plot[:diffuse][])
             if plot[:wireframe][]
                 edgevertices = collect(Quantica.edgevertices(band.mesh))
                 linesegments!(plot, edgevertices, linewidth = plot[:linewidth])
