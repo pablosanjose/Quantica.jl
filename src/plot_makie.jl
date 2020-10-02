@@ -1,5 +1,5 @@
 using .Makie
-using GeometryTypes: Cylinder
+using GeometryBasics
 import .Makie.AbstractPlotting: plot!, plot, to_value
 
 """
@@ -70,7 +70,7 @@ end
         allintra = false, allcells = true, showsites = true, showlinks = true,
         shadedsites = false, shadedlinks = false, dimming = 0.75,
         siteradius = 0.2, siteborder = 3, siteborderdarken = 1.0, linkdarken = 0.0,
-        linkthickness = 6, linkoffset = 0.000, linkradius = 0.1,
+        linkthickness = 6, linkoffset = 0, linkradius = 0.1,
         tooltips = true, digits = 3,
         _tooltips_rowcolhar = Vector{Tuple{Int,Int,Int}}[],
         ssao = true,
@@ -92,7 +92,6 @@ function plot!(plot::HamiltonianPlot)
     mdist > 0 || (mdist = 1)
     plot[:siteradius][] *= mdist/2
     plot[:linkradius][] *= mdist/2
-    plot[:linkoffset][] *= mdist/2
 
     # plot links
     plot[:showlinks][] &&
@@ -161,7 +160,7 @@ function plotlinks!(plot, lat, itr, dn, n, color)
         rdst = padright(sites[row] + br * dn, Val(3))
         rsrc = padright(sites[col], Val(3))
         rdst = iszero(dn) ? (rdst + rsrc) / 2 : rdst
-        rsrc = rsrc + (plot[:siteradius][] + plot[:linkoffset][]) * normalize(rdst - rsrc)
+        rsrc = rsrc + plot[:linkoffset][]*plot[:linkradius][] * normalize(rdst - rsrc)
         push!(links, rsrc => rdst)
         plot[:tooltips][] && push!(tt, (row, col, n))
     end
