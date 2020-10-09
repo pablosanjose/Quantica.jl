@@ -67,7 +67,7 @@ function VegaLite.vlplot(h::Hamiltonian{LA};
     table      = linkstable(h, directives)
     maxthick   = maximum(s -> ifelse(s.islink, s.scale, zero(s.scale)), table)
     maxsize    = plotsites ? maximum(s -> ifelse(s.islink, zero(s.scale), s.scale), table) : sqrt(15*maxthick)
-    opacityrange = extrema(s -> s.opacity, table)
+    maxopacity = maximum(s -> s.opacity, table)
     corners    = _corners(table)
     plotrange  = (xlims, ylims)
     (domainx, domainy), sizes = domain_size(corners, size, plotrange)
@@ -91,7 +91,7 @@ function VegaLite.vlplot(h::Hamiltonian{LA};
                 scale = {domain = colorrange, scheme = colorscheme´},
                 legend = needslegend(sitecolor)},
             opacity = {:opacity,
-                scale = {range = [0, 1], domain = opacityrange},
+                scale = {range = [0, 1], domain = [0, maxopacity]},
                 legend = needslegend(linkopacity)},
             transform = [{filter = "datum.islink"}],
             selection = {grid2 = {type = :interval, bind = :scales}},
@@ -111,7 +111,7 @@ function VegaLite.vlplot(h::Hamiltonian{LA};
                 scale = {domain = colorrange, scheme = colorscheme´},
                 legend = needslegend(sitecolor)},
             opacity = {:opacity,
-                scale = {range = [0, 1], domain = opacityrange},
+                scale = {range = [0, 1], domain = [0, maxopacity]},
                 legend = needslegend(siteopacity)},
             selection = {grid1 = {type = :interval, bind = :scales}},
             transform = [{filter = "!datum.islink"}],
