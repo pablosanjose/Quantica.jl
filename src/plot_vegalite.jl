@@ -3,11 +3,20 @@ using .VegaLite
 """
     vlplot(b::Bandstructure{1}; kw...)
 
-Plots the 1D bandstructure `b` using VegaLite.
+Plot the 1D bandstructure `b` using VegaLite.
 
     vlplot(h::Hamiltonian; kw...)
 
-Plots the the Hamiltonian lattice projected along `axes` using VegaLite.
+Plot the the Hamiltonian lattice projected along `axes` using VegaLite.
+
+    vlplot(h::Hamiltonian, psi::AbstractVector; kw...)
+
+Plot an eigenstate `psi` (of same dimension as `h`) on the lattice, using one of various
+possible visualization channels: `sitesize`, `siteopacity`, `sitecolor`, `linksize`,
+`linkopacity` or `linkcolor` (see keywords below). For site channels, a function `psi ->
+f(psi)` must be provided (e.g. `f(psi_i) = norm(psi_i)` to plot the norm of the wavefunction
+at each site). For link channels, a function `(psi´, psi) -> f(psi´, psi)` must be provided
+(e.g. `f(psi_i, psi_j) = imag(psi_i'* psi_j)` to plot the current).
 
 # Keyword arguments and defaults:
     - `size = 800`: the `(width, height)` of the plot (or `max(width, height)` if a single number)
@@ -55,15 +64,16 @@ function bandtable(b::Bandstructure{1}, (scalingx, scalingy), bandsiter)
     return table
 end
 
-function VegaLite.vlplot(h::Hamiltonian{LA};
+function VegaLite.vlplot(h::Hamiltonian{LA}, psi = missing;
                          labels = ("x","y"), size = 800, axes::Tuple{Int,Int} = (1,2), xlims = missing, ylims = missing, digits = 4,
                          sitesize = 15, siteopacity = 0.9, linksize = 0.25, linkopacity = 1.0,
                          sitecolor = missing, linkcolor = sitecolor, colorscheme = "lightgreyred", discretecolorscheme = "category10",
                          plotsites = true, plotlinks = true) where {E,LA<:Lattice{E}}
     directives = (; axes = axes, digits = digits,
-                    sitesize_func = sitefunc(sitesize), siteopacity_func = sitefunc(siteopacity),
-                    linksize_func = linkfunc(linksize), linkopacity_func = linkfunc(linkopacity),
-                    sitecolor_func = sitefunc(sitecolor), linkcolor_func = sitefunc(linkcolor))
+                    sitesize_func = sitefunc(sitesize, psi), siteopacity_func = sitefunc(siteopacity, psi),
+                    linksize_func = linkfunc(linksize, psi), linkopacity_func = linkfunc(linkopacity, psi),
+                    sitecolor_func = sitefunc(sitecolor, psi), linkcolor_func = sitefunc(linkcolor, psi))
+    checkdims_psi(h, psi)
     table      = linkstable(h, directives)
     maxthick   = maximum(s -> ifelse(s.islink, s.scale, zero(s.scale)), table)
     maxsize    = plotsites ? maximum(s -> ifelse(s.islink, zero(s.scale), s.scale), table) : sqrt(15*maxthick)
@@ -123,9 +133,6 @@ function VegaLite.vlplot(h::Hamiltonian{LA};
     return table |> p
 end
 
-needslegend(x::Number) = nothing
-needslegend(x) = true
-
 function vltheme((sizex, sizey), points = false)
     p = @vlplot(
         tooltip = :tooltip,
@@ -138,12 +145,30 @@ function vltheme((sizex, sizey), points = false)
     return p
 end
 
+needslegend(x::Number) = nothing
+needslegend(x) = true
+
 sitefunc(f::Function) = f
-sitefunc(r::Number) = i -> r
-sitefunc(::Missing) = i -> 0.0
+sitefunc(o::Number) = psi -> o
+sitefunc(::Missing) = psi -> 0.0
+sitefunc(o, psi::Missing) = sitefunc(o)
+
+function sitefunc(o, psi::AbstractVector)
+    f = sitefunc(o)
+    return i -> f(psi[i])
+end
 
 linkfunc(f::Function) = f
-linkfunc(t) = (i, j) -> t
+linkfunc(t) = (psi´, psi) -> t
+linkfunc(t, psi::Missing) = linkfunc(t)
+
+function linkfunc(t, psi::AbstractVector)
+    f = linkfunc(t)
+    return (i,j) -> f(psi[i], psi[j])
+end
+
+checkdims_psi(h, psi) = size(h, 2) == size(psi, 1) || throw(ArgumentError("The eigenstate length $(size(psi,1)) must match the Hamiltonian dimension $(size(h, 2))"))
+checkdims_psi(h, ::Missing) = nothing
 
 function linkstable(h::Hamiltonian, d)
     (a1, a2) = d.axes
