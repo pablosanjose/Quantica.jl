@@ -29,6 +29,7 @@ at each site). For link channels, a function `(psi´, psi) -> f(psi´, psi)` mus
     - `digits = 4`: number of significant digits to show in onsite energy and hopping tooltips
     - `plotsites = true`: whether to plot sites
     - `plotlinks = true`: whether to plot links
+    - `sitestroke = :white`: the color of site outlines. If `nothing`, no outline will be plotted.
     - `sitesize = 15`: diameter of sites in pixels. Can be a function of site index.
     - `siteopacity = 0.9`: opacity of sites. Can be a function of site index.
     - `linksize = 0.25`: thickness of hopping links as a fraction of sitesize. Can be a function of site indices.
@@ -66,14 +67,16 @@ end
 
 function VegaLite.vlplot(h::Hamiltonian{LA}, psi = missing;
                          labels = ("x","y"), size = 800, axes::Tuple{Int,Int} = (1,2), xlims = missing, ylims = missing, digits = 4,
-                         sitesize = 15, siteopacity = 0.9, linksize = 0.25, linkopacity = 1.0,
-                         sitecolor = missing, linkcolor = sitecolor, colorscheme = "lightgreyred", discretecolorscheme = "category10",
-                         plotsites = true, plotlinks = true) where {E,LA<:Lattice{E}}
+                         plotsites = true, plotlinks = true,
+                         sitestroke = :white, sitesize = 15, siteopacity = 0.9, sitecolor = missing,
+                         linksize = 0.25, linkopacity = 1.0, linkcolor = sitecolor,
+                         colorscheme = "lightgreyred", discretecolorscheme = "category10") where {E,LA<:Lattice{E}}
+    psi´ = maybe_unflatten_or_missing(psi, h)
     directives = (; axes = axes, digits = digits,
-                    sitesize_func = sitefunc(sitesize, psi), siteopacity_func = sitefunc(siteopacity, psi),
-                    linksize_func = linkfunc(linksize, psi), linkopacity_func = linkfunc(linkopacity, psi),
-                    sitecolor_func = sitefunc(sitecolor, psi), linkcolor_func = sitefunc(linkcolor, psi))
-    checkdims_psi(h, psi)
+                    sitesize_func = sitefunc(sitesize, psi´), siteopacity_func = sitefunc(siteopacity, psi´),
+                    linksize_func = linkfunc(linksize, psi´), linkopacity_func = linkfunc(linkopacity, psi´),
+                    sitecolor_func = sitefunc(sitecolor, psi´), linkcolor_func = sitefunc(linkcolor, psi´))
+    checkdims_psi(h, psi´)
     table      = linkstable(h, directives)
     maxthick   = maximum(s -> ifelse(s.islink, s.scale, zero(s.scale)), table)
     maxsize    = plotsites ? maximum(s -> ifelse(s.islink, zero(s.scale), s.scale), table) : sqrt(15*maxthick)
@@ -113,7 +116,7 @@ function VegaLite.vlplot(h::Hamiltonian{LA}, psi = missing;
     end
     if plotsites
         p += @vlplot(
-            mark = {:circle, stroke = :black},
+            mark = {:circle, stroke = sitestroke},
             size = {:scale,
                 scale = {range = [0, (maxsize)^2], domain = [0, maxsize], clamp = false},
                 legend = needslegend(sitesize)},
@@ -147,6 +150,9 @@ end
 
 needslegend(x::Number) = nothing
 needslegend(x) = true
+
+maybe_unflatten_or_missing(psi::Missing, h) = missing
+maybe_unflatten_or_missing(psi, h) = maybe_unflatten(psi, h)
 
 sitefunc(f::Function) = f
 sitefunc(o::Number) = psi -> o
