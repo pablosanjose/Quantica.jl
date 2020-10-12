@@ -77,3 +77,20 @@ end
     @test length(bands(b)) == 4
     @test_throws UndefKeywordError bandstructure(ph, mesh2D, mapping = (k, φ) -> ((;p = SA[1, φ]),))
 end
+
+@testset "unflatten" begin
+    h = LatticePresets.honeycomb() |> hamiltonian(onsite(2I) + hopping(I, range = 1), orbitals = (Val(2), Val(1))) |> unitcell(2) |> unitcell
+    sp = states(spectrum(h))[:,1]
+    sp´ = Quantica.unflatten(sp, h)
+    l = size(h, 1)
+    @test length(sp) == 1.5 * l
+    @test length(sp´) == l
+    @test all(x -> iszero(last(x)), sp´[l+1:end])
+
+    h = LatticePresets.honeycomb() |> hamiltonian(onsite(2I) + hopping(I, range = 1), orbitals = Val(2)) |> unitcell(2) |> unitcell
+    sp = states(spectrum(h))[:,1]
+    sp´ = Quantica.unflatten(sp, h)
+    l = size(h, 1)
+    @test length(sp) == 2 * l
+    @test length(sp´) == l
+end

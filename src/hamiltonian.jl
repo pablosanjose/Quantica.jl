@@ -280,6 +280,38 @@ function flatoffsetorbs(i, lat, norbs, offsets´)
     return i´, N
 end
 
+## unflatten ##
+
+unflatten(v, h) = unflatten!(similar(v, orbitaltype(h), size(h, 2)), v, h)
+
+function unflatten!(v::AbstractVector{T}, vflat::AbstractArray, h::Hamiltonian) where {T}
+    norbs = length.(h.orbitals)
+    offsetsflat = flatoffsets(h.lattice.unitcell.offsets, norbs)
+    dimflat = last(offsetsflat)
+    checkflatdims(v, h)
+    checkunflatdims(vflat, dimflat)
+    j = 0
+    for s in sublats(h.lattice)
+        N = norbs[s]
+        for i in offsetsflat[s]+1:N:offsetsflat[s+1]
+            j += 1
+            v[j] = padright(view(vflat, i:i+N-1), T)
+        end
+    end
+    return v
+end
+
+checkflatdims(v::AbstractVector{T}, h) where {T} =
+    T === orbitaltype(h) && size(v, 1) == size(h, 2) ||
+        throw(ArgumentError("Element type or dimensions of destination array are inconsistent with Hamiltonian"))
+
+checkunflatdims(vflat::AbstractVector{T}, dimflat) where {T} =
+    size(vflat, 1) == dimflat && T <: Number ||
+        throw(ArgumentError("Element type or dimensions of source array are inconsistent with Hamiltonian"))
+
+maybe_unflatten(v::AbstractVector{T}, h::Hamiltonian) where {T} =
+    T === orbitaltype(h) && size(v, 1) == size(h, 2) ? v : unflatten(v, h)
+
 #######################################################################
 # similarmatrix
 #######################################################################
@@ -568,7 +600,7 @@ blockdim(::Type{S}) where {N,S<:SMatrix{N,N}} = N
 blockdim(::Type{T}) where {T<:Number} = 1
 
 # find SVector type that can hold all orbital amplitudes in any lattice sites
-orbitaltype(orbs, type::Type{Tv} = Complex{T}) where {T,Tv} =
+orbitaltype(orbs, type::Type{Tv}) where {Tv} =
     _orbitaltype(SVector{1,Tv}, orbs...)
 _orbitaltype(::Type{S}, ::NTuple{D,NameType}, os...) where {N,Tv,D,S<:SVector{N,Tv}} =
     (M = max(N,D); _orbitaltype(SVector{M,Tv}, os...))
