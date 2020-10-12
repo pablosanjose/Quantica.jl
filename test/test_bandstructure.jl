@@ -6,11 +6,11 @@
     h = LatticePresets.honeycomb() |>
         hamiltonian(onsite(0.5, sublats = :A) + onsite(-0.5, sublats = :B) +
                     hopping(-1, range = 1/√3))
-    b = bandstructure(h, points = (13, 23))
+    b = bandstructure(h, points = (13, 15))
     @test length(bands(b)) == 2
 
     h = LatticePresets.cubic() |> hamiltonian(hopping(1)) |> unitcell(2)
-    b = bandstructure(h, points = (5, 9, 5))
+    b = bandstructure(h, points = (5, 7, 5))
     @test length(bands(b)) == 8
 
     b = bandstructure(h, :Γ, :X; points = 4)
@@ -59,7 +59,7 @@ end
 @testset "parametric bandstructures" begin
     ph = LatticePresets.linear() |> hamiltonian(onsite(0I) + hopping(-I), orbitals = Val(2)) |> unitcell(2) |>
          parametric(@onsite!((o; k) -> o + k*I), @hopping!((t; k = 2, p = [1,2])-> t - k*I + p'p))
-    mesh2D = mesh((0, 1), (0, 2π), points = 25)
+    mesh2D = mesh((0, 1), (0, 2π), points = 15)
     b = bandstructure(ph, mesh2D, mapping = (x, k) -> (x, (;k = k)))
     @test length(bands(b)) == 4
     b = bandstructure(ph, mesh2D, mapping = (x, k) -> ((x,), (;k = k)))
