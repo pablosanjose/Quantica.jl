@@ -86,11 +86,15 @@ end
 
 padright(sv::StaticVector{E,T}, x::T, ::Val{E}) where {E,T} = sv
 padright(sv::StaticVector{E1,T1}, x::T2, ::Val{E2}) where {E1,T1,E2,T2} =
-    (T = promote_type(T1,T2); SVector{E2, T}(ntuple(i -> i > E1 ? x : convert(T, sv[i]), Val(E2))))
+    (T = promote_type(T1,T2); SVector{E2,T}(ntuple(i -> i > E1 ? x : convert(T, sv[i]), Val(E2))))
 padright(sv::StaticVector{E,T}, ::Val{E2}) where {E,T,E2} = padright(sv, zero(T), Val(E2))
 padright(sv::StaticVector{E,T}, ::Val{E}) where {E,T} = sv
 padright(t::NTuple{N´,Any}, x, ::Val{N}) where {N´,N} = ntuple(i -> i > N´ ? x : t[i], Val(N))
 padright(t::NTuple{N´,Any}, ::Val{N}) where {N´,N} = ntuple(i -> i > N´ ? 0 : t[i], Val(N))
+
+padright(v, ::Type{S}) where {E,T,S<:SVector{E,T}} = padright(v, zero(T), S)
+padright(v, x::T, ::Type{S}) where {E,T,S<:SVector{E,T}} =
+    SVector{E,T}(ntuple(i -> i > length(v) ? x : convert(T, v[i]), Val(E)))
 
 # Pad element type to a "larger" type
 @inline padtotype(s::SMatrix{E,L}, ::Type{S}) where {E,L,E2,L2,S<:SMatrix{E2,L2}} =

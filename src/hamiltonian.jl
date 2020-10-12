@@ -280,6 +280,53 @@ function flatoffsetorbs(i, lat, norbs, offsets´)
     return i´, N
 end
 
+## unflatten ##
+
+unflatten(v, h) = unflatten!(similar(v, orbitaltype(h), size(h, 2)), v, h)
+
+function unflatten!(v::AbstractVector{T}, vflat::AbstractArray, h::Hamiltonian) where {T}
+    norbs = length.(h.orbitals)
+    offsetsflat = flatoffsets(h.lattice.unitcell.offsets, norbs)
+    dimflat = last(offsetsflat)
+    check_unflatten_dst_dims(v, h)
+    check_unflatten_src_dims(vflat, dimflat)
+    check_unflatten_eltypes(v, h)
+    j = 0
+    for s in sublats(h.lattice)
+        N = norbs[s]
+        for i in offsetsflat[s]+1:N:offsetsflat[s+1]
+            j += 1
+            v[j] = padright(view(vflat, i:i+N-1), T)
+        end
+    end
+    return v
+end
+
+check_unflatten_dst_dims(v, h) =
+    size(v, 1) == size(h, 2) ||
+        throw(ArgumentError("Dimension of destination array is inconsistent with Hamiltonian"))
+
+check_unflatten_src_dims(vflat, dimflat) =
+    size(vflat, 1) == dimflat ||
+        throw(ArgumentError("Dimension of source array is inconsistent with Hamiltonian"))
+
+check_unflatten_eltypes(v::AbstractVector{T}, h) where {T} =
+    T === orbitaltype(h) ||
+        throw(ArgumentError("Eltype of desination array is inconsistent with Hamiltonian"))
+
+## maybe_unflatten: call unflatten but only if we cannot do it without copying
+maybe_unflatten(vflat, h) = _maybe_unflatten(vflat, h, orbitaltype(h), h.orbitals)
+# source is already of the correct orbitaltype(h)
+function _maybe_unflatten(v::AbstractVector{T}, h, ::Type{T}, orbs) where {T}
+    check_unflatten_dst_dims(v, h)
+    return v
+end
+# source can be reinterpreted, because the number of orbitals is the same M for all N sublattices
+_maybe_unflatten(v::AbstractVector{T}, h, ::Type{S}, ::NTuple{N,NTuple{M}}) where {N,M,T<:Number,S<:SVector{M}} =
+    reinterpret(SVector{M,T}, v)
+# otherwise call unflatten
+_maybe_unflatten(v, h, S, orbs) = unflatten(v, h)
+
 #######################################################################
 # similarmatrix
 #######################################################################
@@ -568,7 +615,7 @@ blockdim(::Type{S}) where {N,S<:SMatrix{N,N}} = N
 blockdim(::Type{T}) where {T<:Number} = 1
 
 # find SVector type that can hold all orbital amplitudes in any lattice sites
-orbitaltype(orbs, type::Type{Tv} = Complex{T}) where {T,Tv} =
+orbitaltype(orbs, type::Type{Tv}) where {Tv} =
     _orbitaltype(SVector{1,Tv}, orbs...)
 _orbitaltype(::Type{S}, ::NTuple{D,NameType}, os...) where {N,Tv,D,S<:SVector{N,Tv}} =
     (M = max(N,D); _orbitaltype(SVector{M,Tv}, os...))
