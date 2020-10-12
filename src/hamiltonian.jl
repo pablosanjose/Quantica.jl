@@ -288,8 +288,9 @@ function unflatten!(v::AbstractVector{T}, vflat::AbstractArray, h::Hamiltonian) 
     norbs = length.(h.orbitals)
     offsetsflat = flatoffsets(h.lattice.unitcell.offsets, norbs)
     dimflat = last(offsetsflat)
-    checkflatdims(v, h)
-    checkunflatdims(vflat, dimflat)
+    check_unflatten_dst_dims(v, h)
+    check_unflatten_src_dims(vflat, dimflat)
+    check_unflatten_eltypes(v, h)
     j = 0
     for s in sublats(h.lattice)
         N = norbs[s]
@@ -301,16 +302,30 @@ function unflatten!(v::AbstractVector{T}, vflat::AbstractArray, h::Hamiltonian) 
     return v
 end
 
-checkflatdims(v::AbstractVector{T}, h) where {T} =
-    T === orbitaltype(h) && size(v, 1) == size(h, 2) ||
-        throw(ArgumentError("Element type or dimensions of destination array are inconsistent with Hamiltonian"))
+check_unflatten_dst_dims(v, h) =
+    size(v, 1) == size(h, 2) ||
+        throw(ArgumentError("Dimension of destination array is inconsistent with Hamiltonian"))
 
-checkunflatdims(vflat::AbstractVector{T}, dimflat) where {T} =
-    size(vflat, 1) == dimflat && T <: Number ||
-        throw(ArgumentError("Element type or dimensions of source array are inconsistent with Hamiltonian"))
+check_unflatten_src_dims(vflat, dimflat) =
+    size(vflat, 1) == dimflat ||
+        throw(ArgumentError("Dimension of source array is inconsistent with Hamiltonian"))
 
-maybe_unflatten(v::AbstractVector{T}, h::Hamiltonian) where {T} =
-    T === orbitaltype(h) && size(v, 1) == size(h, 2) ? v : unflatten(v, h)
+check_unflatten_eltypes(v::AbstractVector{T}, h) where {T} =
+    T === orbitaltype(h) ||
+        throw(ArgumentError("Eltype of desination array is inconsistent with Hamiltonian"))
+
+## maybe_unflatten: call unflatten but only if we cannot do it without copying
+maybe_unflatten(vflat, h) = _maybe_unflatten(vflat, h, orbitaltype(h), h.orbitals)
+# source is already of the correct orbitaltype(h)
+function _maybe_unflatten(v::AbstractVector{T}, h, ::Type{T}, orbs) where {T}
+    check_unflatten_dst_dims(v, h)
+    return v
+end
+# source can be reinterpreted, because the number of orbitals is the same M for all N sublattices
+_maybe_unflatten(v::AbstractVector{T}, h, ::Type{S}, ::NTuple{N,NTuple{M}}) where {N,M,T<:Number,S<:SVector{M}} =
+    reinterpret(SVector{M,T}, v)
+# otherwise call unflatten
+_maybe_unflatten(v, h, S, orbs) = unflatten(v, h)
 
 #######################################################################
 # similarmatrix
