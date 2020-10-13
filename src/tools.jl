@@ -145,6 +145,9 @@ end
 
 # normalize_axis_directions(q::SMatrix{M,N}) where {M,N} = hcat(ntuple(i->q[:,i]*sign(q[i,i]), Val(N))...)
 
+padprojector(::Type{S}, ::Val{N}) where {M,N,S<:SMatrix{M,M}} = S(Diagonal(SVector(padright(filltuple(1, Val(N)), Val(M)))))
+padprojector(::Type{S}, ::NTuple{N,Any}) where {S,N} = padprojector(S, Val(N))
+
 _blockdiag(s1::SMatrix{E1,L1,T1}, s2::SMatrix{E2,L2,T2}) where {E1,L1,T1,E2,L2,T2} = hcat(
     ntuple(j->vcat(s1[:,j], zero(SVector{E2,T2})), Val(L1))...,
     ntuple(j->vcat(zero(SVector{E1,T1}), s2[:,j]), Val(L2))...)

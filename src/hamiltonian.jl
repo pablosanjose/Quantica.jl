@@ -658,6 +658,23 @@ end
 
 _nnzdiag(s::Matrix) = count(!iszero, s[i,i] for i in 1:minimum(size(s)))
 
+function check_orbital_consistency(h::Hamiltonian)
+    lat = h.lattice
+    for scol in sublats(lat), srow in sublats(lat), hh in h.harmonics
+        for (row, col) in nonzero_indices(hh, siterange(lat, srow), siterange(lat, scol))
+            check_orbital_consistency(hh.h[row, col], h.orbitals[srow], h.orbitals[scol])
+        end
+    end
+    return nothing
+end
+
+function check_orbital_consistency(z::S, ::NTuple{N´}, ::NTuple{N}) where {M,N´,N,S<:SMatrix{M,M}}
+    prow = padprojector(S, Val(N´))
+    pcol = padprojector(S, Val(N))
+    z == prow * z * pcol || throw(ArgumentError("Internal error: orbital structure not correctly encoded into Hamiltonian harmonics"))
+    return nothing
+end
+
 bravais(h::Hamiltonian) = bravais(h.lattice)
 
 nsites(h::Hamiltonian) = isempty(h.harmonics) ? 0 : nsites(first(h.harmonics))
@@ -854,6 +871,88 @@ function check_compatible_hsuper(s1, s2)
     return nothing
 end
 
+## Hamiltonian algebra
+
+function Base.literal_pow(::typeof(^), h::Hamiltonian, p::Val{P}) where {P}
+    P > 0 || throw(ArgumentError("Only positive powers of Hamiltonians are supported"))
+    P == 1 && return copy(h)
+    hhs = similar(h.harmonics, 0)
+    nh = length(h.harmonics)
+    dims = size(h)
+    hhiter = CartesianIndices(ntuple(i -> 1:nh, p))
+    for Is in hhiter
+        is = Tuple(Is)
+        dn = sum(i -> h.harmonics[i].dn, is)
+        hh = get_or_push!(hhs, dn, dims)
+        hh.h .+= prod((i -> h.harmonics[i].h).(is))
+    end
+    return Hamiltonian(h.lattice, hhs, h.orbitals)
+end
+
+function Base.:*(h1::Hamiltonian, h2::Hamiltonian) where {P}
+    check_compatible_hamiltonians(h1, h2)
+    hhs = similar(h1.harmonics, 0)
+    dims = size(h1)
+    for hh1 in h1.harmonics, hh2 in h2.harmonics
+        dn = hh1.dn + hh2.dn
+        hh = get_or_push!(hhs, dn, dims)
+        mul!(hh.h, hh1.h, hh2.h, 1, 1)
+    end
+    return Hamiltonian(h1.lattice, hhs, h1.orbitals)
+end
+
+Base.:*(h::Hamiltonian, p::Number) = p * h
+
+function Base.:*(p::Number, h::Hamiltonian)
+    hhs = copy.(h.harmonics)
+    for hh in hhs
+        hh.h .*= p
+    end
+    return Hamiltonian(h.lattice, hhs, h.orbitals)
+end
+
+Base.:-(h1::Hamiltonian, h2) = h1 + (-h2)
+Base.:-(h::Hamiltonian) = (-1) * h
+
+function Base.:+(h1::Hamiltonian, h2::Hamiltonian)
+    check_compatible_hamiltonians(h1, h2)
+    hhs = copy.(h1.harmonics)
+    dims = size(h1)
+    for hh2 in h2.harmonics
+        hh = get_or_push!(hhs, hh2.dn, dims)
+        hh.h .+= hh2.h
+    end
+    return Hamiltonian(h1.lattice, hhs, h1.orbitals)
+end
+
+Base.:+(id::UniformScaling, h::Hamiltonian) = h + id
+
+function Base.:+(h::Hamiltonian, id::UniformScaling)
+    hhs = copy.(h.harmonics)
+    M = blocktype(h)
+    mat = first(hhs).h
+    shift_diagonal!(mat, blocktype(h), h, id)
+    return Hamiltonian(h.lattice, hhs, h.orbitals)
+end
+
+function shift_diagonal!(mat, ::Type{<:Number}, h, id)
+    mat .+= id
+    return mat
+end
+
+function shift_diagonal!(mat, ::Type{M}, h, id) where {N,M<:SMatrix{N,N}}
+    for s in sublats(h.lattice)
+        shift = id.λ * padprojector(M, h.orbitals[s])
+        for i in siterange(h.lattice, s)
+            mat[i,i] += shift
+        end
+    end
+    return mat
+end
+
+check_compatible_hamiltonians(h1, h2) =
+    isequal(h1.lattice, h2.lattice) && h1.orbitals == h2.orbitals && size(h1) == size(h2) ||
+        throw(ArgumentError("Cannot combine Hamiltonians with different lattices, dimensions or orbitals"))
 #######################################################################
 # auxiliary types
 #######################################################################
