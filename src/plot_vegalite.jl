@@ -32,9 +32,9 @@ at each site). For link channels, a function `(psi´, psi) -> f(psi´, psi)` mus
     - `sitestroke = :white`: the color of site outlines. If `nothing`, no outline will be plotted.
     - `sitesize = 15`: diameter of sites in pixels. Can be a function of site index.
     - `siteopacity = 0.9`: opacity of sites. Can be a function of site index.
+    - `sitecolor = missing`: function of site index that returns a real to be enconded into a color, using `colorscheme`
     - `linksize = 0.25`: thickness of hopping links as a fraction of sitesize. Can be a function of site indices.
     - `linkopacity = 1.0`: opacity of hopping links. Can be a function of site indices.
-    - `sitecolor = missing`: function of site index that returns a real to be enconded into a color, using `colorscheme`
     - `linkcolor = sitecolor`: function of link indices that returns a real to be enconded into a color, using `colorscheme`
     - `colorscheme`: Color scheme from `https://vega.github.io/vega/docs/schemes/` to be used (defaults "category10" or "lightgreyred")
 """
