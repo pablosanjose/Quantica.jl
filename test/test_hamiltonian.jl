@@ -450,3 +450,15 @@ end
     @test hamiltonian(lat, hopping(1, range = (nrange(20), nrange(20)))) |> nhoppings == 18
     @test hamiltonian(lat, hopping(1, range = (nrange(20), nrange(21)))) |> nhoppings == 30
 end
+
+@testset "hamiltonian algebra" begin
+    h1 = LatticePresets.honeycomb() |> hamiltonian(onsite(-I) + hopping(I), orbitals = (Val(2), Val(1))) |> unitcell(4)
+    h2 = LatticePresets.honeycomb() |> hamiltonian(hopping(3I, range = 1), orbitals = (Val(2), Val(1))) |> unitcell(4)
+    phis = (0.3, 0.8)
+    @test bloch(3.3*h1, phis) ≈ 3.3*bloch(h1, phis)
+    @test bloch(3.3*h1 + h2, phis) ≈ 3.3*bloch(h1, phis) + bloch(h2, phis)
+    @test bloch(h1^2, phis) ≈ bloch(h1, phis)^2
+    h´ = 2.3h1^3 - 2h2*h1 - 3I
+    @test Quantica.check_orbital_consistency(h´) === nothing
+    @test bloch(flatten(h´), phis) ≈ 2.3bloch(flatten(h1), phis)^3 - 2bloch(flatten(h2), phis)*bloch(flatten(h1), phis) - 3I
+end
