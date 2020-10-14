@@ -211,7 +211,7 @@ function VegaLite.vlplot(h::Hamiltonian{LA}, psi = missing;
         colorscheme´ = discretecolorscheme
         colorrange´ = nothing
     end
-
+    
     p = vltheme(sizes)
     if plotlinks
         p += @vlplot(
@@ -221,7 +221,7 @@ function VegaLite.vlplot(h::Hamiltonian{LA}, psi = missing;
                 legend = needslegend(linksize)},
             color = {colorfield,
                 scale = {domain = colorrange´, scheme = colorscheme´},
-                legend = needslegend(sitecolor)},
+                legend = needslegend(linkcolor)},
             strokeOpacity = {:opacity,
                 scale = {range = (0, 1), domain = (0, maxlinkopacity)},
                 legend = needslegend(linkopacity)},
@@ -239,6 +239,9 @@ function VegaLite.vlplot(h::Hamiltonian{LA}, psi = missing;
             size = {:scale,
                 scale = {range = (0, maxdiameter^2), domain = (0, maxsitesize), clamp = false},
                 legend = needslegend(sitesize)},
+            color = {colorfield,
+                scale = {domain = colorrange´, scheme = colorscheme´},
+                legend = needslegend(sitecolor)},
             opacity = {:opacity,
                 scale = {range = (0, 1), domain = (0, maxsiteopacity)},
                 legend = needslegend(siteopacity)},
@@ -257,7 +260,7 @@ function vltheme((sizex, sizey), points = false)
         tooltip = :tooltip,
         width = sizex, height = sizey,
         config = {
-            circle = {stroke = :black, strokeWidth = 1, size = 200},
+            circle = {strokeWidth = 1, size = 200},
             line = {point = points},
             scale = {minOpacity = 0, maxOpacity = 1.0}})
     return p
