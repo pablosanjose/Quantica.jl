@@ -738,7 +738,7 @@ function nonzero_indices(h::Hamiltonian, rowrange = 1:size(h, 1), colrange = 1:s
     return gen
 end
 
-function nonzero_indices(har::HamiltonianHarmonic, rowrange = 1:size(h, 1), colrange = 1:size(h, 2))
+function nonzero_indices(har::HamiltonianHarmonic, rowrange = 1:size(har, 1), colrange = 1:size(har, 2))
     rowrange´ = rclamp(rowrange, 1:size(har, 1))
     colrange´ = rclamp(colrange, 1:size(har, 2))
     gen = ((rowvals(har.h)[ptr], col)
