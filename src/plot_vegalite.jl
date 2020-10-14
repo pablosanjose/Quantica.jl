@@ -1,5 +1,98 @@
 using .VegaLite
 
+export DensityShader, CurrentShader
+
+#######################################################################
+# Shaders
+#######################################################################
+struct CurrentShader{K,T}
+    axis::Int
+    kernel::K
+    transform::T
+end
+
+"""
+    CurrentShader(axis = 0; kernel = 1, transform = identity)
+
+Construct a `CurrentShader` object that can be used in `vlplot(h, psi; ...)` to visualize
+the current of a state `psi` along a given `axis` under Hamiltonian `h`, optionally
+transformed by `transform`. An `axis = 0` represent the norm of the current.
+
+The current along a link `i=>k` is defined as
+
+    j_ki = (r[k][axis]-r[i][axis]) * imag(psi[k]' * h[k,i] * kernel * psi[j])
+
+The current at a site `i` is the sum of links incident on that site
+
+    j_i = ∑_k j_ki
+
+The visualized current is `transform(j_ki)` and `transform(j_i)`, respectively.
+"""
+CurrentShader(axis = 0; kernel = 1, transform = identity) =
+    CurrentShader(axis, kernel, transform)
+
+struct DensityShader{K,T}
+    kernel::K
+    transform::T
+end
+
+"""
+    DensityShader(kernel = 1, transform = identity)
+
+Construct a `DensityShader` object that can be used in `vlplot(h, psi; ...)` to visualize
+the density of a state `psi`, optionally transformed by `transform`.
+
+The visualized density at a site `i` is defined as
+
+    ρ_i = transform(psi[i]' * kernel * psi[i])
+
+The density at a half-link is equal to the density at the originating site.
+"""
+DensityShader(; kernel = 1, transform = identity) = DensityShader(kernel, transform)
+
+function site_shader(shader::CurrentShader, psi::AbstractVector{T}, h) where {T}
+    pos = allsitepositions(h.lattice)
+    br = bravais(h.lattice)
+    current = zeros(real(eltype(T)), length(pos))
+    for hh in h.harmonics, (row, col) in nonzero_indices(hh)
+        dr = pos[row] + br * hh.dn - pos[col]
+        dj = imag(psi[row]' * shader.kernel * hh.h[row, col] * psi[col])
+        j = iszero(shader.axis) ? real(shader.transform(norm(dr * dj))) : real(shader.transform(dr[shader.axis] * dj))
+        current[row] += j
+    end
+    return i -> current[i]
+end
+
+site_shader(shader::DensityShader, psi::AbstractVector, h) =
+    i -> real(shader.transform(psi[i]' * shader.kernel * psi[i]))
+
+site_shader(shader::Function, psi, h) = i -> shader(psi[i])
+site_shader(shader::Number, psi, h) = i -> shader
+site_shader(shader::Missing, psi, h) = i -> 0.0
+
+function link_shader(shader::CurrentShader, psi::AbstractVector{T}, h) where {T}
+    pos = allsitepositions(h.lattice)
+    # Assuming that only links from base unit cell are plotted
+    h0 = first(h.harmonics).h
+    current = (row, col) -> begin
+        dr = pos[row] - pos[col]
+        dj = imag(psi[row]' * shader.kernel * h0[row, col] * psi[col])
+        j = iszero(shader.axis) ? shader.transform(norm(dr * dj)) : shader.transform(dr[shader.axis] * dj)
+        return real(j)
+    end
+    return current
+end
+
+link_shader(shader::DensityShader, psi::AbstractVector, h) =
+    (row,col) -> real(shader.transform(psi[col]' * shader.kernel * psi[col]))
+
+link_shader(shader::Function, psi, h) = (row, col) -> shader(psi[row], psi[col])
+link_shader(shader::Number, psi, h) = (row, col) -> shader
+link_shader(shader::Missing, psi, h) = (row, col) -> 0.0
+
+#######################################################################
+# vlplot
+#######################################################################
 """
     vlplot(b::Bandstructure{1}; kw...)
 
@@ -11,36 +104,55 @@ Plot the the Hamiltonian lattice projected along `axes` using VegaLite.
 
     vlplot(h::Hamiltonian, psi::AbstractVector; kw...)
 
-Plot an eigenstate `psi` (of same dimension as `h`) on the lattice, using one of various
-possible visualization channels: `sitesize`, `siteopacity`, `sitecolor`, `linksize`,
-`linkopacity` or `linkcolor` (see keywords below). For site channels, a function `psi ->
-f(psi)` must be provided (e.g. `f(psi_i) = norm(psi_i)` to plot the norm of the wavefunction
-at each site). For link channels, a function `(psi´, psi) -> f(psi´, psi)` must be provided
-(e.g. `f(psi_i, psi_j) = imag(psi_i'* psi_j)` to plot the current).
+Plot an eigenstate `psi` on the lattice, using one of various possible visualization
+shaders: `sitesize`, `siteopacity`, `sitecolor`, `linksize`, `linkopacity` or `linkcolor`
+(see keywords below). If `psi` is obtained in a flattened form, it will be automatically
+"unflattened" to restore the orbital structure of `h`.
 
-# Keyword arguments and defaults:
+# Keyword arguments and defaults
+
+## Common
     - `size = 800`: the `(width, height)` of the plot (or `max(width, height)` if a single number)
-    - `points = false`: whether to plot points on line plots
     - `labels`: labels for the x and y plot axes. Defaults `("φ/2π", "ε")` and `("x", "y")` respectively
     - `scaling = (1/2π, 1)`: `(scalex, scaley)` scalings for the x (Bloch phase) and y (energy) variables
     - `xlims = missing` and `ylims = missing`: `(xmin, xmax)` and `(ymin, ymax)` to constrain plot range
+
+## Bandstructure-specifc
+    - `points = false`: whether to plot points on line plots
     - `bands = missing`: bands to plot (or all if `missing`)
-    - `axes = (1,2)`: lattice axes to project onto the plot x-y plane
+
+## Hamiltonian-specific
+    - `axes = (1,2)`:lattice axes to project onto the plot x-y plane
     - `digits = 4`: number of significant digits to show in onsite energy and hopping tooltips
     - `plotsites = true`: whether to plot sites
     - `plotlinks = true`: whether to plot links
     - `sitestroke = :white`: the color of site outlines. If `nothing`, no outline will be plotted.
-    - `sitesize = 15`: diameter of sites in pixels. Can be a function of site index.
-    - `siteopacity = 0.9`: opacity of sites. Can be a function of site index.
-    - `sitecolor = missing`: function of site index that returns a real to be enconded into a color, using `colorscheme`
-    - `linksize = 0.25`: thickness of hopping links as a fraction of sitesize. Can be a function of site indices.
-    - `linkopacity = 1.0`: opacity of hopping links. Can be a function of site indices.
-    - `linkcolor = sitecolor`: function of link indices that returns a real to be enconded into a color, using `colorscheme`
-    - `colorscheme`: Color scheme from `https://vega.github.io/vega/docs/schemes/` to be used (defaults "category10" or "lightgreyred")
+    - `colorscheme = "redyellowblue"`: Color scheme from `https://vega.github.io/vega/docs/schemes/`
+    - `discretecolorscheme = "category10"`: Color scheme from `https://vega.github.io/vega/docs/schemes/`
+    - `maxdiameter = 15`: maximum diameter of sites, useful when `sitesize` is not a constant.
+    - `maxthickness = 0.25`: maximum thickness of links, as a fraction of `maxdiameter`, useful when `linksize` is not a constant.
+    - `sitesize = maxdiameter`: diameter of sites.
+    - `siteopacity = 0.9`: opacity of sites.
+    - `sitecolor = missing`: color of sites. If `missing`, colors will encode the site sublattice following `discretecolorscheme`
+    - `linksize = maxthickness`: thickness of hopping links.
+    - `linkopacity = 1.0`: opacity of hopping links.
+    - `linkcolor = sitecolor`: color of links. If `missing`, colors will encode source site sublattice, following `discretecolorscheme`
+    - `colorrange = missing`: the range of values to encode using `sitecolor` and `linkcolor`. If `missing` the minimum and maximum values will be used.
+
+Apart from a number, all site shaders (`sitesize`, `siteopacity` and `sitecolor`) can also
+be a real-valued function of the wavefunction amplitude `psi` at each site, `psi -> value(psi)`.
+Similarly, link shaders (`linksize`, `linkopacity` and `linkcolor`) can be a function of the
+wavefunction amplitudes at end and origin of the link, `(psi´, psi) -> value(psi´, psi)`.
+
+Any shader can also be a `CurrentShader` or a `DensityShader` object, that computes the
+current or density at each site or link (see `CurrentShader` and `DensityShader`).
+
+Note that values of sizes are relative, so there is no need to normalize shader values. The
+maximum visual value of site diameter and link thickness is given by `maxdiameter` (in
+pixels) and `maxthickness` (as a fraction of `maxdiameter`)
 """
 function VegaLite.vlplot(b::Bandstructure;
-    labels = ("φ", "ε"), scaling = (1, 1), size = 640, points = false, xlims = missing, ylims = missing, bands = missing,
-    sitesize = 30)
+    labels = ("φ", "ε"), scaling = (1, 1), size = 640, points = false, xlims = missing, ylims = missing, bands = missing)
     labelx, labely = labels
     table = bandtable(b, make_it_two(scaling), bands)
     sizes = make_it_two(size)
@@ -68,49 +180,56 @@ end
 function VegaLite.vlplot(h::Hamiltonian{LA}, psi = missing;
                          labels = ("x","y"), size = 800, axes::Tuple{Int,Int} = (1,2), xlims = missing, ylims = missing, digits = 4,
                          plotsites = true, plotlinks = true,
-                         sitestroke = :white, sitesize = 15, siteopacity = 0.9, sitecolor = missing,
-                         linksize = 0.25, linkopacity = 1.0, linkcolor = sitecolor,
-                         colorscheme = "lightgreyred", discretecolorscheme = "category10") where {E,LA<:Lattice{E}}
+                         maxdiameter = 20, maxthickness = 0.25,
+                         sitestroke = :white, sitesize = maxdiameter, siteopacity = 0.9, sitecolor = missing,
+                         linksize = maxthickness, linkopacity = 1.0, linkcolor = sitecolor,
+                         colorrange = missing,
+                         colorscheme = "redyellowblue", discretecolorscheme = "category10") where {E,LA<:Lattice{E}}
     psi´ = maybe_unflatten_or_missing(psi, h)
-    directives = (; axes = axes, digits = digits,
-                    sitesize_func = sitefunc(sitesize, psi´), siteopacity_func = sitefunc(siteopacity, psi´),
-                    linksize_func = linkfunc(linksize, psi´), linkopacity_func = linkfunc(linkopacity, psi´),
-                    sitecolor_func = sitefunc(sitecolor, psi´), linkcolor_func = sitefunc(linkcolor, psi´))
     checkdims_psi(h, psi´)
-    table      = linkstable(h, directives)
-    maxthick   = maximum(s -> ifelse(s.islink, s.scale, zero(s.scale)), table)
-    maxsize    = plotsites ? maximum(s -> ifelse(s.islink, zero(s.scale), s.scale), table) : sqrt(15*maxthick)
-    maxopacity = maximum(s -> s.opacity, table)
+
+    directives     = (; axes = axes, digits = digits,
+                        sitesize_shader = site_shader(sitesize, psi´, h), siteopacity_shader = site_shader(siteopacity, psi´, h),
+                        linksize_shader = link_shader(linksize, psi´, h), linkopacity_shader = link_shader(linkopacity, psi´, h),
+                        sitecolor_shader = site_shader(sitecolor, psi´, h), linkcolor_shader = site_shader(linkcolor, psi´, h))
+
+    table          = linkstable(h, directives)
+    maxsiteopacity = maximum(s.opacity for s in table if !s.islink)
+    maxlinkopacity = maximum(s.opacity for s in table if s.islink)
+    maxsitesize    = maximum(s.scale for s in table if !s.islink)
+    maxlinksize    = maximum(s.scale for s in table if s.islink)
+
     corners    = _corners(table)
     plotrange  = (xlims, ylims)
     (domainx, domainy), sizes = domain_size(corners, size, plotrange)
-    linkcolorfield = ifelse(linkcolor === missing, :sublat, :color)
-    sitecolorfield = ifelse(sitecolor === missing, :sublat, :color)
     if (plotsites && sitecolor !== missing) || (plotlinks && linkcolor !== missing)
+        colorfield = :color
         colorscheme´ = colorscheme
-        colorrange = extrema(s -> s.color, table)
+        colorrange´ = sanitize_colorrange(colorrange, table)
     else
+        colorfield = :sublat
         colorscheme´ = discretecolorscheme
-        colorrange = nothing
+        colorrange´ = nothing
     end
+    
     p = vltheme(sizes)
     if plotlinks
         p += @vlplot(
             mark = {:rule},
-            size = {:scale,
-                scale = {range = [0, (maxsize)^2], domain = [0, maxthick], clamp = false},
+            strokeWidth = {:scale,
+                scale = {range = (0, maxthickness * maxdiameter), domain = (0, maxlinksize)},
                 legend = needslegend(linksize)},
-            color = {linkcolorfield,
-                scale = {domain = colorrange, scheme = colorscheme´},
-                legend = needslegend(sitecolor)},
-            opacity = {:opacity,
-                scale = {range = [0, 1], domain = [0, maxopacity]},
+            color = {colorfield,
+                scale = {domain = colorrange´, scheme = colorscheme´},
+                legend = needslegend(linkcolor)},
+            strokeOpacity = {:opacity,
+                scale = {range = (0, 1), domain = (0, maxlinkopacity)},
                 legend = needslegend(linkopacity)},
             transform = [{filter = "datum.islink"}],
             selection = {grid2 = {type = :interval, bind = :scales}},
             encoding = {
-                x = {:x, scale = {domain = domainx, nice = false}, axis = {grid = false}},
-                y = {:y, scale = {domain = domainy, nice = false}, axis = {grid = false}},
+                x = {:x, scale = {domain = domainx, nice = false}, axis = {grid = false}, title = labels[1]},
+                y = {:y, scale = {domain = domainy, nice = false}, axis = {grid = false}, title = labels[2]},
                 x2 = {:x2, scale = {domain = domainx, nice = false}, axis = {grid = false}},
                 y2 = {:y2, scale = {domain = domainy, nice = false}, axis = {grid = false}}})
     end
@@ -118,13 +237,13 @@ function VegaLite.vlplot(h::Hamiltonian{LA}, psi = missing;
         p += @vlplot(
             mark = {:circle, stroke = sitestroke},
             size = {:scale,
-                scale = {range = [0, (maxsize)^2], domain = [0, maxsize], clamp = false},
+                scale = {range = (0, maxdiameter^2), domain = (0, maxsitesize), clamp = false},
                 legend = needslegend(sitesize)},
-            color = {sitecolorfield,
-                scale = {domain = colorrange, scheme = colorscheme´},
+            color = {colorfield,
+                scale = {domain = colorrange´, scheme = colorscheme´},
                 legend = needslegend(sitecolor)},
             opacity = {:opacity,
-                scale = {range = [0, 1], domain = [0, maxopacity]},
+                scale = {range = (0, 1), domain = (0, maxsiteopacity)},
                 legend = needslegend(siteopacity)},
             selection = {grid1 = {type = :interval, bind = :scales}},
             transform = [{filter = "!datum.islink"}],
@@ -141,37 +260,21 @@ function vltheme((sizex, sizey), points = false)
         tooltip = :tooltip,
         width = sizex, height = sizey,
         config = {
-            circle = {stroke = :black, strokeWidth = 1, size = 200},
+            circle = {strokeWidth = 1, size = 200},
             line = {point = points},
-            rule = {strokeWidth = 3},
             scale = {minOpacity = 0, maxOpacity = 1.0}})
     return p
 end
+
+sanitize_colorrange(::Missing, table) = extrema(s -> s.color, table)
+sanitize_colorrange(r::AbstractVector, table) = convert(Vector, r)
+sanitize_colorrange(r::Tuple, table) = [first(r), last(r)]
 
 needslegend(x::Number) = nothing
 needslegend(x) = true
 
 maybe_unflatten_or_missing(psi::Missing, h) = missing
 maybe_unflatten_or_missing(psi, h) = maybe_unflatten(psi, h)
-
-sitefunc(f::Function) = f
-sitefunc(o::Number) = psi -> o
-sitefunc(::Missing) = psi -> 0.0
-sitefunc(o, psi::Missing) = sitefunc(o)
-
-function sitefunc(o, psi::AbstractVector)
-    f = sitefunc(o)
-    return i -> f(psi[i])
-end
-
-linkfunc(f::Function) = f
-linkfunc(t) = (psi´, psi) -> t
-linkfunc(t, psi::Missing) = linkfunc(t)
-
-function linkfunc(t, psi::AbstractVector)
-    f = linkfunc(t)
-    return (i,j) -> f(psi[i], psi[j])
-end
 
 checkdims_psi(h, psi) = size(h, 2) == size(psi, 1) || throw(ArgumentError("The eigenstate length $(size(psi,1)) must match the Hamiltonian dimension $(size(h, 2))"))
 checkdims_psi(h, ::Missing) = nothing
@@ -197,8 +300,8 @@ function linkstable(h::Hamiltonian, d)
                     ridx += 1
                     push!(table, (x = x, y = y, x2 = x, y2 = y,
                                 sublat = sublatname(lat, ssrc), tooltip = matrixstring_inline(i, h0[i, i], d.digits),
-                                scale = d.sitesize_func(ridx), color = d.sitecolor_func(ridx),
-                                opacity = d.siteopacity_func(ridx), islink = false))
+                                scale = d.sitesize_shader(ridx), color = d.sitecolor_shader(ridx),
+                                opacity = d.siteopacity_shader(ridx), islink = false))
                 end
             end
             for sdst in slats
@@ -213,8 +316,8 @@ function linkstable(h::Hamiltonian, d)
                         push!(table,
                             (x = x, y = y, x2 = x, y2 = y,
                             sublat = sublatname(lat, sdst), tooltip = matrixstring_inline(row, h0[row, row], d.digits),
-                            scale =  d.sitesize_func(row), color = d.sitecolor_func(row),
-                            opacity = 0.5 * d.siteopacity_func(row), islink = false))
+                            scale =  d.sitesize_shader(row), color = d.sitecolor_shader(row),
+                            opacity = 0.5 * d.siteopacity_shader(row), islink = false))
                         push!(rows, row)
                     end
                     # draw half-links but only intracell
@@ -225,8 +328,8 @@ function linkstable(h::Hamiltonian, d)
                     rdst ≈ rsrc || push!(table,
                         (x = x, y = y, x2 = x´, y2 = y´,
                         sublat = sublatname(lat, ssrc), tooltip = matrixstring_inline(row, col, har.h[row, col], d.digits),
-                        scale = d.linksize_func(row, col), color = d.linkcolor_func(col),
-                        opacity = ifelse(iszero(har.dn), 1.0, 0.5) * d.linkopacity_func(row, col), islink = true))
+                        scale = d.linksize_shader(row, col), color = d.linkcolor_shader(col),
+                        opacity = ifelse(iszero(har.dn), 1.0, 0.5) * d.linkopacity_shader(row, col), islink = true))
                 end
             end
         end
