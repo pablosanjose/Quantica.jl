@@ -57,7 +57,8 @@ function site_shader(shader::CurrentShader, psi::AbstractVector{T}, h) where {T}
     for hh in h.harmonics, (row, col) in nonzero_indices(hh)
         dr = pos[row] + br * hh.dn - pos[col]
         dj = imag(psi[row]' * shader.kernel * hh.h[row, col] * psi[col])
-        current[row] += iszero(shader.axis) ? shader.transform(norm(dr * dj)) : shader.transform(dr[shader.axis] * dj)
+        j = iszero(shader.axis) ? real(shader.transform(norm(dr * dj))) : real(shader.transform(dr[shader.axis] * dj))
+        current[row] += j
     end
     return i -> current[i]
 end
@@ -77,7 +78,7 @@ function link_shader(shader::CurrentShader, psi::AbstractVector{T}, h) where {T}
         dr = pos[row] - pos[col]
         dj = imag(psi[row]' * shader.kernel * h0[row, col] * psi[col])
         j = iszero(shader.axis) ? shader.transform(norm(dr * dj)) : shader.transform(dr[shader.axis] * dj)
-        return j
+        return real(j)
     end
     return current
 end
