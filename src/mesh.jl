@@ -228,7 +228,7 @@ parsenode(pt::Tuple, val) = parsenode(SVector(float.(pt)), val)
 
 function parsenode(node::Symbol, val)
     pt = get(BZpoints, node, missing)
-    pt === missing && throw(ArgumentError("Unknown Brillouin zone point $p, use one of $(keys(BZpoints))"))
+    pt === missing && throw(ArgumentError("Unknown Brillouin zone point $pt, use one of $(keys(BZpoints))"))
     pt´ = parsenode(pt, val)
     return pt´
 end

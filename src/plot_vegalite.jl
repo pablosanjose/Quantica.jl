@@ -211,7 +211,7 @@ function VegaLite.vlplot(h::Hamiltonian{LA}, psi = missing;
         colorscheme´ = discretecolorscheme
         colorrange´ = nothing
     end
-    
+
     p = vltheme(sizes)
     if plotlinks
         p += @vlplot(
