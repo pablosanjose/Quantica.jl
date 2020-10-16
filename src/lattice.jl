@@ -652,15 +652,20 @@ supercell_center(lat::AbstractLattice{E,L,T}) where {E,L,T} =
 # supplements supercell with most orthogonal bravais axes
 function extended_supercell(bravais, supercell::SMatrix{L,L´}) where {L,L´}
     L == L´ && return supercell
-    bravais_new = bravais * supercell
+    bravais_new_norm = normalize_cols(bravais * supercell)
+    bravais_norm = normalize_cols(bravais)
     # νnorm are the L projections of old bravais on new bravais axis subspace
-    ν = bravais' * bravais_new  # L×L´
+    ν = bravais_norm' * bravais_new_norm  # L×L´
     νnorm = SVector(ntuple(row -> norm(ν[row,:]), Val(L)))
     νorder = sortperm(νnorm)
     ext_axes = hcat(ntuple(i -> unitvector(SVector{L,Int}, νorder[i]), Val(L-L´))...)
     ext_supercell = hcat(supercell, ext_axes)
     return ext_supercell
 end
+
+normalize_cols(s::SMatrix{L,0}) where {L} = s
+normalize_cols(s::SMatrix{0,L}) where {L} = s
+normalize_cols(s) = mapslices(v -> v/norm(v), s, dims = 1)
 
 function _superlat(lat, scmatrix, pararegion, selector_perp, seed)
     br = bravais(lat)

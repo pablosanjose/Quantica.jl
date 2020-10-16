@@ -68,7 +68,7 @@ end
         h´ = unitcell(h, sc)
         h´´ = unitcell(h´, 2)
         @test coordination(h´´) ≈ coordination(h´) ≈ c
-        h´ = unitcell(h, Tuple(Ic))
+        h´ = unitcell(h´, Tuple(Ic))
         h´´ = unitcell(h´, 2)
         @test coordination(h´´) ≈ coordination(h´)
     end
