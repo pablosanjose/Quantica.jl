@@ -1,5 +1,5 @@
-using LinearAlgebra: diag, norm
-using Quantica: Hamiltonian, ParametricHamiltonian, nhoppings, nonsites, nsites, allsitepositions
+using LinearAlgebra: diag, norm, det
+using Quantica: Hamiltonian, ParametricHamiltonian, nhoppings, nonsites, nsites, coordination, allsitepositions
 
 @testset "basic hamiltonians" begin
     presets = (LatticePresets.linear, LatticePresets.square, LatticePresets.triangular,
@@ -22,29 +22,21 @@ using Quantica: Hamiltonian, ParametricHamiltonian, nhoppings, nonsites, nsites,
     h = LatticePresets.square() |> unitcell(region = RegionPresets.square(5)) |>
         hamiltonian(hopping(1, range = Inf))
     @test nhoppings(h) == 600
-
     h = LatticePresets.square() |> hamiltonian(hopping(1, dn = (10,0), range = Inf))
     @test nhoppings(h) == 1
     @test isassigned(h, (10,0))
-
     h = LatticePresets.honeycomb() |> hamiltonian(onsite(1.0, sublats = :A), orbitals = (Val(1), Val(2)))
     @test Quantica.nonsites(h) == 1
-
     h = LatticePresets.square() |> unitcell(3) |> hamiltonian(hopping(1, indices = (1:8 .=> 2:9, 9=>1), range = 3, plusadjoint = true))
     @test nhoppings(h) == 48
-
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = (1, 1)))
     @test nhoppings(h) == 12
-
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = (1, 2/√3)))
     @test nhoppings(h) == 18
-
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = (2, 1)))
     @test Quantica.nhoppings(h) == 0
-
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = (30, 30)))
     @test Quantica.nhoppings(h) == 12
-
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = (10, 10.1)))
     @test Quantica.nhoppings(h) == 48
 end
@@ -60,19 +52,26 @@ end
     h = LatticePresets.square() |> hamiltonian(hopping(1, range = √2)) |> unitcell(5) |> unitcell(indices = 2:2:25)
     @test nhoppings(h) == 32
     @test nsites(h) == 12
-    lat = LatticePresets.honeycomb()
-    h = lat |> hamiltonian(hopping(1)) |> unitcell
-    @test allsitepositions(h.lattice) == allsitepositions(lat)
-    h = lat |> hamiltonian(hopping(1)) |> unitcell((1,1))
-    @test allsitepositions(h.lattice) == allsitepositions(lat)
-    h = lat |> hamiltonian(hopping(1)) |> unitcell((1,-1))
-    @test allsitepositions(h.lattice) == allsitepositions(lat)
     lat = LatticePresets.honeycomb(dim = Val(3)) |> unitcell(3) |> unitcell((1,1), indices = not(1))
     h = lat |> hamiltonian(hopping(1)) |> unitcell
-    @test allsitepositions(h.lattice) == allsitepositions(lat)
     @test nsites(h) == 17
     h = unitcell(h, indices = not(1))
     @test nsites(h) == 16
+    # dim-preserving unitcell reshaping should always preserve coordination
+    lat = lattice(sublat((0.0, -0.1), (0,0), (0,1/√3), (0.0,1.6/√3)), bravais = SA[cos(pi/3) sin(pi/3); -cos(pi/3) sin(pi/3)]')
+    h = lat |> hamiltonian(hopping(1, range = 1/√3))
+    c = coordination(h)
+    iter = CartesianIndices((-3:3, -3:3))
+    for Ic´ in iter, Ic in iter
+        sc = SMatrix{2,2,Int}(Tuple(Ic)..., Tuple(Ic´)...)
+        iszero(det(sc)) && continue
+        h´ = unitcell(h, sc)
+        h´´ = unitcell(h´, 2)
+        @test coordination(h´´) ≈ coordination(h´) ≈ c
+        h´ = unitcell(h, Tuple(Ic))
+        h´´ = unitcell(h´, 2)
+        @test coordination(h´´) ≈ coordination(h´)
+    end
 end
 
 @testset "hamiltonian wrap" begin

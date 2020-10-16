@@ -613,13 +613,6 @@ function supercell(lat::Lattice{E,L}, v...; seed = missing, kw...) where {E,L}
     return _superlat(lat, scmatrix, pararegion, perpselector, seed)
 end
 
-# Fast-path methods
-supercell(lat::Lattice{E,L}, factors::Vararg{Integer,L}) where {E,L} =
-    _superlat_fastpath(lat, factors)
-supercell(lat::Lattice{E,L}, factor::Integer) where {E,L} =
-    _superlat_fastpath(lat, filltuple(factor, Val(L)))
-supercell(lat::Lattice) = _superlat_fastpath(lat, ())
-
 sanitize_supercell(::Val{L}) where {L} = SMatrix{L,0,Int}()
 sanitize_supercell(::Val{L}, ::Tuple{}) where {L} = SMatrix{L,0,Int}()
 sanitize_supercell(::Val{L}, v::NTuple{L,Int}...) where {L} = toSMatrix(Int, v)
@@ -629,17 +622,32 @@ sanitize_supercell(::Val{L}, ss::Integer...) where {L} = SMatrix{L,L,Int}(Diagon
 sanitize_supercell(::Val{L}, v) where {L} =
     throw(ArgumentError("Improper supercell specification $v for an $L lattice dimensions, see `supercell`"))
 
-function supercell_regions(lat::Lattice{E,L,T}, sc::SMatrix{L,L´}) where {E,L,T,L´}
+function supercell_regions(lat::Lattice{E,L}, sc::SMatrix{L,L´}) where {E,L,L´}
+    dn_func = r_to_dn(lat, sc)
+    parainds = SVector{L´,Int}(1:L´)
+    perpinds = SVector{L-L´,Int}((1+L´):L)
+    pararegion(r) = iszero(dn_func(r)[parainds])
+    perpregion(r) = iszero(dn_func(r)[perpinds])
+    return pararegion, perpregion
+end
+
+# Computes δn[inds] so that r = bravais´ * δn + dr, where dr is within a supercell and
+# bravais´ = bravais * supercell, but extending supercell into a square matrix
+# Supercell center is placed at mean(allpos)
+function r_to_dn(lat::AbstractLattice{E,L,T}, sc::SMatrix{L}, inds = :) where {E,L,T}
     br = bravais(lat)
     extsc = extended_supercell(br, sc)
     projector = pinverse(br * extsc) # E need not be equal to L, hence pseudoinverse
-    siteshift = ntuple(Val(L)) do i
-        minimum((projector * r)[i] for r in allsitepositions(lat)) - sqrt(eps(T))
-    end
-    pararegion(r) = all(i -> 0 <= (projector * r)[i] - siteshift[i] < 1, 1:L´)
-    perpregion(r) = all(i -> 0 <= (projector * r)[i] - siteshift[i] < 1, (1+L´):L)
-    return pararegion, perpregion
+    # Place mean(positions) at the center of supercell
+    r0 = supercell_center(lat)
+    # This results in a zero vector for all sites within the unit supercell
+    return r -> floor.(Int, (projector * (r - r0))[inds])
 end
+
+supercell_center(lat::AbstractLattice{E,L,T}) where {E,L,T} =
+    mean(allsitepositions(lat)) -
+    bravais(lat) * SVector{L,T}(filltuple(1/2, Val(L))) -
+    SVector{E,T}(filltuple(sqrt(eps(T)), Val(E)))
 
 # supplements supercell with most orthogonal bravais axes
 function extended_supercell(bravais, supercell::SMatrix{L,L´}) where {L,L´}
@@ -657,7 +665,8 @@ end
 function _superlat(lat, scmatrix, pararegion, selector_perp, seed)
     br = bravais(lat)
     rsel = resolve(selector_perp, lat)
-    cells = _cell_iter(lat, pararegion, rsel, seed)
+    cells = _cell_iter(lat, scmatrix, pararegion, rsel, seed)
+    # cells = _cell_iter(lat, scmatrix)
     ns = nsites(lat)
     mask = OffsetArray(falses(ns, size(cells)...), 1:ns, cells.indices...)
     @inbounds for dn in cells
@@ -673,26 +682,51 @@ function _superlat(lat, scmatrix, pararegion, selector_perp, seed)
     return Superlattice(lat.bravais, lat.unitcell, supercell)
 end
 
-function _cell_iter(lat::Lattice{E,L}, pararegion, rsel_perp, seed) where {E,L}
+function _cell_iter(lat::Lattice{E,L}, sc::SMatrix{L,L´}, pararegion, rsel_perp, seed) where {E,L,L´}
+    # We first ensure that a full supercell bounding box is enconpassed by the iterator,
+    # the sought after cell iter is bbox only if L == L´ and all sites are inside unitcell (no outliers)
+    br = bravais(lat)
+    extsc = extended_supercell(br, sc)
+    dns = Iterators.product(ntuple(_ -> 0:1, Val(L))...)
+    bbox_min = bbox_max = zero(SVector{L,Int})
+    for dn in dns
+        isempty(dn) && break
+        bbox_min = min.(extsc * SVector(dn), bbox_min)
+        bbox_max = max.(extsc * SVector(dn), bbox_max)
+    end
+    minimum_bbox = CartesianIndices(UnitRange.(Tuple(bbox_min), Tuple(bbox_max)))
+
+    # We now iterate over a growing box of dn, ensuring that all dn are included such that
+    # r + br*dn is inside the supercell for any unitcell site at r
     seed´ = seed === missing ? zero(SVector{L,Int}) : seedcell(SVector{E}(seed), bravais(lat))
     iter = BoxIterator(seed´)
-    foundfirst = false
     counter = 0
     br = bravais(lat)
-    for dnvec in iter
+    ibr = pinverse(br)
+    for dn in iter
         found = false
         counter += 1; counter == TOOMANYITERS &&
             throw(ArgumentError("`region` seems unbounded (after $TOOMANYITERS iterations)"))
-        foundfirst || acceptcell!(iter, dnvec)
-        for i in siteindices(rsel_perp, dnvec)
-            r = siteposition(i, dnvec, lat)
-            # site i is already in perpregion through rsel. Is it also in pararegion?
-            found_in_cell = pararegion(r)
-            if found_in_cell
-                acceptcell!(iter, dnvec)
-                foundfirst = true
-                break
-            end
+        # we need to make sure we've covered at least the minimum bounding box
+        inside_minimum = CartesianIndex(Tuple(dn)) in minimum_bbox
+        inside_minimum && (acceptcell!(iter, dn); continue)
+        explored_bbox = CartesianIndices(iter)
+        # We explore all sites in the unit cell, not only `i in siteindices(rsel_perp, dn)`,
+        # because that could cause unitcell outliers to not be found
+        for (i, r) in enumerate(allsitepositions(lat))
+            r_dn = r + br * dn
+            # we now check if the dn_r of r folded onto unitcell has been explored
+            # (i.e. ensure unitcell outliers are reached)
+            dn_r = CartesianIndex(floor.(Int, Tuple(ibr * r)))
+            not_yet_found = !in(dn_r, explored_bbox)
+            # it the site has not been found this dn should be accepted. Continue to next dn
+            not_yet_found && (acceptcell!(iter, dn); break)
+            # is site i in perpregion? Otherwise go to next site
+            (i, dn) in rsel_perp || continue
+            # site i, shifted by dn, is already in perpregion through rsel. Is it also in pararegion?
+            is_in_cell = pararegion(r_dn)
+            # if it is, mark dn as accepted and continue to grow BoxIterator
+            is_in_cell && (acceptcell!(iter, dn); break)
         end
     end
     c = CartesianIndices(iter)
@@ -701,18 +735,6 @@ end
 
 seedcell(seed::NTuple{N,Any}, brmat) where {N} = seedcell(SVector{N}(seed), brmat)
 seedcell(seed::SVector{E}, brmat::SMatrix{E}) where {E} = round.(Int, brmat \ seed)
-
-function _superlat_fastpath(lat::Lattice{E,L}, factors) where {E,L}
-    scmatrix = sanitize_supercell(Val(L), factors...)
-    sites = 1:nsites(lat)
-    cells = _cells_fastpath(Val(L), factors)
-    mask = missing
-    supercell = Supercell(scmatrix, sites, cells, mask)
-    return Superlattice(lat.bravais, lat.unitcell, supercell)
-end
-
-_cells_fastpath(::Val, factors) = CartesianIndices((i -> 0 : i - 1).(factors))
-_cells_fastpath(::Val{L}, factors::Tuple{}) where {L} = CartesianIndices(filltuple(0:0, Val(L)))
 
 #######################################################################
 # unitcell

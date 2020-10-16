@@ -38,7 +38,7 @@ $i  Orbitals         : $(displayorbitals(ham))
 $i  Element type     : $(displayelements(ham))
 $i  Onsites          : $(nonsites(ham))
 $i  Hoppings         : $(nhoppings(ham))
-$i  Coordination     : $(nhoppings(ham) / nsites(ham))")
+$i  Coordination     : $(coordination(ham))")
     ioindent = IOContext(io, :indent => string("  "))
     issuperlattice(ham.lattice) && print(ioindent, "\n", ham.lattice.supercell)
 end
@@ -625,7 +625,9 @@ _orbitaltype(t::Type{SVector{1,Tv}}) where {Tv} = Tv
 orbitaltype(h::Hamiltonian{LA,L,M}) where {N,T,LA,L,M<:SMatrix{N,N,T}} = SVector{N,T}
 orbitaltype(h::Hamiltonian{LA,L,M}) where {LA,L,M<:Number} = M
 
-function nhoppings(ham::Hamiltonian)
+coordination(ham) = nhoppings(ham) / nsites(ham)
+
+function nhoppings(ham)
     count = 0
     for h in ham.harmonics
         count += iszero(h.dn) ? (_nnz(h.h) - _nnzdiag(h.h)) : _nnz(h.h)
@@ -633,7 +635,7 @@ function nhoppings(ham::Hamiltonian)
     return count
 end
 
-function nonsites(ham::Hamiltonian)
+function nonsites(ham)
     count = 0
     for h in ham.harmonics
         iszero(h.dn) && (count += _nnzdiag(h.h))
@@ -1253,39 +1255,41 @@ function unitcell(ham::Hamiltonian{<:Lattice}, args...; modifiers = (), kw...)
 end
 
 function unitcell(ham::Hamiltonian{LA,L}; modifiers = ()) where {E,L,T,L´,LA<:Superlattice{E,L,T,L´}}
-    lat = ham.lattice
-    sc = lat.supercell
-    isc = inv_supercell(bravais(lat), sc.matrix)
-    modifiers´ = resolve.(ensuretuple(modifiers), Ref(lat))
+    slat = ham.lattice
+    sc = slat.supercell
+    supercell_dn = r_to_dn(slat, sc.matrix, SVector{L´}(1:L´))
+    pos = allsitepositions(slat)
+    br = bravais(slat)
+    modifiers´ = resolve.(ensuretuple(modifiers), Ref(slat))
     mapping = OffsetArray{Int}(undef, sc.sites, sc.cells.indices...) # store supersite indices newi
     mapping .= 0
-    foreach_supersite((s, oldi, olddn, newi) -> mapping[oldi, Tuple(olddn)...] = newi, lat)
+    foreach_supersite((s, oldi, olddn, newi) -> mapping[oldi, Tuple(olddn)...] = newi, slat)
     dim = nsites(sc)
     B = blocktype(ham)
     S = typeof(SparseMatrixBuilder{B}(dim, dim))
     harmonic_builders = HamiltonianHarmonic{L´,B,S}[]
-    # pinvint = pinvmultiple(sc.matrix)
-    foreach_supersite(lat) do s, source_i, source_dn, newcol
+    foreach_supersite(slat) do s, source_i, source_dn, newcol
         for oldh in ham.harmonics
             rows = rowvals(oldh.h)
             vals = nonzeros(oldh.h)
             target_dn = source_dn + oldh.dn
-            super_dn = new_dn(target_dn, isc)
-            wrapped_dn = wrap_dn(target_dn, super_dn, sc.matrix)
-            newh = get_or_push!(harmonic_builders, super_dn, dim, newcol)
             for p in nzrange(oldh.h, source_i)
                 target_i = rows[p]
+                r = pos[target_i] + br * target_dn
+                super_dn = supercell_dn(r)
+                wrapped_dn = wrap_dn(target_dn, super_dn, sc.matrix)
                 # check: wrapped_dn could exit bounding box along non-periodic direction
                 checkbounds(Bool, mapping, target_i, Tuple(wrapped_dn)...) || continue
+                newh = get_or_push!(harmonic_builders, super_dn, dim, newcol)
                 newrow = mapping[target_i, Tuple(wrapped_dn)...]
-                val = applymodifiers(vals[p], lat, (source_i, target_i), (source_dn, target_dn), modifiers´...)
+                val = applymodifiers(vals[p], slat, (source_i, target_i), (source_dn, target_dn), modifiers´...)
                 iszero(newrow) || pushtocolumn!(newh.h, newrow, val)
             end
         end
         foreach(h -> finalizecolumn!(h.h), harmonic_builders)
     end
     harmonics = [HamiltonianHarmonic(h.dn, sparse(h.h)) for h in harmonic_builders]
-    unitlat = unitcell(lat)
+    unitlat = unitcell(slat)
     orbs = ham.orbitals
     return Hamiltonian(unitlat, harmonics, orbs)
 end
@@ -1299,9 +1303,6 @@ function get_or_push!(hs::Vector{<:HamiltonianHarmonic{L,B,<:SparseMatrixBuilder
     push!(hs, newh)
     return newh
 end
-
-inv_supercell(br, sc::SMatrix{L,L´}) where {L,L´} = inv(extended_supercell(br, sc))[SVector{L´}(1:L´), :]
-new_dn(oldn, isc) = floor.(Int, isc * oldn)
 
 wrap_dn(olddn::SVector, newdn::SVector, supercell::SMatrix) = olddn - supercell * newdn
 
