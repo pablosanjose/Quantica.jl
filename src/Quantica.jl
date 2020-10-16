@@ -17,6 +17,8 @@ using ExprTools
 
 using SparseArrays: getcolptr, AbstractSparseMatrix
 
+using Statistics: mean
+
 export sublat, bravais, lattice, dims, supercell, unitcell,
        hopping, onsite, @onsite!, @hopping!, parameters, siteselector, hopselector, nrange,
        sitepositions, siteindices, not,
