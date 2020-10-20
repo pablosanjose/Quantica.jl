@@ -66,7 +66,7 @@ transform!(f, s::Spectrum) = (map!(f, s.energies, s.energies); s)
 #######################################################################
 # Bandstructure
 #######################################################################
-struct Band{M,A<:AbstractVector{M},MD<:Mesh,S<:AbstractArray}
+struct Band{D,M,A<:AbstractVector{M},MD<:Mesh{D},S<:AbstractArray}
     mesh::MD        # Mesh with missing vertices removed
     simplices::S    # Tuples of indices of mesh vertices that define mesh simplices
     states::A       # Must be resizeable container to build & refine band
@@ -78,9 +78,8 @@ function Band(mesh::Mesh{D}, states::AbstractVector{M}, dimstates::Int) where {M
     return Band(mesh, simps, states, dimstates)
 end
 
-struct Bandstructure{D,M,B<:Band{M},MD<:Mesh{D}}   # D is dimension of parameter space
+struct Bandstructure{D,M,B<:Band{D,M}}   # D is dimension of ε + parameter space
     bands::Vector{B}
-    kmesh::MD
 end
 
 function Base.show(io::IO, b::Bandstructure{D,M}) where {D,M}
@@ -89,11 +88,10 @@ function Base.show(io::IO, b::Bandstructure{D,M}) where {D,M}
     print(io, i, summary(b), "\n",
 "$i  Bands        : $(length(b.bands))
 $i  Element type : $(displayelements(M))")
-    print(ioindent, "\n", b.kmesh)
 end
 
 Base.summary(b::Bandstructure{D,M}) where {D,M} =
-    "Bandstructure{$D}: collection of $(D)D bands"
+    "Bandstructure{$D}: collection of $(D-1)D bands in a $(D)D space"
 
 # API #
 """
@@ -244,7 +242,7 @@ Bandstructure{2}: collection of 2D bands
     Edges      : 1776
 
 julia> bandstructure(h, :Γ, :X, :Y, :Γ; points = (10,15,10))
-Bandstructure{1}: collection of 1D bands
+Bandstructure{2}: collection of 1D bands
   Bands        : 18
   Element type : scalar (Complex{Float64})
   Mesh{1}: mesh of a 1-dimensional manifold
@@ -253,7 +251,7 @@ Bandstructure{1}: collection of 1D bands
 
 julia> bandstructure(h, mesh((0, 2π); points = 11); mapping = φ -> (φ, 0))
        # Equivalent to bandstructure(h, :Γ, :X; points = 11)
-Bandstructure{1}: collection of 1D bands
+Bandstructure{2}: collection of 1D bands
   Bands        : 18
   Element type : scalar (Complex{Float64})
   Mesh{1}: mesh of a 1-dimensional manifold
@@ -263,7 +261,7 @@ Bandstructure{1}: collection of 1D bands
 julia> ph = parametric(h, @hopping!((t; α) -> t * α));
 
 julia> bandstructure(ph, mesh((0, 2π); points = 11); mapping = φ -> (φ, 0, (; α = 2φ)))
-Bandstructure{1}: collection of 1D bands
+Bandstructure{2}: collection of 1D bands
   Bands        : 18
   Element type : scalar (Complex{Float64})
   Mesh{1}: mesh of a 1-dimensional manifold
@@ -365,7 +363,7 @@ function _bandstructure(matrixf::Function, matrix´::AbstractMatrix{M}, mesh::MD
 
     p = Progress(nϵ * nk, "Step 2/2 - Connecting bands: ")
     pcounter = 0
-    bands = Band{M,Vector{M},Mesh{D+1,T,Vector{SVector{D+1,T}}},Vector{NTuple{D+1,Int}}}[]
+    bands = Band{D+1,M,Vector{M},Mesh{D+1,T,Vector{SVector{D+1,T}}},Vector{NTuple{D+1,Int}}}[]
     vertindices = zeros(Int, nϵ, nk) # 0 == unclassified, -1 == different band, > 0 vertex index
     pending = Tuple{Int,CartesianIndex{2}}[] # (originating vertex index, (ϵ, k))
     dests = Int[]; srcs = Int[]       # To build adjacency matrices
@@ -383,7 +381,7 @@ function _bandstructure(matrixf::Function, matrix´::AbstractMatrix{M}, mesh::MD
         pcounter += nverts
         ProgressMeter.update!(p, pcounter; showvalues = ())
     end
-    return Bandstructure(bands, mesh)
+    return Bandstructure(bands)
 end
 
 _maybereal(::Type{<:Complex}) = identity

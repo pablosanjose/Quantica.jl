@@ -247,14 +247,14 @@ end
 # plot(::Bandstructure)
 #######################################################################
 
-function plot(bs::Bandstructure{1}; kw...)
+function plot(bs::Bandstructure{2}; kw...)
     scene = bandplot2d(bs; kw...)
     axis = scene[Axis]
     axis[:names, :axisnames] = ("φ", "ε")
     return scene
 end
 
-function plot(bs::Bandstructure{2}; kw...)
+function plot(bs::Bandstructure{3}; kw...)
     scene = bandplot3d(bs; kw...)
     axis = scene[Axis]
     to_value(scene[:show_axis]) && (axis[:names, :axisnames] = ("φ₁", "φ₂", "ε"))
