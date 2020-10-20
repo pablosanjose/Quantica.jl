@@ -94,9 +94,9 @@ link_shader(shader::Missing, psi, h) = (row, col) -> 0.0
 # vlplot
 #######################################################################
 """
-    vlplot(b::Bandstructure{1}; kw...)
+    vlplot(b::Bandstructure{2}; kw...)
 
-Plot the 1D bandstructure `b` using VegaLite.
+Plot the 1D bandstructure `b` using VegaLite in 2D.
 
     vlplot(h::Hamiltonian; kw...)
 
@@ -168,9 +168,8 @@ function VegaLite.vlplot(b::Bandstructure;
     return p
 end
 
-function bandtable(b::Bandstructure{1}, (scalingx, scalingy), bandsiter)
+function bandtable(b::Bandstructure{2}, (scalingx, scalingy), bandsiter)
     bandsiter´ = bandsiter === missing ? eachindex(bands(b)) : bandsiter
-    ks = vertices(b.kmesh)
     bnds = bands(b)
     table = [(x = v[1] * scalingx, y = v[2] * scalingy, band = i, tooltip = string(v))
              for i in bandsiter´ for v in vertices(bnds[i])]

@@ -91,8 +91,7 @@ Base.summary(g::GreensFunction{<:BandGreenSolver}) =
     "GreensFunction{Bandstructure}: Green's function from a $(latdim(g.h))D bandstructure"
 
 function greensolver(b::Bandstructure{D}) where {D}
-    V = D + 1
-    indsedges = tuplepairs(Val(D+1)) # not inferred for D>2
+    indsedges = tuplepairs(Val(D))
     v = [SimplexData(simplex, band, indsedges) for band in bands(b) for simplex in band.simplices]
     return BandGreenSolver(v,  indsedges)
 end
