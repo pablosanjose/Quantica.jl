@@ -247,14 +247,14 @@ end
 # plot(::Bandstructure)
 #######################################################################
 
-function plot(bs::Bandstructure{2}; kw...)
+function plot(bs::Bandstructure{1}; kw...)
     scene = bandplot2d(bs; kw...)
     axis = scene[Axis]
     axis[:names, :axisnames] = ("φ", "ε")
     return scene
 end
 
-function plot(bs::Bandstructure{3}; kw...)
+function plot(bs::Bandstructure{2}; kw...)
     scene = bandplot3d(bs; kw...)
     axis = scene[Axis]
     to_value(scene[:show_axis]) && (axis[:names, :axisnames] = ("φ₁", "φ₂", "ε"))
@@ -263,7 +263,7 @@ end
 
 @recipe(BandPlot2D, bandstructure) do scene
     Theme(
-    linewidth = 3,
+    linethickness = 3.0,
     wireframe = true,
     colors = map(t -> RGBAf0((0.8 .* t)...),
         ((0.973, 0.565, 0.576), (0.682, 0.838, 0.922), (0.742, 0.91, 0.734),
@@ -278,18 +278,19 @@ function plot!(plot::BandPlot2D)
     colors = Iterators.cycle(plot[:colors][])
     for (nb, color) in zip(bands, colors)
         band = bs.bands[nb]
-        vertices = band.mesh.vertices
-        simplices = band.simplices
+        vertices = band.verts
+        simplices = band.simpinds
         linesegments!(plot, (t -> vertices[first(t)] => vertices[last(t)]).(simplices),
-                      linewidth = plot[:linewidth], color = color)
+                      linewidth = plot[:linethickness][], color = color)
     end
     return plot
  end
 
 @recipe(BandPlot3D, bandstructure) do scene
     Theme(
-    linewidth = 1,
-    wireframe = false,
+    linethickness = 1.0,
+    wireframe = true,
+    linedarken = 0.5,
     ssao = true, ambient = Vec3f0(0.55), diffuse = Vec3f0(0.4),
     colors = map(t -> RGBAf0(t...),
         ((0.973, 0.565, 0.576), (0.682, 0.838, 0.922), (0.742, 0.91, 0.734),
@@ -300,20 +301,20 @@ end
 
 function plot!(plot::BandPlot3D)
     bs = to_value(plot[1])
-    bands = haskey(plot, :bands) ? to_value(plot[:bands]) : eachindex(bs.bands)
+    bandinds = haskey(plot, :bands) ? to_value(plot[:bands]) : eachindex(bs.bands)
     colors = Iterators.cycle(plot[:colors][])
-    for (nb, color) in zip(bands, colors)
+    for (nb, color) in zip(bandinds, colors)
         band = bs.bands[nb]
-        vertices = band.mesh.vertices
-        connectivity = [s[j] for s in band.simplices, j in 1:3]
+        vertices = band.verts
+        connectivity = [s[j] for s in band.simpinds, j in 1:3]
         if isempty(connectivity)
             scatter!(plot, vertices, color = color)
         else
             mesh!(plot, vertices, connectivity, color = color, transparency = false,
-            ssao = plot[:ssao][], ambient = plot[:ambient][], diffuse = plot[:diffuse][])
+                ssao = plot[:ssao][], ambient = plot[:ambient][], diffuse = plot[:diffuse][])
             if plot[:wireframe][]
-                edgevertices = collect(Quantica.edgevertices(band.mesh))
-                linesegments!(plot, edgevertices, linewidth = plot[:linewidth])
+                edgevertices = collect(Quantica.edgevertices(band))
+                linesegments!(plot, edgevertices, color = darken(color, plot[:linedarken][]), linewidth = plot[:linethickness][])
             end
         end
     end

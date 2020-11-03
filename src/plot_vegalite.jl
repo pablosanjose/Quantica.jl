@@ -94,7 +94,7 @@ link_shader(shader::Missing, psi, h) = (row, col) -> 0.0
 # vlplot
 #######################################################################
 """
-    vlplot(b::Bandstructure{2}; kw...)
+    vlplot(b::Bandstructure{1}; kw...)
 
 Plot the 1D bandstructure `b` using VegaLite in 2D.
 
@@ -120,6 +120,7 @@ shaders: `sitesize`, `siteopacity`, `sitecolor`, `linksize`, `linkopacity` or `l
 ## Bandstructure-specifc
     - `points = false`: whether to plot points on line plots
     - `bands = missing`: bands to plot (or all if `missing`)
+    - `thickness = 2`: thickness of band lines
 
 ## Hamiltonian-specific
     - `axes = (1,2)`:lattice axes to project onto the plot x-y plane
@@ -152,7 +153,7 @@ maximum visual value of site diameter and link thickness is given by `maxdiamete
 pixels) and `maxthickness` (as a fraction of `maxdiameter`)
 """
 function VegaLite.vlplot(b::Bandstructure;
-    labels = ("φ", "ε"), scaling = (1, 1), size = 640, points = false, xlims = missing, ylims = missing, bands = missing)
+    labels = ("φ", "ε"), scaling = (1, 1), size = 640, points = false, xlims = missing, ylims = missing, bands = missing, thickness = 2)
     labelx, labely = labels
     table = bandtable(b, make_it_two(scaling), bands)
     sizes = make_it_two(size)
@@ -160,7 +161,7 @@ function VegaLite.vlplot(b::Bandstructure;
     plotrange = (xlims, ylims)
     (domainx, domainy), _ = domain_size(corners, size, plotrange)
     p = table |> vltheme(sizes, points) + @vlplot(
-        mark = :line,
+        mark = {:line, strokeWidth = thickness},
         x = {:x, scale = {domain = domainx, nice = false}, title = labelx, sort = nothing},
         y = {:y, scale = {domain = domainy, nice = false}, title = labely, sort = nothing},
         color = "band:n",
@@ -168,11 +169,27 @@ function VegaLite.vlplot(b::Bandstructure;
     return p
 end
 
-function bandtable(b::Bandstructure{2}, (scalingx, scalingy), bandsiter)
+# We optimize 1D band plots by collecting connected simplices into line segments (because :rule is considerabley slower than :line)
+function bandtable(b::Bandstructure{1,T}, (scalingx, scalingy), bandsiter) where {T}
     bandsiter´ = bandsiter === missing ? eachindex(bands(b)) : bandsiter
-    bnds = bands(b)
-    table = [(x = v[1] * scalingx, y = v[2] * scalingy, band = i, tooltip = string(v))
-             for i in bandsiter´ for v in vertices(bnds[i])]
+    NT = typeof((;x = zero(T), y = zero(T), band = 1, segment = 1))
+    table = NT[]
+    for (nb, band) in enumerate(bands(b))
+        segment = 0
+        verts = vertices(band)
+        sinds = band.simpinds
+        s0 = first(sinds)
+        for s in sinds
+            if first(s) == last(s0)
+                push!(table, (; x = verts[first(s)][1] * scalingx, y = verts[first(s)][2] * scalingy, band = nb, segment = segment))
+            else
+                push!(table, (; x = verts[last(s0)][1] * scalingx, y = verts[last(s0)][2] * scalingy, band = nb, segment = segment))
+                segment += 1
+                s0 = s
+                push!(table, (; x = verts[first(s)][1] * scalingx, y = verts[first(s)][2] * scalingy, band = nb, segment = segment))
+            end
+        end
+    end
     return table
 end
 
@@ -184,7 +201,7 @@ function VegaLite.vlplot(h::Hamiltonian{LA}, psi = missing;
                          linksize = maxthickness, linkopacity = 1.0, linkcolor = sitecolor,
                          colorrange = missing,
                          colorscheme = "redyellowblue", discretecolorscheme = "category10") where {E,LA<:Lattice{E}}
-    psi´ = maybe_unflatten_or_missing(psi, h)
+    psi´ = unflatten_or_reinterpret_or_missing(psi, h)
     checkdims_psi(h, psi´)
 
     directives     = (; axes = axes, digits = digits,
@@ -272,8 +289,8 @@ sanitize_colorrange(r::Tuple, table) = [first(r), last(r)]
 needslegend(x::Number) = nothing
 needslegend(x) = true
 
-maybe_unflatten_or_missing(psi::Missing, h) = missing
-maybe_unflatten_or_missing(psi, h) = maybe_unflatten(psi, h)
+unflatten_or_reinterpret_or_missing(psi::Missing, h) = missing
+unflatten_or_reinterpret_or_missing(psi, h) = unflatten_or_reinterpret(psi, h)
 
 checkdims_psi(h, psi) = size(h, 2) == size(psi, 1) || throw(ArgumentError("The eigenstate length $(size(psi,1)) must match the Hamiltonian dimension $(size(h, 2))"))
 checkdims_psi(h, ::Missing) = nothing
@@ -341,6 +358,10 @@ function _corners(table)
     for row in table
         min´ = min.(min´, (row.x, row.y))
         max´ = max.(max´, (row.x, row.y))
+        if isdefined(row, :x2)
+            min´ = min.(min´, (row.x2, row.y2))
+            max´ = max.(max´, (row.x2, row.y2))
+        end
     end
     return min´, max´
 end

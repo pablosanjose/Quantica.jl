@@ -360,3 +360,62 @@ Base.IteratorEltype(::SiteSublats) = Base.HasEltype()
 Base.eltype(::SiteSublats) = Tuple{Int,Int}
 
 Base.length(s::SiteSublats) = nsites(s.u)
+
+#######################################################################
+# Runs
+#######################################################################
+struct Runs{T,F}
+    xs::Vector{T}
+    istogether::F
+end
+
+approxruns(xs::Vector{T}) where {T} = Runs(xs, (x, y) -> isapprox(x, y; atol = sqrt(eps(T))))
+equalruns(xs) = Runs(xs, ==)
+
+function last_in_run(xs::Vector{T}, i, istogether) where {T}
+    xi = xs[i]
+    for j in i:length(xs)
+        (j == length(xs) || !istogether(xs[j+1], xi)) && return j
+    end
+    return i
+end
+
+# Base.iterate(s::Runs) = iterate(s, 1)
+function Base.iterate(s::Runs, j = 1)
+    j > length(s.xs) && return nothing
+    lst = last_in_run(s.xs, j, s.istogether)
+    return j:lst, lst + 1
+end
+
+Base.IteratorSize(::Runs) = Base.SizeUnknown()
+
+Base.IteratorEltype(::Runs) = Base.HasEltype()
+
+Base.eltype(::Runs) = UnitRange{Int}
+
+#######################################################################
+# MarchingNeighbors
+#######################################################################
+struct MarchingNeighbors{D,G}
+    n::CartesianIndex{D}
+    gen::G
+    len::Int
+end
+
+function marchingneighbors(c, n)
+    rp = max(n, first(c)):min(n + oneunit(n), last(c))
+    rm = max(n - oneunit(n), first(c)):min(n, last(c))
+    gen = Iterators.filter(!isequal(n), Iterators.flatten((rp, rm)))
+    len = length(rp) + length(rm) - 2
+    return MarchingNeighbors(n, gen, len)
+end
+
+Base.iterate(m::MarchingNeighbors, s...) = iterate(m.gen, s...)
+
+Base.IteratorSize(::MarchingNeighbors) = Base.HasLength()
+
+Base.IteratorEltype(::MarchingNeighbors) = Base.HasEltype()
+
+Base.eltype(::MarchingNeighbors{D}) where {D} = CartesianIndex{D}
+
+Base.length(m::MarchingNeighbors) = m.len

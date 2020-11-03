@@ -201,9 +201,6 @@ Base.size(ph::ParametricHamiltonian, n...) = size(ph.h, n...)
 
 Base.eltype(ph::ParametricHamiltonian) = eltype(ph.h)
 
-DualNumbers.Dual(p::ParametricHamiltonian) =
-    ParametricHamiltonian(Dual(p.baseh), Dual(p.h), p.modifiers, p.ptrdata, p.allptrs, p.parameters)
-
 #######################################################################
 # bloch! for parametric
 #######################################################################

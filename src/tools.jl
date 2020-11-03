@@ -86,7 +86,7 @@ end
 
 padright(sv::StaticVector{E,T}, x::T, ::Val{E}) where {E,T} = sv
 padright(sv::StaticVector{E1,T1}, x::T2, ::Val{E2}) where {E1,T1,E2,T2} =
-    (T = promote_type(T1,T2); SVector{E2,T}(ntuple(i -> i > E1 ? x : convert(T, sv[i]), Val(E2))))
+    (T = promote_type(T1,T2); SVector{E2,T}(padright(Tuple(sv), x, Val(E2))))
 padright(sv::StaticVector{E,T}, ::Val{E2}) where {E,T,E2} = padright(sv, zero(T), Val(E2))
 padright(sv::StaticVector{E,T}, ::Val{E}) where {E,T} = sv
 padright(t::NTuple{N´,Any}, x, ::Val{N}) where {N´,N} = ntuple(i -> i > N´ ? x : t[i], Val(N))
@@ -200,32 +200,32 @@ end
 
 ############################################################################################
 
-function pushapproxruns!(runs::AbstractVector{<:UnitRange}, list::AbstractVector{T},
-                         offset = 0, degtol = sqrt(eps(real(T)))) where {T}
-    len = length(list)
-    len < 2 && return runs
-    rmin = rmax = 1
-    prev = list[1]
-    @inbounds for i in 2:len
-        next = list[i]
-        if abs(next - prev) < degtol
-            rmax = i
-        else
-            rmin < rmax && push!(runs, (offset + rmin):(offset + rmax))
-            rmin = rmax = i
-        end
-        prev = next
-    end
-    rmin < rmax && push!(runs, (offset + rmin):(offset + rmax))
-    return runs
-end
+# function pushapproxruns!(runs::AbstractVector{<:UnitRange}, list::AbstractVector{T},
+#                          offset = 0, degtol = sqrt(eps(real(T)))) where {T}
+#     len = length(list)
+#     len < 2 && return runs
+#     rmin = rmax = 1
+#     prev = list[1]
+#     @inbounds for i in 2:len
+#         next = list[i]
+#         if abs(next - prev) < degtol
+#             rmax = i
+#         else
+#             rmin < rmax && push!(runs, (offset + rmin):(offset + rmax))
+#             rmin = rmax = i
+#         end
+#         prev = next
+#     end
+#     rmin < rmax && push!(runs, (offset + rmin):(offset + rmax))
+#     return runs
+# end
 
-function hasapproxruns(list::AbstractVector{T}, degtol = sqrt(eps(real(T)))) where {T}
-    for i in 2:length(list)
-        abs(list[i] - list[i-1]) < degtol && return true
-    end
-    return false
-end
+# function hasapproxruns(list::AbstractVector{T}, degtol = sqrt(eps(real(T)))) where {T}
+#     for i in 2:length(list)
+#         abs(list[i] - list[i-1]) < degtol && return true
+#     end
+#     return false
+# end
 
 eltypevec(::AbstractMatrix{T}) where {T<:Number} = T
 eltypevec(::AbstractMatrix{S}) where {N,T<:Number,S<:SMatrix{N,N,T}} = SVector{N,T}
@@ -263,10 +263,6 @@ function append_slice!(dest::AbstractArray, src::AbstractArray{T,N}, Rsrc::Carte
     end
     return dest
 end
-
-dualarray(a::DenseMatrix) = map(x->Dual.(x, 0), a)
-# Need to preserve stored zeros, so we have to treat sparse case as special
-dualarray(s::SparseMatrixCSC) = SparseMatrixCSC(s.m, s.n, s.colptr, s.rowval, map(x->Dual.(x, 0), s.nzval))
 
 ######################################################################
 # convert a matrix/number block to a matrix/inlinematrix string
