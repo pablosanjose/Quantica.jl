@@ -11,7 +11,7 @@ function __init__()
 end
 
 using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
-      ProgressMeter, LinearMaps, Random, SpecialFunctions, DualNumbers
+      ProgressMeter, LinearMaps, Random, SpecialFunctions
 
 using ExprTools
 
@@ -25,7 +25,7 @@ export sublat, bravais, lattice, dims, supercell, unitcell,
        ket, randomkets,
        hamiltonian, parametric, bloch, bloch!, similarmatrix,
        flatten, wrap, transform!, combine,
-       spectrum, bandstructure, mesh, isometric,
+       spectrum, bandstructure, cuboid, isometric,
        bands, vertices,
        energies, states,
        momentaKPM, dosKPM, averageKPM, densityKPM, bandrangeKPM,

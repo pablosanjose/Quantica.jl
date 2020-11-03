@@ -314,18 +314,18 @@ check_unflatten_eltypes(v::AbstractVector{T}, h) where {T} =
     T === orbitaltype(h) ||
         throw(ArgumentError("Eltype of desination array is inconsistent with Hamiltonian"))
 
-## maybe_unflatten: call unflatten but only if we cannot do it without copying
-maybe_unflatten(vflat, h) = _maybe_unflatten(vflat, h, orbitaltype(h), h.orbitals)
+## unflatten_or_reinterpret: call unflatten but only if we cannot do it without copying
+unflatten_or_reinterpret(vflat, h) = _unflatten_or_reinterpret(vflat, h, orbitaltype(h), h.orbitals)
 # source is already of the correct orbitaltype(h)
-function _maybe_unflatten(v::AbstractVector{T}, h, ::Type{T}, orbs) where {T}
+function _unflatten_or_reinterpret(v::AbstractVector{T}, h, ::Type{T}, orbs) where {T}
     check_unflatten_dst_dims(v, h)
     return v
 end
 # source can be reinterpreted, because the number of orbitals is the same M for all N sublattices
-_maybe_unflatten(v::AbstractVector{T}, h, ::Type{S}, ::NTuple{N,NTuple{M}}) where {N,M,T<:Number,S<:SVector{M}} =
+_unflatten_or_reinterpret(v::AbstractVector{T}, h, ::Type{S}, ::NTuple{N,NTuple{M}}) where {N,M,T<:Number,S<:SVector{M}} =
     reinterpret(SVector{M,T}, v)
 # otherwise call unflatten
-_maybe_unflatten(v, h, S, orbs) = unflatten(v, h)
+_unflatten_or_reinterpret(v, h, S, orbs) = unflatten(v, h)
 
 #######################################################################
 # similarmatrix
@@ -625,6 +625,9 @@ _orbitaltype(t::Type{SVector{1,Tv}}) where {Tv} = Tv
 orbitaltype(h::Hamiltonian{LA,L,M}) where {N,T,LA,L,M<:SMatrix{N,N,T}} = SVector{N,T}
 orbitaltype(h::Hamiltonian{LA,L,M}) where {LA,L,M<:Number} = M
 
+orbitaltype(::Type{M}) where {M<:Number} = M
+orbitaltype(::Type{S}) where {N,T,S<:SMatrix{N,N,T}} = SVector{N,T}
+
 coordination(ham) = nhoppings(ham) / nsites(ham)
 
 function nhoppings(ham)
@@ -720,12 +723,6 @@ SparseArrays.issparse(h::Hamiltonian{LA,L,M,A}) where {LA,L,M,A<:AbstractSparseM
 SparseArrays.issparse(h::Hamiltonian{LA,L,M,A}) where {LA,L,M,A} = false
 
 Base.parent(h::Hamiltonian) = h
-
-# Dual numbers #
-
-DualNumbers.Dual(h::Hamiltonian) = Hamiltonian(h.lattice, Dual.(h.harmonics), h.orbitals)
-
-DualNumbers.Dual(h::HamiltonianHarmonic) = HamiltonianHarmonic(h.dn, dualarray(h.h))
 
 # Iterators #
 
