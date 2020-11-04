@@ -592,7 +592,7 @@ function proj(ψ, ψ0, realzero, complexzero)
     for j0 in axes(ψ0, 2), j in axes(ψ, 2)
         p0 = complexzero
         @simd for i0 in axes(ψ0, 1)
-            @inbounds p0 += ψ[i0,j] ⋅ ψ0[i0,j0]
+            @inbounds p0 += dot(ψ[i0,j], ψ0[i0,j0])
         end
         p += abs2(p0)
     end
