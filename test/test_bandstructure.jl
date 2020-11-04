@@ -1,4 +1,5 @@
 using Quantica: nbands, nvertices, nedges, nsimplices
+using Arpack
 
 @testset "basic bandstructures" begin
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(-1))
@@ -33,6 +34,11 @@ using Quantica: nbands, nvertices, nedges, nsimplices
     # complex spectra
     h = LatticePresets.honeycomb() |> hamiltonian(onsite(im) + hopping(-1)) |> unitcell(2)
     b = bandstructure(h, cuboid((-π, π), (-π, π), subticks = 7))
+    @test nbands(b)  == 1
+
+    # spectrum sorting
+    h = LatticePresets.honeycomb() |> hamiltonian(hopping(-1)) |> unitcell(10)
+    b = bandstructure(h, :Γ, :X, subticks = 7, method = ArpackPackage(sigma = im, nev = 8))
     @test nbands(b)  == 1
 end
 
