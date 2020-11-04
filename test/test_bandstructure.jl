@@ -29,6 +29,11 @@ using Quantica: nbands, nvertices, nedges, nsimplices
     b = bandstructure(h, :Γ, :X, (0, π), :Z, :Γ; subticks = (4,5,6,7))
     @test nbands(b) == 1
     @test nvertices(b) == 113
+
+    # complex spectra
+    h = LatticePresets.honeycomb() |> hamiltonian(onsite(im) + hopping(-1)) |> unitcell(2)
+    b = bandstructure(h, cuboid((-π, π), (-π, π), subticks = 7))
+    @test nbands(b)  == 1
 end
 
 @testset "functional bandstructures" begin
