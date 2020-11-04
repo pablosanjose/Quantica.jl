@@ -38,7 +38,7 @@ using Arpack
 
     # spectrum sorting
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(-1)) |> unitcell(10)
-    b = bandstructure(h, :Γ, :X, subticks = 7, method = ArpackPackage(sigma = im, nev = 8))
+    b = bandstructure(h, :Γ, :K, :K´, subticks = 7, method = ArpackPackage(sigma = im, nev = 8))
     @test nbands(b)  == 1
 end
 
