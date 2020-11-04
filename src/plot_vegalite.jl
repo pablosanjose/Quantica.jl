@@ -172,23 +172,23 @@ end
 # We optimize 1D band plots by collecting connected simplices into line segments (because :rule is considerabley slower than :line)
 function bandtable(b::Bandstructure{1,T}, (scalingx, scalingy), bandsiter) where {T}
     bandsiter´ = bandsiter === missing ? eachindex(bands(b)) : bandsiter
-    NT = typeof((;x = zero(T), y = zero(T), band = 1, segment = 1))
+    NT = typeof((;x = zero(T), y = zero(T), band = 1))
     table = NT[]
     for (nb, band) in enumerate(bands(b))
-        segment = 0
         verts = vertices(band)
         sinds = band.simpinds
-        s0 = first(sinds)
+        s0 = (0, 0)
         for s in sinds
-            if first(s) == last(s0)
-                push!(table, (; x = verts[first(s)][1] * scalingx, y = verts[first(s)][2] * scalingy, band = nb, segment = segment))
+            if first(s) == last(s0) || s0 == (0, 0)
+                push!(table, (; x = verts[first(s)][1] * scalingx, y = verts[first(s)][2] * scalingy, band = nb))
             else
-                push!(table, (; x = verts[last(s0)][1] * scalingx, y = verts[last(s0)][2] * scalingy, band = nb, segment = segment))
-                segment += 1
-                s0 = s
-                push!(table, (; x = verts[first(s)][1] * scalingx, y = verts[first(s)][2] * scalingy, band = nb, segment = segment))
+                push!(table, (; x = verts[last(s0)][1] * scalingx, y = verts[last(s0)][2] * scalingy, band = nb))
+                push!(table, (; x = T(NaN), y = T(NaN), band = nb))  # cut
+                push!(table, (; x = verts[first(s)][1] * scalingx, y = verts[first(s)][2] * scalingy, band = nb))
             end
+            s0 = s
         end
+        push!(table, (; x = verts[last(s0)][1] * scalingx, y = verts[last(s0)][2] * scalingy, band = nb))
     end
     return table
 end
@@ -356,11 +356,14 @@ end
 function _corners(table)
     min´ = max´ = (first(table).x, first(table).y)
     for row in table
-        min´ = min.(min´, (row.x, row.y))
-        max´ = max.(max´, (row.x, row.y))
+        x, y = row.x, row.y
+        (isnan(x) || isnan(y)) && continue
+        min´ = min.(min´, (x, y))
+        max´ = max.(max´, (x, y))
         if isdefined(row, :x2)
-            min´ = min.(min´, (row.x2, row.y2))
-            max´ = max.(max´, (row.x2, row.y2))
+            x2, y2 = row.x2, row.y2
+            min´ = min.(min´, (x2, y2))
+            max´ = max.(max´, (x2, y2))
         end
     end
     return min´, max´
