@@ -83,6 +83,7 @@ transform!(f, s::Spectrum) = (map!(f, s.energies, s.energies); s)
 ######################################################################
 struct BandMesh{D´,T<:Number}  # D´ is dimension of BaseMesh space plus one (energy)
     verts::Vector{SVector{D´,T}}
+    degs::Vector{Int}                   # Vertex degeneracies
     adjmat::SparseMatrixCSC{Bool,Int}   # Undirected graph: both dest > src and dest < src
     simpinds::Vector{NTuple{D´,Int}}
 end
@@ -106,12 +107,12 @@ vertices(m::BandMesh) = m.verts
 
 edges(adjmat, src) = nzrange(adjmat, src)
 
-# neighbors(adjmat::SparseMatrixCSC, src::Int) = view(rowvals(adjmat), nzrange(adjmat, src))
-
 edgedest(adjmat, edge) = rowvals(adjmat)[edge]
 
 edgevertices(m::BandMesh) =
     ((vsrc, m.verts[edgedest(m.adjmat, edge)]) for (i, vsrc) in enumerate(m.verts) for edge in edges(m.adjmat, i))
+
+degeneracy(m::BandMesh, i) = m.degs[i]
 
 transform!(f::Function, m::BandMesh) = (map!(f, vertices(m), vertices(m)); m)
 
@@ -527,6 +528,7 @@ end
 
 function knit_band(bandidx, basemesh::CuboidMesh{D,T}, subspaces, minoverlap, pending, cuboidinds, linearinds, I, J, projinds, showprog, prog) where {D,T}
     verts = SVector{D+1,T}[]
+    degs = Int[]
     vertcounter = 0
     while !isempty(pending)
         src, dst = pop!(pending)
@@ -540,6 +542,7 @@ function knit_band(bandidx, basemesh::CuboidMesh{D,T}, subspaces, minoverlap, pe
 
         vert = vcat(vertex(basemesh, n), SVector(subspaces[n][i].energy))
         push!(verts, vert)
+        push!(degs, degeneracy(subspaces[n][i]))
         push!(cuboidinds, dst)
         vertcounter += 1
         linearinds[n][i] = BandLinearIndex(bandidx, vertcounter)
@@ -567,7 +570,7 @@ function knit_band(bandidx, basemesh::CuboidMesh{D,T}, subspaces, minoverlap, pe
 
     simpinds = band_simplices(verts, adjmat)
 
-    return BandMesh(verts, adjmat, simpinds)
+    return BandMesh(verts, degs, adjmat, simpinds)
 end
 
 function append_adjacent!(I, J, msrc, mdst)
