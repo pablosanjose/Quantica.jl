@@ -7,9 +7,25 @@ abstract type AbstractDiagonalizeMethod end
 struct Diagonalizer{M<:AbstractDiagonalizeMethod,T<:Real}
     method::M
     minoverlap::T
+    perm::Vector{Int} # reusable permutation vector
 end
 
-diagonalizer(method, minoverlap) = Diagonalizer(method, float(minoverlap))
+diagonalizer(matrix, method, minoverlap = 0) =
+    Diagonalizer(method, float(minoverlap), Vector{Int}(undef, size(matrix, 2)))
+
+@inline function (d::Diagonalizer)(matrix)
+    ϵ, ψ = diagonalize(matrix, d.method)
+    issorted(ϵ, by = real) || sorteigs!(d.perm, ϵ, ψ)
+    return ϵ, ψ
+end
+
+function sorteigs!(perm, ϵ::AbstractVector, ψ::AbstractMatrix)
+    resize!(perm, length(ϵ))
+    p = sortperm!(perm, ϵ, by = real, alg = Base.DEFAULT_UNSTABLE)
+    permute!(ϵ, p)
+    Base.permutecols!!(ψ, p)
+    return ϵ, ψ
+end
 
 ## Diagonalize methods ##
 
@@ -89,8 +105,3 @@ similarmatrix(h, method::AbstractDiagonalizeMethod) = similarmatrix(h, method_ma
 
 method_matrixtype(::LinearAlgebraPackage, h) = Matrix{blockeltype(h)}
 method_matrixtype(::AbstractDiagonalizeMethod, h) = flatten
-
-# # Type of states in bandstructure. Should be Matrix view, because eigvecs are dense and we need to support degeneracies
-# method_matviewtype(::AbstractDiagonalizeMethod, ::AbstractMatrix{T}) where {T} = subarray_matrix_type(orbitaltype(T))
-
-# subarray_matrix_type(::Type{M}) where {M} = typeof(view(Matrix{eltype(M)}(undef, 2, 2), :, 1:0))
