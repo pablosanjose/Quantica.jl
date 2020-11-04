@@ -178,6 +178,7 @@ function bandtable(b::Bandstructure{1,T}, (scalingx, scalingy), bandsiter) where
         segment = 0
         verts = vertices(band)
         sinds = band.simpinds
+        isempty(sinds) && continue
         s0 = first(sinds)
         for s in sinds
             if first(s) == last(s0)

@@ -4,13 +4,12 @@
 #######################################################################
 abstract type AbstractDiagonalizeMethod end
 
-struct Diagonalizer{M<:AbstractDiagonalizeMethod,S<:SubArray,T<:Real}
+struct Diagonalizer{M<:AbstractDiagonalizeMethod,T<:Real}
     method::M
     minoverlap::T
-    matviewtype::Type{S}
 end
 
-diagonalizer(matrix, method, minoverlap) = Diagonalizer(method, float(minoverlap), method_matviewtype(method, matrix))
+diagonalizer(method, minoverlap) = Diagonalizer(method, float(minoverlap))
 
 ## Diagonalize methods ##
 
@@ -91,7 +90,7 @@ similarmatrix(h, method::AbstractDiagonalizeMethod) = similarmatrix(h, method_ma
 method_matrixtype(::LinearAlgebraPackage, h) = Matrix{blockeltype(h)}
 method_matrixtype(::AbstractDiagonalizeMethod, h) = flatten
 
-# Type of states in bandstructure. Should be Matrix view, because eigvecs are dense and we need to support degeneracies
-method_matviewtype(::AbstractDiagonalizeMethod, ::AbstractMatrix{T}) where {T} = subarray_matrix_type(orbitaltype(T))
+# # Type of states in bandstructure. Should be Matrix view, because eigvecs are dense and we need to support degeneracies
+# method_matviewtype(::AbstractDiagonalizeMethod, ::AbstractMatrix{T}) where {T} = subarray_matrix_type(orbitaltype(T))
 
-subarray_matrix_type(::Type{M}) where {M} = typeof(view(Matrix{eltype(M)}(undef, 2, 2), :, 1:0))
+# subarray_matrix_type(::Type{M}) where {M} = typeof(view(Matrix{eltype(M)}(undef, 2, 2), :, 1:0))

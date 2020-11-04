@@ -1,6 +1,20 @@
 #######################################################################
 # Spectrum
 #######################################################################
+struct Subspace{C,T,S<:SubArray{C,2}}
+    energy::T
+    basis::S
+end
+
+degeneracy(s::Subspace) = size(s.basis, 2)
+
+collect_subspaces(ϵs, ψs, ::Type{T}) where {T} = _collect_subspaces(ϵs, ψs, typeof(Subspace(zero(T), view(ψs, :, 1:1))))
+_collect_subspaces(ϵs, ψs, ::Type{SS}) where {C,T,SS<:Subspace{C,T}} =
+    SS[Subspace(_convert_energy(ϵs, rng, T), view(ψs, :, rng)) for rng in approxruns(ϵs)]
+
+_convert_energy(ϵs, rng, ::Type{T}) where {T<:Real} = mean(i -> T(real(ϵs[i])), rng)
+_convert_energy(ϵs, rng, ::Type{T}) where {T<:Complex} = mean(i -> T(ϵs[i]), rng)
+
 struct Spectrum{E,T,A<:AbstractMatrix{T}}
     energies::E
     states::A
@@ -391,7 +405,7 @@ function bandstructure(h::Union{Hamiltonian,ParametricHamiltonian}, basemesh::Cu
                        method = LinearAlgebraPackage(), minoverlap = 0.3, mapping = missing, transform = missing, showprogress = true)
     # ishermitian(h) || throw(ArgumentError("Hamiltonian must be hermitian"))
     matrix = similarmatrix(h, method_matrixtype(method, h))
-    diag = diagonalizer(matrix, method, minoverlap)
+    diag = diagonalizer(method, minoverlap)
     matrixf(vertex) = bloch!(matrix, h, map_phiparams(mapping, vertex))
     b = bandstructure(matrixf, basemesh, diag, showprogress)
     if transform !== missing
@@ -405,7 +419,7 @@ function bandstructure(matrixf::Function, basemesh::CuboidMesh;
                        method = LinearAlgebraPackage(),  minoverlap = 0.3, mapping = missing, transform = missing, showprogress = true)
     matrixf´ = wrapmapping(mapping, matrixf)
     matrix = samplematrix(matrixf´, basemesh)
-    diag = diagonalizer(matrix, method, minoverlap)
+    diag = diagonalizer(method, minoverlap)
     b = bandstructure(matrixf´, basemesh, diag, showprogress)
     transform === missing || transform!(transform, b)
     return b
@@ -428,9 +442,9 @@ samplematrix(matrixf, basemesh) = matrixf(Tuple(first(vertices(basemesh))))
 
 function bandstructure(matrixf::Function, basemesh::CuboidMesh, diago::Diagonalizer, showprogress)
     # Step 1/3 - Diagonalising:
-    subspaces, nverts = bandstructure_diagonalize(matrixf, basemesh, diago, showprogress)
+    subspaces = bandstructure_diagonalize(matrixf, basemesh, diago.method, showprogress)
     # Step 2/3 - Knitting bands:
-    bands, cuboidinds, linearinds = bandstructure_knit(basemesh, diago, subspaces, nverts, showprogress)
+    bands, cuboidinds, linearinds = bandstructure_knit(basemesh, subspaces, diago.minoverlap, showprogress)
     # Step 3/3 - Collecting simplices:
     simplices = bandstructure_collect(subspaces, bands, cuboidinds, showprogress)
 
@@ -440,30 +454,18 @@ end
 #######################################################################
 # bandstructure_diagonalize
 #######################################################################
-struct Subspace{C,T,S<:SubArray{C}}
-    energy::T
-    states::S
-end
-
-degeneracy(s::Subspace) = size(s.states, 2)
-
-function bandstructure_diagonalize(matrixf::Function, basemesh::CuboidMesh{D,T}, diago::Diagonalizer{M,S}, showprogress = false) where {D,T,M,C,S<:SubArray{C}}
+function bandstructure_diagonalize(matrixf::Function, basemesh::CuboidMesh, method, showprogress = false)
     prog = Progress(length(basemesh), "Step 1/3 - Diagonalising: ")
-    subspaces = Array{Vector{Subspace{C,T,S}},D}(undef, size(basemesh)...)
-    nverts = 0
-    for n in eachindex(basemesh)
-        matrix = matrixf(Tuple(vertex(basemesh, n)))
-        # (ϵk, ψk) = diagonalize(Hermitian(matrix), d)  ## This is faster (!)
-        (ϵs, ψs) = diagonalize(matrix, diago.method)
-        subspaces[n] = collect_subspaces(ϵs, ψs, Subspace{C,T,S})
-        nverts += length(subspaces[n])
-        showprogress && ProgressMeter.next!(prog; showvalues = ())
-    end
-    return subspaces, nverts
+    subspaces = [build_subspaces(matrixf, vertex, method, showprogress, prog) for vertex in vertices(basemesh)]
+    return subspaces
 end
 
-collect_subspaces(ϵs, ψs, ::Type{SS}) where {SS} =
-    SS[Subspace(ϵs[first(rng)], view(ψs, :, rng)) for rng in approxruns(ϵs)]
+function build_subspaces(matrixf, vertex::SVector{D,T}, method, showprog, prog) where {D,T}
+    matrix = matrixf(Tuple(vertex))
+    (ϵs, ψs) = diagonalize(matrix, method)
+    showprog && ProgressMeter.next!(prog; showvalues = ())
+    return collect_subspaces(ϵs, ψs, T)
+end
 
 #######################################################################
 # bandstructure_knit
@@ -483,7 +485,8 @@ struct BandCuboidIndex{D}
     colidx::Int
 end
 
-function bandstructure_knit(basemesh::CuboidMesh{D,T}, diago::Diagonalizer{M,S}, subspaces, nverts, showprog = false) where {D,T,M,S}
+function bandstructure_knit(basemesh::CuboidMesh{D,T}, subspaces::Array{Vector{S},D}, minoverlap, showprog = false) where {D,T,C,S<:Subspace{C}}
+    nverts = sum(length, subspaces)
     prog = Progress(nverts, "Step 2/3 - Knitting bands: ")
 
     bands = BandMesh{D+1,T}[]
@@ -491,7 +494,7 @@ function bandstructure_knit(basemesh::CuboidMesh{D,T}, diago::Diagonalizer{M,S},
     linearinds = [zeros(BandLinearIndex, length(ss)) for ss in subspaces] # 0 == unclassified, > 0 vertex index
     cuboidinds = BandCuboidIndex{D}[]                          # cuboid indices of processed vertices
     I = Int[]; J = Int[]                                       # To build adjacency matrices
-    P = real(eltype(eltype(S)))                                # type of projections between states
+    P = real(eltype(C))                                        # type of projections between states
     maxsubs = maximum(length, subspaces)
     projinds = Vector{Tuple{P,Int}}(undef, maxsubs)            # Reusable list of projections for sorting
 
@@ -504,7 +507,7 @@ function bandstructure_knit(basemesh::CuboidMesh{D,T}, diago::Diagonalizer{M,S},
         resize!(I, 0)
         resize!(J, 0)
         pending[1] = (seedidx, seedidx) # source CartesianIndex for band search, with no originating vertex
-        bandmesh = knit_band(bandidx, basemesh, subspaces, diago.minoverlap, pending, cuboidinds, linearinds, I, J, projinds, showprog, prog)
+        bandmesh = knit_band(bandidx, basemesh, subspaces, minoverlap, pending, cuboidinds, linearinds, I, J, projinds, showprog, prog)
         push!(bands, bandmesh)
     end
 
@@ -578,7 +581,7 @@ function sorted_valid_projections!(projinds, subs::Vector{<:Subspace}, sub0::Sub
     for (j, sub) in enumerate(subs)
         bandidx´ = linearindscol[j].bandidx
         bandidx´ == 0 || bandidx´ == bandidx || continue
-        p = proj(sub.states, sub0.states, realzero, complexzero)
+        p = proj(sub.basis, sub0.basis, realzero, complexzero)
         p > minoverlap && (projinds[j] = (p, j))
     end
     sort!(projinds, rev = true, alg = Base.DEFAULT_UNSTABLE)
@@ -688,7 +691,7 @@ function bandstructure_collect(subspaces::Array{Vector{Subspace{C,T,S}},D}, band
                 sverts[scounter] = ntuple(i -> band.verts[s[i]], Val(D+1))
                 sstates[scounter] = ntuple(Val(D+1)) do i
                     c = cuboidinds[ioffset + s[i]]
-                    subspaces[c.baseidx][c.colidx].states
+                    subspaces[c.baseidx][c.colidx].basis
                 end
             end
             showprog && ProgressMeter.next!(prog; showvalues = ())
