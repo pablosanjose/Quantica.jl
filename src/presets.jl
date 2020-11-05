@@ -109,7 +109,7 @@ Base.show(io::IO, ::Region{E}) where {E} =
 
 Base.:&(r1::Region{E}, r2::Region{E}) where {E} = Region{E}(r -> r1.f(r) && r2.f(r))
 Base.:|(r1::Region{E}, r2::Region{E}) where {E}  = Region{E}(r -> r1.f(r) || r2.f(r))
-Base.xor(r1::Region{E}, r2::Region{E}) where {E}  = Region{E}(r -> xor(r1.f(r),r2.f(r)))
+Base.xor(r1::Region{E}, r2::Region{E}) where {E}  = Region{E}(r -> xor(r1.f(r), r2.f(r)))
 Base.:!(r1::Region{E}) where {E}  = Region{E}(r -> !r1.f(r))
 
 extended_eps(T = Float64) = sqrt(eps(T))
