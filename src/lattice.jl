@@ -733,6 +733,7 @@ function _cell_iter(lat::Lattice{E,L}, sc::SMatrix{L,L´}, pararegion, rsel_perp
             site_not_in_explored_bbox && (acceptcell!(iter, dn); first_found && break)
         end
         # make sure we don't stop search until we find at least one site in supercell
+        # (necessary when seed is outside your region)
         first_found || acceptcell!(iter, dn)
     end
     c = CartesianIndices(iter)
