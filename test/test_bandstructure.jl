@@ -38,8 +38,8 @@ using Arpack
 
     # spectrum sorting
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(-1)) |> unitcell(10)
-    b = bandstructure(h, :Γ, :K, :K´, subticks = 7, method = ArpackPackage(sigma = im, nev = 8))
-    @test nbands(b)  == 1
+    b = bandstructure(h, :K, :K´, subticks = 7, method = ArpackPackage(sigma = 0.1im, nev = 12))
+    @test nbands(b) == 1
 end
 
 @testset "functional bandstructures" begin
