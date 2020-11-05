@@ -626,8 +626,8 @@ function supercell_regions(lat::Lattice{E,L}, sc::SMatrix{L,L´}) where {E,L,L´
     dn_func = r_to_dn(lat, sc)
     parainds = SVector{L´,Int}(1:L´)
     perpinds = SVector{L-L´,Int}((1+L´):L)
-    pararegion(r) = iszero(dn_func(r)[parainds])
-    perpregion(r) = iszero(dn_func(r)[perpinds])
+    pararegion(r) = iszero(dn_func(r)[parainds])  # true if isempty(parainds)
+    perpregion(r) = iszero(dn_func(r)[perpinds])  # true if isempty(perpinds)
     return pararegion, perpregion
 end
 
@@ -671,7 +671,6 @@ function _superlat(lat, scmatrix, pararegion, selector_perp, seed)
     br = bravais(lat)
     rsel = resolve(selector_perp, lat)
     cells = _cell_iter(lat, scmatrix, pararegion, rsel, seed)
-    # cells = _cell_iter(lat, scmatrix)
     ns = nsites(lat)
     mask = OffsetArray(falses(ns, size(cells)...), 1:ns, cells.indices...)
     @inbounds for dn in cells
@@ -714,28 +713,27 @@ function _cell_iter(lat::Lattice{E,L}, sc::SMatrix{L,L´}, pararegion, rsel_perp
             throw(ArgumentError("`region` seems unbounded (after $TOOMANYITERS iterations)"))
         # we need to make sure we've covered at least the minimum bounding box
         inside_minimum = CartesianIndex(Tuple(dn)) in minimum_bbox
-        inside_minimum && (acceptcell!(iter, dn); continue)
         explored_bbox = CartesianIndices(iter)
-        # make sure we don't stop search until we find at least one site (in both perpregion and pararegion)
-        first_found || acceptcell!(iter, dn)
         # We explore all sites in the unit cell, not only `i in siteindices(rsel_perp, dn)`,
         # because that could cause unitcell outliers to not be found
         for (i, r) in enumerate(allsitepositions(lat))
             r_dn = r + br * dn
-            # we now check if the dn_r of r folded onto unitcell has been explored
-            # (i.e. ensure unitcell outliers are reached)
-            dn_r = CartesianIndex(floor.(Int, Tuple(ibr * r)))
-            not_yet_found = !in(dn_r, explored_bbox)
-            # it the site has not been found this dn should be accepted. Continue to next dn
-            not_yet_found && (acceptcell!(iter, dn); break)
-            # is site i in perpregion? Otherwise go to next site
-            (i, dn) in rsel_perp || continue
-            # site i, shifted by dn, is already in perpregion through rsel. Is it also in pararegion?
-            is_in_cell = pararegion(r_dn)
+            is_in_cell = (i, dn) in rsel_perp && pararegion(r_dn)
             first_found = first_found || is_in_cell
-            # if it is, mark dn as accepted and continue to grow BoxIterator
-            is_in_cell && (acceptcell!(iter, dn); break)
+            # if site is in supercell (both perp and para regions), mark dn as accepted
+            # to grow BoxIterator. Also do so if we haven't yet covered minimum bounding box.
+            # Continue to next dn only if we have already found first site, to avoid skipping any.
+            (inside_minimum || is_in_cell) && (acceptcell!(iter, dn); first_found && break)
+            # we now check if the site that is not in cell has already been covered by the BoxIterator.
+            # We check if dn_r of r (dn's needed to get r into the unitcell Bravais-bounding-box) has been explored
+            # This way we ensure unitcell outliers [outside Bravais vector bounding box] are reached
+            dn_r = CartesianIndex(floor.(Int, Tuple(ibr * r)))
+            site_not_in_explored_bbox = !in(dn_r, explored_bbox)
+            # it the site has not been found this dn should be accepted.
+            site_not_in_explored_bbox && (acceptcell!(iter, dn); first_found && break)
         end
+        # make sure we don't stop search until we find at least one site in supercell
+        first_found || acceptcell!(iter, dn)
     end
     c = CartesianIndices(iter)
     return c
