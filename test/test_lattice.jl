@@ -113,3 +113,14 @@ end
     @test supercell(LatticePresets.bcc(), (2,1,0), region = RegionPresets.circle(10, (1,0))) isa Superlattice{3,3}
     @test supercell(LatticePresets.cubic(), (2,1,0), region = RegionPresets.sphere(10)) isa Superlattice{3,3}
 end
+
+@testset "boolean regions" begin
+    lat = unitcell(LP.square(), region = xor(RP.square(10), RP.square(20)))
+    @test nsites(lat) == 320
+    lat = unitcell(LP.honeycomb(), region = xor(RP.circle(20), RP.square(10)))
+    lat´ = unitcell(LP.honeycomb(), region = RP.circle(20) & !RP.square(10))
+    @test allsitepositions(lat) == allsitepositions(lat´)
+    lat = unitcell(LP.honeycomb(), region = RP.circle(5, (5,0)) | RP.circle(5, (15,0)) | RP.circle(5, (25,0)))
+    lat´ = unitcell(LP.honeycomb(), region = RP.circle(5, (5,0)))
+    @test nsites(lat) == 3 * nsites(lat´)
+end

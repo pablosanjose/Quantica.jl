@@ -708,14 +708,16 @@ function _cell_iter(lat::Lattice{E,L}, sc::SMatrix{L,L´}, pararegion, rsel_perp
     counter = 0
     br = bravais(lat)
     ibr = pinverse(br)
+    first_found = false
     for dn in iter
-        found = false
         counter += 1; counter == TOOMANYITERS &&
             throw(ArgumentError("`region` seems unbounded (after $TOOMANYITERS iterations)"))
         # we need to make sure we've covered at least the minimum bounding box
         inside_minimum = CartesianIndex(Tuple(dn)) in minimum_bbox
         inside_minimum && (acceptcell!(iter, dn); continue)
         explored_bbox = CartesianIndices(iter)
+        # make sure we don't stop search until we find at least one site (in both perpregion and pararegion)
+        first_found || acceptcell!(iter, dn)
         # We explore all sites in the unit cell, not only `i in siteindices(rsel_perp, dn)`,
         # because that could cause unitcell outliers to not be found
         for (i, r) in enumerate(allsitepositions(lat))
@@ -730,6 +732,7 @@ function _cell_iter(lat::Lattice{E,L}, sc::SMatrix{L,L´}, pararegion, rsel_perp
             (i, dn) in rsel_perp || continue
             # site i, shifted by dn, is already in perpregion through rsel. Is it also in pararegion?
             is_in_cell = pararegion(r_dn)
+            first_found = first_found || is_in_cell
             # if it is, mark dn as accepted and continue to grow BoxIterator
             is_in_cell && (acceptcell!(iter, dn); break)
         end

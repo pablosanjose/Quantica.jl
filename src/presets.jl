@@ -107,6 +107,11 @@ Region{E}(f::F) where {E,F<:Function} = Region{E,F}(f)
 Base.show(io::IO, ::Region{E}) where {E} =
     print(io, "Region{$E} : region in $(E)D space")
 
+Base.:&(r1::Region{E}, r2::Region{E}) where {E} = Region{E}(r -> r1.f(r) && r2.f(r))
+Base.:|(r1::Region{E}, r2::Region{E}) where {E}  = Region{E}(r -> r1.f(r) || r2.f(r))
+Base.xor(r1::Region{E}, r2::Region{E}) where {E}  = Region{E}(r -> xor(r1.f(r),r2.f(r)))
+Base.:!(r1::Region{E}) where {E}  = Region{E}(r -> !r1.f(r))
+
 extended_eps(T = Float64) = sqrt(eps(T))
 
 circle(radius = 10.0, c...) = Region{2}(_region_ellipse((radius, radius), c...))
@@ -145,3 +150,11 @@ function _region_cuboid((lx, ly, lz), (cx, cy, cz) = (0, 0, 0))
 end
 
 end # module
+
+#######################################################################
+# Aliases
+#######################################################################
+
+const RP = RegionPresets
+const LP = LatticePresets
+const HP = HamiltonianPresets

@@ -31,7 +31,7 @@ export sublat, bravais, lattice, dims, supercell, unitcell,
        momentaKPM, dosKPM, averageKPM, densityKPM, bandrangeKPM,
        greens, greensolver
 
-export LatticePresets, RegionPresets, HamiltonianPresets
+export RegionPresets, RP, LatticePresets, LP, HamiltonianPresets, HP
 
 export LinearAlgebraPackage, ArpackPackage, KrylovKitPackage
 
