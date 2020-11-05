@@ -172,7 +172,7 @@ end
 # We optimize 1D band plots by collecting connected simplices into line segments (because :rule is considerabley slower than :line)
 function bandtable(b::Bandstructure{1,T}, (scalingx, scalingy), bandsiter) where {T}
     bandsiter´ = bandsiter === missing ? eachindex(bands(b)) : bandsiter
-    NT = typeof((;x = zero(T), y = zero(T), band = 1))
+    NT = typeof((;x = zero(T), y = zero(T), band = 1, tooltip = 1))
     table = NT[]
     for (nb, band) in enumerate(bands(b))
         verts = vertices(band)
@@ -181,15 +181,15 @@ function bandtable(b::Bandstructure{1,T}, (scalingx, scalingy), bandsiter) where
         s0 = (0, 0)
         for s in sinds
             if first(s) == last(s0) || s0 == (0, 0)
-                push!(table, (; x = verts[first(s)][1] * scalingx, y = verts[first(s)][2] * scalingy, band = nb))
+                push!(table, (; x = verts[first(s)][1] * scalingx, y = verts[first(s)][2] * scalingy, band = nb, tooltip = degeneracy(band, first(s))))
             else
-                push!(table, (; x = verts[last(s0)][1] * scalingx, y = verts[last(s0)][2] * scalingy, band = nb))
-                push!(table, (; x = T(NaN), y = T(NaN), band = nb))  # cut
-                push!(table, (; x = verts[first(s)][1] * scalingx, y = verts[first(s)][2] * scalingy, band = nb))
+                push!(table, (; x = verts[last(s0)][1] * scalingx, y = verts[last(s0)][2] * scalingy, band = nb, tooltip = degeneracy(band, last(s0))))
+                push!(table, (; x = T(NaN), y = T(NaN), band = nb, tooltip = 0))  # cut
+                push!(table, (; x = verts[first(s)][1] * scalingx, y = verts[first(s)][2] * scalingy, band = nb, tooltip = degeneracy(band, first(s))))
             end
             s0 = s
         end
-        push!(table, (; x = verts[last(s0)][1] * scalingx, y = verts[last(s0)][2] * scalingy, band = nb))
+        push!(table, (; x = verts[last(s0)][1] * scalingx, y = verts[last(s0)][2] * scalingy, band = nb, tooltip = degeneracy(band, last(s0))))
     end
     return table
 end
