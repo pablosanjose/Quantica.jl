@@ -72,6 +72,15 @@ end
         h´´ = unitcell(h´, 2)
         @test coordination(h´´) ≈ coordination(h´)
     end
+    h = LP.honeycomb() |> hamiltonian(hopping(1)) |> unitcell(2) |> unitcell(mincoordination = 2)
+    @test nsites(h) == 6
+    h = LP.cubic() |> hamiltonian(hopping(1)) |> unitcell(4) |> unitcell(mincoordination = 4)
+    @test nsites(h) == 0
+    h = LP.honeycomb() |> hamiltonian(hopping(1)) |> unitcell(region = RP.circle(5) & !RP.circle(2)) |> unitcell(mincoordination = 2)
+    @test nsites(h) == 144
+    h = LP.honeycomb() |> hamiltonian(hopping(1)) |> unitcell(10, region = !RP.circle(2, (0,8)))
+    h´ = h |> unitcell(1, mincoordination = 2)
+    @test nsites(h´) == nsites(h) - 1
 end
 
 @testset "hamiltonian wrap" begin

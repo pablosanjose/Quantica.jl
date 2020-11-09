@@ -360,6 +360,10 @@ function boolean_mask(f, mask1, mask2, indranges)
     return mask
 end
 
+expanded_supercell_mask(s::Supercell{L,L´,Missing}) where {L,L´} =
+    ones(Bool, s.sites, s.cells.indices...)
+expanded_supercell_mask(s::Supercell{L,L´}) where {L,L´} = s.mask
+
 #######################################################################
 # Superlattice
 #######################################################################
@@ -413,6 +417,8 @@ function check_compatible_superlattice(s1, s2)
     compatible || throw(ArgumentError("Superlattices are incompatible for boolean masking"))
     return nothing
 end
+
+expand_supercell_mask(s::Superlattice) = Superlattice(s.bravais, s.unitcell, expand_supercell_mask(s.supercell))
 
 #######################################################################
 # AbstractLattice interface
@@ -633,7 +639,15 @@ end
 
 # Computes δn[inds] so that r = bravais´ * δn + dr, where dr is within a supercell and
 # bravais´ = bravais * supercell, but extending supercell into a square matrix
-# Supercell center is placed at mean(allpos)
+# Supercell center is placed at mean(allpos). Enconde it as a struct for type stability
+struct PosToCell{S,V,I}
+    projector::S
+    r0::V
+    inds::I
+end
+
+(p::PosToCell)(r) = floor.(Int, (p.projector * (r - p.r0))[p.inds])
+
 function r_to_dn(lat::AbstractLattice{E,L,T}, sc::SMatrix{L}, inds = :) where {E,L,T}
     br = bravais(lat)
     extsc = extended_supercell(br, sc)
@@ -641,7 +655,7 @@ function r_to_dn(lat::AbstractLattice{E,L,T}, sc::SMatrix{L}, inds = :) where {E
     # Place mean(positions) at the center of supercell
     r0 = supercell_center(lat)
     # This results in a zero vector for all sites within the unit supercell
-    return r -> floor.(Int, (projector * (r - r0))[inds])
+    return PosToCell(projector, r0, inds)
 end
 
 supercell_center(lat::AbstractLattice{E,L,T}) where {E,L,T} =
@@ -774,12 +788,14 @@ with factors along the diagonal)
 
 Convert Superlattice `slat` into a lattice with its unit cell matching `slat`'s supercell.
 
-    unitcell(h::Hamiltonian, v...; modifiers = (), kw...)
+    unitcell(h::Hamiltonian, v...; mincoordination, modifiers = (), kw...)
 
 Transforms the `Lattice` of `h` to have a larger unitcell, while expanding the Hamiltonian
-accordingly. The modifiers (a tuple of `ElementModifier`s, either `@onsite!` or `@hopping!`
-with no free parameters) will be applied to onsite and hoppings as the hamiltonian is
-expanded. See `@onsite!` and `@hopping!` for details
+accordingly. A nonzero `mincoordination` indicates a minimum number of hopping neighbors
+required for sites to be included in the resulting unit cell. The modifiers (a tuple of
+`ElementModifier`s, either `@onsite!` or `@hopping!` with no free parameters) will be
+applied to onsite and hoppings as the hamiltonian is expanded. See `@onsite!` and
+`@hopping!` for details
 
 Note: for performance reasons, in sparse hamiltonians only the stored onsites and hoppings
 will be transformed by `ElementModifier`s, so you might want to add zero onsites or hoppings
@@ -787,7 +803,7 @@ when building `h` to have a modifier applied to them later.
 
     lat_or_h |> unitcell(v...; kw...)
 
-Curried syntax, equivalent to `unitcell(lat_or_h, v...; kw...)
+Curried syntax, equivalent to `unitcell(lat_or_h, v...; kw...)`
 
 # Examples
 
