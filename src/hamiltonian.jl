@@ -696,6 +696,9 @@ function flatsize(h::Hamiltonian)
     return (n, n)
 end
 
+expand_supercell_mask(h::Hamiltonian{<:Superlattice}) =
+    Hamiltonian(expand_supercell_mask(h.lattice), h.harmonics, h.orbitals)
+
 Base.size(h::Hamiltonian, n) = size(first(h.harmonics).h, n)
 Base.size(h::Hamiltonian) = size(first(h.harmonics).h)
 Base.size(h::HamiltonianHarmonic, n) = size(h.h, n)
@@ -1266,7 +1269,7 @@ function unitcell(ham::Hamiltonian{LA,L}; modifiers = (), mincoordination = miss
     mapping .= 0
     foreach_supersite((s, oldi, olddn, newi) -> mapping[oldi, Tuple(olddn)...] = newi, slat´)
 
-    dim = nsites(sc)
+    dim = nsites(slat´.supercell)
     B = blocktype(ham)
     S = typeof(SparseMatrixBuilder{B}(dim, dim))
     harmonic_builders = HamiltonianHarmonic{L´,B,S}[]
@@ -1292,24 +1295,25 @@ function unitcell(ham::Hamiltonian{LA,L}; modifiers = (), mincoordination = miss
         foreach(h -> finalizecolumn!(h.h), harmonic_builders)
     end
     harmonics = [HamiltonianHarmonic(h.dn, sparse(h.h)) for h in harmonic_builders]
-    unitlat = unitcell(slat)
+    unitlat = unitcell(slat´)
     orbs = ham.orbitals
     return Hamiltonian(unitlat, harmonics, orbs)
 end
 
 filtered_superlat!(sham, ::Missing, args...) = sham.lattice
 filtered_superlat!(sham, mc::Int, args...) =
-    _filtered_superlat!(sham, mc, expanded_supercell_mask(sham.lattice.supercell), args...)
+    _filtered_superlat!(expand_supercell_mask(sham), mc, args...)
 
-function _filtered_superlat!(sham::Hamiltonian{LA,L}, mincoord, mask, args...) where {LA,L}
+function _filtered_superlat!(sham::Hamiltonian{LA,L}, mincoord, args...) where {LA,L}
     slat = sham.lattice
     sc = slat.supercell
+    mask = sc.mask
     if mincoord > 0
         delsites = NTuple{L+1,Int}[]
         while true
             foreach_supersite(sham.lattice) do _, source_i, source_dn, _
                 nn = num_neighbors_supercell(sham.harmonics, source_i, source_dn, mask, args...)
-                nn >= mincoord || push!(delsites, (source_i, Tuple(source_dn)...))
+                nn < mincoord && push!(delsites, (source_i, Tuple(source_dn)...))
             end
             foreach(p -> mask[p...] = false, delsites)
             isempty(delsites) && break

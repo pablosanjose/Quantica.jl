@@ -360,9 +360,9 @@ function boolean_mask(f, mask1, mask2, indranges)
     return mask
 end
 
-expanded_supercell_mask(s::Supercell{L,L´,Missing}) where {L,L´} =
-    ones(Bool, s.sites, s.cells.indices...)
-expanded_supercell_mask(s::Supercell{L,L´}) where {L,L´} = s.mask
+expand_supercell_mask(s::Supercell{L,L´,Missing}) where {L,L´} =
+    Supercell(s.matrix, s.sites, s.cells, ones(Bool, s.sites, s.cells.indices...))
+expand_supercell_mask(s::Supercell{L,L´}) where {L,L´} = s
 
 #######################################################################
 # Superlattice
@@ -474,6 +474,9 @@ ismasked(lat::Superlattice) = ismasked(lat.supercell)
 
 maskranges(lat::Superlattice) = (1:nsites(lat), lat.supercell.cells.indices...)
 maskranges(lat::Lattice) = (1:nsites(lat),)
+
+expand_supercell_mask(s::Superlattice) =
+    Superlattice(s.bravais, s.unitcell, expand_supercell_mask(s.supercell))
 
 """
     transform!(f::Function, lat::Lattice)
