@@ -696,6 +696,9 @@ function flatsize(h::Hamiltonian)
     return (n, n)
 end
 
+expand_supercell_mask(h::Hamiltonian{<:Superlattice}) =
+    Hamiltonian(expand_supercell_mask(h.lattice), h.harmonics, h.orbitals)
+
 Base.size(h::Hamiltonian, n) = size(first(h.harmonics).h, n)
 Base.size(h::Hamiltonian) = size(first(h.harmonics).h)
 Base.size(h::HamiltonianHarmonic, n) = size(h.h, n)
@@ -1246,49 +1249,103 @@ function supercell(ham::Hamiltonian, args...; kw...)
     return Hamiltonian(slat, ham.harmonics, ham.orbitals)
 end
 
-function unitcell(ham::Hamiltonian{<:Lattice}, args...; modifiers = (), kw...)
+function unitcell(ham::Hamiltonian{<:Lattice}, args...; modifiers = (), mincoordination = missing, kw...)
     sham = supercell(ham, args...; kw...)
-    return unitcell(sham; modifiers = modifiers)
+    return unitcell(sham; modifiers = modifiers, mincoordination = mincoordination)
 end
 
-function unitcell(ham::Hamiltonian{LA,L}; modifiers = ()) where {E,L,T,L´,LA<:Superlattice{E,L,T,L´}}
+function unitcell(ham::Hamiltonian{LA,L}; modifiers = (), mincoordination = missing) where {E,L,T,L´,LA<:Superlattice{E,L,T,L´}}
     slat = ham.lattice
     sc = slat.supercell
     supercell_dn = r_to_dn(slat, sc.matrix, SVector{L´}(1:L´))
     pos = allsitepositions(slat)
     br = bravais(slat)
     modifiers´ = resolve.(ensuretuple(modifiers), Ref(slat))
-    mapping = OffsetArray{Int}(undef, sc.sites, sc.cells.indices...) # store supersite indices newi
+
+    # Build a version of slat that has a filtered supercell mask according to mincoordination
+    slat´ = filtered_superlat!(ham, mincoordination, supercell_dn, br, sc.matrix, pos)
+    # store supersite indices newi
+    mapping = OffsetArray{Int}(undef, sc.sites, sc.cells.indices...)
     mapping .= 0
-    foreach_supersite((s, oldi, olddn, newi) -> mapping[oldi, Tuple(olddn)...] = newi, slat)
-    dim = nsites(sc)
+    foreach_supersite((s, oldi, olddn, newi) -> mapping[oldi, Tuple(olddn)...] = newi, slat´)
+
+    dim = nsites(slat´.supercell)
     B = blocktype(ham)
     S = typeof(SparseMatrixBuilder{B}(dim, dim))
     harmonic_builders = HamiltonianHarmonic{L´,B,S}[]
-    foreach_supersite(slat) do s, source_i, source_dn, newcol
+
+    foreach_supersite(slat´) do s, source_i, source_dn, newcol
         for oldh in ham.harmonics
             rows = rowvals(oldh.h)
             vals = nonzeros(oldh.h)
             target_dn = source_dn + oldh.dn
             for p in nzrange(oldh.h, source_i)
                 target_i = rows[p]
-                r = pos[target_i] + br * target_dn
-                super_dn = supercell_dn(r)
-                wrapped_dn = wrap_dn(target_dn, super_dn, sc.matrix)
+                wrapped_dn, super_dn = wrap_super_dn(target_i, target_dn, supercell_dn, br, sc.matrix, pos)
                 # check: wrapped_dn could exit bounding box along non-periodic direction
                 checkbounds(Bool, mapping, target_i, Tuple(wrapped_dn)...) || continue
                 newh = get_or_push!(harmonic_builders, super_dn, dim, newcol)
                 newrow = mapping[target_i, Tuple(wrapped_dn)...]
-                val = applymodifiers(vals[p], slat, (source_i, target_i), (source_dn, target_dn), modifiers´...)
-                iszero(newrow) || pushtocolumn!(newh.h, newrow, val)
+                if !iszero(newrow)
+                    val = applymodifiers(vals[p], slat, (source_i, target_i), (source_dn, target_dn), modifiers´...)
+                    pushtocolumn!(newh.h, newrow, val)
+                end
             end
         end
         foreach(h -> finalizecolumn!(h.h), harmonic_builders)
     end
     harmonics = [HamiltonianHarmonic(h.dn, sparse(h.h)) for h in harmonic_builders]
-    unitlat = unitcell(slat)
+    unitlat = unitcell(slat´)
     orbs = ham.orbitals
     return Hamiltonian(unitlat, harmonics, orbs)
+end
+
+filtered_superlat!(sham, ::Missing, args...) = sham.lattice
+filtered_superlat!(sham, mc::Int, args...) =
+    _filtered_superlat!(expand_supercell_mask(sham), mc, args...)
+
+function _filtered_superlat!(sham::Hamiltonian{LA,L}, mincoord, args...) where {LA,L}
+    slat = sham.lattice
+    sc = slat.supercell
+    mask = sc.mask
+    if mincoord > 0
+        delsites = NTuple{L+1,Int}[]
+        while true
+            foreach_supersite(sham.lattice) do _, source_i, source_dn, _
+                nn = num_neighbors_supercell(sham.harmonics, source_i, source_dn, mask, args...)
+                nn < mincoord && push!(delsites, (source_i, Tuple(source_dn)...))
+            end
+            foreach(p -> mask[p...] = false, delsites)
+            isempty(delsites) && break
+            resize!(delsites, 0)
+        end
+    end
+    sc = Supercell(sc.matrix, sc.sites, sc.cells, mask)
+    return Superlattice(slat.bravais, slat.unitcell, sc)
+end
+
+function num_neighbors_supercell(hhs, source_i, source_dn, mask, args...)
+    nn = 0
+    for hh in hhs
+        ptrs = nzrange(hh.h, source_i)
+        rows = rowvals(hh.h)
+        target_dn = source_dn + hh.dn
+        for p in nzrange(hh.h, source_i)
+            target_i = rows[p]
+            wrapped_dn, _ = wrap_super_dn(target_i, target_dn, args...)
+            isonsite = rows[p] == source_i && iszero(hh.dn)
+            isincell = isinmask(mask, rows[p], Tuple(wrapped_dn)...)
+            nn += !isonsite && isincell
+        end
+    end
+    return nn
+end
+
+function wrap_super_dn(target_i, target_dn, supercell_dn, br, smat, pos)
+    r = pos[target_i] + br * target_dn
+    super_dn = supercell_dn(r)
+    wrapped_dn = target_dn - smat * super_dn
+    return wrapped_dn, super_dn
 end
 
 function get_or_push!(hs::Vector{<:HamiltonianHarmonic{L,B,<:SparseMatrixBuilder}}, dn, dim, currentcol) where {L,B}
@@ -1300,8 +1357,6 @@ function get_or_push!(hs::Vector{<:HamiltonianHarmonic{L,B,<:SparseMatrixBuilder
     push!(hs, newh)
     return newh
 end
-
-wrap_dn(olddn::SVector, newdn::SVector, supercell::SMatrix) = olddn - supercell * newdn
 
 applymodifiers(val, lat, inds, dns) = val
 
