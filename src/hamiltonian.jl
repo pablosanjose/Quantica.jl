@@ -1301,20 +1301,20 @@ filtered_superlat!(sham, ::Missing, args...) = sham.lattice
 filtered_superlat!(sham, mc::Int, args...) =
     _filtered_superlat!(sham, mc, expanded_supercell_mask(sham.lattice.supercell), args...)
 
-# function _filtered_superlat!(sham::Hamiltonian{LA,L}, mincoord::Int, mask::OffsetArray, supercell_dn::Function, br::SMatrix, smat::SMatrix, pos::Vector) where {LA,L}
 function _filtered_superlat!(sham::Hamiltonian{LA,L}, mincoord, mask, args...) where {LA,L}
     slat = sham.lattice
     sc = slat.supercell
-    mincoord > 0 || return sc
-    delsites = NTuple{L+1,Int}[]
-    while true
-        foreach_supersite(sham.lattice) do _, source_i, source_dn, _
-            nn = num_neighbors_supercell(sham.harmonics, source_i, source_dn, mask, args...)
-            nn >= mincoord || push!(delsites, (source_i, Tuple(source_dn)...))
+    if mincoord > 0
+        delsites = NTuple{L+1,Int}[]
+        while true
+            foreach_supersite(sham.lattice) do _, source_i, source_dn, _
+                nn = num_neighbors_supercell(sham.harmonics, source_i, source_dn, mask, args...)
+                nn >= mincoord || push!(delsites, (source_i, Tuple(source_dn)...))
+            end
+            foreach(p -> mask[p...] = false, delsites)
+            isempty(delsites) && break
+            resize!(delsites, 0)
         end
-        foreach(p -> mask[p...] = false, delsites)
-        isempty(delsites) && break
-        resize!(delsites, 0)
     end
     sc = Supercell(sc.matrix, sc.sites, sc.cells, mask)
     return Superlattice(slat.bravais, slat.unitcell, sc)
@@ -1328,7 +1328,6 @@ function num_neighbors_supercell(hhs, source_i, source_dn, mask, args...)
         target_dn = source_dn + hh.dn
         for p in nzrange(hh.h, source_i)
             target_i = rows[p]
-            # global tmp = (target_i, target_dn, supercell_dn, br, smat, pos)
             wrapped_dn, _ = wrap_super_dn(target_i, target_dn, args...)
             isonsite = rows[p] == source_i && iszero(hh.dn)
             isincell = isinmask(mask, rows[p], Tuple(wrapped_dn)...)
