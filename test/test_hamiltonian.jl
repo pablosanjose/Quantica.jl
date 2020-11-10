@@ -81,6 +81,8 @@ end
     h = LP.honeycomb() |> hamiltonian(hopping(1)) |> unitcell(10, region = !RP.circle(2, (0,8)))
     h´ = h |> unitcell(1, mincoordination = 2)
     @test nsites(h´) == nsites(h) - 1
+    h = LP.square() |> hamiltonian(hopping(0)) |> unitcell(4, mincoordination = 2)
+    @test nsites(h) == 0
 end
 
 @testset "hamiltonian wrap" begin
