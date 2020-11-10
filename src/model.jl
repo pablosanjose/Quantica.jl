@@ -476,8 +476,8 @@ TightbindingModel(ts::TightbindingModelTerm...) = TightbindingModel(ts)
 
 # External API #
 
-Base.:*(x, m::TightbindingModel) = TightbindingModel(x .* m.terms)
-Base.:*(m::TightbindingModel, x) = x * m
+Base.:*(x::Number, m::TightbindingModel) = TightbindingModel(x .* m.terms)
+Base.:*(m::TightbindingModel, x::Number) = x * m
 Base.:-(m::TightbindingModel) = TightbindingModel((-1) .* m.terms)
 
 Base.:+(m::TightbindingModel, t::TightbindingModel) = TightbindingModel((m.terms..., t.terms...))
@@ -743,10 +743,10 @@ _onlyhoppings(s, t::HoppingTerm, args...) =
     (HoppingTerm(t, merge_non_missing(t.selector, s)), _onlyhoppings(s, args...)...)
 _onlyhoppings(s) = ()
 
-Base.:*(x, o::OnsiteTerm) =
+Base.:*(x::Number, o::OnsiteTerm) =
     OnsiteTerm(o.o, o.selector, x * o.coefficient)
-Base.:*(x, t::HoppingTerm) = HoppingTerm(t.t, t.selector, x * t.coefficient)
-Base.:*(t::TightbindingModelTerm, x) = x * t
+Base.:*(x::Number, t::HoppingTerm) = HoppingTerm(t.t, t.selector, x * t.coefficient)
+Base.:*(t::TightbindingModelTerm, x::Number) = x * t
 Base.:-(t::TightbindingModelTerm) = (-1) * t
 
 Base.adjoint(t::TightbindingModel) = TightbindingModel(adjoint.(terms(t)))
@@ -1003,8 +1003,8 @@ KetModel{2}: model with 2 terms
 """
 ket(f; normalized = true, maporbitals::Bool = false, kw...) = KetModel(onsite(f; kw...), normalized, Val(maporbitals))
 
-Base.:*(x, k::KetModel) = KetModel(k.model * x, k.normalized, k.maporbitals)
-Base.:*(k::KetModel, x) = KetModel(x * k.model, k.normalized, k.maporbitals)
+Base.:*(x::Number, k::KetModel) = KetModel(k.model * x, k.normalized, k.maporbitals)
+Base.:*(k::KetModel, x::Number) = KetModel(x * k.model, k.normalized, k.maporbitals)
 Base.:-(k::KetModel) = KetModel(-k.model, k.normalized, k.maporbitals)
 Base.:-(k1::KetModel, k2::KetModel) = KetModel(k1.model - k2.model, k1.normalized && k2.normalized, _andVal(k1.maporbitals, k2.maporbitals))
 Base.:+(k1::KetModel, k2::KetModel) = KetModel(k1.model + k2.model, k1.normalized && k2.normalized, _andVal(k1.maporbitals, k2.maporbitals))
