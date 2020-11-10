@@ -791,11 +791,15 @@ Convert Superlattice `slat` into a lattice with its unit cell matching `slat`'s 
     unitcell(h::Hamiltonian, v...; mincoordination, modifiers = (), kw...)
 
 Transforms the `Lattice` of `h` to have a larger unitcell, while expanding the Hamiltonian
-accordingly. A nonzero `mincoordination` indicates a minimum number of hopping neighbors
-required for sites to be included in the resulting unit cell. The modifiers (a tuple of
-`ElementModifier`s, either `@onsite!` or `@hopping!` with no free parameters) will be
-applied to onsite and hoppings as the hamiltonian is expanded. See `@onsite!` and
-`@hopping!` for details
+accordingly.
+
+A nonzero `mincoordination` indicates a minimum number of nonzero hopping neighbors required
+for sites to be included in the resulting unit cell. Sites with inferior coordination will
+be removed recursively, until all remaining satisfy `mincoordination`.
+
+The `modifiers` (a tuple of `ElementModifier`s, either `@onsite!` or `@hopping!` with no
+free parameters) will be applied to onsite and hoppings as the hamiltonian is expanded. See
+`@onsite!` and `@hopping!` for details.
 
 Note: for performance reasons, in sparse hamiltonians only the stored onsites and hoppings
 will be transformed by `ElementModifier`s, so you might want to add zero onsites or hoppings

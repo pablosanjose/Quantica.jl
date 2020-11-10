@@ -1329,13 +1329,15 @@ function num_neighbors_supercell(hhs, source_i, source_dn, mask, args...)
     for hh in hhs
         ptrs = nzrange(hh.h, source_i)
         rows = rowvals(hh.h)
+        nzel = nonzeros(hh.h)
         target_dn = source_dn + hh.dn
         for p in nzrange(hh.h, source_i)
             target_i = rows[p]
             wrapped_dn, _ = wrap_super_dn(target_i, target_dn, args...)
             isonsite = rows[p] == source_i && iszero(hh.dn)
             isincell = isinmask(mask, rows[p], Tuple(wrapped_dn)...)
-            nn += !isonsite && isincell
+            isnonzero = !iszero(nzel[p])
+            nn += !isonsite && isincell && isnonzero
         end
     end
     return nn
