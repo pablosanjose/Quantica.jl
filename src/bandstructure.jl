@@ -1,7 +1,7 @@
 #######################################################################
 # Spectrum
 #######################################################################
-struct Subspace{C,T,S<:SubArray{C,2}}
+struct Subspace{C,T,S<:AbstractMatrix{C}}
     energy::T
     basis::S
 end
@@ -184,12 +184,19 @@ struct SimplexIndexer{D,T}
     sptrs::Array{UnitRange{Int},D}  # range of indices of sverts and svecs for each simplex CartesianIndex in base mesh
 end
 
-struct Bandstructure{D,C,T,S<:SubArray{C,2},D´,B<:BandMesh{D´,T},M<:Diagonalizer}   # D is dimension of base mesh, D´ = D+1
-    bands::Vector{B}
-    sverts::Vector{NTuple{D´,SVector{D´,T}}}
-    sbases::Vector{NTuple{D´,S}}
-    indexers::Vector{SimplexIndexer{D,T}}
-    diag::M
+struct Bandstructure{D,C,T,S<:AbstractMatrix{C},E,D´,B<:BandMesh{D´,T},M<:Diagonalizer}   # D is dimension of base mesh, D´ = D+1
+    bands::Vector{B}                                # band meshes (vertices + adjacencies)
+    sverts::Vector{NTuple{D´,SVector{D´,T}}}        # (base-coords..., energy) of each simplex vertex (groupings of bands.verts)
+    sbases::Vector{NTuple{D´,S}}                    # basis on each simplex vertex, possibly degenerate
+    sprojs::Vector{NTuple{D´,Matrix{E}}}            # projection of basis on each simplex vertex to interpolate
+    indexers::Vector{SimplexIndexer{D,T}}           # provides ranges of simplices above corresponding to a given base-mesh minicuboid
+    diag::M                                         # diagonalizer that can be used to add additional base-meshes for refinement
+end
+
+function Bandstructure(bands, sverts, sbases::Vector{NTuple{D´,S}}, indexers, diag) where {D´,C,S<:AbstractMatrix{C}}
+    E = eltype(C)
+    sprojs = Vector{NTuple{D´,Matrix{E}}}(undef, length(sbases))
+    return Bandstructure(bands, sverts, sbases, sprojs, indexers, diag)
 end
 
 function Base.show(io::IO, bs::Bandstructure)
@@ -349,82 +356,6 @@ nsimplices(bs::Bandstructure) = sum(nsimplices, bands(bs))
 
 nbands(bs::Bandstructure) = length(bands(bs))
 
-## Project simplices
-
-## Indexing
-
-Base.getindex(bs::Bandstructure, ϕs::Tuple; around = missing) = interpolate_bandstructure(bs, ϕs, around)
-
-function interpolate_bandstructure(bs::Bandstructure{D,C,T,S}, ϕs::NTuple{D2,Any}, around) where {D,C,T,S}
-    D === D2 || throw(ArgumentError("Bandstructure needs a NTuple{$D} of base coordinates for interpolation"))
-    found = false
-    inds = zero.(Int, ϕs)
-    indexer = first(bs.indexers)
-    for outer indexer in bs.indexers
-        inds = find_basemesh_interval.(ϕs, Ref(indexer.basemesh.ticks))
-        found = !any(iszero, inds)
-        found && break
-    end
-    found || throw(ArgumentError("Cannot interpolate $ϕs within any of the bandstructure's base meshes"))
-    rng = indexer.sptrs[CartesianIndex(inds)]
-    subs = Subspace{C,T,S}[]
-    for i in rng
-        sub = interpolate_subspace(ϕs, bs.sverts[i], bs.bases[i])
-        sub === nothing && continue
-        push!(subs, sub)
-    end
-    filter_around!(subs, around)
-    return subs
-end
-
-function find_basemesh_interval(ϕ, ticks)
-    @inbounds for m = 1:length(ticks)-1
-        ticks[m] <= ϕ <= ticks[m+1] && return m
-    end
-    return 0
-end
-
-filter_around!(ss, ε0::Number) = filter_around!(ss, ε0, 1)
-filter_around!(ss, (ε0, n)::Tuple) = filter_around!(ss, ε0, 1:n)
-filter_around!(ss::Vector{<:Subspace}, ε0, which) = partialsort!(ss, which, by = s -> abs(s.energy - ε0))
-
-function interpolate_subspace(ϕtup, verts, bases)
-    dverts = tuple_diff_first(verts)
-    dbase = Base.front.(dverts)
-    smat = hcat(dbase...)
-    dϕvec = SVector(ϕtup) - first(bverts)
-    dϕinds = inv(smat) * dϕvec
-    insimplex(dϕinds) || return nothing
-    dϵs = SVector(last.(dverts))
-    ϵ0 = last(first(verts))
-    energy = ϵ0 + dot(dϕinds, dϵs)
-    basis = inerpolate_subspace_basis(dϕinds, bases)
-    return Subspace(energy, basis)
-end
-
-@inbounds insimplex(dϕinds) = sum(dϕinds) <= 1 && all(0 <= i <= 1, dϕinds)
-
-function inerpolate_subspace_basis(dϕinds, bases)
-    firstbasis = first(bases)
-    projbasis = firstbasis
-    for basis in Base.tail(bases)
-        size(basis, 2) < size(projbasis, 2) && (projbasis = basis)
-    end
-    ibasis = zero(projbasis)
-    # build ibasis = P(bases[1]) + dϕindsᵢ ⋅ [P(bases[i+1])-P(bases[1])], where P is projection on projbasis
-    add_projection!(ibasis, firstbasis, projbasis, 1 - sum(dϕinds))
-    for (dϕind, basis) in zip(dϕinds, Base.tail(bases))
-        add_projection!(ibasis, basis, projbasis, dϕind)
-    end
-    return ibasis
-end
-
-function add_projection!(ibasis, basis, projbasis, coeff)
-    qrmat = similar(basis, size(basis, 1), size(projbasis, 1) + size(basis, 1))
-
-
-end
-
 """
     bands(bs::Bandstructure[, i])
 
@@ -469,6 +400,63 @@ function transform!((fk, fε)::Tuple{Function,Function}, bs::Bandstructure)
 end
 
 #######################################################################
+# isometric and Brillouin zone points
+#######################################################################
+function isometric(h::Hamiltonian)
+    r = qr(bravais(h)).R
+    r = r * sign(r[1,1])
+    ibr = inv(r')
+    return ϕs -> ibr * ϕs
+end
+
+isometric(h::Hamiltonian{<:Any,L}, nodes) where {L} = _isometric(h, parsenode.(nodes, Val(L)))
+
+_isometric(h, pts::Tuple) = _isometric(h, [pts...])
+
+function _isometric(h, pts::Vector)
+    br = bravais(h)
+    pts´ = map(p -> br * p, pts)
+    pathlength = pushfirst!(cumsum(norm.(diff(pts))), 0.0)
+    isometric = piecewise_mapping(pathlength)
+    return isometric
+end
+
+nodeindices(nodes::NTuple{N,Any}) where {N} = ntuple(i -> i-1, Val(N))
+
+piecewise_mapping(nodes, ::Val{N}) where {N} = piecewise_mapping(parsenode.(nodes, Val(N)))
+
+function piecewise_mapping(pts)
+    N = length(pts) # could be a Tuple or a different container
+    mapping = x -> begin
+        x´ = clamp(only(x), 0, N-1)
+        i = min(floor(Int, x´), N-2) + 1
+        p = pts[i] + (x´ - i + 1) * (pts[i+1] - pts[i])
+        return p
+    end
+    return mapping
+end
+
+parsenode(pt::SVector, ::Val{L}) where {L} = padright(pt, Val(L))
+parsenode(pt::Tuple, val) = parsenode(SVector(float.(pt)), val)
+
+function parsenode(node::Symbol, val)
+    pt = get(BZpoints, node, missing)
+    pt === missing && throw(ArgumentError("Unknown Brillouin zone point $pt, use one of $(keys(BZpoints))"))
+    pt´ = parsenode(pt, val)
+    return pt´
+end
+
+const BZpoints =
+    ( Γ  = (0,)
+    , X  = (pi,)
+    , Y  = (0, pi)
+    , Z  = (0, 0, pi)
+    , K  = (2pi/3, -2pi/3)
+    , K´ = (4pi/3, 2pi/3)
+    , M  = (pi, 0)
+    )
+
+#######################################################################
 # bandstructure building
 #######################################################################
 function bandstructure(h::Hamiltonian{<:Any, L}; subticks = 13, kw...) where {L}
@@ -486,9 +474,8 @@ end
 
 function bandstructure(h::Union{Hamiltonian,ParametricHamiltonian}, basemesh::CuboidMesh;
                        method = LinearAlgebraPackage(), minoverlap = 0.3, mapping = missing, transform = missing, showprogress = true)
-    # ishermitian(h) || throw(ArgumentError("Hamiltonian must be hermitian"))
     matrix = similarmatrix(h, method_matrixtype(method, h))
-    matrixf(vertex) = bloch!(matrix, h, map_phiparams(mapping, vertex))
+    matrixf = HamiltonianBlochFunctor(h, matrix, mapping)
     diag = diagonalizer(matrixf, matrix, method, minoverlap)
     b = bandstructure(diag, basemesh, showprogress)
     if transform !== missing
@@ -570,7 +557,7 @@ struct BandCuboidIndex{D}
     colidx::Int
 end
 
-Base.Tuple(ci::BaseCuboidIndex) = (Tuple(ci.baseidx)..., ci.colidx)
+Base.Tuple(ci::BandCuboidIndex) = (Tuple(ci.baseidx)..., ci.colidx)
 
 function bandstructure_knit(diag, basemesh::CuboidMesh{D,T}, subspaces::Array{Vector{S},D}, showprog = false) where {D,T,C,S<:Subspace{C}}
     nverts = sum(length, subspaces)
@@ -776,7 +763,7 @@ function bandstructure_collect(subspaces::Array{Vector{Subspace{C,T,S}},D}, band
         for s in band.sinds
             scounter += 1
             let ioffset = ioffset  # circumvent boxing, JuliaLang/#15276
-                s0inds[scounter] = minimum(i -> Tuple(cuboidinds[ioffset + i]), s)
+                s0inds[scounter] = minimum(i -> cuboidinds[ioffset + i].baseidx, s)
                 sverts[scounter] = ntuple(i -> band.verts[s[i]], Val(D+1))
                 sbases[scounter] = ntuple(Val(D+1)) do i
                     c = cuboidinds[ioffset + s[i]]
@@ -801,58 +788,102 @@ function bandstructure_collect(subspaces::Array{Vector{Subspace{C,T,S}},D}, band
 end
 
 #######################################################################
-# isometric and Brillouin zone points
+# Bandstructure indexing
 #######################################################################
-function isometric(h::Hamiltonian)
-    r = qr(bravais(h)).R
-    r = r * sign(r[1,1])
-    ibr = inv(r')
-    return ϕs -> ibr * ϕs
-end
+Base.getindex(bs::Bandstructure, ϕs::Tuple; around = missing) = interpolate_bandstructure(bs, ϕs, around)
 
-isometric(h::Hamiltonian{<:Any,L}, nodes) where {L} = _isometric(h, parsenode.(nodes, Val(L)))
-
-_isometric(h, pts::Tuple) = _isometric(h, [pts...])
-
-function _isometric(h, pts::Vector)
-    br = bravais(h)
-    pts´ = map(p -> br * p, pts)
-    pathlength = pushfirst!(cumsum(norm.(diff(pts))), 0.0)
-    isometric = piecewise_mapping(pathlength)
-    return isometric
-end
-
-nodeindices(nodes::NTuple{N,Any}) where {N} = ntuple(i -> i-1, Val(N))
-
-piecewise_mapping(nodes, ::Val{N}) where {N} = piecewise_mapping(parsenode.(nodes, Val(N)))
-
-function piecewise_mapping(pts)
-    N = length(pts) # could be a Tuple or a different container
-    mapping = x -> begin
-        x´ = clamp(only(x), 0, N-1)
-        i = min(floor(Int, x´), N-2) + 1
-        p = pts[i] + (x´ - i + 1) * (pts[i+1] - pts[i])
-        return p
+function interpolate_bandstructure(bs::Bandstructure{D,C,T}, ϕs, around) where {D,C,T}
+    D == length(ϕs) || throw(ArgumentError("Bandstructure needs a NTuple{$D} of base coordinates for interpolation"))
+    found = false
+    inds = filltuple(0, Val(D))
+    indexer = first(bs.indexers)
+    for outer indexer in bs.indexers
+        inds = find_basemesh_interval.(ϕs, indexer.basemesh.ticks)
+        found = !any(iszero, inds)
+        found && break
     end
-    return mapping
+    found || throw(ArgumentError("Cannot interpolate $ϕs within any of the bandstructure's base meshes"))
+    rng = indexer.sptrs[CartesianIndex(inds)]
+    subs = Subspace{C,T,Matrix{C}}[]
+    for i in rng
+        sprojs = get_or_add_projection_basis(bs, i)
+        sub = interpolate_subspace(ϕs, bs.sverts[i], bs.sbases[i], sprojs)
+        sub === nothing && continue
+        push!(subs, sub)
+    end
+    subs´ = filter_around!(subs, around)
+    return subs´
 end
 
-parsenode(pt::SVector, ::Val{L}) where {L} = padright(pt, Val(L))
-parsenode(pt::Tuple, val) = parsenode(SVector(float.(pt)), val)
-
-function parsenode(node::Symbol, val)
-    pt = get(BZpoints, node, missing)
-    pt === missing && throw(ArgumentError("Unknown Brillouin zone point $pt, use one of $(keys(BZpoints))"))
-    pt´ = parsenode(pt, val)
-    return pt´
+function find_basemesh_interval(ϕ, ticks)
+    @inbounds for m = 1:length(ticks)-1
+        ticks[m] <= ϕ <= ticks[m+1] && return m
+    end
+    return 0
 end
 
-const BZpoints =
-    ( Γ  = (0,)
-    , X  = (pi,)
-    , Y  = (0, pi)
-    , Z  = (0, 0, pi)
-    , K  = (2pi/3, -2pi/3)
-    , K´ = (4pi/3, 2pi/3)
-    , M  = (pi, 0)
-    )
+function get_or_add_projection_basis(bs, i)
+    isassigned(bs.sprojs, i) && return bs.sprojs[i]
+    bases = bs.sbases[i]
+    firstbasis = first(bases)
+    projbasis = firstbasis
+    for basis in Base.tail(bases)
+        size(basis, 2) < size(projbasis, 2) && (projbasis = basis)
+    end
+    sprojs = projection_basis.(bases, Ref(projbasis))
+    bs.sprojs[i] = sprojs
+    return sprojs
+end
+
+# Projects src onto dst, and finds an orthonormal basis of the projection subspace
+function projection_basis(dst, src)
+    t = dst' * src  # n´ x n matrix, so that dst * t spans the projection subspace
+    src === dst && return t  # assumes orthonormal src == dst
+    n = size(src, 2)
+    n´ = size(dst, 2)
+    @inbounds for j in 1:n
+        col = view(t, :, j)
+        for j´ in 1:j-1
+            col´ = view(t, :, j´)
+            r = dot(col´, col)/dot(col´, col´)
+            col .-= r .* col´
+        end
+        normalize!(col)
+    end
+    return t
+end
+
+function interpolate_subspace(ϕtup, verts, bases, projs)
+    dverts = tuple_minus_first(verts)
+    dbase = frontSVector.(dverts)
+    smat = hcat(dbase...)
+    dϕvec = SVector(ϕtup) - frontSVector(first(verts))
+    dϕinds = inv(smat) * dϕvec
+    insimplex(dϕinds) || return nothing
+    dϵs = SVector(last.(dverts))
+    ϵ0 = last(first(verts))
+    energy = ϵ0 + dot(dϕinds, dϵs)
+    basis = inerpolate_subspace_basis(dϕinds, bases, projs)
+    return Subspace(energy, basis)
+end
+
+@inbounds insimplex(dϕinds) = sum(dϕinds) <= 1 && all(i -> 0 <= i < 1, dϕinds)
+
+function inerpolate_subspace_basis(dϕinds, bases, projs)
+    ibasis = first(bases) * first(projs)
+    ibasis .*= (1 - sum(dϕinds))
+    for i in 2:length(bases)
+        mul!(ibasis, bases[i], projs[i], dϕinds[i-1], 1)
+    end
+    return ibasis
+end
+
+filter_around!(ss, ::Missing) = sort!(ss; by = s -> s.energy, alg = Base.DEFAULT_UNSTABLE)
+filter_around!(ss, ε0::Number) = filter_around!(ss, ε0, 1)
+
+function filter_around!(ss, (ε0, n)::Tuple)
+    0 <= n <= length(ss) || throw(ArgumentError("Cannot retrieve more than $(length(ss)) subspaces"))
+    return filter_around!(ss, ε0, 1:n)
+end
+
+filter_around!(ss::Vector{<:Subspace}, ε0, which) = partialsort!(ss, which; by = s -> abs(s.energy - ε0))

@@ -60,8 +60,10 @@ function tuplepairs(c::Tuple, r::NTuple{V}) where {V}
 end
 
 # Base.tail(t) .- first(t) but avoiding rounding errors in difference
-tuple_diff_first(t::Tuple{T,Vararg{T,D}}) where {D,T} =
+tuple_minus_first(t::Tuple{T,Vararg{T,D}}) where {D,T} =
     ntuple(i -> ifelse(t[i+1] ≈ t[1], zero(T), t[i+1] - t[1]), Val(D))
+
+frontSVector(s::SVector) = SVector(Base.front(Tuple(s)))
 
 mergetuples(ts...) = keys(merge(tonamedtuple.(ts)...))
 tonamedtuple(ts::Val{T}) where {T} = NamedTuple{T}(filltuple(0,T))
