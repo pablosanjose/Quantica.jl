@@ -34,8 +34,10 @@ _convert_energy(ϵs, rng, ::Type{T}) where {T<:Complex} = mean(i -> T(ϵs[i]), r
 Base.iterate(s::Subspace) = s.energy, Val(:basis)
 Base.iterate(s::Subspace, ::Val{:basis}) = s.basis, Val(:done)
 Base.iterate(::Subspace, ::Val{:done}) = nothing
+Base.IteratorSize(::Subspace) = Base.HasLength()
 Base.first(s::Subspace) = s.energy
 Base.last(s::Subspace) = s.basis
+Base.length(s::Subspace) = 2
 
 struct Spectrum{C,T,E<:AbstractVector{T},A<:AbstractMatrix{C}}
     energies::E
@@ -300,8 +302,7 @@ linear interpolation of each band at base-mesh coordinates `φs`.
     bs[(φs...), around = (0.2, 10)] : the ten interpolated subspaces at `φs` with energies closest to 0.2
 
 The eigenenergy `ε` and subspace basis `ψs` of a `sub::Subspace` can themselves be obtained
-via destructuring, `ε, ψs = sub`, or `ε = first(sub), ψs = last(sub)`. Also, a single
-`BandMesh` as obtained with e.g. `b = bands(bs, 2)` can be indexed as `b[(φs...), ...]`.
+via destructuring, `ε, ψs = sub`, or `ε = first(sub), ψs = last(sub)`.
 
 # Examples
 ```jldoctest
@@ -511,12 +512,12 @@ sanitize_transform((f,_)::Tuple{Function,Missing}, args...) = (f, identity)
 samplematrix(matrixf, basemesh) = matrixf(Tuple(first(vertices(basemesh))))
 
 function bandstructure(diag::Diagonalizer, basemesh::CuboidMesh, showprogress)
-    # Step 1/3 - Diagonalising:
+    # Step 1/2 - Diagonalising:
     subspaces = bandstructure_diagonalize(diag, basemesh, showprogress)
-    # Step 2/3 - Knitting bands:
+    # Step 2/2 - Knitting bands:
     bands, cuboidinds, linearinds = bandstructure_knit(diag, basemesh, subspaces, showprogress)
-    # Step 3/3 - Collecting simplices:
-    sverts, sbases, sptrs = bandstructure_collect(subspaces, bands, cuboidinds, showprogress)
+
+    sverts, sbases, sptrs = bandstructure_collect(subspaces, bands, cuboidinds)
 
     indexers = [SimplexIndexer(basemesh, sptrs)]
 
@@ -527,7 +528,7 @@ end
 # bandstructure_diagonalize
 #######################################################################
 function bandstructure_diagonalize(diag, basemesh::CuboidMesh, showprogress = false)
-    prog = Progress(length(basemesh), "Step 1/3 - Diagonalising: ")
+    prog = Progress(length(basemesh), "Step 1/2 - Diagonalising: ")
     subspaces = [build_subspaces(diag, vertex, showprogress, prog) for vertex in vertices(basemesh)]
     return subspaces
 end
@@ -561,7 +562,7 @@ Base.Tuple(ci::BandCuboidIndex) = (Tuple(ci.baseidx)..., ci.colidx)
 
 function bandstructure_knit(diag, basemesh::CuboidMesh{D,T}, subspaces::Array{Vector{S},D}, showprog = false) where {D,T,C,S<:Subspace{C}}
     nverts = sum(length, subspaces)
-    prog = Progress(nverts, "Step 2/3 - Knitting bands: ")
+    prog = Progress(nverts, "Step 2/2 - Knitting bands: ")
 
     bands = BandMesh{D+1,T}[]
     pending = Tuple{BandCuboidIndex{D},BandCuboidIndex{D}}[]   # pairs of neighboring vertex indices src::IT, dst::IT
@@ -748,10 +749,8 @@ switchlast(s::NTuple{N,T}) where {N,T} = ntuple(i -> i < N - 1 ? s[i] : s[2N - i
 ######################################################################
 # bandstructure_collect
 ######################################################################
-function bandstructure_collect(subspaces::Array{Vector{Subspace{C,T,S}},D}, bands, cuboidinds, showprog) where {C,T,S,D}
+function bandstructure_collect(subspaces::Array{Vector{Subspace{C,T,S}},D}, bands, cuboidinds) where {C,T,S,D}
     nsimplices = sum(band -> length(band.sinds), bands)
-    prog = Progress(nsimplices, "Step 3/3 - Collecting simplices: ")
-
     sverts = Vector{NTuple{D+1,SVector{D+1,T}}}(undef, nsimplices)
     sbases = Vector{NTuple{D+1,S}}(undef, nsimplices)
     sptrs = fill(1:0, size(subspaces) .- 1)                  # assuming non-periodic basemesh
@@ -770,7 +769,6 @@ function bandstructure_collect(subspaces::Array{Vector{Subspace{C,T,S}},D}, band
                     subspaces[c.baseidx][c.colidx].basis
                 end
             end
-            showprog && ProgressMeter.next!(prog; showvalues = ())
         end
         ioffset += nvertices(band)
     end
@@ -805,11 +803,15 @@ function interpolate_bandstructure(bs::Bandstructure{D,C,T}, ϕs, around) where 
     found || throw(ArgumentError("Cannot interpolate $ϕs within any of the bandstructure's base meshes"))
     rng = indexer.sptrs[CartesianIndex(inds)]
     subs = Subspace{C,T,Matrix{C}}[]
+    # To avoid unncecessary simplices and double matches with ϕs at a simplex boundary,
+    # we just accept simplices with the same base center of mass as the first valid one
+    basecenter = zero(SVector{D,T})
     for i in rng
-        sprojs = get_or_add_projection_basis(bs, i)
-        sub = interpolate_subspace(ϕs, bs.sverts[i], bs.sbases[i], sprojs)
-        sub === nothing && continue
-        push!(subs, sub)
+        basecenter´ = sum(frontSVector, bs.sverts[i])
+        iszero(basecenter) || basecenter ≈ basecenter´ || continue
+        sprojs = get_or_add_projection_basis!(bs, i)
+        haspushed = push_interpolated_subspace!(subs, ϕs, bs.sverts[i], bs.sbases[i], sprojs)
+        haspushed && (basecenter = basecenter´)
     end
     subs´ = filter_around!(subs, around)
     return subs´
@@ -817,12 +819,15 @@ end
 
 function find_basemesh_interval(ϕ, ticks)
     @inbounds for m = 1:length(ticks)-1
-        ticks[m] <= ϕ <= ticks[m+1] && return m
+        ticks[m] <= ϕ < ticks[m+1] && return m
     end
+    ϕ ≈ last(ticks) && return length(ticks) - 1
     return 0
 end
 
-function get_or_add_projection_basis(bs, i)
+add_projection_bases!(bs) = foreach(i -> get_or_add_projection_basis!(bs, i), eachindex(bs.sprojs))
+
+function get_or_add_projection_basis!(bs, i)
     isassigned(bs.sprojs, i) && return bs.sprojs[i]
     bases = bs.sbases[i]
     firstbasis = first(bases)
@@ -853,23 +858,26 @@ function projection_basis(dst, src)
     return t
 end
 
-function interpolate_subspace(ϕtup, verts, bases, projs)
+function push_interpolated_subspace!(subs, ϕtup, verts, bases, projs)
     dverts = tuple_minus_first(verts)
     dbase = frontSVector.(dverts)
     smat = hcat(dbase...)
     dϕvec = SVector(ϕtup) - frontSVector(first(verts))
     dϕinds = inv(smat) * dϕvec
-    insimplex(dϕinds) || return nothing
+
+    insimplex(dϕinds) || return false
+
     dϵs = SVector(last.(dverts))
     ϵ0 = last(first(verts))
     energy = ϵ0 + dot(dϕinds, dϵs)
-    basis = inerpolate_subspace_basis(dϕinds, bases, projs)
-    return Subspace(energy, basis)
+    basis = interpolate_subspace_basis(dϕinds, bases, projs)
+    push!(subs, Subspace(energy, basis))
+    return true
 end
 
-@inbounds insimplex(dϕinds) = sum(dϕinds) <= 1 && all(i -> 0 <= i < 1, dϕinds)
+insimplex(dϕinds) = sum(dϕinds) <= 1 && all(i -> 0 <= i <= 1, dϕinds)
 
-function inerpolate_subspace_basis(dϕinds, bases, projs)
+function interpolate_subspace_basis(dϕinds, bases, projs)
     ibasis = first(bases) * first(projs)
     ibasis .*= (1 - sum(dϕinds))
     for i in 2:length(bases)
