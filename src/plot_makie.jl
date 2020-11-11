@@ -279,7 +279,7 @@ function plot!(plot::BandPlot2D)
     for (nb, color) in zip(bands, colors)
         band = bs.bands[nb]
         vertices = band.verts
-        simplices = band.simpinds
+        simplices = band.sinds
         linesegments!(plot, (t -> vertices[first(t)] => vertices[last(t)]).(simplices),
                       linewidth = plot[:linethickness][], color = color)
     end
@@ -306,7 +306,7 @@ function plot!(plot::BandPlot3D)
     for (nb, color) in zip(bandinds, colors)
         band = bs.bands[nb]
         vertices = band.verts
-        connectivity = [s[j] for s in band.simpinds, j in 1:3]
+        connectivity = [s[j] for s in band.sinds, j in 1:3]
         if isempty(connectivity)
             scatter!(plot, vertices, color = color)
         else

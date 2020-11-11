@@ -27,7 +27,7 @@ export sublat, bravais, lattice, dims, supercell, unitcell,
        flatten, wrap, transform!, combine,
        spectrum, bandstructure, cuboid, isometric,
        bands, vertices,
-       energies, states,
+       energies, states, degeneracy,
        momentaKPM, dosKPM, averageKPM, densityKPM, bandrangeKPM,
        greens, greensolver
 

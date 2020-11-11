@@ -1,4 +1,4 @@
-using Quantica: nbands, nvertices, nedges, nsimplices
+using Quantica: nbands, nvertices, nedges, nsimplices, Subspace
 using Arpack
 
 @testset "basic bandstructures" begin
@@ -120,4 +120,19 @@ end
     sp = states(spectrum(h))[:,1]
     sp´ = Quantica.unflatten_or_reinterpret(sp, h)
     @test sp === sp
+end
+
+@testset "spectrum indexing" begin
+    h = LatticePresets.honeycomb() |> hamiltonian(hopping(1)) |> unitcell(2) |> wrap
+    s = spectrum(h)
+    ϵv, ψm = s
+    @test ϵv == first(s) == s.energies
+    @test ψm == last(s) == s.states
+    @test s[1] isa Subspace
+    @test degeneracy(s[2]) == 2
+    @test s[1:3] isa Vector{<:Subspace}
+    @test s[[1,3]] isa Vector{<:Subspace}
+    ϵ, ψs = s[1]
+    @test ϵ isa Number
+    @test ψs isa SubArray{<:Complex, 2}
 end

@@ -117,10 +117,6 @@ function SimplexData(simplex::NTuple{V}, band, indsedges) where {V}
     return SimplexData(ε0, εmin, εmax, k0, Δks, volume, zvelocity, edgecoeffs, dωzs, defaultdη, φ0, φs)
 end
 
-# Base.tail(t) .- first(t) but avoiding rounding errors in difference
-tuple_diff_first(t::Tuple{T,Vararg{T,D}}) where {D,T} =
-    ntuple(i -> ifelse(t[i+1] ≈ t[1], zero(T), t[i+1] - t[1]), Val(D))
-
 function edgecoeff(indsedge, zvelocity::SVector{D}) where {D}
     basis = edgebasis(indsedge, Val(D))
     othervecs = Base.tail(basis)
