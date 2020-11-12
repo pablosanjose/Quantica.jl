@@ -69,7 +69,7 @@ end
     h´ = unitcell(h)
     s1 = spectrum(h´, transform = inv)
     s2 = transform!(inv, spectrum(h´))
-    @test energies(s1) == energies(s2)
+    @test s1.energies == s2.energies
     # no automatic mapping from 2D to 3D
     h = LatticePresets.cubic() |> hamiltonian(hopping(1)) |> unitcell(2)
     @test_throws DimensionMismatch bandstructure(h, cuboid((0, 2pi), (0, 2pi)), showprogress = false)
@@ -99,7 +99,7 @@ end
 
 @testset "unflatten" begin
     h = LatticePresets.honeycomb() |> hamiltonian(onsite(2I) + hopping(I, range = 1), orbitals = (Val(2), Val(1))) |> unitcell(2) |> unitcell
-    sp = states(spectrum(h))[:,1]
+    sp = spectrum(h).states[:,1]
     sp´ = Quantica.unflatten_or_reinterpret(sp, h)
     l = size(h, 1)
     @test length(sp) == 1.5 * l
@@ -109,7 +109,7 @@ end
     @test sp´ !== sp
 
     h = LatticePresets.honeycomb() |> hamiltonian(onsite(2I) + hopping(I, range = 1), orbitals = Val(2)) |> unitcell(2) |> unitcell
-    sp = states(spectrum(h))[:,1]
+    sp = spectrum(h).states[:,1]
     sp´ = Quantica.unflatten_or_reinterpret(sp, h)
     l = size(h, 1)
     @test length(sp) == 2 * l
@@ -117,7 +117,7 @@ end
     @test sp´ isa Base.ReinterpretArray
 
     h = LatticePresets.honeycomb() |> hamiltonian(onsite(2I) + hopping(I, range = 1), orbitals = Val(2)) |> unitcell(2) |> unitcell
-    sp = states(spectrum(h))[:,1]
+    sp = spectrum(h).states[:,1]
     sp´ = Quantica.unflatten_or_reinterpret(sp, h)
     @test sp === sp
 end
@@ -129,7 +129,7 @@ end
     @test ϵv == first(s) == s.energies
     @test ψm == last(s) == s.states
     @test s[1] isa Subspace
-    @test degeneracy(s[2]) == 2
+    @test degeneracy(s[2]) == 3
     @test s[1:3] isa Vector{<:Subspace}
     @test s[[1,3]] isa Vector{<:Subspace}
     ϵ, ψs = s[1]

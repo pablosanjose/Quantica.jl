@@ -76,10 +76,10 @@ spectrum (useful for performing shifts or other postprocessing).
 # Indexing
 
 The eigenenergies `εv::Vector` and eigenstates `ψm::Matrix` in a `s::Spectrum` object can be
-accessed via destructuring, `(εv, ψm) = sp`, or `εv = first(sp), ψm = last(sp)`. Any
-degenerate energies appear repeated in `εv`. Alternatively, one can access one or more
-complete `sub::Subspace`s (eigenenergy together with its eigenstates, including all
-degenerates) via the indexing syntax,
+accessed via destructuring, `εv, ψm = sp`, or `εv = first(sp) = sp.energies, ψm = last(sp) =
+sp.states`. Any degenerate energies appear repeated in `εv`. Alternatively, one can access
+one or more complete `sub::Subspace`s (eigenenergy together with its eigenstates, including
+all degenerates) via the indexing syntax,
 
     s[1]                   : first `Subspace`
     s[2:4]                 : subspaces 2, 3 and 4
@@ -87,10 +87,10 @@ degenerates) via the indexing syntax,
     s[around = 0.2]        : single subspace with energy closest to 0.2
     s[around = (0.2, 10)]  : the ten subspaces with energies closest to 0.2
 
-The eigenenergy `ε` and subspace basis `ψs` of a `sub::Subspace` can themselves be obtained
-via destructuring, `ε, ψs = sub`, or `ε = first(sub), ψs = last(sub)`. For performance
-reasons `ψs` is a `SubArray` view of the appropriate columns of `ψm`, not an independent
-copy.
+The eigenenergy `ε` and subspace basis `ψs` of a `sub::Subspace` can be obtained via
+destructuring, `ε, ψs = sub`, or `ε = first(sub) = sub.energy, ψs = last(sub) = sub.basis`.
+For performance reasons `ψs` is a `SubArray` view of the appropriate columns of `ψm`, not an
+independent copy.
 
 # See also
     `bandstructure`
@@ -762,10 +762,12 @@ function bandstructure_collect(subspaces::Array{Vector{Subspace{C,T,S}},D}, band
         for s in band.sinds
             scounter += 1
             let ioffset = ioffset  # circumvent boxing, JuliaLang/#15276
-                s0inds[scounter] = minimum(i -> cuboidinds[ioffset + i].baseidx, s)
-                sverts[scounter] = ntuple(i -> band.verts[s[i]], Val(D+1))
+                baseinds = (i -> cuboidinds[ioffset + i].baseidx).(s)
+                pbase = sortperm(SVector(baseinds))
+                s0inds[scounter] = baseinds[first(pbase)] # equivalent to minimum(baseinds)
+                sverts[scounter] = ntuple(i -> band.verts[s[pbase[i]]], Val(D+1))
                 sbases[scounter] = ntuple(Val(D+1)) do i
-                    c = cuboidinds[ioffset + s[i]]
+                    c = cuboidinds[ioffset + s[pbase[i]]]
                     subspaces[c.baseidx][c.colidx].basis
                 end
             end
@@ -773,10 +775,10 @@ function bandstructure_collect(subspaces::Array{Vector{Subspace{C,T,S}},D}, band
         ioffset += nvertices(band)
     end
 
-    p = sortperm(s0inds; alg = Base.DEFAULT_UNSTABLE)
-    permute!(s0inds, p)
-    permute!(sverts, p)
-    permute!(sbases, p)
+    psimps = sortperm(s0inds; alg = Base.DEFAULT_UNSTABLE)
+    permute!(s0inds, psimps)
+    permute!(sverts, psimps)
+    permute!(sbases, psimps)
 
     for rng in equalruns(s0inds)
         sptrs[s0inds[first(rng)]] = rng
@@ -803,15 +805,20 @@ function interpolate_bandstructure(bs::Bandstructure{D,C,T}, ϕs, around) where 
     found || throw(ArgumentError("Cannot interpolate $ϕs within any of the bandstructure's base meshes"))
     rng = indexer.sptrs[CartesianIndex(inds)]
     subs = Subspace{C,T,Matrix{C}}[]
-    # To avoid unncecessary simplices and double matches with ϕs at a simplex boundary,
-    # we just accept simplices with the same base center of mass as the first valid one
-    basecenter = zero(SVector{D,T})
-    for i in rng
-        basecenter´ = sum(frontSVector, bs.sverts[i])
-        iszero(basecenter) || basecenter ≈ basecenter´ || continue
-        sprojs = get_or_add_projection_basis!(bs, i)
-        haspushed = push_interpolated_subspace!(subs, ϕs, bs.sverts[i], bs.sbases[i], sprojs)
-        haspushed && (basecenter = basecenter´)
+    # Since we have sorted simplices to canonical base vertex order in bandstructure_collect
+    # we can avoid unncecessary simplices (and double matches with ϕs at a simplex boundary)
+    # by demanding equal vertices
+    simplexbase = find_basemesh_simplex(ϕs, bs, rng)
+    if simplexbase !== nothing
+        basevertices, dϕinds = simplexbase
+        for i in rng
+            sverts = bs.sverts[i]
+            basevertices´ = frontSVector.(sverts)
+            basevertices´ == basevertices || continue
+            sbases = bs.sbases[i]
+            sprojs = get_or_add_projection_basis!(bs, i)
+            push_interpolated_subspace!(subs, dϕinds, sverts, sbases, sprojs)
+        end
     end
     subs´ = filter_around!(subs, around)
     return subs´
@@ -824,6 +831,25 @@ function find_basemesh_interval(ϕ, ticks)
     ϕ ≈ last(ticks) && return length(ticks) - 1
     return 0
 end
+
+function find_basemesh_simplex(ϕs, bs, rng)
+    for i in rng
+        basevertices = frontSVector.(bs.sverts[i])
+        dϕinds = normalized_base_inds(ϕs, basevertices)
+        insimplex(dϕinds) && return basevertices, dϕinds
+    end
+    return nothing
+end
+
+function normalized_base_inds(ϕs, baseverts)
+    dbase = tuple_minus_first(baseverts)
+    smat = hcat(dbase...)
+    dϕvec = SVector(ϕs) - first(baseverts)
+    dϕinds = inv(smat) * dϕvec
+    return dϕinds
+end
+
+insimplex(dϕinds) = sum(dϕinds) <= 1 && all(i -> 0 <= i <= 1, dϕinds)
 
 add_projection_bases!(bs) = foreach(i -> get_or_add_projection_basis!(bs, i), eachindex(bs.sprojs))
 
@@ -858,24 +884,15 @@ function projection_basis(dst, src)
     return t
 end
 
-function push_interpolated_subspace!(subs, ϕtup, verts, bases, projs)
-    dverts = tuple_minus_first(verts)
-    dbase = frontSVector.(dverts)
-    smat = hcat(dbase...)
-    dϕvec = SVector(ϕtup) - frontSVector(first(verts))
-    dϕinds = inv(smat) * dϕvec
-
-    insimplex(dϕinds) || return false
-
-    dϵs = SVector(last.(dverts))
-    ϵ0 = last(first(verts))
+function push_interpolated_subspace!(subs, dϕinds, verts, bases, projs)
+    ϵs = last.(verts)
+    dϵs = SVector(tuple_minus_first(ϵs))
+    ϵ0 = first(ϵs)
     energy = ϵ0 + dot(dϕinds, dϵs)
     basis = interpolate_subspace_basis(dϕinds, bases, projs)
     push!(subs, Subspace(energy, basis))
-    return true
+    return nothing
 end
-
-insimplex(dϕinds) = sum(dϕinds) <= 1 && all(i -> 0 <= i <= 1, dϕinds)
 
 function interpolate_subspace_basis(dϕinds, bases, projs)
     ibasis = first(bases) * first(projs)

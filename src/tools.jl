@@ -29,9 +29,9 @@ indstopair(s::Tuple) = Pair(last(s), first(s))
 filltuple(x, ::Val{L}) where {L} = ntuple(_ -> x, Val(L))
 filltuple(x, ::NTuple{N,Any}) where {N} = ntuple(_ -> x, Val(N))
 
-# toSVector can deal with the L=0 edge case, unlike SVector
-frontsvec(x, ::Val{L}) where {L} = toSVector(ntuple(i->x[i], Val(L)))
-tailtuple(x::SVector{N}, ::Val{L}) where {N,L} = ntuple(i->x[N+i-L], Val(L))
+# # toSVector can deal with the L=0 edge case, unlike SVector
+# frontsvec(x, ::Val{L}) where {L} = toSVector(ntuple(i->x[i], Val(L)))
+# tailtuple(x::SVector{N}, ::Val{L}) where {N,L} = ntuple(i->x[N+i-L], Val(L))
 
 @inline tuplejoin() = ()
 @inline tuplejoin(x) = x
