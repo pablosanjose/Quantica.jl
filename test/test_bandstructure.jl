@@ -152,4 +152,5 @@ end
     d = diagonalizer(h)
     @test first(d()) ≈ [-3,3]
     @test first(d(())) ≈ [-3,3]
+    @test d() == Tuple(spectrum(h))
 end

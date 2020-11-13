@@ -76,10 +76,10 @@ spectrum (useful for performing shifts or other postprocessing).
 # Indexing
 
 The eigenenergies `εv::Vector` and eigenstates `ψm::Matrix` in a `s::Spectrum` object can be
-accessed via destructuring, `εv, ψm = sp`, or `εv = first(sp) = sp.energies, ψm = last(sp) =
-sp.states`. Any degenerate energies appear repeated in `εv`. Alternatively, one can access
-one or more complete `sub::Subspace`s (eigenenergy together with its eigenstates, including
-all degenerates) via the indexing syntax,
+accessed via destructuring, `εv, ψm = sp`, or `εv, ψm = Tuple(sp)`, or `εv = first(sp) =
+sp.energies, ψm = last(sp) = sp.states`. Any degenerate energies appear repeated in `εv`.
+Alternatively, one can access one or more complete `sub::Subspace`s (eigenenergy together
+with its eigenstates, including all degenerates) via the indexing syntax,
 
     s[1]                   : first `Subspace`
     s[2:4]                 : subspaces 2, 3 and 4
@@ -93,14 +93,9 @@ For performance reasons `ψs` is a `SubArray` view of the appropriate columns of
 independent copy.
 
 # See also
-    `bandstructure`
+    `bandstructure`, `diagonalizer`
 """
 function spectrum(h; method = LinearAlgebraPackage(), transform = missing)
-    # matrix = similarmatrix(h, method_matrixtype(method, h))
-    # matrixf = φs -> bloch!(matrix, h)
-    # diag = diagonalizer(matrixf, matrix, method)
-    # matrix = similarmatrix(h, method_matrixtype(method, h))
-    # matrixf = φs -> bloch!(matrix, h)
     diag = diagonalizer(h; method = method)
     (ϵk, ψk) = diag(())
     subs = collect(approxruns(ϵk))
@@ -108,6 +103,8 @@ function spectrum(h; method = LinearAlgebraPackage(), transform = missing)
     transform === missing || transform!(transform, s)
     return s
 end
+
+Base.Tuple(s::Spectrum) = (s.energies, s.states)
 
 """
     transform!(f::Function, s::Spectrum)
@@ -348,7 +345,7 @@ Bandstructure{2}: collection of 1D bands
 ```
 
 # See also
-    `mesh`, `bloch`, `parametric`
+    `cuboid`, `diagonalizer`, `bloch`, `parametric`
 """
 bandstructure
 

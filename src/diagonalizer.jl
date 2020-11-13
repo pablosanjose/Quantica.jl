@@ -22,9 +22,12 @@ end
 """
     diagonalizer(h::Union{Hamiltonian,ParametricHamiltonian}; method = LinearAlgebraPackage(), mapping = missing)
 
-Build a `d::Diagonalizer` object that when called as `d(φs)` (or `d()` for 0D Hamiltonians),
-uses the specified diagonalization `method` to produce the sorted eigenpairs of `h` at Bloch
-momenta given by `mapping`. See `bandstructure` for further details
+Build a `d::Diagonalizer` object that, when called as `d(φs)` , uses the specified
+diagonalization `method` to produce the sorted eigenpairs of `h` at Bloch momenta given by
+`mapping`. See `bandstructure` for further details.
+
+A 0D Hamiltonian `h` also supports `d = diagonalizer(h)`. In this case `d` can be called
+with no arguments and gives the same information as `spectrum`, `d() = Tuple(spectrum(h))`.
 
 # Examples
 ```jldoctest
@@ -37,11 +40,15 @@ julia> d((0, 0)) |> first
 2-element Array{Float64,1}:
  -3.0
   3.0
+
+julia> h = wrap(h); d = diagonalizer(h);
+
+julia> d() == Tuple(spectrum(h))
+true
 ```
 
 # See also
-    `bandstructure`
-
+    `bandstructure`, `spectrum`
 """
 function diagonalizer(h::Union{Hamiltonian,ParametricHamiltonian}; method = LinearAlgebraPackage(), mapping = missing, minoverlap = 0.3)
     matrix = similarmatrix(h, method_matrixtype(method, h))
