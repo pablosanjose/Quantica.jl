@@ -219,6 +219,7 @@ bloch!(matrix, ph::ParametricHamiltonian, (φs, params)::Tuple{SVector,NamedTupl
     bloch!(matrix, ph(; params...), φs, axis)
 
 # normalizes the output to (SVector(phis), params_namedtuple)
+sanitize_phiparams(::Tuple{}) = (SVector{0,Int}(), NamedTuple())
 sanitize_phiparams(phi::Number) = (SA[phi], NamedTuple())
 sanitize_phiparams(phis::NTuple{N,Number}) where {N} = (SVector(phis), NamedTuple())
 sanitize_phiparams(phis::SVector{N,<:Number}) where {N} = (phis, NamedTuple())

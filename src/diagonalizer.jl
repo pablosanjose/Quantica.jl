@@ -4,7 +4,7 @@
 #######################################################################
 abstract type AbstractDiagonalizeMethod end
 
-struct HamiltonianBlochFunctor{H<:Union{Hamiltonian,ParametricHamiltonian},A,M}
+struct HamiltonianBlochFunctor{H<:Union{Hamiltonian,ParametricHamiltonian},A<:AbstractMatrix,M}
     h::H
     matrix::A
     mapping::M
@@ -19,8 +19,48 @@ struct Diagonalizer{M<:AbstractDiagonalizeMethod,T<:Real,F}
     matrixf::F        # functor or function matrixf(φs) that produces matrices to be diagonalized
 end
 
-diagonalizer(matrixf, matrix, method, minoverlap = 0) =
-    Diagonalizer(method, float(minoverlap), Vector{Int}(undef, size(matrix, 2)), matrixf)
+"""
+    diagonalizer(h::Union{Hamiltonian,ParametricHamiltonian}; method = LinearAlgebraPackage(), mapping = missing)
+
+Build a `d::Diagonalizer` object that, when called as `d(φs)` , uses the specified
+diagonalization `method` to produce the sorted eigenpairs `(εs, ψs)` of `h` at Bloch
+phases/parameters given by `mapping`. See `bandstructure` for further details.
+
+A 0D Hamiltonian `h` also supports `d = diagonalizer(h)`. In this case `d` can be called
+with no arguments and gives the same information as `spectrum`, `d() == Tuple(spectrum(h))`.
+
+# Examples
+```jldoctest
+julia> h = LatticePresets.honeycomb() |> hamiltonian(hopping(1));
+
+julia> d = diagonalizer(h)
+Diagonalizer with method : LinearAlgebraPackage{NamedTuple{(),Tuple{}}}
+
+julia> d((0, 0)) |> first
+2-element Array{Float64,1}:
+ -3.0
+  3.0
+
+julia> h = wrap(h); d = diagonalizer(h);
+
+julia> d() == Tuple(spectrum(h))
+true
+```
+
+# See also
+    `bandstructure`, `spectrum`
+"""
+function diagonalizer(h::Union{Hamiltonian,ParametricHamiltonian}; method = LinearAlgebraPackage(), mapping = missing, minoverlap = 0.3)
+    matrix = similarmatrix(h, method_matrixtype(method, h))
+    matrixf = HamiltonianBlochFunctor(h, matrix, mapping)
+    perm = Vector{Int}(undef, size(matrix, 2))
+    return Diagonalizer(method, float(minoverlap), perm, matrixf)
+end
+
+function diagonalizer(matrixf::Function, dimh; method = LinearAlgebraPackage(), minoverlap = 0.3)
+    perm = Vector{Int}(undef, dimh)
+    return Diagonalizer(method, float(minoverlap), perm, matrixf)
+end
 
 @inline function (d::Diagonalizer)(φs)
     ϵ, ψ = diagonalize(d.matrixf(φs), d.method)
@@ -28,12 +68,18 @@ diagonalizer(matrixf, matrix, method, minoverlap = 0) =
     return ϵ, ψ
 end
 
+@inline (d::Diagonalizer)() = d(())
+
 function sorteigs!(perm, ϵ::AbstractVector, ψ::AbstractMatrix)
     resize!(perm, length(ϵ))
     p = sortperm!(perm, ϵ, by = real, alg = Base.DEFAULT_UNSTABLE)
     permute!(ϵ, p)
     Base.permutecols!!(ψ, p)
     return ϵ, ψ
+end
+
+function Base.show(io::IO, d::Diagonalizer)
+    print(io, "Diagonalizer with method : $(summary(d.method))")
 end
 
 ## Diagonalize methods ##

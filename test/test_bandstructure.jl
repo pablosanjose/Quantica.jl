@@ -137,9 +137,20 @@ end
     @test ψs isa SubArray{<:Complex, 2}
 end
 
-@testset "spectrum indexing" begin
+@testset "bandstructure indexing" begin
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(1)) |> unitcell(2)
     bs = bandstructure(h, subticks = 13)
     @test sum(degeneracy, bs[(1,2)]) == size(h,1)
     @test_broken sum(degeneracy, bs[(0.2,0.3)]) == size(h,1)
+end
+
+@testset "diagonalizer" begin
+    h = LatticePresets.honeycomb() |> hamiltonian(hopping(1))
+    d = diagonalizer(h)
+    @test first(d((0, 0))) ≈ [-3,3]
+    h = wrap(h)
+    d = diagonalizer(h)
+    @test first(d()) ≈ [-3,3]
+    @test first(d(())) ≈ [-3,3]
+    @test d() == Tuple(spectrum(h))
 end
