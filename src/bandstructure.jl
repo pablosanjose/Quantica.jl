@@ -96,9 +96,12 @@ independent copy.
     `bandstructure`
 """
 function spectrum(h; method = LinearAlgebraPackage(), transform = missing)
-    matrix = similarmatrix(h, method_matrixtype(method, h))
-    matrixf = φs -> bloch!(matrix, h)
-    diag = diagonalizer(matrixf, matrix, method)
+    # matrix = similarmatrix(h, method_matrixtype(method, h))
+    # matrixf = φs -> bloch!(matrix, h)
+    # diag = diagonalizer(matrixf, matrix, method)
+    # matrix = similarmatrix(h, method_matrixtype(method, h))
+    # matrixf = φs -> bloch!(matrix, h)
+    diag = diagonalizer(h; method = method)
     (ϵk, ψk) = diag(())
     subs = collect(approxruns(ϵk))
     s = Spectrum(ϵk, ψk, subs)

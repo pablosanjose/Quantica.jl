@@ -148,4 +148,8 @@ end
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(1))
     d = diagonalizer(h)
     @test first(d((0, 0))) ≈ [-3,3]
+    h = wrap(h)
+    d = diagonalizer(h)
+    @test first(d()) ≈ [-3,3]
+    @test first(d(())) ≈ [-3,3]
 end
