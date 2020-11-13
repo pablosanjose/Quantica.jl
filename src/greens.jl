@@ -106,8 +106,8 @@ function SimplexData(simplex::NTuple{V}, band, indsedges) where {V}
     εmin, εmax = extrema(εs)
     ε0 = first(εs)
     k0 = first(ks)
-    Δks = hcat(tuple_diff_first(ks)...)
-    zvelocity = SVector(tuple_diff_first(εs))
+    Δks = hcat(tuple_minus_first(ks)...)
+    zvelocity = SVector(tuple_minus_first(εs))
     volume = abs(det(Δks))
     edgecoeffs = edgecoeff.(indsedges, Ref(zvelocity))
     dωzs = sectionpoint.(indsedges, Ref(zvelocity))
@@ -116,10 +116,6 @@ function SimplexData(simplex::NTuple{V}, band, indsedges) where {V}
     φs = vertexstate.(Base.tail(simplex), Ref(band))
     return SimplexData(ε0, εmin, εmax, k0, Δks, volume, zvelocity, edgecoeffs, dωzs, defaultdη, φ0, φs)
 end
-
-# Base.tail(t) .- first(t) but avoiding rounding errors in difference
-tuple_diff_first(t::Tuple{T,Vararg{T,D}}) where {D,T} =
-    ntuple(i -> ifelse(t[i+1] ≈ t[1], zero(T), t[i+1] - t[1]), Val(D))
 
 function edgecoeff(indsedge, zvelocity::SVector{D}) where {D}
     basis = edgebasis(indsedge, Val(D))

@@ -4,17 +4,26 @@
 #######################################################################
 abstract type AbstractDiagonalizeMethod end
 
-struct Diagonalizer{M<:AbstractDiagonalizeMethod,T<:Real}
+struct HamiltonianBlochFunctor{H<:Union{Hamiltonian,ParametricHamiltonian},A,M}
+    h::H
+    matrix::A
+    mapping::M
+end
+
+(f::HamiltonianBlochFunctor)(vertex) = bloch!(f.matrix, f.h, map_phiparams(f.mapping, vertex))
+
+struct Diagonalizer{M<:AbstractDiagonalizeMethod,T<:Real,F}
     method::M
     minoverlap::T
     perm::Vector{Int} # reusable permutation vector
+    matrixf::F        # functor or function matrixf(φs) that produces matrices to be diagonalized
 end
 
-diagonalizer(matrix, method, minoverlap = 0) =
-    Diagonalizer(method, float(minoverlap), Vector{Int}(undef, size(matrix, 2)))
+diagonalizer(matrixf, matrix, method, minoverlap = 0) =
+    Diagonalizer(method, float(minoverlap), Vector{Int}(undef, size(matrix, 2)), matrixf)
 
-@inline function (d::Diagonalizer)(matrix)
-    ϵ, ψ = diagonalize(matrix, d.method)
+@inline function (d::Diagonalizer)(φs)
+    ϵ, ψ = diagonalize(d.matrixf(φs), d.method)
     issorted(ϵ, by = real) || sorteigs!(d.perm, ϵ, ψ)
     return ϵ, ψ
 end

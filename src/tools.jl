@@ -29,9 +29,9 @@ indstopair(s::Tuple) = Pair(last(s), first(s))
 filltuple(x, ::Val{L}) where {L} = ntuple(_ -> x, Val(L))
 filltuple(x, ::NTuple{N,Any}) where {N} = ntuple(_ -> x, Val(N))
 
-# toSVector can deal with the L=0 edge case, unlike SVector
-frontsvec(x, ::Val{L}) where {L} = toSVector(ntuple(i->x[i], Val(L)))
-tailtuple(x::SVector{N}, ::Val{L}) where {N,L} = ntuple(i->x[N+i-L], Val(L))
+# # toSVector can deal with the L=0 edge case, unlike SVector
+# frontsvec(x, ::Val{L}) where {L} = toSVector(ntuple(i->x[i], Val(L)))
+# tailtuple(x::SVector{N}, ::Val{L}) where {N,L} = ntuple(i->x[N+i-L], Val(L))
 
 @inline tuplejoin() = ()
 @inline tuplejoin(x) = x
@@ -58,6 +58,12 @@ function tuplepairs(c::Tuple, r::NTuple{V}) where {V}
     c´ = (c..., tuple.(first(r), t)...)
     return tuplepairs(c´, t)
 end
+
+# Base.tail(t) .- first(t) but avoiding rounding errors in difference
+tuple_minus_first(t::Tuple{T,Vararg{T,D}}) where {D,T} =
+    ntuple(i -> ifelse(t[i+1] ≈ t[1], zero(T), t[i+1] - t[1]), Val(D))
+
+frontSVector(s::SVector) = SVector(Base.front(Tuple(s)))
 
 mergetuples(ts...) = keys(merge(tonamedtuple.(ts)...))
 tonamedtuple(ts::Val{T}) where {T} = NamedTuple{T}(filltuple(0,T))

@@ -170,13 +170,13 @@ function VegaLite.vlplot(b::Bandstructure;
 end
 
 # We optimize 1D band plots by collecting connected simplices into line segments (because :rule is considerabley slower than :line)
-function bandtable(b::Bandstructure{1,T}, (scalingx, scalingy), bandsiter) where {T}
+function bandtable(b::Bandstructure{1,C,T}, (scalingx, scalingy), bandsiter) where {C,T}
     bandsiter´ = bandsiter === missing ? eachindex(bands(b)) : bandsiter
     NT = typeof((;x = zero(T), y = zero(T), band = 1, tooltip = 1))
     table = NT[]
     for (nb, band) in enumerate(bands(b))
         verts = vertices(band)
-        sinds = band.simpinds
+        sinds = band.sinds
         isempty(sinds) && continue
         s0 = (0, 0)
         for s in sinds
