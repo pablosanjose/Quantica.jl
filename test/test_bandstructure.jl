@@ -137,7 +137,7 @@ end
     @test ψs isa SubArray{<:Complex, 2}
 end
 
-@testset "spectrum indexing" begin
+@testset "bandstructure indexing" begin
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(1)) |> unitcell(2)
     bs = bandstructure(h, subticks = 13)
     @test sum(degeneracy, bs[(1,2)]) == size(h,1)
