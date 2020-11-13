@@ -136,3 +136,10 @@ end
     @test ϵ isa Number
     @test ψs isa SubArray{<:Complex, 2}
 end
+
+@testset "spectrum indexing" begin
+    h = LatticePresets.honeycomb() |> hamiltonian(hopping(1)) |> unitcell(2)
+    bs = bandstructure(h, subticks = 13)
+    @test sum(degeneracy, bs[(1,2)]) == size(h,1)
+    @test_broken sum(degeneracy, bs[(0.2,0.3)]) == size(h,1)
+end

@@ -349,11 +349,11 @@ Bandstructure{2}: collection of 1D bands
 """
 bandstructure
 
-nvertices(bs::Bandstructure) = sum(nvertices, bands(bs))
+nvertices(bs::Bandstructure) = isempty(bands(bs)) ? 0 : sum(nvertices, bands(bs))
 
-nedges(bs::Bandstructure) = sum(nedges, bands(bs))
+nedges(bs::Bandstructure) = isempty(bands(bs)) ? 0 : sum(nedges, bands(bs))
 
-nsimplices(bs::Bandstructure) = sum(nsimplices, bands(bs))
+nsimplices(bs::Bandstructure) = isempty(bands(bs)) ? 0 : sum(nsimplices, bands(bs))
 
 nbands(bs::Bandstructure) = length(bands(bs))
 
@@ -622,9 +622,8 @@ function knit_band(bandidx, basemesh::CuboidMesh{D,T}, subspaces, minoverlap, pe
 
         subdst = subspaces[n][i]
         deg = degeneracy(subdst)
-        found = false
         for n´ in neighbors(basemesh, n)
-            deg == 1 && n´ == n0 && continue  # Only if deg == 1 is this justified (think deg at BZ boundary)
+            deg == 1 && n´ == n0 && continue  # Only if deg == 1 is no-backstep justified (think deg at BZ boundary)
             sorted_valid_projections!(projinds, subspaces[n´], subdst, minoverlap, bandidx, linearinds[n´])
             cumdeg´ = 0
             for (p, i´) in projinds
@@ -632,7 +631,6 @@ function knit_band(bandidx, basemesh::CuboidMesh{D,T}, subspaces, minoverlap, pe
                 push!(pending, (dst, BandCuboidIndex(n´, i´)))
                 cumdeg´ += degeneracy(subspaces[n´][i´])
                 cumdeg´ >= deg && break # links on each column n´ = cumulated deg at most equal to deg links
-                found = true
             end
         end
     end
@@ -658,7 +656,7 @@ function sorted_valid_projections!(projinds, subs::Vector{<:Subspace}, sub0::Sub
     for (j, sub) in enumerate(subs)
         bandidx´ = linearindscol[j].bandidx
         bandidx´ == 0 || bandidx´ == bandidx || continue
-        p = proj(sub.basis, sub0.basis, realzero, complexzero)
+        p = proj_squared(sub.basis, sub0.basis, realzero, complexzero)
         p > minoverlap && (projinds[j] = (p, j))
     end
     sort!(projinds, rev = true, alg = Base.DEFAULT_UNSTABLE)
@@ -666,9 +664,10 @@ function sorted_valid_projections!(projinds, subs::Vector{<:Subspace}, sub0::Sub
 end
 
 # non-allocating version of `sum(abs2, ψ' * ψ0)`
-function proj(ψ, ψ0, realzero, complexzero)
+function proj_squared(ψ, ψ0, realzero, complexzero)
     size(ψ, 1) == size(ψ0, 1) || throw(error("Internal error: eigenstates of different sizes"))
     p = realzero
+    # project the smaller-dim subspace onto the larger-dim subspace
     for j0 in axes(ψ0, 2), j in axes(ψ, 2)
         p0 = complexzero
         @simd for i0 in axes(ψ0, 1)
@@ -750,11 +749,11 @@ switchlast(s::NTuple{N,T}) where {N,T} = ntuple(i -> i < N - 1 ? s[i] : s[2N - i
 # bandstructure_collect
 ######################################################################
 function bandstructure_collect(subspaces::Array{Vector{Subspace{C,T,S}},D}, bands, cuboidinds) where {C,T,S,D}
-    nsimplices = sum(band -> length(band.sinds), bands)
-    sverts = Vector{NTuple{D+1,SVector{D+1,T}}}(undef, nsimplices)
-    sbases = Vector{NTuple{D+1,S}}(undef, nsimplices)
+    nsimps = isempty(bands) ? 0 : sum(nsimplices, bands)
+    sverts = Vector{NTuple{D+1,SVector{D+1,T}}}(undef, nsimps)
+    sbases = Vector{NTuple{D+1,S}}(undef, nsimps)
     sptrs = fill(1:0, size(subspaces) .- 1)                  # assuming non-periodic basemesh
-    s0inds = Vector{CartesianIndex{D}}(undef, nsimplices)    # base cuboid index for reference vertex in simplex, for sorting
+    s0inds = Vector{CartesianIndex{D}}(undef, nsimps)    # base cuboid index for reference vertex in simplex, for sorting
 
     scounter = 0
     ioffset = 0
