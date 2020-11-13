@@ -23,11 +23,11 @@ end
     diagonalizer(h::Union{Hamiltonian,ParametricHamiltonian}; method = LinearAlgebraPackage(), mapping = missing)
 
 Build a `d::Diagonalizer` object that, when called as `d(φs)` , uses the specified
-diagonalization `method` to produce the sorted eigenpairs of `h` at Bloch momenta given by
-`mapping`. See `bandstructure` for further details.
+diagonalization `method` to produce the sorted eigenpairs `(εs, ψs)` of `h` at Bloch
+phases/parameters given by `mapping`. See `bandstructure` for further details.
 
 A 0D Hamiltonian `h` also supports `d = diagonalizer(h)`. In this case `d` can be called
-with no arguments and gives the same information as `spectrum`, `d() = Tuple(spectrum(h))`.
+with no arguments and gives the same information as `spectrum`, `d() == Tuple(spectrum(h))`.
 
 # Examples
 ```jldoctest
