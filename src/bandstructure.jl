@@ -474,10 +474,8 @@ function bandstructure(h::Hamiltonian{<:Any,L}, node1, node2, nodes...; subticks
 end
 
 function bandstructure(h::Union{Hamiltonian,ParametricHamiltonian}, basemesh::CuboidMesh;
-                       method = LinearAlgebraPackage(), minoverlap = 0.3, mapping = missing, transform = missing, showprogress = true)
-    matrix = similarmatrix(h, method_matrixtype(method, h))
-    matrixf = HamiltonianBlochFunctor(h, matrix, mapping)
-    diag = diagonalizer(matrixf, matrix, method, minoverlap)
+                       transform = missing, showprogress = true, kw...)
+    diag = diagonalizer(h; kw...)
     b = bandstructure(diag, basemesh, showprogress)
     if transform !== missing
         transform´ = sanitize_transform(transform, h)
@@ -487,10 +485,10 @@ function bandstructure(h::Union{Hamiltonian,ParametricHamiltonian}, basemesh::Cu
 end
 
 function bandstructure(matrixf::Function, basemesh::CuboidMesh;
-                       method = LinearAlgebraPackage(),  minoverlap = 0.3, mapping = missing, transform = missing, showprogress = true)
+                       mapping = missing, transform = missing, showprogress = true)
     matrixf´ = wrapmapping(mapping, matrixf)
-    matrix = samplematrix(matrixf´, basemesh)
-    diag = diagonalizer(matrixf´, matrix, method, minoverlap)
+    dimh = size(samplematrix(matrixf´, basemesh), 1)
+    diag = diagonalizer(matrixf´, dimh)
     b = bandstructure(diag, basemesh, showprogress)
     transform === missing || transform!(transform, b)
     return b

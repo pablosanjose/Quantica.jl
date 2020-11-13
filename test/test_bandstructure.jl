@@ -143,3 +143,9 @@ end
     @test sum(degeneracy, bs[(1,2)]) == size(h,1)
     @test_broken sum(degeneracy, bs[(0.2,0.3)]) == size(h,1)
 end
+
+@testset "diagonalizer" begin
+    h = LatticePresets.honeycomb() |> hamiltonian(hopping(1))
+    d = diagonalizer(h)
+    @test first(d((0, 0))) ≈ [-3,3]
+end
