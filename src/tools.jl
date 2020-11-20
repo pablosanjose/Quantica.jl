@@ -98,6 +98,7 @@ padright(sv::StaticVector{E,T}, ::Val{E}) where {E,T} = sv
 padright(t::NTuple{N´,Any}, x, ::Val{N}) where {N´,N} = ntuple(i -> i > N´ ? x : t[i], Val(N))
 padright(t::NTuple{N´,Any}, ::Val{N}) where {N´,N} = ntuple(i -> i > N´ ? 0 : t[i], Val(N))
 
+padright(v, ::Type{<:Number}) = first(v)
 padright(v, ::Type{S}) where {E,T,S<:SVector{E,T}} = padright(v, zero(T), S)
 padright(v, x::T, ::Type{S}) where {E,T,S<:SVector{E,T}} =
     SVector{E,T}(ntuple(i -> i > length(v) ? x : convert(T, v[i]), Val(E)))
