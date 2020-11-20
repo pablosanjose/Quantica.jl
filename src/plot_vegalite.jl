@@ -217,8 +217,8 @@ function VegaLite.vlplot(h::Hamiltonian{LA}, psi = missing;
     maxsitesize    = plotsites ? maximum(s.scale for s in table if !s.islink)   : 0.0
     maxlinkopacity = plotlinks ? maximum(s.opacity for s in table if s.islink)  : 0.0
     maxlinksize    = plotlinks ? maximum(s.scale for s in table if s.islink)    : 0.0
-    
-    mindiameter > 0 && filter!(s -> !s.islink && s.scale >= mindiameter*maxsitesize/maxdiameter, table)
+
+    mindiameter > 0 && filter!(s -> s.islink || s.scale >= mindiameter*maxsitesize/maxdiameter, table)
 
     corners    = _corners(table)
     plotrange  = (xlims, ylims)
