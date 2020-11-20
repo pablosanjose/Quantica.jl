@@ -66,7 +66,7 @@ end
 site_shader(shader::DensityShader, psi::AbstractVector, h) =
     i -> real(shader.transform(psi[i]' * shader.kernel * psi[i]))
 
-site_shader(shader::Function, psi, h) = i -> shader(psi[i])
+site_shader(shader::Function, psi, h) = i -> sumrow(shader, psi, i)
 site_shader(shader::Number, psi, h) = i -> shader
 site_shader(shader::Missing, psi, h) = i -> 0.0
 
@@ -86,9 +86,14 @@ end
 link_shader(shader::DensityShader, psi::AbstractVector, h) =
     (row,col) -> real(shader.transform(psi[col]' * shader.kernel * psi[col]))
 
-link_shader(shader::Function, psi, h) = (row, col) -> shader(psi[row], psi[col])
+link_shader(shader::Function, psi, h) = (row, col) -> sumrow(shader, psi, row, col)
 link_shader(shader::Number, psi, h) = (row, col) -> shader
 link_shader(shader::Missing, psi, h) = (row, col) -> 0.0
+
+sumrow(shader, psi::AbstractVector, i) = shader(psi[i])
+sumrow(shader, psi::AbstractVector, i, j) = shader(psi[i], psi[j])
+sumrow(shader, psi::AbstractMatrix, i) = sum(col -> shader(psi[i, col]), axes(psi,2))
+sumrow(shader, psi::AbstractMatrix, i, j) = sum(col -> shader(psi[i, col], psi[j, col]), axes(psi,2))
 
 #######################################################################
 # vlplot
@@ -212,17 +217,17 @@ function VegaLite.vlplot(h::Hamiltonian{LA}, psi = missing;
                         sitecolor_shader = site_shader(sitecolor, psi´, h), linkcolor_shader = site_shader(linkcolor, psi´, h))
 
     table          = linkstable(h, directives, plotsites, plotlinks)
-
     maxsiteopacity = plotsites ? maximum(s.opacity for s in table if !s.islink) : 0.0
     maxsitesize    = plotsites ? maximum(s.scale for s in table if !s.islink)   : 0.0
     maxlinkopacity = plotlinks ? maximum(s.opacity for s in table if s.islink)  : 0.0
     maxlinksize    = plotlinks ? maximum(s.scale for s in table if s.islink)    : 0.0
-    
-    mindiameter > 0 && filter!(s -> !s.islink && s.scale >= mindiameter*maxsitesize/maxdiameter, table)
+
+    mindiameter > 0 && filter!(s -> s.islink || s.scale >= mindiameter*maxsitesize/maxdiameter, table)
 
     corners    = _corners(table)
     plotrange  = (xlims, ylims)
     (domainx, domainy), sizes = domain_size(corners, size, plotrange)
+
     if (plotsites && sitecolor !== missing) || (plotlinks && linkcolor !== missing)
         colorfield = :color
         colorscheme´ = colorscheme
@@ -295,15 +300,12 @@ needslegend(x::Number) = nothing
 needslegend(x) = true
 
 unflatten_or_reinterpret_or_missing(psi::Missing, h) = missing
-unflatten_or_reinterpret_or_missing(psi::AbstractVector, h) = unflatten_or_reinterpret(psi, h)
+unflatten_or_reinterpret_or_missing(psi::AbstractArray, h) = unflatten_or_reinterpret(psi, h)
 
-function unflatten_or_reinterpret_or_missing(s::Subspace, h)
-    degeneracy(s) == 1 || @warn "Multiply degenerate `Subspace`. Plotting only first state"
-    psi = vec(view(s.basis, :, 1:1))
-    return unflatten_or_reinterpret_or_missing(psi, h)
-end
+unflatten_or_reinterpret_or_missing(s::Subspace, h) = unflatten_or_reinterpret_or_missing(s.basis, h)
 
-checkdims_psi(h, psi) = size(h, 2) == size(psi, 1) || throw(ArgumentError("The eigenstate length $(size(psi,1)) must match the Hamiltonian dimension $(size(h, 2))"))
+checkdims_psi(h, psi) = size(h, 2) == size(psi, 1) ||
+    throw(ArgumentError("The eigenstate length $(size(psi,1)) must match the Hamiltonian dimension $(size(h, 2))"))
 checkdims_psi(h, ::Missing) = nothing
 
 function linkstable(h::Hamiltonian, d, plotsites, plotlinks)
