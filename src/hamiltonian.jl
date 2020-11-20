@@ -282,7 +282,8 @@ end
 
 ## unflatten ##
 
-unflatten(vflat, h) = unflatten!(similar(vflat, orbitaltype(h), size(vflat)...), vflat, h)
+unflatten(vflat::AbstractVector, h) = unflatten!(similar(vflat, orbitaltype(h), size(h, 2)), vflat, h)
+unflatten(vflat::AbstractMatrix, h) = unflatten!(similar(vflat, orbitaltype(h), size(h, 2), size(vflat, 2)), vflat, h)
 
 function unflatten!(v::AbstractArray{T}, vflat::AbstractArray, h::Hamiltonian) where {T}
     norbs = length.(h.orbitals)
@@ -291,7 +292,7 @@ function unflatten!(v::AbstractArray{T}, vflat::AbstractArray, h::Hamiltonian) w
     check_unflatten_dst_dims(v, h)
     check_unflatten_src_dims(vflat, dimflat)
     check_unflatten_eltypes(v, h)
-    j = 0
+    row = 0
     for col in 1:size(v, 2)
         for s in sublats(h.lattice)
             N = norbs[s]
