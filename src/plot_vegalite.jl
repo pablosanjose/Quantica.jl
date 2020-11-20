@@ -114,6 +114,14 @@ shaders: `sitesize`, `siteopacity`, `sitecolor`, `linksize`, `linkopacity` or `l
 (see keywords below). If `psi` is obtained in a flattened form, it will be automatically
 "unflattened" to restore the orbital structure of `h`.
 
+    vlplot(h::Hamiltonian, psi::AbstractMatrix; kw...)
+
+Same as above, but columns of psi will be summed over after applying shaders to each.
+
+    vlplot(h::Hamiltonian, psi::Subspace; kw...)
+
+Equivalent to `vlplot(h, psi.basis; kw...)`.
+
 # Keyword arguments and defaults
 
 ## Common
