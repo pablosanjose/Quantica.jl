@@ -33,7 +33,7 @@ export sublat, bravais, lattice, dims, supercell, unitcell,
 
 export RegionPresets, RP, LatticePresets, LP, HamiltonianPresets, HP
 
-export LinearAlgebraPackage, ArpackPackage, KrylovKitPackage
+export LinearAlgebraPackage, ArpackPackage, ArnoldiMethodPackage, KrylovKitPackage
 
 export @SMatrix, @SVector, SMatrix, SVector, SA
 

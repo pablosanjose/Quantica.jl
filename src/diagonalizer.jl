@@ -119,7 +119,8 @@ end
 ArnoldiMethodPackage(; kw...) = (checkloaded(:ArnoldiMethod); ArnoldiMethodPackage(values(kw)))
 
 function diagonalize(matrix, method::ArnoldiMethodPackage)
-    ϵ, ψ = Main.ArnoldiMethod.partialschur(matrix; (method.kw)...)
+    p = first(Main.ArnoldiMethod.partialschur(matrix; (method.kw)...))
+    ϵ, ψ = p.eigenvalues, p.Q
     return ϵ, ψ
 end
 

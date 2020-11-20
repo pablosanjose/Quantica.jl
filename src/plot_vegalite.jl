@@ -131,6 +131,7 @@ shaders: `sitesize`, `siteopacity`, `sitecolor`, `linksize`, `linkopacity` or `l
     - `colorscheme = "redyellowblue"`: Color scheme from `https://vega.github.io/vega/docs/schemes/`
     - `discretecolorscheme = "category10"`: Color scheme from `https://vega.github.io/vega/docs/schemes/`
     - `maxdiameter = 15`: maximum diameter of sites, useful when `sitesize` is not a constant.
+    - `mindiameter = 0`: site diameters below this value will be excluded (may be used with `plotlinks = false` to increase performance)
     - `maxthickness = 0.25`: maximum thickness of links, as a fraction of `maxdiameter`, useful when `linksize` is not a constant.
     - `sitesize = maxdiameter`: diameter of sites.
     - `siteopacity = 0.9`: opacity of sites.
@@ -197,7 +198,7 @@ end
 function VegaLite.vlplot(h::Hamiltonian{LA}, psi = missing;
                          labels = ("x","y"), size = 800, axes::Tuple{Int,Int} = (1,2), xlims = missing, ylims = missing, digits = 4,
                          plotsites = true, plotlinks = true,
-                         maxdiameter = 20, maxthickness = 0.25,
+                         maxdiameter = 20, mindiameter = 0, maxthickness = 0.25,
                          sitestroke = :white, sitesize = maxdiameter, siteopacity = 0.9, sitecolor = missing,
                          linksize = maxthickness, linkopacity = 1.0, linkcolor = sitecolor,
                          colorrange = missing,
@@ -210,11 +211,14 @@ function VegaLite.vlplot(h::Hamiltonian{LA}, psi = missing;
                         linksize_shader = link_shader(linksize, psi´, h), linkopacity_shader = link_shader(linkopacity, psi´, h),
                         sitecolor_shader = site_shader(sitecolor, psi´, h), linkcolor_shader = site_shader(linkcolor, psi´, h))
 
-    table          = linkstable(h, directives)
-    maxsiteopacity = maximum(s.opacity for s in table if !s.islink)
-    maxlinkopacity = maximum(s.opacity for s in table if s.islink)
-    maxsitesize    = maximum(s.scale for s in table if !s.islink)
-    maxlinksize    = maximum(s.scale for s in table if s.islink)
+    table          = linkstable(h, directives, plotsites, plotlinks)
+
+    maxsiteopacity = plotsites ? maximum(s.opacity for s in table if !s.islink) : 0.0
+    maxsitesize    = plotsites ? maximum(s.scale for s in table if !s.islink)   : 0.0
+    maxlinkopacity = plotlinks ? maximum(s.opacity for s in table if s.islink)  : 0.0
+    maxlinksize    = plotlinks ? maximum(s.scale for s in table if s.islink)    : 0.0
+    
+    mindiameter > 0 && filter!(s -> !s.islink && s.scale >= mindiameter*maxsitesize/maxdiameter, table)
 
     corners    = _corners(table)
     plotrange  = (xlims, ylims)
@@ -291,12 +295,18 @@ needslegend(x::Number) = nothing
 needslegend(x) = true
 
 unflatten_or_reinterpret_or_missing(psi::Missing, h) = missing
-unflatten_or_reinterpret_or_missing(psi, h) = unflatten_or_reinterpret(psi, h)
+unflatten_or_reinterpret_or_missing(psi::AbstractVector, h) = unflatten_or_reinterpret(psi, h)
+
+function unflatten_or_reinterpret_or_missing(s::Subspace, h)
+    degeneracy(s) == 1 || @warn "Multiply degenerate `Subspace`. Plotting only first state"
+    psi = vec(view(s.basis, :, 1:1))
+    return unflatten_or_reinterpret_or_missing(psi, h)
+end
 
 checkdims_psi(h, psi) = size(h, 2) == size(psi, 1) || throw(ArgumentError("The eigenstate length $(size(psi,1)) must match the Hamiltonian dimension $(size(h, 2))"))
 checkdims_psi(h, ::Missing) = nothing
 
-function linkstable(h::Hamiltonian, d)
+function linkstable(h::Hamiltonian, d, plotsites, plotlinks)
     (a1, a2) = d.axes
     lat = h.lattice
     T = numbertype(lat)
@@ -315,7 +325,7 @@ function linkstable(h::Hamiltonian, d)
                 for (i, r) in enumeratesites(lat, ssrc)
                     x = get(r, a1, zero(T)); y = get(r, a2, zero(T))
                     ridx += 1
-                    push!(table, (x = x, y = y, x2 = x, y2 = y,
+                    plotsites && push!(table, (x = x, y = y, x2 = x, y2 = y,
                                 sublat = sublatname(lat, ssrc), tooltip = matrixstring_inline(i, h0[i, i], d.digits),
                                 scale = d.sitesize_shader(ridx), color = d.sitecolor_shader(ridx),
                                 opacity = d.siteopacity_shader(ridx), islink = false))
@@ -330,13 +340,14 @@ function linkstable(h::Hamiltonian, d)
                     # sites in neighboring cells connected to dn=0 cell. But add only once.
                     if !iszero(har.dn) && !in(row, rows)
                         x = get(rdst, a1, zero(T)); y = get(rdst, a2, zero(T))
-                        push!(table,
+                        plotsites && push!(table,
                             (x = x, y = y, x2 = x, y2 = y,
                             sublat = sublatname(lat, sdst), tooltip = matrixstring_inline(row, h0[row, row], d.digits),
                             scale =  d.sitesize_shader(row), color = d.sitecolor_shader(row),
                             opacity = 0.5 * d.siteopacity_shader(row), islink = false))
                         push!(rows, row)
                     end
+                    plotlinks || continue
                     # draw half-links but only intracell
                     rdst = ifelse(iszero(har.dn), (rdst + rsrc) / 2, rdst)
                     x  = get(rsrc, a1, zero(T)); y  = get(rsrc, a2, zero(T))
