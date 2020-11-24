@@ -779,7 +779,7 @@ function bandstructure_collect(subspaces::Array{Vector{Subspace{C,T,S}},D}, band
 
     for rng in equalruns(s0inds)
         baseind = s0inds[first(rng)]
-        baseind in CartesianIndices(sptrs) || continue
+        baseind in CartesianIndices(sptrs) || continue  # TODO: should not be necessary
         sptrs[baseind] = rng
     end
 
