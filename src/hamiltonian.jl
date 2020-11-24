@@ -292,8 +292,8 @@ function unflatten!(v::AbstractArray{T}, vflat::AbstractArray, h::Hamiltonian) w
     check_unflatten_dst_dims(v, h)
     check_unflatten_src_dims(vflat, dimflat)
     check_unflatten_eltypes(v, h)
-    row = 0
     for col in 1:size(v, 2)
+        row = 0
         for s in sublats(h.lattice)
             N = norbs[s]
             for i in offsetsflat[s]+1:N:offsetsflat[s+1]
@@ -313,7 +313,7 @@ check_unflatten_src_dims(vflat, dimflat) =
     size(vflat, 1) == dimflat ||
         throw(ArgumentError("Dimension of source array is inconsistent with Hamiltonian"))
 
-check_unflatten_eltypes(v::AbstractVector{T}, h) where {T} =
+check_unflatten_eltypes(v::AbstractArray{T}, h) where {T} =
     T === orbitaltype(h) ||
         throw(ArgumentError("Eltype of desination array is inconsistent with Hamiltonian"))
 
@@ -800,7 +800,7 @@ Base.getindex(h::Hamiltonian, dn::NTuple) = getindex(h, SVector(dn))
     nh === nothing && throw(BoundsError(h, dn))
     return h.harmonics[nh].h
 end
-Base.getindex(h::Hamiltonian, dn::NTuple, i::Vararg{Int}) = h[dn][i...]
+Base.getindex(h::Hamiltonian, dn::Union{NTuple,SVector}, i0, i::Vararg{Int}) = h[dn][i0, i...]
 Base.getindex(h::Hamiltonian{LA, L}, i::Vararg{Int}) where {LA,L} = h[zero(SVector{L,Int})][i...]
 
 Base.deleteat!(h::Hamiltonian{<:Any,L}, dn::Vararg{Int,L}) where {L} =
