@@ -750,7 +750,7 @@ function bandstructure_collect(subspaces::Array{Vector{Subspace{C,T,S}},D}, band
     nsimps = isempty(bands) ? 0 : sum(nsimplices, bands)
     sverts = Vector{NTuple{D+1,SVector{D+1,T}}}(undef, nsimps)
     sbases = Vector{NTuple{D+1,S}}(undef, nsimps)
-    sptrs = fill(1:0, size(subspaces) .- 1)                  # assuming non-periodic basemesh
+    sptrs = fill(1:0, size(subspaces) .- 1)               # assuming non-periodic basemesh
     s0inds = Vector{CartesianIndex{D}}(undef, nsimps)    # base cuboid index for reference vertex in simplex, for sorting
 
     scounter = 0
@@ -761,7 +761,7 @@ function bandstructure_collect(subspaces::Array{Vector{Subspace{C,T,S}},D}, band
             let ioffset = ioffset  # circumvent boxing, JuliaLang/#15276
                 baseinds = (i -> cuboidinds[ioffset + i].baseidx).(s)
                 pbase = sortperm(SVector(baseinds))
-                s0inds[scounter] = baseinds[first(pbase)] # equivalent to minimum(baseinds)
+                s0inds[scounter] = minimum(baseinds) # or equivalently, baseinds[first(pbase)]
                 sverts[scounter] = ntuple(i -> band.verts[s[pbase[i]]], Val(D+1))
                 sbases[scounter] = ntuple(Val(D+1)) do i
                     c = cuboidinds[ioffset + s[pbase[i]]]
@@ -778,7 +778,9 @@ function bandstructure_collect(subspaces::Array{Vector{Subspace{C,T,S}},D}, band
     permute!(sbases, psimps)
 
     for rng in equalruns(s0inds)
-        sptrs[s0inds[first(rng)]] = rng
+        baseind = s0inds[first(rng)]
+        baseind in CartesianIndices(sptrs) || continue  # TODO: should not be necessary
+        sptrs[baseind] = rng
     end
 
     return sverts, sbases, sptrs

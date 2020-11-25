@@ -50,50 +50,40 @@ The density at a half-link is equal to the density at the originating site.
 """
 DensityShader(; kernel = 1, transform = identity) = DensityShader(kernel, transform)
 
-function site_shader(shader::CurrentShader, psi::AbstractVector{T}, h) where {T}
+site_shader(shader, h, psi) = i -> applyshader(shader, h, psi, i)
+link_shader(shader, h, psi) = (i, j, dn) -> applyshader(shader, h, psi, i, j, dn)
+
+applyshader(shader, h, psi, i...) = applyshader_vector(shader, h, psi, i...)
+applyshader(shader, h, psi::AbstractMatrix, i...) = sum(col -> applyshader_vector(shader, h, view(psi, :, col), i...), axes(psi, 2))
+
+applyshader_vector(shader::Number, h, x...) = shader
+applyshader_vector(shader::Missing, h, x...) = 0.0
+applyshader_vector(shader::Function, h, psi, i) = shader(psi[i])
+applyshader_vector(shader::Function, h, psi, i, j, dn) = shader(psi[i], psi[j])
+applyshader_vector(shader::DensityShader, h, psi, i) = real(shader.transform(psi[i]' * shader.kernel * psi[i]))
+applyshader_vector(shader::DensityShader, h, psi, i, j, dn) = real(shader.transform(psi[j]' * shader.kernel * psi[j]))
+
+function applyshader_vector(shader::CurrentShader, h, psi::AbstractVector{T}, src) where {T}
     pos = allsitepositions(h.lattice)
-    br = bravais(h.lattice)
-    current = zeros(real(eltype(T)), length(pos))
-    for hh in h.harmonics, (row, col) in nonzero_indices(hh)
-        dr = pos[row] + br * hh.dn - pos[col]
-        dj = imag(psi[row]' * shader.kernel * hh.h[row, col] * psi[col])
-        j = iszero(shader.axis) ? real(shader.transform(norm(dr * dj))) : real(shader.transform(dr[shader.axis] * dj))
-        current[row] += j
+    c = zero(real(eltype(T)))
+    for har in h.harmonics
+        rows = rowvals(har.h)
+        for ptr in nzrange(har.h, src)
+            dst = rows[ptr]
+            c += applyshader_vector(shader, h, psi, dst, src, har.dn)
+        end
     end
-    return i -> current[i]
+    return c
 end
 
-site_shader(shader::DensityShader, psi::AbstractVector, h) =
-    i -> real(shader.transform(psi[i]' * shader.kernel * psi[i]))
-
-site_shader(shader::Function, psi, h) = i -> sumrow(shader, psi, i)
-site_shader(shader::Number, psi, h) = i -> shader
-site_shader(shader::Missing, psi, h) = i -> 0.0
-
-function link_shader(shader::CurrentShader, psi::AbstractVector{T}, h) where {T}
+function applyshader_vector(shader::CurrentShader, h, psi, i, j, dn)
     pos = allsitepositions(h.lattice)
     # Assuming that only links from base unit cell are plotted
-    h0 = first(h.harmonics).h
-    current = (row, col) -> begin
-        dr = pos[row] - pos[col]
-        dj = imag(psi[row]' * shader.kernel * h0[row, col] * psi[col])
-        j = iszero(shader.axis) ? shader.transform(norm(dr * dj)) : shader.transform(dr[shader.axis] * dj)
-        return real(j)
-    end
-    return current
+    dr = pos[i] - pos[j] + bravais(h) * dn
+    dc = imag(psi[i]' * shader.kernel * h[dn, i, j] * psi[j])
+    c = iszero(shader.axis) ? shader.transform(norm(dr * dc)) : shader.transform(dr[shader.axis] * dc)
+    return real(c)
 end
-
-link_shader(shader::DensityShader, psi::AbstractVector, h) =
-    (row,col) -> real(shader.transform(psi[col]' * shader.kernel * psi[col]))
-
-link_shader(shader::Function, psi, h) = (row, col) -> sumrow(shader, psi, row, col)
-link_shader(shader::Number, psi, h) = (row, col) -> shader
-link_shader(shader::Missing, psi, h) = (row, col) -> 0.0
-
-sumrow(shader, psi::AbstractVector, i) = shader(psi[i])
-sumrow(shader, psi::AbstractVector, i, j) = shader(psi[i], psi[j])
-sumrow(shader, psi::AbstractMatrix, i) = sum(col -> shader(psi[i, col]), axes(psi,2))
-sumrow(shader, psi::AbstractMatrix, i, j) = sum(col -> shader(psi[i, col], psi[j, col]), axes(psi,2))
 
 #######################################################################
 # vlplot
@@ -151,7 +141,7 @@ Equivalent to `vlplot(h, psi.basis; kw...)`.
     - `sitecolor = missing`: color of sites. If `missing`, colors will encode the site sublattice following `discretecolorscheme`
     - `linksize = maxthickness`: thickness of hopping links.
     - `linkopacity = 1.0`: opacity of hopping links.
-    - `linkcolor = sitecolor`: color of links. If `missing`, colors will encode source site sublattice, following `discretecolorscheme`
+    - `linkcolor = missing`: color of links. If `missing`, colors will encode source site sublattice, following `discretecolorscheme`
     - `colorrange = missing`: the range of values to encode using `sitecolor` and `linkcolor`. If `missing` the minimum and maximum values will be used.
 
 Apart from a number, all site shaders (`sitesize`, `siteopacity` and `sitecolor`) can also
@@ -213,16 +203,16 @@ function VegaLite.vlplot(h::Hamiltonian{LA}, psi = missing;
                          plotsites = true, plotlinks = true,
                          maxdiameter = 20, mindiameter = 0, maxthickness = 0.25,
                          sitestroke = :white, sitesize = maxdiameter, siteopacity = 0.9, sitecolor = missing,
-                         linksize = maxthickness, linkopacity = 1.0, linkcolor = sitecolor,
+                         linksize = maxthickness, linkopacity = 1.0, linkcolor = missing,
                          colorrange = missing,
                          colorscheme = "redyellowblue", discretecolorscheme = "category10") where {E,LA<:Lattice{E}}
     psi´ = unflatten_or_reinterpret_or_missing(psi, h)
     checkdims_psi(h, psi´)
 
     directives     = (; axes = axes, digits = digits,
-                        sitesize_shader = site_shader(sitesize, psi´, h), siteopacity_shader = site_shader(siteopacity, psi´, h),
-                        linksize_shader = link_shader(linksize, psi´, h), linkopacity_shader = link_shader(linkopacity, psi´, h),
-                        sitecolor_shader = site_shader(sitecolor, psi´, h), linkcolor_shader = site_shader(linkcolor, psi´, h))
+                        sitesize_shader = site_shader(sitesize, h, psi´), siteopacity_shader = site_shader(siteopacity, h, psi´),
+                        sitecolor_shader = site_shader(sitecolor, h, psi´), linksize_shader = link_shader(linksize, h, psi´),
+                        linkopacity_shader = link_shader(linkopacity, h, psi´), linkcolor_shader = link_shader(linkcolor, h, psi´))
 
     table          = linkstable(h, directives, plotsites, plotlinks)
     maxsiteopacity = plotsites ? maximum(s.opacity for s in table if !s.islink) : 0.0
@@ -366,8 +356,8 @@ function linkstable(h::Hamiltonian, d, plotsites, plotlinks)
                     rdst ≈ rsrc || push!(table,
                         (x = x, y = y, x2 = x´, y2 = y´,
                         sublat = sublatname(lat, ssrc), tooltip = matrixstring_inline(row, col, har.h[row, col], d.digits),
-                        scale = d.linksize_shader(row, col), color = d.linkcolor_shader(col),
-                        opacity = ifelse(iszero(har.dn), 1.0, 0.5) * d.linkopacity_shader(row, col), islink = true))
+                        scale = d.linksize_shader(row, col, har.dn), color = d.linkcolor_shader(row, col, har.dn),
+                        opacity = ifelse(iszero(har.dn), 1.0, 0.5) * d.linkopacity_shader(row, col, har.dn), islink = true))
                 end
             end
         end
