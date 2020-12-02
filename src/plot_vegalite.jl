@@ -178,7 +178,8 @@ function bandtable(b::Bandstructure{1,C,T}, (scalingx, scalingy), bandsiter) whe
     bandsiter´ = bandsiter === missing ? eachindex(bands(b)) : bandsiter
     NT = typeof((;x = zero(T), y = zero(T), band = 1, tooltip = 1))
     table = NT[]
-    for (nb, band) in enumerate(bands(b))
+    for nb in bandsiter´
+        band = bands(b, nb)
         verts = vertices(band)
         sinds = band.sinds
         isempty(sinds) && continue
