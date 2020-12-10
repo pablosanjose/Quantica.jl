@@ -364,6 +364,7 @@ Base.length(s::SiteSublats) = nsites(s.u)
 #######################################################################
 # Runs
 #######################################################################
+# iteration yields ranges of subsequent xs elements such that istogether on them gives true
 struct Runs{T,F}
     xs::Vector{T}
     istogether::F
@@ -402,11 +403,19 @@ struct MarchingNeighbors{D,G}
     len::Int
 end
 
+# c is a CartesianRange over vertices, and n is a CartesianIndex from which to find neighbors
 function marchingneighbors(c, n)
     rp = max(n, first(c)):min(n + oneunit(n), last(c))
     rm = max(n - oneunit(n), first(c)):min(n, last(c))
     gen = Iterators.filter(!isequal(n), Iterators.flatten((rp, rm)))
     len = length(rp) + length(rm) - 2
+    return MarchingNeighbors(n, gen, len)
+end
+
+function marchingneighbors_forward(c, n)
+    rp = max(n, first(c)):min(n + oneunit(n), last(c))
+    gen = Iterators.filter(!isequal(n), rp)
+    len = length(rp) - 2
     return MarchingNeighbors(n, gen, len)
 end
 
@@ -419,3 +428,63 @@ Base.IteratorEltype(::MarchingNeighbors) = Base.HasEltype()
 Base.eltype(::MarchingNeighbors{D}) where {D} = CartesianIndex{D}
 
 Base.length(m::MarchingNeighbors) = m.len
+
+#######################################################################
+# MarchingSimplices
+#######################################################################
+struct MarchingSimplices{D,D´}
+    cinds::CartesianIndices{D´,NTuple{D´,Base.OneTo{Int}}}
+    simps::Vector{NTuple{D´,CartesianIndex{D}}}  # simplices verts in unit cuboid
+    unitperms::Vector{NTuple{D,Int}}             # unit vector order of simplices
+end
+
+# c is a CartesianIndices over all vertices
+function marchingsimplices(c::CartesianIndices{D}) where {D}
+    unitperms = marchingsimplices_unitperms(Val(D))
+    edgeperms = map(edge -> unitvector.(CartesianIndex{D}, edge), unitperms)
+    simps = marchingsimplices_verts.(edgeperms)
+    srange = eachindex(simps)
+    refverts = ntuple(i -> Base.OneTo(c.indices[i][1:end-1]), Val(D))
+    cinds = CartesianIndices((refverts..., srange))
+    return MarchingSimplices(cinds, simps, unitperms)
+end
+
+# indices of unit vectors in a unit cuboid, taken in any order
+marchingsimplices_unitperms(::Val{D}) where {D} = permutations(ntuple(identity, Val(D)))
+
+# simplex vertices as the sum of unit vectors in any permutation
+marchingsimplices_verts(edges::NTuple{D}) where {D} =
+    (zero(CartesianIndex{D}), edges...) |> cumsum |> orientsimp
+
+function orientsimp(sverts)
+    volume = det(hcat(SVector.(Tuple.(Base.tail(sverts)))...))
+    sverts´ = ifelse(volume >= 0, sverts, switchlast(sverts))
+    return sverts´
+end
+
+switchlast(s::NTuple{N,T}) where {N,T} = ntuple(i -> i < N - 1 ? s[i] : s[2N - i - 1] , Val(N))
+
+function Base.iterate(m::MarchingSimplices, s...)
+    it = iterate(m.cinds, s...)
+    it === nothing && return nothing
+    c, s´ = it
+    t = Tuple(c)
+    nsimp = last(t)
+    refvert = CartesianIndex(Base.front(t))
+    verts = Ref(refvert) .+ m.simps[nsimp]
+    return verts, s´
+end
+
+Base.IteratorSize(::MarchingSimplices{D}) where {D} = Base.HasShape{D}()
+
+Base.axes(m::MarchingSimplices, i...) = axes(m.cinds, i...)
+
+Base.size(m::MarchingSimplices, i...) = size(m.cinds, i...)
+
+Base.CartesianIndices(m::MarchingSimplices) = m.cinds
+
+Base.IteratorEltype(::MarchingSimplices) = Base.HasEltype()
+
+Base.eltype(::MarchingSimplices{D,D´}) where {D,D´} = NTuple{D´,CartesianIndex{D}}
+
+Base.length(m::MarchingSimplices) = prod(length.(axes(m)))

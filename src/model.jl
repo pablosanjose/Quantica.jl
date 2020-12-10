@@ -18,7 +18,7 @@ closest pairs of sites in a lattice, irrespective of their sublattice.
 
 Obtain the actual nth-nearest-neighbot distance between sites in lattice `lat`.
 
-# See also:
+# See also
     `hopping`
 """
 nrange(n::Int) = NeighborRange(n)
@@ -613,7 +613,7 @@ Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
   Coordination     : 0.0
 ```
 
-# See also:
+# See also
     `hopping`
 """
 onsite(o; kw...) = onsite(o, siteselector(; kw...))
@@ -726,7 +726,7 @@ Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
   Coordination     : 9.0
 ```
 
-# See also:
+# See also
     `onsite`, `nrange`
 """
 function hopping(t; plusadjoint = false, range = nrange(1), kw...)
@@ -837,7 +837,7 @@ do `@onsite!(...) + @hopping!(...)`). `ElementModifier`s are not model terms but
 transformations of an existing Hamiltonian that are meant to be applied sequentially (the
 order of application usually matters).
 
-# See also:
+# See also
     `@hopping!`, `parametric`
 """
 macro onsite!(kw, f)
@@ -864,7 +864,7 @@ do `@onsite!(...) + @hopping!(...)`). `ElementModifier`s are not model terms but
 transformations of an existing Hamiltonian that are meant to be applied sequentially (the
 order of application usually matters).
 
-# See also:
+# See also
     `@onsite!`, `parametric`
 """
 macro hopping!(kw, f)
@@ -998,7 +998,7 @@ KetModel{2}: model with 2 terms
     Coefficient      : -1
 ```
 
-# See also:
+# See also
     `onsite`, `Vector`, `Matrix`
 """
 ket(f; normalized = true, maporbitals::Bool = false, kw...) = KetModel(onsite(f; kw...), normalized, Val(maporbitals))
@@ -1053,7 +1053,7 @@ independently to each orbital. The remaining keywords `kw` are passed to `ket` a
 used to constrain the random amplitude to a subset of sites. `normalized`, however, is
 always `false`.
 
-# See also:
+# See also
     `ket`
 """
 randomkets(n::Int, f = r -> cis(2pi*rand()); kw...) =

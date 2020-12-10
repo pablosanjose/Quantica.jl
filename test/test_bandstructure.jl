@@ -40,6 +40,14 @@ using Arpack
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(-1)) |> unitcell(10)
     b = bandstructure(h, :K, :K´, subticks = 7, method = ArpackPackage(sigma = 0.1im, nev = 12), showprogress = false)
     @test nbands(b) == 1
+
+    # number of simplices contant across BZ (computing their degeneracy with the projs at each vertex j)
+    h = LatticePresets.honeycomb() |> hamiltonian(hopping(-1)) |> unitcell(3)
+    nev = size(h, 1)
+    b = bandstructure(h, splitbands = false)
+    @test nbands(b) == 1
+    band = bands(b, 1)
+    @test all(j -> all(rng -> sum(i -> degeneracy(band.sbases[i][j]), rng) == nev, band.sptrs), 1:3)
 end
 
 @testset "functional bandstructures" begin
@@ -48,7 +56,8 @@ end
     hf((x,)) = bloch!(matrix, hc, (x, -x))
     m = cuboid((0, 1))
     b = bandstructure(hf, m, showprogress = false)
-    @test nbands(b)  == 2
+    @test nbands(b) == 2
+    @test nsimplices(b)  == 24
 
     hc2 = LatticePresets.honeycomb() |> hamiltonian(hopping(-1))
     hp2 = parametric(hc2, @hopping!((t; s) -> s*t))
@@ -56,7 +65,8 @@ end
     hf2((s, x)) = bloch!(matrix2, hp2(s = s), (x, x))
     m2 = cuboid((0, 1), (0, 1))
     b = bandstructure(hf2, m2, showprogress = false)
-    @test nbands(b)  == 1
+    @test nbands(b) == 1
+    @test nsimplices(b)  == 576
 end
 
 @testset "bandstructures lifts & transforms" begin
@@ -141,7 +151,7 @@ end
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(1)) |> unitcell(2)
     bs = bandstructure(h, subticks = 13)
     @test sum(degeneracy, bs[(1,2)]) == size(h,1)
-    @test_broken sum(degeneracy, bs[(0.2,0.3)]) == size(h,1)
+    @test sum(degeneracy, bs[(0.2,0.3)]) == size(h,1)
 end
 
 @testset "diagonalizer" begin
@@ -152,5 +162,5 @@ end
     d = diagonalizer(h)
     @test first(d()) ≈ [-3,3]
     @test first(d(())) ≈ [-3,3]
-    @test d() == Tuple(spectrum(h))
+    @test all(d() .≈ Tuple(spectrum(h)))
 end

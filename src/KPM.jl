@@ -232,7 +232,7 @@ resolution`, rounded to the closest integer.
 Same as above with KPM momenta `μ` as input. Equivalent to `densityKPM(μ; kw...)` except
 that imaginary parts are dropped.
 
-# See also:
+# See also
     `momentaKPM`, `densityKPM`, `averageKPM`
 """
 function dosKPM(h; resolution = 2, kets = randomkets(1), kw...)
@@ -263,7 +263,7 @@ for `dosKPM`, all imaginary parts in `ρ_A` are preserved), where the number of 
 
 Same as above with the KPM momenta as input (see `momentaKPM`).
 
-# See also:
+# See also
     `dosKPM`, `momentaKPM`, `averageKPM`
 """
 densityKPM(h, A; resolution = 2, kw...) =
@@ -295,7 +295,7 @@ energy `E_k`, kBT` is the temperature in energy units and `Ef` the Fermi energy.
 
 Same as above with the KPM momenta as input (see `momentaKPM`).
 
-# See also:
+# See also
     `dosKPM`, `momentaKPM`, `averageKPM`
 """
 averageKPM(h, A; kBT = 0, Ef = 0, kw...) = averageKPM(momentaKPM(h, A; kw...); kBT = kBT, Ef = Ef)
