@@ -171,7 +171,7 @@ Bravais{2,2,Float64} : set of 2 Bravais vectors in 2D space.
   Matrix      : [1.0 3.0; 2.0 4.0]
 ```
 
-# See also:
+# See also
     `lattice`
 """
 bravais(lat::AbstractLattice) = lat.bravais.matrix
@@ -261,7 +261,7 @@ Lattice{3,2,Float64} : 2D lattice in 3D space
     Sites         : (1) --> 1 total per unit cell
 ```
 
-# See also:
+# See also
     `LatticePresets`, `bravais`, `sublat`, `supercell`, `intracell`
 """
 function lattice(ss::Sublat...; bravais = (), kw...)
@@ -607,7 +607,7 @@ Superlattice{2,2,Float64,2} : 2D lattice in 2D space, filling a 2D supercell
     Supersites    : 9
 ```
 
-# See also:
+# See also
     `unitcell`, `siteselector`
 """
 supercell(v...; kw...) = lat -> supercell(lat, v...; kw...)
@@ -841,7 +841,7 @@ Lattice{2,2,Float64} : 2D lattice in 2D space
     Sites         : (9) --> 9 total per unit cell
 ```
 
-# See also:
+# See also
     `supercell`, `siteselector`
 """
 unitcell(v::Union{SMatrix,Tuple,SVector,Integer}...; kw...) = lat -> unitcell(lat, v...; kw...)

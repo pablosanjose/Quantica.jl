@@ -180,10 +180,10 @@ function bandtable(b::Bandstructure{1,C,T}, (scalingx, scalingy), bandsiter) whe
     table = NT[]
     for (nb, band) in enumerate(bands(b))
         verts = vertices(band)
-        sinds = band.sinds
-        isempty(sinds) && continue
+        simps = band.simps
+        isempty(simps) && continue
         s0 = (0, 0)
-        for s in sinds
+        for s in simps
             if first(s) == last(s0) || s0 == (0, 0)
                 push!(table, (; x = verts[first(s)][1] * scalingx, y = verts[first(s)][2] * scalingy, band = nb, tooltip = degeneracy(band, first(s))))
             else

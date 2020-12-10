@@ -517,7 +517,7 @@ julia> h[(3,3)][[1,2],[1,2]] .= Ref(@SMatrix[1 2; 2 1])
  [1.0+0.0im 2.0+0.0im; 2.0+0.0im 1.0+0.0im]  [1.0+0.0im 2.0+0.0im; 2.0+0.0im 1.0+0.0im]
 ```
 
-# See also:
+# See also
     `onsite`, `hopping`, `bloch`, `bloch!`
 """
 hamiltonian(lat::AbstractLattice, ts...; orbitals = missing, kw...) =
@@ -829,7 +829,7 @@ supercell that contains cells that are both in the supercell of `h1` and `h2`
 
 Equivalent of the above for `Superlattice`s
 
-# See also:
+# See also
     `|`, `xor`
 """
 (Base.:&)(s1::Hamiltonian{<:Superlattice}, s2::Hamiltonian{<:Superlattice}) =
@@ -845,7 +845,7 @@ supercell that contains cells that are either in the supercell of `h1` or `h2`
 
 Equivalent of the above for `Superlattice`s
 
-# See also:
+# See also
     `&`, `xor`
 """
 (Base.:|)(s1::Hamiltonian{<:Superlattice}, s2::Hamiltonian{<:Superlattice}) =
@@ -862,7 +862,7 @@ both
 
 Equivalent of the above for `Superlattice`s
 
-# See also:
+# See also
     `&`, `|`
 """
 (Base.xor)(s1::Hamiltonian{<:Superlattice}, s2::Hamiltonian{<:Superlattice}) =
@@ -1544,7 +1544,7 @@ julia> h = LatticePresets.honeycomb() |> hamiltonian(onsite(1) + hopping(2)) |> 
   [2, 2]  =  1.0+0.0im
 ```
 
-# See also:
+# See also
     `bloch!`, `similarmatrix`
 """
 bloch(ϕs, axis = 0) = h -> bloch(h, ϕs, axis)
@@ -1602,7 +1602,7 @@ julia> bloch!(similarmatrix(ph, flatten), ph, (0, 0, (; α = 2)))
   [3, 3]  =  0.0+0.0im
 ```
 
-# See also:
+# See also
     `bloch`, `similarmatrix`
 """
 bloch!(matrix, h::Hamiltonian, ϕs, axis = 0) = _bloch!(matrix, h, toSVector(ϕs), axis)

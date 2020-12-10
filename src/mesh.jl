@@ -1,8 +1,18 @@
 ######################################################################
 # CuboidMesh
 ######################################################################
-struct CuboidMesh{D,T}
+struct CuboidMesh{D,T,D´}
     ticks::NTuple{D,Vector{T}}
+    simpitr::MarchingSimplices{D,D´}
+end
+
+function Base.show(io::IO, mesh::CuboidMesh{D}) where {D}
+    i = get(io, :indent, "")
+    print(io,
+"$(i)CuboidMesh{$D}: a mesh of a $(D)D parameter cuboid
+$i  Ranges     : $(extrema.(mesh.ticks))
+$i  Axes ticks : $(length.(mesh.ticks))
+$i  Simplices  : $(size(mesh.simpitr)) -> $(length(mesh.simpitr))")
 end
 
 """
@@ -46,16 +56,18 @@ function _cuboid(subticks, axesticks::Vararg{Tuple,L}) where {L}
         end
         allaxisticks
     end
-    return CuboidMesh(allticks)
+    simpitr = marchingsimplices(CartesianIndices(eachindex.(allticks)))
+    return CuboidMesh(allticks, simpitr)
 end
 
 Base.eachindex(mesh::CuboidMesh) = CartesianIndices(eachindex.(mesh.ticks))
 
+Base.getindex(mesh::CuboidMesh, n::CartesianIndex) = SVector(getindex.(mesh.ticks, Tuple(n)))
+Base.getindex(mesh::CuboidMesh, i...) = mesh[eachindex(mesh)[i...]]
+
 Base.size(mesh::CuboidMesh, i...) = size(eachindex(mesh), i...)
 
 Base.length(mesh::CuboidMesh) = prod(length.(mesh.ticks))
-
-vertex(mesh::CuboidMesh, n::CartesianIndex) = SVector(getindex.(mesh.ticks, Tuple(n)))
 
 vertices(mesh::CuboidMesh) = (SVector(v) for v in Iterators.product(mesh.ticks...))
 
@@ -63,8 +75,16 @@ nvertices(mesh::CuboidMesh) = length(vertices(mesh))
 
 neighbors(mesh::CuboidMesh, n::CartesianIndex) = marchingneighbors(eachindex(mesh), n)
 
-function neighbors(mesh::CuboidMesh, j::Int)
-    c = eachindex(mesh)
-    l = LinearIndices(c)
-    return (l[i] for i in neighbors(mesh, c[j]))
-end
+neighbors_forward(mesh::CuboidMesh, n::CartesianIndex) = marchingneighbors_forward(eachindex(mesh), n)
+
+# function neighbors(mesh::CuboidMesh, j::Int)
+#     c = eachindex(mesh)
+#     l = LinearIndices(c)
+#     return (l[i] for i in neighbors(mesh, c[j]))
+# end
+
+marchingsimplices(m::CuboidMesh) = m.simpitr
+
+unitperms(m::CuboidMesh) = m.simpitr.unitperms
+
+unitsimplex(m::CuboidMesh, i) = m.simpitr.simps[i]

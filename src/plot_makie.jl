@@ -1,6 +1,9 @@
-using .Makie
 using GeometryBasics
-import .Makie.AbstractPlotting: plot!, plot, to_value
+using .Makie: AbstractPlotting
+using .Makie.AbstractPlotting: to_value, RGBAf0, Vec3f0, FRect, @recipe, LineSegments, Theme,
+    lift, campixel, SceneSpace, Node, Axis, text!, on, mouse_selection, poly!, scale!,
+    translate!, linesegments!, mesh!, scatter!, meshscatter!
+import .Makie.AbstractPlotting: plot!, plot
 
 """
     plot(h::Hamiltonian)
@@ -279,7 +282,7 @@ function plot!(plot::BandPlot2D)
     for (nb, color) in zip(bands, colors)
         band = bs.bands[nb]
         vertices = band.verts
-        simplices = band.sinds
+        simplices = band.simps
         linesegments!(plot, (t -> vertices[first(t)] => vertices[last(t)]).(simplices),
                       linewidth = plot[:linethickness][], color = color)
     end
@@ -306,7 +309,7 @@ function plot!(plot::BandPlot3D)
     for (nb, color) in zip(bandinds, colors)
         band = bs.bands[nb]
         vertices = band.verts
-        connectivity = [s[j] for s in band.sinds, j in 1:3]
+        connectivity = [s[j] for s in band.simps, j in 1:3]
         if isempty(connectivity)
             scatter!(plot, vertices, color = color)
         else

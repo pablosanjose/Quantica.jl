@@ -12,9 +12,8 @@ end
 
 (f::HamiltonianBlochFunctor)(vertex) = bloch!(f.matrix, f.h, map_phiparams(f.mapping, vertex))
 
-struct Diagonalizer{M<:AbstractDiagonalizeMethod,T<:Real,F}
+struct Diagonalizer{M<:AbstractDiagonalizeMethod,F}
     method::M
-    minoverlap::T
     perm::Vector{Int} # reusable permutation vector
     matrixf::F        # functor or function matrixf(φs) that produces matrices to be diagonalized
 end
@@ -50,21 +49,22 @@ true
 # See also
     `bandstructure`, `spectrum`
 """
-function diagonalizer(h::Union{Hamiltonian,ParametricHamiltonian}; method = LinearAlgebraPackage(), mapping = missing, minoverlap = 0.3)
+function diagonalizer(h::Union{Hamiltonian,ParametricHamiltonian}; method = LinearAlgebraPackage(), mapping = missing)
     matrix = similarmatrix(h, method_matrixtype(method, h))
     matrixf = HamiltonianBlochFunctor(h, matrix, mapping)
     perm = Vector{Int}(undef, size(matrix, 2))
-    return Diagonalizer(method, float(minoverlap), perm, matrixf)
+    return Diagonalizer(method, perm, matrixf)
 end
 
-function diagonalizer(matrixf::Function, dimh; method = LinearAlgebraPackage(), minoverlap = 0.3)
+function diagonalizer(matrixf::Function, dimh; method = LinearAlgebraPackage())
     perm = Vector{Int}(undef, dimh)
-    return Diagonalizer(method, float(minoverlap), perm, matrixf)
+    return Diagonalizer(method, perm, matrixf)
 end
 
 @inline function (d::Diagonalizer)(φs)
     ϵ, ψ = diagonalize(d.matrixf(φs), d.method)
     issorted(ϵ, by = real) || sorteigs!(d.perm, ϵ, ψ)
+    fixphase!(ψ)
     return ϵ, ψ
 end
 
@@ -76,6 +76,14 @@ function sorteigs!(perm, ϵ::AbstractVector, ψ::AbstractMatrix)
     permute!(ϵ, p)
     Base.permutecols!!(ψ, p)
     return ϵ, ψ
+end
+
+fixphase!(ψ::AbstractArray{<:Real}) = ψ
+function fixphase!(ψ::AbstractArray{<:Complex})
+    for col in eachcol(ψ)
+        col ./= cis(angle(mean(col)))
+    end
+    return ψ
 end
 
 function Base.show(io::IO, d::Diagonalizer)

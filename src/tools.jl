@@ -18,8 +18,9 @@ toSVector(::Type{T}, ::Tuple{}) where {T} = SVector{0,T}()
 # Dynamic dispatch
 toSVector(v::AbstractVector) = SVector(Tuple(v))
 
-unitvector(::Type{SVector{L,T}}, i) where {L,T} =
-    SVector{L,T}(ntuple(j -> j == i ? one(T) : zero(T), Val(L)))
+unitvector(::Type{SVector{L,T}}, i) where {L,T} = SVector{L,T}(unitvector(NTuple{L,T}, i))
+unitvector(::Type{CartesianIndex{L}}, i) where {L} = CartesianIndex(unitvector(NTuple{L,Int}, i))
+unitvector(::Type{NTuple{L,T}}, i) where {L,T} =ntuple(j -> j == i ? one(T) : zero(T), Val(L))
 
 ensuretuple(s::Tuple) = s
 ensuretuple(s) = (s,)
@@ -39,6 +40,9 @@ filltuple(x, ::NTuple{N,Any}) where {N} = ntuple(_ -> x, Val(N))
 @inline tuplejoin(x, y, z...) = (x..., tuplejoin(y, z...)...)
 
 tuplesplice(s::NTuple{N,T}, ind, el) where {N,T} = ntuple(i -> i === ind ? T(el) : s[i], Val(N))
+
+shiftleft(s::NTuple{N,Any}, n = 1) where {N} = ntuple(i -> s[mod1(i+n, N)], Val(N))
+shiftright(s, n = 1) = shiftleft(s, -n)
 
 tupleproduct(p1, p2) = tupleproduct(ensuretuple(p1), ensuretuple(p2))
 tupleproduct(p1::NTuple{M,Any}, p2::NTuple{N,Any}) where {M,N} =
@@ -63,9 +67,12 @@ end
 tuple_minus_first(t::Tuple{T,Vararg{T,D}}) where {D,T} =
     ntuple(i -> ifelse(t[i+1] ≈ t[1], zero(T), t[i+1] - t[1]), Val(D))
 
+firsttail(t::Tuple) = first(t), Base.tail(t)
+
 frontSVector(s::SVector) = SVector(Base.front(Tuple(s)))
 
 mergetuples(ts...) = keys(merge(tonamedtuple.(ts)...))
+
 tonamedtuple(ts::Val{T}) where {T} = NamedTuple{T}(filltuple(0,T))
 
 function deletemultiple_nocheck(dn::SVector{N}, axes::NTuple{M,Int}) where {N,M}
@@ -205,41 +212,30 @@ function normalize_columns!(kmat::AbstractMatrix, cols)
     return kmat
 end
 
-############################################################################################
-
-# function pushapproxruns!(runs::AbstractVector{<:UnitRange}, list::AbstractVector{T},
-#                          offset = 0, degtol = sqrt(eps(real(T)))) where {T}
-#     len = length(list)
-#     len < 2 && return runs
-#     rmin = rmax = 1
-#     prev = list[1]
-#     @inbounds for i in 2:len
-#         next = list[i]
-#         if abs(next - prev) < degtol
-#             rmax = i
-#         else
-#             rmin < rmax && push!(runs, (offset + rmin):(offset + rmax))
-#             rmin = rmax = i
-#         end
-#         prev = next
-#     end
-#     rmin < rmax && push!(runs, (offset + rmin):(offset + rmax))
-#     return runs
-# end
-
-# function hasapproxruns(list::AbstractVector{T}, degtol = sqrt(eps(real(T)))) where {T}
-#     for i in 2:length(list)
-#         abs(list[i] - list[i-1]) < degtol && return true
-#     end
-#     return false
-# end
-
 eltypevec(::AbstractMatrix{T}) where {T<:Number} = T
 eltypevec(::AbstractMatrix{S}) where {N,T<:Number,S<:SMatrix{N,N,T}} = SVector{N,T}
 
 tuplesort((a,b)::Tuple{<:Number,<:Number}) = a > b ? (b, a) : (a, b)
 tuplesort(t::Tuple) = t
 tuplesort(::Missing) = missing
+
+# Gram-Schmidt but with column normalization only when norm^2 >= threshold (otherwise zero!)
+function orthonormalize!(m::AbstractMatrix, threshold = 0)
+    @inbounds for j in axes(m, 2)
+        col = view(m, :, j)
+        for j´ in 1:j-1
+            col´ = view(m, :, j´)
+            norm2´ = dot(col´, col´)
+            iszero(norm2´) && continue
+            r = dot(col´, col)/norm2´
+            col .-= r .* col´
+        end
+        norm2 = real(dot(col, col))
+        factor = ifelse(norm2 < threshold, zero(norm2), 1/sqrt(norm2))
+        col .*= factor
+    end
+    return m
+end
 
 # Like copyto! but with potentially different tensor orders (adapted from Base.copyto!, see #33588)
 function copyslice!(dest::AbstractArray{T1,N1}, Rdest::CartesianIndices{N1},
@@ -265,11 +261,24 @@ function append_slice!(dest::AbstractArray, src::AbstractArray{T,N}, Rsrc::Carte
     Rdest = (length(dest) + 1):(length(dest) + length(Rsrc))
     resize!(dest, last(Rdest))
     src′ = Base.unalias(dest, src)
-    @inbounds for (Is, Id) in zip(Rsrc, Rdest)
+    for (Is, Id) in zip(Rsrc, Rdest)
         @inbounds dest[Id] = src′[Is]
     end
     return dest
 end
+
+permutations(ss::NTuple) = permutations!(typeof(ss)[], ss, ())
+
+function permutations!(p, s1, s2)
+    for (i, s) in enumerate(s1)
+        permutations!(p, delete(s1, i), (s2..., s))
+    end
+    return p
+end
+
+permutations!(p, ::Tuple{}, s2) = push!(p, s2)
+
+delete(t::NTuple{N,Any}, i) where {N} = ntuple(j -> j < i ? t[j] : t[j+1], Val(N-1))
 
 ######################################################################
 # convert a matrix/number block to a matrix/inlinematrix string
@@ -299,95 +308,6 @@ function _matrixstring_inline(s::SMatrix{N}) where {N}
 end
 
 numberstring(x) = _isreal(x) ? string(" ", real(x)) : _isimag(x) ? string(" ", imag(x), "im") : string(" ", x)
-
-######################################################################
-# Permutations (taken from Combinatorics.jl)
-######################################################################
-
-struct Permutations{T}
-    a::T
-    t::Int
-end
-
-Base.eltype(::Type{Permutations{T}}) where {T} = Vector{eltype(T)}
-
-Base.length(p::Permutations) = (0 <= p.t <= length(p.a)) ? factorial(length(p.a), length(p.a)-p.t) : 0
-
-"""
-    permutations(a)
-Generate all permutations of an indexable object `a` in lexicographic order. Because the number of permutations
-can be very large, this function returns an iterator object.
-Use `collect(permutations(a))` to get an array of all permutations.
-"""
-permutations(a) = Permutations(a, length(a))
-
-"""
-    permutations(a, t)
-Generate all size `t` permutations of an indexable object `a`.
-"""
-function permutations(a, t::Integer)
-    if t < 0
-        t = length(a) + 1
-    end
-    Permutations(a, t)
-end
-
-function Base.iterate(p::Permutations, s = collect(1:length(p.a)))
-    (!isempty(s) && max(s[1], p.t) > length(p.a) || (isempty(s) && p.t > 0)) && return
-    nextpermutation(p.a, p.t ,s)
-end
-
-function nextpermutation(m, t, state)
-    perm = [m[state[i]] for i in 1:t]
-    n = length(state)
-    if t <= 0
-        return(perm, [n+1])
-    end
-    s = copy(state)
-    if t < n
-        j = t + 1
-        while j <= n &&  s[t] >= s[j]; j+=1; end
-    end
-    if t < n && j <= n
-        s[t], s[j] = s[j], s[t]
-    else
-        if t < n
-            reverse!(s, t+1)
-        end
-        i = t - 1
-        while i>=1 && s[i] >= s[i+1]; i -= 1; end
-        if i > 0
-            j = n
-            while j>i && s[i] >= s[j]; j -= 1; end
-            s[i], s[j] = s[j], s[i]
-            reverse!(s, i+1)
-        else
-            s[1] = n+1
-        end
-    end
-    return (perm, s)
-end
-
-# Taken from Combinatorics.jl
-# TODO: This should really live in Base, otherwise it's type piracy
-"""
-    factorial(n, k)
-
-Compute ``n!/k!``.
-"""
-function Base.factorial(n::T, k::T) where T<:Integer
-    if k < 0 || n < 0 || k > n
-        throw(DomainError((n, k), "n and k must be nonnegative with k ≤ n"))
-    end
-    f = one(T)
-    while n > k
-        f = Base.checked_mul(f, n)
-        n -= 1
-    end
-    return f
-end
-
-Base.factorial(n::Integer, k::Integer) = factorial(promote(n, k)...)
 
 ############################################################################################
 ######## fast sparse copy #  Revise after #33589 is merged #################################
