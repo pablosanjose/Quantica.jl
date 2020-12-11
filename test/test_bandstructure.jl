@@ -152,6 +152,11 @@ end
     bs = bandstructure(h, subticks = 13)
     @test sum(degeneracy, bs[(1,2)]) == size(h,1)
     @test sum(degeneracy, bs[(0.2,0.3)]) == size(h,1)
+    h = LatticePresets.honeycomb() |> hamiltonian(hopping(1f0*I), orbitals = (Val(1),Val(2))) |> unitcell(2)
+    bs = bandstructure(h, subticks = 13)
+    @test sum(degeneracy, bs[(1,2)]) == size(h,1) * 1.5
+    @test sum(degeneracy, bs[(0.2,0.3)]) == size(h,1) * 1.5
+    @test bs[(1,2), around = 0] |> last |> eltype == SVector{2, ComplexF64}
 end
 
 @testset "diagonalizer" begin

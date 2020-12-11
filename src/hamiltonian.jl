@@ -320,8 +320,10 @@ check_unflatten_eltypes(v::AbstractArray{T}, h) where {T} =
 valdim(::Type{<:Number}) = Val(1)
 valdim(::Type{S}) where {N,S<:SVector{N}} = Val(N)
 
-## unflatten_or_reinterpret: call unflatten but only if we cannot do it without copying
-unflatten_or_reinterpret(vflat, h) = _unflatten_or_reinterpret(vflat, h, orbitaltype(h), h.orbitals)
+## unflatten_or_reinterpret: call unflatten but only if we cannot unflatten via reinterpret
+unflatten_or_reinterpret(vflat, ::Missing) = vflat
+unflatten_or_reinterpret(vflat, h::Hamiltonian) = _unflatten_or_reinterpret(vflat, h, orbitaltype(h), h.orbitals)
+
 # source is already of the correct orbitaltype(h)
 function _unflatten_or_reinterpret(v::AbstractArray{T}, h, ::Type{T}, orbs) where {T}
     check_unflatten_dst_dims(v, h)
