@@ -279,7 +279,7 @@ end
 Base.in((i, dni)::Tuple{Integer,SVector}, rs::ResolvedSelector{<:SiteSelector}) =
     isinindices(i, rs.selector.indices) &&
     isinregion(i, dni, rs.selector.region, rs.lattice) &&
-    isinsublats(sublat(rs.lattice, i), rs.selector.sublats)
+    isinsublats(sublat_site(i, rs.lattice), rs.selector.sublats)
 
 Base.in((j, i)::Pair{<:Integer,<:Integer}, rs::ResolvedSelector{<:HopSelector}) = (i, j) in rs
 
@@ -292,7 +292,7 @@ Base.in((inds, dns), rs::ResolvedSelector{<:HopSelector}) =
     !isonsite(inds, dns) && isinindices(indstopair(inds), rs.selector.indices) &&
     isinregion(inds, dns, rs.selector.region, rs.lattice) && isindns(dns, rs.selector.dns) &&
     isinrange(inds, dns, rs.selector.range, rs.lattice) &&
-    isinsublats(indstopair(sublat.(Ref(rs.lattice), inds)), rs.selector.sublats)
+    isinsublats(indstopair(sublat_site.(inds, Ref(rs.lattice))), rs.selector.sublats)
 
 isonsite((i, j), (dni, dnj)) = i == j && dni == dnj
 

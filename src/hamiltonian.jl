@@ -12,13 +12,28 @@ HamiltonianHarmonic{L,M,A}(dn::SVector{L,Int}, n::Int, m::Int) where {L,M,A<:Spa
 HamiltonianHarmonic{L,M,A}(dn::SVector{L,Int}, n::Int, m::Int) where {L,M,A<:Matrix{M}} =
     HamiltonianHarmonic(dn, zeros(M, n, m))
 
+struct OrbitalStructure{N,O<:NTuple{N,Tuple{Vararg{NameType}}}}
+    orbitals::O
+    offsets::Tuple{Int,Vararg{Int,N}}
+    flatoffsets::Tuple{Int,Vararg{Int,N}}
+end
+
+function OrbitalStructure(orbs::NTuple{N,Any}, lat::AbstractLattice) where {N}
+    offsets = ntuple(i -> lat.unitcell.offsets[i], Val(N+1))
+    offsets´ = flatoffsets(offsets, length.(orbs))
+    return OrbitalStructure(orbs, offsets, offsets´)
+end
+
+OrbitalStructure(n) = OrbitalStructure((:A,), (0, n), (0, n))
+
 struct Hamiltonian{LA<:AbstractLattice,L,M,A<:AbstractMatrix,
-                   H<:HamiltonianHarmonic{L,M,A},
-                   O<:Tuple{Vararg{Tuple{Vararg{NameType}}}}} # <: AbstractMatrix{M}
+                   H<:HamiltonianHarmonic{L,M,A},O} # <: AbstractMatrix{M}
     lattice::LA
     harmonics::Vector{H}
-    orbitals::O
+    orbstruct::OrbitalStructure{O}
 end
+
+Hamiltonian(lat, hs, orbs::Tuple) = Hamiltonian(lat, hs, OrbitalStructure(orbs, lat))
 
 function Hamiltonian(lat, hs::Vector{H}, orbs, n::Int, m::Int) where {L,M,H<:HamiltonianHarmonic{L,M}}
     sort!(hs, by = h -> abs.(h.dn))
@@ -27,6 +42,48 @@ function Hamiltonian(lat, hs::Vector{H}, orbs, n::Int, m::Int) where {L,M,H<:Ham
     end
     return Hamiltonian(lat, hs, orbs)
 end
+
+orbitals(h::Hamiltonian) = h.orbstruct.orbitals
+offsets(h::Hamiltonian) = h.orbstruct.offsets
+flatoffsets(h::Hamiltonian) = h.orbstruct.flatoffsets
+
+Base.eltype(::Hamiltonian{<:Any,<:Any,M}) where {M} = M
+
+Base.isequal(h1::HamiltonianHarmonic, h2::HamiltonianHarmonic) =
+    h1.dn == h2.dn && h1.h == h2.h
+Base.isequal(o1::OrbitalStructure, o2::OrbitalStructure) =
+    o1.orbitals == o1.orbitals && o1.offsets == o2.offsets && o1.flatoffsets == o2.flatoffsets
+
+sublat_site(siteidx, o::OrbitalStructure) = sublat_site(siteidx, o.offsets)
+
+# sublat offsets after flattening (without padding zeros)
+flatoffsets(offsets, norbs) = _flatoffsets((0,), offsets, norbs...)
+_flatoffsets(offsets´::NTuple{N,Any}, offsets, n, ns...) where {N} =
+    _flatoffsets((offsets´..., offsets´[end] + n * (offsets[N+1] - offsets[N])), offsets, ns...)
+_flatoffsets(offsets´, offsets) = offsets´
+
+# offset of site i after flattening
+@inline flatoffset_site(i, orbstruct) = first(flatoffsetorbs_site(i, orbstruct))
+
+function flatoffsetorbs_site(i, orbstruct)
+    s = sublat_site(i, orbstruct)
+    N = length(orbstruct.orbitals[s])
+    offset = orbstruct.offsets[s]
+    offset´ = orbstruct.flatoffsets[s]
+    Δi = i - offset
+    i´ = offset´ + (Δi - 1) * N
+    return i´, N
+end
+
+displaymatrixtype(h::Hamiltonian) = displaymatrixtype(matrixtype(h))
+displaymatrixtype(::Type{<:SparseMatrixCSC}) = "SparseMatrixCSC, sparse"
+displaymatrixtype(::Type{<:Array}) = "Matrix, dense"
+displaymatrixtype(A::Type{<:AbstractArray}) = string(A)
+displayelements(h::Hamiltonian) = displayelements(blocktype(h))
+displayelements(::Type{S}) where {N,T,S<:SMatrix{N,N,T}} = "$N × $N blocks ($T)"
+displayelements(::Type{T}) where {T} = "scalar ($T)"
+displayorbitals(h::Hamiltonian) =
+    replace(replace(string(orbitals(h)), "Symbol(\"" => ":"), "\")" => "")
 
 Base.show(io::IO, ham::Hamiltonian) = show(io, MIME("text/plain"), ham)
 function Base.show(io::IO, ::MIME"text/plain", ham::Hamiltonian)
@@ -48,21 +105,6 @@ Base.summary(h::Hamiltonian{LA}) where {E,L,LA<:Lattice{E,L}} =
 
 Base.summary(::Hamiltonian{LA}) where {E,L,T,L´,LA<:Superlattice{E,L,T,L´}} =
     "Hamiltonian{<:Superlattice} : $(L)D Hamiltonian on a $(L´)D Superlattice in $(E)D space"
-
-Base.eltype(::Hamiltonian{<:Any,<:Any,M}) where {M} = M
-
-Base.isequal(h1::HamiltonianHarmonic, h2::HamiltonianHarmonic) =
-    h1.dn == h2.dn && h1.h == h2.h
-
-displaymatrixtype(h::Hamiltonian) = displaymatrixtype(matrixtype(h))
-displaymatrixtype(::Type{<:SparseMatrixCSC}) = "SparseMatrixCSC, sparse"
-displaymatrixtype(::Type{<:Array}) = "Matrix, dense"
-displaymatrixtype(A::Type{<:AbstractArray}) = string(A)
-displayelements(h::Hamiltonian) = displayelements(blocktype(h))
-displayelements(::Type{S}) where {N,T,S<:SMatrix{N,N,T}} = "$N × $N blocks ($T)"
-displayelements(::Type{T}) where {T} = "scalar ($T)"
-displayorbitals(h::Hamiltonian) =
-    replace(replace(string(h.orbitals), "Symbol(\"" => ":"), "\")" => "")
 
 #######################################################################
 # flatten
@@ -111,29 +153,33 @@ flatten() = h -> flatten(h)
 
 function flatten(h::Hamiltonian)
     all(isequal(1), norbitals(h)) && return copy(h)
-    harmonics´ = [flatten(har, h.orbitals, h.lattice) for har in h.harmonics]
-    lattice´ = flatten(h.lattice, h.orbitals)
-    orbitals´ = (_ -> (:flat, )).(h.orbitals)
-    return Hamiltonian(lattice´, harmonics´, orbitals´)
+    harmonics´ = [flatten(har, h.orbstruct) for har in h.harmonics]
+    lattice´ = flatten(h.lattice, h.orbstruct)
+    orbs´ = (_ -> (:flat, )).(orbitals(h))
+    return Hamiltonian(lattice´, harmonics´, orbs´)
 end
 
-flatten(h::HamiltonianHarmonic, orbs, lat) =
-    HamiltonianHarmonic(h.dn, _flatten(h.h, orbs, lat))
+flatten(h::HamiltonianHarmonic, orbstruct) =
+    HamiltonianHarmonic(h.dn, _flatten(h.h, orbstruct))
 
-function _flatten(src::SparseMatrixCSC{<:SMatrix{N,N,T}}, orbs, lat, ::Type{T´} = T) where {N,T,T´}
-    norbs = length.(orbs)
-    offsets´ = flatoffsets(lat.unitcell.offsets, norbs)
+_flatten(src::AbstractArray{<:Number}, orbstruct) = src
+_flatten(src::AbstractArray{T}, orbstruct, ::Type{T}) where {T<:Number} = src
+_flatten(src::AbstractArray{T}, orbstruct, ::Type{T´}) where {T<:Number,T´<:Number} = T´.(src)
+
+function _flatten(src::SparseMatrixCSC{<:SMatrix{N,N,T}}, orbstruct, ::Type{T´} = T) where {N,T,T´}
+    norbs = length.(orbstruct.orbitals)
+    offsets´ = orbstruct.flatoffsets
     dim´ = last(offsets´)
 
     builder = SparseMatrixBuilder{T´}(dim´, dim´, nnz(src) * N * N)
 
     for col in 1:size(src, 2)
-        scol = sublat(lat, col)
+        scol = sublat_site(col, orbstruct)
         for j in 1:norbs[scol]
             for p in nzrange(src, col)
                 row = rowvals(src)[p]
-                srow = sublat(lat, row)
-                rowoffset´ = flatoffset(row, lat, norbs, offsets´)
+                srow = sublat_site(row, orbstruct)
+                rowoffset´ = flatoffset_site(row, orbstruct)
                 val = nonzeros(src)[p]
                 for i in 1:norbs[srow]
                     pushtocolumn!(builder, rowoffset´ + i, val[i, j])
@@ -146,18 +192,18 @@ function _flatten(src::SparseMatrixCSC{<:SMatrix{N,N,T}}, orbs, lat, ::Type{T´}
     return matrix
 end
 
-function _flatten(src::DenseMatrix{<:SMatrix{N,N,T}}, orbs, lat, ::Type{T´} = T) where {N,T,T´}
-    norbs = length.(orbs)
-    offsets´ = flatoffsets(lat.unitcell.offsets, norbs)
+function _flatten(src::DenseMatrix{<:SMatrix{N,N,T}}, orbstruct, ::Type{T´} = T) where {N,T,T´}
+    norbs = length.(orbstruct.orbitals)
+    offsets´ = orbstruct.flatoffsets
     dim´ = last(offsets´)
     matrix = similar(src, T´, dim´, dim´)
 
     for col in 1:size(src, 2), row in 1:size(src, 1)
-        srow, scol = sublat(lat, row), sublat(lat, col)
+        srow, scol = sublat_site(row, orbstruct), sublat_site(col, orbstruct)
         nrow, ncol = norbs[srow], norbs[scol]
         val = src[row, col]
-        rowoffset´ = flatoffset(row, lat, norbs, offsets´)
-        coloffset´ = flatoffset(col, lat, norbs, offsets´)
+        rowoffset´ = flatoffset_site(row, orbstruct)
+        coloffset´ = flatoffset_site(col, orbstruct)
         for j in 1:ncol, i in 1:nrow
             matrix[rowoffset´ + i, coloffset´ + j] = val[i, j]
         end
@@ -165,20 +211,40 @@ function _flatten(src::DenseMatrix{<:SMatrix{N,N,T}}, orbs, lat, ::Type{T´} = T
     return matrix
 end
 
-function flatten(lat::Lattice, orbs)
-    length(orbs) == nsublats(lat) || throw(ArgumentError("Mismatch between sublattices and orbitals"))
-    unitcell´ = flatten(lat.unitcell, length.(orbs))
+# for Subspace bases
+function _flatten(src::DenseMatrix{<:SVector{N,T}}, orbstruct, ::Type{T´} = T) where {N,T,T´}
+    norbs = length.(orbstruct.orbitals)
+    offsets´ = orbstruct.flatoffsets
+    dim´ = last(offsets´)
+    matrix = similar(src, T´, dim´, size(src, 2))
+
+    for col in 1:size(src, 2), row in 1:size(src, 1)
+        srow = sublat_site(row, orbstruct)
+        nrow = norbs[srow]
+        val = src[row, col]
+        rowoffset´ = flatoffset_site(row, orbstruct)
+        for i in 1:nrow
+            matrix[rowoffset´ + i, col] = val[i]
+        end
+    end
+    return matrix
+end
+
+function flatten(lat::Lattice, orbstruct)
+    length(orbstruct.orbitals) == nsublats(lat) || throw(ArgumentError("Mismatch between sublattices and orbitals"))
+    unitcell´ = flatten(lat.unitcell, orbstruct) #length.(orbstruct.orbitals))
     bravais´ = lat.bravais
     lat´ = Lattice(bravais´, unitcell´)
 end
 
-function flatten(unitcell::Unitcell, orbs::NTuple{S,Any}) where {S}
-    norbs = length.(orbs)
-    offsets´ = [flatoffsets(unitcell.offsets, norbs)...]
+function flatten(unitcell::Unitcell, orbstruct) # orbs::NTuple{S,Any}) where {S}
+    norbs = length.(orbstruct.orbitals)
+    nsublats = length(orbstruct.orbitals)
+    offsets´ = orbstruct.flatoffsets
     ns´ = last(offsets´)
     sites´ = similar(unitcell.sites, ns´)
     i = 1
-    for sl in 1:S, site in sitepositions(unitcell, sl), rep in 1:norbs[sl]
+    for sl in 1:nsublats, site in sitepositions(unitcell, sl), rep in 1:norbs[sl]
         sites´[i] = site
         i += 1
     end
@@ -189,9 +255,7 @@ end
 
 function flatten_sparse_copy!(dst, src, h)
     fill!(dst, zero(eltype(dst)))
-    norbs = length.(h.orbitals)
-    offsets = h.lattice.unitcell.offsets
-    offsets´ = flatoffsets(offsets, norbs)
+    norbs = length.(orbitals(h))
     coloffset = 0
     for s´ in sublats(h.lattice)
         N´ = norbs[s´]
@@ -199,7 +263,7 @@ function flatten_sparse_copy!(dst, src, h)
             for p in nzrange(src, col)
                 val = nonzeros(src)[p]
                 row = rowvals(src)[p]
-                rowoffset, M´ = flatoffsetorbs(row, h.lattice, norbs, offsets´)
+                rowoffset, M´ = flatoffsetorbs_site(row, h.orbstruct)
                 for j in 1:N´, i in 1:M´
                     dst[i + rowoffset, j + coloffset] = val[i, j]
                 end
@@ -211,9 +275,7 @@ function flatten_sparse_copy!(dst, src, h)
 end
 
 function flatten_sparse_muladd!(dst, src, h, α = I)
-    norbs = length.(h.orbitals)
-    offsets = h.lattice.unitcell.offsets
-    offsets´ = flatoffsets(offsets, norbs)
+    norbs = length.(orbitals(h))
     coloffset = 0
     for s´ in sublats(h.lattice)
         N´ = norbs[s´]
@@ -221,7 +283,7 @@ function flatten_sparse_muladd!(dst, src, h, α = I)
             for p in nzrange(src, col)
                 val = α * nonzeros(src)[p]
                 row = rowvals(src)[p]
-                rowoffset, M´ = flatoffsetorbs(row, h.lattice, norbs, offsets´)
+                rowoffset, M´ = flatoffsetorbs_site(row, h.orbstruct)
                 for j in 1:N´, i in 1:M´
                     dst[i + rowoffset, j + coloffset] += val[i, j]
                 end
@@ -233,9 +295,7 @@ function flatten_sparse_muladd!(dst, src, h, α = I)
 end
 
 function flatten_dense_muladd!(dst, src, h, α = I)
-    norbs = length.(h.orbitals)
-    offsets = h.lattice.unitcell.offsets
-    offsets´ = flatoffsets(offsets, norbs)
+    norbs = length.(orbitals(h))
     coloffset = 0
     for s´ in sublats(h.lattice)
         N´ = norbs[s´]
@@ -262,33 +322,15 @@ function flatten_dense_copy!(dst, src, h)
     return flatten_dense_muladd!(dst, src, h, I)
 end
 
-# sublat offsets after flattening (without padding zeros)
-flatoffsets(offsets, norbs) = _flatoffsets((0,), offsets, norbs...)
-_flatoffsets(offsets´::NTuple{N,Any}, offsets, n, ns...) where {N} =
-    _flatoffsets((offsets´..., offsets´[end] + n * (offsets[N+1] - offsets[N])), offsets, ns...)
-_flatoffsets(offsets´, offsets) = offsets´
-
-# offset of site i after flattening
-@inline flatoffset(args...) = first(flatoffsetorbs(args...))
-
-function flatoffsetorbs(i, lat, norbs, offsets´)
-    s = sublat(lat, i)
-    N = norbs[s]
-    offset = lat.unitcell.offsets[s]
-    Δi = i - offset
-    i´ = offsets´[s] + (Δi - 1) * N
-    return i´, N
-end
-
 ## unflatten ##
 
 unflatten(vflat::AbstractVector, h) = unflatten!(similar(vflat, orbitaltype(h), size(h, 2)), vflat, h)
 unflatten(vflat::AbstractMatrix, h) = unflatten!(similar(vflat, orbitaltype(h), size(h, 2), size(vflat, 2)), vflat, h)
 
 function unflatten!(v::AbstractArray{T}, vflat::AbstractArray, h::Hamiltonian) where {T}
-    norbs = length.(h.orbitals)
-    offsetsflat = flatoffsets(h.lattice.unitcell.offsets, norbs)
-    dimflat = last(offsetsflat)
+    norbs = length.(orbitals(h))
+    flatoffsets = h.orbstruct.flatoffsets
+    dimflat = last(flatoffsets)
     check_unflatten_dst_dims(v, h)
     check_unflatten_src_dims(vflat, dimflat)
     check_unflatten_eltypes(v, h)
@@ -296,7 +338,7 @@ function unflatten!(v::AbstractArray{T}, vflat::AbstractArray, h::Hamiltonian) w
         row = 0
         for s in sublats(h.lattice)
             N = norbs[s]
-            for i in offsetsflat[s]+1:N:offsetsflat[s+1]
+            for i in flatoffsets[s]+1:N:flatoffsets[s+1]
                 row += 1
                 v[row, col] = padright(view(vflat, i:i+N-1, col:col), T)
             end
@@ -322,7 +364,7 @@ valdim(::Type{S}) where {N,S<:SVector{N}} = Val(N)
 
 ## unflatten_or_reinterpret: call unflatten but only if we cannot unflatten via reinterpret
 unflatten_or_reinterpret(vflat, ::Missing) = vflat
-unflatten_or_reinterpret(vflat, h::Hamiltonian) = _unflatten_or_reinterpret(vflat, h, orbitaltype(h), h.orbitals)
+unflatten_or_reinterpret(vflat, h::Hamiltonian) = _unflatten_or_reinterpret(vflat, h, orbitaltype(h), orbitals(h))
 
 # source is already of the correct orbitaltype(h)
 function _unflatten_or_reinterpret(v::AbstractArray{T}, h, ::Type{T}, orbs) where {T}
@@ -391,7 +433,7 @@ _similarmatrix(::Type{A}, ::Type{A´}, h) where {T<:Number,A<:AbstractSparseMatr
 _similarmatrix(::Type{A}, ::Type{A´}, h) where {N,T<:SMatrix{N,N},A<:AbstractSparseMatrix{T},T´<:SMatrix{N,N},A´<:AbstractSparseMatrix{T´}} =
     similar_merged(h.harmonics, T)
 _similarmatrix(::Type{A}, ::Type{A´}, h) where {N,T<:Number,A<:AbstractSparseMatrix{T},T´<:SMatrix{N,N},A´<:AbstractSparseMatrix{T´}} =
-    _flatten(similar_merged(h.harmonics), h.orbitals, h.lattice, T)
+    _flatten(similar_merged(h.harmonics), h.orbstruct, T)
 _similarmatrix(::Type{A}, ::Type{A´}, h) where {T<:Number,A<:Matrix{T},T´<:Number,A´<:AbstractMatrix{T´}} =
     similar(A, size(h))
 _similarmatrix(::Type{A}, ::Type{A´}, h) where {N,T<:SMatrix{N,N},A<:Matrix{T},T´<:SMatrix{N,N},A´<:AbstractMatrix{T´}} =
@@ -675,7 +717,7 @@ function check_orbital_consistency(h::Hamiltonian)
     lat = h.lattice
     for scol in sublats(lat), srow in sublats(lat), hh in h.harmonics
         for (row, col) in nonzero_indices(hh, siterange(lat, srow), siterange(lat, scol))
-            check_orbital_consistency(hh.h[row, col], h.orbitals[srow], h.orbitals[scol])
+            check_orbital_consistency(hh.h[row, col], orbitals(h)[srow], orbitals(h)[scol])
         end
     end
     return nothing
@@ -695,27 +737,27 @@ nsites(h::HamiltonianHarmonic) = size(h.h, 1)
 
 nsublats(h::Hamiltonian) = nsublats(h.lattice)
 
-norbitals(h::Hamiltonian) = length.(h.orbitals)
+norbitals(h::Hamiltonian) = length.(orbitals(h))
 
 flatsize(h::Hamiltonian, n) = first(flatsize(h)) # h is always square
 
 function flatsize(h::Hamiltonian)
-    n = sum(sublatlengths(h.lattice) .* length.(h.orbitals))
+    n = sum(sublatlengths(h.lattice) .* length.(orbitals(h)))
     return (n, n)
 end
 
 expand_supercell_mask(h::Hamiltonian{<:Superlattice}) =
-    Hamiltonian(expand_supercell_mask(h.lattice), h.harmonics, h.orbitals)
+    Hamiltonian(expand_supercell_mask(h.lattice), h.harmonics, orbitals(h))
 
 Base.size(h::Hamiltonian, n) = size(first(h.harmonics).h, n)
 Base.size(h::Hamiltonian) = size(first(h.harmonics).h)
 Base.size(h::HamiltonianHarmonic, n) = size(h.h, n)
 Base.size(h::HamiltonianHarmonic) = size(h.h)
 
-Base.Matrix(h::Hamiltonian) = Hamiltonian(h.lattice, Matrix.(h.harmonics), h.orbitals)
+Base.Matrix(h::Hamiltonian) = Hamiltonian(h.lattice, Matrix.(h.harmonics), h.orbstruct)
 Base.Matrix(h::HamiltonianHarmonic) = HamiltonianHarmonic(h.dn, Matrix(h.h))
 
-Base.copy(h::Hamiltonian) = Hamiltonian(copy(h.lattice), copy.(h.harmonics), h.orbitals)
+Base.copy(h::Hamiltonian) = Hamiltonian(copy(h.lattice), copy.(h.harmonics), h.orbstruct)
 Base.copy(h::HamiltonianHarmonic) = HamiltonianHarmonic(h.dn, copy(h.h))
 
 function LinearAlgebra.ishermitian(h::Hamiltonian)
@@ -728,7 +770,7 @@ end
 
 Base.isequal(h1::Hamiltonian, h2::Hamiltonian) =
     isequal(h1.lattice, h2.lattice) && isequal(h1.harmonics, h2.harmonics) &&
-    isequal(h1.orbitals, h2.orbitals)
+    isequal(h1.orbstruct, h2.orbstruct)
 
 SparseArrays.issparse(h::Hamiltonian{LA,L,M,A}) where {LA,L,M,A<:AbstractSparseMatrix} = true
 SparseArrays.issparse(h::Hamiltonian{LA,L,M,A}) where {LA,L,M,A} = false
@@ -872,11 +914,11 @@ Equivalent of the above for `Superlattice`s
 
 function boolean_mask_hamiltonian(f, s1::Hamiltonian{<:Superlattice}, s2::Hamiltonian{<:Superlattice})
     check_compatible_hsuper(s1, s2)
-    return Hamiltonian(f(s1.lattice, s2.lattice), s1.harmonics, s1.orbitals)
+    return Hamiltonian(f(s1.lattice, s2.lattice), s1.harmonics, orbitals(s1))
 end
 
 function check_compatible_hsuper(s1, s2)
-    compatible = isequal(s1.harmonics, s2.harmonics) && isequal(s1.orbitals, s2.orbitals)
+    compatible = isequal(s1.harmonics, s2.harmonics) && isequal(s1.orbstruct, s2.orbstruct)
     compatible || throw(ArgumentError("Hamiltonians are incompatible for boolean masking"))
     return nothing
 end
@@ -896,7 +938,7 @@ function Base.literal_pow(::typeof(^), h::Hamiltonian, p::Val{P}) where {P}
         hh = get_or_push!(hhs, dn, dims)
         hh.h .+= prod((i -> h.harmonics[i].h).(is))
     end
-    return Hamiltonian(h.lattice, hhs, h.orbitals)
+    return Hamiltonian(h.lattice, hhs, h.orbstruct)
 end
 
 function Base.:*(h1::Hamiltonian, h2::Hamiltonian) where {P}
@@ -908,7 +950,7 @@ function Base.:*(h1::Hamiltonian, h2::Hamiltonian) where {P}
         hh = get_or_push!(hhs, dn, dims)
         mul!(hh.h, hh1.h, hh2.h, 1, 1)
     end
-    return Hamiltonian(h1.lattice, hhs, h1.orbitals)
+    return Hamiltonian(h1.lattice, hhs, h1.orbstruct)
 end
 
 Base.:*(h::Hamiltonian, p::Number) = p * h
@@ -918,7 +960,7 @@ function Base.:*(p::Number, h::Hamiltonian)
     for hh in hhs
         hh.h .*= p
     end
-    return Hamiltonian(h.lattice, hhs, h.orbitals)
+    return Hamiltonian(h.lattice, hhs, h.orbstruct)
 end
 
 Base.:-(h1::Hamiltonian, h2) = h1 + (-h2)
@@ -932,7 +974,7 @@ function Base.:+(h1::Hamiltonian, h2::Hamiltonian)
         hh = get_or_push!(hhs, hh2.dn, dims)
         hh.h .+= hh2.h
     end
-    return Hamiltonian(h1.lattice, hhs, h1.orbitals)
+    return Hamiltonian(h1.lattice, hhs, h1.orbstruct)
 end
 
 Base.:+(id::UniformScaling, h::Hamiltonian) = h + id
@@ -942,7 +984,7 @@ function Base.:+(h::Hamiltonian, id::UniformScaling)
     M = blocktype(h)
     mat = first(hhs).h
     shift_diagonal!(mat, blocktype(h), h, id)
-    return Hamiltonian(h.lattice, hhs, h.orbitals)
+    return Hamiltonian(h.lattice, hhs, h.orbstruct)
 end
 
 function shift_diagonal!(mat, ::Type{<:Number}, h, id)
@@ -952,7 +994,7 @@ end
 
 function shift_diagonal!(mat, ::Type{M}, h, id) where {N,M<:SMatrix{N,N}}
     for s in sublats(h.lattice)
-        shift = id.λ * padprojector(M, h.orbitals[s])
+        shift = id.λ * padprojector(M, orbitals(h)[s])
         for i in siterange(h.lattice, s)
             mat[i,i] += shift
         end
@@ -961,7 +1003,7 @@ function shift_diagonal!(mat, ::Type{M}, h, id) where {N,M<:SMatrix{N,N}}
 end
 
 check_compatible_hamiltonians(h1, h2) =
-    isequal(h1.lattice, h2.lattice) && h1.orbitals == h2.orbitals && size(h1) == size(h2) ||
+    isequal(h1.lattice, h2.lattice) && isequal(h1.orbstruct, h2.orbstruct) && size(h1) == size(h2) ||
         throw(ArgumentError("Cannot combine Hamiltonians with different lattices, dimensions or orbitals"))
 #######################################################################
 # auxiliary types
@@ -1179,7 +1221,7 @@ function Base.Matrix(kmodels, h::Hamiltonian)
     kmodels´ = resolve_tuple(kmodels, h.lattice)
     allpos = allsitepositions(h.lattice)
     T = guess_eltype(kmodels´, allpos, h)
-    orbs = h.orbitals
+    orbs = orbitals(h)
     kmat = [generate_amplitude(km, i, allpos[i], T, orbs[s]) for (i, s) in sitesublats(h.lattice), km in kmodels´]
     check_compatible_kets(kmat, h)
     maybe_normalize!(kmat, kmodels)
@@ -1254,7 +1296,7 @@ end
 #######################################################################
 function supercell(ham::Hamiltonian, args...; kw...)
     slat = supercell(ham.lattice, args...; kw...)
-    return Hamiltonian(slat, ham.harmonics, ham.orbitals)
+    return Hamiltonian(slat, ham.harmonics, orbitals(ham))
 end
 
 function unitcell(ham::Hamiltonian{<:Lattice}, args...; modifiers = (), mincoordination = missing, kw...)
@@ -1304,8 +1346,7 @@ function unitcell(ham::Hamiltonian{LA,L}; modifiers = (), mincoordination = miss
     end
     harmonics = [HamiltonianHarmonic(h.dn, sparse(h.h)) for h in harmonic_builders]
     unitlat = unitcell(slat´)
-    orbs = ham.orbitals
-    return Hamiltonian(unitlat, harmonics, orbs)
+    return Hamiltonian(unitlat, harmonics, orbitals(ham))
 end
 
 filtered_superlat!(sham, ::Missing, args...) = sham.lattice
@@ -1444,7 +1485,7 @@ function wrap(h::Hamiltonian{<:Lattice,L}, axes::NTuple{N,Int}; phases = missing
     lattice´ = _wrap(h.lattice, axes)
     phases´ = (phases === missing) ? filltuple(0, Val(N)) : phases
     harmonics´ = _wrap(h.harmonics, axes, phases´, size(h))
-    return Hamiltonian(lattice´, harmonics´, h.orbitals)
+    return Hamiltonian(lattice´, harmonics´, orbitals(h))
 end
 
 wrap(axes::Union{Integer,Tuple}; kw...) = h -> wrap(h, axes; kw...)
@@ -1485,7 +1526,7 @@ _combine(::Missing, hams...) = _combine(TightbindingModel(), hams...)
 
 function _combine(model::TightbindingModel, hams::Hamiltonian...)
     lat = combine((h -> h.lattice).(hams)...)
-    orbs = tuplejoin((h -> h.orbitals).(hams)...)
+    orbs = tuplejoin(orbitals.(hams)...)
     builder = IJVBuilder(lat, orbs, hams...)
     model´ = offdiagonal(model, lat, nsublats.(hams))
     ham = hamiltonian_sparse!(builder, lat, orbs, model´)

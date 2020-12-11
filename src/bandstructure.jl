@@ -1,16 +1,19 @@
 #######################################################################
 # Subspace
 #######################################################################
-struct Subspace{D,C,T,S<:AbstractMatrix{C}}
+struct Subspace{D,C,T,S<:AbstractMatrix{C},O<:OrbitalStructure}
     energy::T
     basis::S
+    orbstruct::O
     basevert::SVector{D,T}
 end
 
-Subspace(h::Union{Hamiltonian,Missing}, energy, basis, basevert...) =
-    Subspace(energy, unflatten_or_reinterpret(basis, h), basevert...)
-Subspace(energy::T, basis) where {T} = Subspace(energy, basis, SVector{0,T}())
-Subspace(energy::T, basis, basevert) where {T} = Subspace(energy, basis, SVector(T.(basevert)))
+Subspace(h::Hamiltonian, energy, basis, basevert...) =
+    Subspace(energy, unflatten_or_reinterpret(basis, h), h.orbstruct, basevert...)
+Subspace(h::Missing, energy, basis, basevert...) =
+    Subspace(energy, basis, OrbitalStructure(size(basis, 1)), basevert...)
+Subspace(energy::T, basis, orbstruct) where {T} = Subspace(energy, basis, orbstruct, SVector{0,T}())
+Subspace(energy::T, basis, orbstruct, basevert) where {T} = Subspace(energy, basis, orbstruct, SVector(T.(basevert)))
 
 function Base.show(io::IO, s::Subspace{D,C,T}) where {D,C,T}
     i = get(io, :indent, "")
@@ -31,6 +34,8 @@ Return the degeneracy of a given energy subspace. It is equal to `size(s.basis, 
 """
 degeneracy(s::Subspace) = degeneracy(s.basis)
 degeneracy(m::AbstractMatrix) = isempty(m) ? 1 : size(m, 2)  # To support sentinel empty projs
+
+flatten(s::Subspace) = Subspace(s.energy, _flatten(s.basis, s.orbstruct), s.orbstruct, s.basevert)
 
 # destructuring
 Base.iterate(s::Subspace) = s.energy, Val(:basis)
@@ -532,7 +537,6 @@ function bandstructure(diag::Diagonalizer, basemesh::CuboidMesh, split, showprog
 end
 
 ## Diagonalize bands step
-
 function bandstructure_diagonalize(diag, basemesh::CuboidMesh, showprogress)
     prog = Progress(length(basemesh), "Step 1/2 - Diagonalising: ")
     spectra = [build_spectrum(diag, vertex, showprogress, prog) for vertex in vertices(basemesh)]

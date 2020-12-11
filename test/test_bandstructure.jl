@@ -161,6 +161,12 @@ end
     @test size(bs[(1,2), around = 0].basis, 1) == size(h, 2)
 end
 
+@testset "subspace flatten" begin
+    h = LatticePresets.honeycomb() |> hamiltonian(hopping(I), orbitals = (Val(1), Val(2))) |> unitcell(2) |> unitcell
+    sub = spectrum(h)[1]
+    @test size(sub.basis) == (8,1) && size(flatten(sub).basis) == (12,1)
+end
+
 @testset "diagonalizer" begin
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(1))
     d = diagonalizer(h)

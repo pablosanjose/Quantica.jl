@@ -56,6 +56,7 @@ function diagonalizer(h::Union{Hamiltonian,ParametricHamiltonian}; method = Line
     matrix = similarmatrix(h, method_matrixtype(method, h))
     matrixf = HamiltonianBlochFunctor(h, matrix, mapping)
     perm = Vector{Int}(undef, size(matrix, 2))
+    orbstruct = parent(h).orbstruct
     return Diagonalizer(method, perm, matrixf, parent(h))
 end
 

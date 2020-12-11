@@ -58,6 +58,8 @@ struct Unitcell{E,T,N}
     offsets::Vector{Int}        # Linear site number offsets for each sublat
 end                             # so that diff(offset) == sublatlengths
 
+Unitcell(sites, names, offsets::Tuple) = Unitcell(sites, names, [offsets...])
+
 Unitcell(sublats::Sublat...; kw...) = Unitcell(promote(sublats...); kw...)
 
 Unitcell(s; dim = Val(dims(s)), type = float(numbertype(s)), names = sublatnames(s)) =
@@ -116,14 +118,6 @@ nsites(u::Unitcell) = length(u.sites)
 nsites(u::Unitcell, sublat) = sublatlengths(u)[sublat]
 
 offsets(u::Unitcell) = u.offsets
-
-function sublat(u::Unitcell, siteidx)
-    l = length(u.offsets)
-    for s in 2:l
-        @inbounds u.offsets[s] + 1 > siteidx && return s - 1
-    end
-    return l
-end
 
 sublatlengths(u::Unitcell) = diff(u.offsets)
 
@@ -441,8 +435,17 @@ numbertype(::Unitcell{E,T}) where {E,T} = T
 positiontype(::AbstractLattice{E,L,T}) where {E,L,T} = SVector{E,T}
 dntype(::AbstractLattice{E,L}) where {E,L} = SVector{L,Int}
 
-sublat(lat::AbstractLattice, siteidx) = sublat(lat.unitcell, siteidx)
 sublats(lat::AbstractLattice) = sublats(lat.unitcell)
+
+sublat_site(siteidx, lat::AbstractLattice) = sublat_site(siteidx, lat.unitcell.offsets)
+
+function sublat_site(siteidx, offsets)
+    l = length(offsets)
+    for s in 2:l
+        @inbounds offsets[s] + 1 > siteidx && return s - 1
+    end
+    return l
+end
 
 siterange(lat::AbstractLattice, sublat) = siterange(lat.unitcell, sublat)
 
