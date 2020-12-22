@@ -89,7 +89,7 @@ end
 
 @testset "parametric bandstructures" begin
     ph = LatticePresets.linear() |> hamiltonian(onsite(0I) + hopping(-I), orbitals = Val(2)) |> unitcell(2) |>
-         parametric(@onsite!((o; k) -> o + k*I), @hopping!((t; k = 2, p = [1,2])-> t - k*I + p'p))
+         parametric(@onsite!((o; k) -> o + k*I), @hopping!((t; k = 2, p = [1,2])-> t - k*I .+ p'p))
     mesh2D = cuboid((0, 1), (0, 2π), subticks = 15)
     b = bandstructure(ph, mesh2D, mapping = (x, k) -> (x, (;k = k)), showprogress = false)
     @test nbands(b)  == 4
@@ -101,7 +101,7 @@ end
     @test nbands(b)  == 1
 
     ph = LatticePresets.linear() |> hamiltonian(onsite(0I) + hopping(-I), orbitals = Val(2)) |> unitcell(2) |>
-        unitcell |> parametric(@onsite!((o; k) -> o + k*I), @hopping!((t; k = 2, p = [1,2])-> t - k*I + p'p))
+        unitcell |> parametric(@onsite!((o; k) -> o + k*I), @hopping!((t; k = 2, p = [1,2])-> t - k*I .+ p'p))
     b = bandstructure(ph, mesh2D, mapping = (k, φ) -> (;k = k, p = SA[1, φ]), showprogress = false)
     @test nbands(b)  == 1
     b = bandstructure(ph, mesh2D, mapping = (k, φ) -> ((;k = k, p = SA[1, φ]),), showprogress = false)
