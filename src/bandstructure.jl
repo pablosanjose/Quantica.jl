@@ -7,21 +7,22 @@ struct Subspace{D,C,T,S<:AbstractMatrix{C},O<:OrbitalStructure}
     orbstruct::O
     basevert::SVector{D,T}
 end
-
-Subspace(h::Hamiltonian, energy, basis, basevert...) =
-    Subspace(energy, unflatten_or_reinterpret(basis, h), h.orbstruct, basevert...)
-Subspace(h::Missing, energy, basis, basevert...) =
-    Subspace(energy, basis, OrbitalStructure(size(basis, 1)), basevert...)
+Subspace(h::Hamiltonian, args...) = Subspace(h.orbstruct, args...)
+Subspace(::Missing, energy, basis, basevert...) =
+    Subspace(OrbitalStructure(eltype(basis), size(basis, 1)), energy, basis, basevert...)
+Subspace(o::OrbitalStructure, energy, basis, basevert...) =
+    Subspace(energy, unflatten_or_reinterpret(basis, o), o, basevert...)
 Subspace(energy::T, basis, orbstruct) where {T} = Subspace(energy, basis, orbstruct, SVector{0,T}())
 Subspace(energy::T, basis, orbstruct, basevert) where {T} = Subspace(energy, basis, orbstruct, SVector(T.(basevert)))
 
 function Base.show(io::IO, s::Subspace{D,C,T}) where {D,C,T}
     i = get(io, :indent, "")
     print(io,
-"$(i)Subspace{$D,$C,$T}: eigenenergy subspace on a $(D)D manifold
+"$(i)Subspace{$D}: eigenenergy subspace on a $(D)D manifold
 $i  Energy       : $(s.energy)
 $i  Degeneracy   : $(degeneracy(s))
-$i  Bloch/params : $(s.basevert)")
+$i  Bloch/params : $(s.basevert)
+$i  Basis eltype : $C")
 end
 
 """
@@ -35,7 +36,11 @@ Return the degeneracy of a given energy subspace. It is equal to `size(s.basis, 
 degeneracy(s::Subspace) = degeneracy(s.basis)
 degeneracy(m::AbstractMatrix) = isempty(m) ? 1 : size(m, 2)  # To support sentinel empty projs
 
+orbitalstructure(s::Subspace) = s.orbstruct
+
 flatten(s::Subspace) = Subspace(s.energy, _flatten(s.basis, s.orbstruct), s.orbstruct, s.basevert)
+
+unflatten(s::Subspace, o::OrbitalStructure) = Subspace(s.energy, unflatten(s.basis, o), o, s.basevert)
 
 # destructuring
 Base.iterate(s::Subspace) = s.energy, Val(:basis)
@@ -159,7 +164,7 @@ subspace(s::Spectrum, rngs) = subspace.(Ref(s), rngs)
 function subspace(s::Spectrum, rng::AbstractUnitRange)
     ε = mean(j -> s.energies[j], rng)
     ψs = view(s.states, :, rng)
-    Subspace(s.diag.h, ε, ψs)
+    Subspace(s.diag.orbstruct, ε, ψs)
 end
 
 nsubspaces(s::Spectrum) = length(s.subs)
@@ -477,6 +482,7 @@ Bandstructure{2}: collection of 1D bands
     `cuboid`, `diagonalizer`, `bloch`, `parametric`, `splitbands!`
 """
 function bandstructure(h::Hamiltonian{<:Any, L}; subticks = 13, kw...) where {L}
+    L == 0 && throw(ArgumentError("Hamiltonian is 0D, use `spectrum` instead of `bandstructure`"))
     base = cuboid(filltuple((-π, π), Val(L))...; subticks = subticks)
     return bandstructure(h, base; kw...)
 end
@@ -852,7 +858,7 @@ Base.getindex(bs::Bandstructure, ϕs::Tuple; around = missing) = interpolate_ban
 
 function interpolate_bandstructure(bs::Bandstructure, ϕs, around)
     subs = subspace_type(bs, ϕs)[]
-    foreach(band -> interpolate_band!(subs, band, ϕs, bs.diag.h), bs.bands)
+    foreach(band -> interpolate_band!(subs, band, ϕs, bs.diag.orbstruct), bs.bands)
     return filter_around!(subs, around)
 end
 
@@ -862,10 +868,10 @@ function subspace_type(bs::Bandstructure, ϕs)
     ε0 = last(first(band.verts))
     b0 = first(band.vbases)
     m0 = Matrix{eltype(b0)}(undef, size(b0, 1), 0)
-    return typeof(Subspace(bs.diag.h, ε0, m0, ϕs))
+    return typeof(Subspace(bs.diag.orbstruct, ε0, m0, ϕs))
 end
 
-function interpolate_band!(subs, band::Band{D}, ϕs, h) where {D}
+function interpolate_band!(subs, band::Band{D}, ϕs, orbstruct) where {D}
     D == length(ϕs) || throw(ArgumentError("Bandstructure needs a NTuple{$D} of base coordinates for interpolation"))
     s = find_basemesh_simplex(promote(ϕs...), band.basemesh)
     s === nothing && return subs
@@ -886,7 +892,7 @@ function interpolate_band!(subs, band::Band{D}, ϕs, h) where {D}
             foreach(i -> mul!(basis, bs[i], ps[i], dϕinds[i], true), 1:D)
         end
         # h is necessary here to perhaps unflatten basis
-        push!(subs, Subspace(h, energy, basis, ϕs))
+        push!(subs, Subspace(orbstruct, energy, basis, ϕs))
     end
     return subs
 end

@@ -12,11 +12,11 @@ end
 
 (f::HamiltonianBlochFunctor)(vertex) = bloch!(f.matrix, f.h, map_phiparams(f.mapping, vertex))
 
-struct Diagonalizer{M<:AbstractDiagonalizeMethod,F,H<:Union{Hamiltonian,Missing}}
+struct Diagonalizer{M<:AbstractDiagonalizeMethod,F,O<:Union{OrbitalStructure,Missing}}
     method::M
     perm::Vector{Int} # reusable permutation vector
     matrixf::F        # functor or function matrixf(φs) that produces matrices to be diagonalized
-    h::H              # store original Hamiltonian if available
+    orbstruct::O      # store structure of original Hamiltonian if available (to allow unflattening eigenstates)
 end
 
 struct NoUnflatten end
@@ -57,7 +57,7 @@ function diagonalizer(h::Union{Hamiltonian,ParametricHamiltonian}; method = Line
     matrixf = HamiltonianBlochFunctor(h, matrix, mapping)
     perm = Vector{Int}(undef, size(matrix, 2))
     orbstruct = parent(h).orbstruct
-    return Diagonalizer(method, perm, matrixf, parent(h))
+    return Diagonalizer(method, perm, matrixf, orbstruct)
 end
 
 function diagonalizer(matrixf::Function, dimh; method = LinearAlgebraPackage())
@@ -76,7 +76,7 @@ end
 
 function (d::Diagonalizer)(φs)
     ϵ, ψ = d(φs, NoUnflatten())
-    ψ´ = unflatten_or_reinterpret(ψ, d.h)
+    ψ´ = unflatten_or_reinterpret(ψ, d.orbstruct)
     return ϵ, ψ´
 end
 

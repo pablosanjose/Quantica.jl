@@ -12,28 +12,30 @@ HamiltonianHarmonic{L,M,A}(dn::SVector{L,Int}, n::Int, m::Int) where {L,M,A<:Spa
 HamiltonianHarmonic{L,M,A}(dn::SVector{L,Int}, n::Int, m::Int) where {L,M,A<:Matrix{M}} =
     HamiltonianHarmonic(dn, zeros(M, n, m))
 
-struct OrbitalStructure{N,O<:NTuple{N,Tuple{Vararg{NameType}}}}
+struct OrbitalStructure{T,N,O<:NTuple{N,Tuple{Vararg{NameType}}}}
+    orbtype::Type{T}    # T<:Union{Number,SVector} is Hamiltonian's orbitaltype
     orbitals::O
     offsets::Tuple{Int,Vararg{Int,N}}
     flatoffsets::Tuple{Int,Vararg{Int,N}}
 end
 
-function OrbitalStructure(orbs::NTuple{N,Any}, lat::AbstractLattice) where {N}
+function OrbitalStructure(::Type{T}, orbs::O, lat::AbstractLattice) where {T,N,O<:NTuple{N,Any}}
     offsets = ntuple(i -> lat.unitcell.offsets[i], Val(N+1))
     offsets´ = flatoffsets(offsets, length.(orbs))
-    return OrbitalStructure(orbs, offsets, offsets´)
+    return OrbitalStructure(T, orbs, offsets, offsets´)
 end
 
-OrbitalStructure(n) = OrbitalStructure((:A,), (0, n), (0, n))
+OrbitalStructure(::Type{T}, n) where {T} = OrbitalStructure(T, ((:A,),), (0, n), (0, n))
 
 struct Hamiltonian{LA<:AbstractLattice,L,M,A<:AbstractMatrix,
-                   H<:HamiltonianHarmonic{L,M,A},O} # <: AbstractMatrix{M}
+                   H<:HamiltonianHarmonic{L,M,A},O<:OrbitalStructure} # <: AbstractMatrix{M}
     lattice::LA
     harmonics::Vector{H}
-    orbstruct::OrbitalStructure{O}
+    orbstruct::O
 end
 
-Hamiltonian(lat, hs, orbs::Tuple) = Hamiltonian(lat, hs, OrbitalStructure(orbs, lat))
+Hamiltonian(lat, hs::Vector{H}, orbs::Tuple) where {L,M,H<:HamiltonianHarmonic{L,M}} =
+    Hamiltonian(lat, hs, OrbitalStructure(orbitaltype(M), orbs, lat))
 
 function Hamiltonian(lat, hs::Vector{H}, orbs, n::Int, m::Int) where {L,M,H<:HamiltonianHarmonic{L,M}}
     sort!(hs, by = h -> abs.(h.dn))
@@ -44,7 +46,9 @@ function Hamiltonian(lat, hs::Vector{H}, orbs, n::Int, m::Int) where {L,M,H<:Ham
 end
 
 orbitals(h::Hamiltonian) = h.orbstruct.orbitals
+
 offsets(h::Hamiltonian) = h.orbstruct.offsets
+
 flatoffsets(h::Hamiltonian) = h.orbstruct.flatoffsets
 
 Base.eltype(::Hamiltonian{<:Any,<:Any,M}) where {M} = M
@@ -55,6 +59,12 @@ Base.isequal(o1::OrbitalStructure, o2::OrbitalStructure) =
     o1.orbitals == o1.orbitals && o1.offsets == o2.offsets && o1.flatoffsets == o2.flatoffsets
 
 sublat_site(siteidx, o::OrbitalStructure) = sublat_site(siteidx, o.offsets)
+
+dimh(o::OrbitalStructure) = last(o.offsets)
+
+sublats(o::OrbitalStructure) = 1:length(o.orbitals)
+
+orbitals(o::OrbitalStructure) = o.orbitals
 
 # sublat offsets after flattening (without padding zeros)
 flatoffsets(offsets, norbs) = _flatoffsets((0,), offsets, norbs...)
@@ -106,10 +116,20 @@ Base.summary(h::Hamiltonian{LA}) where {E,L,LA<:Lattice{E,L}} =
 Base.summary(::Hamiltonian{LA}) where {E,L,T,L´,LA<:Superlattice{E,L,T,L´}} =
     "Hamiltonian{<:Superlattice} : $(L)D Hamiltonian on a $(L´)D Superlattice in $(E)D space"
 
+function Base.show(io::IO, o::OrbitalStructure{T,N,O}) where {T,N,O}
+    i = get(io, :indent, "")
+    ioindent = IOContext(io, :indent => string(i, "  "))
+    print(io, i,
+"$(i)OrbitalStructure: orbital structure of Hamiltonian
+$i  Orbital Type  : $T
+$i  Orbitals      : $(orbitals(o))
+$i  Sublattices   : $(length(sublats(o)))
+$i  Dimensions    : $(dimh(o))")
+end
+
 #######################################################################
 # flatten
 #######################################################################
-
 """
     flatten(h::Hamiltonian)
 
@@ -117,6 +137,10 @@ Flatten a multiorbital Hamiltonian `h` into one with a single orbital per site. 
 associated lattice is flattened also, so that there is one site per orbital for each initial
 site (all at the same position). Note that in the case of sparse Hamiltonians, zeros in
 hopping/onsite matrices are preserved as structural zeros upon flattening.
+
+    flatten(s::Subspace)
+
+Rebuild `s` by flattening its basis to have a scalar eltype.
 
     h |> flatten()
 
@@ -148,6 +172,9 @@ Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
   Hoppings         : 6
   Coordination     : 2.0
 ```
+
+# See also
+    `unflatten`
 """
 flatten() = h -> flatten(h)
 
@@ -192,7 +219,7 @@ function _flatten(src::SparseMatrixCSC{<:SMatrix{N,N,T}}, orbstruct, ::Type{T´}
     return matrix
 end
 
-function _flatten(src::DenseMatrix{<:SMatrix{N,N,T}}, orbstruct, ::Type{T´} = T) where {N,T,T´}
+function _flatten(src::StridedMatrix{<:SMatrix{N,N,T}}, orbstruct, ::Type{T´} = T) where {N,T,T´}
     norbs = length.(orbstruct.orbitals)
     offsets´ = orbstruct.flatoffsets
     dim´ = last(offsets´)
@@ -212,7 +239,7 @@ function _flatten(src::DenseMatrix{<:SMatrix{N,N,T}}, orbstruct, ::Type{T´} = T
 end
 
 # for Subspace bases
-function _flatten(src::DenseMatrix{<:SVector{N,T}}, orbstruct, ::Type{T´} = T) where {N,T,T´}
+function _flatten(src::StridedMatrix{<:SVector{N,T}}, orbstruct, ::Type{T´} = T) where {N,T,T´}
     norbs = length.(orbstruct.orbitals)
     offsets´ = orbstruct.flatoffsets
     dim´ = last(offsets´)
@@ -323,20 +350,56 @@ function flatten_dense_copy!(dst, src, h)
 end
 
 ## unflatten ##
+"""
+    unflatten(v::AbstractArray, o::OrbitalStructure{T})
 
-unflatten(vflat::AbstractVector, h) = unflatten!(similar(vflat, orbitaltype(h), size(h, 2)), vflat, h)
-unflatten(vflat::AbstractMatrix, h) = unflatten!(similar(vflat, orbitaltype(h), size(h, 2), size(vflat, 2)), vflat, h)
+Rebuild `v` to have element type `T` and orbital structure `o` by performing the inverse of
+`flatten(v)`.
 
-function unflatten!(v::AbstractArray{T}, vflat::AbstractArray, h::Hamiltonian) where {T}
-    norbs = length.(orbitals(h))
-    flatoffsets = h.orbstruct.flatoffsets
+# Examples
+```jldoctest
+julia> h = LP.honeycomb() |> hamiltonian(hopping(I), orbitals = (:up,:down)) |> unitcell;
+
+julia> psi = spectrum(h)[around = -1]
+Subspace{0}: eigenenergy subspace on a 0D manifold
+  Energy       : -0.9999999999999989
+  Degeneracy   : 2
+  Bloch/params : Float64[]
+  Basis eltype : SVector{2, ComplexF64}
+
+julia> psiflat = flatten(psi)
+Subspace{0}: eigenenergy subspace on a 0D manifold
+  Energy       : -0.9999999999999989
+  Degeneracy   : 2
+  Bloch/params : Float64[]
+  Basis eltype : ComplexF64
+
+julia> unflatten(psiflat, orbitalstructure(psi))
+Subspace{0}: eigenenergy subspace on a 0D manifold
+  Energy       : -0.9999999999999989
+  Degeneracy   : 2
+  Bloch/params : Float64[]
+  Basis eltype : SVector{2, ComplexF64}
+```
+
+# See also
+    `flatten`, `orbitalstructure`
+"""
+unflatten(vflat::AbstractVector, o::OrbitalStructure{T}) where {T} =
+    unflatten!(similar(vflat, T, dimh(o)), vflat, o)
+unflatten(vflat::AbstractMatrix, o::OrbitalStructure{T}) where {T} =
+    unflatten!(similar(vflat, T, dimh(o), size(vflat, 2)), vflat, o)
+
+function unflatten!(v::AbstractArray{T}, vflat::AbstractArray, o::OrbitalStructure) where {T}
+    norbs = length.(o.orbitals)
+    flatoffsets = o.flatoffsets
     dimflat = last(flatoffsets)
-    check_unflatten_dst_dims(v, h)
+    check_unflatten_dst_dims(v, dimh(o))
     check_unflatten_src_dims(vflat, dimflat)
-    check_unflatten_eltypes(v, h)
+    check_unflatten_eltypes(v, o)
     for col in 1:size(v, 2)
         row = 0
-        for s in sublats(h.lattice)
+        for s in sublats(o)
             N = norbs[s]
             for i in flatoffsets[s]+1:N:flatoffsets[s+1]
                 row += 1
@@ -347,35 +410,32 @@ function unflatten!(v::AbstractArray{T}, vflat::AbstractArray, h::Hamiltonian) w
     return v
 end
 
-check_unflatten_dst_dims(v, h) =
-    size(v, 1) == size(h, 2) ||
+## unflatten_or_reinterpret: call unflatten but only if we cannot unflatten via reinterpret
+unflatten_or_reinterpret(vflat, ::Missing) = vflat
+# source is already of the correct orbitaltype(h)
+function unflatten_or_reinterpret(vflat::AbstractArray{T}, o::OrbitalStructure{T}) where {T}
+    check_unflatten_dst_dims(vflat, dimh(o))
+    vflat
+end
+# source can be reinterpreted, because the number of orbitals is the same M for all N sublattices
+unflatten_or_reinterpret(vflat::AbstractArray{T}, o::OrbitalStructure{S,N,<:NTuple{N,NTuple{M}}}) where {T,S,N,M} =
+    reinterpret(SVector{M,T}, vflat)
+# otherwise call unflatten
+unflatten_or_reinterpret(vflat, o) = unflatten(vflat, o)
+
+check_unflatten_dst_dims(v, dimh) =
+    size(v, 1) == dimh ||
         throw(ArgumentError("Dimension of destination array is inconsistent with Hamiltonian"))
 
 check_unflatten_src_dims(vflat, dimflat) =
     size(vflat, 1) == dimflat ||
         throw(ArgumentError("Dimension of source array is inconsistent with Hamiltonian"))
 
-check_unflatten_eltypes(v::AbstractArray{T}, h) where {T} =
-    T === orbitaltype(h) ||
-        throw(ArgumentError("Eltype of desination array is inconsistent with Hamiltonian"))
+check_unflatten_eltypes(::AbstractArray{T}, ::OrbitalStructure{S}) where {T,S} =
+    T === S || throw(ArgumentError("Eltype of desination array is inconsistent with Hamiltonian"))
 
 valdim(::Type{<:Number}) = Val(1)
 valdim(::Type{S}) where {N,S<:SVector{N}} = Val(N)
-
-## unflatten_or_reinterpret: call unflatten but only if we cannot unflatten via reinterpret
-unflatten_or_reinterpret(vflat, ::Missing) = vflat
-unflatten_or_reinterpret(vflat, h::Hamiltonian) = _unflatten_or_reinterpret(vflat, h, orbitaltype(h), orbitals(h))
-
-# source is already of the correct orbitaltype(h)
-function _unflatten_or_reinterpret(v::AbstractArray{T}, h, ::Type{T}, orbs) where {T}
-    check_unflatten_dst_dims(v, h)
-    return v
-end
-# source can be reinterpreted, because the number of orbitals is the same M for all N sublattices
-_unflatten_or_reinterpret(v::AbstractArray{T}, h, ::Type{S}, ::NTuple{N,NTuple{M}}) where {N,M,T<:Number,S<:SVector{M}} =
-    reinterpret(SVector{M,T}, v)
-# otherwise call unflatten
-_unflatten_or_reinterpret(v, h, S, orbs) = unflatten(v, h)
 
 #######################################################################
 # similarmatrix
@@ -443,7 +503,7 @@ _similarmatrix(::Type{A}, ::Type{A´}, h) where {N,T<:Number,A<:Matrix{T},T´<:S
 
 _similarmatrix(::typeof(flatten), ::Type{A´}, h) where {N,T,S<:SMatrix{N,N,T},A´<:AbstractSparseMatrix{S}} =
     _similarmatrix(AbstractSparseMatrix{T}, A´, h)
-_similarmatrix(::typeof(flatten), ::Type{A´}, h) where {N,T,S<:SMatrix{N,N,T},A´<:DenseMatrix{S}} =
+_similarmatrix(::typeof(flatten), ::Type{A´}, h) where {N,T,S<:SMatrix{N,N,T},A´<:StridedMatrix{S}} =
     _similarmatrix(Matrix{T}, A´, h)
 _similarmatrix(::typeof(flatten), ::Type{A´}, h) where {T<:Number,A´<:AbstractArray{T}} =
     _similarmatrix(A´, A´, h)
@@ -457,7 +517,7 @@ _similarmatrix(dest_type, src_type, h) = throw(ArgumentError("Unexpected `blocht
 # ensure we have stored entries for all harmonics in the sparse case
 similar_merged(hs::AbstractVector{H}, ::Type{M´} = M) where {M´,M,H<:HamiltonianHarmonic{<:Any,M,<:AbstractSparseMatrix}} =
     _similar_merged_sparse(hs, M´)
-similar_merged(hs::AbstractVector{H}, ::Type{M´} = M) where {M´,M,H<:HamiltonianHarmonic{<:Any,M,<:DenseMatrix}} =
+similar_merged(hs::AbstractVector{H}, ::Type{M´} = M) where {M´,M,H<:HamiltonianHarmonic{<:Any,M,<:StridedMatrix}} =
     similar(first(hs).h, M´)
 
 function _similar_merged_sparse(hs::Vector{<:HamiltonianHarmonic{L,M}},::Type{M´} = M) where {L,M,M´}
@@ -596,12 +656,32 @@ sanitize_orbs(o::NTuple{N,Union{Integer,NameType}}) where {N} = nametype.(o)
 sanitize_orbs(p) = throw(ArgumentError("Wrong format for orbitals, see `hamiltonian`"))
 
 """
-    dims(lat_or_ham) -> (E, L)
+    orbitalstructure(x::Union{Hamiltonian,ParametricHamiltonian})
+    orbitalstructure(x::Subspace)
+
+Return an `OrbitalStructure` containing information about the orbital structure of `x`
+
+# Examples
+
+```jldoctest
+julia> sp = spectrum(LP.honeycomb() |> hamiltonian(hopping(I), orbitals = (:up,:down)) |> unitcell);
+
+julia> sp[around = -1] |> orbitalstructure
+OrbitalStructure: orbital structure of Hamiltonian
+  Orbital Type  : SVector{2, ComplexF64}
+  Orbitals      : ((:up, :down), (:up, :down))
+  Sublattices   : 2
+  Dimensions    : 2
+```
+"""
+orbitalstructure(h::Hamiltonian) = h.orbstruct
+
+"""
+    dims(lh::Union{Hamiltonian,AbstractLattice}) -> (E, L)
 
 Return a tuple `(E, L)` of the embedding `E` and lattice dimensions `L` of `AbstractLattice`
-or `Hamiltonian` `lat_or_ham`
+or `Hamiltonian` `lh`
 """
-
 dims(lat::AbstractLattice{E,L}) where {E,L} = E, L
 dims(h::Hamiltonian) = dims(h.lattice)
 
@@ -664,6 +744,13 @@ blockdim(h::Hamiltonian) = blockdim(blocktype(h))
 blockdim(::Type{S}) where {N,S<:SMatrix{N,N}} = N
 blockdim(::Type{T}) where {T<:Number} = 1
 
+orbitaltype(h::Hamiltonian) = orbitaltype(h.orbstruct)
+
+orbitaltype(o::OrbitalStructure{T}) where {T} = T
+
+orbitaltype(::Type{M}) where {M<:Number} = M
+orbitaltype(::Type{S}) where {N,T,S<:SMatrix{N,N,T}} = SVector{N,T}
+
 # find SVector type that can hold all orbital amplitudes in any lattice sites
 orbitaltype(orbs, type::Type{Tv}) where {Tv} =
     _orbitaltype(SVector{1,Tv}, orbs...)
@@ -671,12 +758,6 @@ _orbitaltype(::Type{S}, ::NTuple{D,NameType}, os...) where {N,Tv,D,S<:SVector{N,
     (M = max(N,D); _orbitaltype(SVector{M,Tv}, os...))
 _orbitaltype(t::Type{SVector{N,Tv}}) where {N,Tv} = t
 _orbitaltype(t::Type{SVector{1,Tv}}) where {Tv} = Tv
-
-orbitaltype(h::Hamiltonian{LA,L,M}) where {N,T,LA,L,M<:SMatrix{N,N,T}} = SVector{N,T}
-orbitaltype(h::Hamiltonian{LA,L,M}) where {LA,L,M<:Number} = M
-
-orbitaltype(::Type{M}) where {M<:Number} = M
-orbitaltype(::Type{S}) where {N,T,S<:SMatrix{N,N,T}} = SVector{N,T}
 
 coordination(ham) = nhoppings(ham) / nsites(ham)
 
@@ -697,7 +778,7 @@ function nonsites(ham)
 end
 
 _nnz(h::AbstractSparseMatrix) = count(!iszero, nonzeros(h)) # Does not include stored zeros
-_nnz(h::DenseMatrix) = count(!iszero, h)
+_nnz(h::StridedMatrix) = count(!iszero, h)
 
 function _nnzdiag(s::SparseMatrixCSC)
     count = 0
@@ -1704,13 +1785,13 @@ end
 
 _copy!(dest, src, h) = copy!(dest, src)
 _copy!(dst::AbstractMatrix{<:Number}, src::SparseMatrixCSC{<:Number}, h) = _fast_sparse_copy!(dst, src)
-_copy!(dst::DenseMatrix{<:Number}, src::SparseMatrixCSC{<:Number}, h) = _fast_sparse_copy!(dst, src)
-_copy!(dst::DenseMatrix{<:SMatrix{N,N}}, src::SparseMatrixCSC{<:SMatrix{N,N}}, h) where {N} = _fast_sparse_copy!(dst, src)
+_copy!(dst::StridedMatrix{<:Number}, src::SparseMatrixCSC{<:Number}, h) = _fast_sparse_copy!(dst, src)
+_copy!(dst::StridedMatrix{<:SMatrix{N,N}}, src::SparseMatrixCSC{<:SMatrix{N,N}}, h) where {N} = _fast_sparse_copy!(dst, src)
 _copy!(dst::AbstractMatrix{<:Number}, src::SparseMatrixCSC{<:SMatrix}, h) = flatten_sparse_copy!(dst, src, h)
-_copy!(dst::DenseMatrix{<:Number}, src::DenseMatrix{<:SMatrix}, h) = flatten_dense_copy!(dst, src, h)
+_copy!(dst::StridedMatrix{<:Number}, src::StridedMatrix{<:SMatrix}, h) = flatten_dense_copy!(dst, src, h)
 
 _add!(dest, src, h, α) = _plain_muladd!(dest, src, α)
 _add!(dst::AbstractMatrix{<:Number}, src::SparseMatrixCSC{<:Number}, h, α = 1) = _fast_sparse_muladd!(dst, src, α)
 _add!(dst::AbstractMatrix{<:SMatrix{N,N}}, src::SparseMatrixCSC{<:SMatrix{N,N}}, h, α = I) where {N} = _fast_sparse_muladd!(dst, src, α)
 _add!(dst::AbstractMatrix{<:Number}, src::SparseMatrixCSC{<:SMatrix}, h, α = I) = flatten_sparse_muladd!(dst, src, h, α)
-_add!(dst::DenseMatrix{<:Number}, src::DenseMatrix{<:SMatrix}, h, α = I) = flatten_dense_muladd!(dst, src, h, α)
+_add!(dst::StridedMatrix{<:Number}, src::StridedMatrix{<:SMatrix}, h, α = I) = flatten_dense_muladd!(dst, src, h, α)
