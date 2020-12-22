@@ -58,6 +58,7 @@ end
     b = bandstructure(hf, m, showprogress = false)
     @test nbands(b) == 2
     @test nsimplices(b)  == 24
+    @test b[(1,), around = 0] isa Subspace
 
     hc2 = LatticePresets.honeycomb() |> hamiltonian(hopping(-1))
     hp2 = parametric(hc2, @hopping!((t; s) -> s*t))
@@ -67,6 +68,7 @@ end
     b = bandstructure(hf2, m2, showprogress = false)
     @test nbands(b) == 1
     @test nsimplices(b)  == 576
+    @test degeneracy.(b[(0,0), around = (0, 2)]) == [1, 1]
 end
 
 @testset "bandstructures lifts & transforms" begin
@@ -110,7 +112,7 @@ end
 @testset "unflatten" begin
     h = LatticePresets.honeycomb() |> hamiltonian(onsite(2I) + hopping(I, range = 1), orbitals = (Val(2), Val(1))) |> unitcell(2) |> unitcell
     sp = spectrum(h).states[:,1]
-    sp´ = Quantica.unflatten_or_reinterpret(sp, h)
+    sp´ = Quantica.unflatten_or_reinterpret(sp, h.orbstruct)
     l = size(h, 1)
     @test length(sp) == 1.5 * l
     @test length(sp´) == l
@@ -118,9 +120,18 @@ end
     @test sp´ isa Vector
     @test sp´ !== sp
 
+    h = LatticePresets.honeycomb() |> hamiltonian(onsite(2I) + hopping(I, range = 1), orbitals = (Val(2), Val(1))) |> unitcell(2)
+    b = bandstructure(h)
+    psi = b[(0,0), around = 0]
+    psi´ = flatten(psi)
+    psi´´ = unflatten(psi´, orbitalstructure(psi))
+    @test eltype(psi.basis) == eltype(psi´´.basis) == SVector{2, ComplexF64}
+    @test eltype(psi´.basis) == ComplexF64
+    @test psi.basis == psi´´.basis
+
     h = LatticePresets.honeycomb() |> hamiltonian(onsite(2I) + hopping(I, range = 1), orbitals = Val(2)) |> unitcell(2) |> unitcell
     sp = spectrum(h).states[:,1]
-    sp´ = Quantica.unflatten_or_reinterpret(sp, h)
+    sp´ = Quantica.unflatten_or_reinterpret(sp, h.orbstruct)
     l = size(h, 1)
     @test length(sp) == 2 * l
     @test length(sp´) == l
@@ -128,7 +139,7 @@ end
 
     h = LatticePresets.honeycomb() |> hamiltonian(onsite(2I) + hopping(I, range = 1), orbitals = Val(2)) |> unitcell(2) |> unitcell
     sp = spectrum(h).states[:,1]
-    sp´ = Quantica.unflatten_or_reinterpret(sp, h)
+    sp´ = Quantica.unflatten_or_reinterpret(sp, h.orbstruct)
     @test sp === sp
 end
 
@@ -152,6 +163,19 @@ end
     bs = bandstructure(h, subticks = 13)
     @test sum(degeneracy, bs[(1,2)]) == size(h,1)
     @test sum(degeneracy, bs[(0.2,0.3)]) == size(h,1)
+    @test size(bs[(1,2), around = 0].basis, 1) == size(h, 2)
+    h = LatticePresets.honeycomb() |> hamiltonian(hopping(1f0*I), orbitals = (Val(1),Val(2))) |> unitcell(2)
+    bs = bandstructure(h, subticks = 13)
+    @test sum(degeneracy, bs[(1,2)]) == size(h,1) * 1.5
+    @test sum(degeneracy, bs[(0.2,0.3)]) == size(h,1) * 1.5
+    @test bs[(1,2), around = 0] |> last |> eltype == SVector{2, ComplexF64}
+    @test size(bs[(1,2), around = 0].basis, 1) == size(h, 2)
+end
+
+@testset "subspace flatten" begin
+    h = LatticePresets.honeycomb() |> hamiltonian(hopping(I), orbitals = (Val(1), Val(2))) |> unitcell(2) |> unitcell
+    sub = spectrum(h)[1]
+    @test size(sub.basis) == (8,1) && size(flatten(sub).basis) == (12,1)
 end
 
 @testset "diagonalizer" begin

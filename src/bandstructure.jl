@@ -1,22 +1,28 @@
 #######################################################################
 # Subspace
 #######################################################################
-struct Subspace{D,C,T,S<:AbstractMatrix{C}}
+struct Subspace{D,C,T,S<:AbstractMatrix{C},O<:OrbitalStructure}
     energy::T
     basis::S
+    orbstruct::O
     basevert::SVector{D,T}
 end
+Subspace(h::Hamiltonian, args...) = Subspace(h.orbstruct, args...)
+Subspace(::Missing, energy, basis, basevert...) =
+    Subspace(OrbitalStructure(eltype(basis), size(basis, 1)), energy, basis, basevert...)
+Subspace(o::OrbitalStructure, energy, basis, basevert...) =
+    Subspace(energy, unflatten_or_reinterpret(basis, o), o, basevert...)
+Subspace(energy::T, basis, orbstruct) where {T} = Subspace(energy, basis, orbstruct, SVector{0,T}())
+Subspace(energy::T, basis, orbstruct, basevert) where {T} = Subspace(energy, basis, orbstruct, SVector(T.(basevert)))
 
-Subspace(energy::T, basis) where {T} = Subspace(energy, basis, SVector{0,T}())
-Subspace(energy::T, basis, basevert) where {T} = Subspace(energy, basis, SVector(T.(basevert)))
-
-function Base.show(io::IO, s::Subspace{C,T,D}) where {C,T,D}
+function Base.show(io::IO, s::Subspace{D,C,T}) where {D,C,T}
     i = get(io, :indent, "")
     print(io,
-"$(i)Subspace{$C,$T,$D}: eigenenergy subspace on a $(D)D manifold
+"$(i)Subspace{$D}: eigenenergy subspace on a $(D)D manifold
 $i  Energy       : $(s.energy)
 $i  Degeneracy   : $(degeneracy(s))
-$i  Bloch/params : $(s.basevert)")
+$i  Bloch/params : $(s.basevert)
+$i  Basis eltype : $C")
 end
 
 """
@@ -30,6 +36,12 @@ Return the degeneracy of a given energy subspace. It is equal to `size(s.basis, 
 degeneracy(s::Subspace) = degeneracy(s.basis)
 degeneracy(m::AbstractMatrix) = isempty(m) ? 1 : size(m, 2)  # To support sentinel empty projs
 
+orbitalstructure(s::Subspace) = s.orbstruct
+
+flatten(s::Subspace) = Subspace(s.energy, _flatten(s.basis, s.orbstruct), s.orbstruct, s.basevert)
+
+unflatten(s::Subspace, o::OrbitalStructure) = Subspace(s.energy, unflatten(s.basis, o), o, s.basevert)
+
 # destructuring
 Base.iterate(s::Subspace) = s.energy, Val(:basis)
 Base.iterate(s::Subspace, ::Val{:basis}) = s.basis, Val(:done)
@@ -42,22 +54,23 @@ Base.length(s::Subspace) = 2
 #######################################################################
 # Spectrum
 #######################################################################
-struct Spectrum{D,C,T,S<:AbstractMatrix{C},E<:AbstractVector{T}}
+struct Spectrum{D,C,T,S<:AbstractMatrix{C},E<:AbstractVector{T},M<:Diagonalizer}
     energies::E
     states::S
+    diag::M
     basevert::SVector{D,T}
     subs::Vector{UnitRange{Int}}
 end
 
-Spectrum(energies::AbstractVector{T}, states) where {T} = Spectrum(energies, states, zero(SVector{0,real(T)}))
+Spectrum(energies::AbstractVector{T}, states, diag) where {T} = Spectrum(energies, states, diag, zero(SVector{0,real(T)}))
 
-function Spectrum(energies, states, basevert::SVector{<:Any,T}) where {T}
+function Spectrum(energies, states, diag, basevert::SVector{<:Any,T}) where {T}
     energies´ = maybereal(energies, T)
     subs = collect(approxruns(energies´))
     for rng in subs
         orthonormalize!(view(states, :, rng))
     end
-    return Spectrum(energies´, states, basevert, subs)
+    return Spectrum(energies´, states, diag, basevert, subs)
 end
 
 maybereal(energies, ::Type{T}) where {T<:Real} = T.(real.(energies))
@@ -113,8 +126,8 @@ independent copy.
 """
 function spectrum(h; method = LinearAlgebraPackage(), transform = missing)
     diag = diagonalizer(h; method = method)
-    (ϵk, ψk) = diag(())
-    s = Spectrum(ϵk, ψk)
+    (ϵk, ψk) = diag((), NoUnflatten())
+    s = Spectrum(ϵk, ψk, diag)
     transform === missing || transform!(transform, s)
     return s
 end
@@ -127,12 +140,12 @@ Transform the energies of `s` by applying `f` to them in place.
 transform!(f, s::Spectrum) = (map!(f, s.energies, s.energies); s)
 
 # destructuring
-Base.iterate(s::Spectrum) = s.energies, Val(:states)
-Base.iterate(s::Spectrum, ::Val{:states}) = s.states, Val(:done)
-Base.iterate(::Spectrum, ::Val{:done}) = nothing
 Base.first(s::Spectrum) = s.energies
 Base.last(s::Spectrum) = s.states
-Base.Tuple(s::Spectrum) = (s.energies, s.states)
+Base.iterate(s::Spectrum) = first(s), Val(:states)
+Base.iterate(s::Spectrum, ::Val{:states}) = last(s), Val(:done)
+Base.iterate(::Spectrum, ::Val{:done}) = nothing
+Base.Tuple(s::Spectrum) = (first(s), last(s))
 
 Base.getindex(s::Spectrum, i::Int) = subspace(s, s.subs[i])
 Base.getindex(s::Spectrum, is::Union{AbstractUnitRange,AbstractVector}) = getindex.(Ref(s), is)
@@ -151,7 +164,7 @@ subspace(s::Spectrum, rngs) = subspace.(Ref(s), rngs)
 function subspace(s::Spectrum, rng::AbstractUnitRange)
     ε = mean(j -> s.energies[j], rng)
     ψs = view(s.states, :, rng)
-    Subspace(ε, ψs)
+    Subspace(s.diag.orbstruct, ε, ψs)
 end
 
 nsubspaces(s::Spectrum) = length(s.subs)
@@ -204,12 +217,14 @@ degeneracy(m::Band, i) = degeneracy(m.vbases[i])
 
 transform!(f::Function, m::Band) = (map!(f, vertices(m), vertices(m)); m)
 
+Base.getindex(b::Band, i::Int) = b.verts[i], b.vbases[i]
+
 #######################################################################
 # Bandstructure
 #######################################################################
 struct Bandstructure{D,C,T,B<:Band{D,C,T},M<:Diagonalizer}   # D is dimension of base mesh, D´ = D+1
-    bands::Vector{B}                                # band meshes (vertices + adjacencies)
-    diag::M                                         # diagonalizer that can be used to add additional base-meshes for refinement
+    bands::Vector{B}  # band meshes (vertices + adjacencies)
+    diag::M           # diagonalizer that can be used to add additional base-meshes for refinement
 end
 
 function Base.show(io::IO, bs::Bandstructure)
@@ -467,6 +482,7 @@ Bandstructure{2}: collection of 1D bands
     `cuboid`, `diagonalizer`, `bloch`, `parametric`, `splitbands!`
 """
 function bandstructure(h::Hamiltonian{<:Any, L}; subticks = 13, kw...) where {L}
+    L == 0 && throw(ArgumentError("Hamiltonian is 0D, use `spectrum` instead of `bandstructure`"))
     base = cuboid(filltuple((-π, π), Val(L))...; subticks = subticks)
     return bandstructure(h, base; kw...)
 end
@@ -527,7 +543,6 @@ function bandstructure(diag::Diagonalizer, basemesh::CuboidMesh, split, showprog
 end
 
 ## Diagonalize bands step
-
 function bandstructure_diagonalize(diag, basemesh::CuboidMesh, showprogress)
     prog = Progress(length(basemesh), "Step 1/2 - Diagonalising: ")
     spectra = [build_spectrum(diag, vertex, showprogress, prog) for vertex in vertices(basemesh)]
@@ -535,8 +550,8 @@ function bandstructure_diagonalize(diag, basemesh::CuboidMesh, showprogress)
 end
 
 function build_spectrum(diag, vertex, showprog, prog)
-    (ϵs, ψs) = diag(Tuple(vertex))
-    spectrum = Spectrum(ϵs, ψs, vertex)
+    (ϵs, ψs) = diag(Tuple(vertex), NoUnflatten())
+    spectrum = Spectrum(ϵs, ψs, diag, vertex)
     showprog && ProgressMeter.next!(prog)
     return spectrum
 end
@@ -841,14 +856,22 @@ get_vert_or_simp(s::NTuple, i, bs, is) = bs[first(s)].n, getindex.(Ref(is), s)
 #######################################################################
 Base.getindex(bs::Bandstructure, ϕs::Tuple; around = missing) = interpolate_bandstructure(bs, ϕs, around)
 
-function interpolate_bandstructure(bs::Bandstructure{D,C,T}, ϕs, around) where {D,C<:Complex,T}
-    subs = Subspace{D,C,T,Matrix{promote_type(C,T)}}[]
-    foreach(band -> interpolate_band!(subs, band, ϕs), bs.bands)
-    filter_around!(subs, around)
-    return subs
+function interpolate_bandstructure(bs::Bandstructure, ϕs, around)
+    subs = subspace_type(bs, ϕs)[]
+    foreach(band -> interpolate_band!(subs, band, ϕs, bs.diag.orbstruct), bs.bands)
+    return filter_around!(subs, around)
 end
 
-function interpolate_band!(subs, band::Band{D}, ϕs) where {D}
+function subspace_type(bs::Bandstructure, ϕs)
+    (isempty(bs.bands) || isempty(first(bs.bands).vbases)) && throw(ArgumentError("Cannot index into empty bandstructure"))
+    band = first(bs.bands)
+    ε0 = last(first(band.verts))
+    b0 = first(band.vbases)
+    m0 = Matrix{eltype(b0)}(undef, size(b0, 1), 0)
+    return typeof(Subspace(bs.diag.orbstruct, ε0, m0, ϕs))
+end
+
+function interpolate_band!(subs, band::Band{D}, ϕs, orbstruct) where {D}
     D == length(ϕs) || throw(ArgumentError("Bandstructure needs a NTuple{$D} of base coordinates for interpolation"))
     s = find_basemesh_simplex(promote(ϕs...), band.basemesh)
     s === nothing && return subs
@@ -862,17 +885,20 @@ function interpolate_band!(subs, band::Band{D}, ϕs) where {D}
         basis = isempty(p0) ? copy(b0) : b0 * p0
         lmul!(1 - sum(dϕinds), basis)
         if isempty(p0)  # deg == 1 sentinel optimization
-            ps´ = ntuple(i -> cis(angle(dot(bs[i], b0))), Val(D))
-            for i in 1:D
-                basis .+= bs[i] .* (cis(angle(dot(bs[i], b0))) * dϕinds[i])
+            for j in 1:D
+                basis .+= bs[j] .* (sentinel_phase(bs[j], b0) * dϕinds[j])
             end
         else
             foreach(i -> mul!(basis, bs[i], ps[i], dϕinds[i], true), 1:D)
         end
-        push!(subs, Subspace(energy, basis, ϕs))
+        # h is necessary here to perhaps unflatten basis
+        push!(subs, Subspace(orbstruct, energy, basis, ϕs))
     end
     return subs
 end
+
+sentinel_phase(bj::AbstractVector{<:Real}, b0::AbstractVector{<:Real}) = 1
+sentinel_phase(bj, b0) = cis(angle(dot(bj, b0)))
 
 # The simplex sought has unitperm such that reverse(dϕs[unitperm]) is sorted
 function find_basemesh_simplex(ϕs::NTuple{D}, basemesh) where {D}
