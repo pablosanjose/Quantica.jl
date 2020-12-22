@@ -178,12 +178,13 @@ function bandtable(b::Bandstructure{1,C,T}, (scalingx, scalingy), bandsiter) whe
     bandsiter´ = bandsiter === missing ? eachindex(bands(b)) : bandsiter
     NT = typeof((;x = zero(T), y = zero(T), band = 1, tooltip = 1))
     table = NT[]
-    for (nb, band) in enumerate(bands(b))
+    for nb in bandsiter´
+        band = bands(b, nb)
         verts = vertices(band)
-        sinds = band.sinds
-        isempty(sinds) && continue
+        simps = band.simps
+        isempty(simps) && continue
         s0 = (0, 0)
-        for s in sinds
+        for s in simps
             if first(s) == last(s0) || s0 == (0, 0)
                 push!(table, (; x = verts[first(s)][1] * scalingx, y = verts[first(s)][2] * scalingy, band = nb, tooltip = degeneracy(band, first(s))))
             else
@@ -300,7 +301,7 @@ needslegend(x) = true
 unflatten_or_reinterpret_or_missing(psi::Missing, h) = missing
 unflatten_or_reinterpret_or_missing(psi::AbstractArray, h) = unflatten_or_reinterpret(psi, h)
 
-unflatten_or_reinterpret_or_missing(s::Subspace, h) = unflatten_or_reinterpret_or_missing(s.basis, h)
+unflatten_or_reinterpret_or_missing(s::Subspace, h) = unflatten_or_reinterpret(s.basis, h)
 
 checkdims_psi(h, psi) = size(h, 2) == size(psi, 1) ||
     throw(ArgumentError("The eigenstate length $(size(psi,1)) must match the Hamiltonian dimension $(size(h, 2))"))

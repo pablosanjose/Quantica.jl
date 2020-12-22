@@ -21,7 +21,8 @@ The Quantica.jl package provides an expressive API to build arbitrary quantum sy
 - `bloch`, `bloch!`, `similarmatrix`: build the Bloch matrix of a Hamiltonian
 - `parametric`, `@onsite!`, `@hopping!`, `parameters`: build a parametric Hamiltonian
 - `dims`, `sitepositions`, `siteindices`, `bravais`: inspect lattices and Hamiltonians
-- `supercell`, `unitcell`, `flatten`, `wrap`, `transform!`, `combine`: build derived lattices or Hamiltonians
+- `supercell`, `unitcell`, `wrap`, `transform!`, `combine`: build derived lattices or Hamiltonians
+- `flatten`, `unflatten`, `orbitalstructure`: operate with multiorbital Hamiltonian or Subspaces
 - `cuboid`: build a bandstructure discretization mesh
 - `bandstructure`, `spectrum`, `diagonalizer`: compute the generalized bandstructure of a Hamiltonian or a ParametricHamiltonian
 - `bands`, `energies`, `states`: inspect spectrum and bandstructure objects

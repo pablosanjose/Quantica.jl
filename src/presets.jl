@@ -40,10 +40,9 @@ module HamiltonianPresets
 
 using Quantica, LinearAlgebra
 
-function graphene(; a0 = 0.246, range = a0/sqrt(3), t0 = 2.7)
+function graphene(; a0 = 0.246, range = a0/sqrt(3), t0 = 2.7, β = 3, kw...)
     lat = LatticePresets.honeycomb(a0 = a0)
-    # h = hamiltonian(lat, hopping((r, dr) -> t0 * exp(-3*(norm(dr)/a0 - 1)), range = 1.01*range), orbitals = size(t0, 1))
-    h = hamiltonian(lat, hopping(-I, range = range), orbitals = size(t0, 1))
+    h = hamiltonian(lat, hopping((r, dr) -> t0 * exp(-β*(norm(dr)/a0 - 1)) * I, range = range); kw...)
     return h
 end
 
