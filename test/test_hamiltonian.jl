@@ -472,3 +472,28 @@ end
     @test Quantica.check_orbital_consistency(h´) === nothing
     @test bloch(flatten(h´), phis) ≈ 2.3bloch(flatten(h1), phis)^3 - 2bloch(flatten(h2), phis)*bloch(flatten(h1), phis) - 3I
 end
+
+@testset "transform! hamiltonians" begin
+    h = LP.honeycomb(dim = 3) |> hamiltonian(hopping(1))
+    h1 = copy(h)
+    h2 = transform!(r -> r + SA[0,0,1], h1)
+    h3 = h1 |> transform!(r -> r + SA[0,0,1])
+    @test h1 === h2 === h3
+    @test all(r->r[3] == 2.0, allsitepositions(h3.lattice))
+    @test bloch(h, (1,2)) == bloch(h3, (1,2))
+end
+
+@testset "combine hamiltonians" begin
+    h1 = LP.square(dim = Val(3)) |> hamiltonian(hopping(1))
+    h2 = transform!(r -> r + SA[0,0,1], copy(h1))
+    h = combine(h1, h2; coupling = hopping((r,dr) -> exp(-norm(dr)), range = √2))
+    @test coordination(h) == 9
+    h0 = LP.honeycomb(dim = Val(3), names = (:A, :B)) |> hamiltonian(hopping(1))
+    ht = LP.honeycomb(dim = Val(3), names = (:At, :Bt)) |> hamiltonian(hopping(1)) |> transform!(r -> r + SA[0,1/√3,1])
+    hb = LP.honeycomb(dim = Val(3), names = (:Ab, :Bb)) |> hamiltonian(hopping(1)) |> transform!(r -> r + SA[0,1/√3,-1])
+    h = combine(hb, h0, ht; coupling = hopping((r,dr) -> exp(-norm(dr)), range = 2,
+        sublats = ((:A,:B) => (:At, :Bt), (:A,:B) => (:Ab, :Bb)),  plusadjoint = true))
+    @test iszero(bloch(h)[1:2, 5:6])
+    h = combine(hb, h0, ht; coupling = hopping((r,dr) -> exp(-norm(dr)), range = 2))
+    @test !iszero(bloch(h)[1:2, 5:6])
+end
