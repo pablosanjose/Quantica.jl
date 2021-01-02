@@ -479,10 +479,16 @@ maskranges(lat::Superlattice) = (1:nsites(lat), lat.supercell.cells.indices...)
 maskranges(lat::Lattice) = (1:nsites(lat),)
 
 """
+    x |> transform!(f::Function)
+
+Curried version of `transform!`, equivalent to `transform!(f, x)`
+
     transform!(f::Function, lat::Lattice)
 
 Transform the site positions of `lat` by applying `f` to them in place.
 """
+transform!(f::Function) = x -> transform!(f, x)
+
 function transform!(f::Function, lat::Lattice)
     transform!(f, lat.unitcell)
     bravais´ = transform(f, lat.bravais)
