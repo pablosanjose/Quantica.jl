@@ -488,9 +488,12 @@ end
     h2 = transform!(r -> r + SA[0,0,1], copy(h1))
     h = combine(h1, h2; coupling = hopping((r,dr) -> exp(-norm(dr)), range = √2))
     @test coordination(h) == 9
-    h1 = LP.honeycomb(dim = Val(3), names = (:Ab, :Bb)) |> hamiltonian(hopping(1))
-    h2 = LP.honeycomb(dim = Val(3), names = (:At, :Bt)) |> hamiltonian(hopping(1)) |> transform!(r -> r + SA[0,1/√3,1])
-    h = combine(h1, h2; coupling = hopping((r,dr) -> exp(-norm(dr)), range = 1))
-    @test coordination(h) == 3.5
-
+    h0 = LP.honeycomb(dim = Val(3), names = (:A, :B)) |> hamiltonian(hopping(1))
+    ht = LP.honeycomb(dim = Val(3), names = (:At, :Bt)) |> hamiltonian(hopping(1)) |> transform!(r -> r + SA[0,1/√3,1])
+    hb = LP.honeycomb(dim = Val(3), names = (:Ab, :Bb)) |> hamiltonian(hopping(1)) |> transform!(r -> r + SA[0,1/√3,-1])
+    h = combine(hb, h0, ht; coupling = hopping((r,dr) -> exp(-norm(dr)), range = 2,
+        sublats = ((:A,:B) => (:At, :Bt), (:A,:B) => (:Ab, :Bb)),  plusadjoint = true))
+    @test iszero(bloch(h)[1:2, 5:6])
+    h = combine(hb, h0, ht; coupling = hopping((r,dr) -> exp(-norm(dr)), range = 2))
+    @test !iszero(bloch(h)[1:2, 5:6])
 end

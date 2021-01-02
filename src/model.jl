@@ -755,9 +755,9 @@ Base.:*(t::TightbindingModelTerm, x::Number) = x * t
 Base.:-(t::TightbindingModelTerm) = (-1) * t
 
 Base.adjoint(t::TightbindingModel) = TightbindingModel(adjoint.(terms(t)))
-Base.adjoint(t::OnsiteTerm{Function}) = OnsiteTerm(r -> t.o(r)', t.selector, t.coefficient')
+Base.adjoint(t::OnsiteTerm{<:Function}) = OnsiteTerm(r -> t.o(r)', t.selector, t.coefficient')
 Base.adjoint(t::OnsiteTerm) = OnsiteTerm(t.o', t.selector, t.coefficient')
-Base.adjoint(t::HoppingTerm{Function}) = HoppingTerm((r, dr) -> t.t(r, -dr)', t.selector', t.coefficient')
+Base.adjoint(t::HoppingTerm{<:Function}) = HoppingTerm((r, dr) -> t.t(r, -dr)', t.selector', t.coefficient')
 Base.adjoint(t::HoppingTerm) = HoppingTerm(t.t', t.selector', t.coefficient')
 
 #######################################################################
