@@ -68,8 +68,8 @@ function twisted_bilayer_graphene(;
         scbot = SA[m+r÷3 -r÷3; r÷3 m+2r÷3] * SA[1 0; -1 1]
         sctop = SA[m+2r÷3 r÷3; -r÷3 m+r÷3] * SA[1 0; -1 1]
     end
-    latbot = lattice(brbot, sAbot, sBbot)
-    lattop = lattice(brtop, sAtop, sBtop)
+    latbot = lattice(sAbot, sBbot; bravais = brbot)
+    lattop = lattice(sAtop, sBtop; bravais = brtop)
     htop = hamiltonian(lattop, modelintra; kw...) |> unitcell(sctop)
     hbot = hamiltonian(latbot, modelintra; kw...) |> unitcell(scbot)
     let R = SA[cos(θ/2) -sin(θ/2) 0; sin(θ/2) cos(θ/2) 0; 0 0 1]

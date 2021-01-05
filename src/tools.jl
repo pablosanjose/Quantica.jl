@@ -127,8 +127,6 @@ padright(v, x::T, ::Type{S}) where {E,T,S<:SVector{E,T}} =
 negative(s::SVector{L,<:Number}) where {L} = -s
 negative(s::SVector{0,<:Number}) = s
 
-empty_sparse(::Type{M}, n, m) where {M} = sparse(Int[], Int[], M[], n, m)
-
 display_as_tuple(v, prefix = "") = isempty(v) ? "()" :
     string("(", prefix, join(v, string(", ", prefix)), ")")
 

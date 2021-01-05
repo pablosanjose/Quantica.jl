@@ -155,6 +155,8 @@ Additionally, indices or sublattices can be wrapped in `not` to exclude them (se
 """
 siteselector(; region = missing, sublats = missing, indices = missing) =
     SiteSelector(region, sublats, indices)
+siteselector(s::SiteSelector; region = s.region, sublats = s.sublats, indices = s.indices) =
+    SiteSelector(region, sublats, indices)
 
 """
     hopselector(; range = missing, dn = missing, sublats = missing, indices = missing, region = missing)
@@ -204,6 +206,8 @@ Additionally, indices or sublattices can be wrapped in `not` to exclude them (se
 
 """
 hopselector(; region = missing, sublats = missing, dn = missing, range = missing, indices = missing) =
+    HopSelector(region, sublats, sanitize_dn(dn), sanitize_range(range), indices)
+hopselector(s::HopSelector; region = s.region, sublats = s.sublats, dn = s.dns, range = s.range, indices = s.indices) =
     HopSelector(region, sublats, sanitize_dn(dn), sanitize_range(range), indices)
 
 ensurenametype((s1, s2)::Pair) = nametype(s1) => nametype(s2)
@@ -255,6 +259,7 @@ resolve_sublat_name(s, lat) =
 resolve_sublat_pairs(::Missing, lat) = missing
 resolve_sublat_pairs(n::Not, lat) = Not(resolve_sublat_pairs(n.i, lat))
 resolve_sublat_pairs(s::Tuple, lat) = resolve_sublat_pairs.(s, Ref(lat))
+resolve_sublat_pairs(s::Vector, lat) = resolve_sublat_pairs.(s, Ref(lat))
 resolve_sublat_pairs((src, dst)::Pair, lat) = _resolve_sublat_pairs(src, lat) => _resolve_sublat_pairs(dst, lat)
 _resolve_sublat_pairs(n::Not, lat) = Not(_resolve_sublat_pairs(n.i, lat))
 _resolve_sublat_pairs(p, lat) = resolve_sublat_name.(p, Ref(lat))
@@ -750,9 +755,9 @@ Base.:*(t::TightbindingModelTerm, x::Number) = x * t
 Base.:-(t::TightbindingModelTerm) = (-1) * t
 
 Base.adjoint(t::TightbindingModel) = TightbindingModel(adjoint.(terms(t)))
-Base.adjoint(t::OnsiteTerm{Function}) = OnsiteTerm(r -> t.o(r)', t.selector, t.coefficient')
+Base.adjoint(t::OnsiteTerm{<:Function}) = OnsiteTerm(r -> t.o(r)', t.selector, t.coefficient')
 Base.adjoint(t::OnsiteTerm) = OnsiteTerm(t.o', t.selector, t.coefficient')
-Base.adjoint(t::HoppingTerm{Function}) = HoppingTerm((r, dr) -> t.t(r, -dr)', t.selector', t.coefficient')
+Base.adjoint(t::HoppingTerm{<:Function}) = HoppingTerm((r, dr) -> t.t(r, -dr)', t.selector', t.coefficient')
 Base.adjoint(t::HoppingTerm) = HoppingTerm(t.t', t.selector', t.coefficient')
 
 #######################################################################
@@ -771,11 +776,12 @@ offdiagonal(o::OnsiteTerm, lat, nsublats) =
     throw(ArgumentError("No onsite terms allowed in off-diagonal coupling"))
 
 function offdiagonal(t::HoppingTerm, lat, nsublats)
-    selector´ = resolve(t.selector, lat)
-    s = selector´.sublats
+    rs = resolve(t.selector, lat)
+    s = collect(sublats(rs))
     sr = sublatranges(nsublats...)
-    filter!(spair ->  findblock(first(spair), sr) != findblock(last(spair), sr), s)
-    return HoppingTerm(t.t, selector´, t.coefficient)
+    filter!(spair -> findblock(first(spair), sr) != findblock(last(spair), sr), s)
+    rs´ = ResolvedSelector(hopselector(rs.selector, sublats = s), lat)
+    return HoppingTerm(t.t, rs´, t.coefficient)
 end
 
 sublatranges(i::Int, is::Int...) = _sublatranges((1:i,), is...)
