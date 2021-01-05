@@ -1,35 +1,38 @@
 #######################################################################
 # Green's function
 #######################################################################
-abstract type GreenSolver end
+abstract type AbstractGreensSolver end
 
-struct GreensFunction{S<:GreenSolver,H}
-    h::H
+struct GreensFunction{S<:AbstractGreensSolver,L,B<:NTuple{L,Union{Int,Missing}},H<:Hamiltonian}
     solver::S
+    h::H
+    boundaries::B
 end
 
 """
-    greens(h::Hamiltonian, solveobject)
+    greens(h::Hamiltonian, solveobject; boundaries::NTuple{L,Integer} = missing)
 
-Construct the Green's function `g::GreensFunction` of `h` using the provided `solveobject`.
-Currently valid `solveobject`s are
+Construct the Green's function `g::GreensFunction` of `L`-dimensional Hamiltonian `h` using
+the provided `solveobject`. Currently valid `solveobject`s are
 
 - the `Bandstructure` of `h` (for an unbounded `h` or an `Hamiltonian{<:Superlattice}}`)
 - the `Spectrum` of `h` (for a bounded `h`)
+- `SingleShot1D()` (for 1D Hamiltonians, to use the single-shot generalized eigenvalue approach)
 
-    h |> greens(h -> solveobject(h))
+If a `boundaries = (n₁, n₂, ...)` is provided, a reflecting boundary is assumed for each
+non-missing `nᵢ` perpendicular to Bravais vector `i` at a cell distance `nᵢ` from the
+origin.
 
-Curried form equivalent to the above, giving `greens(h, solveobject(h))` (see
-example below).
+    h |> greens(h -> solveobject(h), args...)
 
-    g([m,] ω, cells::Pair = missing)
+Curried form equivalent to the above, giving `greens(h, solveobject(h), args...)`.
 
-From a constructed `g::GreensFunction`, obtain the retarded Green's function
-matrix at frequency `ω` between unit cells `src` and `dst` by calling `g(ω, src
-=> dst)`, where `src, dst` are `::NTuple{L,Int}` or `SVector{L,Int}`. If
-`cells` is missing, `src` and `dst` are assumed to be zero vectors. For
-performance, one can use a preallocated matrix `m` (e.g. `m =
-similarmatrix(h)`) by calling `g(m, ω, cells)`.
+    g(ω, cells::Pair = missing)
+
+From a constructed `g::GreensFunction`, obtain the retarded Green's function matrix at
+frequency `ω` between unit cells `src` and `dst` by calling `g(ω, src => dst)`, where `src,
+dst` are `::NTuple{L,Int}` or `SVector{L,Int}`. If `cells` is missing, `src` and `dst` are
+assumed to be zero vectors. See also `greens!` to use a preallocated matrix.
 
 # Examples
 
@@ -49,16 +52,132 @@ julia> m = similarmatrix(g); g(m, 0.2)
  6.663377810046025 - 24.472789025006396im
 ```
 
+# See also
+    `greens!`
 """
-greens(h, solver) = GreensFunction(h, greensolver(solver))
-greens(solver::Function) = h -> greens(h, solver(h))
+greens(h::Hamiltonian{<:Any,L}, solverobject; boundaries = filltuple(missing, Val(L))) where {L} =
+    GreensFunction(greensolver(solverobject, h), h, boundaries)
+greens(solver::Function, args...; kw...) = h -> greens(solver(h), h, args...; kw...)
 
-# Needed to make similarmatrix work with GreensFunction
-matrixtype(g::GreensFunction) = Matrix{eltype(g.h)}
-Base.parent(g::GreensFunction) = g.h
+# fallback
+greensolver(s::AbstractGreensSolver) = s
+
+# call API
+(g::GreensFunction)(ω::Number, cells = missing) = greens!(similarmatrix(g), g, ω, cells)
+
+similarmatrix(g::GreensFunction, type = Matrix{blocktype(g.h)}) = similarmatrix(g.h, type)
+
+greens!(matrix, g, ω, cells) = greens!(matrix, g, ω, sanitize_cells(cells, g))
+
+sanitize_cells(::Missing, ::GreensFunction{S,L}) where {S,L} =
+    zero(SVector{L,Int}) => zero(SVector{L,Int})
+sanitize_cells((cell0, cell1)::Pair{Integer,Integer}, ::GreensFunction{S,1}) where {S} =
+    (cell0,) => (cell1,)
+sanitize_cells(cells::Pair{NTuple{L,Integer},NTuple{L,Integer}}, ::GreensFunction{S,L}) where {S,L} =
+    cells
+sanitize_cells(cells, g::GreensFunction{S,L}) where {S,L} =
+    throw(ArgumentError("Cells should be of the form `cᵢ => cⱼ`, with each `c` an `NTuple{$L,Integer}`"))
+
+const SVectorPair{L} = Pair{SVector{L,Int},SVector{L,Int}}
 
 #######################################################################
-# BandGreenSolver
+# SingleShot1DGreensSolver
+#######################################################################
+struct SingleShot1D end
+
+struct SingleShot1DGreensSolver{T,O<:OrbitalStructure} <: AbstractGreensSolver
+    A::Matrix{T}
+    B::Matrix{T}
+    Acopy::Matrix{T}
+    Bcopy::Matrix{T}
+    maxdn::Int
+    orbstruct::O
+    H0block::CartesianIndices{2,Tuple{UnitRange{Int64}, UnitRange{Int64}}}
+    H0diag::Vector{T}
+end
+#=
+Precomputes A = [0 I 0...; 0 0 I; ...; -V₂ -V₁... ω-H₀ -V₋₁] and B = [I 0 0...; 0 I 0...;...; ... 0 0 V₋₂]
+(form for two Harmonics {V₁,V₂})
+These define the eigenvalue problem A*φ = λ B*φ, with λ = exp(i kx a0) and φ = [φ₀, φ₁, φ₂...φₘ],
+where φₙ = λ φₙ₋₁ = λⁿ φ₀, and m = max
+Since we need at least half the eigenpairs, we use LAPACK, and hence dense matrices.
+=#
+function SingleShot1DGreensSolver(h::Hamiltonian)
+    latdim(h) == 1 || throw(ArgumentError("Cannot use a SingleShot1D Green function solver with an $(latdim(h))-dimensional Hamiltonian"))
+    maxdn = maximum(har -> abs(first(har.dn)), h.harmonics)
+    H = unitcell(h, (maxdn,))
+    dimh = flatsize(H, 1)
+    T = complex(blockeltype(H))
+    A = zeros(T, 2dimh, 2dimh)
+    B = zeros(T, 2dimh, 2dimh)
+    @show H
+    H0, V´, V = H[(0,)], H[(-1,)], H[(1,)]
+    orbs = H.orbstruct
+    block1, block2 = 1:dimh, dimh+1:2dimh
+    copy!(view(A, block1, block2), I(dimh))
+    _add!(view(A, block2, block1), v, orbs, -1)
+    _add!(view(A, block2, block2), h0, orbs, -1)
+    copy!(view(B, block1, block1), I(dimh))
+    _add!(view(B, block2, block2), v´, orbs, 1)
+    H0block = CartesianIndices((block2, block2))
+    H0diag = [-A[i, j] for (i, j) in zip(block2, block2)]
+    return SingleShot1DGreensSolver(A, B, copy(A), copy(B), maxdn, orbs, H0block, H0diag)
+end
+
+
+function (gs::SingleShot1DGreensSolver{T})(ω) where {T}
+    A = copy!(gs.Acopy, gs.A)
+    B = copy!(gs.Bcopy, gs.B)
+    iη = im * sqrt(eps(real(T)))
+    for (row, col, h0) in zip(gs.rngrow, gs.rngcol, gs.H0diag)
+        A[row, col] = ω + iη - h0
+    end
+    λs, χs = eigen(A, B; sortby = abs)  # not eigen! because we need the ω-H0 block later
+    return select_retarded(λs, χs, gs)
+end
+
+function select_retarded(λs, χs, gs)
+    dimH = length(gs.H0diag)
+    ret  = 1:length(λs)÷2
+    adv  = length(λs)÷2 + 1:length(λs)
+    λR   = view(λs, ret)
+    λA   = view(λs, adv)
+    φR   = view(χs, 1:dimh, ret)
+    φA   = view(χs, 1:dimh, adv)
+    φλR  = view(χs, dimh+1:2dimh, ret)
+    @show φR * Diagonal(λR) * inv(φR)
+    @show φA * Diagonal(inv.(λA)) * inv(φA)
+    iG0  = view(gs.Acopy, gs.H0block)
+    tmp  = view(gs.Bcopy, 1:dimh, ret)
+    return λR, φR, φλR, iG0, tmp
+end
+
+function greensolver(::SingleShot1D, h)
+    latdim(h) == 1 || throw(ArgumentError("Cannot use a SingleShot1D Green function solver with an $L-dimensional Hamiltonian"))
+    return SingleShot1DGreensSolver(h)
+end
+
+# SingleShot1DGreensSolver provides the pieces to compute `GV = φR λR φR⁻¹` and from there `G = G_00 = (ω0 - H0 - V´GV)⁻¹` within the first `unit supercell` of a semi-infinite chain
+# In an infinite chain we have instead `G_NN = (ω0 - H0 - V'GV - VGV')⁻¹`, for any N, where `VGV'= (V'G'V)'`. Here `GV` and `G'V` involve the retarded and advanced G sectors, respectively
+# The retarded/advanced sectors are classified by the eigenmode velocity (positive, negative) if they are propagating, or abs(λ) (< 0, > 0) if they are evanescent
+# The velocity is given by vᵢ = im * φᵢ'(V'λᵢ-Vλᵢ')φᵢ / φᵢ'φᵢ
+# Unit supercells different from the first. Semi-infinite G_N0 = G_{N-1,0}VG = (GV)^N G.
+# Each unit is an maxdn × maxdn block matrix of the actual `g` we want
+function greens!(matrix, g::GreensFunction{<:SingleShot1DGreensSolver,1}, ω, (src, dst)::SVectorPair{1})
+    λR, φR, φλR, iG0, tmp = g.solver(ω)
+    N = mod(abs(first(dst - src)), g.maxdn)
+    if !iszero(N)
+        λR .^= N
+        φλR = rmul!(φλR, Diagonal(λR))
+    end
+    iG0φR = mul!(tmp, iG0, φR)
+    G = (iG0φR' \ φλR')'
+    copy!(matrix, G)
+    return matrix
+end
+
+#######################################################################
+# BandGreensSolver
 #######################################################################
 struct SimplexData{D,E,T,C<:SMatrix,DD,SA<:SubArray}
     ε0::T
@@ -75,25 +194,26 @@ struct SimplexData{D,E,T,C<:SMatrix,DD,SA<:SubArray}
     φs::NTuple{D,SA}
 end
 
-struct BandGreenSolver{P<:SimplexData,E} <: GreenSolver
+struct BandGreensSolver{P<:SimplexData,E,H<:Hamiltonian} <: AbstractGreensSolver
     simplexdata::Vector{P}
     indsedges::NTuple{E,Tuple{Int,Int}} # all distinct pairs of 1:V, where V=D+1=num verts
+    h::H
 end
 
-function Base.show(io::IO, g::GreensFunction{<:BandGreenSolver})
+function Base.show(io::IO, g::GreensFunction{<:BandGreensSolver})
     print(io, summary(g), "\n",
-"  Matrix size    : $(size(g.h, 1)) × $(size(g.h, 2))
-  Element type   : $(displayelements(g.h))
+"  Matrix size    : $(size(g.solver.h, 1)) × $(size(g.h, 2))
+  Element type   : $(displayelements(g.solver.h))
   Band simplices : $(length(g.solver.simplexdata))")
 end
 
-Base.summary(g::GreensFunction{<:BandGreenSolver}) =
-    "GreensFunction{Bandstructure}: Green's function from a $(latdim(g.h))D bandstructure"
+Base.summary(g::GreensFunction{<:BandGreensSolver}) =
+    "GreensFunction{Bandstructure}: Green's function from a $(latdim(g.solver.h))D bandstructure"
 
-function greensolver(b::Bandstructure{D}) where {D}
+function greensolver(b::Bandstructure{D}, h) where {D}
     indsedges = tuplepairs(Val(D))
     v = [SimplexData(simplex, band, indsedges) for band in bands(b) for simplex in band.simplices]
-    return BandGreenSolver(v,  indsedges)
+    return BandGreensSolver(v,  indsedges, h)
 end
 
 edges_per_simplex(L) = binomial(L,2)
@@ -168,23 +288,15 @@ end
 
 ## Call API
 
-(g::GreensFunction{<:BandGreenSolver})(ω::Number, cells = missing) = g(similarmatrix(g), ω, cells)
-
-function (g::GreensFunction{<:BandGreenSolver})(matrix::AbstractMatrix, ω::Number, cells = missing)
+function greens!(matrix, g::GreensFunction{<:BandGreensSolver,L}, ω::Number, (src, dst)::SVectorPair{L}) where {L}
     fill!(matrix, zero(eltype(matrix)))
-    cells´ = sanitize_dn(cells, g.h)
+    dn = dst - src
     for simplexdata in g.solver.simplexdata
-        g0, gjs = green_simplex(ω, cells´, simplexdata, g.solver.indsedges)
+        g0, gjs = green_simplex(ω, dn, simplexdata, g.solver.indsedges)
         addsimplex!(matrix, g0, gjs, simplexdata)
     end
     return matrix
 end
-
-sanitize_dn((src, dst)::Pair, ::Hamiltonian{LA,L}) where {LA,L} =
-    SVector{L}(dst) - SVector{L}(src)
-
-sanitize_dn(::Missing, ::Hamiltonian{LA,L}) where {LA,L} =
-    zero(SVector{L,Int})
 
 function green_simplex(ω, dn, data::SimplexData{L}, indsedges) where {L}
     dη = data.Δks' * dn
