@@ -38,7 +38,7 @@ struct Hamiltonian{LA<:AbstractLattice,L,M,A<:AbstractMatrix,
         dimh = nsites(lattice)
         all(har -> size(har.h) == (dimh, dimh), harmonics) || throw(DimensionMismatch("Harmonics don't match lattice dimensions"))
         length(harmonics) > 0 && iszero(first(harmonics).dn) ||
-            push!(harmonics, H(zero(SVector{L,Int}), dimh, dimh))
+            pushfirst!(harmonics, H(zero(SVector{L,Int}), dimh, dimh))
         sort!(harmonics, by = h -> abs.(h.dn))
         return new(lattice, harmonics, orbstruct)
     end
