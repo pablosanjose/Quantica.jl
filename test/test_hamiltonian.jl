@@ -83,6 +83,9 @@ end
     @test nsites(h´) == nsites(h) - 1
     h = LP.square() |> hamiltonian(hopping(0)) |> unitcell(4, mincoordination = 2)
     @test nsites(h) == 0
+    # check dn=0 invariant
+    h = LP.linear() |> hamiltonian(hopping(1)) |> unitcell((1,))
+    @test length(h.harmonics) == 3 && iszero(first(h.harmonics).dn)
 end
 
 @testset "hamiltonian wrap" begin

@@ -32,18 +32,23 @@ struct Hamiltonian{LA<:AbstractLattice,L,M,A<:AbstractMatrix,
     lattice::LA
     harmonics::Vector{H}
     orbstruct::O
+    # Enforce sorted-dns-starting-from-zero invariant onto harmonics
+    function Hamiltonian{LA,L,M,A,H,O}(lattice, harmonics, orbstruct) where
+        {LA<:AbstractLattice,L,M,A<:AbstractMatrix, H<:HamiltonianHarmonic{L,M,A},O<:OrbitalStructure}
+        dimh = nsites(lattice)
+        all(har -> size(har.h) == (dimh, dimh), harmonics) || throw(DimensionMismatch("Harmonics don't match lattice dimensions"))
+        length(harmonics) > 0 && iszero(first(harmonics).dn) ||
+            push!(harmonics, H(zero(SVector{L,Int}), dimh, dimh))
+        sort!(harmonics, by = h -> abs.(h.dn))
+        return new(lattice, harmonics, orbstruct)
+    end
 end
+
+Hamiltonian(lat::LA, hs::Vector{H}, orb::O) where {LA<:AbstractLattice,L,M,A<:AbstractMatrix, H<:HamiltonianHarmonic{L,M,A},O<:OrbitalStructure} =
+    Hamiltonian{LA,L,M,A,H,O}(lat, hs, orb)
 
 Hamiltonian(lat, hs::Vector{H}, orbs::Tuple) where {L,M,H<:HamiltonianHarmonic{L,M}} =
     Hamiltonian(lat, hs, OrbitalStructure(orbitaltype(M), orbs, lat))
-
-function Hamiltonian(lat, hs::Vector{H}, orbs, n::Int, m::Int) where {L,M,H<:HamiltonianHarmonic{L,M}}
-    sort!(hs, by = h -> abs.(h.dn))
-    if isempty(hs) || !iszero(first(hs).dn)
-        pushfirst!(hs, H(zero(SVector{L,Int}), empty_sparse(M, n, m)))
-    end
-    return Hamiltonian(lat, hs, orbs)
-end
 
 orbitals(h::Hamiltonian) = h.orbstruct.orbitals
 
@@ -1175,7 +1180,7 @@ function hamiltonian_sparse!(builder::IJVBuilder{L,M}, lat::AbstractLattice{E,L}
     n = nsites(lat)
     HT = HamiltonianHarmonic{L,M,SparseMatrixCSC{M,Int}}
     harmonics = HT[HT(e.dn, sparse(e.i, e.j, e.v, n, n)) for e in builder.ijvs if !isempty(e)]
-    return Hamiltonian(lat, harmonics, orbs, n, n)
+    return Hamiltonian(lat, harmonics, orbs)
 end
 
 applyterms!(builder, terms...) = foreach(term -> applyterm!(builder, term), terms)
