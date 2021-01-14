@@ -202,7 +202,10 @@ function bulk_surface_projectors(H0::AbstractMatrix{T}, V, V´) where {T}
 end
 
 function filter_projectors(V::AbstractMatrix{T}, H0, Pb, Ps) where {T}
-    Σ1´ = Ps * V' * Pb' * pinv(Pb * H0 * Pb') * Pb * H0 * Ps'
+    # Σ1´ = Ps * V' * Pb' * pinv(Pb * H0 * Pb') * Pb * H0 * Ps'
+    PbH0Pb´ = Pb * H0 * Pb'
+    ω0 = one(T) + eigmax(PbH0Pb´)
+    Σ1´ = Ps * V' * Pb' * ldiv!(lu!(ω0*I - PbH0Pb´), Pb * H0 * Ps')
     SVD = svd(Matrix(Σ1´), full = true)
     W, S, U = SVD.U, SVD.S, SVD.V
     dim_b´ = count(s -> iszero(chop(s)), S)
