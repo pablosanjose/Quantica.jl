@@ -158,7 +158,7 @@ Base.summary(g::GreensFunction{<:SingleShot1DGreensSolver}) =
 hasbulk(gs::SingleShot1DGreensSolver) = !iszero(size(gs.Pb, 1))
 
 function greensolver(::SingleShot1D, h)
-    latdim(h) == 1 || throw(ArgumentError("Cannot use a SingleShot1D Green function solver with an $L-dimensional Hamiltonian"))
+    latdim(h) == 1 || throw(ArgumentError("Cannot use a SingleShot1D Green function solver with an $(latdim(h))-dimensional Hamiltonian"))
     return SingleShot1DGreensSolver(h)
 end
 
