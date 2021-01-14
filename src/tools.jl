@@ -135,6 +135,8 @@ displayvectors(mat::SMatrix{E,L,<:AbstractFloat}; kw...) where {E,L} =
 displayvectors(mat::SMatrix{E,L,<:Integer}; kw...) where {E,L} =
     ntuple(l -> Tuple(mat[:,l]), Val(L))
 
+chop(x::T) where {T} = ifelse(abs2(x) < eps(real(T)), zero(T), x)
+
 # pseudoinverse of supercell s times an integer n, so that it is an integer matrix (for accuracy)
 pinvmultiple(s::SMatrix{L,0}) where {L} = (SMatrix{0,0,Int}(), 0)
 function pinvmultiple(s::SMatrix{L,L´}) where {L,L´}

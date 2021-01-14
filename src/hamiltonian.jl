@@ -1740,7 +1740,7 @@ bloch!(matrix, h::Hamiltonian, ϕs, axis = 0) = _bloch!(matrix, h, toSVector(ϕs
 bloch!(matrix, h::Hamiltonian, ϕs::Tuple{SVector,NamedTuple}, args...) = bloch!(matrix, h, first(ϕs), args...)
 
 function bloch!(matrix, h::Hamiltonian)
-    _copy!(parent(matrix), first(h.harmonics).h, h) # faster copy!(dense, sparse) specialization
+    _copy!(parent(matrix), first(h.harmonics).h, h.orbstruct) # faster copy!(dense, sparse) specialization
     return matrix
 end
 
