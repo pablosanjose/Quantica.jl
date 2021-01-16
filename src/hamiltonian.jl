@@ -422,8 +422,14 @@ unflatten_or_reinterpret(vflat, ::Missing) = vflat
 # source is already of the correct orbitaltype(h)
 function unflatten_or_reinterpret(vflat::AbstractArray{T}, o::OrbitalStructure{T}) where {T}
     check_unflatten_dst_dims(vflat, dimh(o))
-    vflat
+    return vflat
 end
+
+function unflatten_or_reinterpret(vflat::AbstractArray{<:Number}, o::OrbitalStructure{<:Number})
+    check_unflatten_dst_dims(vflat, dimh(o))
+    return vflat
+end
+
 # source can be reinterpreted, because the number of orbitals is the same M for all N sublattices
 unflatten_or_reinterpret(vflat::AbstractArray{T}, o::OrbitalStructure{S,N,<:NTuple{N,NTuple{M}}}) where {T,S,N,M} =
     reinterpret(SVector{M,T}, vflat)
@@ -1740,7 +1746,7 @@ bloch!(matrix, h::Hamiltonian, ϕs, axis = 0) = _bloch!(matrix, h, toSVector(ϕs
 bloch!(matrix, h::Hamiltonian, ϕs::Tuple{SVector,NamedTuple}, args...) = bloch!(matrix, h, first(ϕs), args...)
 
 function bloch!(matrix, h::Hamiltonian)
-    _copy!(parent(matrix), first(h.harmonics).h, h) # faster copy!(dense, sparse) specialization
+    _copy!(parent(matrix), first(h.harmonics).h, h.orbstruct) # faster copy!(dense, sparse) specialization
     return matrix
 end
 

@@ -164,7 +164,7 @@ subspace(s::Spectrum, rngs) = subspace.(Ref(s), rngs)
 function subspace(s::Spectrum, rng::AbstractUnitRange)
     ε = mean(j -> s.energies[j], rng)
     ψs = view(s.states, :, rng)
-    Subspace(s.diag.orbstruct, ε, ψs)
+    return Subspace(s.diag.orbstruct, ε, ψs)
 end
 
 nsubspaces(s::Spectrum) = length(s.subs)

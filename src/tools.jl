@@ -27,7 +27,7 @@ ensuretuple(s) = (s,)
 
 indstopair(s::Tuple) = Pair(last(s), first(s))
 
-filltuple(x, ::Val{L}) where {L} = ntuple(_ -> x, Val(L))
+filltuple(x, L) = ntuple(_ -> x, L)
 filltuple(x, ::NTuple{N,Any}) where {N} = ntuple(_ -> x, Val(N))
 
 # # toSVector can deal with the L=0 edge case, unlike SVector
@@ -134,6 +134,8 @@ displayvectors(mat::SMatrix{E,L,<:AbstractFloat}; kw...) where {E,L} =
     ntuple(l -> round.(Tuple(mat[:,l]); kw...), Val(L))
 displayvectors(mat::SMatrix{E,L,<:Integer}; kw...) where {E,L} =
     ntuple(l -> Tuple(mat[:,l]), Val(L))
+
+chop(x::T) where {T} = ifelse(abs2(x) < eps(real(T)), zero(T), x)
 
 # pseudoinverse of supercell s times an integer n, so that it is an integer matrix (for accuracy)
 pinvmultiple(s::SMatrix{L,0}) where {L} = (SMatrix{0,0,Int}(), 0)
