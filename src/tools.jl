@@ -157,6 +157,8 @@ function pinverse(m::SMatrix)
     return inv(qrm.R) * qrm.Q'
 end
 
+issquare(a::AbstractMatrix) = size(a, 1) == size(a, 2)
+
 # normalize_axis_directions(q::SMatrix{M,N}) where {M,N} = hcat(ntuple(i->q[:,i]*sign(q[i,i]), Val(N))...)
 
 padprojector(::Type{S}, ::Val{N}) where {M,N,S<:SMatrix{M,M}} = S(Diagonal(SVector(padright(filltuple(1, Val(N)), Val(M)))))

@@ -194,36 +194,20 @@ function bulk_surface_projectors(H0::AbstractMatrix{T}, V, V´) where {T}
     Pb = U'[dim_s+1:end, :]
     Ps´ = W'[1:dim_s, :]
     Pb´ = W'[dim_s+1:end, :]
-
-    Pb,  Ps  = filter_projectors(V, H0, Pb, Ps)
-    Pb´, Ps´ = filter_projectors(V´, H0, Pb´, Ps´)
-
     return Pb, Ps, Ps´
-end
-
-function filter_projectors(V::AbstractMatrix{T}, H0, Pb, Ps) where {T}
-    # Σ1´ = Ps * V' * Pb' * pinv(Pb * H0 * Pb') * Pb * H0 * Ps'
-    PbH0Pb´ = Pb * H0 * Pb'
-    ω0 = one(T) + eigmax(PbH0Pb´)
-    Σ1´ = Ps * V' * Pb' * ldiv!(lu!(ω0*I - PbH0Pb´), Pb * H0 * Ps')
-    SVD = svd(Matrix(Σ1´), full = true)
-    W, S, U = SVD.U, SVD.S, SVD.V
-    dim_b´ = count(s -> iszero(chop(s)), S)
-    dim_s´ = length(S) - dim_b´
-    Qs = U'[1:dim_s´, :]
-    Qb = U'[dim_s´+1:end, :]
-    Pb_filtered = vcat(Pb, Qb * Ps)
-    Ps_filtered = Qs * Ps
-    return Pb_filtered, Ps_filtered
 end
 
 ## Solver execution
 
 function eigen_funcbarrier(A::AbstractMatrix{T}, B)::Tuple{Vector{T},Matrix{T}} where {T}
-    factB = lu!(B)
-    B⁻¹A = ldiv!(factB, A)
-    λs, φχs = eigen!(B⁻¹A; sortby = abs)
+    λs, φχs = eigen!(A, B; sortby = abs)
+    cleanup_λ!(λs)
     return λs, φχs
+end
+
+function cleanup_λ!(λs::AbstractVector{T}) where {T}
+    λs .= (λ -> ifelse(isnan(λ), T(Inf), ifelse(abs2(λ) < eps(real(T)), zero(T), λ))).(λs)
+    return λs
 end
 
 function (gs::SingleShot1DGreensSolver)(ω)
@@ -307,24 +291,22 @@ function classify_retarded_advanced(λs, φs, χs, φ, χ, gs)
     Base.permutecols!!(χ, copy!(p´, p))
     Base.permutecols!!(φs, copy!(p´, p))
 
-    dim_s = size(φ, 2) ÷ 2
-    ret  = 1:dim_s
-    adv  = dim_s+1:2dim_s
+    ret, adv = nonsingular_ret_adv(λs)
 
     λR   = view(λs, ret)
     χR   = view(χ, :, ret)   # This resides in part of gs.temps.χ
     φR   = view(φ, :, ret)   # This resides in part of gs.temps.φ
     # overwrite output of eigen to preserve normalization of full φ
     φRs  = mul!(view(φs, :, ret), gs.Ps, φR)
-    iφRs = rdiv!(copyto!(gs.temps.ss1, I), lu!(φRs))
+    iφRs = issquare(φRs) ? rdiv!(copyto!(gs.temps.ss1, I), lu!(φRs)) : pinv(φRs)
 
     iλA  = view(λs, adv)
-    iλA .= (λ -> ifelse(isnan(λ), 0, 1/λ)).(iλA)
+    iλA .= inv.(iλA)
     χA  = view(χ, :, adv)   # This resides in part of gs.temps.χ
     φA   = view(φ, :, adv)   # This resides in part of gs.temps.φ
     # overwrite output of eigen to preserve normalization of full χ
     χAs´ = mul!(view(χs, :, adv), gs.Ps´, χA)
-    iχAs´ = rdiv!(copyto!(gs.temps.ss2, I), lu!(χAs´))
+    iχAs´ = issquare(χAs´) ? rdiv!(copyto!(gs.temps.ss2, I), lu!(χAs´)) : pinv(χAs´)
 
     return λR, χR, iφRs, iλA, φA, iχAs´
 end
@@ -349,6 +331,15 @@ function compute_velocities_and_normalize!(φ, χ, λs, gs)
         end
     end # sortperm(vs) would now give the order of adv-evan, adv-prop, ret-prop, ret-evan
     return vs
+end
+
+function nonsingular_ret_adv(λs::AbstractVector)
+    dim_s = length(λs) ÷ 2
+    i0 = findfirst(!iszero, λs)
+    i0 === nothing && throw(ArgumentError("Unexpected non-conjugate λ solutions"))
+    ret = i0:dim_s
+    adv = dim_s+1:2dim_s+1-i0
+    return ret, adv
 end
 
 ## Greens execution
