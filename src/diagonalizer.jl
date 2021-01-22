@@ -14,9 +14,10 @@ end
 
 struct Diagonalizer{M<:AbstractDiagonalizeMethod,F,O<:Union{OrbitalStructure,Missing}}
     method::M
-    perm::Vector{Int} # reusable permutation vector
-    matrixf::F        # functor or function matrixf(φs) that produces matrices to be diagonalized
-    orbstruct::O      # store structure of original Hamiltonian if available (to allow unflattening eigenstates)
+    matrixf::F         # functor or function matrixf(φs) that produces matrices to be diagonalized
+    orbstruct::O       # store structure of original Hamiltonian if available (to allow unflattening eigenstates)
+    perm::Vector{Int}  # reusable permutation vector
+    perm´::Vector{Int} # reusable permutation vector
 end
 
 struct NoUnflatten end
@@ -57,17 +58,17 @@ function diagonalizer(h::Union{Hamiltonian,ParametricHamiltonian}; method = Line
     matrixf = HamiltonianBlochFunctor(h, matrix, mapping)
     perm = Vector{Int}(undef, size(matrix, 2))
     orbstruct = parent(h).orbstruct
-    return Diagonalizer(method, perm, matrixf, orbstruct)
+    return Diagonalizer(method, matrixf, orbstruct, perm, copy(perm))
 end
 
 function diagonalizer(matrixf::Function, dimh; method = LinearAlgebraPackage())
     perm = Vector{Int}(undef, dimh)
-    return Diagonalizer(method, perm, matrixf, missing)
+    return Diagonalizer(method, matrixf, missing, perm, copy(perm))
 end
 
 @inline function (d::Diagonalizer)(φs, ::NoUnflatten)
     ϵ, ψ = diagonalize(d.matrixf(φs), d.method)
-    issorted(ϵ, by = real) || sorteigs!(d.perm, ϵ, ψ)
+    issorted(ϵ, by = real) || sorteigs!(ϵ, ψ, d)
     fixphase!(ψ)
     return ϵ, ψ
 end
@@ -82,11 +83,13 @@ end
 
 @inline (d::Diagonalizer)() = d(())
 
-function sorteigs!(perm, ϵ::AbstractVector, ψ::AbstractMatrix)
-    resize!(perm, length(ϵ))
-    p = sortperm!(perm, ϵ, by = real, alg = Base.DEFAULT_UNSTABLE)
-    permute!(ϵ, p)
-    Base.permutecols!!(ψ, p)
+function sorteigs!(ϵ::AbstractVector, ψ::AbstractMatrix, d)
+    p, p´ = d.perm, d.perm´
+    resize!(p, length(ϵ))
+    resize!(p´, length(ϵ))
+    sortperm!(p, ϵ, by = real, alg = Base.DEFAULT_UNSTABLE)
+    Base.permute!!(ϵ, copy!(p´, p))
+    Base.permutecols!!(ψ, copy!(p´, p))
     return ϵ, ψ
 end
 

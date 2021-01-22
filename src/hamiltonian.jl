@@ -71,6 +71,8 @@ sublats(o::OrbitalStructure) = 1:length(o.orbitals)
 
 orbitals(o::OrbitalStructure) = o.orbitals
 
+siterange(o::OrbitalStructure, sublat) = (1+o.offsets[sublat]):o.offsets[sublat+1]
+
 # sublat offsets after flattening (without padding zeros)
 flatoffsets(offsets, norbs) = _flatoffsets((0,), offsets, norbs...)
 _flatoffsets(offsets´::NTuple{N,Any}, offsets, n, ns...) where {N} =
@@ -82,7 +84,7 @@ _flatoffsets(offsets´, offsets) = offsets´
 
 function flatoffsetorbs_site(i, orbstruct)
     s = sublat_site(i, orbstruct)
-    N = length(orbstruct.orbitals[s])
+    N = length(orbitals(orbstruct)[s])
     offset = orbstruct.offsets[s]
     offset´ = orbstruct.flatoffsets[s]
     Δi = i - offset
@@ -199,7 +201,7 @@ _flatten(src::AbstractArray{T}, orbstruct, ::Type{T}) where {T<:Number} = src
 _flatten(src::AbstractArray{T}, orbstruct, ::Type{T´}) where {T<:Number,T´<:Number} = T´.(src)
 
 function _flatten(src::SparseMatrixCSC{<:SMatrix{N,N,T}}, orbstruct, ::Type{T´} = T) where {N,T,T´}
-    norbs = length.(orbstruct.orbitals)
+    norbs = length.(orbitals(orbstruct))
     offsets´ = orbstruct.flatoffsets
     dim´ = last(offsets´)
 
@@ -225,7 +227,7 @@ function _flatten(src::SparseMatrixCSC{<:SMatrix{N,N,T}}, orbstruct, ::Type{T´}
 end
 
 function _flatten(src::StridedMatrix{<:SMatrix{N,N,T}}, orbstruct, ::Type{T´} = T) where {N,T,T´}
-    norbs = length.(orbstruct.orbitals)
+    norbs = length.(orbitals(orbstruct))
     offsets´ = orbstruct.flatoffsets
     dim´ = last(offsets´)
     matrix = similar(src, T´, dim´, dim´)
@@ -245,7 +247,7 @@ end
 
 # for Subspace bases
 function _flatten(src::StridedMatrix{<:SVector{N,T}}, orbstruct, ::Type{T´} = T) where {N,T,T´}
-    norbs = length.(orbstruct.orbitals)
+    norbs = length.(orbitals(orbstruct))
     offsets´ = orbstruct.flatoffsets
     dim´ = last(offsets´)
     matrix = similar(src, T´, dim´, size(src, 2))
@@ -263,15 +265,15 @@ function _flatten(src::StridedMatrix{<:SVector{N,T}}, orbstruct, ::Type{T´} = T
 end
 
 function flatten(lat::Lattice, orbstruct)
-    length(orbstruct.orbitals) == nsublats(lat) || throw(ArgumentError("Mismatch between sublattices and orbitals"))
-    unitcell´ = flatten(lat.unitcell, orbstruct) #length.(orbstruct.orbitals))
+    length(orbitals(orbstruct)) == nsublats(lat) || throw(ArgumentError("Mismatch between sublattices and orbitals"))
+    unitcell´ = flatten(lat.unitcell, orbstruct)
     bravais´ = lat.bravais
     lat´ = Lattice(bravais´, unitcell´)
 end
 
 function flatten(unitcell::Unitcell, orbstruct) # orbs::NTuple{S,Any}) where {S}
-    norbs = length.(orbstruct.orbitals)
-    nsublats = length(orbstruct.orbitals)
+    norbs = length.(orbitals(orbstruct))
+    nsublats = length(sublats(orbstruct))
     offsets´ = orbstruct.flatoffsets
     ns´ = last(offsets´)
     sites´ = similar(unitcell.sites, ns´)
@@ -285,17 +287,17 @@ function flatten(unitcell::Unitcell, orbstruct) # orbs::NTuple{S,Any}) where {S}
     return unitcell´
 end
 
-function flatten_sparse_copy!(dst, src, h)
+function flatten_sparse_copy!(dst, src, o::OrbitalStructure)
     fill!(dst, zero(eltype(dst)))
-    norbs = length.(orbitals(h))
+    norbs = length.(orbitals(o))
     coloffset = 0
-    for s´ in sublats(h.lattice)
+    for s´ in sublats(o)
         N´ = norbs[s´]
-        for col in siterange(h.lattice, s´)
+        for col in siterange(o, s´)
             for p in nzrange(src, col)
                 val = nonzeros(src)[p]
                 row = rowvals(src)[p]
-                rowoffset, M´ = flatoffsetorbs_site(row, h.orbstruct)
+                rowoffset, M´ = flatoffsetorbs_site(row, o)
                 for j in 1:N´, i in 1:M´
                     dst[i + rowoffset, j + coloffset] = val[i, j]
                 end
@@ -306,16 +308,16 @@ function flatten_sparse_copy!(dst, src, h)
     return dst
 end
 
-function flatten_sparse_muladd!(dst, src, h, α = I)
-    norbs = length.(orbitals(h))
+function flatten_sparse_muladd!(dst, src, o::OrbitalStructure, α = I)
+    norbs = length.(orbitals(o))
     coloffset = 0
-    for s´ in sublats(h.lattice)
+    for s´ in sublats(o)
         N´ = norbs[s´]
-        for col in siterange(h.lattice, s´)
+        for col in siterange(o, s´)
             for p in nzrange(src, col)
                 val = α * nonzeros(src)[p]
                 row = rowvals(src)[p]
-                rowoffset, M´ = flatoffsetorbs_site(row, h.orbstruct)
+                rowoffset, M´ = flatoffsetorbs_site(row, o)
                 for j in 1:N´, i in 1:M´
                     dst[i + rowoffset, j + coloffset] += val[i, j]
                 end
@@ -326,16 +328,16 @@ function flatten_sparse_muladd!(dst, src, h, α = I)
     return dst
 end
 
-function flatten_dense_muladd!(dst, src, h, α = I)
-    norbs = length.(orbitals(h))
+function flatten_dense_muladd!(dst, src, o::OrbitalStructure, α = I)
+    norbs = length.(orbitals(o))
     coloffset = 0
-    for s´ in sublats(h.lattice)
+    for s´ in sublats(o)
         N´ = norbs[s´]
-        for col in siterange(h.lattice, s´)
+        for col in siterange(o, s´)
             rowoffset = 0
-            for s in sublats(h.lattice)
+            for s in sublats(o)
                 M´ = norbs[s]
-                for row in siterange(h.lattice, s)
+                for row in siterange(o, s)
                     val = α * src[row, col]
                     for j in 1:N´, i in 1:M´
                         dst[i + rowoffset, j + coloffset] += val[i, j]
@@ -349,9 +351,9 @@ function flatten_dense_muladd!(dst, src, h, α = I)
     return dst
 end
 
-function flatten_dense_copy!(dst, src, h)
+function flatten_dense_copy!(dst, src, o::OrbitalStructure)
     fill!(dst, zero(eltype(dst)))
-    return flatten_dense_muladd!(dst, src, h, I)
+    return flatten_dense_muladd!(dst, src, o, I)
 end
 
 ## unflatten ##
@@ -396,7 +398,7 @@ unflatten(vflat::AbstractMatrix, o::OrbitalStructure{T}) where {T} =
     unflatten!(similar(vflat, T, dimh(o), size(vflat, 2)), vflat, o)
 
 function unflatten!(v::AbstractArray{T}, vflat::AbstractArray, o::OrbitalStructure) where {T}
-    norbs = length.(o.orbitals)
+    norbs = length.(orbitals(o))
     flatoffsets = o.flatoffsets
     dimflat = last(flatoffsets)
     check_unflatten_dst_dims(v, dimh(o))
@@ -1738,14 +1740,14 @@ bloch!(matrix, h::Hamiltonian, ϕs, axis = 0) = _bloch!(matrix, h, toSVector(ϕs
 bloch!(matrix, h::Hamiltonian, ϕs::Tuple{SVector,NamedTuple}, args...) = bloch!(matrix, h, first(ϕs), args...)
 
 function bloch!(matrix, h::Hamiltonian)
-    _copy!(parent(matrix), first(h.harmonics).h, h) # faster copy!(dense, sparse) specialization
+    _copy!(parent(matrix), first(h.harmonics).h, h.orbstruct) # faster copy!(dense, sparse) specialization
     return matrix
 end
 
 function _bloch!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,L,M}, ϕs::SVector{L}, axis::Number) where {L,M}
     rawmatrix = parent(matrix)
     if iszero(axis)
-        _copy!(rawmatrix, first(h.harmonics).h, h) # faster copy!(dense, sparse) specialization
+        _copy!(rawmatrix, first(h.harmonics).h, h.orbstruct) # faster copy!(dense, sparse) specialization
         add_harmonics!(rawmatrix, h, ϕs, dn -> 1)
     else
         fill!(rawmatrix, zero(M)) # There is no guarantee of same structure
@@ -1760,7 +1762,7 @@ function _bloch!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,L,M}, ϕs::SVe
     if iszero(prefactor0)
         fill!(rawmatrix, zero(eltype(rawmatrix)))
     else
-        _copy!(rawmatrix, first(h.harmonics).h, h)
+        _copy!(rawmatrix, first(h.harmonics).h, h.orbstruct)
         rmul!(rawmatrix, prefactor0)
     end
     add_harmonics!(rawmatrix, h, ϕs, dnfunc)
@@ -1779,24 +1781,24 @@ function add_harmonics!(zerobloch, h::Hamiltonian{<:Lattice,L}, ϕs::SVector{L},
         prefactor = dnfunc(hh.dn)
         iszero(prefactor) && continue
         ephi = prefactor * cis(-ϕs´ * hh.dn)
-        _add!(zerobloch, hhmatrix, h, ephi)
+        _add!(zerobloch, hhmatrix, h.orbstruct, ephi)
     end
     return zerobloch
 end
 
 ############################################################################################
-######## _copy! and _add! call specialized methods in tools.jl #############################
+######## _copy! and _add! call specialized methods #########################################
 ############################################################################################
 
 _copy!(dest, src, h) = copy!(dest, src)
-_copy!(dst::AbstractMatrix{<:Number}, src::SparseMatrixCSC{<:Number}, h) = _fast_sparse_copy!(dst, src)
-_copy!(dst::StridedMatrix{<:Number}, src::SparseMatrixCSC{<:Number}, h) = _fast_sparse_copy!(dst, src)
-_copy!(dst::StridedMatrix{<:SMatrix{N,N}}, src::SparseMatrixCSC{<:SMatrix{N,N}}, h) where {N} = _fast_sparse_copy!(dst, src)
-_copy!(dst::AbstractMatrix{<:Number}, src::SparseMatrixCSC{<:SMatrix}, h) = flatten_sparse_copy!(dst, src, h)
-_copy!(dst::StridedMatrix{<:Number}, src::StridedMatrix{<:SMatrix}, h) = flatten_dense_copy!(dst, src, h)
+_copy!(dst::AbstractMatrix{<:Number}, src::SparseMatrixCSC{<:Number}, o) = _fast_sparse_copy!(dst, src)
+_copy!(dst::StridedMatrix{<:Number}, src::SparseMatrixCSC{<:Number}, o) = _fast_sparse_copy!(dst, src)
+_copy!(dst::StridedMatrix{<:SMatrix{N,N}}, src::SparseMatrixCSC{<:SMatrix{N,N}}, o) where {N} = _fast_sparse_copy!(dst, src)
+_copy!(dst::AbstractMatrix{<:Number}, src::SparseMatrixCSC{<:SMatrix}, o) = flatten_sparse_copy!(dst, src, o)
+_copy!(dst::StridedMatrix{<:Number}, src::StridedMatrix{<:SMatrix}, o) = flatten_dense_copy!(dst, src, o)
 
-_add!(dest, src, h, α) = _plain_muladd!(dest, src, α)
-_add!(dst::AbstractMatrix{<:Number}, src::SparseMatrixCSC{<:Number}, h, α = 1) = _fast_sparse_muladd!(dst, src, α)
-_add!(dst::AbstractMatrix{<:SMatrix{N,N}}, src::SparseMatrixCSC{<:SMatrix{N,N}}, h, α = I) where {N} = _fast_sparse_muladd!(dst, src, α)
-_add!(dst::AbstractMatrix{<:Number}, src::SparseMatrixCSC{<:SMatrix}, h, α = I) = flatten_sparse_muladd!(dst, src, h, α)
-_add!(dst::StridedMatrix{<:Number}, src::StridedMatrix{<:SMatrix}, h, α = I) = flatten_dense_muladd!(dst, src, h, α)
+_add!(dest, src, o, α) = _plain_muladd!(dest, src, α)
+_add!(dst::AbstractMatrix{<:Number}, src::SparseMatrixCSC{<:Number}, o, α = 1) = _fast_sparse_muladd!(dst, src, α)
+_add!(dst::AbstractMatrix{<:SMatrix{N,N}}, src::SparseMatrixCSC{<:SMatrix{N,N}}, o, α = I) where {N} = _fast_sparse_muladd!(dst, src, α)
+_add!(dst::AbstractMatrix{<:Number}, src::SparseMatrixCSC{<:SMatrix}, o, α = I) = flatten_sparse_muladd!(dst, src, o, α)
+_add!(dst::StridedMatrix{<:Number}, src::StridedMatrix{<:SMatrix}, o, α = I) = flatten_dense_muladd!(dst, src, o, α)

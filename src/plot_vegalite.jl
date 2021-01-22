@@ -299,9 +299,8 @@ needslegend(x::Number) = nothing
 needslegend(x) = true
 
 unflatten_or_reinterpret_or_missing(psi::Missing, h) = missing
-unflatten_or_reinterpret_or_missing(psi::AbstractArray, h) = unflatten_or_reinterpret(psi, h)
-
-unflatten_or_reinterpret_or_missing(s::Subspace, h) = unflatten_or_reinterpret(s.basis, h)
+unflatten_or_reinterpret_or_missing(psi::AbstractArray, h) = unflatten_or_reinterpret(psi, h.orbstruct)
+unflatten_or_reinterpret_or_missing(s::Subspace, h) = unflatten_or_reinterpret(s.basis, h.orbstruct)
 
 checkdims_psi(h, psi) = size(h, 2) == size(psi, 1) ||
     throw(ArgumentError("The eigenstate length $(size(psi,1)) must match the Hamiltonian dimension $(size(h, 2))"))
