@@ -90,7 +90,7 @@ const SVectorPair{L} = Pair{SVector{L,Int},SVector{L,Int}}
 # SingleShot1DGreensSolver
 #######################################################################
 """
-    SingleShot1D(; direct = false)
+    SingleShot1D(; direct = true)
 
 Return a Greens function solver using the generalized eigenvalue approach, whereby given the
 energy `ω`, the eigenmodes of the infinite 1D Hamiltonian, and the corresponding infinite
@@ -111,8 +111,12 @@ imaginary part to `ω`.
 
 To avoid singular solutions `λ=0,∞`, the nullspace of `V` is projected out of the problem.
 Sometimes, however, some linear algebra implementations of the eigensolver can lead to
-incomplete convergence, signaled by a `LAPACKException(n)`. If that happens one can try the
-option `direct = true` that turns the generalized eigenproblem into a standard eigenproblem.
+incomplete convergence, signaled by a `LAPACKException(n)`. This problem does not arise if
+we the generalized eigenproblem into a standard eigenproblem. This is achieved with `direct
+= true`. The performance is also slightly improved. Such approach, however, is not possible
+for some special infinite 1D lattices that have bound states embedded in a continuum even in
+the absence of boundaries. A `SingularExcepcion` error is then thrown. In such cases, try
+`direct = false`.
 
 # Examples
 ```jldoctest
@@ -138,7 +142,7 @@ struct SingleShot1D
     invert_B::Bool
 end
 
-SingleShot1D(; direct = false) = SingleShot1D(direct)
+SingleShot1D(; direct = true) = SingleShot1D(direct)
 
 struct SingleShot1DTemporaries{T}
     b2s::Matrix{T}      # size = dim_b, 2dim_s
