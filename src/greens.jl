@@ -59,7 +59,7 @@ julia> m = similarmatrix(g); g(m, 0.2)
 ```
 
 # See also
-    `greens!`
+    `greens!`, `SingleShot1D`
 """
 greens(h::Hamiltonian{<:Any,L}, solverobject; boundaries = filltuple(missing, Val(L))) where {L} =
     GreensFunction(greensolver(solverobject, h), h, boundaries)

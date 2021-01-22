@@ -102,7 +102,16 @@ Plot the the Hamiltonian lattice projected along `axes` using VegaLite.
 Plot an eigenstate `psi` on the lattice, using one of various possible visualization
 shaders: `sitesize`, `siteopacity`, `sitecolor`, `linksize`, `linkopacity` or `linkcolor`
 (see keywords below). If `psi` is obtained in a flattened form, it will be automatically
-"unflattened" to restore the orbital structure of `h`.
+"unflattened" to restore the orbital structure of `h`. The vector `psi` must have length
+equal to the number of sites (after unflattening if required).
+
+If `h` is defined on an unbounded `L`-dimensional lattice, and `psi` is of the form
+
+    psi = [cell₁ => psi₁, cell₂ => psi₂,...]
+
+where `cellᵢ::NTuple{L,Int}` are indices of unit cells, said unit cells will all be plotted
+together with their corresponding `psiᵢ`. Otherwise, a single cell at the origin will be
+plotted.
 
     vlplot(h::Hamiltonian, psi::AbstractMatrix; kw...)
 
@@ -130,6 +139,7 @@ Equivalent to `vlplot(h, psi.basis; kw...)`.
     - `digits = 4`: number of significant digits to show in onsite energy and hopping tooltips
     - `plotsites = true`: whether to plot sites
     - `plotlinks = true`: whether to plot links
+    - `onlyonecell = false`: whether to omit plotting links to neighboring unit cells in unbounded lattices
     - `sitestroke = :white`: the color of site outlines. If `nothing`, no outline will be plotted.
     - `colorscheme = "redyellowblue"`: Color scheme from `https://vega.github.io/vega/docs/schemes/`
     - `discretecolorscheme = "category10"`: Color scheme from `https://vega.github.io/vega/docs/schemes/`
@@ -201,24 +211,16 @@ end
 
 function VegaLite.vlplot(h::Hamiltonian{LA}, psi = missing;
                          labels = ("x","y"), size = 800, axes::Tuple{Int,Int} = (1,2), xlims = missing, ylims = missing, digits = 4,
-                         plotsites = true, plotlinks = true,
+                         onlyonecell = false, plotsites = true, plotlinks = true,
                          maxdiameter = 20, mindiameter = 0, maxthickness = 0.25,
                          sitestroke = :white, sitesize = maxdiameter, siteopacity = 0.9, sitecolor = missing,
                          linksize = maxthickness, linkopacity = 1.0, linkcolor = missing,
                          colorrange = missing,
                          colorscheme = "redyellowblue", discretecolorscheme = "category10") where {E,LA<:Lattice{E}}
-    psi´ = unflatten_or_reinterpret_or_missing(psi, h)
-    checkdims_psi(h, psi´)
 
-    directives     = (; axes = axes, digits = digits,
-                        sitesize_shader = site_shader(sitesize, h, psi´), siteopacity_shader = site_shader(siteopacity, h, psi´),
-                        sitecolor_shader = site_shader(sitecolor, h, psi´), linksize_shader = link_shader(linksize, h, psi´),
-                        linkopacity_shader = link_shader(linkopacity, h, psi´), linkcolor_shader = link_shader(linkcolor, h, psi´))
-
-    table          = linkstable(h, directives, plotsites, plotlinks)
-    maxsiteopacity = plotsites ? maximum(s.opacity for s in table if !s.islink) : 0.0
+    table = linkstable(h, psi; axes, digits, onlyonecell, plotsites, plotlinks,
+                               sitesize, siteopacity, sitecolor, linksize, linkopacity, linkcolor)
     maxsitesize    = plotsites ? maximum(s.scale for s in table if !s.islink)   : 0.0
-    maxlinkopacity = plotlinks ? maximum(s.opacity for s in table if s.islink)  : 0.0
     maxlinksize    = plotlinks ? maximum(s.scale for s in table if s.islink)    : 0.0
 
     mindiameter > 0 && filter!(s -> s.islink || s.scale >= mindiameter*maxsitesize/maxdiameter, table)
@@ -248,7 +250,7 @@ function VegaLite.vlplot(h::Hamiltonian{LA}, psi = missing;
                 scale = {domain = colorrange´, scheme = colorscheme´},
                 legend = needslegend(linkcolor)},
             strokeOpacity = {:opacity,
-                scale = {range = (0, 1), domain = (0, maxlinkopacity)},
+                scale = {range = (0, 1), domain = (0, 1)},
                 legend = needslegend(linkopacity)},
             transform = [{filter = "datum.islink"}],
             selection = {grid2 = {type = :interval, bind = :scales}},
@@ -268,7 +270,7 @@ function VegaLite.vlplot(h::Hamiltonian{LA}, psi = missing;
                 scale = {domain = colorrange´, scheme = colorscheme´},
                 legend = needslegend(sitecolor)},
             opacity = {:opacity,
-                scale = {range = (0, 1), domain = (0, maxsiteopacity)},
+                scale = {range = (0, 1), domain = (0, 1)},
                 legend = needslegend(siteopacity)},
             selection = {grid1 = {type = :interval, bind = :scales}},
             transform = [{filter = "!datum.islink"}],
@@ -306,24 +308,51 @@ checkdims_psi(h, psi) = size(h, 2) == size(psi, 1) ||
     throw(ArgumentError("The eigenstate length $(size(psi,1)) must match the Hamiltonian dimension $(size(h, 2))"))
 checkdims_psi(h, ::Missing) = nothing
 
-function linkstable(h::Hamiltonian, d, plotsites, plotlinks)
-    (a1, a2) = d.axes
-    lat = h.lattice
-    T = numbertype(lat)
-    slats = sublats(lat)
-    rs = allsitepositions(lat)
+function linkstable(h, psi; kw...)
+    T = numbertype(h.lattice)
     table = NamedTuple{(:x, :y, :x2, :y2, :sublat, :tooltip, :scale, :color, :opacity, :islink),
                        Tuple{T,T,T,T,NameType,String,Float64,Float64,Float64,Bool}}[]
+    linkstable!(table, h, psi; kw...)
+    return table
+end
+
+function linkstable!(table, h, cellpsi::AbstractVector{<:Pair}; kw...)
+    foreach(cellpsi) do (cell, psi)
+        linkstable!(table, h, psi, cell; kw..., onlyonecell = true)
+    end
+    return table
+end
+
+function linkstable!(table, h, psi, cell = missing;
+                     axes, digits, onlyonecell, plotsites, plotlinks,
+                     sitesize, siteopacity, sitecolor, linksize, linkopacity, linkcolor) where {LA,L}
+    psi´ = unflatten_or_reinterpret_or_missing(psi, h)
+    checkdims_psi(h, psi´)
+    d = (; axes = axes, digits = digits,
+        sitesize_shader    = site_shader(sitesize, h, psi´),
+        siteopacity_shader = site_shader(siteopacity, h, psi´),
+        sitecolor_shader   = site_shader(sitecolor, h, psi´),
+        linksize_shader    = link_shader(linksize, h, psi´),
+        linkopacity_shader = link_shader(linkopacity, h, psi´),
+        linkcolor_shader   = link_shader(linkcolor, h, psi´))
+    (a1, a2) = d.axes
+    lat = h.lattice
+    br = bravais(h)
+    T = numbertype(lat)
+    r0 = cell === missing ? br * SVector(filltuple(0, latdim(h))) : br * SVector(cell)
+    slats = sublats(lat)
+    rs = allsitepositions(lat)
     h0 = h.harmonics[1].h
     rows = Int[] # list of plotted destination sites for dn != 0
 
     for har in h.harmonics
+        !iszero(har.dn) && onlyonecell && continue
         resize!(rows, 0)
         ridx = 0
         for ssrc in slats
             if iszero(har.dn)
                 for (i, r) in enumeratesites(lat, ssrc)
-                    x = get(r, a1, zero(T)); y = get(r, a2, zero(T))
+                    x = get(r + r0, a1, zero(T)); y = get(r + r0, a2, zero(T))
                     ridx += 1
                     plotsites && push!(table, (x = x, y = y, x2 = x, y2 = y,
                                 sublat = sublatname(lat, ssrc), tooltip = matrixstring_inline(i, h0[i, i], d.digits),
@@ -335,8 +364,8 @@ function linkstable(h::Hamiltonian, d, plotsites, plotlinks)
                 itr = nonzero_indices(har, siterange(lat, sdst), siterange(lat, ssrc))
                 for (row, col) in itr
                     iszero(har.dn) && col == row && continue
-                    rsrc = rs[col]
-                    rdst = (rs[row] + bravais(lat) * har.dn)
+                    rsrc = rs[col] + r0
+                    rdst = (rs[row] + bravais(lat) * har.dn + r0)
                     # sites in neighboring cells connected to dn=0 cell. But add only once.
                     if !iszero(har.dn) && !in(row, rows)
                         x = get(rdst, a1, zero(T)); y = get(rdst, a2, zero(T))
@@ -349,7 +378,7 @@ function linkstable(h::Hamiltonian, d, plotsites, plotlinks)
                     end
                     plotlinks || continue
                     # draw half-links but only intracell
-                    rdst = ifelse(iszero(har.dn), (rdst + rsrc) / 2, rdst)
+                    rdst = ifelse(cell !== missing || iszero(har.dn), (rdst + rsrc) / 2, rdst)
                     x  = get(rsrc, a1, zero(T)); y  = get(rsrc, a2, zero(T))
                     x´ = get(rdst, a1, zero(T)); y´ = get(rdst, a2, zero(T))
                     # Exclude links perpendicular to the screen

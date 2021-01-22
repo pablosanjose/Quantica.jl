@@ -27,7 +27,7 @@ ensuretuple(s) = (s,)
 
 indstopair(s::Tuple) = Pair(last(s), first(s))
 
-filltuple(x, ::Val{L}) where {L} = ntuple(_ -> x, Val(L))
+filltuple(x, L) = ntuple(_ -> x, L)
 filltuple(x, ::NTuple{N,Any}) where {N} = ntuple(_ -> x, Val(N))
 
 # # toSVector can deal with the L=0 edge case, unlike SVector
