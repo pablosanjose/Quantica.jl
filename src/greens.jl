@@ -17,7 +17,7 @@ the provided `solveobject`. Currently valid `solveobject`s are
 
 - the `Bandstructure` of `h` (for an unbounded `h` or an `Hamiltonian{<:Superlattice}}`)
 - the `Spectrum` of `h` (for a bounded `h`)
-- `SingleShot1D()` (for 1D Hamiltonians, to use the single-shot generalized eigenvalue approach)
+- `SingleShot1D(; direct = false)` (single-shot generalized [or direct if `direct = true`] eigenvalue approach for 1D Hamiltonians)
 
 If a `boundaries = (n₁, n₂, ...)` is provided, a reflecting boundary is assumed for each
 non-missing `nᵢ` perpendicular to Bravais vector `i` at a cell distance `nᵢ` from the
@@ -89,7 +89,60 @@ const SVectorPair{L} = Pair{SVector{L,Int},SVector{L,Int}}
 #######################################################################
 # SingleShot1DGreensSolver
 #######################################################################
-struct SingleShot1D end
+"""
+    SingleShot1D(; direct = true)
+
+Return a Greens function solver using the generalized eigenvalue approach, whereby given the
+energy `ω`, the eigenmodes of the infinite 1D Hamiltonian, and the corresponding infinite
+and semi-infinite Greens function can be computed by solving the generalized eigenvalue
+equation
+
+    A⋅φχ = λ B⋅φχ
+    A = [0 I; V ω-H0]
+    B = [I 0; 0 V']
+
+This is the matrix form of the problem `λ(ω-H0)φ - Vφ - λ²V'φ = 0`, where `φχ = [φ; λφ]`,
+and `φ` are `ω`-energy eigenmodes, with (possibly complex) momentum `q`, and eigenvalues are
+`λ = exp(-iqa₀)`. The algorithm assumes the Hamiltonian has only `dn = (0,)` and `dn = (±1,
+)` Bloch harmonics (`H0`, `V` and `V'`), so its unit cell will be enlarged before applying
+the solver if needed. Bound states in the spectrum will yield delta functions in the density
+of states that can be resolved by adding a broadening in the form of a small positive
+imaginary part to `ω`.
+
+To avoid singular solutions `λ=0,∞`, the nullspace of `V` is projected out of the problem.
+Sometimes, however, some linear algebra implementations of the eigensolver can lead to
+incomplete convergence, signaled by a `LAPACKException(n)`. This problem does not arise if
+we the generalized eigenproblem into a standard eigenproblem. This is achieved with `direct
+= true`. The performance is also slightly improved. Such approach, however, is not possible
+for some special infinite 1D lattices that have bound states embedded in a continuum even in
+the absence of boundaries. A `SingularExcepcion` error is then thrown. In such cases, try
+`direct = false`.
+
+# Examples
+```jldoctest
+julia> using LinearAlgebra
+
+julia> h = LP.honeycomb() |> hamiltonian(hopping(1)) |> unitcell((1,-1), (10,10)) |> Quantica.wrap(2);
+
+julia> g = greens(h, SingleShot1D(), boundaries = (0,))
+GreensFunction{SingleShot1DGreensSolver}: Green's function using the single-shot 1D method
+  Matrix size    : 40 × 40
+  Element type   : scalar (ComplexF64)
+  Boundaries     : (0,)
+  Reduced dims   : 20
+
+julia> tr(g(0.3))
+-32.193416068730784 - 3.4399800712973474im
+```
+
+# See also
+    `greens`
+"""
+struct SingleShot1D
+    invert_B::Bool
+end
+
+SingleShot1D(; direct = true) = SingleShot1D(direct)
 
 struct SingleShot1DTemporaries{T}
     b2s::Matrix{T}      # size = dim_b, 2dim_s
@@ -127,6 +180,7 @@ function SingleShot1DTemporaries{T}(dim_H, dim_s, dim_b) where {T}
 end
 
 struct SingleShot1DGreensSolver{T<:Complex,R<:Real,H<:Hessenberg{T}} <: AbstractGreensSolver
+    invert_B::Bool
     A::Matrix{T}
     B::Matrix{T}
     minusH0::SparseMatrixCSC{T,Int}
@@ -146,10 +200,10 @@ end
 
 function Base.show(io::IO, g::GreensFunction{<:SingleShot1DGreensSolver})
     print(io, summary(g), "\n",
-"  Matrix size    : $(size(g.h, 1)) × $(size(g.h, 2))
+"  Matrix size    : $(size(g.solver.V, 1)) × $(size(g.solver.V, 2))
+  Reduced size   : $(size(g.solver.Ps, 1)) × $(size(g.solver.Ps, 1))
   Element type   : $(displayelements(g.h))
-  Boundaries     : $(g.boundaries)
-  Reduced dims   : $(size(g.solver.Ps, 1))")
+  Boundaries     : $(g.boundaries)")
 end
 
 Base.summary(g::GreensFunction{<:SingleShot1DGreensSolver}) =
@@ -157,17 +211,17 @@ Base.summary(g::GreensFunction{<:SingleShot1DGreensSolver}) =
 
 hasbulk(gs::SingleShot1DGreensSolver) = !iszero(size(gs.Pb, 1))
 
-function greensolver(::SingleShot1D, h)
+function greensolver(s::SingleShot1D, h)
     latdim(h) == 1 || throw(ArgumentError("Cannot use a SingleShot1D Green function solver with an $(latdim(h))-dimensional Hamiltonian"))
-    return SingleShot1DGreensSolver(h)
+    return SingleShot1DGreensSolver(h, s.invert_B)
 end
 
 ## Preparation
 
-function SingleShot1DGreensSolver(h::Hamiltonian)
+function SingleShot1DGreensSolver(h::Hamiltonian, invert_B)
     latdim(h) == 1 || throw(ArgumentError("Cannot use a SingleShot1D Green function solver with an $(latdim(h))-dimensional Hamiltonian"))
-    maxdn = maximum(har -> abs(first(har.dn)), h.harmonics)
-    H = flatten(unitcell(h, (maxdn,)))
+    maxdn = max(1, maximum(har -> abs(first(har.dn)), h.harmonics))
+    H = flatten(maxdn == 1 ? h : unitcell(h, (maxdn,)))
     H0, V, V´ = H[(0,)], H[(1,)], H[(-1,)]
     Pb, Ps, Ps´ = bulk_surface_projectors(H0, V, V´)
     H0ss = Ps * H0 * Ps'
@@ -182,7 +236,7 @@ function SingleShot1DGreensSolver(h::Hamiltonian)
     dim_s, dim_b, dim_H = size(Ps, 1), size(Pb, 1), size(H0, 2)
     velocities = fill(zero(real(T)), 2dim_s)
     temps = SingleShot1DTemporaries{T}(dim_H, dim_s, dim_b)
-    return SingleShot1DGreensSolver(A, B, -H0, V, Pb, Ps, Ps´, H0ss, H0bs, Vss, Vbs, hessbb, velocities, maxdn, temps)
+    return SingleShot1DGreensSolver(invert_B, A, B, -H0, V, Pb, Ps, Ps´, H0ss, H0bs, Vss, Vbs, hessbb, velocities, maxdn, temps)
 end
 
 function bulk_surface_projectors(H0::AbstractMatrix{T}, V, V´) where {T}
@@ -190,45 +244,24 @@ function bulk_surface_projectors(H0::AbstractMatrix{T}, V, V´) where {T}
     W, S, U = SVD.U, SVD.S, SVD.V
     dim_b = count(s -> iszero(chop(s)), S)
     dim_s = length(S) - dim_b
-    Ps = U'[1:dim_s, :]
-    Pb = U'[dim_s+1:end, :]
-    Ps´ = W'[1:dim_s, :]
-    Pb´ = W'[dim_s+1:end, :]
-
-    Pb,  Ps  = filter_projectors(V, H0, Pb, Ps)
-    Pb´, Ps´ = filter_projectors(V´, H0, Pb´, Ps´)
-
+    if iszero(dim_b)
+        Ps = Matrix{T}(I, dim_s, dim_s)
+        Ps´ = copy(Ps)
+        Pb = Ps[1:0, :]
+    else
+        Ps = U'[1:dim_s, :]
+        Pb = U'[dim_s+1:end, :]
+        Ps´ = W'[1:dim_s, :]
+        Pb´ = W'[dim_s+1:end, :]
+    end
     return Pb, Ps, Ps´
-end
-
-function filter_projectors(V::AbstractMatrix{T}, H0, Pb, Ps) where {T}
-    # Σ1´ = Ps * V' * Pb' * pinv(Pb * H0 * Pb') * Pb * H0 * Ps'
-    PbH0Pb´ = Pb * H0 * Pb'
-    ω0 = one(T) + eigmax(PbH0Pb´)
-    Σ1´ = Ps * V' * Pb' * ldiv!(lu!(ω0*I - PbH0Pb´), Pb * H0 * Ps')
-    SVD = svd(Matrix(Σ1´), full = true)
-    W, S, U = SVD.U, SVD.S, SVD.V
-    dim_b´ = count(s -> iszero(chop(s)), S)
-    dim_s´ = length(S) - dim_b´
-    Qs = U'[1:dim_s´, :]
-    Qb = U'[dim_s´+1:end, :]
-    Pb_filtered = vcat(Pb, Qb * Ps)
-    Ps_filtered = Qs * Ps
-    return Pb_filtered, Ps_filtered
 end
 
 ## Solver execution
 
-function eigen_funcbarrier(A::AbstractMatrix{T}, B)::Tuple{Vector{T},Matrix{T}} where {T}
-    factB = lu!(B)
-    B⁻¹A = ldiv!(factB, A)
-    λs, φχs = eigen!(B⁻¹A; sortby = abs)
-    return λs, φχs
-end
-
 function (gs::SingleShot1DGreensSolver)(ω)
     A, B = single_shot_surface_matrices(gs, ω)
-    λs, φχs = eigen_funcbarrier(A, B)
+    λs, φχs = eigen_funcbarrier(A, B, gs.invert_B)
     dim_s = size(φχs, 1) ÷ 2
     φs = view(φχs, 1:dim_s, :)
     χs = view(φχs, dim_s+1:2dim_s, :)
@@ -242,6 +275,23 @@ function (gs::SingleShot1DGreensSolver)(ω)
         copy!(χ, χs)
     end
     return classify_retarded_advanced(λs, φs, χs, φ, χ, gs)
+end
+
+function eigen_funcbarrier(A::AbstractMatrix{T}, B, invert_B)::Tuple{Vector{T},Matrix{T}} where {T}
+    if invert_B
+        factB = lu!(B)
+        B⁻¹A = ldiv!(factB, A)
+        λs, φχs = eigen!(B⁻¹A; sortby = abs)
+    else
+        λs, φχs = eigen!(A, B; sortby = abs)
+    end
+    cleanup_λ!(λs)
+    return λs, φχs
+end
+
+function cleanup_λ!(λs::AbstractVector{T}) where {T}
+    λs .= (λ -> ifelse(isnan(λ), T(Inf), ifelse(abs2(λ) < eps(real(T)), zero(T), λ))).(λs)
+    return λs
 end
 
 function single_shot_surface_matrices(gs::SingleShot1DGreensSolver{T}, ω) where {T}
@@ -281,7 +331,19 @@ function single_shot_surface_matrices(gs::SingleShot1DGreensSolver{T}, ω) where
     # B22 = -A21'
     B22 .= .- A21'
 
+    chkfinite(A)
+    chkfinite(B)
+
     return A, B
+end
+
+function chkfinite(A::AbstractMatrix)
+    for a in A
+        if !isfinite(a)
+            throw(ArgumentError("Matrix contains Infs or NaNs. This may happen when the energy ω exactly matches a bound state in the spectrum. Try adding a small positive imaginary part to ω."))
+        end
+    end
+    return true
 end
 
 # φ = [Pₛ' + Pᵦ' g₀ᵦᵦ (λ⁻¹Vᵦₛ + H₀ᵦₛ)] φₛ
@@ -302,29 +364,31 @@ function classify_retarded_advanced(λs, φs, χs, φ, χ, gs)
     # order for ret-evan, ret-prop, adv-prop, adv-evan
     p = sortperm!(gs.temps.v2s1, vs; rev = true)
     p´ = gs.temps.v2s2
+    Base.permute!!(vs, copy!(p´, p))
     Base.permute!!(λs, copy!(p´, p))
     Base.permutecols!!(φ, copy!(p´, p))
     Base.permutecols!!(χ, copy!(p´, p))
     Base.permutecols!!(φs, copy!(p´, p))
 
-    dim_s = size(φ, 2) ÷ 2
-    ret  = 1:dim_s
-    adv  = dim_s+1:2dim_s
+    ret, adv = nonsingular_ret_adv(λs, vs)
+    # @show vs
+    # @show abs.(λs)
+    # @show ret, adv, length(λs), length(vs)
 
     λR   = view(λs, ret)
     χR   = view(χ, :, ret)   # This resides in part of gs.temps.χ
     φR   = view(φ, :, ret)   # This resides in part of gs.temps.φ
     # overwrite output of eigen to preserve normalization of full φ
     φRs  = mul!(view(φs, :, ret), gs.Ps, φR)
-    iφRs = rdiv!(copyto!(gs.temps.ss1, I), lu!(φRs))
+    iφRs = issquare(φRs) ? rdiv!(copyto!(gs.temps.ss1, I), lu!(φRs)) : pinv(φRs)
 
     iλA  = view(λs, adv)
-    iλA .= (λ -> ifelse(isnan(λ), 0, 1/λ)).(iλA)
+    iλA .= inv.(iλA)
     χA  = view(χ, :, adv)   # This resides in part of gs.temps.χ
     φA   = view(φ, :, adv)   # This resides in part of gs.temps.φ
     # overwrite output of eigen to preserve normalization of full χ
     χAs´ = mul!(view(χs, :, adv), gs.Ps´, χA)
-    iχAs´ = rdiv!(copyto!(gs.temps.ss2, I), lu!(χAs´))
+    iχAs´ = issquare(χAs´) ? rdiv!(copyto!(gs.temps.ss2, I), lu!(χAs´)) : pinv(χAs´)
 
     return λR, χR, iφRs, iλA, φA, iχAs´
 end
@@ -333,8 +397,8 @@ end
 function compute_velocities_and_normalize!(φ, χ, λs, gs)
     vs = gs.velocities
     tmp = gs.temps.vH
-    for i in eachindex(vs)
-        abs2λ = abs2(λs[i])
+    for (i, λ) in enumerate(λs)
+        abs2λ = abs2(λ)
         if abs2λ ≈ 1
             φi = view(φ, :, i)
             χi = view(χ, :, i)
@@ -348,7 +412,25 @@ function compute_velocities_and_normalize!(φ, χ, λs, gs)
             vs[i] = abs2λ < 1 ? Inf : -Inf
         end
     end # sortperm(vs) would now give the order of adv-evan, adv-prop, ret-prop, ret-evan
-    return vs
+    return view(vs, 1:length(λs))
+end
+
+function nonsingular_ret_adv(λs::AbstractVector{T}, vs) where {T}
+    rmin, rmax = 1, 0
+    amin, amax = 1, 0
+    ε = eps(real(T))
+    for (i, v) in enumerate(vs)
+        aλ2 = abs2(λs[i])
+        if aλ2 < ε
+            rmin = i + 1
+        elseif v > 0
+            rmax = i
+            amin = i + 1
+        elseif v < 0 && isfinite(aλ2)
+            amax = i
+        end
+    end
+    return rmin:rmax, amin:amax
 end
 
 ## Greens execution
