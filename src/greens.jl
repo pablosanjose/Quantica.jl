@@ -17,7 +17,7 @@ the provided `solveobject`. Currently valid `solveobject`s are
 
 - the `Bandstructure` of `h` (for an unbounded `h` or an `Hamiltonian{<:Superlattice}}`)
 - the `Spectrum` of `h` (for a bounded `h`)
-- `SingleShot1D()` (for 1D Hamiltonians, to use the single-shot generalized eigenvalue approach)
+- `SingleShot1D(; direct = false)` (single-shot generalized [or direct if `direct = true`] eigenvalue approach for 1D Hamiltonians)
 
 If a `boundaries = (n₁, n₂, ...)` is provided, a reflecting boundary is assumed for each
 non-missing `nᵢ` perpendicular to Bravais vector `i` at a cell distance `nᵢ` from the
@@ -89,7 +89,56 @@ const SVectorPair{L} = Pair{SVector{L,Int},SVector{L,Int}}
 #######################################################################
 # SingleShot1DGreensSolver
 #######################################################################
-struct SingleShot1D end
+"""
+    SingleShot1D(; direct = false)
+
+Return a Greens function solver using the generalized eigenvalue approach, whereby given the
+energy `ω`, the eigenmodes of the infinite 1D Hamiltonian, and the corresponding infinite
+and semi-infinite Greens function can be computed by solving the generalized eigenvalue
+equation
+
+    A⋅φχ = λ B⋅φχ
+    A = [0 I; V ω-H0]
+    B = [I 0; 0 V']
+
+This is the matrix form of the problem `λ(ω-H0)φ - Vφ - λ²V'φ = 0`, where `φχ = [φ; λφ]`,
+and `φ` are `ω`-energy eigenmodes, with (possibly complex) momentum `q`, and eigenvalues are
+`λ = exp(-iqa₀)`. The algorithm assumes the Hamiltonian has only `dn = (0,)` and `dn = (±1,
+)` Bloch harmonics (`H0`, `V` and `V'`), so its unit cell will be enlarged before applying
+the solver if needed. Bound states in the spectrum will yield delta functions in the density
+of states that can be resolved by adding a broadening in the form of a small positive
+imaginary part to `ω`.
+
+To avoid singular solutions `λ=0,∞`, the nullspace of `V` is projected out of the problem.
+Sometimes, however, some linear algebra implementations of the eigensolver can lead to
+incomplete convergence, signaled by a `LAPACKException(n)`. If that happens one can try the
+option `direct = true` that turns the generalized eigenproblem into a standard eigenproblem.
+
+# Examples
+```jldoctest
+julia> using LinearAlgebra
+
+julia> h = LP.honeycomb() |> hamiltonian(hopping(1)) |> unitcell((1,-1), (10,10)) |> Quantica.wrap(2);
+
+julia> g = greens(h, SingleShot1D(), boundaries = (0,))
+GreensFunction{SingleShot1DGreensSolver}: Green's function using the single-shot 1D method
+  Matrix size    : 40 × 40
+  Element type   : scalar (ComplexF64)
+  Boundaries     : (0,)
+  Reduced dims   : 20
+
+julia> tr(g(0.3))
+-32.193416068730784 - 3.4399800712973474im
+```
+
+# See also
+    `greens`
+"""
+struct SingleShot1D
+    invert_B::Bool
+end
+
+SingleShot1D(; direct = false) = SingleShot1D(direct)
 
 struct SingleShot1DTemporaries{T}
     b2s::Matrix{T}      # size = dim_b, 2dim_s
@@ -127,6 +176,7 @@ function SingleShot1DTemporaries{T}(dim_H, dim_s, dim_b) where {T}
 end
 
 struct SingleShot1DGreensSolver{T<:Complex,R<:Real,H<:Hessenberg{T}} <: AbstractGreensSolver
+    invert_B::Bool
     A::Matrix{T}
     B::Matrix{T}
     minusH0::SparseMatrixCSC{T,Int}
@@ -157,14 +207,14 @@ Base.summary(g::GreensFunction{<:SingleShot1DGreensSolver}) =
 
 hasbulk(gs::SingleShot1DGreensSolver) = !iszero(size(gs.Pb, 1))
 
-function greensolver(::SingleShot1D, h)
+function greensolver(s::SingleShot1D, h)
     latdim(h) == 1 || throw(ArgumentError("Cannot use a SingleShot1D Green function solver with an $(latdim(h))-dimensional Hamiltonian"))
-    return SingleShot1DGreensSolver(h)
+    return SingleShot1DGreensSolver(h, s.invert_B)
 end
 
 ## Preparation
 
-function SingleShot1DGreensSolver(h::Hamiltonian)
+function SingleShot1DGreensSolver(h::Hamiltonian, invert_B)
     latdim(h) == 1 || throw(ArgumentError("Cannot use a SingleShot1D Green function solver with an $(latdim(h))-dimensional Hamiltonian"))
     maxdn = maximum(har -> abs(first(har.dn)), h.harmonics)
     H = flatten(unitcell(h, (maxdn,)))
@@ -182,7 +232,7 @@ function SingleShot1DGreensSolver(h::Hamiltonian)
     dim_s, dim_b, dim_H = size(Ps, 1), size(Pb, 1), size(H0, 2)
     velocities = fill(zero(real(T)), 2dim_s)
     temps = SingleShot1DTemporaries{T}(dim_H, dim_s, dim_b)
-    return SingleShot1DGreensSolver(A, B, -H0, V, Pb, Ps, Ps´, H0ss, H0bs, Vss, Vbs, hessbb, velocities, maxdn, temps)
+    return SingleShot1DGreensSolver(invert_B, A, B, -H0, V, Pb, Ps, Ps´, H0ss, H0bs, Vss, Vbs, hessbb, velocities, maxdn, temps)
 end
 
 function bulk_surface_projectors(H0::AbstractMatrix{T}, V, V´) where {T}
@@ -199,20 +249,9 @@ end
 
 ## Solver execution
 
-function eigen_funcbarrier(A::AbstractMatrix{T}, B)::Tuple{Vector{T},Matrix{T}} where {T}
-    λs, φχs = eigen!(A, B; sortby = abs)
-    cleanup_λ!(λs)
-    return λs, φχs
-end
-
-function cleanup_λ!(λs::AbstractVector{T}) where {T}
-    λs .= (λ -> ifelse(isnan(λ), T(Inf), ifelse(abs2(λ) < eps(real(T)), zero(T), λ))).(λs)
-    return λs
-end
-
 function (gs::SingleShot1DGreensSolver)(ω)
     A, B = single_shot_surface_matrices(gs, ω)
-    λs, φχs = eigen_funcbarrier(A, B)
+    λs, φχs = eigen_funcbarrier(A, B, gs.invert_B)
     dim_s = size(φχs, 1) ÷ 2
     φs = view(φχs, 1:dim_s, :)
     χs = view(φχs, dim_s+1:2dim_s, :)
@@ -226,6 +265,23 @@ function (gs::SingleShot1DGreensSolver)(ω)
         copy!(χ, χs)
     end
     return classify_retarded_advanced(λs, φs, χs, φ, χ, gs)
+end
+
+function eigen_funcbarrier(A::AbstractMatrix{T}, B, invert_B)::Tuple{Vector{T},Matrix{T}} where {T}
+    if invert_B
+        factB = lu!(B)
+        B⁻¹A = ldiv!(factB, A)
+        λs, φχs = eigen!(B⁻¹A; sortby = abs)
+    else
+        λs, φχs = eigen!(A, B; sortby = abs)
+    end
+    cleanup_λ!(λs)
+    return λs, φχs
+end
+
+function cleanup_λ!(λs::AbstractVector{T}) where {T}
+    λs .= (λ -> ifelse(isnan(λ), T(Inf), ifelse(abs2(λ) < eps(real(T)), zero(T), λ))).(λs)
+    return λs
 end
 
 function single_shot_surface_matrices(gs::SingleShot1DGreensSolver{T}, ω) where {T}
@@ -264,6 +320,9 @@ function single_shot_surface_matrices(gs::SingleShot1DGreensSolver{T}, ω) where
 
     # B22 = -A21'
     B22 .= .- A21'
+
+    A .= chop.(A)
+    B .= chop.(B)
 
     return A, B
 end
