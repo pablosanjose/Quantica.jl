@@ -200,10 +200,10 @@ end
 
 function Base.show(io::IO, g::GreensFunction{<:SingleShot1DGreensSolver})
     print(io, summary(g), "\n",
-"  Matrix size    : $(size(g.h, 1)) × $(size(g.h, 2))
+"  Matrix size    : $(size(g.solver.V, 1)) × $(size(g.solver.V, 2))
+  Reduced size   : $(size(g.solver.Ps, 1)) × $(size(g.solver.Ps, 1))
   Element type   : $(displayelements(g.h))
-  Boundaries     : $(g.boundaries)
-  Reduced dims   : $(size(g.solver.Ps, 1))")
+  Boundaries     : $(g.boundaries)")
 end
 
 Base.summary(g::GreensFunction{<:SingleShot1DGreensSolver}) =
@@ -220,8 +220,8 @@ end
 
 function SingleShot1DGreensSolver(h::Hamiltonian, invert_B)
     latdim(h) == 1 || throw(ArgumentError("Cannot use a SingleShot1D Green function solver with an $(latdim(h))-dimensional Hamiltonian"))
-    maxdn = maximum(har -> abs(first(har.dn)), h.harmonics)
-    H = flatten(unitcell(h, (maxdn,)))
+    maxdn = max(1, maximum(har -> abs(first(har.dn)), h.harmonics))
+    H = flatten(maxdn == 1 ? h : unitcell(h, (maxdn,)))
     H0, V, V´ = H[(0,)], H[(1,)], H[(-1,)]
     Pb, Ps, Ps´ = bulk_surface_projectors(H0, V, V´)
     H0ss = Ps * H0 * Ps'
@@ -244,10 +244,16 @@ function bulk_surface_projectors(H0::AbstractMatrix{T}, V, V´) where {T}
     W, S, U = SVD.U, SVD.S, SVD.V
     dim_b = count(s -> iszero(chop(s)), S)
     dim_s = length(S) - dim_b
-    Ps = U'[1:dim_s, :]
-    Pb = U'[dim_s+1:end, :]
-    Ps´ = W'[1:dim_s, :]
-    Pb´ = W'[dim_s+1:end, :]
+    if iszero(dim_b)
+        Ps = Matrix{T}(I, dim_s, dim_s)
+        Ps´ = copy(Ps)
+        Pb = Ps[1:0, :]
+    else
+        Ps = U'[1:dim_s, :]
+        Pb = U'[dim_s+1:end, :]
+        Ps´ = W'[1:dim_s, :]
+        Pb´ = W'[dim_s+1:end, :]
+    end
     return Pb, Ps, Ps´
 end
 
@@ -325,10 +331,19 @@ function single_shot_surface_matrices(gs::SingleShot1DGreensSolver{T}, ω) where
     # B22 = -A21'
     B22 .= .- A21'
 
-    A .= chop.(A)
-    B .= chop.(B)
+    chkfinite(A)
+    chkfinite(B)
 
     return A, B
+end
+
+function chkfinite(A::AbstractMatrix)
+    for a in A
+        if !isfinite(a)
+            throw(ArgumentError("Matrix contains Infs or NaNs. This may happen when the energy ω exactly matches a bound state in the spectrum. Try adding a small positive imaginary part to ω."))
+        end
+    end
+    return true
 end
 
 # φ = [Pₛ' + Pᵦ' g₀ᵦᵦ (λ⁻¹Vᵦₛ + H₀ᵦₛ)] φₛ
@@ -349,12 +364,16 @@ function classify_retarded_advanced(λs, φs, χs, φ, χ, gs)
     # order for ret-evan, ret-prop, adv-prop, adv-evan
     p = sortperm!(gs.temps.v2s1, vs; rev = true)
     p´ = gs.temps.v2s2
+    Base.permute!!(vs, copy!(p´, p))
     Base.permute!!(λs, copy!(p´, p))
     Base.permutecols!!(φ, copy!(p´, p))
     Base.permutecols!!(χ, copy!(p´, p))
     Base.permutecols!!(φs, copy!(p´, p))
 
-    ret, adv = nonsingular_ret_adv(λs)
+    ret, adv = nonsingular_ret_adv(λs, vs)
+    # @show vs
+    # @show abs.(λs)
+    # @show ret, adv, length(λs), length(vs)
 
     λR   = view(λs, ret)
     χR   = view(χ, :, ret)   # This resides in part of gs.temps.χ
@@ -378,8 +397,8 @@ end
 function compute_velocities_and_normalize!(φ, χ, λs, gs)
     vs = gs.velocities
     tmp = gs.temps.vH
-    for i in eachindex(vs)
-        abs2λ = abs2(λs[i])
+    for (i, λ) in enumerate(λs)
+        abs2λ = abs2(λ)
         if abs2λ ≈ 1
             φi = view(φ, :, i)
             χi = view(χ, :, i)
@@ -393,16 +412,25 @@ function compute_velocities_and_normalize!(φ, χ, λs, gs)
             vs[i] = abs2λ < 1 ? Inf : -Inf
         end
     end # sortperm(vs) would now give the order of adv-evan, adv-prop, ret-prop, ret-evan
-    return vs
+    return view(vs, 1:length(λs))
 end
 
-function nonsingular_ret_adv(λs::AbstractVector)
-    dim_s = length(λs) ÷ 2
-    i0 = findfirst(!iszero, λs)
-    i0 === nothing && throw(ArgumentError("Unexpected non-conjugate λ solutions"))
-    ret = i0:dim_s
-    adv = dim_s+1:2dim_s+1-i0
-    return ret, adv
+function nonsingular_ret_adv(λs::AbstractVector{T}, vs) where {T}
+    rmin, rmax = 1, 0
+    amin, amax = 1, 0
+    ε = eps(real(T))
+    for (i, v) in enumerate(vs)
+        aλ2 = abs2(λs[i])
+        if aλ2 < ε
+            rmin = i + 1
+        elseif v > 0
+            rmax = i
+            amin = i + 1
+        elseif v < 0 && isfinite(aλ2)
+            amax = i
+        end
+    end
+    return rmin:rmax, amin:amax
 end
 
 ## Greens execution

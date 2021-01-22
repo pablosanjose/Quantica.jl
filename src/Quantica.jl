@@ -29,7 +29,7 @@ export sublat, bravais, lattice, dims, supercell, unitcell,
        bands, vertices,
        energies, states, degeneracy,
        momentaKPM, dosKPM, averageKPM, densityKPM, bandrangeKPM,
-       greens, greensolver
+       greens, greensolver, SingleShot1D
 
 export RegionPresets, RP, LatticePresets, LP, HamiltonianPresets, HP
 
