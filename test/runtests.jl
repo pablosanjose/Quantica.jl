@@ -7,5 +7,6 @@ using Quantica
     include("test_hamiltonian.jl")
     include("test_mesh.jl")
     include("test_bandstructure.jl")
+    include("test_greens.jl")
     include("test_KPM.jl")
 end
