@@ -481,6 +481,8 @@ Bandstructure{2}: collection of 1D bands
 # See also
     `cuboid`, `diagonalizer`, `bloch`, `parametric`, `splitbands!`
 """
+bandstructure(args...; kw...) = h -> bandstructure(h, args...; kw...)
+
 function bandstructure(h::Hamiltonian{<:Any, L}; subticks = 13, kw...) where {L}
     L == 0 && throw(ArgumentError("Hamiltonian is 0D, use `spectrum` instead of `bandstructure`"))
     base = cuboid(filltuple((-π, π), Val(L))...; subticks = subticks)

@@ -63,7 +63,7 @@ julia> m = similarmatrix(g); g(m, 0.2)
 """
 greens(h::Hamiltonian{<:Any,L}, solverobject; boundaries = filltuple(missing, Val(L))) where {L} =
     GreensFunction(greensolver(solverobject, h), h, boundaries)
-greens(solver::Function, args...; kw...) = h -> greens(solver(h), h, args...; kw...)
+greens(solver::Function, args...; kw...) = h -> greens(h, solver(h), args...; kw...)
 
 # solver fallback
 greensolver(s::AbstractGreensSolver) = s
@@ -90,7 +90,7 @@ const SVectorPair{L} = Pair{SVector{L,Int},SVector{L,Int}}
 # SingleShot1DGreensSolver
 #######################################################################
 """
-    SingleShot1D(; direct = true)
+    SingleShot1D(; direct = false)
 
 Return a Greens function solver using the generalized eigenvalue approach, whereby given the
 energy `ω`, the eigenmodes of the infinite 1D Hamiltonian, and the corresponding infinite
@@ -110,13 +110,10 @@ of states that can be resolved by adding a broadening in the form of a small pos
 imaginary part to `ω`.
 
 To avoid singular solutions `λ=0,∞`, the nullspace of `V` is projected out of the problem.
-Sometimes, however, some linear algebra implementations of the eigensolver can lead to
-incomplete convergence, signaled by a `LAPACKException(n)`. This problem does not arise if
-we the generalized eigenproblem into a standard eigenproblem. This is achieved with `direct
-= true`. The performance is also slightly improved. Such approach, however, is not possible
-for some special infinite 1D lattices that have bound states embedded in a continuum even in
-the absence of boundaries. A `SingularExcepcion` error is then thrown. In such cases, try
-`direct = false`.
+This produces a new `A´` and `B´` with reduced dimensions. `B´` can often be inverted,
+turning this into a standard eigenvalue problem, which is slightly faster to solve. This is
+achieved with `direct = true`. However, `B´` sometimes is still non-invertible for some
+values of `ω`. In this case use `direct = false` (the default).
 
 # Examples
 ```jldoctest
@@ -127,12 +124,12 @@ julia> h = LP.honeycomb() |> hamiltonian(hopping(1)) |> unitcell((1,-1), (10,10)
 julia> g = greens(h, SingleShot1D(), boundaries = (0,))
 GreensFunction{SingleShot1DGreensSolver}: Green's function using the single-shot 1D method
   Matrix size    : 40 × 40
+  Reduced size   : 20 × 20
   Element type   : scalar (ComplexF64)
   Boundaries     : (0,)
-  Reduced dims   : 20
 
 julia> tr(g(0.3))
--32.193416068730784 - 3.4399800712973474im
+-32.193416068730684 - 3.4399800712973074im
 ```
 
 # See also
@@ -140,9 +137,10 @@ julia> tr(g(0.3))
 """
 struct SingleShot1D
     invert_B::Bool
+    cutoff::Int
 end
 
-SingleShot1D(; direct = true) = SingleShot1D(direct)
+SingleShot1D(; direct = false, cutoff = 1) = SingleShot1D(direct, cutoff)
 
 struct SingleShot1DTemporaries{T}
     b2s::Matrix{T}      # size = dim_b, 2dim_s
@@ -181,6 +179,7 @@ end
 
 struct SingleShot1DGreensSolver{T<:Complex,R<:Real,H<:Hessenberg{T}} <: AbstractGreensSolver
     invert_B::Bool
+    λ2min::R
     A::Matrix{T}
     B::Matrix{T}
     minusH0::SparseMatrixCSC{T,Int}
@@ -213,36 +212,37 @@ hasbulk(gs::SingleShot1DGreensSolver) = !iszero(size(gs.Pb, 1))
 
 function greensolver(s::SingleShot1D, h)
     latdim(h) == 1 || throw(ArgumentError("Cannot use a SingleShot1D Green function solver with an $(latdim(h))-dimensional Hamiltonian"))
-    return SingleShot1DGreensSolver(h, s.invert_B)
+    return SingleShot1DGreensSolver(h, s.invert_B, s.cutoff)
 end
 
 ## Preparation
 
-function SingleShot1DGreensSolver(h::Hamiltonian, invert_B)
+function SingleShot1DGreensSolver(h::Hamiltonian, invert_B, cutoff)
     latdim(h) == 1 || throw(ArgumentError("Cannot use a SingleShot1D Green function solver with an $(latdim(h))-dimensional Hamiltonian"))
     maxdn = max(1, maximum(har -> abs(first(har.dn)), h.harmonics))
     H = flatten(maxdn == 1 ? h : unitcell(h, (maxdn,)))
+    T = complex(blockeltype(H))
+    λ2min = cutoff^2 * eps(real(T))
     H0, V, V´ = H[(0,)], H[(1,)], H[(-1,)]
-    Pb, Ps, Ps´ = bulk_surface_projectors(H0, V, V´)
+    Pb, Ps, Ps´ = bulk_surface_projectors(H0, V, V´, λ2min)
     H0ss = Ps * H0 * Ps'
     H0bs = Pb * H0 * Ps'
     Vss  = Ps * V * Ps'
     Vbs  = Pb * V * Ps'
     hessbb = hessenberg!(Pb * (-H0) * Pb')
     dim_s = size(Ps, 1)
-    T = complex(blockeltype(H))
     A = zeros(T, 2dim_s, 2dim_s)
     B = zeros(T, 2dim_s, 2dim_s)
     dim_s, dim_b, dim_H = size(Ps, 1), size(Pb, 1), size(H0, 2)
     velocities = fill(zero(real(T)), 2dim_s)
     temps = SingleShot1DTemporaries{T}(dim_H, dim_s, dim_b)
-    return SingleShot1DGreensSolver(invert_B, A, B, -H0, V, Pb, Ps, Ps´, H0ss, H0bs, Vss, Vbs, hessbb, velocities, maxdn, temps)
+    return SingleShot1DGreensSolver(invert_B, λ2min, A, B, -H0, V, Pb, Ps, Ps´, H0ss, H0bs, Vss, Vbs, hessbb, velocities, maxdn, temps)
 end
 
-function bulk_surface_projectors(H0::AbstractMatrix{T}, V, V´) where {T}
+function bulk_surface_projectors(H0::AbstractMatrix{T}, V, V´, cutoff2) where {T}
     SVD = svd(Matrix(V), full = true)
     W, S, U = SVD.U, SVD.S, SVD.V
-    dim_b = count(s -> iszero(chop(s)), S)
+    dim_b = count(s -> abs2(s) < cutoff2, S)
     dim_s = length(S) - dim_b
     if iszero(dim_b)
         Ps = Matrix{T}(I, dim_s, dim_s)
@@ -255,13 +255,14 @@ function bulk_surface_projectors(H0::AbstractMatrix{T}, V, V´) where {T}
         Pb´ = W'[dim_s+1:end, :]
     end
     return Pb, Ps, Ps´
+    return Pb, Ps, Ps´
 end
 
 ## Solver execution
 
 function (gs::SingleShot1DGreensSolver)(ω)
     A, B = single_shot_surface_matrices(gs, ω)
-    λs, φχs = eigen_funcbarrier(A, B, gs.invert_B)
+    λs, φχs = eigen_funcbarrier!(A, B, gs)
     dim_s = size(φχs, 1) ÷ 2
     φs = view(φχs, 1:dim_s, :)
     χs = view(φχs, dim_s+1:2dim_s, :)
@@ -277,20 +278,39 @@ function (gs::SingleShot1DGreensSolver)(ω)
     return classify_retarded_advanced(λs, φs, χs, φ, χ, gs)
 end
 
-function eigen_funcbarrier(A::AbstractMatrix{T}, B, invert_B)::Tuple{Vector{T},Matrix{T}} where {T}
-    if invert_B
+function eigen_funcbarrier!(A::AbstractMatrix{T}, B, gs)::Tuple{Vector{T},Matrix{T}} where {T<:Complex}
+    if gs.invert_B
         factB = lu!(B)
         B⁻¹A = ldiv!(factB, A)
         λs, φχs = eigen!(B⁻¹A; sortby = abs)
+        clean_λ!(λs, gs.λ2min)
     else
-        λs, φχs = eigen!(A, B; sortby = abs)
+        alpha, beta, _, φχ´ = LAPACK.ggev!('N', 'V', A, B)
+        λ´ = clean_λ!(alpha, beta, gs.λ2min)
+        λs, φχs = GeneralizedEigen(LinearAlgebra.sorteig!(λ´, φχ´, abs)...)
     end
-    cleanup_λ!(λs)
     return λs, φχs
 end
 
-function cleanup_λ!(λs::AbstractVector{T}) where {T}
-    λs .= (λ -> ifelse(isnan(λ), T(Inf), ifelse(abs2(λ) < eps(real(T)), zero(T), λ))).(λs)
+function clean_λ!(λ::AbstractVector{T}, cutoff2) where {T}
+    λs .= (λ -> ifelse(isnan(λ), T(Inf),
+                ifelse(abs2(λ) < λ2min, zero(T),
+                ifelse(abs2(λ) > 1/λ2min, T(Inf), λ)))).(λs)
+    return λs
+end
+
+function clean_λ!(αs::AbstractVector{T}, βs, cutoff2) where {T}
+    λs = αs
+    for i in eachindex(αs)
+        α2, β2 = abs2(αs[i]), abs2(βs[i])
+        if α2 < cutoff2
+            λs[i] = zero(T)
+        elseif β2 < cutoff2
+            λs[i] = T(Inf)
+        else
+            λs[i] = αs[i] / βs[i]
+        end
+    end
     return λs
 end
 
@@ -418,10 +438,9 @@ end
 function nonsingular_ret_adv(λs::AbstractVector{T}, vs) where {T}
     rmin, rmax = 1, 0
     amin, amax = 1, 0
-    ε = eps(real(T))
     for (i, v) in enumerate(vs)
         aλ2 = abs2(λs[i])
-        if aλ2 < ε
+        if iszero(aλ2)
             rmin = i + 1
         elseif v > 0
             rmax = i
@@ -454,6 +473,14 @@ function (g::GreensFunction{<:SingleShot1DGreensSolver,1,Tuple{Int}})(ω, ::Miss
     return cells -> G_semiinfinite!(gs, factors, G∞⁻¹, shift_cells(cells, N0))
 end
 
+function invG(g::GreensFunction{<:SingleShot1DGreensSolver}, ω)
+    gs = g.solver
+    factors = gs(ω)
+    onlyhalf = only(g.boundaries) === missing ? false : true
+    G∞⁻¹ = inverse_G∞!(gs.temps.HH0, ω, gs, factors, onlyhalf)
+    return G∞⁻¹
+end
+
 function G_infinite!(gs, factors, G∞⁻¹, (src, dst))
     src´ = div(only(src), gs.maxdn, RoundToZero)
     dst´ = div(only(dst), gs.maxdn, RoundToZero)
@@ -481,12 +508,16 @@ end
 shift_cells((src, dst), N0) = (only(src) - N0, only(dst) - N0)
 
 # G∞⁻¹ = G₀⁻¹ - V´GrV - VGlV´ with V´GrV = V'*χR*φRs⁻¹Ps and VGlV´ = iχA*φAs´⁻¹Ps´
-function  inverse_G∞!(matrix, ω, gs, (λR, χR, iφRs, iλA, φA, iχAs´))
+function  inverse_G∞!(matrix, ω, gs, (λR, χR, iφRs, iλA, φA, iχAs´), onlyhalf = false)
     G0⁻¹ = inverse_G0!(matrix, ω, gs)
     V´GrV = mul!(gs.temps.Hs2, gs.V', mul!(gs.temps.Hs1, χR, iφRs))
     mul!(G0⁻¹, V´GrV, gs.Ps, -1, 1)
-    VGlV´ = mul!(gs.temps.Hs2, gs.V, mul!(gs.temps.Hs1, φA, iχAs´))
-    G∞⁻¹ = mul!(G0⁻¹, VGlV´, gs.Ps´, -1, 1)
+    if onlyhalf
+        G∞⁻¹ = G0⁻¹
+    else
+        VGlV´ = mul!(gs.temps.Hs2, gs.V, mul!(gs.temps.Hs1, φA, iχAs´))
+        G∞⁻¹ = mul!(G0⁻¹, VGlV´, gs.Ps´, -1, 1)
+    end
     return G∞⁻¹
 end
 
@@ -515,199 +546,199 @@ end
 #######################################################################
 # BandGreensSolver
 #######################################################################
-struct SimplexData{D,E,T,C<:SMatrix,DD,SA<:SubArray}
-    ε0::T
-    εmin::T
-    εmax::T
-    k0::SVector{D,T}
-    Δks::SMatrix{D,D,T,DD}     # k - k0 = Δks * z
-    volume::T
-    zvelocity::SVector{D,T}
-    edgecoeffs::NTuple{E,Tuple{T,C}} # s*det(Λ)/w.w and Λc for each edge
-    dωzs::NTuple{E,NTuple{2,SVector{D,T}}}
-    defaultdη::SVector{D,T}
-    φ0::SA
-    φs::NTuple{D,SA}
-end
+# struct SimplexData{D,E,T,C<:SMatrix,DD,SA<:SubArray}
+#     ε0::T
+#     εmin::T
+#     εmax::T
+#     k0::SVector{D,T}
+#     Δks::SMatrix{D,D,T,DD}     # k - k0 = Δks * z
+#     volume::T
+#     zvelocity::SVector{D,T}
+#     edgecoeffs::NTuple{E,Tuple{T,C}} # s*det(Λ)/w.w and Λc for each edge
+#     dωzs::NTuple{E,NTuple{2,SVector{D,T}}}
+#     defaultdη::SVector{D,T}
+#     φ0::SA
+#     φs::NTuple{D,SA}
+# end
 
-struct BandGreensSolver{P<:SimplexData,E,H<:Hamiltonian} <: AbstractGreensSolver
-    simplexdata::Vector{P}
-    indsedges::NTuple{E,Tuple{Int,Int}} # all distinct pairs of 1:V, where V=D+1=num verts
-    h::H
-end
+# struct BandGreensSolver{P<:SimplexData,E,H<:Hamiltonian} <: AbstractGreensSolver
+#     simplexdata::Vector{P}
+#     indsedges::NTuple{E,Tuple{Int,Int}} # all distinct pairs of 1:V, where V=D+1=num verts
+#     h::H
+# end
 
-function Base.show(io::IO, g::GreensFunction{<:BandGreensSolver})
-    print(io, summary(g), "\n",
-"  Matrix size    : $(size(g.h, 1)) × $(size(g.h, 2))
-  Element type   : $(displayelements(g.h))
-  Band simplices : $(length(g.solver.simplexdata))")
-end
+# function Base.show(io::IO, g::GreensFunction{<:BandGreensSolver})
+#     print(io, summary(g), "\n",
+# "  Matrix size    : $(size(g.h, 1)) × $(size(g.h, 2))
+#   Element type   : $(displayelements(g.h))
+#   Band simplices : $(length(g.solver.simplexdata))")
+# end
 
-Base.summary(g::GreensFunction{<:BandGreensSolver}) =
-    "GreensFunction{Bandstructure}: Green's function from a $(latdim(g.h))D bandstructure"
+# Base.summary(g::GreensFunction{<:BandGreensSolver}) =
+#     "GreensFunction{Bandstructure}: Green's function from a $(latdim(g.h))D bandstructure"
 
-function greensolver(b::Bandstructure{D}, h) where {D}
-    indsedges = tuplepairs(Val(D))
-    v = [SimplexData(simplex, band, indsedges) for band in bands(b) for simplex in band.simplices]
-    return BandGreensSolver(v,  indsedges, h)
-end
+# function greensolver(b::Bandstructure{D}, h) where {D}
+#     indsedges = tuplepairs(Val(D))
+#     v = [SimplexData(simplex, band, indsedges) for band in bands(b) for simplex in band.simplices]
+#     return BandGreensSolver(v,  indsedges, h)
+# end
 
-edges_per_simplex(L) = binomial(L,2)
+# edges_per_simplex(L) = binomial(L,2)
 
-function SimplexData(simplex::NTuple{V}, band, indsedges) where {V}
-    D = V - 1
-    vs = ntuple(i -> vertices(band)[simplex[i]], Val(V))
-    ks = ntuple(i -> SVector(Base.front(Tuple(vs[i]))), Val(V))
-    εs = ntuple(i -> last(vs[i]), Val(V))
-    εmin, εmax = extrema(εs)
-    ε0 = first(εs)
-    k0 = first(ks)
-    Δks = hcat(tuple_minus_first(ks)...)
-    zvelocity = SVector(tuple_minus_first(εs))
-    volume = abs(det(Δks))
-    edgecoeffs = edgecoeff.(indsedges, Ref(zvelocity))
-    dωzs = sectionpoint.(indsedges, Ref(zvelocity))
-    defaultdη = dummydη(zvelocity)
-    φ0 = vertexstate(first(simplex), band)
-    φs = vertexstate.(Base.tail(simplex), Ref(band))
-    return SimplexData(ε0, εmin, εmax, k0, Δks, volume, zvelocity, edgecoeffs, dωzs, defaultdη, φ0, φs)
-end
+# function SimplexData(simplex::NTuple{V}, band, indsedges) where {V}
+#     D = V - 1
+#     vs = ntuple(i -> vertices(band)[simplex[i]], Val(V))
+#     ks = ntuple(i -> SVector(Base.front(Tuple(vs[i]))), Val(V))
+#     εs = ntuple(i -> last(vs[i]), Val(V))
+#     εmin, εmax = extrema(εs)
+#     ε0 = first(εs)
+#     k0 = first(ks)
+#     Δks = hcat(tuple_minus_first(ks)...)
+#     zvelocity = SVector(tuple_minus_first(εs))
+#     volume = abs(det(Δks))
+#     edgecoeffs = edgecoeff.(indsedges, Ref(zvelocity))
+#     dωzs = sectionpoint.(indsedges, Ref(zvelocity))
+#     defaultdη = dummydη(zvelocity)
+#     φ0 = vertexstate(first(simplex), band)
+#     φs = vertexstate.(Base.tail(simplex), Ref(band))
+#     return SimplexData(ε0, εmin, εmax, k0, Δks, volume, zvelocity, edgecoeffs, dωzs, defaultdη, φ0, φs)
+# end
 
-function edgecoeff(indsedge, zvelocity::SVector{D}) where {D}
-    basis = edgebasis(indsedge, Val(D))
-    othervecs = Base.tail(basis)
-    edgevec = first(basis)
-    cutvecs = (v -> dot(zvelocity, edgevec) * v - dot(zvelocity, v) * edgevec).(othervecs)
-    Λc = hcat(cutvecs...)
-    Λ = hcat(zvelocity, Λc)
-    s = sign(det(hcat(basis...)))
-    coeff = s * (det(Λ)/dot(zvelocity, zvelocity))
-    return coeff, Λc
-end
+# function edgecoeff(indsedge, zvelocity::SVector{D}) where {D}
+#     basis = edgebasis(indsedge, Val(D))
+#     othervecs = Base.tail(basis)
+#     edgevec = first(basis)
+#     cutvecs = (v -> dot(zvelocity, edgevec) * v - dot(zvelocity, v) * edgevec).(othervecs)
+#     Λc = hcat(cutvecs...)
+#     Λ = hcat(zvelocity, Λc)
+#     s = sign(det(hcat(basis...)))
+#     coeff = s * (det(Λ)/dot(zvelocity, zvelocity))
+#     return coeff, Λc
+# end
 
-function edgebasis(indsedge, ::Val{D}) where {D}
-    inds = ntuple(identity, Val(D+1))
-    swappedinds = tupleswapfront(inds, indsedge) # places the two edge vertindices first
-    zverts = (i->unitvector(SVector{D,Int}, i-1)).(swappedinds)
-    basis = (z -> z - first(zverts)).(Base.tail(zverts)) # first of basis is edge vector
-    return basis
-end
+# function edgebasis(indsedge, ::Val{D}) where {D}
+#     inds = ntuple(identity, Val(D+1))
+#     swappedinds = tupleswapfront(inds, indsedge) # places the two edge vertindices first
+#     zverts = (i->unitvector(SVector{D,Int}, i-1)).(swappedinds)
+#     basis = (z -> z - first(zverts)).(Base.tail(zverts)) # first of basis is edge vector
+#     return basis
+# end
 
-function sectionpoint((i, j), zvelocity::SVector{D,T}) where {D,T}
-    z0, z1 = unitvector(SVector{D,Int}, i-1), unitvector(SVector{D,Int}, j-1)
-    z10 = z1 - z0
-    # avoid numerical cancellation errors due to zvelocity perpendicular to edge
-    d = chop(dot(zvelocity, z10), maximum(abs.(zvelocity)))
-    dzdω = z10 / d
-    dz0 = z0 - z10 * dot(zvelocity, z0) / d
-    return dzdω, dz0   # The section z is dω * dzdω + dz0
-end
+# function sectionpoint((i, j), zvelocity::SVector{D,T}) where {D,T}
+#     z0, z1 = unitvector(SVector{D,Int}, i-1), unitvector(SVector{D,Int}, j-1)
+#     z10 = z1 - z0
+#     # avoid numerical cancellation errors due to zvelocity perpendicular to edge
+#     d = chop(dot(zvelocity, z10), maximum(abs.(zvelocity)))
+#     dzdω = z10 / d
+#     dz0 = z0 - z10 * dot(zvelocity, z0) / d
+#     return dzdω, dz0   # The section z is dω * dzdω + dz0
+# end
 
-# A vector, not parallel to zvelocity, and with all nonzero components and none equal
-function dummydη(zvelocity::SVector{D,T}) where {D,T}
-    (D == 1 || iszero(zvelocity)) && return SVector(ntuple(i->T(i), Val(D)))
-    rng = MersenneTwister(0)
-    while true
-        dη = rand(rng, SVector{D,T})
-        isparallel = dot(dη, zvelocity)^2 ≈ dot(zvelocity, zvelocity) * dot(dη, dη)
-        isvalid = allunique(dη) && !isparallel
-        isvalid && return dη
-    end
-    throw(error("Unexpected error finding dummy dη"))
-end
+# # A vector, not parallel to zvelocity, and with all nonzero components and none equal
+# function dummydη(zvelocity::SVector{D,T}) where {D,T}
+#     (D == 1 || iszero(zvelocity)) && return SVector(ntuple(i->T(i), Val(D)))
+#     rng = MersenneTwister(0)
+#     while true
+#         dη = rand(rng, SVector{D,T})
+#         isparallel = dot(dη, zvelocity)^2 ≈ dot(zvelocity, zvelocity) * dot(dη, dη)
+#         isvalid = allunique(dη) && !isparallel
+#         isvalid && return dη
+#     end
+#     throw(error("Unexpected error finding dummy dη"))
+# end
 
-function vertexstate(ind, band)
-    ϕind = 1 + band.dimstates*(ind - 1)
-    state = view(band.states, ϕind:(ϕind+band.dimstates-1))
-    return state
-end
+# function vertexstate(ind, band)
+#     ϕind = 1 + band.dimstates*(ind - 1)
+#     state = view(band.states, ϕind:(ϕind+band.dimstates-1))
+#     return state
+# end
 
-## Call API
+# ## Call API
 
-function greens!(matrix, g::GreensFunction{<:BandGreensSolver,L}, ω::Number, (src, dst)::SVectorPair{L}) where {L}
-    fill!(matrix, zero(eltype(matrix)))
-    dn = dst - src
-    for simplexdata in g.solver.simplexdata
-        g0, gjs = green_simplex(ω, dn, simplexdata, g.solver.indsedges)
-        addsimplex!(matrix, g0, gjs, simplexdata)
-    end
-    return matrix
-end
+# function greens!(matrix, g::GreensFunction{<:BandGreensSolver,L}, ω::Number, (src, dst)::SVectorPair{L}) where {L}
+#     fill!(matrix, zero(eltype(matrix)))
+#     dn = dst - src
+#     for simplexdata in g.solver.simplexdata
+#         g0, gjs = green_simplex(ω, dn, simplexdata, g.solver.indsedges)
+#         addsimplex!(matrix, g0, gjs, simplexdata)
+#     end
+#     return matrix
+# end
 
-function green_simplex(ω, dn, data::SimplexData{L}, indsedges) where {L}
-    dη = data.Δks' * dn
-    phase = cis(dot(dn, data.k0))
-    dω = ω - data.ε0
-    gz = simplexterm.(dω, Ref(dη), Ref(data), data.edgecoeffs, data.dωzs, indsedges)
-    g0z, gjz = first.(gz), last.(gz)
-    g0 = im^(L-1) * phase * sum(g0z)
-    gj = -im^L * phase * sum(gjz)
-    return g0, gj
-end
+# function green_simplex(ω, dn, data::SimplexData{L}, indsedges) where {L}
+#     dη = data.Δks' * dn
+#     phase = cis(dot(dn, data.k0))
+#     dω = ω - data.ε0
+#     gz = simplexterm.(dω, Ref(dη), Ref(data), data.edgecoeffs, data.dωzs, indsedges)
+#     g0z, gjz = first.(gz), last.(gz)
+#     g0 = im^(L-1) * phase * sum(g0z)
+#     gj = -im^L * phase * sum(gjz)
+#     return g0, gj
+# end
 
-function simplexterm(dω, dη::SVector{D,T}, data, coeffs, (dzdω, dz0), (i, j)) where {D,T}
-    bailout = Complex(zero(T)), Complex.(zero(dη))
-    z = dω * dzdω + dz0
-    # Edges with divergent sections do not contribute
-    all(isfinite, z) || return bailout
-    z0 = unitvector(SVector{D,T},i-1)
-    z1 = unitvector(SVector{D,T},j-1)
-    coeff, Λc = coeffs
-    # If dη is zero (DOS) use a precomputed (non-problematic) simplex-constant vector
-    dη´ = iszero(dη) ? data.defaultdη : dη
-    d = dot(dη´, z)
-    d0 = dot(dη´, z0)
-    d1 = dot(dη´, z1)
-    # Skip if singularity in formula
-    (d ≈ d0 || d ≈ d1) && return bailout
-    s = sign(dot(dη´, dzdω))
-    coeff0 = coeff / prod(Λc' * dη´)
-    coeffj = isempty(Λc) ? zero(dη) : (Λc ./ ((dη´)' * Λc)) * sumvec(Λc)
-    params = s, d, d0, d1
-    zs = z, z0, z1
-    g0z = iszero(dη) ? g0z_asymptotic(D, coeff0, params) : g0z_general(coeff0, params)
-    gjz = iszero(dη) ? gjz_asymptotic(D, g0z, coeffj, coeff0, zs, params) :
-                       gjz_general(g0z, coeffj, coeff0, zs, params)
-    return g0z, gjz
-end
+# function simplexterm(dω, dη::SVector{D,T}, data, coeffs, (dzdω, dz0), (i, j)) where {D,T}
+#     bailout = Complex(zero(T)), Complex.(zero(dη))
+#     z = dω * dzdω + dz0
+#     # Edges with divergent sections do not contribute
+#     all(isfinite, z) || return bailout
+#     z0 = unitvector(SVector{D,T},i-1)
+#     z1 = unitvector(SVector{D,T},j-1)
+#     coeff, Λc = coeffs
+#     # If dη is zero (DOS) use a precomputed (non-problematic) simplex-constant vector
+#     dη´ = iszero(dη) ? data.defaultdη : dη
+#     d = dot(dη´, z)
+#     d0 = dot(dη´, z0)
+#     d1 = dot(dη´, z1)
+#     # Skip if singularity in formula
+#     (d ≈ d0 || d ≈ d1) && return bailout
+#     s = sign(dot(dη´, dzdω))
+#     coeff0 = coeff / prod(Λc' * dη´)
+#     coeffj = isempty(Λc) ? zero(dη) : (Λc ./ ((dη´)' * Λc)) * sumvec(Λc)
+#     params = s, d, d0, d1
+#     zs = z, z0, z1
+#     g0z = iszero(dη) ? g0z_asymptotic(D, coeff0, params) : g0z_general(coeff0, params)
+#     gjz = iszero(dη) ? gjz_asymptotic(D, g0z, coeffj, coeff0, zs, params) :
+#                        gjz_general(g0z, coeffj, coeff0, zs, params)
+#     return g0z, gjz
+# end
 
-sumvec(::SMatrix{N,M,T}) where {N,M,T} = SVector(ntuple(_->one(T),Val(M)))
+# sumvec(::SMatrix{N,M,T}) where {N,M,T} = SVector(ntuple(_->one(T),Val(M)))
 
-g0z_general(coeff0, (s, d, d0, d1)) =
-    coeff0 * cis(d) * ((cosint_c(-s*(d0-d)) + im*sinint(d0-d)) - (cosint_c(-s*(d1-d)) + im*sinint(d1-d)))
+# g0z_general(coeff0, (s, d, d0, d1)) =
+#     coeff0 * cis(d) * ((cosint_c(-s*(d0-d)) + im*sinint(d0-d)) - (cosint_c(-s*(d1-d)) + im*sinint(d1-d)))
 
-gjz_general(g0z, coeffj, coeff0, (z, z0, z1), (s, d, d0, d1)) =
-    g0z * (im * z - coeffj) + coeff0 * ((z0-z) * cis(d0) / (d0-d) - (z1-z) * cis(d1) / (d1-d))
+# gjz_general(g0z, coeffj, coeff0, (z, z0, z1), (s, d, d0, d1)) =
+#     g0z * (im * z - coeffj) + coeff0 * ((z0-z) * cis(d0) / (d0-d) - (z1-z) * cis(d1) / (d1-d))
 
-g0z_asymptotic(D, coeff0, (s, d, d0, d1)) =
-    coeff0 * (cosint_a(-s*(d0-d)) - cosint_a(-s*(d1-d))) * (im*d)^(D-1)/factorial(D-1)
+# g0z_asymptotic(D, coeff0, (s, d, d0, d1)) =
+#     coeff0 * (cosint_a(-s*(d0-d)) - cosint_a(-s*(d1-d))) * (im*d)^(D-1)/factorial(D-1)
 
-function gjz_asymptotic(D, g0z, coeffj, coeff0, (z, z0, z1), (s, d, d0, d1))
-    g0z´ = g0z
-    for n in 1:(D-1)
-        g0z´ += coeff0 * im^n * (im*d)^(D-1-n)/factorial(D-1-n) *
-                ((d0-d)^n - (d1-d)^n)/(n*factorial(n))
-    end
-    gjz = g0z´ * (im * z - im * coeffj * d / D) +
-        coeff0 * ((z0-z) * (im*d0)^D / (d0-d) - (z1-z) * (im*d1)^D / (d1-d)) / factorial(D)
-    return gjz
-end
+# function gjz_asymptotic(D, g0z, coeffj, coeff0, (z, z0, z1), (s, d, d0, d1))
+#     g0z´ = g0z
+#     for n in 1:(D-1)
+#         g0z´ += coeff0 * im^n * (im*d)^(D-1-n)/factorial(D-1-n) *
+#                 ((d0-d)^n - (d1-d)^n)/(n*factorial(n))
+#     end
+#     gjz = g0z´ * (im * z - im * coeffj * d / D) +
+#         coeff0 * ((z0-z) * (im*d0)^D / (d0-d) - (z1-z) * (im*d1)^D / (d1-d)) / factorial(D)
+#     return gjz
+# end
 
-cosint_c(x::Real) = ifelse(iszero(abs(x)), zero(x), cosint(abs(x))) + im*pi*(x<=0)
+# cosint_c(x::Real) = ifelse(iszero(abs(x)), zero(x), cosint(abs(x))) + im*pi*(x<=0)
 
-cosint_a(x::Real) = ifelse(iszero(abs(x)), zero(x), log(abs(x))) + im*pi*(x<=0)
+# cosint_a(x::Real) = ifelse(iszero(abs(x)), zero(x), log(abs(x))) + im*pi*(x<=0)
 
-function addsimplex!(matrix, g0, gjs, simplexdata)
-    φ0 = simplexdata.φ0
-    φs = simplexdata.φs
-    vol = simplexdata.volume
-    for c in CartesianIndices(matrix)
-        (row, col) = Tuple(c)
-        x = g0 * (φ0[row] * φ0[col]')
-        for (φ, gj) in zip(φs, gjs)
-            x += (φ[row]*φ[col]' - φ0[row]*φ0[col]') * gj
-        end
-        matrix[row, col] += vol * x
-    end
-    return matrix
-end
+# function addsimplex!(matrix, g0, gjs, simplexdata)
+#     φ0 = simplexdata.φ0
+#     φs = simplexdata.φs
+#     vol = simplexdata.volume
+#     for c in CartesianIndices(matrix)
+#         (row, col) = Tuple(c)
+#         x = g0 * (φ0[row] * φ0[col]')
+#         for (φ, gj) in zip(φs, gjs)
+#             x += (φ[row]*φ[col]' - φ0[row]*φ0[col]') * gj
+#         end
+#         matrix[row, col] += vol * x
+#     end
+#     return matrix
+# end
