@@ -339,7 +339,7 @@ function linkstable!(table, h, psi, cell = missing;
     lat = h.lattice
     br = bravais(h)
     T = numbertype(lat)
-    r0 = cell === missing ? br * SVector(filltuple(0, latdim(h))) : br * SVector(cell)
+    r0 = cell === missing ? br * zero(SVector{latdim(h),T}) : br * toSVector(T,cell)
     slats = sublats(lat)
     rs = allsitepositions(lat)
     h0 = h.harmonics[1].h
