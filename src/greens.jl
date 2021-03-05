@@ -348,8 +348,14 @@ function single_shot_surface_matrices(gs::SingleShot1DGreensSolver{T}, ω) where
         mul!(A21, gs.H0bs', tmp, -1, 1)
     end
 
-    # B22 = -A21'
-    B22 .= .- A21'
+    # B22 = Vₛₛ + Vᵦₛ' g₀ᵦᵦ H₀ᵦₛ
+    B22 .= gs.Vss
+    if hasbulk(gs)
+        copy!(tmp, gs.H0bs)
+        ldiv!(gs.hessbb + ω*I, tmp)
+        mul!(B22, gs.Vbs', tmp, 1, 1)
+    end
+    # B22 .= .- A21'
 
     chkfinite(A)
     chkfinite(B)
