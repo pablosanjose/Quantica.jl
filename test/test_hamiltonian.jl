@@ -479,8 +479,8 @@ end
 @testset "transform! hamiltonians" begin
     h = LP.honeycomb(dim = 3) |> hamiltonian(hopping(1))
     h1 = copy(h)
-    h2 = transform!(r -> r + SA[0,0,1], h1)
-    h3 = h1 |> transform!(r -> r + SA[0,0,1])
+    h2 = transform!(r -> SA[1 2 3; 2 3 4; 3 4 5] * r + SA[0,0,1], h1)
+    h3 = h1 |> transform!(r -> SA[1 2 3; 2 3 4; 3 4 5] * r + SA[0,0,1])
     @test h1 === h2 === h3
     @test all(r->r[3] == 2.0, allsitepositions(h3.lattice))
     @test bloch(h, (1,2)) == bloch(h3, (1,2))
