@@ -42,7 +42,7 @@ function lighten(rgba, v = 0.66)
 end
 
 function mindist(h::Hamiltonian)
-    distmin = zero(Float64)
+    distmin = Inf
     num = 0
     ss = allsitepositions(h.lattice)
     br = bravais(h.lattice)
@@ -91,8 +91,8 @@ function plot!(plot::HamiltonianPlot)
     colors = Iterators.cycle(plot[:colors][])
     sublats = Quantica.sublats(lat)
 
-    mdist = Quantica.mindist(h)
-    mdist > 0 || (mdist = 1)
+    mdist = mindist(h)
+    isfinite(mdist) || (mdist = 1)
     plot[:siteradius][] *= mdist/2
     plot[:linkradius][] *= mdist/2
 
