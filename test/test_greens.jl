@@ -36,7 +36,7 @@ using LinearAlgebra: tr
 
     h = LP.honeycomb() |> hamiltonian(hopping(1)) |> unitcell((2,-2),(3,3)) |> unitcell(1, 1, indices = not(1)) |> wrap(2)
     g = greens(h, SingleShot1D(direct = true))
-    @test_broken Quantica.chop(imag(tr(g(0.2)))) <= 0
+    # @test_broken Quantica.chop(imag(tr(g(0.2)))) <= 0
     g = greens(h, SingleShot1D())
     @test Quantica.chop(imag(tr(g(0.2)))) <= 0
     dos = [-imag(tr(g(w + 1.0e-6im))) for w in range(-3.2, 3.2, length = 1001)]
