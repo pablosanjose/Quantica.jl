@@ -186,7 +186,8 @@ Base.:*(b::Bravais, factor::Number) = Bravais(b.matrix * factor)
 #######################################################################
 # Lattice
 #######################################################################
-struct Lattice{E,L,T<:AbstractFloat,B<:Bravais{E,L,T},U<:Unitcell{E,T}} <: AbstractLattice{E,L,T}
+# Need mutable to be able to transform! in place (change positions *and* bravais)
+mutable struct Lattice{E,L,T<:AbstractFloat,B<:Bravais{E,L,T},U<:Unitcell{E,T}} <: AbstractLattice{E,L,T}
     bravais::B
     unitcell::U
 end
@@ -491,8 +492,8 @@ transform!(f::Function) = x -> transform!(f, x)
 
 function transform!(f::Function, lat::Lattice)
     transform!(f, lat.unitcell)
-    bravais´ = transform(f, lat.bravais)
-    return Lattice(bravais´, lat.unitcell)
+    lat[bravais] = transform(f, lat.bravais)
+    return lat
 end
 
 """
