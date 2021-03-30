@@ -1,9 +1,9 @@
 using GeometryBasics
-using .Makie: AbstractPlotting
-using .Makie.AbstractPlotting: to_value, RGBAf0, Vec3f0, FRect, @recipe, LineSegments, Theme,
+using .GLMakie: AbstractPlotting
+using .GLMakie.AbstractPlotting: to_value, RGBAf0, Vec3f0, FRect, @recipe, LineSegments, Theme,
     lift, campixel, SceneSpace, Node, Axis, text!, on, mouse_selection, poly!, scale!,
     translate!, linesegments!, mesh!, scatter!, meshscatter!
-import .Makie.AbstractPlotting: plot!, plot
+import .GLMakie.AbstractPlotting: plot!, plot
 
 """
     plot(h::Hamiltonian)
@@ -61,14 +61,14 @@ end
 # plot(::Hamiltonian)
 #######################################################################
 function plot(h::Hamiltonian{<:Lattice}; resolution = (1000, 1000), kw...)
-    scene = hamiltonianplot(h; resolution = resolution, scale_plot = false, kw...)
-    plot = scene[end]
-    plot[:tooltips][] && addtooltips!(scene, h)
-    scale!(scene)
-    return scene
+    figaxisplot = hamiltonianplot(h; resolution = resolution, scale_plot = false, kw...)
+    _, axis, plot = figaxisplot
+    plot[:tooltips][] && addtooltips!(axis.scene, h)
+    scale!(axis.scene)
+    return figaxisplot
 end
 
-@recipe(HamiltonianPlot, hamiltonian) do scene
+@recipe(HamiltonianPlot) do scene
     Theme(
         allintra = false, allcells = true, showsites = true, showlinks = true,
         shadedsites = false, shadedlinks = false, dimming = 0.75,
@@ -204,11 +204,10 @@ function addtooltips!(scene, h)
         Vec3f0((mp .+ 5 .+ (0, -50))..., 0)
     end
     popup = poly!(campixel(scene), poprect, raw = true, color = RGBAf0(1,1,1,0), visible = visible)
-    rect = popup[end]
     translate!(popup, Vec3f0(0, 0, 10000))
     text!(popup, " ", textsize = 30, position = textpos, align = (:center, :center),
         color = :black, strokewidth = 4, strokecolor = :white, raw = true, visible = visible)
-    text_field = popup[end]
+    text_field = popup.plots[end]
     on(scene.events.mouseposition) do event
         subplot, idx = mouse_selection(scene)
         layer = findfirst(isequal(subplot), sceneplot.plots)
