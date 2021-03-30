@@ -63,8 +63,9 @@ end
 function plot(h::Hamiltonian{<:Lattice}; resolution = (1000, 1000), kw...)
     figaxisplot = hamiltonianplot(h; resolution = resolution, scale_plot = false, kw...)
     _, axis, plot = figaxisplot
-    plot[:tooltips][] && addtooltips!(axis.scene, h)
-    scale!(axis.scene)
+    scene = axis.scene
+    plot[:tooltips][] && addtooltips!(scene, h)
+    scale!(scene)
     return figaxisplot
 end
 
@@ -250,17 +251,11 @@ end
 #######################################################################
 
 function plot(bs::Bandstructure{1}; kw...)
-    scene = bandplot2d(bs; kw...)
-    axis = scene[Axis]
-    axis[:names, :axisnames] = ("φ", "ε")
-    return scene
+    return bandplot2d(bs; kw...)
 end
 
 function plot(bs::Bandstructure{2}; kw...)
-    scene = bandplot3d(bs; kw...)
-    axis = scene[Axis]
-    to_value(scene[:show_axis]) && (axis[:names, :axisnames] = ("φ₁", "φ₂", "ε"))
-    return scene
+    return bandplot3d(bs; kw...)
 end
 
 @recipe(BandPlot2D, bandstructure) do scene
@@ -283,7 +278,7 @@ function plot!(plot::BandPlot2D)
         vertices = band.verts
         simplices = band.simps
         linesegments!(plot, (t -> vertices[first(t)] => vertices[last(t)]).(simplices),
-                      linewidth = plot[:linethickness][], color = color)
+                      linewidth = plot[:linethickness][], color = color, xlabel = "φ", ylabel = "ε")
     end
     return plot
  end
@@ -310,10 +305,11 @@ function plot!(plot::BandPlot3D)
         vertices = band.verts
         connectivity = [s[j] for s in band.simps, j in 1:3]
         if isempty(connectivity)
-            scatter!(plot, vertices, color = color)
+            scatter!(plot, vertices, color = color, xlabel = "φ₁", ylabel = "φ₂", zlabel = "ε")
         else
             mesh!(plot, vertices, connectivity, color = color, transparency = false,
-                ssao = plot[:ssao][], ambient = plot[:ambient][], diffuse = plot[:diffuse][])
+                ssao = plot[:ssao][], ambient = plot[:ambient][], diffuse = plot[:diffuse][],
+                xlabel = "φ₁", ylabel = "φ₂", zlabel = "ε")
             if plot[:wireframe][]
                 edgevertices = collect(Quantica.edgevertices(band))
                 linesegments!(plot, edgevertices, color = darken(color, plot[:linedarken][]), linewidth = plot[:linethickness][])
