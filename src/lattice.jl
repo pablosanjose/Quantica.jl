@@ -492,7 +492,7 @@ transform!(f::Function) = x -> transform!(f, x)
 
 function transform!(f::Function, lat::Lattice)
     transform!(f, lat.unitcell)
-    lat[bravais] = transform(f, lat.bravais)
+    lat.bravais = transform(f, lat.bravais)
     return lat
 end
 
