@@ -4,7 +4,7 @@ using Quantica: Hamiltonian, ParametricHamiltonian, nhoppings, nonsites, nsites,
 @testset "basic hamiltonians" begin
     presets = (LatticePresets.linear, LatticePresets.square, LatticePresets.triangular,
                LatticePresets.honeycomb, LatticePresets.cubic, LatticePresets.fcc,
-               LatticePresets.bcc)
+               LatticePresets.bcc, LatticePresets.hcp)
     types = (Float16, Float32, Float64, ComplexF16, ComplexF32, ComplexF64)
     ts = (1, 2.0I, @SMatrix[1 2; 3 4], 1.0f0*I)
     orbs = (Val(1), Val(1), Val(2), (Val(1), Val(2)))
