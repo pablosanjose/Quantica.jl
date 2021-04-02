@@ -40,7 +40,7 @@ end
     a0s = (1, 2)
     presets = (LatticePresets.linear, LatticePresets.square, LatticePresets.triangular,
                LatticePresets.honeycomb, LatticePresets.cubic, LatticePresets.fcc,
-               LatticePresets.bcc)
+               LatticePresets.bcc, LatticePresets.hcp)
     for a0 in a0s, t in (Float32, Float64), e in 1:4, preset in presets
         @test preset(; a0 = a0, type = t, dim = e) isa Lattice{e,<:Any,t}
     end
@@ -77,15 +77,15 @@ end
 @testset "lattice unitcell" begin
     presets = (LatticePresets.linear, LatticePresets.square, LatticePresets.triangular,
                LatticePresets.honeycomb, LatticePresets.cubic, LatticePresets.fcc,
-               LatticePresets.bcc)
-    Random.seed!(1234)
+               LatticePresets.bcc, LatticePresets.hcp)
     for preset in presets
         lat = preset()
         E, L = dims(lat)
         for l in 1:L
-            svecs = ntuple(i -> ntuple(j -> rand(1:5) , Val(E)), L-l)
-            @test unitcell(preset(), svecs...) isa Lattice{E,L-l}
-            @test unitcell(preset(), l) isa Lattice{E,L}
+            # some ramdon but deterministic svecs
+            svecs = ntuple(i -> ntuple(j -> i*round(Int, cos(2j)) + j*round(Int, sin(2i)) , Val(E)), L-l)
+            @test unitcell(lat, svecs...) isa Lattice{E,L-l}
+            @test unitcell(lat, l) isa Lattice{E,L}
         end
     end
     @test unitcell(LatticePresets.honeycomb(), region = RegionPresets.circle(10, (10,0))) isa Lattice{2,0}
@@ -97,15 +97,15 @@ end
 @testset "lattice supercell" begin
     presets = (LatticePresets.linear, LatticePresets.square, LatticePresets.triangular,
                LatticePresets.honeycomb, LatticePresets.cubic, LatticePresets.fcc,
-               LatticePresets.bcc)
-    Random.seed!(1234)
+               LatticePresets.bcc, LatticePresets.hcp)
     for preset in presets
         lat = preset()
         E, L = dims(lat)
         for l in 1:L
-            svecs = ntuple(i -> ntuple(j -> rand(1:5) , Val(E)), L-l)
-            @test supercell(preset(), svecs...) isa Superlattice{E,<:Any,<:Any,L-l}
-            @test supercell(preset(), l) isa Superlattice{E,<:Any,<:Any,L}
+            # some ramdon but deterministic svecs
+            svecs = ntuple(i -> ntuple(j -> i*round(Int, cos(2j)) + j*round(Int, sin(2i)) , Val(E)), L-l)
+            @test supercell(lat, svecs...) isa Superlattice{E,<:Any,<:Any,L-l}
+            @test supercell(lat, l) isa Superlattice{E,<:Any,<:Any,L}
         end
     end
     @test supercell(LatticePresets.honeycomb(), region = RegionPresets.circle(10, (0,2))) isa Superlattice{2,2}
