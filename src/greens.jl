@@ -356,15 +356,15 @@ nondeflated_selfenergy(::Type{Val{:RL}}, s, sch) =
     nondeflated_selfenergy(Val{:R}, s, sch), nondeflated_selfenergy(Val{:L}, s, sch)
 
 (s::Schur1DGreensSolver{<:Deflator})(ω, ::Type{Val{:R}}) =
-    deflated_selfenergy(s.deflatorR, s, ω)
+    deflated_selfenergy(s.deflatorR, ω)
 
 (s::Schur1DGreensSolver{<:Deflator})(ω, ::Type{Val{:L}}) =
-    deflated_selfenergy(s.deflatorL, s, ω)
+    deflated_selfenergy(s.deflatorL, ω)
 
 (s::Schur1DGreensSolver{<:Deflator})(ω, ::Type{Val{:RL}}) =
-    deflated_selfenergy(s.deflatorR, s, ω), deflated_selfenergy(s.deflatorL, s, ω)
+    deflated_selfenergy(s.deflatorR, ω), deflated_selfenergy(s.deflatorL, ω)
 
-function deflated_selfenergy(d::Deflator{T,M}, s::Schur1DGreensSolver, ω) where {T,M}
+function deflated_selfenergy(d::Deflator{T,M}, ω) where {T,M}
     shiftω!(d, ω)
     A, B, Q1, Q2 = deflate(d, ω)
     # find right-moving eigenvectors with atol < |λ| < 1
