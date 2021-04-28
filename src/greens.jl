@@ -187,7 +187,7 @@ function deflated_size_text(g::GreensFunction)
     return text
 end
 
-deflated_size_text(d::Deflator) = "$(size(d.Adef, 1)) × $(size(d.Adef, 2))"
+deflated_size_text(d::Deflator) = "$(size(d.Adef, 1) ÷ 2) × $(size(d.Adef, 2) ÷ 2)"
 
 Base.summary(g::GreensFunction{<:Schur1DGreensSolver}) =
     "GreensFunction{Schur1DGreensSolver}: Green's function using the Schur1D method"
