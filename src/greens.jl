@@ -308,9 +308,7 @@ rowspace_qr(mat, atol) = first(fullrank_decomposition_qr(mat, atol))
 
 ## Deflate
 
-function deflate(d::Deflator{T,<:SparseMatrixCSC}, ω) where {T}
-    # shift diagonal of appropriate subblocks of Ablock and Vblock´
-    shiftω!(d, ω)
+function deflate(d::Deflator{T,<:SparseMatrixCSC}) where {T}
     r = size(d.R, 2)
     m = size(d.Vblock´, 1)  # m = 2r+b
     # Vblock´ = [RP´ 0] * Q' = b × 2r+b; Q = [rowspaceV nullspaceV] = 2r+b × 2r+b = m × m
@@ -368,7 +366,7 @@ nondeflated_selfenergy(::Type{Val{:RL}}, s, sch) =
 
 function deflated_selfenergy(d::Deflator{T,M}, s::Schur1DGreensSolver, ω) where {T,M}
     shiftω!(d, ω)
-    A, B, Q1, Q2 = deflate(d, ω)
+    A, B, Q1, Q2 = deflate(d)
     # find right-moving eigenvectors with atol < |λ| < 1
     sch = schur!(A, B)
     rmodes = retarded_modes(sch, d.atol)
