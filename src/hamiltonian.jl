@@ -498,6 +498,7 @@ julia> similarmatrix(h, LinearAlgebraPackage()) |> summary
     `bloch!`
 """
 similarmatrix(h, dest_type = missing) = _similarmatrix(dest_type, matrixtype(h), h)
+similarmatrix(kets, dest_type, ketflatsize) = _similarmatrix(dest_type, typeof(kets), ketflatsize)
 
 _similarmatrix(::Missing, src_type, h) =
     similar_merged(h.harmonics)
@@ -513,6 +514,8 @@ _similarmatrix(::Type{A}, ::Type{A´}, h) where {N,T<:SMatrix{N,N},A<:Matrix{T},
     similar(A, size(h))
 _similarmatrix(::Type{A}, ::Type{A´}, h) where {N,T<:Number,A<:Matrix{T},T´<:SMatrix{N,N},A´<:AbstractMatrix{T´}} =
     similar(A, flatsize(h))
+_similarmatrix(::Type{A}, ::Type{A´}, ketflatsize::Tuple) where {N,T<:Number,A<:Matrix{T},T´<:SMatrix{N,N},A´<:AbstractMatrix{T´}} =
+    similar(A, ketflatsize)
 
 _similarmatrix(::typeof(flatten), ::Type{A´}, h) where {N,T,S<:SMatrix{N,N,T},A´<:AbstractSparseMatrix{S}} =
     _similarmatrix(AbstractSparseMatrix{T}, A´, h)
@@ -1797,7 +1800,7 @@ end
 ############################################################################################
 
 _copy!(dest, src, h) = copy!(dest, src)
-_copy!(dst::AbstractMatrix{<:Number}, src::SparseMatrixCSC{<:Number}, o) = _fast_sparse_copy!(dst, src)
+_copy!(dst::AbstractMatrix{<:Number}, src::SparseMatrixCSC{<:Number}, o) =_fast_sparse_copy!(dst, src)
 _copy!(dst::StridedMatrix{<:Number}, src::SparseMatrixCSC{<:Number}, o) = _fast_sparse_copy!(dst, src)
 _copy!(dst::StridedMatrix{<:SMatrix{N,N}}, src::SparseMatrixCSC{<:SMatrix{N,N}}, o) where {N} = _fast_sparse_copy!(dst, src)
 _copy!(dst::AbstractMatrix{<:Number}, src::SparseMatrixCSC{<:SMatrix}, o) = flatten_sparse_copy!(dst, src, o)

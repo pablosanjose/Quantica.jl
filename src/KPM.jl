@@ -24,9 +24,9 @@ function KPMBuilder(h, A, kets, order, bandrange)
     eA = eltype(eltype(A))
     mulist = zeros(promote_type(eh, eA), order + 1)
     bandbracket = bandbracketKPM(h, bandrange)
-    h´ = matrixKPM(h)
-    A´ = matrixKPM(A)
-    kets´ = Matrix(kets, h)
+    h´ = matrixKPM(h, SparseMatrixCSC{eh, Int64})
+    A´ = matrixKPM(A, SparseMatrixCSC{eh, Int64})
+    kets´ = matrixKPM(kets, h)
     builder = KPMBuilder(h´, A´, kets´, similar(kets´), similar(kets´), bandbracket, order, mulist)
     return builder
 end
@@ -38,7 +38,29 @@ function matrixKPM(h::Hamiltonian{<:Lattice,L}, matrixtype = missing) where {L}
     return bloch!(m, h)
 end
 
-matrixKPM(A::UniformScaling) = A
+matrixKPM(kets::StochasticTraceKets, h::Hamiltonian) = 
+    matrixKPM(Matrix(kets, h), first(length.(orbitals(orbitalstructure(h)))))
+
+matrixKPM(ketmat::Matrix{T}, orbitals) where{T<:Number} = ketmat
+
+function matrixKPM(ketmat::Matrix{SMatrix{N,M,T,P}}, orbitals) where{N,M,T,P}
+        flatsize = size(ketmat) .* (orbitals, 1)
+        m = similarmatrix(ketmat, Matrix{T}, flatsize)
+        flatten_kets!(m, ketmat, orbitals)
+        return m
+end
+
+matrixKPM(A::UniformScaling, matrixtype = missing) = A
+
+function flatten_kets!(m, kets´´, orbitals)
+    rows, cols = size(kets´´)
+    for j in 1:cols
+        for i in 1:rows
+            m[1+(i-1)*orbitals:i*orbitals, j] = diag(kets´´[i, j])
+        end
+    end
+    return m
+end
 
 """
     momentaKPM(h::Hamiltonian, A = I; kets = randomkets(1), order = 10, bandrange = missing)
