@@ -207,6 +207,9 @@ deflated_size_text(d::Deflator) = "$(size(d.Adef, 1) ÷ 2) × $(size(d.Adef, 2) 
 Base.summary(g::GreensFunction{<:Schur1DGreensSolver}) =
     "GreensFunction{Schur1DGreensSolver}: Green's function using the Schur1D method"
 
+Base.size(s::Schur1DGreensSolver, args...) = size(s.deflatorR, args...)
+Base.size(d::Deflator, args...) = size(d.Adef, args...)
+
 hasdeflator(::Schur1DGreensSolver{<:Deflator}) = true
 hasdeflator(::Schur1DGreensSolver{Missing}) = false
 
@@ -365,6 +368,8 @@ nondeflated_selfenergy(::Type{Val{:RL}}, s, sch) =
     deflated_selfenergy(s.deflatorR, s, ω), deflated_selfenergy(s.deflatorL, s, ω)
 
 function deflated_selfenergy(d::Deflator{T,M}, s::Schur1DGreensSolver, ω) where {T,M}
+    # if r = 0 (absolute deflation), Σ=0
+    size(d) == (0, 0) && return fill!(d.tmp.nn, zero(T))
     shiftω!(d, ω)
     A, B, Q1, Q2 = deflate(d)
     # find right-moving eigenvectors with atol < |λ| < 1

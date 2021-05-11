@@ -439,9 +439,11 @@ function push_rows!(rowval, nzval, rows, col)
 end
 
 function nonzero_rows(m::AbstractMatrix{T}, atol = default_tol(T)) where {T}
-    row = 0
-    for outer row in reverse(1:size(m, 1))
-        maximum(abs, view(m, row, :)) > atol && break
+    nrows = size(m, 1)
+    zerorows = 0
+    for j in 0:nrows-1
+        maximum(abs, view(m, nrows - j, :)) > atol && break
+        zerorows += 1
     end
-    return row
+    return nrows - zerorows
 end
