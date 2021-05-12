@@ -328,7 +328,15 @@ function flatten_sparse_muladd!(dst, src, o::OrbitalStructure, α = I)
     return dst
 end
 
-function flatten_dense_muladd!(dst, src, o::OrbitalStructure, α = I)
+function flatten_dense_muladd!(dst, src, o::OrbitalStructure, α = I) 
+    if size(src, 1) == size(src, 2)
+        flatten_dense_muladd_square!(dst, src, o, α)
+    else
+        flatten_dense_muladd_nonsquare!(dst, src, o, α)
+    end
+end
+
+function flatten_dense_muladd_square!(dst, src, o::OrbitalStructure, α = I)
     norbs = length.(orbitals(o))
     coloffset = 0
     for s´ in sublats(o)
@@ -346,6 +354,24 @@ function flatten_dense_muladd!(dst, src, o::OrbitalStructure, α = I)
                 end
             end
             coloffset += N´
+        end
+    end
+    return dst
+end
+
+function flatten_dense_muladd_nonsquare!(dst, src, o::OrbitalStructure, α = I)
+    norbs = length.(orbitals(o))
+    N´ = size(src, 2)
+    rowoffset = 0
+    for j in 1:N´
+        rowoffset = 0
+        for s in sublats(o)
+            M´ = norbs[s]
+            for row in siterange(o, s)
+                val = α * src[row, j]
+                [dst[i + rowoffset, j] += diag(val)[i] for i in 1:M´]
+                rowoffset += M´
+            end
         end
     end
     return dst
@@ -498,7 +524,7 @@ julia> similarmatrix(h, LinearAlgebraPackage()) |> summary
     `bloch!`
 """
 similarmatrix(h, dest_type = missing) = _similarmatrix(dest_type, matrixtype(h), h)
-similarmatrix(kets, dest_type, ketflatsize) = _similarmatrix(dest_type, typeof(kets), ketflatsize)
+similarmatrix(h::AbstractMatrix, dest_type) = _similarmatrix(dest_type, typeof(h), h)
 
 _similarmatrix(::Missing, src_type, h) =
     similar_merged(h.harmonics)
@@ -514,8 +540,8 @@ _similarmatrix(::Type{A}, ::Type{A´}, h) where {N,T<:SMatrix{N,N},A<:Matrix{T},
     similar(A, size(h))
 _similarmatrix(::Type{A}, ::Type{A´}, h) where {N,T<:Number,A<:Matrix{T},T´<:SMatrix{N,N},A´<:AbstractMatrix{T´}} =
     similar(A, flatsize(h))
-_similarmatrix(::Type{A}, ::Type{A´}, ketflatsize::Tuple) where {N,T<:Number,A<:Matrix{T},T´<:SMatrix{N,N},A´<:AbstractMatrix{T´}} =
-    similar(A, ketflatsize)
+_similarmatrix(::Type{A}, ::Type{A´}, h::AbstractMatrix) where {N,T<:Number,A<:Matrix{T},T´<:SMatrix{N,N},A´<:AbstractMatrix{T´}} =
+    similar(A, size(h) .* (N ,1))
 
 _similarmatrix(::typeof(flatten), ::Type{A´}, h) where {N,T,S<:SMatrix{N,N,T},A´<:AbstractSparseMatrix{S}} =
     _similarmatrix(AbstractSparseMatrix{T}, A´, h)
@@ -1800,7 +1826,7 @@ end
 ############################################################################################
 
 _copy!(dest, src, h) = copy!(dest, src)
-_copy!(dst::AbstractMatrix{<:Number}, src::SparseMatrixCSC{<:Number}, o) =_fast_sparse_copy!(dst, src)
+_copy!(dst::AbstractMatrix{<:Number}, src::SparseMatrixCSC{<:Number}, o) = _fast_sparse_copy!(dst, src)
 _copy!(dst::StridedMatrix{<:Number}, src::SparseMatrixCSC{<:Number}, o) = _fast_sparse_copy!(dst, src)
 _copy!(dst::StridedMatrix{<:SMatrix{N,N}}, src::SparseMatrixCSC{<:SMatrix{N,N}}, o) where {N} = _fast_sparse_copy!(dst, src)
 _copy!(dst::AbstractMatrix{<:Number}, src::SparseMatrixCSC{<:SMatrix}, o) = flatten_sparse_copy!(dst, src, o)

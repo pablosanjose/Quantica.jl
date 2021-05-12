@@ -24,8 +24,8 @@ function KPMBuilder(h, A, kets, order, bandrange)
     eA = eltype(eltype(A))
     mulist = zeros(promote_type(eh, eA), order + 1)
     bandbracket = bandbracketKPM(h, bandrange)
-    h´ = matrixKPM(h, SparseMatrixCSC{eh, Int64})
-    A´ = matrixKPM(A, SparseMatrixCSC{eh, Int64})
+    h´ = matrixKPM(h)
+    A´ = matrixKPM(A)
     kets´ = matrixKPM(kets, h)
     builder = KPMBuilder(h´, A´, kets´, similar(kets´), similar(kets´), bandbracket, order, mulist)
     return builder
@@ -34,32 +34,30 @@ end
 function matrixKPM(h::Hamiltonian{<:Lattice,L}, matrixtype = missing) where {L}
     iszero(L) ||
         throw(ArgumentError("Hamiltonian is defined on an infinite lattice. Reduce it to zero-dimensions with `wrap` or `unitcell`."))
-    m = similarmatrix(h, matrixtype)
-    return bloch!(m, h)
-end
-
-matrixKPM(kets::StochasticTraceKets, h::Hamiltonian) = 
-    matrixKPM(Matrix(kets, h), first(length.(orbitals(orbitalstructure(h)))))
-
-matrixKPM(ketmat::Matrix{T}, orbitals) where{T<:Number} = ketmat
-
-function matrixKPM(ketmat::Matrix{SMatrix{N,M,T,P}}, orbitals) where{N,M,T,P}
-        flatsize = size(ketmat) .* (orbitals, 1)
-        m = similarmatrix(ketmat, Matrix{T}, flatsize)
-        flatten_kets!(m, ketmat, orbitals)
-        return m
+    return bloch!(similarmatrix(h, flatten), h)
 end
 
 matrixKPM(A::UniformScaling, matrixtype = missing) = A
 
-function flatten_kets!(m, kets´´, orbitals)
-    rows, cols = size(kets´´)
-    for j in 1:cols
-        for i in 1:rows
-            m[1+(i-1)*orbitals:i*orbitals, j] = diag(kets´´[i, j])
+matrixKPM(kets::StochasticTraceKets, h::Hamiltonian) = 
+    matrixKPM(Matrix(kets, h), h)
+
+matrixKPM(kets::Matrix{T}, h) where{T<:Number} = kets
+
+function matrixKPM(kets, h)
+    if eltype(kets) == eltype(h) && size(kets, 1) == size(h, 1)
+        println(typeof(kets)) 
+        o = orbitalstructure(h)
+        s = similarmatrix(kets, flatten)
+        return flatten_dense_copy!(s, kets, o)
+    else
+        if eltype(kets) != eltype(h)
+            throw(ArgumentError("eltype of kets != eltype of hamiltonian")) 
+        end
+        if size(kets, 1) != size(h, 1)
+            throw(DimensionMismatch("Specified `kets` does not match hamiltonian dimension")) 
         end
     end
-    return m
 end
 
 """
