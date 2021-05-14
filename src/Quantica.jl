@@ -11,7 +11,7 @@ function __init__()
 end
 
 using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
-      ProgressMeter, LinearMaps, Random, SpecialFunctions
+      ProgressMeter, LinearMaps, Random, SuiteSparse
 
 using ExprTools
 
@@ -29,7 +29,7 @@ export sublat, bravais, lattice, dims, supercell, unitcell,
        bands, vertices,
        energies, states, degeneracy,
        momentaKPM, dosKPM, averageKPM, densityKPM, bandrangeKPM,
-       greens, greensolver, SingleShot1D
+       greens, greensolver, Schur1D
 
 export RegionPresets, RP, LatticePresets, LP, HamiltonianPresets, HP
 
