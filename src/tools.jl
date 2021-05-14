@@ -122,7 +122,7 @@ padtotype(s::Number, ::Type{S}) where {N,T,S<:SVector{N,T}} =
 padtotype(x::Number, ::Type{T}) where {T<:Number} = T(x)
 padtotype(u::UniformScaling, ::Type{T}) where {T<:Number} = T(u.λ)
 padtotype(u::UniformScaling, ::Type{S}) where {S<:SMatrix} = S(u)
-padtotype(a::AbstractVector, t::SVector) = padright(a, t)
+padtotype(a::AbstractArray, t::Type{<:SVector}) = padright(a, t)
 
 function padtotype(a::AbstractMatrix, ::Type{S}) where {N,M,T,S<:SMatrix{N,M,T}}
     t = ntuple(Val(N*M)) do i

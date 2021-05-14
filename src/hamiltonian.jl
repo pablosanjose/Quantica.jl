@@ -419,13 +419,19 @@ maybeunflatten_blocks(x, o) = isunflat_blocks(x, o) ? x : unflatten_blocks(x, o)
 isunflat_orbitals(m, o) = orbitaltype(o) == eltype(m) && size(m, 1) == dimh(o)
 isunflat_blocks(m, o) = blocktype(o) == eltype(m) && size(m, 1) == dimh(o)
 
-function unflatten!(v::AbstractArray{T}, vflat::AbstractArray, o::OrbitalStructure) where {T}
-    norbs = length.(orbitals(o))
-    flatoffsets = o.flatoffsets
-    dimflat = last(flatoffsets)
+function unflatten!(v::AbstractArray, vflat::AbstractArray, o::OrbitalStructure)
+    dimflat = last(o.flatoffsets)
     check_unflatten_dst_dims(v, dimh(o))
     check_unflatten_src_dims(vflat, dimflat)
     check_unflatten_eltypes(v, o)
+    v = _unflatten!(v, vflat, o)
+    return v
+end
+
+# unflatten into SMatrix blocks
+function _unflatten!(v::AbstractArray{T}, vflat::AbstractArray, o::OrbitalStructure) where {T<:SMatrix}
+    norbs = length.(orbitals(o))
+    flatoffsets = o.flatoffsets
     col = 0
     for scol in sublats(o)
         M = colstride(norbs, scol, T)
@@ -439,6 +445,25 @@ function unflatten!(v::AbstractArray{T}, vflat::AbstractArray, o::OrbitalStructu
                     val = view(vflat, i:i+N-1, j:j+M-1)
                     v[row, col] = padtotype(val, T)
                 end
+            end
+        end
+    end
+    return v
+end
+
+# unflatten into SVector orbitals
+function _unflatten!(v::AbstractArray{T}, vflat::AbstractArray, o::OrbitalStructure) where {T<:SVector}
+    norbs = length.(orbitals(o))
+    flatoffsets = o.flatoffsets
+    col = 0
+    for col in 1:size(v, 2)
+        row = 0
+        for srow in sublats(o)
+            N = rowstride(norbs, srow)
+            for i in flatoffsets[srow]+1:N:flatoffsets[srow+1]
+                row += 1
+                val = view(vflat, i:i+N-1, col:col)
+                v[row, col] = padtotype(val, T)
             end
         end
     end
