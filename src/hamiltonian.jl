@@ -154,6 +154,11 @@ Rebuild `s` by flattening its basis to have a scalar eltype.
 Curried form equivalent to `flatten(h)` of `h |> flatten` (included for consistency with
 the rest of the API).
 
+    flatten(x, o::OrbitalStructure)
+
+Flatten object x, if applicable, using the orbital structure o, as obtained from a
+Hamiltonian `h` with `orbitalstructure(h)`
+
 # Examples
 
 ```jldoctest
@@ -186,21 +191,49 @@ Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
 flatten() = h -> flatten(h)
 
 function flatten(h::Hamiltonian)
-    all(isequal(1), norbitals(h)) && return copy(h)
+    isflat(h) && return copy(h)
     harmonics´ = [flatten(har, h.orbstruct) for har in h.harmonics]
     lattice´ = flatten(h.lattice, h.orbstruct)
     orbs´ = (_ -> (:flat, )).(orbitals(h))
     return Hamiltonian(lattice´, harmonics´, orbs´)
 end
 
+# special method: if already flat, don't make a copy
+maybeflatten(h, args...) = isflat(h) ? h : flatten(h, args...)
+
+isflat(h::Hamiltonian) = all(isequal(1), norbitals(h))
+
 flatten(h::HamiltonianHarmonic, orbstruct) =
-    HamiltonianHarmonic(h.dn, _flatten(h.h, orbstruct))
+    HamiltonianHarmonic(h.dn, flatten(h.h, orbstruct))
 
-_flatten(src::AbstractArray{<:Number}, orbstruct) = src
-_flatten(src::AbstractArray{T}, orbstruct, ::Type{T}) where {T<:Number} = src
-_flatten(src::AbstractArray{T}, orbstruct, ::Type{T´}) where {T<:Number,T´<:Number} = T´.(src)
+function flatten(lat::Lattice, orbstruct)
+    length(orbitals(orbstruct)) == nsublats(lat) || throw(ArgumentError("Mismatch between sublattices and orbitals"))
+    unitcell´ = flatten(lat.unitcell, orbstruct)
+    bravais´ = lat.bravais
+    lat´ = Lattice(bravais´, unitcell´)
+end
 
-function _flatten(src::SparseMatrixCSC{<:SMatrix{N,N,T}}, orbstruct, ::Type{T´} = T) where {N,T,T´}
+function flatten(unitcell::Unitcell, orbstruct) # orbs::NTuple{S,Any}) where {S}
+    norbs = length.(orbitals(orbstruct))
+    nsublats = length(sublats(orbstruct))
+    offsets´ = orbstruct.flatoffsets
+    ns´ = last(offsets´)
+    sites´ = similar(unitcell.sites, ns´)
+    i = 1
+    for sl in 1:nsublats, site in sitepositions(unitcell, sl), rep in 1:norbs[sl]
+        sites´[i] = site
+        i += 1
+    end
+    names´ = unitcell.names
+    unitcell´ = Unitcell(sites´, names´, offsets´)
+    return unitcell´
+end
+
+flatten(src::AbstractArray{<:Number}, orbstruct) = src
+flatten(src::AbstractArray{T}, orbstruct, ::Type{T}) where {T<:Number} = src
+flatten(src::AbstractArray{T}, orbstruct, ::Type{T´}) where {T<:Number,T´<:Number} = T´.(src)
+
+function flatten(src::SparseMatrixCSC{<:SMatrix{N,N,T}}, orbstruct, ::Type{T´} = T) where {N,T,T´}
     norbs = length.(orbitals(orbstruct))
     offsets´ = orbstruct.flatoffsets
     dim´ = last(offsets´)
@@ -226,7 +259,7 @@ function _flatten(src::SparseMatrixCSC{<:SMatrix{N,N,T}}, orbstruct, ::Type{T´}
     return matrix
 end
 
-function _flatten(src::StridedMatrix{<:SMatrix{N,N,T}}, orbstruct, ::Type{T´} = T) where {N,T,T´}
+function flatten(src::StridedMatrix{<:SMatrix{N,N,T}}, orbstruct, ::Type{T´} = T) where {N,T,T´}
     norbs = length.(orbitals(orbstruct))
     offsets´ = orbstruct.flatoffsets
     dim´ = last(offsets´)
@@ -246,7 +279,7 @@ function _flatten(src::StridedMatrix{<:SMatrix{N,N,T}}, orbstruct, ::Type{T´} =
 end
 
 # for Subspace bases
-function _flatten(src::StridedMatrix{<:SVector{N,T}}, orbstruct, ::Type{T´} = T) where {N,T,T´}
+function flatten(src::StridedMatrix{<:SVector{N,T}}, orbstruct, ::Type{T´} = T) where {N,T,T´}
     norbs = length.(orbitals(orbstruct))
     offsets´ = orbstruct.flatoffsets
     dim´ = last(offsets´)
@@ -262,29 +295,6 @@ function _flatten(src::StridedMatrix{<:SVector{N,T}}, orbstruct, ::Type{T´} = T
         end
     end
     return matrix
-end
-
-function flatten(lat::Lattice, orbstruct)
-    length(orbitals(orbstruct)) == nsublats(lat) || throw(ArgumentError("Mismatch between sublattices and orbitals"))
-    unitcell´ = flatten(lat.unitcell, orbstruct)
-    bravais´ = lat.bravais
-    lat´ = Lattice(bravais´, unitcell´)
-end
-
-function flatten(unitcell::Unitcell, orbstruct) # orbs::NTuple{S,Any}) where {S}
-    norbs = length.(orbitals(orbstruct))
-    nsublats = length(sublats(orbstruct))
-    offsets´ = orbstruct.flatoffsets
-    ns´ = last(offsets´)
-    sites´ = similar(unitcell.sites, ns´)
-    i = 1
-    for sl in 1:nsublats, site in sitepositions(unitcell, sl), rep in 1:norbs[sl]
-        sites´[i] = site
-        i += 1
-    end
-    names´ = unitcell.names
-    unitcell´ = Unitcell(sites´, names´, offsets´)
-    return unitcell´
 end
 
 function flatten_sparse_copy!(dst, src, o::OrbitalStructure)
@@ -308,6 +318,7 @@ function flatten_sparse_copy!(dst, src, o::OrbitalStructure)
     return dst
 end
 
+# Specialized flattening copy! and muladd!
 function flatten_sparse_muladd!(dst, src, o::OrbitalStructure, α = I)
     norbs = length.(orbitals(o))
     coloffset = 0
@@ -358,10 +369,9 @@ end
 
 ## unflatten ##
 """
-    unflatten(v::AbstractArray, o::OrbitalStructure{T})
+    unflatten(x, o::OrbitalStructure)
 
-Rebuild `v` to have element type `T` and orbital structure `o` by performing the inverse of
-`flatten(v)`.
+Rebuild object `x` performing the inverse of `flatten(x)` or `flatten(x, o)`.
 
 # Examples
 ```jldoctest
@@ -392,63 +402,117 @@ Subspace{0}: eigenenergy subspace on a 0D manifold
 # See also
     `flatten`, `orbitalstructure`
 """
-unflatten(vflat::AbstractVector, o::OrbitalStructure{T}) where {T} =
-    unflatten!(similar(vflat, T, dimh(o)), vflat, o)
-unflatten(vflat::AbstractMatrix, o::OrbitalStructure{T}) where {T} =
-    unflatten!(similar(vflat, T, dimh(o), size(vflat, 2)), vflat, o)
+unflatten
 
-function unflatten!(v::AbstractArray{T}, vflat::AbstractArray, o::OrbitalStructure) where {T}
-    norbs = length.(orbitals(o))
-    flatoffsets = o.flatoffsets
-    dimflat = last(flatoffsets)
+# Pending implementation for Hamiltonian, Lattice, Unitcell
+
+unflatten_orbitals(v::AbstractVector, o::OrbitalStructure) =
+    isunflat_orbitals(v, o) ? copy(v) : unflatten!(similar(v, orbitaltype(o), dimh(o)), v, o)
+unflatten_orbitals(m::AbstractMatrix, o::OrbitalStructure) =
+    isunflat_orbitals(m, o) ? copy(m) : unflatten!(similar(m, orbitaltype(o), dimh(o), size(m, 2)), m, o)
+unflatten_blocks(m::AbstractMatrix, o::OrbitalStructure) =
+    isunflat_blocks(m, o) ? copy(m) : unflatten!(similar(m, blocktype(o), dimh(o), dimh(o)), m, o)
+
+maybeunflatten_orbitals(x, o) = isunflat_orbitals(x, o) ? x : unflatten_orbitals(x, o)
+maybeunflatten_blocks(x, o) = isunflat_blocks(x, o) ? x : unflatten_blocks(x, o)
+
+isunflat_orbitals(m, o) = orbitaltype(o) == eltype(m) && size(m, 1) == dimh(o)
+isunflat_blocks(m, o) = blocktype(o) == eltype(m) && size(m, 1) == dimh(o)
+
+function unflatten!(v::AbstractArray, vflat::AbstractArray, o::OrbitalStructure)
+    dimflat = last(o.flatoffsets)
     check_unflatten_dst_dims(v, dimh(o))
     check_unflatten_src_dims(vflat, dimflat)
     check_unflatten_eltypes(v, o)
-    for col in 1:size(v, 2)
-        row = 0
-        for s in sublats(o)
-            N = norbs[s]
-            for i in flatoffsets[s]+1:N:flatoffsets[s+1]
-                row += 1
-                v[row, col] = padright(view(vflat, i:i+N-1, col:col), T)
+    v = _unflatten!(v, vflat, o)
+    return v
+end
+
+# unflatten into SMatrix blocks
+function _unflatten!(v::AbstractArray{T}, vflat::AbstractArray, o::OrbitalStructure) where {T<:SMatrix}
+    norbs = length.(orbitals(o))
+    flatoffsets = o.flatoffsets
+    col = 0
+    for scol in sublats(o)
+        M = colstride(norbs, scol, T)
+        for j in flatoffsets[scol]+1:M:flatoffsets[scol+1]
+            col +=1
+            row = 0
+            for srow in sublats(o)
+                N = rowstride(norbs, srow)
+                for i in flatoffsets[srow]+1:N:flatoffsets[srow+1]
+                    row += 1
+                    val = view(vflat, i:i+N-1, j:j+M-1)
+                    v[row, col] = padtotype(val, T)
+                end
             end
         end
     end
     return v
 end
 
-## unflatten_or_reinterpret: call unflatten but only if we cannot unflatten via reinterpret
-unflatten_or_reinterpret(vflat, ::Missing) = vflat
+# unflatten into SVector orbitals
+function _unflatten!(v::AbstractArray{T}, vflat::AbstractArray, o::OrbitalStructure) where {T<:SVector}
+    norbs = length.(orbitals(o))
+    flatoffsets = o.flatoffsets
+    col = 0
+    for col in 1:size(v, 2)
+        row = 0
+        for srow in sublats(o)
+            N = rowstride(norbs, srow)
+            for i in flatoffsets[srow]+1:N:flatoffsets[srow+1]
+                row += 1
+                val = view(vflat, i:i+N-1, col:col)
+                v[row, col] = padtotype(val, T)
+            end
+        end
+    end
+    return v
+end
+
+rowstride(norbs, s) = norbs[s]
+colstride(norbs, s, ::Type{<:SVector}) = 1
+colstride(norbs, s, ::Type{<:SMatrix}) = rowstride(norbs, s)
+
+# dest v should be a vector or matrix such that H*v is possible
+check_unflatten_dst_dims(v, dimh) =
+    size(v, 1) == dimh ||
+        throw(ArgumentError("Dimension of destination array is inconsistent with orbital structure"))
+
+# dest v should be a square matrix like the Hamiltonian
+check_unflatten_dst_dims(v::AbstractArray{<:SMatrix}, dimh) =
+    size(v, 1) == dimh && size(v, 2) == dimh ||
+        throw(ArgumentError("Dimension of destination array is inconsistent with orbital structure"))
+
+check_unflatten_src_dims(vflat, dimflat) =
+    size(vflat, 1) == dimflat ||
+        throw(ArgumentError("Dimension of source array is inconsistent with orbital structure"))
+
+check_unflatten_eltypes(::AbstractArray{T}, o::OrbitalStructure) where {T} =
+    T === orbitaltype(o) || T === blocktype(o) ||
+        throw(ArgumentError("Eltype of desination array is inconsistent with orbital structure"))
+
+## unflatten_orbitals_or_reinterpret: call unflatten_orbitals but only if we cannot unflatten via reinterpret
+unflatten_orbitals_or_reinterpret(vflat, ::Missing) = vflat
 # source is already of the correct orbitaltype(h)
-function unflatten_or_reinterpret(vflat::AbstractArray{T}, o::OrbitalStructure{T}) where {T}
+function unflatten_orbitals_or_reinterpret(vflat::AbstractArray{T}, o::OrbitalStructure{T}) where {T}
     check_unflatten_dst_dims(vflat, dimh(o))
     return vflat
 end
 
-function unflatten_or_reinterpret(vflat::AbstractArray{<:Number}, o::OrbitalStructure{<:Number})
+function unflatten_orbitals_or_reinterpret(vflat::AbstractArray{<:Number}, o::OrbitalStructure{<:Number})
     check_unflatten_dst_dims(vflat, dimh(o))
     return vflat
 end
 
 # source can be reinterpreted, because the number of orbitals is the same M for all N sublattices
-unflatten_or_reinterpret(vflat::AbstractArray{T}, o::OrbitalStructure{S,N,<:NTuple{N,NTuple{M}}}) where {T,S,N,M} =
+unflatten_orbitals_or_reinterpret(vflat::AbstractArray{T}, o::OrbitalStructure{S,N,<:NTuple{N,NTuple{M}}}) where {T,S,N,M} =
     reinterpret(SVector{M,T}, vflat)
-# otherwise call unflatten
-unflatten_or_reinterpret(vflat, o) = unflatten(vflat, o)
+# otherwise call unflatten_orbitals
+unflatten_orbitals_or_reinterpret(vflat, o) = unflatten_orbitals(vflat, o)
 
-check_unflatten_dst_dims(v, dimh) =
-    size(v, 1) == dimh ||
-        throw(ArgumentError("Dimension of destination array is inconsistent with Hamiltonian"))
-
-check_unflatten_src_dims(vflat, dimflat) =
-    size(vflat, 1) == dimflat ||
-        throw(ArgumentError("Dimension of source array is inconsistent with Hamiltonian"))
-
-check_unflatten_eltypes(::AbstractArray{T}, ::OrbitalStructure{S}) where {T,S} =
-    T === S || throw(ArgumentError("Eltype of desination array is inconsistent with Hamiltonian"))
-
-valdim(::Type{<:Number}) = Val(1)
-valdim(::Type{S}) where {N,S<:SVector{N}} = Val(N)
+# valdim(::Type{<:Number}) = Val(1)
+# valdim(::Type{S}) where {N,S<:SVector{N}} = Val(N)
 
 #######################################################################
 # similarmatrix
@@ -506,7 +570,7 @@ _similarmatrix(::Type{A}, ::Type{A´}, h) where {T<:Number,A<:AbstractSparseMatr
 _similarmatrix(::Type{A}, ::Type{A´}, h) where {N,T<:SMatrix{N,N},A<:AbstractSparseMatrix{T},T´<:SMatrix{N,N},A´<:AbstractSparseMatrix{T´}} =
     similar_merged(h.harmonics, T)
 _similarmatrix(::Type{A}, ::Type{A´}, h) where {N,T<:Number,A<:AbstractSparseMatrix{T},T´<:SMatrix{N,N},A´<:AbstractSparseMatrix{T´}} =
-    _flatten(similar_merged(h.harmonics), h.orbstruct, T)
+    flatten(similar_merged(h.harmonics), h.orbstruct, T)
 _similarmatrix(::Type{A}, ::Type{A´}, h) where {T<:Number,A<:Matrix{T},T´<:Number,A´<:AbstractMatrix{T´}} =
     similar(A, size(h))
 _similarmatrix(::Type{A}, ::Type{A´}, h) where {N,T<:SMatrix{N,N},A<:Matrix{T},T´<:SMatrix{N,N},A´<:AbstractMatrix{T´}} =
@@ -744,6 +808,7 @@ _blocktype(::Type{S}) where {N,Tv,S<:SVector{N,Tv}} = SMatrix{N,N,Tv,N*N}
 _blocktype(::Type{S}) where {S<:Number} = S
 
 blocktype(h::Hamiltonian{LA,L,M}) where {LA,L,M} = M
+blocktype(o::OrbitalStructure) = _blocktype(orbitaltype(o))
 
 promote_blocktype(hs::Hamiltonian...) = promote_blocktype(blocktype.(hs)...)
 promote_blocktype(s1::Type, s2::Type, ss::Type...) =
@@ -758,9 +823,7 @@ blockdim(::Type{S}) where {N,S<:SMatrix{N,N}} = N
 blockdim(::Type{T}) where {T<:Number} = 1
 
 orbitaltype(h::Hamiltonian) = orbitaltype(h.orbstruct)
-
-orbitaltype(o::OrbitalStructure{T}) where {T} = T
-
+orbitaltype(o::OrbitalStructure) = o.orbtype
 orbitaltype(::Type{M}) where {M<:Number} = M
 orbitaltype(::Type{S}) where {N,T,S<:SMatrix{N,N,T}} = SVector{N,T}
 

@@ -106,22 +106,31 @@ padright(t::NTuple{N´,Any}, x, ::Val{N}) where {N´,N} = ntuple(i -> i > N´ ? 
 padright(t::NTuple{N´,Any}, ::Val{N}) where {N´,N} = ntuple(i -> i > N´ ? 0 : t[i], Val(N))
 
 padright(v, ::Type{<:Number}) = first(v)
-padright(v, ::Type{S}) where {E,T,S<:SVector{E,T}} = padright(v, zero(T), S)
+padright(v, ::Type{S}) where {T,S<:SVector{<:Any,T}} = padright(v, zero(T), S)
 padright(v, x::T, ::Type{S}) where {E,T,S<:SVector{E,T}} =
     SVector{E,T}(ntuple(i -> i > length(v) ? x : convert(T, v[i]), Val(E)))
 
 # Pad element type to a "larger" type
-@inline padtotype(s::SMatrix{E,L}, ::Type{S}) where {E,L,E2,L2,S<:SMatrix{E2,L2}} =
+padtotype(s::SMatrix{E,L}, ::Type{S}) where {E,L,E2,L2,T,S<:SMatrix{E2,L2,T}} =
     S(SMatrix{E2,E}(I) * s * SMatrix{L,L2}(I))
-@inline padtotype(s::StaticVector, ::Type{S}) where {N,T,S<:SVector{N,T}} =
+padtotype(s::StaticVector, ::Type{S}) where {N,T,S<:SVector{N,T}} =
     padright(T.(s), Val(N))
-@inline padtotype(x::Number, ::Type{S}) where {E,L,S<:SMatrix{E,L}} =
+padtotype(x::Number, ::Type{S}) where {E,L,S<:SMatrix{E,L}} =
     S(x * (SMatrix{E,1}(I) * SMatrix{1,L}(I)))
-@inline padtotype(s::Number, ::Type{S}) where {N,T,S<:SVector{N,T}} =
+padtotype(s::Number, ::Type{S}) where {N,T,S<:SVector{N,T}} =
     padright(SA[T(s)], Val(N))
-@inline padtotype(x::Number, ::Type{T}) where {T<:Number} = T(x)
-@inline padtotype(u::UniformScaling, ::Type{T}) where {T<:Number} = T(u.λ)
-@inline padtotype(u::UniformScaling, ::Type{S}) where {S<:SMatrix} = S(u)
+padtotype(x::Number, ::Type{T}) where {T<:Number} = T(x)
+padtotype(u::UniformScaling, ::Type{T}) where {T<:Number} = T(u.λ)
+padtotype(u::UniformScaling, ::Type{S}) where {S<:SMatrix} = S(u)
+padtotype(a::AbstractArray, t::Type{<:SVector}) = padright(a, t)
+
+function padtotype(a::AbstractMatrix, ::Type{S}) where {N,M,T,S<:SMatrix{N,M,T}}
+    t = ntuple(Val(N*M)) do i
+        n, m = mod1(i, N), fld1(i, N)
+        @inbounds n > size(a, 1) || m > size(a, 2) ? zero(T) : T(a[n,m])
+    end
+    return S(t)
+end
 
 ## Work around BUG: -SVector{0,Int}() isa SVector{0,Union{}}
 negative(s::SVector{L,<:Number}) where {L} = -s
@@ -187,8 +196,23 @@ function ispositive(ndist)
     return result
 end
 
-chop(x::T, x0 = one(T)) where {T<:Real} = ifelse(abs(x) < √eps(T(x0)), zero(T), x)
+chop(x::T, x0 = one(T)) where {T<:Real} = ifelse(abs2(x) < eps(T(x0)), zero(T), x)
 chop(x::C, x0 = one(R)) where {R<:Real,C<:Complex{R}} = chop(real(x), x0) + im*chop(imag(x), x0)
+
+# function chop!(A::AbstractArray{T}, atol = default_tol(T)) where {T}
+#     for (i, a) in enumerate(A)
+#         # if abs(a) < atol
+#         #     A[i] = zero(T)
+#         if !iszero(a) #&& (abs(real(a)) < atol || abs(imag(a)) < atol)
+#             A[i] = chop(a)
+#         elseif abs(a) > 1/atol || isnan(a)
+#             A[i] = T(Inf)
+#         end
+#     end
+#     return A
+# end
+
+default_tol(::Type{T}) where {T} = sqrt(eps(real(float(T))))
 
 function unique_sorted_approx!(v::AbstractVector{T}) where {T}
     i = 1
@@ -213,6 +237,10 @@ function normalize_columns!(kmat::AbstractMatrix, cols)
     end
     return kmat
 end
+
+normalize_columns(s::SMatrix{L,0}) where {L} = s
+normalize_columns(s::SMatrix{0,L}) where {L} = s
+normalize_columns(s) = mapslices(v -> v/norm(v), s, dims = 1)
 
 eltypevec(::AbstractMatrix{T}) where {T<:Number} = T
 eltypevec(::AbstractMatrix{S}) where {N,T<:Number,S<:SMatrix{N,N,T}} = SVector{N,T}
@@ -282,6 +310,14 @@ permutations!(p, ::Tuple{}, s2) = push!(p, s2)
 
 delete(t::NTuple{N,Any}, i) where {N} = ntuple(j -> j < i ? t[j] : t[j+1], Val(N-1))
 
+function one!(m::StridedMatrix{T}) where {T}
+    @inbounds for c in CartesianIndices(m)
+        m[c] = ifelse(c[1] == c[2], one(T), zero(T))
+    end
+    return m
+end
+
+
 ######################################################################
 # convert a matrix/number block to a matrix/inlinematrix string
 ######################################################################
@@ -350,3 +386,81 @@ rclamp(r1::UnitRange, r2::UnitRange) = isempty(r1) ? r1 : clamp(minimum(r1), ext
 
 iclamp(minmax, r::Missing) = minmax
 iclamp((x1, x2), (xmin, xmax)) = (max(x1, xmin), min(x2, xmax))
+
+############################################################################################
+# QR utils
+############################################################################################
+# Sparse QR from SparseSuite is also pivoted
+pqr(a::SparseMatrixCSC) = qr(a)
+pqr(a::Adjoint{T,<:SparseMatrixCSC}) where {T} = qr(copy(a))
+pqr(a::Transpose{T,<:SparseMatrixCSC}) where {T} = qr(copy(a))
+pqr(a) = qr!(copy(a), Val(true))
+
+getQ(qr::Factorization, cols = :) = qr.Q * Idense(size(qr, 1), cols)
+getQ(qr::SuiteSparse.SPQR.QRSparse, cols = :) =  Isparse(size(qr, 1), :, qr.prow) * sparse(qr.Q * Idense(size(qr, 1), cols))
+getQ_dense(qr::SuiteSparse.SPQR.QRSparse, cols = :) =  Isparse(size(qr, 1), :, qr.prow) * (qr.Q * Idense(size(qr, 1), cols))
+
+getQ´(qr::Factorization, cols = :) = qr.Q' * Idense(size(qr, 1), cols)
+getQ´(qr::SuiteSparse.SPQR.QRSparse, cols = :) = sparse((qr.Q * Idense(size(qr, 1), cols))') * Isparse(size(qr,1), qr.prow, :)
+
+getRP´(qr::Factorization) = qr.R * qr.P'
+getRP´(qr::SuiteSparse.SPQR.QRSparse) = qr.R * Isparse(size(qr, 2), qr.pcol, :)
+
+getPR´(qr::Factorization) = qr.P * qr.R'
+getPR´(qr::SuiteSparse.SPQR.QRSparse) = Isparse(size(qr, 2), :, qr.pcol) * qr.R'
+
+Idense(n, ::Colon) = Matrix(I, n, n)
+
+function Idense(n, cols)
+    m = zeros(Bool, n, length(cols))
+    for (j, col) in enumerate(cols)
+        m[col, j] = true
+    end
+    return m
+end
+
+# Equivalent to I(n)[rows, cols], but faster
+Isparse(n, rows, cols) = Isparse(inds(rows, n), inds(cols, n))
+
+function Isparse(rows, cols)
+    rowval = Int[]
+    nzval = Bool[]
+    colptr = Vector{Int}(undef, length(cols) + 1)
+    colptr[1] = 1
+    for (j, col) in enumerate(cols)
+        push_rows!(rowval, nzval, rows, col)
+        colptr[j+1] = length(rowval) + 1
+    end
+    return SparseMatrixCSC(length(rows), length(cols), colptr, rowval, nzval)
+end
+
+inds(::Colon, n) = 1:n
+inds(is, n) = is
+
+function push_rows!(rowval, nzval, rows::AbstractUnitRange, col)
+    if col in rows
+        push!(rowval, 1 + rows[1 + col - first(rows)] - first(rows))
+        push!(nzval, true)
+    end
+    return nothing
+end
+
+function push_rows!(rowval, nzval, rows, col)
+    for (j, row) in enumerate(rows)
+        if row == col
+            push!(rowval, j)
+            push!(nzval, true)
+        end
+    end
+    return nothing
+end
+
+function nonzero_rows(m::AbstractMatrix{T}, atol = default_tol(T)) where {T}
+    nrows = size(m, 1)
+    zerorows = 0
+    for j in 0:nrows-1
+        maximum(abs, view(m, nrows - j, :)) > atol && break
+        zerorows += 1
+    end
+    return nrows - zerorows
+end

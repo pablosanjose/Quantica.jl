@@ -77,7 +77,7 @@ end
 
 function (d::Diagonalizer)(φs)
     ϵ, ψ = d(φs, NoUnflatten())
-    ψ´ = unflatten_or_reinterpret(ψ, d.orbstruct)
+    ψ´ = unflatten_orbitals_or_reinterpret(ψ, d.orbstruct)
     return ϵ, ψ´
 end
 

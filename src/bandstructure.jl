@@ -11,7 +11,7 @@ Subspace(h::Hamiltonian, args...) = Subspace(h.orbstruct, args...)
 Subspace(::Missing, energy, basis, basevert...) =
     Subspace(OrbitalStructure(eltype(basis), size(basis, 1)), energy, basis, basevert...)
 Subspace(o::OrbitalStructure, energy, basis, basevert...) =
-    Subspace(energy, unflatten_or_reinterpret(basis, o), o, basevert...)
+    Subspace(energy, unflatten_orbitals_or_reinterpret(basis, o), o, basevert...)
 Subspace(energy::T, basis, orbstruct) where {T} = Subspace(energy, basis, orbstruct, SVector{0,T}())
 Subspace(energy::T, basis, orbstruct, basevert) where {T} = Subspace(energy, basis, orbstruct, SVector(T.(basevert)))
 
@@ -38,9 +38,10 @@ degeneracy(m::AbstractMatrix) = isempty(m) ? 1 : size(m, 2)  # To support sentin
 
 orbitalstructure(s::Subspace) = s.orbstruct
 
-flatten(s::Subspace) = Subspace(s.energy, _flatten(s.basis, s.orbstruct), s.orbstruct, s.basevert)
+flatten(s::Subspace) =
+    Subspace(s.energy, flatten(s.basis, s.orbstruct), s.orbstruct, s.basevert)
 
-unflatten(s::Subspace, o::OrbitalStructure) = Subspace(s.energy, unflatten(s.basis, o), o, s.basevert)
+unflatten(s::Subspace, o::OrbitalStructure) = Subspace(s.energy, unflatten_orbitals(s.basis, o), o, s.basevert)
 
 # destructuring
 Base.iterate(s::Subspace) = s.energy, Val(:basis)
@@ -50,6 +51,8 @@ Base.IteratorSize(::Subspace) = Base.HasLength()
 Base.first(s::Subspace) = s.energy
 Base.last(s::Subspace) = s.basis
 Base.length(s::Subspace) = 2
+
+Base.copy(s::Subspace) = deepcopy(s)
 
 #######################################################################
 # Spectrum
