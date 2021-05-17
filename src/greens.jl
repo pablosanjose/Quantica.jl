@@ -325,7 +325,7 @@ function deflate(d::Deflator{T,<:SparseMatrixCSC}) where {T}
 end
 
 ## Solver execution: compute self-energy, with or without deflation
-(s::Schur1DGreensSolver)(ω, which = Val{:R}) = schursolver(s, ensurecomplex(ω), which)
+(s::Schur1DGreensSolver)(ω, which = Val(:R)) = schursolver(s, ensurecomplex(ω), which)
 
 ensurecomplex(ω::T) where {T<:Real} = ω + im * default_tol(T)
 ensurecomplex(ω::Complex) = ω
@@ -339,7 +339,7 @@ function schursolver(s::Schur1DGreensSolver{Missing}, ω, which)
     return Σ
 end
 
-function nondeflated_selfenergy(::Type{Val{:R}}, s, sch)
+function nondeflated_selfenergy(::Val{:R}, s, sch)
     n = size(s.h0, 1)
     rmodes = retarded_modes(sch, 0)
     ordschur!(sch, rmodes)
@@ -349,7 +349,7 @@ function nondeflated_selfenergy(::Type{Val{:R}}, s, sch)
     return ΣR
 end
 
-function nondeflated_selfenergy(::Type{Val{:L}}, s, sch)
+function nondeflated_selfenergy(::Val{:L}, s, sch)
     n = size(s.h0, 1)
     amodes = advanced_modes(sch, 0)
     ordschur!(sch, amodes)
@@ -359,16 +359,16 @@ function nondeflated_selfenergy(::Type{Val{:L}}, s, sch)
     return ΣL
 end
 
-nondeflated_selfenergy(::Type{Val{:RL}}, s, sch) =
-    nondeflated_selfenergy(Val{:R}, s, sch), nondeflated_selfenergy(Val{:L}, s, sch)
+nondeflated_selfenergy(::Val{:RL}, s, sch) =
+    nondeflated_selfenergy(Val(:R), s, sch), nondeflated_selfenergy(Val(:L), s, sch)
 
-schursolver(s::Schur1DGreensSolver{<:Deflator}, ω, ::Type{Val{:R}}) =
+schursolver(s::Schur1DGreensSolver{<:Deflator}, ω, ::Val{:R}) =
     deflated_selfenergy(s.deflatorR, s, ω)
 
-schursolver(s::Schur1DGreensSolver{<:Deflator}, ω, ::Type{Val{:L}}) =
+schursolver(s::Schur1DGreensSolver{<:Deflator}, ω, ::Val{:L}) =
     deflated_selfenergy(s.deflatorL, s, ω)
 
-schursolver(s::Schur1DGreensSolver{<:Deflator}, ω, ::Type{Val{:RL}}) =
+schursolver(s::Schur1DGreensSolver{<:Deflator}, ω, ::Val{:RL}) =
     deflated_selfenergy(s.deflatorR, s, ω), deflated_selfenergy(s.deflatorL, s, ω)
 
 function deflated_selfenergy(d::Deflator{T,M}, s::Schur1DGreensSolver, ω) where {T,M}
@@ -514,7 +514,7 @@ dist_to_boundary((src, dst)::Pair, g::GreensFunction{<:Schur1DGreensSolver,1,Tup
 # G_{-N,-1} = (G_{-1,-1}h₋₁)ᴺ⁻¹G_{-1,-1}, where G_{-1,-1} = (ω*I - h0 - ΣL)⁻¹
 function surface_fastpath(g, ω, (dsrc, ddst); sources = I)
     dist = ddst - dsrc
-    Σ = dsrc > 0 ? g.solver(ω, Val{:R}) : g.solver(ω, Val{:L})
+    Σ = dsrc > 0 ? g.solver(ω, Val(:R)) : g.solver(ω, Val(:L))
     h0 = g.solver.h0
     sourcemat = flat_padded_source_matrix(sources, g)
     # in-place optimization of luG⁻¹ = lu(ω*I - h0 - Σ)
@@ -534,7 +534,7 @@ end
 
 # Local infinite: G∞_{n,n} = (ω*I - h0 - ΣR - ΣL)⁻¹
 function local_fastpath(g, ω; sources = I)
-    ΣR, ΣL = g.solver(ω, Val{:RL})
+    ΣR, ΣL = g.solver(ω, Val(:RL))
     h0 = g.solver.h0
     sourcemat = flat_padded_source_matrix(sources, g)
     # in-place optimization of luG∞⁻¹ = lu(ω*I - h0 - ΣL - ΣR)
@@ -601,7 +601,7 @@ function G_semiinfinite(G∞⁻¹, Gh₊, Gh₋, (N, M))
 end
 
 function Gfactors(solver::Schur1DGreensSolver, ω)
-    ΣR, ΣL = solver(ω, Val{:RL})
+    ΣR, ΣL = solver(ω, Val(:RL))
     A1 = ω*I - solver.h0
     GR⁻¹ = A1 - ΣR
     GRh₊ = GR⁻¹ \ Matrix(solver.hp)
