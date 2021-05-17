@@ -340,7 +340,8 @@ end
 
 function nondeflated_selfenergy(::Type{Val{:R}}, s, sch)
     n = size(s.h0, 1)
-    ordschur!(sch, abs.(sch.α ./ sch.β) .<= 1)
+    rmodes = retarded_modes(sch, 0)
+    ordschur!(sch, rmodes)
     ϕΛR⁻¹ = view(sch.Z, 1:n, 1:n)
     ϕR⁻¹ = view(sch.Z, n+1:2n, 1:n)
     ΣR = s.hm * ϕΛR⁻¹ / ϕR⁻¹
@@ -349,7 +350,8 @@ end
 
 function nondeflated_selfenergy(::Type{Val{:L}}, s, sch)
     n = size(s.h0, 1)
-    ordschur!(sch, abs.(sch.β ./ sch.α) .<= 1)
+    amodes = advanced_modes(sch, 0)
+    ordschur!(sch, amodes)
     ϕΛ⁻¹R⁻¹ = view(sch.Z, 1:n, 1:n)
     ϕR⁻¹ = view(sch.Z, n+1:2n, 1:n)
     ΣL = s.hp * ϕR⁻¹ / ϕΛ⁻¹R⁻¹
@@ -402,6 +404,12 @@ end
 function retarded_modes(sch, atol)
     rmodes = Vector{Bool}(undef, length(sch.α))
     rmodes .= atol .< abs.(sch.α ./ sch.β) .< 1
+    return rmodes
+end
+
+function advanced_modes(sch, atol)
+    rmodes = Vector{Bool}(undef, length(sch.β))
+    rmodes .= atol .< abs.(sch.β ./ sch.α) .< 1
     return rmodes
 end
 
