@@ -237,6 +237,7 @@ end
 Deflator(atol::Nothing, As...) = missing
 
 function Deflator(atol::Real, h₊::M, h₀::M, h₋::M) where {M}
+    h₊ ≈ h₋' || throw(ArgumentError("Deflation requires mutually adjoint intercell h₊ = h₋'. If you intended to build a non-Hermitian Hamiltonian, please use the undeflated method `Schur(deflation = nothing)`."))
     rowspaceR, _, nullspaceR = fullrank_decomposition_qr(h₊, atol)
     B       = Matrix(nullspaceR)                      # nullspace(A0)
     R       = Matrix(rowspaceR)                       # orthogonal complement of nullspace(h₊)
