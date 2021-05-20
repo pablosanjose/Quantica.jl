@@ -920,7 +920,7 @@ Base.copy(h::HamiltonianHarmonic) = HamiltonianHarmonic(h.dn, copy(h.h))
 function LinearAlgebra.ishermitian(h::Hamiltonian)
     for hh in h.harmonics
         isassigned(h, -hh.dn) || return false
-        hh.h == h[-hh.dn]' || return false
+        hh.h ≈ h[-hh.dn]' || return false
     end
     return true
 end
