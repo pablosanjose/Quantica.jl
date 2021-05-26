@@ -202,6 +202,8 @@ end
 maybeflatten(h, args...) = isflat(h) ? h : flatten(h, args...)
 
 isflat(h::Hamiltonian) = all(isequal(1), norbitals(h))
+isflat(m::AbstractArray{<:Number}) = true
+isflat(m) = false
 
 flatten(h::HamiltonianHarmonic, orbstruct) =
     HamiltonianHarmonic(h.dn, flatten(h.h, orbstruct))
@@ -413,8 +415,8 @@ unflatten_orbitals(m::AbstractMatrix, o::OrbitalStructure) =
 unflatten_blocks(m::AbstractMatrix, o::OrbitalStructure) =
     isunflat_blocks(m, o) ? copy(m) : unflatten!(similar(m, blocktype(o), dimh(o), dimh(o)), m, o)
 
-maybeunflatten_orbitals(x, o) = isunflat_orbitals(x, o) ? x : unflatten_orbitals(x, o)
-maybeunflatten_blocks(x, o) = isunflat_blocks(x, o) ? x : unflatten_blocks(x, o)
+maybe_unflatten_orbitals(x, o) = isunflat_orbitals(x, o) ? x : unflatten_orbitals(x, o)
+maybe_unflatten_blocks(x, o) = isunflat_blocks(x, o) ? x : unflatten_blocks(x, o)
 
 isunflat_orbitals(m, o) = orbitaltype(o) == eltype(m) && size(m, 1) == dimh(o)
 isunflat_blocks(m, o) = blocktype(o) == eltype(m) && size(m, 1) == dimh(o)
@@ -1144,14 +1146,14 @@ function Base.:+(h::Hamiltonian, id::UniformScaling)
     return Hamiltonian(h.lattice, hhs, h.orbstruct)
 end
 
-function shift_diagonal!(mat, ::Type{<:Number}, h, id)
+function shift_diagonal!(mat, ::Type{<:Number}, h, id::UniformScaling)
     mat .+= id
     return mat
 end
 
-function shift_diagonal!(mat, ::Type{M}, h, id) where {N,M<:SMatrix{N,N}}
+function shift_diagonal!(mat, ::Type{S}, h, id::UniformScaling) where {N,S<:SMatrix{N,N}}
     for s in sublats(h.lattice)
-        shift = id.λ * padprojector(M, orbitals(h)[s])
+        shift = id.λ * padprojector(S, orbitals(h)[s])
         for i in siterange(h.lattice, s)
             mat[i,i] += shift
         end
