@@ -213,6 +213,7 @@ chop(x::C, x0 = one(R)) where {R<:Real,C<:Complex{R}} = chop(real(x), x0) + im*c
 # end
 
 default_tol(::Type{T}) where {T} = sqrt(eps(real(float(T))))
+default_tol(::T) where {T<:Number} = default_tol(T)
 
 function unique_sorted_approx!(v::AbstractVector{T}) where {T}
     i = 1

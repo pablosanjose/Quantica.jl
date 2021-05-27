@@ -15,9 +15,7 @@ end
 Construct the Green's function `g::GreensFunction` of `L`-dimensional Hamiltonian `h` using
 the provided `solveobject`. Currently valid `solveobject`s are
 
-- the `Bandstructure` of `h` (for an unbounded `h` or an `Hamiltonian{<:Superlattice}}`)
-- the `Spectrum` of `h` (for a bounded `h`)
-- `Schur1D(; kw...)` (single-shot generalized eigenvalue approach for 1D Hamiltonians)
+- `Schur1D()` (single-shot generalized eigenvalue approach for 1D Hamiltonians)
 
 If a `boundaries = (n₁, n₂, ...)` is provided, a reflecting boundary is assumed for each
 non-missing `nᵢ` perpendicular to Bravais vector `i` at a cell distance `nᵢ` from the
@@ -28,45 +26,38 @@ origin.
 Curried form equivalent to the above, giving `greens(h, solveobject(h), args...)`.
 
     g(ω, cells::Pair)
+    g(ω)[cells::Pair]
 
 From a constructed `g::GreensFunction`, obtain the retarded Green's function matrix at
-frequency `ω` between unit cells `src` and `dst` by calling `g(ω, src => dst)`, where `src,
-dst` are `::NTuple{L,Int}` or `SVector{L,Int}`. If not provided, `cells` default to
-`(1, 1, ...) => (1, 1, ...)`.
-
-    g(ω, missing)
-
-If allowed by the used `solveobject`, build an efficient function `cells -> g(ω, cells)`
-that can produce the Greens function between different cells at fixed `ω` without repeating
-cell-independent parts of the computation.
+frequency `ω` between unit cells `src` and `dst`, where `src, dst` are `::NTuple{L,Int}` or
+`SVector{L,Int}`. If allowed by the used `solveobject`, `g0=g(ω)` builds an solution object
+that can efficiently produce the Greens function between different cells at fixed `ω` with
+`g0[cells]` without repeating cell-independent parts of the computation.
 
 # Examples
 
 ```jldoctest
-julia> g = LatticePresets.square() |> hamiltonian(hopping(-1)) |> greens(bandstructure(resolution = 17))
-GreensFunction{Bandstructure}: Green's function from a 2D bandstructure
-  Matrix size    : 1 × 1
-  Element type   : scalar (Complex{Float64})
-  Band simplices : 512
+julia> g = LatticePresets.square() |> hamiltonian(hopping(-1)) |> unitcell((1,0), region = r->0<r[2]<3) |> greens(Schur1D())
+GreensFunction{Schur1DGreensSolver}: Green's function using the Schur1D method
+  Flat matrix size      : 2 × 2
+  Flat deflated size    : 2 × 2
+  Original element type : scalar (ComplexF64)
+  Boundaries            : (missing,)
 
-julia> g(0.2)
-1×1 Array{Complex{Float64},2}:
- 6.663377810046025 - 24.472789025006396im
-
-julia> m = similarmatrix(g); g(m, 0.2)
-1×1 Array{Complex{Float64},2}:
- 6.663377810046025 - 24.472789025006396im
+julia> g(0.2, 3=>2) ≈ g(0.2)[3=>2]
+true
 ```
 
 # See also
-    `greens!`, `Schur1D`
+    `Schur1D`
 """
 greens(h::Hamiltonian{<:Any,L}, solverobject; boundaries = filltuple(missing, Val(L))) where {L} =
     GreensFunction(greensolver(solverobject, h), h, boundaries)
-greens(solver::Function, args...; kw...) = h -> greens(h, solver(h), args...; kw...)
+greens(s; kw...) = h -> greens(h, greensolver(s, h); kw...)
 
 # fallback
-greensolver(s::AbstractGreensSolver) = s
+greensolver(s::AbstractGreensSolver, h) = s
+greensolver(s::Function, h) = s(h)
 
 sanitize_cells((cell0, cell1)::Pair{<:Integer,<:Integer})=
     SA[cell0] => SA[cell1]
@@ -90,7 +81,7 @@ orbitalstructure(g::GreensFunction) = orbitalstructure(g.h)
 # Schur1DGreensSolver
 #######################################################################
 """
-    Schur1D(; deflation = default_tol(T))
+    Schur1D()
 
 Return a Greens function solver using the generalized eigenvalue approach, whereby given the
 energy `ω`, the eigenmodes of the infinite 1D Hamiltonian, and the corresponding infinite
@@ -104,40 +95,36 @@ equation
 This is the matrix form of the problem `λ(ω-h₀)φ - h₊φ - λ²h₋φ = 0`, where `φχ = [φ; λφ]`,
 and `φ` are `ω`-energy eigenmodes, with (possibly complex) momentum `q`, and eigenvalues are
 `λ = exp(-iqa₀)`. The algorithm assumes the Hamiltonian has only `dn = (0,)` and `dn = (±1,
-)` Bloch harmonics (`h₀`, `h₊` and `h₋`), so its unit cell will be enlarged before applying
-the solver if needed. Bound states in the spectrum will yield delta functions in the density
+)` Bloch harmonics (`h₀`, `h₊` and `h₋`), and will error otherwise instructing the user to
+grow the unit cell. Bound states in the spectrum will yield delta functions in the density
 of states that can be resolved by adding a broadening in the form of a small positive
-imaginary part to `ω`.
+imaginary part to `ω`. If `ω::Real`, a small imaginary part will be added automatically.
 
-For performace, the eigenvalue equation may be `deflated', i.e. singular solutions `λ=0,∞`
-will be removed within the absolute tolerance specified by the keyword `deflation`. If no
-deflation is desired, use `deflation = nothing`.
+For performace, the eigenvalue equation may be `deflated' and `stabilized', i.e. singular
+solutions `λ=0,∞` will be removed, and an inverse-free algorithm is used to preserve
+precision even in the presence of singularities.
 
 # Examples
 ```jldoctest
 julia> using LinearAlgebra
 
-julia> h = LP.honeycomb() |> hamiltonian(hopping(1)) |> unitcell((1,-1), (10,10)) |> Quantica.wrap(2);
+julia> h = LP.honeycomb() |> hamiltonian(hopping(1)) |> unitcell((1,-1), (10,10)) |> wrap(2);
 
 julia> g = greens(h, Schur1D(), boundaries = (0,))
 GreensFunction{Schur1DGreensSolver}: Green's function using the Schur1D method
-  Matrix size    : 40 × 40
-  Deflated size  : 20 × 20
-  Element type   : scalar (ComplexF64)
-  Boundaries     : (0,)
+  Flat matrix size      : 40 × 40
+  Flat deflated size    : 20 × 20
+  Original element type : scalar (ComplexF64)
+  Boundaries            : (0,)
 
-julia> tr(g(0.3))
--32.193416068730684 - 3.4399800712973074im
+julia> tr(g(0.3, 1=>1))
+-32.193416071797216 - 3.4400038418349084im
 ```
 
 # See also
     `greens`
 """
-struct Schur1D{R}
-    atol::R  # could be missing for default_tol(T)
-end
-
-Schur1D(; deflation = missing,) = Schur1D(deflation)
+struct Schur1D end
 
 greensolver(s::Schur1D, h) = Schur1DGreensSolver(s, h)
 
@@ -163,12 +150,11 @@ Schur1DWorkspace(R::AbstractMatrix{T}) where {T} = Schur1DWorkspace{T}(size(R)..
 Schur1DWorkspace{T}(n, r) where {T} = Schur1DWorkspace(Matrix{T}.(undef,
     ((n, n), (n, n), (n, r), (n, r), (r, r), (r, r), (r, r), (r, r), (2r, 2r), (2r, 2r), (n+2r, n+2r), (n+2r, n+2r)))...)
 
-struct Deflator{T,R,S}
+struct Deflator{T,S}
     L::Matrix{T}        # h₊ = L*R'
     R::Matrix{T}        # h₋ = R*L'
     iG::Matrix{T}       # Matrix(-h₀ + (LL' + RR') * im)
     ωshifter::S         # metadata to aid in ω-shifting iG
-    atol::R             # deflation tolerance
 end
 
 struct Schur1DGreensSolver{D<:Deflator,T,M} <: AbstractGreensSolver
@@ -186,26 +172,20 @@ function Schur1DGreensSolver(s::Schur1D, h)
     maxdn = maximum(har -> abs(first(har.dn)), h.harmonics)
     maxdn > 1 && throw(ArgumentError("The Hamiltonian has next-nearest unitcell hoppings. Please enlarge the unit cell with `unitcell(h, $maxdn)` to reduce to nearest-cell couplings."))
     h₋, h₀, h₊ = H[(-1,)], H[(0,)], H[(1,)]
-    deflator = Deflator(s, h₊, h₀, h₋)
+    deflator = Deflator(h₊, h₀, h₋)
     L, R = deflator.L, deflator.R
     effmat = EffectiveMatrix(h₀, L, R)
     tmp = Schur1DWorkspace(R)
     return Schur1DGreensSolver(h₀, h₊, h₋, effmat, deflator, tmp)
 end
 
-function Deflator(s::Schur1D, mats...)
-    T = real(eltype(first(mats)))
-    atol = s.atol === missing ? zero(T) : s.atol
-    return Deflator(atol, mats...)
-end
-
-function Deflator(atol::Real, h₊, h₀, h₋)
+function Deflator(h₊, h₀, h₋)
     h₊ ≈ h₋' || throw(ArgumentError("Deflation requires mutually adjoint intercell h₊ = h₋'. If you intended to build a non-Hermitian Hamiltonian, please use the undeflated method `Schur(deflation = nothing)`."))
     Ls, Rs   = svd_sparse(h₊)
     L, R     = Matrix(Ls), Matrix(Rs)
     G⁻¹      = Matrix(-h₀ + (Ls * Ls' + Rs * Rs') * im)
     ωshifter = diag(G⁻¹)
-    return Deflator(L, R, G⁻¹, ωshifter, atol)
+    return Deflator(L, R, G⁻¹, ωshifter)
 end
 
 function Schur1DWorkspace(d::Deflator, h₀::AbstractMatrix{T}) where {T}
@@ -415,7 +395,7 @@ function Base.getindex(s::Schur1DGreensSolution{Int,T}, cells) where {T}
     cells´ = sanitize_cells(cells)
     G = zeros(T, size(s.dstmat, 2), size(s.G∞S, 2))
     if !is_across_boundary(cells´, s.boundary)
-        m, n = dist_to_boundary.(cells, s.boundary)
+        m, n = dist_to_boundary.(cells´, s.boundary)  # m, n = dist_src, dist_dest
         add_G∞!(G, s, n-m, 0, 1)
         add_G∞!(G, s, n, -m, -1)
     end
@@ -541,28 +521,6 @@ function advanced_modes!(whichmodes, sch)
     whichmodes .= abs.(sch.β) .< abs.(sch.α)
     return whichmodes
 end
-
-function orthobasis_decomposition_qr(mat, atol)
-    q = pqr(mat)
-    basis = getQ(q)
-    RP´ = getRP´(q)
-    n = size(basis, 2)
-    r = nonzero_rows(RP´, atol)
-    orthobasis = view(basis, :, 1:r)
-    complement = view(basis, :, r+1:n)
-    r = view(RP´, 1:r, :)
-    return orthobasis, r, complement
-end
-
-function fullrank_decomposition_qr(mat, atol)
-    rowspace, r, nullspace = orthobasis_decomposition_qr(mat', atol)
-    return rowspace, r', nullspace
-end
-
-nullspace_qr(mat, atol) = last(fullrank_decomposition_qr(mat, atol))
-
-rowspace_qr(mat, atol) = first(fullrank_decomposition_qr(mat, atol))
-
 
 #######################################################################
 # BandGreensSolver
