@@ -15,7 +15,7 @@ using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
 
 using ExprTools
 
-using SparseArrays: getcolptr, AbstractSparseMatrix
+using SparseArrays: getcolptr, AbstractSparseMatrix, AbstractSparseMatrixCSC
 
 using Statistics: mean
 
@@ -57,6 +57,7 @@ include("mesh.jl")
 include("diagonalizer.jl")
 include("bandstructure.jl")
 include("KPM.jl")
+include("effective.jl")
 include("greens.jl")
 include("convert.jl")
 

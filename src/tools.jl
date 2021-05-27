@@ -213,6 +213,7 @@ chop(x::C, x0 = one(R)) where {R<:Real,C<:Complex{R}} = chop(real(x), x0) + im*c
 # end
 
 default_tol(::Type{T}) where {T} = sqrt(eps(real(float(T))))
+default_tol(::T) where {T<:Number} = default_tol(T)
 
 function unique_sorted_approx!(v::AbstractVector{T}) where {T}
     i = 1
@@ -388,7 +389,7 @@ iclamp(minmax, r::Missing) = minmax
 iclamp((x1, x2), (xmin, xmax)) = (max(x1, xmin), min(x2, xmax))
 
 ############################################################################################
-# QR utils
+# QR/SVD utils
 ############################################################################################
 # Sparse QR from SparseSuite is also pivoted
 pqr(a::SparseMatrixCSC) = qr(a)
@@ -404,7 +405,10 @@ getQ´(qr::Factorization, cols = :) = qr.Q' * Idense(size(qr, 1), cols)
 getQ´(qr::SuiteSparse.SPQR.QRSparse, cols = :) = sparse((qr.Q * Idense(size(qr, 1), cols))') * Isparse(size(qr,1), qr.prow, :)
 
 getRP´(qr::Factorization) = qr.R * qr.P'
+getRP´(qr::Factorization, rows) = qr.R[rows, :] * qr.P'
 getRP´(qr::SuiteSparse.SPQR.QRSparse) = qr.R * Isparse(size(qr, 2), qr.pcol, :)
+getRP´(qr::SuiteSparse.SPQR.QRSparse, rows) = Isparse(size(qr, 1), rows, :) * qr.R * Isparse(size(qr, 2), qr.pcol, :)
+getRP´thin(qr::Factorization) = getRP´(qr, 1:nonzero_rows(qr.R))
 
 getPR´(qr::Factorization) = qr.P * qr.R'
 getPR´(qr::SuiteSparse.SPQR.QRSparse) = Isparse(size(qr, 2), :, qr.pcol) * qr.R'
@@ -463,4 +467,23 @@ function nonzero_rows(m::AbstractMatrix{T}, atol = default_tol(T)) where {T}
         zerorows += 1
     end
     return nrows - zerorows
+end
+
+nonzero_rows(m::AbstractSparseMatrix{T}, atol = default_tol(T)) where {T} =
+    isempty(rowvals(m)) ? 0 : maximum(rowvals(m))
+
+function svd_sparse(s::AbstractSparseMatrix{T}, atol = default_tol(T)) where {T}
+    iszero(s) && return spzeros(T, size(s, 1), 0), spzeros(T, size(s, 1), 0)
+    q = qr(s)
+    RP´ = getRP´thin(q)
+    r = size(RP´, 1)
+    U = getQ(q, 1:r)
+    q´ = qr(copy(RP´'))
+    RP´´ = getRP´(q´)
+    r = size(RP´´, 1)
+    V = getQ(q´, 1:r)
+    U´, S´, V´ = svd(Matrix(RP´´'))
+    US = sparse(U´ .* sqrt.(S´)')
+    VS = sparse(V´ .* sqrt.(S´)')
+    return U * US, V * VS
 end
