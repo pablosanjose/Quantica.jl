@@ -252,29 +252,45 @@ function mode_subspaces(s::Schur1DGreensSolver{<:Deflator}, ω)
     d = s.deflator
     shiftω!(d, ω)
     A, B = deflated_pencil!(s.tmp, d)
-    return mode_subspaces(s, A, B)
+    return mode_subspaces(s, A, B, imag(ω))
 end
 
 # returns invariant subspaces of retarded and advanced eigenmodes
-function mode_subspaces(s::Schur1DGreensSolver, A::AbstractArray{T}, B::AbstractArray{T}) where {T}
+function mode_subspaces(s::Schur1DGreensSolver, A::AbstractArray{T}, B::AbstractArray{T}, imω) where {T}
     ZrL, ZrR, ZaL, ZaR = s.tmp.rr1, s.tmp.rr2, s.tmp.rr3, s.tmp.rr4
     r = size(A, 1) ÷ 2
     if !iszero(r)
         sch = schur!(A, B)
         # Retarded modes
         whichmodes = Vector{Bool}(undef, length(sch.α))
-        retarded_modes!(whichmodes, sch)
+        retarded_modes!(whichmodes, sch, imω)
         ordschur!(sch, whichmodes)
         copy!(ZrL, view(sch.Z, 1:r, 1:sum(whichmodes)))
         copy!(ZrR, view(sch.Z, r+1:2r, 1:sum(whichmodes)))
         # Advanced modes
-        advanced_modes!(whichmodes, sch)
+        advanced_modes!(whichmodes, sch, imω)
         ordschur!(sch, whichmodes)
         copy!(ZaL, view(sch.Z, 1:r, 1:sum(whichmodes)))
         copy!(ZaR, view(sch.Z, r+1:2r, 1:sum(whichmodes)))
     end
     return ZrL, ZrR, ZaL, ZaR
 end
+
+# need this barrier for type-stability (sch.α and sch.β are finicky)
+function retarded_modes!(whichmodes, sch, imω)
+    whichmodes .= abs.(sch.α) .< abs.(sch.β)
+    sum(whichmodes) == length(whichmodes) ÷ 2 || throw_imω(imω)
+    return whichmodes
+end
+
+function advanced_modes!(whichmodes, sch, imω)
+    whichmodes .= abs.(sch.β) .< abs.(sch.α)
+    sum(whichmodes) == length(whichmodes) ÷ 2 || throw_imω(imω)
+    return whichmodes
+end
+
+throw_imω(imω) =
+    throw(ArgumentError("Couldn't separate advanced from retarded modes. Consider adding a larger positive imaginary part to ω, currently $imω"))
 
 #### g(ω) ##################################################################################
 
@@ -508,19 +524,6 @@ end
 
 zero_fastpath(g; source = I, dest = I) =
     zeros(blockeltype(g), flat_source_dest_dim.((source, dest), Ref(g))...)
-
-#### Tools #################################################################################
-
-# need this barrier for type-stability (sch.α and sch.β are finicky)
-function retarded_modes!(whichmodes, sch)
-    whichmodes .= abs.(sch.α) .< abs.(sch.β)
-    return whichmodes
-end
-
-function advanced_modes!(whichmodes, sch)
-    whichmodes .= abs.(sch.β) .< abs.(sch.α)
-    return whichmodes
-end
 
 #######################################################################
 # BandGreensSolver
