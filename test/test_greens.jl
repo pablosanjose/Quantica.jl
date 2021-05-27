@@ -71,12 +71,14 @@ end
 end
 
 @testset "greens fastpath equivalence" begin
-    h1 = LP.honeycomb() |> hamiltonian(hopping(SA[0 1; 1 0], range = 1), orbitals = Val(2)) |> unitcell((1,-1), region = r->abs(r[2])<2)
-    h2 = LP.honeycomb() |> hamiltonian(hopping(1) + onsite(r->randn())) |> unitcell((2,-3), region = r->abs(r[2])<3)
-    for h in (h1, h2)
-        g = greens(h, Schur1D(), boundaries = (0,))
-        ldos_1 = [g(ω)[n=>m] for ω in range(-0.1, 0.1, length = 5), n in -3:3, m in -3:3]
-        ldos_2 = [g(ω, n=>m) for ω in range(-0.1, 0.1, length = 5), n in -3:3, m in -3:3]
-        @test isapprox(ldos_1, ldos_2, atol = Quantica.default_tol(Quantica.blockeltype(h)))
+    if VERSION >= v"1.7.0-DEV"
+        h1 = LP.honeycomb() |> hamiltonian(hopping(SA[0 1; 1 0], range = 1), orbitals = Val(2)) |> unitcell((1,-1), region = r->abs(r[2])<2)
+        h2 = LP.honeycomb() |> hamiltonian(hopping(1) + onsite(r->randn())) |> unitcell((2,-3), region = r->abs(r[2])<3)
+        for h in (h1, h2)
+            g = greens(h, Schur1D(), boundaries = (0,))
+            ldos_1 = [g(ω)[n=>m] for ω in range(-0.1, 0.1, length = 5), n in -3:3, m in -3:3]
+            ldos_2 = [g(ω, n=>m) for ω in range(-0.1, 0.1, length = 5), n in -3:3, m in -3:3]
+            @test isapprox(ldos_1, ldos_2, atol = Quantica.default_tol(Quantica.blockeltype(h)))
+        end
     end
 end
