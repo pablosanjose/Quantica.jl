@@ -22,7 +22,7 @@ using Statistics: mean
 export sublat, bravais, lattice, dims, supercell, unitcell,
        hopping, onsite, @onsite!, @hopping!, parameters, siteselector, hopselector, nrange,
        sitepositions, siteindices, not,
-       ket, randomkets,
+       ket, ketmodel, randomkets,
        hamiltonian, parametric, bloch, bloch!, similarmatrix,
        flatten, unflatten, orbitalstructure, wrap, transform!, combine,
        spectrum, bandstructure, diagonalizer, cuboid, isometric, splitbands,
@@ -52,6 +52,7 @@ include("presets.jl")
 include("lattice.jl")
 include("model.jl")
 include("hamiltonian.jl")
+include("ket.jl")
 include("parametric.jl")
 include("mesh.jl")
 include("diagonalizer.jl")

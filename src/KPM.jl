@@ -1,4 +1,33 @@
 #######################################################################
+# randomkets
+#######################################################################
+"""
+    randomkets(n, a = r -> cis(2pi*rand()); kw...)
+
+Create a lazy collection of `n` `KetModel`s of amplitude `a`, and `normalization = 1/√n`.
+Other keyword arguments are forwarded to `ketmodel`.
+
+This type of ket model is useful e.g. in stochastic trace evaluation of KPM methods, where
+the amplitude is chosen as a random function with `⟨a⟩ = 0`, `⟨aa⟩ = 0` and `⟨a'a⟩ = 1`. The
+default `a` is a uniform random phase on each site, which satisties these conditions. Then,
+the normalized trace of an operator `A` can be estimated with `Tr[A]/N₀ ≈ ∑⟨ket|A|ket⟩`,
+where the sum is taken over the `n` random kets `|ket⟩` of norm `1/√n` produced by
+`randomkets`, and `N₀` is the total number of orbitals in the full unit cell.
+
+To apply it to a multiorbital system with a maximum of `N` orbitals per site, `a` must in
+general be adapted to produce the desired random `SVector{N}` (unless `maporbitals = true`),
+with the above statistical properties for each orbital. Example: to have independent,
+complex, normally-distributed random components of two orbitals use `randomkets(n, r ->
+randn(SVector{2,ComplexF64}))`, or alternatively `randomkets(n, r -> randn(ComplexF64),
+maporbitals = true)`.
+
+# See also
+    `ket`
+"""
+randomkets(n::Int, a = r -> cis(2pi*rand()); kw...) =
+    Iterators.repeated(ketmodel(a; normalization = 1/√n, kw...), n)
+
+#######################################################################
 # Kernel Polynomial Method : momenta
 #######################################################################
 using Base.Threads
@@ -8,53 +37,61 @@ struct MomentaKPM{T,B<:Tuple}
     bandbracket::B
 end
 
-struct KPMBuilder{A,H<:AbstractMatrix,T,K,B}
+struct KPMBuilder{AM,HM<:AbstractMatrix,T,H<:Hamiltonian,K<:Ket,B}
     h::H
-    A::A
-    kets::K
-    kets0::K
-    kets1::K
+    hmat::HM
+    Amat::AM
+    ket::K
+    ket0::K
+    ket1::K
     bandbracket::Tuple{B,B}
     order::Int
     mulist::Vector{T}
 end
 
-function KPMBuilder(h, A, kets, order, bandrange)
+function KPMBuilder(h::Hamiltonian{<:Lattice,L}, A, order, bandrange, flat) where {L}
+    iszero(L) ||
+        throw(ArgumentError("Hamiltonian is defined on an infinite lattice. Reduce it to zero-dimensions with `wrap` or `unitcell`."))
     eh = eltype(eltype(h))
     eA = eltype(eltype(A))
     mulist = zeros(promote_type(eh, eA), order + 1)
     bandbracket = bandbracketKPM(h, bandrange)
-    h´ = matrixKPM(h)
-    A´ = matrixKPM(A)
-    kets´ = Matrix(kets, h)
-    builder = KPMBuilder(h´, A´, kets´, similar(kets´), similar(kets´), bandbracket, order, mulist)
+    h´ = _KPM_ket_or_ham(h, flat)
+    hmat = h´[tuple()]
+    Amat = _KPM_array(A, flat)
+    zeroket = _KPM_ket_or_ham(ket(h), flat)
+    builder = KPMBuilder(h´, hmat, Amat, zeroket, similar(zeroket), similar(zeroket), bandbracket, order, mulist)
     return builder
 end
 
-function matrixKPM(h::Hamiltonian{<:Lattice,L}, matrixtype = missing) where {L}
-    iszero(L) ||
-        throw(ArgumentError("Hamiltonian is defined on an infinite lattice. Reduce it to zero-dimensions with `wrap` or `unitcell`."))
-    m = similarmatrix(h, matrixtype)
-    return bloch!(m, h)
-end
+_KPM_ket_or_ham(k, ::Val{true}) = flatten(k)
+_KPM_ket_or_ham(k, ::Val{false}) = k
+_KPM_ket_or_ham(k, flat) = flat ? flatten(k) : k
+_KPM_array(h::Hamiltonian, flat) = bloch!(flat ? similarmatrix(h, flatten) : similarmatrix(h), h)
+_KPM_array(h::Hamiltonian, ::Val{true}) = bloch!(similarmatrix(h, flatten), h)
+_KPM_array(h::Hamiltonian, ::Val{false}) = bloch!(similarmatrix(h), h)
+_KPM_array(A::UniformScaling, _) = A
 
-matrixKPM(A::UniformScaling) = A
 
 """
-    momentaKPM(h::Hamiltonian, A = I; kets = randomkets(1), order = 10, bandrange = missing)
+    momentaKPM(h::Hamiltonian, A = I; ket = randomkets(1), order = 10, bandrange = missing, flat = Val(true))
 
-Compute the Kernel Polynomial Method (KPM) momenta `μ_n = ∑⟨ket|T_n(h) A|ket⟩`, where the
-sum is over `kets` and where `T_n(x)` is the Chebyshev polynomial of order `n`, for a given
-`ket`, hamiltonian `h`, and observable `A`.
+Compute the Kernel Polynomial Method (KPM) momenta `μₙ = ⟨k|Tₙ(h) A|k⟩`, where `k =
+ket(ket::KetModel, h)`, `A` is an observable (`Hamiltonian` or `AbstractMatrix`) and
+`Tₙ(h)` is the order-`n` Chebyshev polynomial of the Hamiltonian `h`.
 
-`kets` can be a `KetModel` or a tuple of `KetModel`s (see `ket` and `randomkets`). A `kets =
-randomkets(R, ...)` produces a special `RepeatedKets` object that can be used to compute
-momenta by means of a stochastic trace `μ_n = Tr[A T_n(h)] ≈ ∑ₐ⟨a|A T_n(h)|a⟩`, where the
-`|a⟩` are the `R` random `kets` of norm 1/√R.
+`ket` can be a single `KetModel`, or a collection of `KetModel`s, as in the default
+`ket = randomkets(n)`. In the latter case, `μₙ` is summed over all models. The default
+is useful to estimate momenta of normalized traces using the stochastic trace approach,
+whereby `μ_n = Tr[A T_n(h)]/N₀ ≈ ∑ₖ⟨k|A T_n(h)|k⟩`. Here the `|k⟩`s are `n` random kets of
+norm `1/√n` and `N₀` is the total number of orbitals per unit cell of `h` (see `randomkets`).
 
 The order of the Chebyshev expansion is `order`. The `bandbrange = (ϵmin, ϵmax)` should
 completely encompass the full bandwidth of `hamiltonian`. If `missing` it is computed
-automatically using `ArnoldiMethods` (must be loaded).
+automatically using `ArnoldiMethod` (must be loaded `using ArnoldiMethod`). `flat` indicates
+whether, in the case of multiorbital systems, the internal computations are to be performed
+using flattened arrays, typically increasing performace by making use of external
+linear algebra libraries (e.g. MKL or OpenBLAS).
 
 # Examples
 
@@ -65,58 +102,63 @@ julia> momentaKPM(h, bandrange = (-6,6)).mulist |> length
 11
 ```
 """
-function momentaKPM(h::Hamiltonian, A = I; kets = randomkets(1), order = 10, bandrange = missing)
-    builder = KPMBuilder(h, A, kets, order, bandrange)
-    momenta = momentaKPM(builder)
-    return momenta
+function momentaKPM(h::Hamiltonian, A = I; ket = randomkets(1), order = 10, bandrange = missing, flat = Val(true))
+    builder = KPMBuilder(h, A, order, bandrange, flat)
+    momentaKPM!(builder, ket)
+    jackson!(builder.mulist)
+    return MomentaKPM(builder.mulist, builder.bandbracket)
 end
 
-function momentaKPM(b::KPMBuilder)
+function momentaKPM!(b::KPMBuilder, model::KetModel)
     pmeter = Progress(b.order, "Computing moments: ")
+    ket!(b.ket, model, b.h)
     addmomentaKPM!(b, pmeter)
-    jackson!(b.mulist)
-    return MomentaKPM(b.mulist, b.bandbracket)
+    return nothing
 end
+
+momentaKPM!(b::KPMBuilder, models) = foreach(model -> momentaKPM!(b, model), models)
 
 # This iterates bras <psi_n| = <psi_0|AT_n(h) instead of kets (faster CSC multiplication)
 # In practice we iterate their conjugate |psi_n> = T_n(h') A'|psi_0>, and do the projection
 # onto the start ket, |psi_0>
 function addmomentaKPM!(b::KPMBuilder{<:AbstractMatrix,<:AbstractSparseMatrix}, pmeter)
-    mulist, kets, kets0, kets1 = b.mulist, b.kets, b.kets0, b.kets1
-    h, A, bandbracket = b.h, b.A, b.bandbracket
+    mulist = b.mulist
+    kmat, kmat0, kmat1 = parent.((b.ket, b.ket0, b.ket1))
+    h, A, bandbracket = b.hmat, b.Amat, b.bandbracket
     order = length(mulist) - 1
-    mul!(kets0, A', kets)
-    mulscaled!(kets1, h', kets0, bandbracket)
-    mulist[1] += proj(kets0, kets)
-    mulist[2] += proj(kets1, kets)
+    mul!(kmat0, A', kets)
+    mulscaled!(kmat1, h', kets0, bandbracket)
+    mulist[1] += proj(kmat0, kmat)
+    mulist[2] += proj(kmat1, kmat)
     for n in 3:(order+1)
         ProgressMeter.next!(pmeter; showvalues = ())
-        iterateKPM!(kets0, h', kets1, bandbracket)
-        mulist[n] += proj(kets0, kets)
-        kets0, kets1 = kets1, kets0
+        iterateKPM!(kmat0, h', kmat1, bandbracket)
+        mulist[n] += proj(kmat0, kmat)
+        kmat0, kmat1 = kmat1, kmat0
     end
     return mulist
 end
 
 function addmomentaKPM!(b::KPMBuilder{<:UniformScaling, <:AbstractSparseMatrix,T}, pmeter) where {T}
-    mulist, kets, kets0, kets1, = b.mulist, b.kets, b.kets0, b.kets1
-    h, A, bandbracket = b.h, b.A, b.bandbracket
+    mulist = b.mulist
+    kmat, kmat0, kmat1 = parent.((b.ket, b.ket0, b.ket1))
+    h, A, bandbracket = b.hmat, b.Amat, b.bandbracket
     order = length(mulist) - 1
-    kets0 .= kets
-    mulscaled!(kets1, h', kets0, bandbracket)
-    mulist[1] += μ0 = proj(kets0, kets0)
-    mulist[2] += μ1 = proj(kets1, kets0)
+    kmat0 .= kmat
+    mulscaled!(kmat1, h', kmat0, bandbracket)
+    mulist[1] += μ0 = proj(kmat0, kmat0)
+    mulist[2] += μ1 = proj(kmat1, kmat0)
     # This is not used in the currently activated codepath (BLAS mul!), but is needed in the
     # commented out @threads codepath
     thread_buffers = (zeros(T, Threads.nthreads()), zeros(T, Threads.nthreads()))
     for n in 3:2:(order+1)
         ProgressMeter.next!(pmeter; showvalues = ())
         ProgressMeter.next!(pmeter; showvalues = ()) # twice because of 2-step
-        proj11, proj10 = iterateKPM!(kets0, h', kets1, bandbracket, thread_buffers)
+        proj11, proj10 = iterateKPM!(kmat0, h', kmat1, bandbracket, thread_buffers)
         mulist[n] += 2 * proj11 - μ0
         n + 1 > order + 1 && break
         mulist[n + 1] += 2 * proj10 - μ1
-        kets0, kets1 = kets1, kets0
+        kmat0, kmat1 = kmat1, kmat0
     end
     A.λ ≈ 1 || (mulist .*= A.λ)
     return mulist
@@ -129,19 +171,19 @@ function mulscaled!(y, h´, x, (center, halfwidth))
     return y
 end
 
-function iterateKPM!(kets0, h´, kets1, (center, halfwidth), buff = ())
+function iterateKPM!(kmat0, h´, kmat1, (center, halfwidth), buff = ())
     α = 2/halfwidth
     β = 2center/halfwidth
-    mul!(kets0, h´, kets1, α, -1)
-    @. kets0 = kets0 - β * kets1
-    return proj_or_nothing(buff, kets0, kets1)
+    mul!(kmat0, h´, kmat1, α, -1)
+    @. kmat0 = kmat0 - β * kmat1
+    return proj_or_nothing(buff, kmat0, kmat1)
 end
 
-proj_or_nothing(::Tuple{}, kets0, kets1) = nothing
-proj_or_nothing(buff, kets0, kets1) = (proj(kets1, kets1), proj(kets1, kets0))
+proj_or_nothing(::Tuple{}, kmat0, kmat1) = nothing
+proj_or_nothing(buff, kmat0, kmat1) = (proj(kmat1, kmat1), proj(kmat1, kmat0))
 
-# This is equivalent to tr(ket1'*ket2) for matrices, and ket1'*ket2 for vectors
-proj(kets1, kets2) = dot(kets1, kets2)
+# This is equivalent to tr(kmat1'*kmat2) for matrices
+proj(kmat1, kmat2) = dot(kmat1, kmat2)
 
 # function iterateKPM!(ket0, h´, ket1, (center, halfwidth), thread_buffers = ())
 #     h = parent(h´)
@@ -195,9 +237,10 @@ end
 function bandbracketKPM(h, ::Missing)
     bandbracketKPM(h, bandrangeKPM(h))
 end
+
 bandbracketKPM(h, (ϵmin, ϵmax)::Tuple{T,T}, pad = float(T)(0.01)) where {T} = ((ϵmax + ϵmin) / 2, (ϵmax - ϵmin) / (2 - pad))
 
-bandrangeKPM(h::Hamiltonian) = bandrangeKPM(matrixKPM(h, flatten))
+bandrangeKPM(h::Hamiltonian) = bandrangeKPM(_KPM_array(h, Val(true)))
 
 function bandrangeKPM(h::AbstractMatrix{T}) where {T}
     @warn "Computing spectrum bounds... Consider using the `bandrange` option for faster performance."
@@ -215,53 +258,53 @@ end
 # Kernel Polynomial Method : observables
 #######################################################################
 """
-    dosKPM(h::Hamiltonian; resolution = 2, kets = randomkets(1), kw...)
+    dosKPM(h::Hamiltonian; resolution = 2, ket = randomkets(1), kw...)
 
-Compute, using the Kernel Polynomial Method (KPM), the density of states per site of
-zero-dimensional Hamiltonian `h`, `ρ(ϵ) = ∑⟨ket|δ(ϵ-h)|ket⟩/(NR) ≈ Tr[δ(ϵ-h)]/N` (N is the
-number of sites, and the sum is over `R` random `kets`). If `kets` are not `randomkets` but
-one or more `KetModel`s (see `ket`), the division by `NR` is ommitted, which results in a
-*local* density of states `ρ(ϵ) = ∑⟨ket|δ(ϵ-h)|ket⟩` at sites specified by `kets`.
+Compute, using the Kernel Polynomial Method (KPM), the local density of states `ρₖ(ϵ) =
+⟨k|δ(ϵ-h)|k⟩` for the ket `|k⟩` produced by `ket(ket::KetModel, h)`. The result is a
+tuple of energy points `ϵᵢ::Vector` spanning the band range, and real `ρₖ(ϵᵢ)::Vector`
+values (any residual imaginary part in `ρₖ` is dropped). The number of energy points `ϵᵢ` is
+`order * resolution`, rounded to the closest integer.
 
-The result is a tuple of energy points `xk::Vector` and real `ρ::Vector` values (any
-residual imaginary part in ρ is dropped), where the number of energy points `xk` is `order *
-resolution`, rounded to the closest integer.
+If `ket` is not a single `KetModel`, but a collection of them, the sum `∑ₖρₖ(ε)` over
+all models will be computed. In the case of the default `ket = randomkets(n)`, this
+results in an estimate of the total density of states per orbital, computed through an
+stochastic trace, `ρ(ϵ) = ∑ₖ⟨k|δ(ϵ-h)|k⟩/n ≈ Tr[δ(ϵ-h)]/N₀`, where `N₀` is the total number
+of orbitals in the unit cell.
+
+`dosKPM` is a particular case of `densityKPM` for an operator `A = I` and with any residual
+imaginary parts dropped
 
     dosKPM(μ::MomentaKPM; resolution = 2)
 
-Same as above with KPM momenta `μ` as input. Equivalent to `densityKPM(μ; kw...)` except
-that imaginary parts are dropped.
+Same as above with KPM momenta `μ` as input.
 
 # See also
     `momentaKPM`, `densityKPM`, `averageKPM`
 """
-function dosKPM(h; resolution = 2, kets = randomkets(1), kw...)
-    N = dos_normalization_factor(kets, h)
-    dosKPM(momentaKPM(h, I/N; kets = kets, kw...), resolution = resolution)
-end
+dosKPM(h; resolution = 2, ket = randomkets(1), kw...) =
+    dosKPM(momentaKPM(h, I; ket = ket, kw...), resolution = resolution)
 
 dosKPM(μ::MomentaKPM; resolution = 2) = real.(densityKPM(μ; resolution = resolution))
 
-dos_normalization_factor(kets::StochasticTraceKets, h) = nsites(h)
-dos_normalization_factor(kets, h) = 1
-
 """
-    densityKPM(h::Hamiltonian, A; resolution = 2, kets = randomkets(1), kw...)
+    densityKPM(h::Hamiltonian, A; resolution = 2, ket = randomkets(1), kw...)
 
-Compute, using the Kernel Polynomial Method (KPM), the spectral density of `A` for
-zero-dimensional Hamiltonian `h`, `ρ_A(ϵ) = ∑⟨ket|A δ(ϵ-h)|ket⟩/R ≈ Tr[Aδ(ϵ-h)]` (the sum is
-over `R` random `kets`). `A` can itself be a `Hamiltonian` or a `UniformScaling` `λ*I`. If
-`kets` are not `randomkets` but one or more `KetModel`s (see `ket`), the division by `R` is
-ommitted, which results in a *local* spectral density `ρ_A(ϵ) = ∑⟨ket|Aδ(ϵ-h)|ket⟩` at sites
-specified by `kets`.
+Compute, using the Kernel Polynomial Method (KPM), the spectral density of `A`, `ρᴬₖ(ϵ) =
+⟨k|A δ(ϵ-h)|k⟩` for the ket `|k⟩` produced by `ket(ket::KetModel, h)`. The result is a
+tuple of energy points `ϵᵢ::Vector` spanning the band range, and real `ρᴬₖ(ϵᵢ)::Vector`
+values. The number of energy points `ϵᵢ` is `order * resolution`, rounded to the closest
+integer.
 
-The result is a tuple of energy points `xk::Vector` and real `ρ_A::Vector` values (unlike
-for `dosKPM`, all imaginary parts in `ρ_A` are preserved), where the number of energy points
-`xk` is `order * resolution`, rounded to the closest integer.
+If `ket` is not a single `KetModel`, but a collection of them, the sum `∑ₖρᴬₖ(ε)` over
+all models will be computed. In the case of the default `ket = randomkets(n)`, this
+results in an estimate of the average spectral density per orbital, computed through an
+stochastic trace, `ρᴬ(ϵ) = ∑ₖ⟨k|δ(ϵ-h)A|k⟩/n ≈ Tr[δ(ϵ-h)A]/N₀`, where `N₀` is the total
+number of orbitals in the unit cell.
 
-    densityKPM(momenta::MomentaKPM; resolution = 2)
+    densityKPM(μ::MomentaKPM; resolution = 2)
 
-Same as above with the KPM momenta as input (see `momentaKPM`).
+Same as above with KPM momenta `μ` as input.
 
 # See also
     `dosKPM`, `momentaKPM`, `averageKPM`
@@ -285,11 +328,12 @@ end
 """
     averageKPM(h::Hamiltonian, A; kBT = 0, Ef = 0, kw...)
 
-Compute, using the Kernel Polynomial Method (KPM), the thermal expectation value `<A> = Σ_k
-f(E_k) <k|A|k> = ∫dE f(E) Tr [A δ(E-H)] = Tr [A f(H)]` for a given hermitian operator `A`
-and a zero-dimensional hamiltonian `h` (see `momentaKPM` and its options `kw` for further
-details). `f(E)` is the Fermi-Dirac distribution function, `|k⟩` are `h` eigenstates with
-energy `E_k`, kBT` is the temperature in energy units and `Ef` the Fermi energy.
+Compute, using the Kernel Polynomial Method (KPM), the thermal expectation value `⟨A⟩ = Σ_k
+f(E_k) ⟨k|A|k⟩ = ∫dE f(E) Tr [A δ(E-H)]/N₀ = Tr [A f(H)]/N₀` for a given hermitian operator
+`A` and a zero-dimensional hamiltonian `h` with a total of `N₀` orbitals (see `momentaKPM`
+and its options `kw` for further details). `f(E)` is the Fermi-Dirac distribution function,
+`|k⟩` are `h` eigenstates with energy `E_k`, kBT` is the temperature in energy units and
+`Ef` the Fermi energy.
 
     averageKPM(μ::MomentaKPM, A; kBT = 0, Ef = 0)
 
@@ -300,7 +344,7 @@ Same as above with the KPM momenta as input (see `momentaKPM`).
 """
 averageKPM(h, A; kBT = 0, Ef = 0, kw...) = averageKPM(momentaKPM(h, A; kw...); kBT = kBT, Ef = Ef)
 
-function averageKPM(momenta::MomentaKPM{T}; kBT = 0.0, Ef = 0.0) where {T}
+function averageKPM(momenta::MomentaKPM; kBT = 0.0, Ef = 0.0)
     (center, halfwidth) = momenta.bandbracket
     order = length(momenta.mulist) - 1
     # if !iszero(kBT)

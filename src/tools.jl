@@ -115,6 +115,7 @@ padtotype(s::SMatrix{E,L}, ::Type{S}) where {E,L,E2,L2,T,S<:SMatrix{E2,L2,T}} =
     S(SMatrix{E2,E}(I) * s * SMatrix{L,L2}(I))
 padtotype(s::StaticVector, ::Type{S}) where {N,T,S<:SVector{N,T}} =
     padright(T.(s), Val(N))
+padtotype(s::SVector{1}, ::Type{T}) where {T<:Number} = T(first(s))
 padtotype(x::Number, ::Type{S}) where {E,L,S<:SMatrix{E,L}} =
     S(x * (SMatrix{E,1}(I) * SMatrix{1,L}(I)))
 padtotype(s::Number, ::Type{S}) where {N,T,S<:SVector{N,T}} =
@@ -124,13 +125,13 @@ padtotype(u::UniformScaling, ::Type{T}) where {T<:Number} = T(u.λ)
 padtotype(u::UniformScaling, ::Type{S}) where {S<:SMatrix} = S(u)
 padtotype(a::AbstractArray, t::Type{<:SVector}) = padright(a, t)
 
-function padtotype(a::AbstractMatrix, ::Type{S}) where {N,M,T,S<:SMatrix{N,M,T}}
-    t = ntuple(Val(N*M)) do i
-        n, m = mod1(i, N), fld1(i, N)
-        @inbounds n > size(a, 1) || m > size(a, 2) ? zero(T) : T(a[n,m])
-    end
-    return S(t)
-end
+# function padtotype(a::AbstractMatrix, ::Type{S}) where {N,M,T,S<:SMatrix{N,M,T}}
+#     t = ntuple(Val(N*M)) do i
+#         n, m = mod1(i, N), fld1(i, N)
+#         @inbounds n > size(a, 1) || m > size(a, 2) ? zero(T) : T(a[n,m])
+#     end
+#     return S(t)
+# end
 
 ## Work around BUG: -SVector{0,Int}() isa SVector{0,Union{}}
 negative(s::SVector{L,<:Number}) where {L} = -s
@@ -229,11 +230,11 @@ function unique_sorted_approx!(v::AbstractVector{T}) where {T}
     return v
 end
 
-normalize_columns!(kmat::AbstractMatrix) = normalize_columns!(kmat, axes(kmat, 2))
-
-function normalize_columns!(kmat::AbstractMatrix, cols)
-    for col in cols
-        normalize!(view(kmat, :, col))
+function normalize_columns!(kmat::AbstractMatrix, norm = 1)
+    for col in axes(kmat, 2)
+        v = view(kmat, :, col)
+        iszero(v) || normalize!(v)
+        norm == 1 || (v *= norm)
     end
     return kmat
 end
