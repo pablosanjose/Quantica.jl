@@ -281,11 +281,19 @@ function flatten(src::SparseMatrixCSC{<:SMatrix{N,N,T}}, orbstruct, ::Type{T´} 
 end
 
 function flatten(src::StridedMatrix{<:SMatrix{N,N,T}}, orbstruct, ::Type{T´} = T) where {N,T,T´}
-    norbs = length.(orbitals(orbstruct))
-    offsets´ = orbstruct.flatoffsets
-    dim´ = last(offsets´)
-    matrix = similar(src, T´, dim´, dim´)
+    dim´ = last(orbstruct.flatoffsets)
+    dst = similar(src, T´, dim´, dim´)
+    return flatten!(dst, src, orbstruct)
+end
 
+function flatten(src::StridedMatrix{<:SVector{N,T}}, orbstruct, ::Type{T´} = T) where {N,T,T´}
+    dim´ = last(orbstruct.flatoffsets)
+    dst = similar(src, T´, dim´, size(src, 2))
+    return flatten!(dst, src, orbstruct)
+end
+
+function flatten!(dst, src::StridedMatrix{<:SMatrix{N,N,T}}, orbstruct, ::Type{T´} = T) where {N,T,T´}
+    norbs = length.(orbitals(orbstruct))
     for col in 1:size(src, 2), row in 1:size(src, 1)
         srow, scol = sublat_site(row, orbstruct), sublat_site(col, orbstruct)
         nrow, ncol = norbs[srow], norbs[scol]
@@ -293,29 +301,25 @@ function flatten(src::StridedMatrix{<:SMatrix{N,N,T}}, orbstruct, ::Type{T´} = 
         rowoffset´ = flatoffset_site(row, orbstruct)
         coloffset´ = flatoffset_site(col, orbstruct)
         for j in 1:ncol, i in 1:nrow
-            matrix[rowoffset´ + i, coloffset´ + j] = val[i, j]
+            dst[rowoffset´ + i, coloffset´ + j] = val[i, j]
         end
     end
-    return matrix
+    return dst
 end
 
 # for Subspace bases
-function flatten(src::StridedMatrix{<:SVector{N,T}}, orbstruct, ::Type{T´} = T) where {N,T,T´}
+function flatten!(dst, src::StridedMatrix{<:SVector{N,T}}, orbstruct, ::Type{T´} = T) where {N,T,T´}
     norbs = length.(orbitals(orbstruct))
-    offsets´ = orbstruct.flatoffsets
-    dim´ = last(offsets´)
-    matrix = similar(src, T´, dim´, size(src, 2))
-
     for col in 1:size(src, 2), row in 1:size(src, 1)
         srow = sublat_site(row, orbstruct)
         nrow = norbs[srow]
         val = src[row, col]
         rowoffset´ = flatoffset_site(row, orbstruct)
         for i in 1:nrow
-            matrix[rowoffset´ + i, col] = val[i]
+            dst[rowoffset´ + i, col] = val[i]
         end
     end
-    return matrix
+    return dst
 end
 
 function flatten_sparse_copy!(dst, src, o::OrbitalStructure)

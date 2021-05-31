@@ -104,8 +104,8 @@ Ket(amplitudes::M, orbstruct::O) where {T,M<:AbstractMatrix{T},O<:OrbitalStructu
 Ket(amplitudes::M, orbstruct::O) where {T,M<:AbstractMatrix,O<:OrbitalStructure{T}} =
     Ket{T,M,O}(T.(amplitudes), orbstruct)
 
-check_compatible_ket(a::AbstractMatrix, o::OrbitalStructure) =
-    size(a, 1) == dimh(o) ||
+check_compatible_ket(a::AbstractMatrix{T}, o::OrbitalStructure) where {T} =
+    T == orbitaltype(o) && size(a, 1) == dimh(o) ||
         throw(ArgumentError("Ket is incompatible with OrbitalStructure"))
 
 check_compatible_ket(ket::Ket, h::Hamiltonian) =
@@ -190,7 +190,7 @@ ket!(ket::Ket, kmodel, h) = ket!(parent(ket), kmodel, h)
 
 # The type instability in ket! (due to orbs in multi-orbital h's) is harmless
 function ket!(kmat::AbstractMatrix{T}, kmodel, h) where {T}
-    T == orbitaltype(h) || throw(ArgumentError("Ket matrix and Hamiltonian have different orbital type, $T and $(orbitaltype(h))"))
+    check_compatible_ket(kmat, orbitalstructure(h)) || throw(ArgumentError("Ket matrix and Hamiltonian have incompatible orbital structure"))
     fill!(kmat, zero(T))
     kmodel´ = resolve(kmodel, h.lattice)    # resolve sublat names into sublat indices
     for (sublat, orbs) in enumerate(orbitals(h))

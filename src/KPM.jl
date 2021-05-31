@@ -37,10 +37,11 @@ struct MomentaKPM{T,B<:Tuple}
     bandbracket::B
 end
 
-struct KPMBuilder{AM,HM<:AbstractMatrix,T,H<:Hamiltonian,K<:Ket,B}
+struct KPMBuilder{AM,HM<:AbstractMatrix,T,H<:Hamiltonian,K<:Ket,K´<:Ket,B}
     h::H
     hmat::HM
     Amat::AM
+    ket_nonflattened::K´
     ket::K
     ket0::K
     ket1::K
@@ -49,28 +50,32 @@ struct KPMBuilder{AM,HM<:AbstractMatrix,T,H<:Hamiltonian,K<:Ket,B}
     mulist::Vector{T}
 end
 
-function KPMBuilder(h::Hamiltonian{<:Lattice,L}, A, order, bandrange, flat) where {L}
+function KPMBuilder(h::Hamiltonian{<:Lattice,L}, A, ketmodel, order, bandrange, flat) where {L}
     iszero(L) ||
         throw(ArgumentError("Hamiltonian is defined on an infinite lattice. Reduce it to zero-dimensions with `wrap` or `unitcell`."))
     eh = eltype(eltype(h))
     eA = eltype(eltype(A))
     mulist = zeros(promote_type(eh, eA), order + 1)
     bandbracket = bandbracketKPM(h, bandrange)
-    h´ = _KPM_ket_or_ham(h, flat)
-    hmat = h´[tuple()]
-    Amat = _KPM_array(A, flat)
-    zeroket = _KPM_ket_or_ham(ket(h), flat)
-    builder = KPMBuilder(h´, hmat, Amat, zeroket, similar(zeroket), similar(zeroket), bandbracket, order, mulist)
+    ketmodel´ = maybe_get_first(ketmodel)
+    ket_nonflattened = ket(ketmodel´, h)
+    hmat = maybe_flatten_KPM(h, flat)
+    Amat = maybe_flatten_KPM(A, flat)
+    zeroket = maybe_flatten_KPM(ket_nonflattened, flat)
+    builder = KPMBuilder(h, hmat, Amat, ket_nonflattened, zeroket, similar(zeroket), similar(zeroket), bandbracket, order, mulist)
     return builder
 end
 
-_KPM_ket_or_ham(k, ::Val{true}) = flatten(k)
-_KPM_ket_or_ham(k, ::Val{false}) = k
-_KPM_ket_or_ham(k, flat) = flat ? flatten(k) : k
-_KPM_array(h::Hamiltonian, flat) = bloch!(flat ? similarmatrix(h, flatten) : similarmatrix(h), h)
-_KPM_array(h::Hamiltonian, ::Val{true}) = bloch!(similarmatrix(h, flatten), h)
-_KPM_array(h::Hamiltonian, ::Val{false}) = bloch!(similarmatrix(h), h)
-_KPM_array(A::UniformScaling, _) = A
+maybe_flatten_KPM(k::Ket, ::Val{true}) = flatten(k)
+maybe_flatten_KPM(k::Ket, ::Val{false}) = k
+maybe_flatten_KPM(k::Ket, flat) = flat ? flatten(k) : k
+maybe_flatten_KPM(h::Hamiltonian, ::Val{true}) = bloch!(similarmatrix(h, flatten), h)
+maybe_flatten_KPM(h::Hamiltonian, ::Val{false}) = bloch!(similarmatrix(h), h)
+maybe_flatten_KPM(h::Hamiltonian, flat) = bloch!(flat ? similarmatrix(h, flatten) : similarmatrix(h), h)
+maybe_flatten_KPM(A, _) = A
+
+maybe_get_first(k::Ket) = k
+maybe_get_first(k) = first(k)
 
 
 """
@@ -103,7 +108,7 @@ julia> momentaKPM(h, bandrange = (-6,6)).mulist |> length
 ```
 """
 function momentaKPM(h::Hamiltonian, A = I; ket = randomkets(1), order = 10, bandrange = missing, flat = Val(true))
-    builder = KPMBuilder(h, A, order, bandrange, flat)
+    builder = KPMBuilder(h, A, ket, order, bandrange, flat)
     momentaKPM!(builder, ket)
     jackson!(builder.mulist)
     return MomentaKPM(builder.mulist, builder.bandbracket)
@@ -111,7 +116,8 @@ end
 
 function momentaKPM!(b::KPMBuilder, model::KetModel)
     pmeter = Progress(b.order, "Computing moments: ")
-    ket!(b.ket, model, b.h)
+    ket!(b.ket_nonflattened, model, b.h)
+    flatten!(parent(b.ket), parent(b.ket_nonflattened), b.ket_nonflattened.orbstruct)
     addmomentaKPM!(b, pmeter)
     return nothing
 end
@@ -240,7 +246,7 @@ end
 
 bandbracketKPM(h, (ϵmin, ϵmax)::Tuple{T,T}, pad = float(T)(0.01)) where {T} = ((ϵmax + ϵmin) / 2, (ϵmax - ϵmin) / (2 - pad))
 
-bandrangeKPM(h::Hamiltonian) = bandrangeKPM(_KPM_array(h, Val(true)))
+bandrangeKPM(h::Hamiltonian) = bandrangeKPM(maybe_flatten_KPM(h, Val(true)))
 
 function bandrangeKPM(h::AbstractMatrix{T}) where {T}
     @warn "Computing spectrum bounds... Consider using the `bandrange` option for faster performance."

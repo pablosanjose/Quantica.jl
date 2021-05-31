@@ -10,6 +10,8 @@ using ArnoldiMethod, Random, FFTW
     @test abs(m1.mulist[1]) ≈ abs(m2.mulist[1])
     dos1 = dosKPM(h, order = 10, bandrange = (-3,3), ket = randomkets(1, maporbitals = true))
     dos2 = dosKPM(h, order = 10, bandrange = (-3,3), ket = randomkets(1, r -> randn(), maporbitals = true))
-    @test all(ρ -> 0 < ρ < 10, last(dos1))
-    @test all(ρ -> 0 < ρ < 10, last(dos2))
+    @test all(>(0), last(dos1))
+    @test all(>(0), last(dos2))
+    dos = dosKPM(h, order = 10, bandrange = (-3,3), ket = randomkets(2, r -> randn() * SA[1 0; 0 -1], sublats = :B))
+    @test all(>(0), last(dos))
 end
