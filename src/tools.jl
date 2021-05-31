@@ -125,13 +125,13 @@ padtotype(u::UniformScaling, ::Type{T}) where {T<:Number} = T(u.λ)
 padtotype(u::UniformScaling, ::Type{S}) where {S<:SMatrix} = S(u)
 padtotype(a::AbstractArray, t::Type{<:SVector}) = padright(a, t)
 
-# function padtotype(a::AbstractMatrix, ::Type{S}) where {N,M,T,S<:SMatrix{N,M,T}}
-#     t = ntuple(Val(N*M)) do i
-#         n, m = mod1(i, N), fld1(i, N)
-#         @inbounds n > size(a, 1) || m > size(a, 2) ? zero(T) : T(a[n,m])
-#     end
-#     return S(t)
-# end
+function padtotype(a::AbstractMatrix, ::Type{S}) where {N,M,T,S<:SMatrix{N,M,T}}
+    t = ntuple(Val(N*M)) do i
+        n, m = mod1(i, N), fld1(i, N)
+        @inbounds n > size(a, 1) || m > size(a, 2) ? zero(T) : T(a[n,m])
+    end
+    return S(t)
+end
 
 ## Work around BUG: -SVector{0,Int}() isa SVector{0,Union{}}
 negative(s::SVector{L,<:Number}) where {L} = -s
