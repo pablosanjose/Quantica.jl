@@ -681,9 +681,9 @@ where `T` is the number type of `lat`.
 # Indexing
 
 Indexing into a Hamiltonian `h` works as follows. Access the `HamiltonianHarmonic` matrix at
-a given `dn::NTuple{L,Int}` with `h[dn]`. Assign `v` into element `(i,j)` of said matrix
-with `h[dn][i,j] = v` or `h[dn, i, j] = v`. Broadcasting with vectors of indices `is` and
-`js` is supported, `h[dn][is, js] = v_matrix`.
+a given `dn::NTuple{L,Int}` with `h[dn]`, or alternatively with `h[]` if `L=0`. Assign `v`
+into element `(i,j)` of said matrix with `h[dn][i,j] = v` or `h[dn, i, j] = v`. Broadcasting
+with vectors of indices `is` and `js` is supported, `h[dn][is, js] = v_matrix`.
 
 To add an empty harmonic with a given `dn::NTuple{L,Int}`, do `push!(h, dn)`. To delete it,
 do `deleteat!(h, dn)`.
@@ -1020,6 +1020,7 @@ end
 
 Base.getindex(h::Hamiltonian, dn::NTuple) = getindex(h, SVector(dn))
 Base.getindex(h::Hamiltonian, dn::Tuple{}) = getindex(h, SVector{0,Int}())
+Base.getindex(h::Hamiltonian) = h[tuple()]
 @inline function Base.getindex(h::Hamiltonian{<:Any,L}, dn::SVector{L,Int}) where {L}
     nh = findfirst(hh -> hh.dn == dn, h.harmonics)
     nh === nothing && throw(BoundsError(h, dn))

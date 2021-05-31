@@ -14,4 +14,13 @@ using ArnoldiMethod, Random, FFTW
     @test all(>(0), last(dos2))
     dos = dosKPM(h, order = 10, bandrange = (-3,3), ket = randomkets(2, r -> randn() * SA[1 0; 0 -1], sublats = :B))
     @test all(>(0), last(dos))
+    x, energy = densityKPM(h, h, order = 100, resolution = 1, bandrange = (-3,3), ket = ketmodel(1, indices = 1, maporbitals = true))
+    @test isapprox(abs(sum(energy)), 0, atol = Quantica.default_tol(eltype(energy)))
+    k = ket(ketmodel(1, indices = 1, maporbitals = true), h)
+    x´, energy´ = densityKPM(h, h, order = 100, resolution = 1, bandrange = (-3,3), ket = k)
+    @test x´ ≈ x
+    @test energy´ ≈ energy
+    x´, energy´ = densityKPM(h, h[], order = 100, resolution = 1, bandrange = (-3,3), ket = k)
+    @test x´ ≈ x
+    @test energy´ ≈ energy
 end

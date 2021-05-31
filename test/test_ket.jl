@@ -71,4 +71,7 @@ end
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(I), orbitals = (Val(1), Val(3)))
     k = ket(ketmodel(SA[1 1]; maporbitals = true), h)
     @test unflatten(flatten(k), orbitalstructure(k)) == k
+    kf = ket(ketmodel(SA[1 1]), flatten(h))
+    Quantica.ket!(kf, ketmodel(SA[1 1]; maporbitals = true), h)
+    @test unflatten(kf, orbitalstructure(k)) == k
 end

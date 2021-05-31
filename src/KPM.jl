@@ -37,46 +37,47 @@ struct MomentaKPM{T,B<:Tuple}
     bandbracket::B
 end
 
-struct KPMBuilder{AM,HM<:AbstractMatrix,T,H<:Hamiltonian,K<:Ket,K´<:Ket,B}
+struct KPMBuilder{AM,HM<:AbstractMatrix,T,H<:Hamiltonian,K<:Ket,B}
     h::H
     hmat::HM
     Amat::AM
-    ket_nonflattened::K´
-    ket::K
     ket0::K
     ket1::K
+    ket2::K
     bandbracket::Tuple{B,B}
     order::Int
     mulist::Vector{T}
 end
 
-function KPMBuilder(h::Hamiltonian{<:Lattice,L}, A, ketmodel, order, bandrange, flat) where {L}
+function KPMBuilder(h::Hamiltonian{<:Lattice,L}, A, ket_or_ketmodels, order, bandrange, flat) where {L}
     iszero(L) ||
         throw(ArgumentError("Hamiltonian is defined on an infinite lattice. Reduce it to zero-dimensions with `wrap` or `unitcell`."))
     eh = eltype(eltype(h))
     eA = eltype(eltype(A))
     mulist = zeros(promote_type(eh, eA), order + 1)
     bandbracket = bandbracketKPM(h, bandrange)
-    ketmodel´ = maybe_get_first(ketmodel)
-    ket_nonflattened = ket(ketmodel´, h)
-    hmat = maybe_flatten_KPM(h, flat)
-    Amat = maybe_flatten_KPM(A, flat)
-    zeroket = maybe_flatten_KPM(ket_nonflattened, flat)
-    builder = KPMBuilder(h, hmat, Amat, ket_nonflattened, zeroket, similar(zeroket), similar(zeroket), bandbracket, order, mulist)
+    hmat = matrix_KPM(flat, h)
+    Amat = matrix_KPM(flat, A, orbitalstructure(h))
+    zeroket = maybe_flatten_KPM(flat, firstket_KPM(ket_or_ketmodels, h))
+    builder = KPMBuilder(h, hmat, Amat, zeroket, similar(zeroket), similar(zeroket), bandbracket, order, mulist)
     return builder
 end
 
-maybe_flatten_KPM(k::Ket, ::Val{true}) = flatten(k)
-maybe_flatten_KPM(k::Ket, ::Val{false}) = k
-maybe_flatten_KPM(k::Ket, flat) = flat ? flatten(k) : k
-maybe_flatten_KPM(h::Hamiltonian, ::Val{true}) = bloch!(similarmatrix(h, flatten), h)
-maybe_flatten_KPM(h::Hamiltonian, ::Val{false}) = bloch!(similarmatrix(h), h)
-maybe_flatten_KPM(h::Hamiltonian, flat) = bloch!(flat ? similarmatrix(h, flatten) : similarmatrix(h), h)
-maybe_flatten_KPM(A, _) = A
+firstket_KPM(k::Ket, h) =  k
+firstket_KPM(k::KetModel, h) = ket(k, h)
+firstket_KPM(kets, h) = firstket_KPM(first(kets), h)
 
-maybe_get_first(k::Ket) = k
-maybe_get_first(k) = first(k)
+maybe_flatten_KPM(::Val{true}, k) = flatten(k)
+maybe_flatten_KPM(::Val{false}, k) = k
+maybe_flatten_KPM(flat, k) = flat ? flatten(k) : k
 
+matrix_KPM(::Val{true}, h::Hamiltonian, x...) = bloch!(similarmatrix(h, flatten), h)
+matrix_KPM(::Val{false}, h::Hamiltonian, x...) = bloch!(similarmatrix(h), h)
+matrix_KPM(flat, h::Hamiltonian, x...) = bloch!(flat ? similarmatrix(h, flatten) : similarmatrix(h), h)
+matrix_KPM(::Val{true}, A::AbstractArray, o::OrbitalStructure) = flatten(A, o)
+matrix_KPM(::Val{false}, A::AbstractArray, ::OrbitalStructure) = A
+matrix_KPM(flat, A::AbstractArray, ::OrbitalStructure) = flat ? flatten(A, o) : A
+matrix_KPM(flat, A, x...) = A
 
 """
     momentaKPM(h::Hamiltonian, A = I; ket = randomkets(1), order = 10, bandrange = missing, flat = Val(true))
@@ -85,8 +86,8 @@ Compute the Kernel Polynomial Method (KPM) momenta `μₙ = ⟨k|Tₙ(h) A|k⟩`
 ket(ket::KetModel, h)`, `A` is an observable (`Hamiltonian` or `AbstractMatrix`) and
 `Tₙ(h)` is the order-`n` Chebyshev polynomial of the Hamiltonian `h`.
 
-`ket` can be a single `KetModel`, or a collection of `KetModel`s, as in the default
-`ket = randomkets(n)`. In the latter case, `μₙ` is summed over all models. The default
+`ket` can be a single `KetModel` or `Ket`, or a collection of them, as in the default
+`ket = randomkets(n)`. In the latter case, `μₙ` is summed over all models/kets. The default
 is useful to estimate momenta of normalized traces using the stochastic trace approach,
 whereby `μ_n = Tr[A T_n(h)]/N₀ ≈ ∑ₖ⟨k|A T_n(h)|k⟩`. Here the `|k⟩`s are `n` random kets of
 norm `1/√n` and `N₀` is the total number of orbitals per unit cell of `h` (see `randomkets`).
@@ -114,13 +115,13 @@ function momentaKPM(h::Hamiltonian, A = I; ket = randomkets(1), order = 10, band
     return MomentaKPM(builder.mulist, builder.bandbracket)
 end
 
-function momentaKPM!(b::KPMBuilder, model::KetModel)
+function momentaKPM!(b::KPMBuilder, ket::Ket)
     pmeter = Progress(b.order, "Computing moments: ")
-    ket!(b.ket_nonflattened, model, b.h)
-    flatten!(parent(b.ket), parent(b.ket_nonflattened), b.ket_nonflattened.orbstruct)
     addmomentaKPM!(b, pmeter)
     return nothing
 end
+
+momentaKPM!(b::KPMBuilder, model::KetModel) = momentaKPM!(b, ket!(b.ket0, model, b.h))
 
 momentaKPM!(b::KPMBuilder, models) = foreach(model -> momentaKPM!(b, model), models)
 
@@ -129,11 +130,11 @@ momentaKPM!(b::KPMBuilder, models) = foreach(model -> momentaKPM!(b, model), mod
 # onto the start ket, |psi_0>
 function addmomentaKPM!(b::KPMBuilder{<:AbstractMatrix,<:AbstractSparseMatrix}, pmeter)
     mulist = b.mulist
-    kmat, kmat0, kmat1 = parent.((b.ket, b.ket0, b.ket1))
+    kmat, kmat0, kmat1 = parent.((b.ket0, b.ket1, b.ket2))
     h, A, bandbracket = b.hmat, b.Amat, b.bandbracket
     order = length(mulist) - 1
-    mul!(kmat0, A', kets)
-    mulscaled!(kmat1, h', kets0, bandbracket)
+    mul!(kmat0, A', kmat)
+    mulscaled!(kmat1, h', kmat0, bandbracket)
     mulist[1] += proj(kmat0, kmat)
     mulist[2] += proj(kmat1, kmat)
     for n in 3:(order+1)
@@ -147,7 +148,7 @@ end
 
 function addmomentaKPM!(b::KPMBuilder{<:UniformScaling, <:AbstractSparseMatrix,T}, pmeter) where {T}
     mulist = b.mulist
-    kmat, kmat0, kmat1 = parent.((b.ket, b.ket0, b.ket1))
+    kmat, kmat0, kmat1 = parent.((b.ket0, b.ket1, b.ket2))
     h, A, bandbracket = b.hmat, b.Amat, b.bandbracket
     order = length(mulist) - 1
     kmat0 .= kmat
@@ -246,7 +247,7 @@ end
 
 bandbracketKPM(h, (ϵmin, ϵmax)::Tuple{T,T}, pad = float(T)(0.01)) where {T} = ((ϵmax + ϵmin) / 2, (ϵmax - ϵmin) / (2 - pad))
 
-bandrangeKPM(h::Hamiltonian) = bandrangeKPM(maybe_flatten_KPM(h, Val(true)))
+bandrangeKPM(h::Hamiltonian) = bandrangeKPM(matrix_KPM(Val(true), h))
 
 function bandrangeKPM(h::AbstractMatrix{T}) where {T}
     @warn "Computing spectrum bounds... Consider using the `bandrange` option for faster performance."

@@ -172,7 +172,8 @@ function ket(kmodel::KetModel, h::Hamiltonian)
     ncols = guess_ket_columns(kmodel, h)
     T = orbitaltype(h)
     kmat = Matrix{T}(undef, size(h, 1), ncols)
-    return ket!(kmat, kmodel, h)
+    k = ket(kmat, h)
+    return ket!(k, kmodel, h)
 end
 
 function guess_ket_columns(km, h)
@@ -186,28 +187,29 @@ _guess_ket_columns(::Number) = 1
 _guess_ket_columns(::AbstractVector) = 1
 _guess_ket_columns(t::AbstractMatrix) = size(t, 2)
 
-ket!(ket::Ket, kmodel, h) = ket!(parent(ket), kmodel, h)
-
+# Model application, possibly flattening if target requires it (like bloch!)
 # The type instability in ket! (due to orbs in multi-orbital h's) is harmless
-function ket!(kmat::AbstractMatrix{T}, kmodel, h) where {T}
-    check_compatible_ket(kmat, orbitalstructure(h)) || throw(ArgumentError("Ket matrix and Hamiltonian have incompatible orbital structure"))
+function ket!(k::Ket, kmodel, h)
+    kmat = parent(k)
+    T = eltype(kmat)
     fill!(kmat, zero(T))
     kmodel´ = resolve(kmodel, h.lattice)    # resolve sublat names into sublat indices
     for (sublat, orbs) in enumerate(orbitals(h))
         ket_applyterms_sublat!(kmat, sublat, orbs, h, kmodel´)
     end
     kmodel.normalization === missing || normalize_columns!(kmat, kmodel.normalization)
-    return ket(kmat, h)
+    return ket(kmat, k.orbstruct)
 end
 
 # function barrier for orbs type-stability
 function ket_applyterms_sublat!(kmat::AbstractArray{T}, sublat, orbs, h, kmodel) where {T}
     allpos = allsitepositions(h.lattice)
+    orbstruct = orbitalstructure(h)
     for i in siterange(h.lattice, sublat), term in kmodel.model.terms
         if i in term.selector
             r = allpos[i]
-            mat = ket_orbs_matrix(kmodel.maporbitals, term, r, orbs)
-            kmat[i, :] .+= to_orbtype.(eachcol(mat), T, Ref(orbs))
+            orbsmat = ket_orbs_matrix(kmodel.maporbitals, term, r, orbs)
+            copy_rows!(kmat, i, orbstruct, orbsmat, orbs)
         end
     end
     return kmat
@@ -232,6 +234,19 @@ ensure_orbs_matrix(v::AbstractVector, ::NTuple{N}) where {N} = length(v) == N ? 
 ensure_orbs_matrix(mat::AbstractMatrix, ::NTuple{N}) where {N} = size(mat, 1) == N ? mat :
     throw(ArgumentError("Expected an array with $N rows in ket model with `maporbitals = false`, got $(size(mat, 1)) rows"))
 
-to_orbtype(t::Number, ::Type{T}, t1::NTuple{1}) where {T<:Number} = T(t)
+# copy SVectors
+function copy_rows!(kmat::AbstractMatrix{T}, i, orbstruct, orbsmat, orbs) where {T<:SVector}
+    kmat[i, :] .+= to_orbtype.(eachcol(orbsmat), T, Ref(orbs))
+    return kmat
+end
+
+# copy Scalars
+function copy_rows!(kmat::AbstractMatrix{T}, i, orbstruct, orbsmat, orbs) where {T<:Number}
+    row = flatoffset_site(i, orbstruct) + 1
+    dr = size(orbsmat, 1)
+    kmat[row:row+dr-1, :] .+= T.(orbsmat)
+    return kmat
+end
+
 to_orbtype(t::Number, ::Type{S}, t1::NTuple{1}) where {S<:SVector} = padtotype(t, S)
 to_orbtype(t::AbstractVector, ::Type{S}, t1::NTuple{N}) where {N,S} = padtotype(SVector{N}(t), S)
