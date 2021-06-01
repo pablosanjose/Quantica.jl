@@ -149,36 +149,3 @@ end
         @test hop' === hop´
     end
 end
-
-@testset "kets" begin
-    h = LatticePresets.honeycomb() |> hamiltonian(hopping(I), orbitals = (Val(3), Val(1)))
-    k = Matrix(randomkets(2; sublats = :B), h)
-        @test sum(e -> count(iszero, e), k) == 10
-    k = Matrix(randomkets(2, r->rand() * SA[1 2 3 4]; sublats = :B), h)
-        @test eltype(k) isa Type{<:SMatrix{3,4,ComplexF64}}
-        @test k[2,1][1,2] ≈ 2*k[2,1][1,1]
-    k = Matrix(randomkets(2, r->rand() * SA[1, 2, 3]; sublats = :A), h)
-        @test eltype(k) isa Type{<:SVector{3,ComplexF64}}
-        @test k[2,1][1] ≈ 2*k[2,1][2]
-    k = Matrix(randomkets(2, r->rand() * SA[1 2; 2 3; 3 4]; sublats = :A), h)
-        @test eltype(k) isa Type{<:SMatrix{3,2,ComplexF64}}
-        @test k[2,1][1,2] ≈ 2*k[2,1][1,1]
-    k = Matrix(randomkets(1; region = r -> r[2] < 0, maporbitals = true), h)
-        @test sum(e -> count(iszero, e), k) == 3
-    k = Matrix(randomkets(2, r->randn()SA[1,]; sublats = :B), h)
-        @test sum(e -> count(!iszero, e), k) == 2
-    k = Matrix(randomkets(2; sublats = :B, maporbitals = true), h)
-        @test sum(e -> count(!iszero, e), k) == 2
-    km = ket(r -> randn() * SA[1, -1, 0], sublats = :A)  + ket(r -> randn(), sublats =:B)
-    k = Matrix(km, h)
-        @test sum(e -> count(!iszero, e), k) == 3
-
-    h = LatticePresets.honeycomb() |> hamiltonian(hopping(I), orbitals = (Val(3), Val(1)), orbtype = Float64) |> unitcell(3)
-    k = Matrix(randomkets(2; sublats = :B), h)
-        @test eltype(k) isa Type{SVector{3,ComplexF64}}
-    k = Matrix(randomkets(4, r -> randn(); sublats = :B, normalized = true, indices = not(18)), h)
-        @test eltype(k) isa Type{SVector{3,Float64}}
-        @test all(col -> norm(view(k, :, col)) ≈ 1/2, axes(k,2)) # due to 1/√n for n random vectors
-        @test all((iszero(k[row, col]) for col in axes(k,2), row in 1:nsites(h)÷2))
-        @test all((iszero(k[18, col]) for col in axes(k,2)))
-end

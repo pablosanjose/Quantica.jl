@@ -115,6 +115,7 @@ padtotype(s::SMatrix{E,L}, ::Type{S}) where {E,L,E2,L2,T,S<:SMatrix{E2,L2,T}} =
     S(SMatrix{E2,E}(I) * s * SMatrix{L,L2}(I))
 padtotype(s::StaticVector, ::Type{S}) where {N,T,S<:SVector{N,T}} =
     padright(T.(s), Val(N))
+padtotype(s::SVector{1}, ::Type{T}) where {T<:Number} = T(first(s))
 padtotype(x::Number, ::Type{S}) where {E,L,S<:SMatrix{E,L}} =
     S(x * (SMatrix{E,1}(I) * SMatrix{1,L}(I)))
 padtotype(s::Number, ::Type{S}) where {N,T,S<:SVector{N,T}} =
@@ -230,11 +231,11 @@ function unique_sorted_approx!(v::AbstractVector{T}) where {T}
     return v
 end
 
-normalize_columns!(kmat::AbstractMatrix) = normalize_columns!(kmat, axes(kmat, 2))
-
-function normalize_columns!(kmat::AbstractMatrix, cols)
-    for col in cols
-        normalize!(view(kmat, :, col))
+function normalize_columns!(kmat::AbstractMatrix, norm = 1)
+    for col in axes(kmat, 2)
+        v = view(kmat, :, col)
+        iszero(v) || normalize!(v)
+        norm == 1 || (v *= norm)
     end
     return kmat
 end

@@ -1,17 +1,6 @@
 #######################################################################
-# Hamiltonian
+# OrbitalStructure
 #######################################################################
-struct HamiltonianHarmonic{L,M,A<:Union{AbstractMatrix{M},SparseMatrixBuilder{M}}}
-    dn::SVector{L,Int}
-    h::A
-end
-
-HamiltonianHarmonic{L,M,A}(dn::SVector{L,Int}, n::Int, m::Int) where {L,M,A<:SparseMatrixCSC{M}} =
-    HamiltonianHarmonic(dn, sparse(Int[], Int[], M[], n, m))
-
-HamiltonianHarmonic{L,M,A}(dn::SVector{L,Int}, n::Int, m::Int) where {L,M,A<:Matrix{M}} =
-    HamiltonianHarmonic(dn, zeros(M, n, m))
-
 struct OrbitalStructure{T,N,O<:NTuple{N,Tuple{Vararg{NameType}}}}
     orbtype::Type{T}    # T<:Union{Number,SVector} is Hamiltonian's orbitaltype
     orbitals::O
@@ -26,6 +15,36 @@ function OrbitalStructure(::Type{T}, orbs::O, lat::AbstractLattice) where {T,N,O
 end
 
 OrbitalStructure(::Type{T}, n) where {T} = OrbitalStructure(T, ((:A,),), (0, n), (0, n))
+
+# Equality does not need equal T, or equal orbital names
+Base.:(==)(o1::OrbitalStructure, o2::OrbitalStructure) =
+    length.(o1.orbitals) == length.(o2.orbitals) && o1.offsets == o2.offsets
+
+function Base.show(io::IO, o::OrbitalStructure{T,N,O}) where {T,N,O}
+    i = get(io, :indent, "")
+    ioindent = IOContext(io, :indent => string(i, "  "))
+    print(io,
+"$(i)OrbitalStructure:
+$i  Orbital Type  : $T
+$i  Orbitals      : $(orbitals(o))
+$i  Sublattices   : $(length(sublats(o)))
+$i  Dimensions    : $(dimh(o))")
+end
+
+#######################################################################
+# Hamiltonian
+#######################################################################
+
+struct HamiltonianHarmonic{L,M,A<:Union{AbstractMatrix{M},SparseMatrixBuilder{M}}}
+    dn::SVector{L,Int}
+    h::A
+end
+
+HamiltonianHarmonic{L,M,A}(dn::SVector{L,Int}, n::Int, m::Int) where {L,M,A<:SparseMatrixCSC{M}} =
+    HamiltonianHarmonic(dn, sparse(Int[], Int[], M[], n, m))
+
+HamiltonianHarmonic{L,M,A}(dn::SVector{L,Int}, n::Int, m::Int) where {L,M,A<:Matrix{M}} =
+    HamiltonianHarmonic(dn, zeros(M, n, m))
 
 struct Hamiltonian{LA<:AbstractLattice,L,M,A<:AbstractMatrix,
                    H<:HamiltonianHarmonic{L,M,A},O<:OrbitalStructure} # <: AbstractMatrix{M}
@@ -75,9 +94,9 @@ siterange(o::OrbitalStructure, sublat) = (1+o.offsets[sublat]):o.offsets[sublat+
 
 # sublat offsets after flattening (without padding zeros)
 flatoffsets(offsets, norbs) = _flatoffsets((0,), offsets, norbs...)
-_flatoffsets(offsets´::NTuple{N,Any}, offsets, n, ns...) where {N} =
-    _flatoffsets((offsets´..., offsets´[end] + n * (offsets[N+1] - offsets[N])), offsets, ns...)
-_flatoffsets(offsets´, offsets) = offsets´
+_flatoffsets(flatoffsets´::NTuple{N,Any}, offsets, n, ns...) where {N} =
+    _flatoffsets((flatoffsets´..., flatoffsets´[end] + n * (offsets[N+1] - offsets[N])), offsets, ns...)
+_flatoffsets(flatoffsets´, offsets) = flatoffsets´
 
 # offset of site i after flattening
 @inline flatoffset_site(i, orbstruct) = first(flatoffsetorbs_site(i, orbstruct))
@@ -99,11 +118,11 @@ displaymatrixtype(A::Type{<:AbstractArray}) = string(A)
 displayelements(h::Hamiltonian) = displayelements(blocktype(h))
 displayelements(::Type{S}) where {N,T,S<:SMatrix{N,N,T}} = "$N × $N blocks ($T)"
 displayelements(::Type{T}) where {T} = "scalar ($T)"
-displayorbitals(h::Hamiltonian) =
-    replace(replace(string(orbitals(h)), "Symbol(\"" => ":"), "\")" => "")
+displayorbitals(h::Hamiltonian) = displayorbitals(orbitalstructure(h))
+displayorbitals(o::OrbitalStructure) =
+    replace(replace(string(orbitals(o)), "Symbol(\"" => ":"), "\")" => "")
 
-Base.show(io::IO, ham::Hamiltonian) = show(io, MIME("text/plain"), ham)
-function Base.show(io::IO, ::MIME"text/plain", ham::Hamiltonian)
+function Base.show(io::IO, ham::Hamiltonian)
     i = get(io, :indent, "")
     print(io, i, summary(ham), "\n",
 "$i  Bloch harmonics  : $(length(ham.harmonics)) ($(displaymatrixtype(ham)))
@@ -123,17 +142,6 @@ Base.summary(h::Hamiltonian{LA}) where {E,L,LA<:Lattice{E,L}} =
 Base.summary(::Hamiltonian{LA}) where {E,L,T,L´,LA<:Superlattice{E,L,T,L´}} =
     "Hamiltonian{<:Superlattice} : $(L)D Hamiltonian on a $(L´)D Superlattice in $(E)D space"
 
-function Base.show(io::IO, o::OrbitalStructure{T,N,O}) where {T,N,O}
-    i = get(io, :indent, "")
-    ioindent = IOContext(io, :indent => string(i, "  "))
-    print(io, i,
-"$(i)OrbitalStructure: orbital structure of Hamiltonian
-$i  Orbital Type  : $T
-$i  Orbitals      : $(orbitals(o))
-$i  Sublattices   : $(length(sublats(o)))
-$i  Dimensions    : $(dimh(o))")
-end
-
 #######################################################################
 # flatten
 #######################################################################
@@ -145,19 +153,24 @@ associated lattice is flattened also, so that there is one site per orbital for 
 site (all at the same position). Note that in the case of sparse Hamiltonians, zeros in
 hopping/onsite matrices are preserved as structural zeros upon flattening.
 
+    flatten(k::Ket)
+
+Flattens a multiorbital `Ket` to have a scalar `eltype`, instead of `SVector`.
+
     flatten(s::Subspace)
 
 Rebuild `s` by flattening its basis to have a scalar eltype.
 
-    h |> flatten()
+    x |> flatten()
 
-Curried form equivalent to `flatten(h)` of `h |> flatten` (included for consistency with
+Curried form equivalent to `flatten(x)` or `x |> flatten` (included for consistency with
 the rest of the API).
 
     flatten(x, o::OrbitalStructure)
 
-Flatten object x, if applicable, using the orbital structure o, as obtained from a
-Hamiltonian `h` with `orbitalstructure(h)`
+Flatten object x, if applicable, using the orbital structure `o`, as obtained from a
+Hamiltonian `h` with `orbitalstructure(h)`. `x` here is typically an `AbstractArray` of
+non-scalar `eltype`.
 
 # Examples
 
@@ -207,6 +220,14 @@ isflat(m) = false
 
 flatten(h::HamiltonianHarmonic, orbstruct) =
     HamiltonianHarmonic(h.dn, flatten(h.h, orbstruct))
+
+function flatten(o::OrbitalStructure{T}) where {T}
+    T´ = eltype(T)
+    orbs = (_ -> (:flat, )).(orbitals(o))
+    offsets = o.flatoffsets
+    flatoffsets = o.flatoffsets
+    return OrbitalStructure(T´, orbs, offsets, flatoffsets)
+end
 
 function flatten(lat::Lattice, orbstruct)
     length(orbitals(orbstruct)) == nsublats(lat) || throw(ArgumentError("Mismatch between sublattices and orbitals"))
@@ -262,11 +283,19 @@ function flatten(src::SparseMatrixCSC{<:SMatrix{N,N,T}}, orbstruct, ::Type{T´} 
 end
 
 function flatten(src::StridedMatrix{<:SMatrix{N,N,T}}, orbstruct, ::Type{T´} = T) where {N,T,T´}
-    norbs = length.(orbitals(orbstruct))
-    offsets´ = orbstruct.flatoffsets
-    dim´ = last(offsets´)
-    matrix = similar(src, T´, dim´, dim´)
+    dim´ = last(orbstruct.flatoffsets)
+    dst = similar(src, T´, dim´, dim´)
+    return flatten!(dst, src, orbstruct)
+end
 
+function flatten(src::StridedMatrix{<:SVector{N,T}}, orbstruct, ::Type{T´} = T) where {N,T,T´}
+    dim´ = last(orbstruct.flatoffsets)
+    dst = similar(src, T´, dim´, size(src, 2))
+    return flatten!(dst, src, orbstruct)
+end
+
+function flatten!(dst, src::StridedMatrix{<:SMatrix{N,N,T}}, orbstruct, ::Type{T´} = T) where {N,T,T´}
+    norbs = length.(orbitals(orbstruct))
     for col in 1:size(src, 2), row in 1:size(src, 1)
         srow, scol = sublat_site(row, orbstruct), sublat_site(col, orbstruct)
         nrow, ncol = norbs[srow], norbs[scol]
@@ -274,29 +303,25 @@ function flatten(src::StridedMatrix{<:SMatrix{N,N,T}}, orbstruct, ::Type{T´} = 
         rowoffset´ = flatoffset_site(row, orbstruct)
         coloffset´ = flatoffset_site(col, orbstruct)
         for j in 1:ncol, i in 1:nrow
-            matrix[rowoffset´ + i, coloffset´ + j] = val[i, j]
+            dst[rowoffset´ + i, coloffset´ + j] = val[i, j]
         end
     end
-    return matrix
+    return dst
 end
 
 # for Subspace bases
-function flatten(src::StridedMatrix{<:SVector{N,T}}, orbstruct, ::Type{T´} = T) where {N,T,T´}
+function flatten!(dst, src::StridedMatrix{<:SVector{N,T}}, orbstruct, ::Type{T´} = T) where {N,T,T´}
     norbs = length.(orbitals(orbstruct))
-    offsets´ = orbstruct.flatoffsets
-    dim´ = last(offsets´)
-    matrix = similar(src, T´, dim´, size(src, 2))
-
     for col in 1:size(src, 2), row in 1:size(src, 1)
         srow = sublat_site(row, orbstruct)
         nrow = norbs[srow]
         val = src[row, col]
         rowoffset´ = flatoffset_site(row, orbstruct)
         for i in 1:nrow
-            matrix[rowoffset´ + i, col] = val[i]
+            dst[rowoffset´ + i, col] = val[i]
         end
     end
-    return matrix
+    return dst
 end
 
 function flatten_sparse_copy!(dst, src, o::OrbitalStructure)
@@ -373,7 +398,8 @@ end
 """
     unflatten(x, o::OrbitalStructure)
 
-Rebuild object `x` performing the inverse of `flatten(x)` or `flatten(x, o)`.
+Rebuild object `x` performing the inverse of `flatten(x)` or `flatten(x, o)`. The target `o`
+is required.
 
 # Examples
 ```jldoctest
@@ -512,9 +538,6 @@ unflatten_orbitals_or_reinterpret(vflat::AbstractArray{T}, o::OrbitalStructure{S
     reinterpret(SVector{M,T}, vflat)
 # otherwise call unflatten_orbitals
 unflatten_orbitals_or_reinterpret(vflat, o) = unflatten_orbitals(vflat, o)
-
-# valdim(::Type{<:Number}) = Val(1)
-# valdim(::Type{S}) where {N,S<:SVector{N}} = Val(N)
 
 #######################################################################
 # similarmatrix
@@ -660,9 +683,9 @@ where `T` is the number type of `lat`.
 # Indexing
 
 Indexing into a Hamiltonian `h` works as follows. Access the `HamiltonianHarmonic` matrix at
-a given `dn::NTuple{L,Int}` with `h[dn]`. Assign `v` into element `(i,j)` of said matrix
-with `h[dn][i,j] = v` or `h[dn, i, j] = v`. Broadcasting with vectors of indices `is` and
-`js` is supported, `h[dn][is, js] = v_matrix`.
+a given `dn::NTuple{L,Int}` with `h[dn]`, or alternatively with `h[]` if `L=0`. Assign `v`
+into element `(i,j)` of said matrix with `h[dn][i,j] = v` or `h[dn, i, j] = v`. Broadcasting
+with vectors of indices `is` and `js` is supported, `h[dn][is, js] = v_matrix`.
 
 To add an empty harmonic with a given `dn::NTuple{L,Int}`, do `push!(h, dn)`. To delete it,
 do `deleteat!(h, dn)`.
@@ -998,6 +1021,8 @@ function get_or_push!(harmonics::Vector{H}, dn::SVector{L,Int}, dims) where {L,M
 end
 
 Base.getindex(h::Hamiltonian, dn::NTuple) = getindex(h, SVector(dn))
+Base.getindex(h::Hamiltonian, dn::Tuple{}) = getindex(h, SVector{0,Int}())
+Base.getindex(h::Hamiltonian) = h[tuple()]
 @inline function Base.getindex(h::Hamiltonian{<:Any,L}, dn::SVector{L,Int}) where {L}
     nh = findfirst(hh -> hh.dn == dn, h.harmonics)
     nh === nothing && throw(BoundsError(h, dn))
@@ -1269,7 +1294,7 @@ function applyterm!(builder::IJVBuilder{L}, term::OnsiteTerm) where {L}
     rsel = resolve(term.selector, lat)
     for s in sublats(rsel), i in siteindices(rsel, s)
         r = allpos[i]
-        v = toeltype(term(r, r), eltype(builder), builder.orbs[s], builder.orbs[s])
+        v = to_blocktype(term(r, r), eltype(builder), builder.orbs[s], builder.orbs[s])
         push!(ijv, (i, i, v))
     end
     return nothing
@@ -1296,7 +1321,7 @@ function applyterm!(builder::IJVBuilder{L}, term::HoppingTerm) where {L}
                     keepgoing = true
                     rtarget = allsitepositions(lat)[i]
                     r, dr = _rdr(rsource, rtarget)
-                    v = toeltype(term(r, dr), eltype(builder), builder.orbs[s1], builder.orbs[s2])
+                    v = to_blocktype(term(r, dr), eltype(builder), builder.orbs[s1], builder.orbs[s2])
                     push!(ijv, (i, j, v))
                 end
             end
@@ -1307,25 +1332,19 @@ function applyterm!(builder::IJVBuilder{L}, term::HoppingTerm) where {L}
 end
 
 # For use in Hamiltonian building
-toeltype(t::Number, ::Type{T}, t1::NTuple{1}, t2::NTuple{1}) where {T<:Number} = T(t)
-toeltype(t::Number, ::Type{S}, t1::NTuple{1}, t2::NTuple{1}) where {S<:SMatrix} =
+to_blocktype(t::Number, ::Type{T}, t1::NTuple{1}, t2::NTuple{1}) where {T<:Number} = T(t)
+to_blocktype(t::Number, ::Type{S}, t1::NTuple{1}, t2::NTuple{1}) where {S<:SMatrix} =
     padtotype(t, S)
-toeltype(t::SMatrix{N1,N2}, ::Type{S}, t1::NTuple{N1}, t2::NTuple{N2}) where {N1,N2,S<:SMatrix} =
+to_blocktype(t::SMatrix{N1,N2}, ::Type{S}, t1::NTuple{N1}, t2::NTuple{N2}) where {N1,N2,S<:SMatrix} =
     padtotype(t, S)
 
-toeltype(u::UniformScaling, ::Type{T}, t1::NTuple{1}, t2::NTuple{1}) where {T<:Number} = T(u.λ)
-toeltype(u::UniformScaling, ::Type{S}, t1::NTuple{N1}, t2::NTuple{N2}) where {N1,N2,S<:SMatrix} =
+to_blocktype(u::UniformScaling, ::Type{T}, t1::NTuple{1}, t2::NTuple{1}) where {T<:Number} = T(u.λ)
+to_blocktype(u::UniformScaling, ::Type{S}, t1::NTuple{N1}, t2::NTuple{N2}) where {N1,N2,S<:SMatrix} =
     padtotype(SMatrix{N1,N2}(u), S)
 
-# For use in ket building
-toeltype(t::Number, ::Type{T}, t1::NTuple{1}) where {T<:Number} = T(t)
-toeltype(t::Number, ::Type{S}, t1::NTuple{1}) where {S<:SVector} = padtotype(t, S)
-toeltype(t::SVector{N}, ::Type{S}, t1::NTuple{N}) where {N,S<:SVector} = padtotype(t, S)
-toeltype(t::SMatrix{N}, ::Type{S}, t1::NTuple{N}) where {N,S<:SMatrix} = padtotype(t, S)
-
 # Fallback to catch mismatched or undesired block types
-toeltype(t::Array, x...) = throw(ArgumentError("Array input in model, please use StaticArrays instead (e.g. SA[1 0; 0 1] instead of [1 0; 0 1])"))
-toeltype(t, x...) = throw(DimensionMismatch("Dimension mismatch between model and Hamiltonian. Does the `orbitals` kwarg in your `hamiltonian` match your model?"))
+to_blocktype(t::Array, x...) = throw(ArgumentError("Array input in model, please use StaticArrays instead (e.g. SA[1 0; 0 1] instead of [1 0; 0 1])"))
+to_blocktype(t, x...) = throw(DimensionMismatch("Dimension mismatch between model and Hamiltonian. Does the `orbitals` kwarg in your `hamiltonian` match your model?"))
 
 # Although range can be (rmin, rmax) we return all targets within rmax.
 # Those below rmin get filtered later by `in rsel`
@@ -1346,109 +1365,6 @@ targets(builder, range::Missing, rsource, s1) = siterange(builder.lat, s1)
 checkinfinite(rs) =
     rs.selector.dns === missing && (rs.selector.range === missing || !isfinite(maximum(rs.selector.range))) &&
     throw(ErrorException("Tried to implement an infinite-range hopping on an unbounded lattice"))
-
-#######################################################################
-# Matrix(::KetModel, ::Hamiltonian), and Vector
-#######################################################################
-"""
-  Vector(km::KetModel, h::Hamiltonian)
-
-Construct a `Vector` representation of `km` applied to Hamiltonian `h`.
-"""
-Base.Vector(km::KetModel, h::Hamiltonian) = vec(Matrix(km, h))
-
-"""
-  Matrix(km::KetModel, h::Hamiltonian)
-  Matrix(kms::NTuple{N,KetModel}, h::Hamiltonian)
-  Matrix(kms::AbstractMatrix, h::Hamiltonian)
-  Matrix(kms::StochasticTraceKets, h::Hamiltonian)
-
-Construct an `M×N` `Matrix` representation of the `N` kets `kms` applied to `M×M`
-Hamiltonian `h`. If `kms::StochasticTraceKets` for `n` random kets (constructed with
-`randomkets(n)`), a normalization `1/√n` required for stochastic traces is included.
-"""
-Base.Matrix(km::KetModel, h::Hamiltonian) = Matrix((km,), h)
-
-function Base.Matrix(km::AbstractMatrix, h::Hamiltonian)
-    check_compatible_kets(km, h)
-    kmat = Matrix(km)
-    return kmat
-end
-
-# kmodels should be a Union{NTuple{N,KetModel},StochasticTraceKets}
-function Base.Matrix(kmodels, h::Hamiltonian)
-    kmodels´ = resolve_tuple(kmodels, h.lattice)
-    allpos = allsitepositions(h.lattice)
-    T = guess_eltype(kmodels´, allpos, h)
-    orbs = orbitals(h)
-    kmat = [generate_amplitude(km, i, allpos[i], T, orbs[s]) for (i, s) in sitesublats(h.lattice), km in kmodels´]
-    check_compatible_kets(kmat, h)
-    maybe_normalize!(kmat, kmodels)
-    return kmat
-end
-
-resolve_tuple(ks::NTuple{N,KetModel}, lat) where {N} = resolve.(ks, Ref(lat))
-resolve_tuple(ks::StochasticTraceKets, lat) = resolve(ks, lat)
-
-function guess_eltype(kms, allpos, h)
-    km = first(kms)
-    term = first(km.model.terms)
-    rsel = term.selector
-    s = first(sublats(rsel))
-    i = first(siteindices(rsel, s))
-    r = allpos[i]
-    t = term(r, r)
-    z = zero(orbitaltype(h))
-    T = _guess_eltype(km.maporbitals, t, z)
-    return T
-end
-
-_guess_eltype(::Val{true}, t::Number, z) = typeof(t * z)
-_guess_eltype(::Val{false}, t::Number, z) = typeof(t * z)
-_guess_eltype(::Val{false}, t::SVector{<:Any,T}, z::SVector) where {T} = typeof(zero(T) * z)
-_guess_eltype(::Val{false}, t::SMatrix{M,N,T}, z::SVector{M2,T2}) where {M,N,M2,T,T2} = typeof(SMatrix{M2,N}(zero(T) * zero(T2) * I))
-
-function maybe_normalize!(kmat, kms::StochasticTraceKets)
-    kms.ketmodel.normalized && normalize_columns!(kmat)
-    kmat .*= sqrt(1/size(kmat,2))
-    return kmat
-end
-
-function maybe_normalize!(kmat, kms::Tuple{KetModel})
-    for (i, km) in enumerate(kms)
-        km.normalized && normalize_columns!(kmat, i)
-    end
-    return kmat
-end
-
-check_compatible_kets(kmat::AbstractMatrix, h::Hamiltonian) =
-    comp_eltypes(h, kmat) && size(kmat, 1) == size(h, 2) ||
-        throw(ArgumentError("ket vector or matrix is incompatible with Hamiltonian"))
-
-comp_eltypes(h::Hamiltonian, k::AbstractMatrix) = comp_eltypes(blocktype(h), eltype(k))
-comp_eltypes(::Type{<:Number}, ::Type{<:Number}) = true
-comp_eltypes(::Type{<:Number}, ::Type{<:SMatrix{1}}) = true
-comp_eltypes(::Type{<:SMatrix{N,M}}, ::Type{<:SVector{M}}) where {N,M} = true
-comp_eltypes(::Type{<:SMatrix{N,M}}, ::Type{<:SMatrix{M}}) where {N,M}  = true
-comp_eltypes(t1, t2) = false
-
-### generate_amplitude (asssumes resolved selectors) ###
-
-function generate_amplitude(ketmodel::KetModel, i, r, T, orbs)
-    amplitude = sum(ketmodel.model.terms) do term
-        i in term.selector ? maybe_maporbitals(ketmodel.maporbitals, T, orbs, term, r) : zero(T)
-    end
-    return amplitude
-end
-
-function maybe_maporbitals(::Val{false}, T, orbs, term, r)
-    return toeltype(term(r, r), T, orbs)
-end
-
-function maybe_maporbitals(::Val{true}, T, orbs::NTuple{N}, term, r) where {N}
-    x = SVector{N}(ntuple(_ -> Number(term(r, r)), Val(N)))
-    return toeltype(x, T, orbs)
-end
 
 #######################################################################
 # unitcell/supercell for Hamiltonians

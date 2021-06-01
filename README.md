@@ -23,12 +23,12 @@ The Quantica.jl package provides an expressive API to build arbitrary quantum sy
 - `parametric`, `@onsite!`, `@hopping!`, `parameters`: build a parametric Hamiltonian
 - `dims`, `sitepositions`, `siteindices`, `bravais`: inspect lattices and Hamiltonians
 - `supercell`, `unitcell`, `wrap`, `transform!`, `combine`: build derived lattices or Hamiltonians
-- `flatten`, `unflatten`, `orbitalstructure`: operate with multiorbital Hamiltonian or Subspaces
+- `ket`, `randomkets`: define ket models for use in e.g. KPM routines
+- `flatten`, `unflatten`, `orbitalstructure`: operate with multiorbital Hamiltonian, Kets or Subspaces
 - `cuboid`: build a bandstructure discretization mesh
 - `bandstructure`, `spectrum`, `diagonalizer`: compute the generalized bandstructure of a Hamiltonian or a ParametricHamiltonian
 - `bands`, `energies`, `states`: inspect spectrum and bandstructure objects
 - `momentaKPM`, `dosKPM`, `averageKPM`, `densityKPM`, `bandrangeKPM`: Kernel Polynomial Method (KPM)
-- `ket`, `randomkets`: define ket models for use in e.g. KPM routines
 - `greens`, `greensolver`: build Green's functions of a Hamiltonian
 
 Some of this functionality require loading one or more third-party packages, which include the following:
