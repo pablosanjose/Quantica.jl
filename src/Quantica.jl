@@ -19,6 +19,8 @@ using SparseArrays: getcolptr, AbstractSparseMatrix, AbstractSparseMatrixCSC
 
 using Statistics: mean
 
+using Compat # for use of findmin/findmax in bandstructure.jl
+
 export sublat, bravais, lattice, dims, supercell, unitcell,
        hopping, onsite, @onsite!, @hopping!, parameters, siteselector, hopselector, nrange,
        sitepositions, siteindices, not,
