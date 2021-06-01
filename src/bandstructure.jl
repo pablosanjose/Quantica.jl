@@ -942,7 +942,7 @@ end
 filter_around!(ss::Vector{<:Subspace}, ε0, which) = partialsort!(ss, which; by = s -> abs(s.energy - ε0))
 
 #######################################################################
-# Bandstructure minima, maxima, gap, gapedges
+# Bandstructure minima, maxima, gap, gapedge
 #######################################################################
 """
     minima(b::Bandstructure{1}; refinesteps = 0)
@@ -954,7 +954,7 @@ Only band vertices with one neighbors on each side will be considered as potenti
 minimum.
 
 # See also:
-    `maxima`, `gapedges`, `gap`
+    `maxima`, `gapedge`, `gap`
 """
 minima(b::Bandstructure{1,<:Any,T}; kw...) where {T} =
     Vector{Tuple{T,T}}[band_extrema(band, minimum_criterion, b.diag; kw...) for band in b.bands]
@@ -971,7 +971,7 @@ Only band vertices with one neighbors on each side will be considered as potenti
 maximum.
 
 # See also:
-    `minima`, `gapedges`, `gap`
+    `minima`, `gapedge`, `gap`
 """
 maxima(b::Bandstructure{1,<:Any,T}; kw...) where {T} =
     Vector{Tuple{T,T}}[band_extrema(band, maximum_criterion, b.diag; kw...) for band in b.bands]
@@ -1055,9 +1055,9 @@ Compute only `(φ₊, ε₊)` or `(φ₋, ε₋)`, respectively.
 # See also:
     `gap`, `minima`, `maxima`
 """
-gapedges(b::Bandstructure{1}, ε0; kw...) = gapedges(b, ε0, +; kw...), gapedges(b, ε0, -; kw...)
+gapedge(b::Bandstructure{1}, ε0; kw...) = gapedge(b, ε0, +; kw...), gapedge(b, ε0, -; kw...)
 
-function gapedges(b::Bandstructure{1,<:Any,T}, ε0, ::typeof(+); kw...) where {T}
+function gapedge(b::Bandstructure{1,<:Any,T}, ε0, ::typeof(+); kw...) where {T}
     isinband(b, ε0) && return (missing, zero(T))
     minbands = Iterators.flatten(filter!.(φε -> last(φε) > ε0, minima(b; kw...)))
     isempty(minbands) && return (missing, T(Inf))
@@ -1065,7 +1065,7 @@ function gapedges(b::Bandstructure{1,<:Any,T}, ε0, ::typeof(+); kw...) where {T
     return (φ₊, ε₊)
 end
 
-function gapedges(b::Bandstructure{1,<:Any,T}, ε0, ::typeof(-); kw...) where {T}
+function gapedge(b::Bandstructure{1,<:Any,T}, ε0, ::typeof(-); kw...) where {T}
     isinband(b, ε0) && return (missing, zero(T))
     maxbands = Iterators.flatten(filter!.(φε -> last(φε) < ε0, maxima(b; kw...)))
     isempty(maxbands) && return (missing, T(-Inf))
@@ -1091,9 +1091,9 @@ isinband(b::Band, ε) = maximum(last, b.verts) > ε > minimum(last, b.verts)
 Compute the gap if a 1D bandstructure `b` around ε₀, if any.
 
 # See also:
-    `gapedges`, `minima`, `maxima`
+    `gapedge`, `minima`, `maxima`
 """
 function gap(b::Bandstructure{1}, ε0; kw...)
-    (_, ε₊), (_, ε₋) = gapedges(b, ε0; kw...)
+    (_, ε₊), (_, ε₋) = gapedge(b, ε0; kw...)
     return ε₊ - ε₋
 end

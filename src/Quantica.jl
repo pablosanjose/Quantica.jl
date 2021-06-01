@@ -26,7 +26,7 @@ export sublat, bravais, lattice, dims, supercell, unitcell,
        hamiltonian, parametric, bloch, bloch!, similarmatrix,
        flatten, unflatten, orbitalstructure, wrap, transform!, combine,
        spectrum, bandstructure, diagonalizer, cuboid, isometric, splitbands,
-       bands, vertices, minima, maxima, gapedges, gap, isinband,
+       bands, vertices, minima, maxima, gapedge, gap, isinband,
        energies, states, degeneracy,
        momentaKPM, dosKPM, averageKPM, densityKPM, bandrangeKPM,
        greens, greensolver, Schur1D
