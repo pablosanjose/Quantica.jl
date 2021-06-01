@@ -27,7 +27,7 @@ The Quantica.jl package provides an expressive API to build arbitrary quantum sy
 - `flatten`, `unflatten`, `orbitalstructure`: operate with multiorbital Hamiltonian, Kets or Subspaces
 - `cuboid`: build a bandstructure discretization mesh
 - `bandstructure`, `spectrum`, `diagonalizer`: compute the generalized bandstructure of a Hamiltonian or a ParametricHamiltonian
-- `bands`, `energies`, `states`: inspect spectrum and bandstructure objects
+- `bands`, `energies`, `states`, `minima`, `maxima`, `gapedges`, `gap`, `isinband`: inspect spectrum and bandstructure objects
 - `momentaKPM`, `dosKPM`, `averageKPM`, `densityKPM`, `bandrangeKPM`: Kernel Polynomial Method (KPM)
 - `greens`, `greensolver`: build Green's functions of a Hamiltonian
 

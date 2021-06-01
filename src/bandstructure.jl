@@ -940,3 +940,160 @@ function filter_around!(ss, (ε0, n)::Tuple)
 end
 
 filter_around!(ss::Vector{<:Subspace}, ε0, which) = partialsort!(ss, which; by = s -> abs(s.energy - ε0))
+
+#######################################################################
+# Bandstructure minima, maxima, gap, gapedges
+#######################################################################
+"""
+    minima(b::Bandstructure{1}; refinesteps = 0)
+
+For a 1D bandstructure `b`, compute a vector of `Vector{Tuple{T,T}}`s (one per band),
+containing pairs `(φ, ε)` of Bloch phase and energy where the band, as sampled, has a local
+minimum. The minima will be further refined by a number `refinesteps` of bisections steps.
+Only band vertices with one neighbors on each side will be considered as potential local
+minimum.
+
+# See also:
+    `maxima`, `gapedges`, `gap`
+"""
+minima(b::Bandstructure{1,<:Any,T}; kw...) where {T} =
+    Vector{Tuple{T,T}}[band_extrema(band, minimum_criterion, b.diag; kw...) for band in b.bands]
+
+minimum_criterion(ε, εs...) = all(>=(ε), εs)
+
+"""
+    maxima(b::Bandstructure{1}; refinesteps = 0)
+
+For a 1D bandstructure `b`, compute a vector of `Vector{Tuple{T,T}}`s (one per band),
+containing pairs `(φ, ε)` of Bloch phase and energy where the band, as sampled, has a local
+maximum. The maxima will be further refined by a number `refinesteps` of bisections steps.
+Only band vertices with one neighbors on each side will be considered as potential local
+maximum.
+
+# See also:
+    `minima`, `gapedges`, `gap`
+"""
+maxima(b::Bandstructure{1,<:Any,T}; kw...) where {T} =
+    Vector{Tuple{T,T}}[band_extrema(band, maximum_criterion, b.diag; kw...) for band in b.bands]
+
+maximum_criterion(ε, εs...) = all(<=(ε), εs)
+
+function band_extrema(b::Band{1}, criterion, diag; refinesteps = 0)
+    found, neighbors = findall_with_neighbors(criterion, b)
+    found´ = refine_bisection.(found, neighbors, refinesteps, criterion, Ref(diag))
+    unique!(x -> round.(chop.(x), digits = 8), found´)
+    return found´
+end
+
+function findall_with_neighbors(criterion::Function, b::Band{D,<:Any,T}) where {D,T}
+    vertices = b.verts
+    found = NTuple{2,T}[]
+    neighs = Tuple{NTuple{2,T},NTuple{2,T}}[]
+    for (i, vertex) in enumerate(vertices)
+        ns = neighbors(b, i)
+        if length(ns) == max_neighbors(D)
+            (φ0, ε0) = vertex
+            i1, i2 = ns
+            (φ1, ε1) = vertices[i1]
+            (φ2, ε2) = vertices[i2]
+            φ1 < φ0 < φ2 || φ2 < φ0 < φ1 || continue
+            if criterion(ε0, ε1, ε2)
+                push!(found, (φ0,  ε0))
+                push!(neighs, ((φ1, ε1), (φ2, ε2)))
+            end
+        end
+    end
+    return found, neighs
+end
+
+neighbors(b::Band, i::Int) = (rowvals(b.adjmat)[ptr] for ptr in nzrange(b.adjmat, i))
+
+max_neighbors(D::Int) = 2^D # sum(m->binomial(D+1, m), 1:D), where D = 1 for 1D bands
+
+function refine_bisection(found, neighs, steps, criterion, diag)
+    φ0, ε0 = found
+    (φ1, ε1), (φ2, ε2) = neighs
+    if φ1 > φ2
+        φ1, ε1, φ2, ε2 = φ2, ε2, φ1, ε1
+    end
+    φ1 < φ0 < φ2 || return φ0, ε0
+    for _ in 1:steps
+        a, b = SA[(φ1-φ0)^2 φ1-φ0; (φ2-φ0)^2 φ2-φ0] \ SA[ε1-ε0; ε2-ε0]
+        dφ = -b / 2a  # corresponds to estimated dε = -b^2/4a
+        if iszero(dφ) || isnan(dφ) || ifelse(dφ > 0, dφ/(φ2 - φ0), -dφ/(φ0 - φ1)) > 1
+            break
+        end
+        εs, _ = diag(φ0 + dφ)
+        ε0´ = select_closest(εs, criterion, ε0, ε1, ε2)
+        if dφ > 0
+            φ1, φ0, φ2 = φ0, φ0 + dφ, φ2
+            ε1, ε0, ε2 = ε0, ε0´, ε2
+        else
+            φ1, φ0, φ2 = φ1, φ0 + dφ, φ0
+            ε1, ε0, ε2 = ε1, ε0´, ε0
+        end
+    end
+    return chop(φ0), ε0
+end
+
+select_closest(εs, criterion, ε0, εi...) =
+    last(findmin(ε -> ifelse(criterion(ε, ε0, εi...), abs(ε - ε0), Inf), εs))
+
+"""
+    gapedge(b::Bandstructure{1}, ε₀; refinesteps = 0)
+
+For a 1D bandstructure `b`, compute two tuples, `(φ₊, ε₊)` and `(φ₋, ε₋)`, of band points
+closest in energy to `ε₀`, from above and below, respectively. If ε₀ is inside a band or
+outside the global bandwidth, `φ₊` and `φ₋` will be `missing`. See `minima` or `maxima` for
+details about `refinesteps`.
+
+    gapedge(b::Bandstructure{1}, ε₀, +; kw...)
+    gapedge(b::Bandstructure{1}, ε₀, -; kw...)
+
+Compute only `(φ₊, ε₊)` or `(φ₋, ε₋)`, respectively.
+
+# See also:
+    `gap`, `minima`, `maxima`
+"""
+gapedges(b::Bandstructure{1}, ε0; kw...) = gapedges(b, ε0, +; kw...), gapedges(b, ε0, -; kw...)
+
+function gapedges(b::Bandstructure{1,<:Any,T}, ε0, ::typeof(+); kw...) where {T}
+    isinband(b, ε0) && return (missing, zero(T))
+    minbands = Iterators.flatten(filter!.(φε -> last(φε) > ε0, minima(b; kw...)))
+    isempty(minbands) && return (missing, T(Inf))
+    (φ₊, ε₊) = findmin(last, minbands) |> last
+    return (φ₊, ε₊)
+end
+
+function gapedges(b::Bandstructure{1,<:Any,T}, ε0, ::typeof(-); kw...) where {T}
+    isinband(b, ε0) && return (missing, zero(T))
+    maxbands = Iterators.flatten(filter!.(φε -> last(φε) < ε0, maxima(b; kw...)))
+    isempty(maxbands) && return (missing, T(-Inf))
+    (φ₋, ε₋) = findmax(last, maxbands) |> last
+    return (φ₋, ε₋)
+end
+
+"""
+    isinband(b::Bandstructure, ε)
+    isinband(b::Band, ε)
+
+Returns true if `ε` is contained within a band, false otherwise.
+
+# See also:
+    `gap`, `minima`, `maxima`
+"""
+isinband(b::Bandstructure, ε) = any(band -> isinband(band, ε), b.bands)
+isinband(b::Band, ε) = maximum(last, b.verts) > ε > minimum(last, b.verts)
+
+"""
+    gap(b::Bandstructure{1}, ε₀; refinesteps = 0)
+
+Compute the gap if a 1D bandstructure `b` around ε₀, if any.
+
+# See also:
+    `gapedges`, `minima`, `maxima`
+"""
+function gap(b::Bandstructure{1}, ε0; kw...)
+    (_, ε₊), (_, ε₋) = gapedges(b, ε0; kw...)
+    return ε₊ - ε₋
+end
