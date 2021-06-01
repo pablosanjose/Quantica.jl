@@ -108,7 +108,7 @@ julia> momentaKPM(h, bandrange = (-6,6)).mulist |> length
 11
 ```
 """
-function momentaKPM(h::Hamiltonian, A = I; ket = randomkets(1), order = 10, bandrange = missing, flat = Val(true))
+function momentaKPM(h::Hamiltonian, A = I; ket = randomkets(1), order = 10, bandrange = missing, flat = Val(false))
     builder = KPMBuilder(h, A, ket, order, bandrange, flat)
     momentaKPM!(builder, ket)
     jackson!(builder.mulist)
