@@ -188,3 +188,23 @@ end
     @test first(d(())) ≈ [-3,3]
     @test all(d() .≈ Tuple(spectrum(h)))
 end
+
+@testset "bandstructure extrema" begin
+    h = LP.honeycomb() |>
+        hamiltonian(hopping(I) + onsite(0.1, sublats = :A) - onsite(0.1, sublats = :B)) |>
+        unitcell(3) |>
+        Quantica.wrap(1)
+    b = bandstructure(h, subticks = 20)
+    @test !isapprox(gap(b, 0; refinesteps = 0), 0.2)
+    @test isapprox(gap(b, 0; refinesteps = 1), 0.2)
+    @test isapprox(gap(b, 0.3; refinesteps = 1), 0)
+    @test isapprox(gap(b, 4; refinesteps = 1), Inf)
+    @test all(gapedge(b, 0, +; refinesteps = 1) .≈ (0, 0.1))
+    @test all(gapedge(b, 0, -; refinesteps = 1) .≈ (0, -0.1))
+    h = LP.honeycomb() |> hamiltonian(hopping(I)) |> Quantica.wrap(1)
+    b = bandstructure(h, subticks = 20)
+    length.(minima(b, refinesteps = 0)) == [2, 0]
+    length.(maxima(b, refinesteps = 0)) == [0, 2]
+    length.(minima(b, refinesteps = 1)) == [1, 0]
+    length.(maxima(b, refinesteps = 1)) == [0, 1]
+end
