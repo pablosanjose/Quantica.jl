@@ -425,6 +425,22 @@ Subspace{0}: eigenenergy subspace on a 0D manifold
   Degeneracy   : 2
   Bloch/params : Float64[]
   Basis eltype : SVector{2, ComplexF64}
+
+julia> k = ket(ketmodel(1, sublats = :up), h) |> flatten
+Ket{ComplexF64}: ket with a 4 × 1 amplitude matrix
+  OrbitalStructure:
+    Orbital Type  : ComplexF64
+    Orbitals      : ((:flat,), (:flat,))
+    Sublattices   : 2
+    Dimensions    : 4
+
+julia> unflatten(k, orbitalstructure(h))
+Ket{SVector{2, ComplexF64}}: ket with a 2 × 1 amplitude matrix
+  OrbitalStructure:
+    Orbital Type  : SVector{2, ComplexF64}
+    Orbitals      : ((:up, :down), (:up, :down))
+    Sublattices   : 2
+    Dimensions    : 2
 ```
 
 # See also
@@ -568,19 +584,19 @@ Equivalent to the above, but adapted to the more general type of `x`.
 # Examples
 
 ```jldoctest
-julia> h = LatticePresets.honeycomb() |> hamiltonian(hopping(I), orbitals = Val(2))
+julia> h = LatticePresets.honeycomb() |> hamiltonian(hopping(I), orbitals = Val(2));
 
 julia> similarmatrix(h) |> summary
-"2×2 SparseMatrixCSC{StaticArrays.SArray{Tuple{2,2},Complex{Float64},2,4},Int64}"
+"2×2 SparseMatrixCSC{SMatrix{2, 2, ComplexF64, 4}, Int64}"
 
 julia> similarmatrix(h, Matrix{Int}) |> summary
-"4×4 Array{Int64,2}"
+"4×4 Matrix{Int64}"
 
 julia> similarmatrix(h, flatten) |> summary
-"4×4 SparseMatrixCSC{Complex{Float64},Int64}"
+"4×4 SparseMatrixCSC{ComplexF64, Int64}"
 
 julia> similarmatrix(h, LinearAlgebraPackage()) |> summary
-"4×4 Array{Complex{Float64},2}"
+"4×4 Matrix{ComplexF64}"
 ```
 
 # See also
@@ -698,7 +714,7 @@ Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
   Bloch harmonics  : 5 (SparseMatrixCSC, sparse)
   Harmonic size    : 2 × 2
   Orbitals         : ((:a, :a), (:a, :a))
-  Element type     : 2 × 2 blocks (Complex{Float64})
+  Element type     : 2 × 2 blocks (ComplexF64)
   Onsites          : 0
   Hoppings         : 6
   Coordination     : 3.0
@@ -708,19 +724,26 @@ Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
   Bloch harmonics  : 6 (SparseMatrixCSC, sparse)
   Harmonic size    : 2 × 2
   Orbitals         : ((:a, :a), (:a, :a))
-  Element type     : 2 × 2 blocks (Complex{Float64})
+  Element type     : 2 × 2 blocks (ComplexF64)
   Onsites          : 0
   Hoppings         : 6
   Coordination     : 3.0
 
 julia> h[(3,3)][1,1] = @SMatrix[1 2; 2 1]; h[(3,3)] # element assignment
-2×2 SparseMatrixCSC{StaticArrays.SArray{Tuple{2,2},Complex{Float64},2,4},Int64} with 1 stored entry:
-  [1, 1]  =  [1.0+0.0im 2.0+0.0im; 2.0+0.0im 1.0+0.0im]
+2×2 SparseMatrixCSC{SMatrix{2, 2, ComplexF64, 4}, Int64} with 1 stored entry:
+ [1.0+0.0im 2.0+0.0im; 2.0+0.0im 1.0+0.0im]                      ⋅                     
+                     ⋅                                           ⋅                     
 
 julia> h[(3,3)][[1,2],[1,2]] .= Ref(@SMatrix[1 2; 2 1])
-2×2 view(::SparseMatrixCSC{StaticArrays.SArray{Tuple{2,2},Complex{Float64},2,4},Int64}, [1, 2], [1, 2]) with eltype StaticArrays.SArray{Tuple{2,2},Complex{Float64},2,4}:
+2×2 SparseMatrixCSC{SMatrix{2, 2, ComplexF64, 4}, Int64} with 4 stored entries:
  [1.0+0.0im 2.0+0.0im; 2.0+0.0im 1.0+0.0im]  [1.0+0.0im 2.0+0.0im; 2.0+0.0im 1.0+0.0im]
  [1.0+0.0im 2.0+0.0im; 2.0+0.0im 1.0+0.0im]  [1.0+0.0im 2.0+0.0im; 2.0+0.0im 1.0+0.0im]
+
+ julia> h = unitcell(h); h[]
+2×2 SparseMatrixCSC{SMatrix{2, 2, ComplexF64, 4}, Int64} with 2 stored entries:
+                     ⋅                       [1.0+0.0im 2.0+0.0im; 3.0+0.0im 4.0+0.0im]
+ [1.0+0.0im 2.0+0.0im; 3.0+0.0im 4.0+0.0im]                      ⋅                     
+
 ```
 
 # See also
@@ -769,7 +792,7 @@ Return an `OrbitalStructure` containing information about the orbital structure 
 julia> sp = spectrum(LP.honeycomb() |> hamiltonian(hopping(I), orbitals = (:up,:down)) |> unitcell);
 
 julia> sp[around = -1] |> orbitalstructure
-OrbitalStructure: orbital structure of Hamiltonian
+OrbitalStructure:
   Orbital Type  : SVector{2, ComplexF64}
   Orbitals      : ((:up, :down), (:up, :down))
   Sublattices   : 2
@@ -1689,35 +1712,23 @@ Same as above but with `pϕs = (ϕs, (;kw...))`, `pϕs = (ϕs..., (;kw...))` or 
 julia> h = LatticePresets.honeycomb() |> hamiltonian(hopping(2I), orbitals = (Val(2), Val(1)));
 
 julia> bloch!(similarmatrix(h), h, (0, 0))
-2×2 SparseMatrixCSC{StaticArrays.SArray{Tuple{2,2},Complex{Float64},2,4},Int64} with 2 stored entries:
-  [2, 1]  =  [6.0+0.0im 0.0+0.0im; 0.0+0.0im 0.0+0.0im]
-  [1, 2]  =  [6.0+0.0im 0.0+0.0im; 0.0+0.0im 0.0+0.0im]
+2×2 SparseMatrixCSC{SMatrix{2, 2, ComplexF64, 4}, Int64} with 2 stored entries:
+                     ⋅                       [6.0+0.0im 0.0+0.0im; 0.0+0.0im 0.0+0.0im]
+ [6.0+0.0im 0.0+0.0im; 0.0+0.0im 0.0+0.0im]                      ⋅                     
 
 julia> bloch!(similarmatrix(h, flatten), h, (0, 0))
-3×3 SparseMatrixCSC{Complex{Float64},Int64} with 9 stored entries:
-  [1, 1]  =  0.0+0.0im
-  [2, 1]  =  0.0+0.0im
-  [3, 1]  =  6.0+0.0im
-  [1, 2]  =  0.0+0.0im
-  [2, 2]  =  0.0+0.0im
-  [3, 2]  =  0.0+0.0im
-  [1, 3]  =  6.0+0.0im
-  [2, 3]  =  0.0+0.0im
-  [3, 3]  =  0.0+0.0im
+3×3 SparseMatrixCSC{ComplexF64, Int64} with 9 stored entries:
+ 0.0+0.0im  0.0+0.0im  6.0+0.0im
+ 0.0+0.0im  0.0+0.0im  0.0+0.0im
+ 6.0+0.0im  0.0+0.0im  0.0+0.0im
 
-julia> ph = parametric(h, @hopping!((t; α, β = 0) -> α * t + β));
+julia> ph = parametric(h, @hopping!((t; α, β = 0) -> α * t .+ β));
 
 julia> bloch!(similarmatrix(ph, flatten), ph, (0, 0, (; α = 2)))
-3×3 SparseMatrixCSC{Complex{Float64},Int64} with 9 stored entries:
-  [1, 1]  =  0.0+0.0im
-  [2, 1]  =  0.0+0.0im
-  [3, 1]  =  12.0+0.0im
-  [1, 2]  =  0.0+0.0im
-  [2, 2]  =  0.0+0.0im
-  [3, 2]  =  0.0+0.0im
-  [1, 3]  =  12.0+0.0im
-  [2, 3]  =  0.0+0.0im
-  [3, 3]  =  0.0+0.0im
+3×3 SparseMatrixCSC{ComplexF64, Int64} with 9 stored entries:
+  0.0+0.0im  0.0+0.0im  12.0+0.0im
+  0.0+0.0im  0.0+0.0im   0.0+0.0im
+ 12.0+0.0im  0.0+0.0im   0.0+0.0im
 ```
 
 # See also

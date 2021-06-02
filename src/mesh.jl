@@ -29,8 +29,16 @@ have a number of subticks including endpoints. The number is `subticks` if `subt
 
 ```jldoctest
 julia> cuboid((-π, π), (0, 2π); subticks = 25)
+CuboidMesh{2}: a mesh of a 2D parameter cuboid
+  Ranges     : ((-3.141592653589793, 3.141592653589793), (0.0, 6.283185307179586))
+  Axes ticks : (25, 25)
+  Simplices  : (24, 24, 2) -> 1152
 
 julia> cuboid((-π, π), (0, 2π); subticks = (10, 10))
+CuboidMesh{2}: a mesh of a 2D parameter cuboid
+  Ranges     : ((-3.141592653589793, 3.141592653589793), (0.0, 6.283185307179586))
+  Axes ticks : (10, 10)
+  Simplices  : (9, 9, 2) -> 162
 ```
 
 # External links

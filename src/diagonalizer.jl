@@ -30,24 +30,24 @@ diagonalization `method` to produce the sorted eigenpairs `(εs, ψs)` of `h` at
 phases/parameters given by `mapping`. See `bandstructure` for further details.
 
 A 0D Hamiltonian `h` also supports `d = diagonalizer(h)`. In this case `d` can be called
-with no arguments and gives the same information as `spectrum`, `d() == Tuple(spectrum(h))`.
+with no arguments and gives the same information as `spectrum`, `d() ≈ Tuple(spectrum(h))`.
 
 # Examples
 ```jldoctest
 julia> h = LatticePresets.honeycomb() |> hamiltonian(hopping(1));
 
 julia> d = diagonalizer(h)
-Diagonalizer with method : LinearAlgebraPackage{NamedTuple{(),Tuple{}}}
+Diagonalizer with method : LinearAlgebraPackage{NamedTuple{(), Tuple{}}}
 
 julia> d((0, 0)) |> first
-2-element Array{Float64,1}:
+2-element Vector{Float64}:
  -3.0
   3.0
 
 julia> h = wrap(h); d = diagonalizer(h);
 
-julia> d() == Tuple(spectrum(h))
-true
+julia> d() .≈ Tuple(spectrum(h))
+(true, true)
 ```
 
 # See also

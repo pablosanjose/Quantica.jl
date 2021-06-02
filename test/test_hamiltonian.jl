@@ -403,6 +403,11 @@ end
     @inferred parametric(h, @onsite!((o;μ) -> o- μ))
     @inferred parametric(h, @onsite!(o->2o), @hopping!((t)->2t), @onsite!((o, r)->o+r[1]))
     @inferred parametric(h, @onsite!((o, r)->o*r[1]), @hopping!((t; p)->p*t), @onsite!((o; μ)->o-μ))
+
+    h = LatticePresets.honeycomb() |> hamiltonian(hopping(2I), orbitals = (Val(2), Val(1)))
+    ph = parametric(h, @hopping!((t; α, β = 0) -> α * t .+ β))
+    b = bloch!(similarmatrix(ph, flatten), ph, (0, 0, (; α = 2)))
+    @test b == [0 0 12; 0 0 0; 12 0 0]
 end
 
 @testset "boolean masks" begin
