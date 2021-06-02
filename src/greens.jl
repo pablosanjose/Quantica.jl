@@ -25,14 +25,19 @@ origin.
 
 Curried form equivalent to the above, giving `greens(h, solveobject(h), args...)`.
 
-    g(ω, cells::Pair)
-    g(ω)[cells::Pair]
+    g(ω, cells::Pair; source = I, dest = I)
+    g(ω; source = I, dest = I)[cells::Pair]
 
 From a constructed `g::GreensFunction`, obtain the retarded Green's function matrix at
 frequency `ω` between unit cells `src` and `dst`, where `src, dst` are `::NTuple{L,Int}` or
 `SVector{L,Int}`. If allowed by the used `solveobject`, `g0=g(ω)` builds an solution object
 that can efficiently produce the Greens function between different cells at fixed `ω` with
 `g0[cells]` without repeating cell-independent parts of the computation.
+
+Keywords `source` and `dest` are matrices, possibly non-square, that act as projectors, so
+that `g(ω, ...; source = S, dest = D) = D'*g(ω,...)*S`, which avoinds building the full-cell
+intermediate `g(ω,...)` for efficiency. If `source` and/or `dest` are not `AbstractMatrix`,
+but an iterable of sites, `S` and `D` will be constructed as projectors onto said sites.
 
 # Examples
 

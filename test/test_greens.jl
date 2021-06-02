@@ -82,3 +82,8 @@ end
         end
     end
 end
+
+@testset "greens partial solutions" begin
+    g = LatticePresets.honeycomb() |> hamiltonian(hopping(-I)) |> unitcell((3,0), region = r->0<r[2]<5) |> greens(Schur1D())
+    @test g(0.2, 1=>1; source = (1,6), dest = (1,6)) ≈ g(0.2, 1=>1)[[1,6],[1,6]]
+end
