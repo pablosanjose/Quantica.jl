@@ -159,10 +159,12 @@ Obtain the Bravais matrix of lattice `lat` or Hamiltonian `h`
 # Examples
 
 ```jldoctest
-julia> bravais((1.0, 2), (3, 4))
-Bravais{2,2,Float64} : set of 2 Bravais vectors in 2D space.
-  Vectors     : ((1.0, 2.0), (3.0, 4.0))
-  Matrix      : [1.0 3.0; 2.0 4.0]
+julia> lat = lattice(sublat((0,0)), bravais = ((1.0, 2), (3, 4)));
+
+julia> bravais(lat)
+2×2 SMatrix{2, 2, Float64, 4} with indices SOneTo(2)×SOneTo(2):
+ 1.0  3.0
+ 2.0  4.0
 ```
 
 # See also

@@ -446,39 +446,34 @@ via destructuring, `ε, ψs = sub`, or `ε = first(sub), ψs = last(sub)`.
 julia> h = LatticePresets.honeycomb() |> hamiltonian(hopping(-1)) |> unitcell(3);
 
 julia> bandstructure(h; subticks = 25, method = LinearAlgebraPackage())
-Bandstructure{2}: collection of 2D bands
-  Bands        : 8
-  Element type : scalar (Complex{Float64})
-  Band{2}: mesh of a 2-dimensional manifold
-    Vertices   : 625
-    Edges      : 1776
+Bandstructure{2}: bands of a 2D Hamiltonian
+  Bands         : 1
+  Vertices      : 9917
+  Edges         : 31044
+  Simplices     : 20724
 
 julia> bandstructure(h, :Γ, :X, :Y, :Γ; subticks = (10,15,10))
-Bandstructure{2}: collection of 1D bands
-  Bands        : 18
-  Element type : scalar (Complex{Float64})
-  Band{1}: mesh of a 1-dimensional manifold
-    Vertices   : 33
-    Edges      : 32
+Bandstructure{1}: bands of a 1D Hamiltonian
+  Bands         : 1
+  Vertices      : 442
+  Edges         : 468
+  Simplices     : 468
 
-julia> bandstructure(h, mesh((0, 2π); subticks = 13); mapping = φ -> (φ, 0))
-       # Equivalent to bandstructure(h, :Γ, :X; subticks = 13)
-Bandstructure{2}: collection of 1D bands
-  Bands        : 18
-  Element type : scalar (Complex{Float64})
-  Band{1}: mesh of a 1-dimensional manifold
-    Vertices   : 11
-    Edges      : 10
+julia> bandstructure(h, cuboid((0, 2π); subticks = 13); mapping = φ -> (φ, 0))
+Bandstructure{1}: bands of a 1D Hamiltonian
+  Bands         : 1
+  Vertices      : 136
+  Edges         : 144
+  Simplices     : 144
 
 julia> ph = parametric(h, @hopping!((t; α) -> t * α));
 
-julia> bandstructure(ph, mesh((0, 2π); subticks = 13); mapping = φ -> (φ, 0, (; α = 2φ)))
-Bandstructure{2}: collection of 1D bands
-  Bands        : 18
-  Element type : scalar (Complex{Float64})
-  Band{1}: mesh of a 1-dimensional manifold
-    Vertices   : 11
-    Edges      : 10
+julia> bandstructure(ph, cuboid((0, 2π); subticks = 13); mapping = φ -> (φ, 0, (; α = 2φ)))
+Bandstructure{1}: bands of a 1D Hamiltonian
+  Bands         : 1
+  Vertices      : 132
+  Edges         : 144
+  Simplices     : 144
 ```
 
 # See also

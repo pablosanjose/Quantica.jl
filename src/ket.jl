@@ -46,14 +46,15 @@ together or be multiplied by scalars to build more elaborate `KetModel`s, e.g.
 # Examples
 
 ```jldoctest
-julia> k = ket(1, sublats=:A) - ket(1, sublats=:B)
+julia> k = ketmodel(1, sublats=:A) - ketmodel(1, sublats=:B)
 KetModel{2}: model with 2 terms
-  Normalized : false
+  Normalization : 1
+  Map orbitals  : Val{false}()
   OnsiteTerm{Int64}:
-    Sublattices      : (:A,)
+    Sublattices      : A
     Coefficient      : 1
   OnsiteTerm{Int64}:
-    Sublattices      : (:B,)
+    Sublattices      : B
     Coefficient      : -1
 ```
 # See also
@@ -78,10 +79,15 @@ end
 Base.:*(x::Number, k::KetModel) = KetModel(k.model * x, k.normalization, k.maporbitals)
 Base.:*(k::KetModel, x::Number) = KetModel(x * k.model, k.normalization, k.maporbitals)
 Base.:-(k::KetModel) = KetModel(-k.model, k.normalization, k.maporbitals)
-Base.:-(k1::KetModel, k2::KetModel) = KetModel(k1.model - k2.model, k1.normalization && k2.normalization, _andVal(k1.maporbitals, k2.maporbitals))
-Base.:+(k1::KetModel, k2::KetModel) = KetModel(k1.model + k2.model, k1.normalization && k2.normalization, _andVal(k1.maporbitals, k2.maporbitals))
+Base.:-(k1::KetModel, k2::KetModel) = KetModel(k1.model - k2.model, _checknorm(k1.normalization, k2.normalization), _andVal(k1.maporbitals, k2.maporbitals))
+Base.:+(k1::KetModel, k2::KetModel) = KetModel(k1.model + k2.model, _checknorm(k1.normalization, k2.normalization), _andVal(k1.maporbitals, k2.maporbitals))
 
 _andVal(::Val{A},::Val{B}) where {A,B} = Val(A && B)
+
+function _checknorm(n1, n2)
+    n1 ≈ n2 || @warn "Combining `KetModel`s with different normalizations, choosing $n1"
+    return n1
+end
 
 resolve(k::KetModel, lat::AbstractLattice) = KetModel(resolve(k.model, lat), k.normalization, k.maporbitals)
 

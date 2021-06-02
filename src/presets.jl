@@ -61,7 +61,7 @@ function twisted_bilayer_graphene(;
     sAtop = sublat((0.0, -0.5a0/sqrt(3.0),   interlayerdistance / 2); name = :At)
     sBtop = sublat((0.0,  0.5a0/sqrt(3.0),   interlayerdistance / 2); name = :Bt)
     brbot = a0 * SA[ cos(pi/3) sin(pi/3) 0; -cos(pi/3) sin(pi/3) 0]'
-    brtop = a0 * SA[-cos(pi/3) sin(pi/3) 0;  cos(pi/3) sin(pi/3) 0]'
+    brtop = a0 * SA[ cos(pi/3) sin(pi/3) 0; -cos(pi/3) sin(pi/3) 0]'
     # Supercell matrices sc.
     # The one here is a [1 0; -1 1] rotation of the one in Phys. Rev. B 86, 155449 (2012)
     if gcd(r, 3) == 1
