@@ -957,7 +957,7 @@ minimum.
     `maxima`, `gapedge`, `gap`
 """
 minima(b::Bandstructure{1,<:Any,T}; kw...) where {T} =
-    Vector{Tuple{T,T}}[band_extrema(band, minimum_criterion, b.diag; kw...) for band in b.bands]
+    Vector{Tuple{real(T),real(T)}}[band_extrema(band, minimum_criterion, b.diag; kw...) for band in b.bands]
 
 minimum_criterion(ε, εs...) = all(>=(ε), εs)
 
@@ -974,7 +974,7 @@ maximum.
     `minima`, `gapedge`, `gap`
 """
 maxima(b::Bandstructure{1,<:Any,T}; kw...) where {T} =
-    Vector{Tuple{T,T}}[band_extrema(band, maximum_criterion, b.diag; kw...) for band in b.bands]
+    Vector{Tuple{real(T),real(T)}}[band_extrema(band, maximum_criterion, b.diag; kw...) for band in b.bands]
 
 maximum_criterion(ε, εs...) = all(<=(ε), εs)
 
@@ -985,17 +985,18 @@ function band_extrema(b::Band{1}, criterion, diag; refinesteps = 0)
     return found´
 end
 
-function findall_with_neighbors(criterion::Function, b::Band{D,<:Any,T}) where {D,T}
+function findall_with_neighbors(criterion::Function, b::Band{D,<:Any,T´}) where {D,T´}
     vertices = b.verts
+    T = real(T´)
     found = NTuple{2,T}[]
     neighs = Tuple{NTuple{2,T},NTuple{2,T}}[]
     for (i, vertex) in enumerate(vertices)
         ns = neighbors(b, i)
         if length(ns) == max_neighbors(D)
-            (φ0, ε0) = vertex
+            (φ0, ε0) = real.(vertex)
             i1, i2 = ns
-            (φ1, ε1) = vertices[i1]
-            (φ2, ε2) = vertices[i2]
+            (φ1, ε1) = real.(vertices[i1])
+            (φ2, ε2) = real.(vertices[i2])
             φ1 < φ0 < φ2 || φ2 < φ0 < φ1 || continue
             if criterion(ε0, ε1, ε2)
                 push!(found, (φ0,  ε0))
@@ -1024,7 +1025,7 @@ function refine_bisection(found, neighs, steps, criterion, diag)
             break
         end
         εs, _ = diag(φ0 + dφ)
-        ε0´ = select_closest(εs, criterion, ε0, ε1, ε2)
+        ε0´ = select_closest(real.(εs), criterion, ε0, ε1, ε2)
         if dφ > 0
             φ1, φ0, φ2 = φ0, φ0 + dφ, φ2
             ε1, ε0, ε2 = ε0, ε0´, ε2
