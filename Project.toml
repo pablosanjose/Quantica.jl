@@ -1,7 +1,7 @@
 name = "Quantica"
 uuid = "ae5ea0c6-3f5e-46a2-bc28-a7c4c7a4773c"
 authors = ["Pablo San-Jose"]
-version = "0.4.0"
+version = "0.5.0"
 
 [deps]
 Compat = "34da2185-b29b-5c13-b0c7-acf172513d20"
