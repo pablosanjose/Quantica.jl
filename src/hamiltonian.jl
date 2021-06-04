@@ -401,6 +401,11 @@ end
 Rebuild object `x` performing the inverse of `flatten(x)` or `flatten(x, o)`. The target `o`
 is required.
 
+    x |> unflatten(o::OrbitalStructure)
+
+Curried form equivalent to `unflatten(x, o)` (included for consistency with the
+rest of the API).
+
 # Examples
 ```jldoctest
 julia> h = LP.honeycomb() |> hamiltonian(hopping(I), orbitals = (:up,:down)) |> unitcell;
@@ -446,7 +451,7 @@ Ket{SVector{2, ComplexF64}}: ket with a 2 × 1 amplitude matrix
 # See also
     `flatten`, `orbitalstructure`
 """
-unflatten
+unflatten(o::OrbitalStructure) = x -> unflatten(x, o)
 
 # Pending implementation for Hamiltonian, Lattice, Unitcell
 
