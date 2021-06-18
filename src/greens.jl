@@ -59,7 +59,9 @@ greens(s; kw...) = h -> greens(h, greensolver(s, h); kw...)
 greensolver(s::AbstractGreensSolver, h) = s
 greensolver(s::Function, h) = s(h)
 
-sanitize_cells((cell0, cell1)::Pair{<:Integer,<:Integer})=
+sanitize_cells((cell0, cell1)::Pair) =
+    sanitize_cells(Int.(cell0) => Int.(cell1))
+sanitize_cells((cell0, cell1)::Pair{<:Integer,<:Integer}) =
     SA[cell0] => SA[cell1]
 sanitize_cells((cell0, cell1)::Pair{<:NTuple{L,Integer},<:NTuple{L,Integer}}) where {L} =
     SVector(cell0) => SVector(cell1)
