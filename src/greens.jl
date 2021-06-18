@@ -59,16 +59,12 @@ greens(s; kw...) = h -> greens(h, greensolver(s, h); kw...)
 greensolver(s::AbstractGreensSolver, h) = s
 greensolver(s::Function, h) = s(h)
 
-sanitize_cells((cell0, cell1)::Pair) =
-    sanitize_cells(Int.(cell0) => Int.(cell1))
-sanitize_cells((cell0, cell1)::Pair{<:Integer,<:Integer}) =
-    SA[cell0] => SA[cell1]
-sanitize_cells((cell0, cell1)::Pair{<:NTuple{L,Integer},<:NTuple{L,Integer}}) where {L} =
-    SVector(cell0) => SVector(cell1)
+sanitize_cells((cell0, cell1)::Pair{<:Number,<:Number}) =
+    SA[Int(cell0)] => SA[Int(cell1)]
+sanitize_cells((cell0, cell1)::Pair{<:NTuple{L,Number},<:NTuple{L,Number}}) where {L} =
+    SVector(Int.(cell0)) => SVector(Int.(cell1))
 sanitize_cells(cells) =
-    throw(ArgumentError("Cells should be of the form `cᵢ => cⱼ`, with each `c` an `NTuple{L,Integer}`, got $cells"))
-
-# const SVectorPair{L} = Pair{SVector{L,Int},SVector{L,Int}}
+    throw(ArgumentError("Cells should be of the form `cᵢ => cⱼ`, with each `c` an `Integer` or an `NTuple{L,Integer}`, got $cells"))
 
 Base.size(g::GreensFunction, args...) = size(g.h, args...)
 Base.eltype(g::GreensFunction) = eltype(g.h)
