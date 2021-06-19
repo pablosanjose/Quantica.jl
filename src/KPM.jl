@@ -82,15 +82,19 @@ matrix_KPM(flat, A, x...) = A
 """
     momentaKPM(h::Hamiltonian, A = I; ket = randomkets(1), order = 10, bandrange = missing, flat = Val(true))
 
-Compute the Kernel Polynomial Method (KPM) momenta `μₙ = ⟨k|Tₙ(h) A|k⟩`, where `k =
-ket(ket::KetModel, h)`, `A` is an observable (`Hamiltonian` or `AbstractMatrix`) and
-`Tₙ(h)` is the order-`n` Chebyshev polynomial of the Hamiltonian `h`.
+Compute the Kernel Polynomial Method (KPM) momenta `μₙ = ⟨k|Tₙ(h) A|k⟩`, where `|k⟩ =
+ket(ket::KetModel, h)` or `|k⟩ = ket::Ket` (depending on the type of `ket`), `A` is an
+observable (`Hamiltonian` or `AbstractMatrix`) and `Tₙ(h)` is the order-`n` Chebyshev
+polynomial of the Hamiltonian `h`.
 
-`ket` can be a single `KetModel` or `Ket`, or a collection of them, as in the default
-`ket = randomkets(n)`. In the latter case, `μₙ` is summed over all models/kets. The default
-is useful to estimate momenta of normalized traces using the stochastic trace approach,
+`ket` can be a single `KetModel` or `Ket`, as above, or a collection of them, as in the
+default `ket = randomkets(n)`. In the latter case, `μₙ` is summed over all models/kets, `μₙ
+= ∑_k ⟨k|Tₙ(h) A|k⟩`. If `ket::Ket` is a multi-column ket, a sum over columns will similarly
+be performed. A `ket = randomkets(n)` produces a lazy collection of `n` random `KetModel`s
+that is useful to estimate momenta of normalized traces using the stochastic trace approach,
 whereby `μ_n = Tr[A T_n(h)]/N₀ ≈ ∑ₖ⟨k|A T_n(h)|k⟩`. Here the `|k⟩`s are `n` random kets of
-norm `1/√n` and `N₀` is the total number of orbitals per unit cell of `h` (see `randomkets`).
+norm `1/√n` and `N₀` is the total number of orbitals per unit cell of `h` (see
+`randomkets`).
 
 The order of the Chebyshev expansion is `order`. The `bandbrange = (ϵmin, ϵmax)` should
 completely encompass the full bandwidth of `hamiltonian`. If `missing` it is computed
@@ -268,16 +272,16 @@ end
     dosKPM(h::Hamiltonian; resolution = 2, ket = randomkets(1), kw...)
 
 Compute, using the Kernel Polynomial Method (KPM), the local density of states `ρₖ(ϵ) =
-⟨k|δ(ϵ-h)|k⟩` for the ket `|k⟩` produced by `ket(ket::KetModel, h)`. The result is a
-tuple of energy points `ϵᵢ::Vector` spanning the band range, and real `ρₖ(ϵᵢ)::Vector`
-values (any residual imaginary part in `ρₖ` is dropped). The number of energy points `ϵᵢ` is
-`order * resolution`, rounded to the closest integer.
+⟨k|δ(ϵ-h)|k⟩` for a ket `|k⟩ = ket(ket::KetModel, h)` or `|k⟩ = ket::Ket` (depending on the
+type of `ket`). The result is a tuple of energy points `ϵᵢ::Vector` spanning the band range,
+and real `ρₖ(ϵᵢ)::Vector` values (any residual imaginary part in `ρₖ` is dropped). The
+number of energy points `ϵᵢ` is `order * resolution`, rounded to the closest integer.
 
-If `ket` is not a single `KetModel`, but a collection of them, the sum `∑ₖρₖ(ε)` over
-all models will be computed. In the case of the default `ket = randomkets(n)`, this
-results in an estimate of the total density of states per orbital, computed through an
-stochastic trace, `ρ(ϵ) = ∑ₖ⟨k|δ(ϵ-h)|k⟩/n ≈ Tr[δ(ϵ-h)]/N₀`, where `N₀` is the total number
-of orbitals in the unit cell.
+If `ket` is a collection of `KetModel`s, the sum `∑ₖρₖ(ε)` over all models will be computed.
+In the case of the default `ket = randomkets(n)`, this results in an estimate of the total
+density of states per orbital, computed through an stochastic trace, `ρ(ϵ) =
+∑ₖ⟨k|δ(ϵ-h)|k⟩/n ≈ Tr[δ(ϵ-h)]/N₀`, where `N₀` is the total number of orbitals in the unit
+cell.
 
 `dosKPM` is a particular case of `densityKPM` for an operator `A = I` and with any residual
 imaginary parts dropped
@@ -298,16 +302,16 @@ dosKPM(μ::MomentaKPM; resolution = 2) = real.(densityKPM(μ; resolution = resol
     densityKPM(h::Hamiltonian, A; resolution = 2, ket = randomkets(1), kw...)
 
 Compute, using the Kernel Polynomial Method (KPM), the spectral density of `A`, `ρᴬₖ(ϵ) =
-⟨k|A δ(ϵ-h)|k⟩` for the ket `|k⟩` produced by `ket(ket::KetModel, h)`. The result is a
-tuple of energy points `ϵᵢ::Vector` spanning the band range, and real `ρᴬₖ(ϵᵢ)::Vector`
-values. The number of energy points `ϵᵢ` is `order * resolution`, rounded to the closest
-integer.
+⟨k|A δ(ϵ-h)|k⟩` for a ket `|k⟩ = ket(ket::KetModel, h)` or `|k⟩ = ket::Ket` (depending on
+the type of `ket`). The result is a tuple of energy points `ϵᵢ::Vector` spanning the band
+range, and real `ρᴬₖ(ϵᵢ)::Vector` values. The number of energy points `ϵᵢ` is `order *
+resolution`, rounded to the closest integer.
 
-If `ket` is not a single `KetModel`, but a collection of them, the sum `∑ₖρᴬₖ(ε)` over
-all models will be computed. In the case of the default `ket = randomkets(n)`, this
-results in an estimate of the average spectral density per orbital, computed through an
-stochastic trace, `ρᴬ(ϵ) = ∑ₖ⟨k|δ(ϵ-h)A|k⟩/n ≈ Tr[δ(ϵ-h)A]/N₀`, where `N₀` is the total
-number of orbitals in the unit cell.
+If `ket` is a collection of `KetModel`s, the sum `∑ₖρᴬₖ(ε)` over all models will be computed. In
+the case of the default `ket = randomkets(n)`, this results in an estimate of the average
+spectral density per orbital, computed through an stochastic trace, `ρᴬ(ϵ) =
+∑ₖ⟨k|δ(ϵ-h)A|k⟩/n ≈ Tr[δ(ϵ-h)A]/N₀`, where `N₀` is the total number of orbitals in the unit
+cell.
 
     densityKPM(μ::MomentaKPM; resolution = 2)
 

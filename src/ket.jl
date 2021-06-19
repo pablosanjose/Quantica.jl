@@ -14,7 +14,8 @@ single-column kets, the amplitude `a` can be a `Number`, an `AbstractVector`, or
 position-dependent amplitude a function of the form `r -> ...` returning either. For
 multi-column kets, make `a` an `AbstractMatrix{<:Number}` or a function returning one, which
 will be sliced into each ket column as appropriate. An error will be thrown if the slicing
-is impossible.
+is impossible, due e.g. to a mismatch of `size(a, 1)` and the number of orbitals in an
+applicable sublattice.
 
 # Keyword arguments
 
@@ -24,8 +25,8 @@ column `iszero`, however, it will not be normalized.
 
 If keyword `maporbitals == true` and amplitude `a` is a scalar or a scalar function, `a`
 will be applied to each orbital independently. This is particularly useful in multiorbital
-systems with random amplitudes, e.g. `a = randn`. If `a` is not a scalar, an error will be
-thrown.
+systems with random amplitudes, e.g. `a = r -> randn()`. If `a` is not a scalar and
+`maporbitals == true`, an error will be thrown.
 
 Keywords `region` and `sublats` are the same as for `siteselector`. Only sites at position
 `r` in sublattice with name `s::NameType` will be selected if `region(r) && s in sublats` is
@@ -39,9 +40,8 @@ The keyword `sublats` allows the following formats:
 
 # Ket algebra
 
-`KetModel`s created with `ket` can added or substracted
-together or be multiplied by scalars to build more elaborate `KetModel`s, e.g.
-`ket(1) - 3 * ket(2, region = r -> norm(r) < 10)`
+`KetModel`s created with `ket` can added or substracted together or be multiplied by scalars
+to build more elaborate `KetModel`s, e.g. `ket(1) - 3 * ket(2, region = r -> norm(r) < 10)`
 
 # Examples
 
@@ -143,8 +143,9 @@ Base.parent(k::Ket) = k.amplitudes
 
 Construct a `Ket` `|k⟩` with amplitudes `⟨i|k⟩ = m[i]`, which can be scalars or `SVector`s
 depending on the number of orbitals on site `i`. If `m` is an `AbstractMatrix` instead of an
-`AbstractVector`, the `Ket` represents a multi-column ket `|kⱼ⟩`, such that `⟨i|kⱼ⟩ = m[i,j]`.
-The orbitals per sublattice are encoded in `o = orbitalstructure(h)`.
+`AbstractVector`, the `Ket` represents a multi-column ket (i.e. a collection of kets `|kⱼ⟩`,
+one per column), such that `⟨i|kⱼ⟩ = m[i,j]`. The orbitals per sublattice are encoded in `o
+= orbitalstructure(h)`.
 
     ket(km::KetModel, h::Hamiltonian)
 
