@@ -75,3 +75,28 @@ end
     Quantica.ket!(kf, ketmodel(SA[1 1]; maporbitals = true), h)
     @test unflatten(kf, orbitalstructure(k)) == k
 end
+
+@testset "ket algebra" begin
+    h = LatticePresets.honeycomb() |> hamiltonian(hopping(I), orbitals = (Val(1), Val(3))) |> unitcell(2)
+    km = 2*ketmodel(SA[1 1], sublats = :A) + ketmodel(SA[1 1; 0 0; 1 1], sublats = :B)
+    k = ket(km, h)
+    @test size(k) == (8,2)
+    @test all(k[1:4, 1:2] .== Ref(k[1,1]))
+    @test all(k[5:8, 1:2] .== Ref(k[5,1]))
+    km = ketmodel(SA[1 1], sublats = :A) - 2*ketmodel(SA[1; 0; 1], sublats = :B)
+    @test_throws ArgumentError ket(km, h)
+    km = ketmodel(1, sublats = :A) - 2*ketmodel(SA[1 2; 0 1; 1 1], sublats = :B, singlesitekets = true)
+    k = ket(km, h)
+    @test size(k) == (8, 12)
+    km = ketmodel(I, sublats = :A) + 2*ketmodel(I, sublats = :B, singlesitekets = true)
+    k = ket(km, h)
+    @test size(k) == (8, 16)
+    @test parent(flatten(k)) == I
+    km = basiskets()
+    k´ = ket(km, h)
+    @test k == k´
+    km = ketmodel(I, sublats = :A) + ketmodel(SA[1 0 0; 0 1 0; 0 0 -1], sublats = :B, singlesitekets = true)
+    k = ket(km, h)
+    @test size(k) == (8, 16)
+    @test parent(flatten(k)) != I && abs.(parent(flatten(k))) == I
+end

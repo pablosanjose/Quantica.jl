@@ -28,6 +28,23 @@ randomkets(n::Int, a = r -> cis(2pi*rand()); kw...) =
     Iterators.repeated(ketmodel(a; normalization = 1/√n, kw...), n)
 
 #######################################################################
+# basiskets
+#######################################################################
+"""
+    basiskets(a = I; kw...)
+
+Create a multicolumn ket model that represents a basis for sites selected by
+`siteselctor(kw...)`, with amplitude `a` on each site. For hamiltonians with `N` orbitals
+per site, `a` will need to be either `I` or a matrix with `N` columns. 
+
+`basiskets(a; kw...)` is equivalent to `ketmodel(a; singlesitekets = true, kw...)`.
+
+# See also
+    `ket`
+"""
+basiskets(a = I; kw...) = ketmodel(a; singlesitekets = true, kw...)
+
+#######################################################################
 # Kernel Polynomial Method : momenta
 #######################################################################
 using Base.Threads

@@ -24,7 +24,7 @@ using Compat # for use of findmin/findmax in bandstructure.jl
 export sublat, bravais, lattice, dims, supercell, unitcell,
        hopping, onsite, @onsite!, @hopping!, parameters, siteselector, hopselector, nrange,
        sitepositions, siteindices, not,
-       ket, ketmodel, randomkets,
+       ket, ketmodel, randomkets, basiskets,
        hamiltonian, parametric, bloch, bloch!, similarmatrix,
        flatten, unflatten, orbitalstructure, wrap, transform!, combine,
        spectrum, bandstructure, diagonalizer, cuboid, isometric, splitbands,
