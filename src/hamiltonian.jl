@@ -828,7 +828,8 @@ sitepositions(h::Hamiltonian; kw...) = sitepositions(h.lattice, siteselector(;kw
 
 """
     siteindices(lat::AbstractLattice; kw...)
-    siteindices(lat::Hamiltonian; kw...)
+    siteindices(h::Hamiltonian; kw...)
+    siteindices(lat_or_h, s::SiteSelector)
 
 Build a generator of the unique indices of sites in the lattice unitcell. Only sites
 specified by `siteselector(kw...)` are selected, see `siteselector` for details.
@@ -836,6 +837,7 @@ specified by `siteselector(kw...)` are selected, see `siteselector` for details.
 """
 siteindices(lat::AbstractLattice; kw...) = siteindices(lat, siteselector(;kw...))
 siteindices(h::Hamiltonian; kw...) = siteindices(h.lattice, siteselector(;kw...))
+siteindices(h::Hamiltonian, s::SiteSelector) = siteindices(h.lattice, s)
 
 """
     transform!(f::Function, h::Hamiltonian)
