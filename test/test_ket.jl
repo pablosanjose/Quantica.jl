@@ -96,6 +96,7 @@ end
     k´ = ket(km, h)
     @test k == k´
     km = ketmodel(I, sublats = :A) + ketmodel(SA[1 0 0; 0 1 0; 0 0 -1], sublats = :B, singlesitekets = true)
+    @test km.singlesitekets == true
     k = ket(km, h)
     @test size(k) == (8, 16)
     @test parent(flatten(k)) != I && abs.(parent(flatten(k))) == I
