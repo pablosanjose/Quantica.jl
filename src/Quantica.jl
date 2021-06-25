@@ -22,7 +22,7 @@ using Statistics: mean
 using Compat # for use of findmin/findmax in bandstructure.jl
 
 export sublat, bravais, lattice, dims, supercell, unitcell,
-       hopping, onsite, @onsite!, @hopping!, parameters, siteselector, hopselector, nrange,
+       hopping, onsite, @onsite!, @hopping!, @block!, parameters, siteselector, hopselector, nrange,
        sitepositions, siteindices, not,
        ket, ketmodel, randomkets, basiskets,
        hamiltonian, parametric, bloch, bloch!, similarmatrix,

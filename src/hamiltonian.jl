@@ -925,22 +925,43 @@ end
 
 _nnzdiag(s::Matrix) = count(!iszero, s[i,i] for i in 1:minimum(size(s)))
 
+check_orbital_consistency(::Hamiltonian{<:Any,<:Any,<:Number}) = nothing
+
 function check_orbital_consistency(h::Hamiltonian)
-    lat = h.lattice
-    for scol in sublats(lat), srow in sublats(lat), hh in h.harmonics
-        for (row, col) in nonzero_indices(hh, siterange(lat, srow), siterange(lat, scol))
-            check_orbital_consistency(hh.h[row, col], orbitals(h)[srow], orbitals(h)[scol])
+    slats = sublats(h.lattice)
+    norbs = norbitals(h)
+    M = maximum(norbs)
+    all(norbs .== M) && return nothing
+    for srow in slats, scol in slats
+        nrow, ncol = norbs[srow], norbs[scol]
+        nrow == ncol == M && continue
+        rows = siterange(h.lattice, srow)
+        cols = siterange(h.lattice, scol)
+        for hh in h.harmonics
+            hrows = rowvals(hh.h)
+            nz = nonzeros(hh.h)
+            for col in cols, ptr in nzrange(hh.h, col)
+                row = hrows[ptr]
+                row in rows || continue
+                z = nz[ptr]
+                is_consistent_orbs(z, nrow, ncol) || _throw_inconsistent_orbs()
+            end
         end
     end
     return nothing
 end
 
-function check_orbital_consistency(z::S, ::NTuple{N´}, ::NTuple{N}) where {M,N´,N,S<:SMatrix{M,M}}
-    prow = padprojector(S, Val(N´))
-    pcol = padprojector(S, Val(N))
-    z == prow * z * pcol || throw(ArgumentError("Internal error: orbital structure not correctly encoded into Hamiltonian harmonics"))
-    return nothing
+function is_consistent_orbs(z::SMatrix{N,N}, rows, cols) where {N}
+    for j in cols + 1:N, i in 1:N
+        iszero(z[i,j]) || return false
+    end
+    for j in 1:N-cols, i in rows+1:N
+        iszero(z[i,j]) || return false
+    end
+    return true
 end
+
+@noinline _throw_inconsistent_orbs() = throw(ArgumentError("Internal error: orbital structure not correctly encoded into Hamiltonian harmonics"))
 
 bravais(h::Hamiltonian) = bravais(h.lattice)
 

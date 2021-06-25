@@ -1,24 +1,27 @@
 #######################################################################
 # ParametricHamiltonian
 #######################################################################
-struct ParametricHamiltonian{P,N,M<:NTuple{N,ElementModifier},D<:NTuple{N,Any},H<:Hamiltonian}
+struct ParametricHamiltonian{P,N,M<:NTuple{N,AbstractModifier},D<:NTuple{N,Any},H<:Hamiltonian}
     baseh::H
     h::H
     modifiers::M                   # N modifiers
-    ptrdata::D                     # D is an NTuple{N,Vector{Vector{ptrdata}}}, one per harmonic
-    allptrs::Vector{Vector{Int}}   # ptrdata may be a nzval ptr, a (ptr,r) or a (ptr, r, dr)
-    parameters::NTuple{P,NameType} # allptrs are modified ptrs in each harmonic
+    ptrdata::D                     # D is an NTuple{N,Vector{Vector{ptrdata}}}, one per harmonic,
+    allptrs::Vector{Vector{Int}}   # and ptrdata may be a nzval ptr, a (ptr,r) or a (ptr, r, dr)
+    parameters::NTuple{P,NameType} # allptrs are modified ptrs in each harmonic (needed for reset!)
+    check::Bool                    # whether to check for orbital consistency when calling ph(; params...)
 end
 
 function Base.show(io::IO, ::MIME"text/plain", pham::ParametricHamiltonian{N}) where {N}
     i = get(io, :indent, "")
     print(io, i, "Parametric")
     show(io, pham.h)
-    print(io, i, "\n", "$i  Parameters       : $(parameters(pham))")
+    print(io, i, "\n",
+"$i  Parameters       : $(parameters(pham))
+$i  Check each call  : $(pham.check)")
 end
 
 """
-    parametric(h::Hamiltonian, modifiers::ElementModifier...)
+    parametric(h::Hamiltonian, modifiers::AbstractModifier...; check = true)
 
 Builds a `ParametricHamiltonian` that can be used to efficiently apply `modifiers` to `h`.
 `modifiers` can be any number of `@onsite!(args -> body; kw...)` and `@hopping!(args -> body;
@@ -34,9 +37,18 @@ present but you need to apply modifiers to them.
 For a `ph::ParametricHamiltonian`, return the corresponding `Hamiltonian` with parameters
 `ps` applied.
 
-    h |> parametric(modifiers::ElementModifier...)
+    h |> parametric(modifiers::AbstractModifier...; kw...)
 
-Function form of `parametric`, equivalent to `parametric(h, modifiers...)`.
+Function form of `parametric`, equivalent to `parametric(h, modifiers...; kw...)`.
+
+# Keywords
+
+If the keyword argument `check = true` a check is performed upon each call `h = ph(; ps...)`
+to ensure that the harmonics of the produced Hamiltonian are all internally consistent with
+the orbital structure of `h` (i.e. if the provided modifiers do not create incorrect matrix
+elements). Unless the number of orbitals of `h` is the same in all sublattices, this `check`
+can have a substantial performance impact, so it is advisable to disable it with `check =
+false` once the user has confirmed that `ph(; ps...)` throws no error with `check = true`.
 
 # Examples
 
@@ -47,43 +59,44 @@ ParametricHamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
   Bloch harmonics  : 5 (SparseMatrixCSC, sparse)
   Harmonic size    : 200 × 200
   Orbitals         : ((:a,), (:a,))
-  Element type     : scalar (Complex{Float64})
+  Element type     : scalar (ComplexF64)
   Onsites          : 0
   Hoppings         : 600
   Coordination     : 3.0
   Parameters       : (:μ,)
+  Check each call  : true
 
 julia> ph(μ = 2)
 Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
   Bloch harmonics  : 5 (SparseMatrixCSC, sparse)
   Harmonic size    : 200 × 200
   Orbitals         : ((:a,), (:a,))
-  Element type     : scalar (Complex{Float64})
+  Element type     : scalar (ComplexF64)
   Onsites          : 200
   Hoppings         : 600
   Coordination     : 3.0
 ```
 # See also
-    `@onsite!`, `@hopping!`
+    `@onsite!`, `@hopping!`, `@block!`
 """
-function parametric(h::Hamiltonian, ts::ElementModifier...)
+function parametric(h::Hamiltonian, ts::AbstractModifier...; check = true)
     ts´ = resolve(ts, h.lattice)
     allptrs = Vector{Int}[Int[] for _ in h.harmonics]
     ptrdata = parametric_ptrdata_tuple!(allptrs, h, ts´)
     foreach(sort!, allptrs)
     foreach(unique!, allptrs)
     params = parameters(ts...)
-    return ParametricHamiltonian(h, copy(h), ts´, ptrdata, allptrs, params)
+    return ParametricHamiltonian(h, copy(h), ts´, ptrdata, allptrs, params, check)
 end
 
-parametric(ts::ElementModifier...) = h -> parametric(h, ts...)
+parametric(ts::AbstractModifier...; kw...) = h -> parametric(h, ts...; kw...)
 
 parametric_ptrdata_tuple!(allptrs, h, ts´::Tuple) = _parametric_ptrdata!(allptrs, h, ts´...)
 _parametric_ptrdata!(allptrs, h, t, ts...) =
     (parametric_ptrdata!(allptrs, h, t), _parametric_ptrdata!(allptrs, h, ts...)...)
 _parametric_ptrdata!(allptrs, h) = ()
 
-function parametric_ptrdata!(allptrs, h::Hamiltonian{LA,L,M,<:AbstractSparseMatrix}, t::ElementModifier) where {LA,L,M}
+function parametric_ptrdata!(allptrs, h::Hamiltonian, t::ElementModifier)
     harmonic_ptrdata = empty_ptrdata(h, t)
     lat = h.lattice
     selector = t.selector
@@ -103,6 +116,30 @@ function parametric_ptrdata!(allptrs, h::Hamiltonian{LA,L,M,<:AbstractSparseMatr
     return harmonic_ptrdata
 end
 
+function parametric_ptrdata!(allptrs, h::Hamiltonian, bm::BlockModifier)
+    harmonic_ptrdata = empty_ptrdata(h, bm)
+    rows, cols = bm.rows, bm.cols
+    linds = LinearIndices((1:length(rows), 1:length(cols)))
+    for (har, ptrdata, allptrs_har) in zip(h.harmonics, harmonic_ptrdata, allptrs)
+        har.dn in bm || continue
+        hrows = rowvals(har.h)
+        for (j, col) in enumerate(cols), ptr in nzrange(har.h, col)
+            hrow = hrows[ptr]
+            for (i, row) in enumerate(rows)
+                if row == hrow
+                    push!(ptrdata, (ptr, linds[i, j]))
+                    push!(allptrs_har, ptr)
+                end
+            end
+        end
+    end
+    has_non_stored = any(data -> 0 < length(data) < length(linds), harmonic_ptrdata)
+    has_non_stored && _warn_not_stored()
+    return harmonic_ptrdata
+end
+
+@noinline _warn_not_stored() = @warn "A @block! modifier operates on a non-dense block of the input Hamiltonian. The non-structural zeros in this block will not be modified."
+
 # Uniform case, one vector of nzval ptr per harmonic
 empty_ptrdata(h, t::UniformModifier)  = Vector{Int}[Int[] for _ in h.harmonics]
 
@@ -116,6 +153,9 @@ function empty_ptrdata(h, t::HoppingModifier)
     S = positiontype(h.lattice)
     return Vector{Tuple{Int,S,S}}[Tuple{Int,S,S}[] for _ in h.harmonics]
 end
+
+# BlockModifier case, one vector of (ptr, linearindex) per harmonic
+empty_ptrdata(h, t::BlockModifier)  = Vector{Tuple{Int,Int}}[Tuple{Int,Int}[] for _ in h.harmonics]
 
 # Uniform case
 ptrdatum(t::UniformModifier, lat, ptr, (row, col), dn) = ptr
@@ -132,6 +172,7 @@ function (ph::ParametricHamiltonian)(; kw...)
     checkconsistency(ph, false) # only weak check for performance
     reset_harmonic!.(ph.h.harmonics, ph.baseh.harmonics, ph.allptrs)
     applymodifier_ptrdata!.(Ref(ph.h), ph.modifiers, ph.ptrdata, Ref(values(kw)))
+    ph.check && check_orbital_consistency(ph.h)
     return ph.h
 end
 
@@ -144,7 +185,7 @@ function reset_harmonic!(har, basehar, ptrs)
     return har
 end
 
-function applymodifier_ptrdata!(h, modifier, ptrdata, kw)
+function applymodifier_ptrdata!(h, modifier::ElementModifier, ptrdata, kw)
     for (har, hardata) in zip(h.harmonics, ptrdata)
         nz = nonzeros(har.h)
         @simd for data in hardata  # @simd is valid because ptrs are not repeated
@@ -152,6 +193,23 @@ function applymodifier_ptrdata!(h, modifier, ptrdata, kw)
             args = modifier_args(nz, data)
             val = modifier(args...; kw...)
             nz[ptr] = val
+        end
+    end
+    return h
+end
+
+function applymodifier_ptrdata!(h, modifier::BlockModifier, ptrdata, kw)
+    rows, cols = modifier.rows, modifier.cols
+    for (har, hardata) in zip(h.harmonics, ptrdata)
+        har.dn in modifier || continue
+        block = view(har.h, modifier.rows, modifier.cols)
+        matrix = modifier(block; kw...)
+        nz = nonzeros(har.h)
+        @simd for data in hardata
+            # if ptrs are repeated (because rows or cols are repeated) it's undefined
+            # behavior, so why not @simd anyway
+            ptr, ind = data
+            nz[ptr] = matrix[ind]
         end
     end
     return h
