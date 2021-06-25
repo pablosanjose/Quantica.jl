@@ -408,6 +408,35 @@ end
     ph = parametric(h, @hopping!((t; α, β = 0) -> α * t .+ β))
     b = bloch!(similarmatrix(ph, flatten), ph, (0, 0, (; α = 2)))
     @test b == [0 0 12; 0 0 0; 12 0 0]
+
+    # @block! modifiers
+    h = LatticePresets.honeycomb() |> hamiltonian(onsite(0I) + hopping(I), orbitals = (Val(1), Val(3))) |> unitcell(4)
+    sites = siteindices(h, region = r->r[1]<0);
+    ph = h |> parametric(@onsite!((o; λ=0) -> o - λ*I), @block!((b; λ=0) -> b + λ*I, sites))
+    @test_throws ArgumentError ph(λ = 1)
+    ph = h |> parametric(@onsite!((o; λ=0) -> o - λ*I), @block!((b; λ=0) -> b + λ*I, sites); check = false)
+    @test ph(λ = 1) isa Quantica.Hamiltonian
+    sites = siteindices(h, region = r->r[1]<0, sublats = :B);
+    ph = h |> parametric(@onsite!((o; λ=0) -> o - λ*I; sublats = :B), @block!((b; λ=0) -> b + λ*I, sites))
+    h3 = ph(λ = 3)
+    for i in Quantica.siterange(h.lattice, 1)
+        @test iszero(h3[i, i])
+    end
+    for i in Quantica.siterange(h.lattice, 2)
+        @test i in sites ? iszero(h3[i,i]) : h3[i,i] == -3I
+    end
+
+    h = LatticePresets.square() |> hamiltonian(onsite(0I) + hopping(I)) |> unitcell(4)
+    rows = siteindices(h, region = r->r[1]==0);
+    cols = siteindices(h, region = r->r[1]==3);
+    ph = h |> parametric(
+        @block!((b; λ=0) -> b + λ*I, rows, cols; dn = ((0,0),(1,0))),
+        @block!((b; λ=0) -> b + λ*I, cols, rows; dn = (-1,0)))
+    @test ph(λ = 10)[(1,0)][collect(rows), collect(cols)] == 11I
+    @test ph(λ = 10)[(-1,0)][collect(cols), collect(rows)] == 11I
+    # check that reset works by calling twice
+    @test ph(λ = 10)[(1,0)][collect(rows), collect(cols)] == 11I
+    @test ph(λ = 10)[(-1,0)][collect(cols), collect(rows)] == 11I
 end
 
 @testset "boolean masks" begin

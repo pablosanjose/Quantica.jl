@@ -793,7 +793,8 @@ findblock(s, sr) = findfirst(r -> s in r, sr)
 #######################################################################
 # @onsite! and @hopping!
 #######################################################################
-abstract type ElementModifier{N,S,F} end
+abstract type AbstractModifier end
+abstract type ElementModifier{N,S,F} <: AbstractModifier end
 
 struct ParametricFunction{N,F,P<:Val}
     f::F
@@ -819,24 +820,25 @@ const UniformHoppingModifier = HoppingModifier{1}
 const UniformOnsiteModifier = OnsiteModifier{1}
 
 """
-    parameters(p::ElementModifier...)
+    parameters(p::AbstractModifier...)
 
-Return the parameter names for one or several  `ElementModifier` created with `@onsite!` or
-`@hopping!`
+Return the parameter names for one or several `AbstractModifier` created with `@onsite!`,
+`@hopping!` or `@block!`.
 """
-parameters(ms::ElementModifier...) = mergetuples(_parameters.(ms)...)
-_parameters(m::ElementModifier) = _parameters(m.f)
+parameters(ms::AbstractModifier...) = mergetuples(_parameters.(ms)...)
+_parameters(m::AbstractModifier) = _parameters(m.f)
 _parameters(pf::ParametricFunction) = pf.params
 
 
 """
     @onsite!(args -> body; kw...)
 
-Create an `ElementModifier`, to be used with `parametric`, that applies `f = args -> body`
-to onsite energies specified by `kw` (see `onsite` for details  on possible `kw`s). The form
-of `args -> body` may be `(o; params...) -> ...` or `(o, r; params...) -> ...` if the
-modification is position (`r`) dependent. Keyword arguments `params` are optional, and
-include any parameters that `body` depends on that the user may want to tune.
+Create an `ElementModifier <: AbstractModifier`, to be used with `parametric`, that applies
+`f = args -> body` to onsite energies specified by `kw` (see `onsite` for details on
+possible `kw`s). The form of `args -> body` may be `(o; params...) -> ...` or `(o, r;
+params...) -> ...` if the modification is position (`r`) dependent. Keyword arguments
+`params` are optional, and include any parameters that `body` depends on that the user may
+want to tune.
 
 Note: unlike `onsite` and `hopping`, `ElementModifier`s cannot be combined (i.e. you cannot
 do `@onsite!(...) + @hopping!(...)`). `ElementModifier`s are not model terms but
@@ -844,7 +846,7 @@ transformations of an existing Hamiltonian that are meant to be applied sequenti
 order of application usually matters).
 
 # See also
-    `@hopping!`, `parametric`
+    `@hopping!`, `@block!`, `parametric`
 """
 macro onsite!(kw, f)
     f, N, params = get_f_N_params(f, "Only @onsite!(args -> body; kw...) syntax supported. Mind the `;`.")
@@ -859,7 +861,7 @@ end
 """
     @hopping!(args -> body; kw...)
 
-Create an `ElementModifier`, to be used with `parametric`, that applies `f = args -> body`
+Create an `ElementModifier <: AbstractModifier`, to be used with `parametric`, that applies `f = args -> body`
 to hoppings energies specified by `kw` (see `hopping` for details on possible `kw`s). The
 form of `args -> body` may be `(t; params...) -> ...` or `(t, r, dr; params...) -> ...` if
 the modification is position (`r`, `dr`) dependent. Keyword arguments `params` are optional,
@@ -871,15 +873,15 @@ transformations of an existing Hamiltonian that are meant to be applied sequenti
 order of application usually matters).
 
 # See also
-    `@onsite!`, `parametric`
+    `@onsite!`, `@block!`, `parametric`
 """
 macro hopping!(kw, f)
-    f, N, params = get_f_N_params(f, "Only @hopping!(args -> body; kw...) syntax supported Mind the `;`.")
+    f, N, params = get_f_N_params(f, "Only @hopping!(args -> body; kw...) syntax supported. Mind the `;`.")
     return esc(:(Quantica.HoppingModifier(Quantica.ParametricFunction{$N}($f, $(Val(params))), Quantica.hopselector($kw))))
 end
 
 macro hopping!(f)
-    f, N, params = get_f_N_params(f, "Only @hopping!(args -> body; kw...) syntax supported Mind the `;`.")
+    f, N, params = get_f_N_params(f, "Only @hopping!(args -> body; kw...) syntax supported. Mind the `;`.")
     return esc(:(Quantica.HoppingModifier(Quantica.ParametricFunction{$N}($f, $(Val(params))), Quantica.hopselector())))
 end
 
@@ -928,3 +930,64 @@ _resolve(lat) = ()
 @inline (h!::UniformHoppingModifier)(t, r, dr; kw...) = h!(t; kw...)
 @inline (h!::UniformHoppingModifier)(t; kw...) = h!.f(t; kw...)
 @inline (h!::HoppingModifier)(t, r, dr; kw...) = h!.f(t, r, dr; kw...)
+
+#######################################################################
+# @block!
+#######################################################################
+struct BlockModifier{V,C<:Union{Missing,NTuple{<:Any,SVector}},F<:ParametricFunction{1}} <: AbstractModifier
+    f::F
+    dns::C
+    rows::V
+    cols::V
+end
+
+BlockModifier(f, dns, sites) = BlockModifier(f, dns, sites, sites)
+
+BlockModifier(f::ParametricFunction{1}, dns, rows::Base.Generator, cols::Base.Generator) =
+    BlockModifier(f, dns, collect(rows), collect(cols))
+
+"""
+    @block!((block; params...) -> modified_block, sites; dn = missing)
+    @block!((block; params...) -> modified_block, (rows, cols); dn = missing)
+
+Create an `BlockModifier <: AbstractModifier`, to be used with `parametric`, that applies `f
+= (block; ...) -> ...` to a block `h[dn][sites, sites]` or `h[dn][rows, cols]` of
+hamiltonian `h`. Keyword arguments `params` are optional, and include any parameters that
+`modified_block` depends on that the user may want to tune. If the keyword `dn = missing`,
+the `dn` in `h[dn]` will be restricted to `dn = (0...)`. Otherwise the specified `dn`'s will
+be modified.
+
+Upon construction of a `ParametricHamiltonian` with a `@block!` modifier, a check is
+performed that the whole block specified by `(rows, cols)` is stored in the sparse
+Hamiltonian harmonics. If it is not, any non-zero element in `modified_block` will fail to
+be applied to the harmonic in question, so a warning is issued. The warning can be ignored
+if the user knows that all non-zero elements in `modified_block` are indeed stored in the
+harmonic, either as finite matrix elements or structural zeros.
+
+Special care should be taken when using `@block!` on Hamiltonians with different number of
+orbitals in different sublattices. To avoid type-instabities in this case, the internal
+representation of Hamiltonian harmonics uses a uniform `eltype` that is an `SMatrix{N,N}`
+with `N` the maximum number of orbitals among the different sublattices (padded with zeros
+in sublattices with less than `N` orbitals). The matrix `modified_block` should have this
+same uniform `eltype`.
+
+# See also
+    `@onsite!`, `@hopping!`, `parametric`
+"""
+macro block!(kw, f, rows, cols...)
+    f, N, params = get_f_N_params(f, "Only @block!(args -> body, inds...; dn = ...) syntax supported. Mind the `;`.")
+    N == 1 || throw(ArgumentError("The function passed to `@block!` should be single-argument, with optional keywords."))
+    return esc(:(Quantica.BlockModifier(Quantica.ParametricFunction{1}($f, $(Val(params))), Quantica.sanitize_dn(($kw,)[:dn]), $rows, $(cols...))))
+end
+
+macro block!(f, rows, cols...)
+    f, N, params = get_f_N_params(f, "Only @block!(args -> body, inds...; dn = ...) syntax supported. Mind the `;`.")
+    N == 1 || throw(ArgumentError("The function passed to `@block!` should be single-argument, with optional keywords."))
+    return esc(:(Quantica.BlockModifier(Quantica.ParametricFunction{1}($f, $(Val(params))), missing, $rows, $(cols...))))
+end
+
+@inline (b!::BlockModifier)(h; kw...) = b!.f(h; kw...)
+
+resolve(e::BlockModifier, lat) = e
+
+Base.in(dn, t::BlockModifier) = t.dns === missing ? iszero(dn) : dn in t.dns
