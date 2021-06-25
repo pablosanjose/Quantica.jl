@@ -415,7 +415,7 @@ end
     ph = h |> parametric(@onsite!((o; λ=0) -> o - λ*I), @block!((b; λ=0) -> b + λ*I, sites))
     @test_throws ArgumentError ph(λ = 1)
     ph = h |> parametric(@onsite!((o; λ=0) -> o - λ*I), @block!((b; λ=0) -> b + λ*I, sites); check = false)
-    @test ph(λ = 1) isa Quantica.Hamiltonian
+    @test ph(λ = 1) isa Hamiltonian
     sites = siteindices(h, region = r->r[1]<0, sublats = :B);
     ph = h |> parametric(@onsite!((o; λ=0) -> o - λ*I; sublats = :B), @block!((b; λ=0) -> b + λ*I, sites))
     h3 = ph(λ = 3)

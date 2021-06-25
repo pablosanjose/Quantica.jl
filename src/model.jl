@@ -939,12 +939,21 @@ struct BlockModifier{V,C<:Union{Missing,NTuple{<:Any,SVector}},F<:ParametricFunc
     dns::C
     rows::V
     cols::V
+    function BlockModifier{V,C,F}(f, dns, rows, cols) where {V,C<:Union{Missing,NTuple{<:Any,SVector}},F<:ParametricFunction{1}}
+        new(f, dns, rows, cols)
+    end
 end
 
 BlockModifier(f, dns, sites) = BlockModifier(f, dns, sites, sites)
 
-BlockModifier(f::ParametricFunction{1}, dns, rows::Base.Generator, cols::Base.Generator) =
-    BlockModifier(f, dns, collect(rows), collect(cols))
+function BlockModifier(f::F, dns, rows, cols) where F<:ParametricFunction{1}
+    dns´ = sanitize_dn(dns)
+    rows´ = collect(rows)  # rows, cols from siteindices will be generators
+    cols´ = collect(cols)  # we need collections of known length to use them in `view`
+    V = typeof(rows´)
+    C = typeof(dns´)
+    return BlockModifier{V,C,F}(f, dns´, rows´, cols´)
+end
 
 """
     @block!((block; params...) -> modified_block, sites; dn = missing)
@@ -955,7 +964,7 @@ Create an `BlockModifier <: AbstractModifier`, to be used with `parametric`, tha
 hamiltonian `h`. Keyword arguments `params` are optional, and include any parameters that
 `modified_block` depends on that the user may want to tune. If the keyword `dn = missing`,
 the `dn` in `h[dn]` will be restricted to `dn = (0...)`. Otherwise the specified `dn`'s will
-be modified.
+be modified (e.g. when `dn = (1,0)` or `dn = ((1,0), (-1,0))`).
 
 Upon construction of a `ParametricHamiltonian` with a `@block!` modifier, a check is
 performed that the whole block specified by `(rows, cols)` is stored in the sparse
