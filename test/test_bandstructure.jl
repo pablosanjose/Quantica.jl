@@ -112,7 +112,7 @@ end
 @testset "unflatten" begin
     h = LatticePresets.honeycomb() |> hamiltonian(onsite(2I) + hopping(I, range = 1), orbitals = (Val(2), Val(1))) |> unitcell(2) |> unitcell
     sp = spectrum(h).states[:,1]
-    sp´ = Quantica.unflatten_orbitals_or_reinterpret(sp, h.orbstruct)
+    sp´ = Quantica.unflatten_orbitals_or_reinterpret(sp, orbitalstructure(h))
     l = size(h, 1)
     @test length(sp) == 1.5 * l
     @test length(sp´) == l
@@ -131,7 +131,7 @@ end
 
     h = LatticePresets.honeycomb() |> hamiltonian(onsite(2I) + hopping(I, range = 1), orbitals = Val(2)) |> unitcell(2) |> unitcell
     sp = spectrum(h).states[:,1]
-    sp´ = Quantica.unflatten_orbitals_or_reinterpret(sp, h.orbstruct)
+    sp´ = Quantica.unflatten_orbitals_or_reinterpret(sp, orbitalstructure(h))
     l = size(h, 1)
     @test length(sp) == 2 * l
     @test length(sp´) == l
@@ -139,7 +139,7 @@ end
 
     h = LatticePresets.honeycomb() |> hamiltonian(onsite(2I) + hopping(I, range = 1), orbitals = Val(2)) |> unitcell(2) |> unitcell
     sp = spectrum(h).states[:,1]
-    sp´ = Quantica.unflatten_orbitals_or_reinterpret(sp, h.orbstruct)
+    sp´ = Quantica.unflatten_orbitals_or_reinterpret(sp, orbitalstructure(h))
     @test sp === sp
 end
 

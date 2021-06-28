@@ -397,6 +397,11 @@ sitepositions(rs::ResolvedSelector{<:SiteSelector}) =
 
 siteindices(lat::AbstractLattice, s::SiteSelector) =
     siteindices(resolve(s, lat))
+siteindices(lat::AbstractLattice, ::Colon) = 1:nsites(lat)
+siteindices(lat::AbstractLattice, is::AbstractRange) = intersect(1:nsites(lat), is)
+siteindices(lat::AbstractLattice, i::Integer) = siteindices(lat, i:i)
+siteindices(lat::AbstractLattice, is) = filter!(in(siteindices(lat, :)), sort(is))
+
 siteindices(rs::ResolvedSelector{<:SiteSelector}) =
     (i for i in siteindex_candidates(rs) if i in rs)
 siteindices(rs::ResolvedSelector{<:SiteSelector}, sublat::Int) =

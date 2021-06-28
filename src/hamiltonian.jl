@@ -69,11 +69,11 @@ Hamiltonian(lat::LA, hs::Vector{H}, orb::O) where {LA<:AbstractLattice,L,M,A<:Ab
 Hamiltonian(lat, hs::Vector{H}, orbs::Tuple) where {L,M,H<:HamiltonianHarmonic{L,M}} =
     Hamiltonian(lat, hs, OrbitalStructure(orbitaltype(M), orbs, lat))
 
-orbitals(h::Hamiltonian) = h.orbstruct.orbitals
+orbitals(h::Hamiltonian) = orbitalstructure(h).orbitals
 
-offsets(h::Hamiltonian) = h.orbstruct.offsets
+offsets(h::Hamiltonian) = orbitalstructure(h).offsets
 
-flatoffsets(h::Hamiltonian) = h.orbstruct.flatoffsets
+flatoffsets(h::Hamiltonian) = orbitalstructure(h).flatoffsets
 
 Base.eltype(::Hamiltonian{<:Any,<:Any,M}) where {M} = M
 
@@ -109,6 +109,11 @@ function flatoffsetorbs_site(i, orbstruct)
     Δi = i - offset
     i´ = offset´ + (Δi - 1) * N
     return i´, N
+end
+
+function flatindices(i, orbstruct)
+    o, N = flatoffsetorbs_site(i, orbstruct)
+    return o+1:o+N
 end
 
 displaymatrixtype(h::Hamiltonian) = displaymatrixtype(matrixtype(h))
@@ -205,8 +210,8 @@ flatten() = h -> flatten(h)
 
 function flatten(h::Hamiltonian)
     isflat(h) && return copy(h)
-    harmonics´ = [flatten(har, h.orbstruct) for har in h.harmonics]
-    lattice´ = flatten(h.lattice, h.orbstruct)
+    harmonics´ = [flatten(har, orbitalstructure(h)) for har in h.harmonics]
+    lattice´ = flatten(h.lattice, orbitalstructure(h))
     orbs´ = (_ -> (:flat, )).(orbitals(h))
     return Hamiltonian(lattice´, harmonics´, orbs´)
 end
@@ -616,7 +621,7 @@ _similarmatrix(::Type{A}, ::Type{A´}, h) where {T<:Number,A<:AbstractSparseMatr
 _similarmatrix(::Type{A}, ::Type{A´}, h) where {N,T<:SMatrix{N,N},A<:AbstractSparseMatrix{T},T´<:SMatrix{N,N},A´<:AbstractSparseMatrix{T´}} =
     similar_merged(h.harmonics, T)
 _similarmatrix(::Type{A}, ::Type{A´}, h) where {N,T<:Number,A<:AbstractSparseMatrix{T},T´<:SMatrix{N,N},A´<:AbstractSparseMatrix{T´}} =
-    flatten(similar_merged(h.harmonics), h.orbstruct, T)
+    flatten(similar_merged(h.harmonics), orbitalstructure(h), T)
 _similarmatrix(::Type{A}, ::Type{A´}, h) where {T<:Number,A<:Matrix{T},T´<:Number,A´<:AbstractMatrix{T´}} =
     similar(A, size(h))
 _similarmatrix(::Type{A}, ::Type{A´}, h) where {N,T<:SMatrix{N,N},A<:Matrix{T},T´<:SMatrix{N,N},A´<:AbstractMatrix{T´}} =
@@ -704,9 +709,18 @@ where `T` is the number type of `lat`.
 # Indexing
 
 Indexing into a Hamiltonian `h` works as follows. Access the `HamiltonianHarmonic` matrix at
-a given `dn::NTuple{L,Int}` with `h[dn]`, or alternatively with `h[]` if `L=0`. Assign `v`
-into element `(i,j)` of said matrix with `h[dn][i,j] = v` or `h[dn, i, j] = v`. Broadcasting
-with vectors of indices `is` and `js` is supported, `h[dn][is, js] = v_matrix`.
+a given `dn::NTuple{L,Int}` with `h[dn]`. The special `h[]` syntax stands for `h[(0...)]`
+for the zero-harmonic. Assign `v` into element `(i,j)` of said matrix with `h[dn][i,j] = v`.
+Broadcasting with vectors of indices `is` and `js` is supported, `h[dn][is, js] = v_matrix`.
+
+A slicing syntax `h[rows, cols]` (without specifying `dn`) is also available, that creates a
+special `hs::Slice{<:Hamiltonian}` object that represents a slice of the Hamiltonian matrix
+restricted to `rows` and `cols`. Here, `rows` and `cols` are collections of site indices, or
+alternatively `SiteSelector`s (see `siteselector`s for details). If `rows::Integer` or
+`cols::Integer`, they will be converted to a single-element range (to preserve always a
+matrix-like slice, unlike for `AbstractArray` indexing). Slices support `bloch` and `bloch!`
+to produce the corresponding matrices, and can also be indexed as `hs[dn::Tuple]` that
+produces the equivalent to `h[dn][rows, cols]`.
 
 To add an empty harmonic with a given `dn::NTuple{L,Int}`, do `push!(h, dn)`. To delete it,
 do `deleteat!(h, dn)`.
@@ -877,7 +891,7 @@ blockdim(h::Hamiltonian) = blockdim(blocktype(h))
 blockdim(::Type{S}) where {N,S<:SMatrix{N,N}} = N
 blockdim(::Type{T}) where {T<:Number} = 1
 
-orbitaltype(h::Hamiltonian) = orbitaltype(h.orbstruct)
+orbitaltype(h::Hamiltonian) = orbitaltype(orbitalstructure(h))
 orbitaltype(o::OrbitalStructure) = o.orbtype
 orbitaltype(::Type{M}) where {M<:Number} = M
 orbitaltype(::Type{S}) where {N,T,S<:SMatrix{N,N,T}} = SVector{N,T}
@@ -987,10 +1001,10 @@ Base.size(h::Hamiltonian) = size(first(h.harmonics).h)
 Base.size(h::HamiltonianHarmonic, n) = size(h.h, n)
 Base.size(h::HamiltonianHarmonic) = size(h.h)
 
-Base.Matrix(h::Hamiltonian) = Hamiltonian(h.lattice, Matrix.(h.harmonics), h.orbstruct)
+Base.Matrix(h::Hamiltonian) = Hamiltonian(h.lattice, Matrix.(h.harmonics), orbitalstructure(h))
 Base.Matrix(h::HamiltonianHarmonic) = HamiltonianHarmonic(h.dn, Matrix(h.h))
 
-Base.copy(h::Hamiltonian) = Hamiltonian(copy(h.lattice), copy.(h.harmonics), h.orbstruct)
+Base.copy(h::Hamiltonian) = Hamiltonian(copy(h.lattice), copy.(h.harmonics), orbitalstructure(h))
 Base.copy(h::HamiltonianHarmonic) = HamiltonianHarmonic(h.dn, copy(h.h))
 
 function LinearAlgebra.ishermitian(h::Hamiltonian)
@@ -1003,7 +1017,7 @@ end
 
 Base.isequal(h1::Hamiltonian, h2::Hamiltonian) =
     isequal(h1.lattice, h2.lattice) && isequal(h1.harmonics, h2.harmonics) &&
-    isequal(h1.orbstruct, h2.orbstruct)
+    isequal(orbitalstructure(h1), orbitalstructure(h2))
 
 SparseArrays.issparse(h::Hamiltonian{LA,L,M,A}) where {LA,L,M,A<:AbstractSparseMatrix} = true
 SparseArrays.issparse(h::Hamiltonian{LA,L,M,A}) where {LA,L,M,A} = false
@@ -1054,7 +1068,6 @@ function nzrange_inrows(h, col, rowrange)
     return ptrmin:ptrmax
 end
 
-# Indexing #
 Base.push!(h::Hamiltonian{<:Any,L}, dn::NTuple{L,Int}) where {L} = push!(h, SVector(dn...))
 Base.push!(h::Hamiltonian{<:Any,L}, dn::Vararg{Int,L}) where {L} = push!(h, SVector(dn...))
 function Base.push!(h::Hamiltonian{<:Any,L}, dn::SVector{L,Int}) where {L}
@@ -1071,16 +1084,16 @@ function get_or_push!(harmonics::Vector{H}, dn::SVector{L,Int}, dims) where {L,M
     return hh
 end
 
-Base.getindex(h::Hamiltonian, dn::NTuple) = getindex(h, SVector(dn))
-Base.getindex(h::Hamiltonian, dn::Tuple{}) = getindex(h, SVector{0,Int}())
-Base.getindex(h::Hamiltonian) = h[tuple()]
+# Indexing #
+
+Base.getindex(h::Hamiltonian{<:Any,L}) where {L} = h[zero(SVector{L,Int})]
+Base.getindex(h::Hamiltonian, dn::NTuple{L}) where {L} = getindex(h, SVector{L,Int}(dn))
+
 @inline function Base.getindex(h::Hamiltonian{<:Any,L}, dn::SVector{L,Int}) where {L}
     nh = findfirst(hh -> hh.dn == dn, h.harmonics)
     nh === nothing && throw(BoundsError(h, dn))
     return h.harmonics[nh].h
 end
-Base.getindex(h::Hamiltonian, dn::Union{NTuple,SVector}, i0, i::Vararg{Int}) = h[dn][i0, i...]
-Base.getindex(h::Hamiltonian{LA, L}, i::Vararg{Int}) where {LA,L} = h[zero(SVector{L,Int})][i...]
 
 Base.deleteat!(h::Hamiltonian{<:Any,L}, dn::Vararg{Int,L}) where {L} =
     deleteat!(h, toSVector(dn))
@@ -1173,7 +1186,7 @@ function Base.literal_pow(::typeof(^), h::Hamiltonian, p::Val{P}) where {P}
         hh = get_or_push!(hhs, dn, dims)
         hh.h .+= prod((i -> h.harmonics[i].h).(is))
     end
-    return Hamiltonian(h.lattice, hhs, h.orbstruct)
+    return Hamiltonian(h.lattice, hhs, orbitalstructure(h))
 end
 
 function Base.:*(h1::Hamiltonian, h2::Hamiltonian) where {P}
@@ -1185,7 +1198,7 @@ function Base.:*(h1::Hamiltonian, h2::Hamiltonian) where {P}
         hh = get_or_push!(hhs, dn, dims)
         mul!(hh.h, hh1.h, hh2.h, 1, 1)
     end
-    return Hamiltonian(h1.lattice, hhs, h1.orbstruct)
+    return Hamiltonian(h1.lattice, hhs, orbitalstructure(h1))
 end
 
 Base.:*(h::Hamiltonian, p::Number) = p * h
@@ -1195,7 +1208,7 @@ function Base.:*(p::Number, h::Hamiltonian)
     for hh in hhs
         hh.h .*= p
     end
-    return Hamiltonian(h.lattice, hhs, h.orbstruct)
+    return Hamiltonian(h.lattice, hhs, orbitalstructure(h))
 end
 
 Base.:-(h1::Hamiltonian, h2) = h1 + (-h2)
@@ -1209,7 +1222,7 @@ function Base.:+(h1::Hamiltonian, h2::Hamiltonian)
         hh = get_or_push!(hhs, hh2.dn, dims)
         hh.h .+= hh2.h
     end
-    return Hamiltonian(h1.lattice, hhs, h1.orbstruct)
+    return Hamiltonian(h1.lattice, hhs, orbitalstructure(h1))
 end
 
 Base.:+(id::UniformScaling, h::Hamiltonian) = h + id
@@ -1219,7 +1232,7 @@ function Base.:+(h::Hamiltonian, id::UniformScaling)
     M = blocktype(h)
     mat = first(hhs).h
     shift_diagonal!(mat, blocktype(h), h, id)
-    return Hamiltonian(h.lattice, hhs, h.orbstruct)
+    return Hamiltonian(h.lattice, hhs, orbitalstructure(h))
 end
 
 function shift_diagonal!(mat, ::Type{<:Number}, h, id::UniformScaling)
@@ -1238,7 +1251,7 @@ function shift_diagonal!(mat, ::Type{S}, h, id::UniformScaling) where {N,S<:SMat
 end
 
 check_compatible_hamiltonians(h1, h2) =
-    isequal(h1.lattice, h2.lattice) && isequal(h1.orbstruct, h2.orbstruct) && size(h1) == size(h2) ||
+    isequal(h1.lattice, h2.lattice) && isequal(orbitalstructure(h1), orbitalstructure(h2)) && size(h1) == size(h2) ||
         throw(ArgumentError("Cannot combine Hamiltonians with different lattices, dimensions or orbitals"))
 #######################################################################
 # auxiliary types
@@ -1680,7 +1693,7 @@ Build the intra-cell Hamiltonian matrix of `h`, without adding any Bloch harmoni
 A nonzero `axis` produces the derivative of the Bloch matrix respect to `ϕs[axis]` (i.e. the
 velocity operator along this axis), `∂H(ϕs) = ∑ -im * dn[axis] * exp(-im * ϕs' * dn) h_dn`
 
-    bloch(matrix, h::Hamiltonian{<:Lattice}, ϕs::NTuple{L,Real}, dnfunc::Function)
+    bloch(h::Hamiltonian{<:Lattice}, ϕs::NTuple{L,Real}, dnfunc::Function)
 
 Generalization that applies a prefactor `dnfunc(dn) * exp(im * ϕs' * dn)` to the `dn`
 harmonic.
@@ -1701,6 +1714,9 @@ Curried forms of `bloch`, equivalent to `bloch(h, ϕs, ...)` and `bloch(ph, pϕs
 
 `bloch` allocates a new matrix on each call. For a non-allocating version of `bloch`, see
 `bloch!`.
+
+`bloch` also supports slices of `Hamiltonians` and `ParametricHamiltonians`, produced with
+`h[rows, cols]`, see the indexing section of `hamiltonian` and  `parametric` for details.
 
 # Examples
 
@@ -1766,14 +1782,14 @@ bloch!(matrix, h::Hamiltonian, ϕs, axis = 0) = _bloch!(matrix, h, toSVector(ϕs
 bloch!(matrix, h::Hamiltonian, ϕs::Tuple{SVector,NamedTuple}, args...) = bloch!(matrix, h, first(ϕs), args...)
 
 function bloch!(matrix, h::Hamiltonian)
-    _copy!(parent(matrix), first(h.harmonics).h, h.orbstruct) # faster copy!(dense, sparse) specialization
+    maybe_flatten_copy!(parent(matrix), first(h.harmonics).h, orbitalstructure(h)) # faster copy!(dense, sparse) specialization
     return matrix
 end
 
 function _bloch!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,L,M}, ϕs::SVector{L}, axis::Number) where {L,M}
     rawmatrix = parent(matrix)
     if iszero(axis)
-        _copy!(rawmatrix, first(h.harmonics).h, h.orbstruct) # faster copy!(dense, sparse) specialization
+        maybe_flatten_copy!(rawmatrix, first(h.harmonics).h, orbitalstructure(h)) # faster copy!(dense, sparse) specialization
         add_harmonics!(rawmatrix, h, ϕs, dn -> 1)
     else
         fill!(rawmatrix, zero(M)) # There is no guarantee of same structure
@@ -1788,7 +1804,7 @@ function _bloch!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,L,M}, ϕs::SVe
     if iszero(prefactor0)
         fill!(rawmatrix, zero(eltype(rawmatrix)))
     else
-        _copy!(rawmatrix, first(h.harmonics).h, h.orbstruct)
+        maybe_flatten_copy!(rawmatrix, first(h.harmonics).h, orbitalstructure(h))
         rmul!(rawmatrix, prefactor0)
     end
     add_harmonics!(rawmatrix, h, ϕs, dnfunc)
@@ -1807,24 +1823,24 @@ function add_harmonics!(zerobloch, h::Hamiltonian{<:Lattice,L}, ϕs::SVector{L},
         prefactor = dnfunc(hh.dn)
         iszero(prefactor) && continue
         ephi = prefactor * cis(-ϕs´ * hh.dn)
-        _add!(zerobloch, hhmatrix, h.orbstruct, ephi)
+        maybe_flatten_add!(zerobloch, hhmatrix, orbitalstructure(h), ephi)
     end
     return zerobloch
 end
 
 ############################################################################################
-######## _copy! and _add! call specialized methods #########################################
+######## maybe_flatten_copy! and maybe_flatten_add! call specialized methods #########################################
 ############################################################################################
 
-_copy!(dest, src, h) = copy!(dest, src)
-_copy!(dst::AbstractMatrix{<:Number}, src::SparseMatrixCSC{<:Number}, o) = _fast_sparse_copy!(dst, src)
-_copy!(dst::StridedMatrix{<:Number}, src::SparseMatrixCSC{<:Number}, o) = _fast_sparse_copy!(dst, src)
-_copy!(dst::StridedMatrix{<:SMatrix{N,N}}, src::SparseMatrixCSC{<:SMatrix{N,N}}, o) where {N} = _fast_sparse_copy!(dst, src)
-_copy!(dst::AbstractMatrix{<:Number}, src::SparseMatrixCSC{<:SMatrix}, o) = flatten_sparse_copy!(dst, src, o)
-_copy!(dst::StridedMatrix{<:Number}, src::StridedMatrix{<:SMatrix}, o) = flatten_dense_copy!(dst, src, o)
+maybe_flatten_copy!(dest, src, _) = copy!(dest, src)
+maybe_flatten_copy!(dst::AbstractMatrix{<:Number}, src::SparseMatrixCSC{<:Number}, o) = fast_sparse_copy!(dst, src)
+maybe_flatten_copy!(dst::StridedMatrix{<:Number}, src::SparseMatrixCSC{<:Number}, o) = fast_sparse_copy!(dst, src)
+maybe_flatten_copy!(dst::StridedMatrix{<:SMatrix{N,N}}, src::SparseMatrixCSC{<:SMatrix{N,N}}, o) where {N} = fast_sparse_copy!(dst, src)
+maybe_flatten_copy!(dst::AbstractMatrix{<:Number}, src::SparseMatrixCSC{<:SMatrix}, o) = flatten_sparse_copy!(dst, src, o)
+maybe_flatten_copy!(dst::StridedMatrix{<:Number}, src::StridedMatrix{<:SMatrix}, o) = flatten_dense_copy!(dst, src, o)
 
-_add!(dest, src, o, α) = _plain_muladd!(dest, src, α)
-_add!(dst::AbstractMatrix{<:Number}, src::SparseMatrixCSC{<:Number}, o, α = 1) = _fast_sparse_muladd!(dst, src, α)
-_add!(dst::AbstractMatrix{<:SMatrix{N,N}}, src::SparseMatrixCSC{<:SMatrix{N,N}}, o, α = I) where {N} = _fast_sparse_muladd!(dst, src, α)
-_add!(dst::AbstractMatrix{<:Number}, src::SparseMatrixCSC{<:SMatrix}, o, α = I) = flatten_sparse_muladd!(dst, src, o, α)
-_add!(dst::StridedMatrix{<:Number}, src::StridedMatrix{<:SMatrix}, o, α = I) = flatten_dense_muladd!(dst, src, o, α)
+maybe_flatten_add!(dest, src, _, α) = _plain_muladd!(dest, src, α)
+maybe_flatten_add!(dst::AbstractMatrix{<:Number}, src::SparseMatrixCSC{<:Number}, o, α = 1) = fast_sparse_muladd!(dst, src, α)
+maybe_flatten_add!(dst::AbstractMatrix{<:SMatrix{N,N}}, src::SparseMatrixCSC{<:SMatrix{N,N}}, o, α = I) where {N} = fast_sparse_muladd!(dst, src, α)
+maybe_flatten_add!(dst::AbstractMatrix{<:Number}, src::SparseMatrixCSC{<:SMatrix}, o, α = I) = flatten_sparse_muladd!(dst, src, o, α)
+maybe_flatten_add!(dst::StridedMatrix{<:Number}, src::StridedMatrix{<:SMatrix}, o, α = I) = flatten_dense_muladd!(dst, src, o, α)

@@ -1,5 +1,5 @@
 using LinearAlgebra: diag, norm, det
-using Quantica: Hamiltonian, ParametricHamiltonian, nhoppings, nonsites, nsites, coordination, allsitepositions
+using Quantica: Hamiltonian, ParametricHamiltonian, nhoppings, nonsites, nsites, coordination, allsitepositions, axesflat
 
 @testset "basic hamiltonians" begin
     presets = (LatticePresets.linear, LatticePresets.square, LatticePresets.triangular,
@@ -533,4 +533,57 @@ end
     @test iszero(bloch(h)[1:2, 5:6])
     h = combine(hb, h0, ht; coupling = hopping((r,dr) -> exp(-norm(dr)), range = 2))
     @test !iszero(bloch(h)[1:2, 5:6])
+end
+
+@testset "hamiltonian slices" begin
+    function testslices(h::Hamiltonian, inds, φs)
+        hs = h[inds...]
+        @test bloch(hs, φs) ≈ bloch(h, φs)[axes(hs)...]
+        @test bloch!(similarmatrix(hs, Matrix), hs, φs) ≈ bloch!(similarmatrix(h, Matrix), h, φs)[axes(hs)...]
+        @test bloch!(similarmatrix(hs, Matrix{ComplexF64}), hs, φs) ≈ bloch!(similarmatrix(h, Matrix{ComplexF64}), h, φs)[axesflat(hs)...]
+        @test bloch!(similarmatrix(hs, flatten), hs, φs) ≈ bloch!(similarmatrix(h, flatten), h, φs)[axesflat(hs)...]
+    end
+
+    function testslices(h::ParametricHamiltonian, inds, φs)
+        hs = h[inds...]
+        @test bloch(hs, φs) ≈ bloch(h, φs)[axes(hs)...] ≈
+            bloch(h(), φs)[axes(hs)...]
+        @test bloch!(similarmatrix(hs, Matrix), hs, φs) ≈ bloch!(similarmatrix(h, Matrix), h, φs)[axes(hs)...] ≈
+            bloch!(similarmatrix(h, Matrix), h(), φs)[axes(hs)...]
+        @test bloch!(similarmatrix(hs, Matrix{ComplexF64}), hs, φs) ≈ bloch!(similarmatrix(h, Matrix{ComplexF64}), h, φs)[axesflat(hs)...] ≈
+            bloch!(similarmatrix(h, Matrix{ComplexF64}), h(), φs)[axesflat(hs)...]
+        @test bloch!(similarmatrix(hs, flatten), hs, φs) ≈ bloch!(similarmatrix(h, flatten), h, φs)[axesflat(hs)...] ≈
+            bloch!(similarmatrix(h, flatten), h(), φs)[axesflat(hs)...]
+    end
+
+    function alltests(h, φs)
+        testslices(h, (70, 2), φs)
+        testslices(h, (:, 2), φs)
+        testslices(h, (:, 70), φs)
+        testslices(h, (2, :), φs)
+        testslices(h, (70, :), φs)
+        testslices(h, (1:4, 10:70), φs)
+        testslices(h, (1:4, :), φs)
+        testslices(h, (:, 10:70), φs)
+        s1 = siteselector(; region = r -> 0<r[2]<7)
+        s2 = siteselector(; sublats = :B, region = r -> 0<r[2]<7)
+        s3 = siteselector(; indices = 2:70)
+        testslices(h, (:, s1), φs)
+        testslices(h, (s1, :), φs)
+        testslices(h, (s1, s2), φs)
+        testslices(h, (s3, s2), φs)
+        hs = h[s3, s3]
+        @test axes(hs) == (2:70, 2:70)
+    end
+
+    h = LatticePresets.honeycomb() |> hamiltonian(onsite(1I) + hopping(I), orbitals = (Val(3),Val(2))) |> unitcell((3,-4), region = r -> 0<r[2]<10)
+    alltests(h, .2)
+    h = LatticePresets.honeycomb() |> hamiltonian(onsite(1I) + hopping(I)) |> unitcell(20)
+    alltests(h, (.2, .3))
+    ph = LatticePresets.honeycomb() |> hamiltonian(onsite(1I) + hopping(I), orbitals = (Val(3),Val(2))) |> unitcell((3,-4), region = r -> 0<r[2]<10)
+        parametric(@onsite!((o; k = 2) -> k*o))
+    alltests(ph, .2)
+    ph = LatticePresets.honeycomb() |> hamiltonian(onsite(1I) + hopping(I)) |> unitcell(20) |>
+        parametric(@onsite!((o; k = 2) -> k*o))
+    alltests(ph, (.2, .3))
 end

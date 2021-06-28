@@ -7,7 +7,7 @@ struct Subspace{D,C,T,S<:AbstractMatrix{C},O<:OrbitalStructure}
     orbstruct::O
     basevert::SVector{D,T}
 end
-Subspace(h::Hamiltonian, args...) = Subspace(h.orbstruct, args...)
+Subspace(h::Hamiltonian, args...) = Subspace(orbitalstructure(h), args...)
 Subspace(::Missing, energy, basis, basevert...) =
     Subspace(OrbitalStructure(eltype(basis), size(basis, 1)), energy, basis, basevert...)
 Subspace(o::OrbitalStructure, energy, basis, basevert...) =
