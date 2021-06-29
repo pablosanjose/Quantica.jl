@@ -50,6 +50,12 @@ elements). Unless the number of orbitals of `h` is the same in all sublattices, 
 can have a substantial performance impact, so it is advisable to disable it with `check =
 false` once the user has confirmed that `ph(; ps...)` throws no error with `check = true`.
 
+# Indexing
+
+Indexing into a `ParametricHamiltonian`, as in `ph[rows, cols]` creates a
+`Slice{<:ParametricHamiltonian}`, which is the parametric version of `Slice{<:Hamiltonian}`,
+see `hamiltonian` for details.
+
 # Examples
 
 ```jldoctest
@@ -243,6 +249,8 @@ Return the names of the parameter that `ph` depends on
 parameters(ph::ParametricHamiltonian) = ph.parameters
 
 matrixtype(ph::ParametricHamiltonian) = matrixtype(parent(ph))
+
+blocktype(ph::ParametricHamiltonian) = blocktype(parent(ph))
 
 blockeltype(ph::ParametricHamiltonian) = blockeltype(parent(ph))
 

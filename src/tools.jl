@@ -363,22 +363,38 @@ function _plain_muladd!(dst, src, α)
 end
 
 # Only needed for dense <- sparse (#33589), copy!(sparse, sparse) is fine in v1.5+
-function _fast_sparse_copy!(dst::AbstractMatrix{T}, src::SparseMatrixCSC) where {T}
-    @boundscheck checkbounds(dst, axes(src)...)
+fast_sparse_copy!(dst::AbstractMatrix, src::AbstractSparseMatrix, (rows, cols) = axes(src)) =
+    _fast_sparse_copy!(dst, src, rows, cols)
+
+_fast_sparse_copy!(dst, src, rows, cols) =
+    copy!(dst, view(src, rows, cols))
+_fast_sparse_copy!(dst, src, ::Colon, cols) =
+    _fast_sparse_copy!(dst, src, axes(src, 1), cols)
+_fast_sparse_copy!(dst, src, rows::AbstractRange, ::Colon) =
+    _fast_sparse_copy!(dst, src, rows, axes(src, 2))
+
+function _fast_sparse_copy!(dst, src, rows::AbstractRange, cols)
+    @boundscheck checkbounds(src, rows, cols)
+    @boundscheck checkbounds(dst, eachindex(rows), eachindex(cols))
+    rowoffset = first(rows) - 1
     fill!(dst, zero(eltype(src)))
-    for col in 1:size(src, 1)
+    for (coldst, col) in enumerate(cols)
         for p in nzrange(src, col)
-            @inbounds dst[rowvals(src)[p], col] = nonzeros(src)[p]
+            row = rowvals(src)[p]
+            row in rows || continue
+            rowdst = row - rowoffset
+            @inbounds dst[rowdst, coldst] = nonzeros(src)[p]
         end
     end
     return dst
 end
 
-function _fast_sparse_muladd!(dst::AbstractMatrix{T}, src::SparseMatrixCSC, α = I) where {T}
-    @boundscheck checkbounds(dst, axes(src)...)
-    for col in 1:size(src, 1)
+function fast_sparse_muladd!(dst::AbstractMatrix, src::SparseMatrixCSC, α = I, cols = axes(src, 2))
+    @boundscheck checkbounds(src, axes(dst, 1), cols)
+    @boundscheck checkbounds(dst, axes(src, 1), eachindex(cols))
+    @inbounds for (coldst, col) in enumerate(cols)
         for p in nzrange(src, col)
-            @inbounds dst[rowvals(src)[p], col] += α * nonzeros(src)[p]
+            @inbounds dst[rowvals(src)[p], coldst] += α * nonzeros(src)[p]
         end
     end
     return dst
