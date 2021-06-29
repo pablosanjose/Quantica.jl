@@ -205,7 +205,6 @@ function applymodifier_ptrdata!(h, modifier::ElementModifier, ptrdata, kw)
 end
 
 function applymodifier_ptrdata!(h, modifier::BlockModifier, ptrdata, kw)
-    rows, cols = modifier.rows, modifier.cols
     for (har, hardata) in zip(h.harmonics, ptrdata)
         har.dn in modifier || continue
         block = view(har.h, modifier.rows, modifier.cols)
