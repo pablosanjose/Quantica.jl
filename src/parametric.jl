@@ -14,7 +14,7 @@ end
 function Base.show(io::IO, ::MIME"text/plain", pham::ParametricHamiltonian{N}) where {N}
     i = get(io, :indent, "")
     print(io, i, "Parametric")
-    show(io, pham.hbase)
+    show(io, pham.baseh)
     print(io, i, "\n",
 "$i  Parameters       : $(parameters(pham))
 $i  Check each call  : $(pham.check)")
