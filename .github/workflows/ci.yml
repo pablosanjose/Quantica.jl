@@ -10,7 +10,7 @@ jobs:
     strategy:
       matrix:
         version:
-          - '1.5'
+          - '1'
           - '1.6'
           - 'nightly'
         os:
