@@ -1033,7 +1033,7 @@ function refine_bisection(found, neighs, steps, criterion, diag)
 end
 
 select_closest(εs, criterion, ε0, εi...) =
-    last(findmin(ε -> ifelse(criterion(ε, ε0, εi...), abs(ε - ε0), Inf), εs))
+    argmin(ε -> ifelse(criterion(ε, ε0, εi...), abs(ε - ε0), Inf), εs)
 
 """
     gapedge(b::Bandstructure{1}, ε₀; refinesteps = 0)
@@ -1057,7 +1057,7 @@ function gapedge(b::Bandstructure{1,<:Any,T}, ε0, ::typeof(+); kw...) where {T}
     isinband(b, ε0) && return (missing, zero(T))
     minbands = Iterators.flatten(filter!.(φε -> last(φε) > ε0, minima(b; kw...)))
     isempty(minbands) && return (missing, T(Inf))
-    (φ₊, ε₊) = findmin(last, minbands) |> last
+    (φ₊, ε₊) = argmin(last, minbands)
     return (φ₊, ε₊)
 end
 
@@ -1065,7 +1065,7 @@ function gapedge(b::Bandstructure{1,<:Any,T}, ε0, ::typeof(-); kw...) where {T}
     isinband(b, ε0) && return (missing, zero(T))
     maxbands = Iterators.flatten(filter!.(φε -> last(φε) < ε0, maxima(b; kw...)))
     isempty(maxbands) && return (missing, T(-Inf))
-    (φ₋, ε₋) = findmax(last, maxbands) |> last
+    (φ₋, ε₋) = argmax(last, maxbands)
     return (φ₋, ε₋)
 end
 
