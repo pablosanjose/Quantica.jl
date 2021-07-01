@@ -163,7 +163,11 @@ end
 pinverse(::SMatrix{E,0,T}) where {E,T} = SMatrix{0,E,T}() # BUG: workaround StaticArrays bug SMatrix{E,0,T}()'
 
 function pinverse(m::SMatrix)
-    qrm = qr(m)
+    @static if VERSION >= v"1.7.0-beta2"
+        qrm = qr(m, NoPivot())
+    else
+        qrm = qr(m)
+    end
     return inv(qrm.R) * qrm.Q'
 end
 
