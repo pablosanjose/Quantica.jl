@@ -1,6 +1,7 @@
 module Quantica
 
 # Use README as the docstring of the module:
+using Base.Threads: Iterators
 @doc read(joinpath(dirname(@__DIR__), "README.md"), String) Quantica
 
 using Requires
@@ -19,7 +20,7 @@ using SparseArrays: getcolptr, AbstractSparseMatrix, AbstractSparseMatrixCSC
 
 using Statistics: mean
 
-using Compat # for use of findmin/findmax in bandstructure.jl
+using Compat # for use of argmin/argmax in bandstructure.jl
 
 export sublat, bravais, lattice, dims, supercell, unitcell,
        hopping, onsite, @onsite!, @hopping!, @block!, parameters, siteselector, hopselector, nrange,
