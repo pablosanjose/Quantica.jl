@@ -300,6 +300,7 @@ function flatten(src::StridedMatrix{<:SVector{N,T}}, orbstruct, ::Type{T´} = T)
 end
 
 function flatten!(dst, src::StridedMatrix{<:SMatrix{N,N,T}}, orbstruct, ::Type{T´} = T) where {N,T,T´}
+    size(src) == (dimh(orbstruct), dimh(orbstruct)) || throw(ArgumentError("Dimension mismatch between source array and orbital structure"))
     norbs = length.(orbitals(orbstruct))
     for col in 1:size(src, 2), row in 1:size(src, 1)
         srow, scol = sublat_site(row, orbstruct), sublat_site(col, orbstruct)
