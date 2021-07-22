@@ -12,7 +12,7 @@ function __init__()
 end
 
 using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
-      ProgressMeter, LinearMaps, Random, SuiteSparse
+      ProgressMeter, Random, SuiteSparse
 
 using ExprTools
 
