@@ -41,13 +41,13 @@ Sublat{2,Float64} : sublattice of Float64-typed sites in 2D space
 """
 sublat(sites::AbstractVector{<:SVector}; name = :_, kw...) =
     Sublat(sites, nametype(name))
-sublat(vs::Union{Tuple,AbstractVector{<:Number}}...; kw...) = sublat(toSVectors(vs...); kw...)
+sublat(vs::Union{Tuple,AbstractVector{<:Number}}...; kw...) = sublat(toSVectors(vs); kw...)
 
-toSVectors(vs...) = [promote(toSVector.(vs)...)...]
+toSVectors(vs) = [promote(toSVector.(vs)...)...]
 
 dims(::NTuple{N,Sublat{E,T}}) where {N,E,T} = E
 
-sublatnames(ss::NTuple{N,Sublat{E,T}}) where {N,E,T} = (s -> s.name).(ss)
+sublatnames(ss::NTuple{N,Any}) where {N} = ntuple(i->ss[i].name, Val(N))
 
 #######################################################################
 # Unitcell
@@ -81,6 +81,7 @@ function _unitcell(sublats::NTuple{N,Sublat}, dim::Val{E}, type::Type{T}, names)
     return Unitcell(sites, names´, offsets)
 end
 
+
 _unitcell(u::Unitcell{E,T,N}, dim::Val{E}, type::Type{T}, names) where {E,T,N} =
     Unitcell(u.sites, uniquenames(sanitize_names(names, Val(N))), u.offsets)
 
@@ -92,7 +93,7 @@ sanitize_names(names::AbstractVector, ::Val{N}) where {N} = ntuple(i -> NameType
 sanitize_names(names::NTuple{N,Union{NameType,Int}}, ::Val{N}) where {N} = NameType.(names)
 
 function uniquenames(names::NTuple{N,NameType}) where {N}
-    namesvec = [names...]
+    namesvec = NameType[names...]
     allnames = NameType[:_]
     for i in eachindex(names)
         namesvec[i] in allnames && (namesvec[i] = uniquename(allnames, namesvec[i], i))

@@ -9,9 +9,9 @@ _toSMatrix(::Type{T}, s::SMatrix{N,M}) where {N,M,T} = convert(SMatrix{N,M,T}, s
 toSMatrix(s::AbstractMatrix) = SMatrix{size(s,1), size(s,2)}(s)
 toSMatrix(s::AbstractVector) = toSMatrix(Tuple(s))
 
-toSVector(::Tuple{}) = SVector{0,Float64}()
 toSVector(v::SVector) = v
-toSVector(v::NTuple{N,Any}) where {N} = SVector(v)
+toSVector(::Tuple{}) = SVector{0,Float64}()
+toSVector(v::Tuple) = SVector(v)
 toSVector(x::Number) = SVector{1}(x)
 toSVector(::Type{T}, v) where {T} = T.(toSVector(v))
 toSVector(::Type{T}, ::Tuple{}) where {T} = SVector{0,T}()
@@ -113,8 +113,8 @@ padright(v, x::T, ::Type{S}) where {E,T,S<:SVector{E,T}} =
 # Pad element type to a "larger" type
 padtotype(s::SMatrix{E,L}, ::Type{S}) where {E,L,E2,L2,T,S<:SMatrix{E2,L2,T}} =
     S(SMatrix{E2,E}(I) * s * SMatrix{L,L2}(I))
-padtotype(s::StaticVector, ::Type{S}) where {N,T,S<:SVector{N,T}} =
-    padright(T.(s), Val(N))
+padtotype(s::SVector{N´}, ::Type{S}) where {N´,N,T,S<:SVector{N,T}} =
+    padright(SVector{N´,T}(s), Val(N))
 padtotype(s::SVector{1}, ::Type{T}) where {T<:Number} = T(first(s))
 padtotype(x::Number, ::Type{S}) where {E,L,S<:SMatrix{E,L}} =
     S(x * (SMatrix{E,1}(I) * SMatrix{1,L}(I)))
