@@ -1557,7 +1557,7 @@ function applymodifiers(val, lat, inds, dns, m::UniformModifier, ms...)
     return applymodifiers(val´, lat, inds, dns, ms...)
 end
 
-function applymodifiers(val, lat, (row, col), (dnrow, dncol), m::OnsiteModifier, ms...)
+function applymodifiers(val, lat, (row, col), (dnrow, dncol), m::SiteModifier, ms...)
     selected = ((row, col), (dnrow, dncol)) in m.selector
     if selected
         r = allsitepositions(lat)[col] + bravais(lat) * dncol
@@ -1568,7 +1568,7 @@ function applymodifiers(val, lat, (row, col), (dnrow, dncol), m::OnsiteModifier,
     return applymodifiers(val´, lat, (row, col), (dnrow, dncol), ms...)
 end
 
-function applymodifiers(val, lat, (row, col), (dnrow, dncol), m::HoppingModifier, ms...)
+function applymodifiers(val, lat, (row, col), (dnrow, dncol), m::HopModifier, ms...)
     selected = ((row, col), (dnrow, dncol)) in m.selector
     if selected
         br = bravais(lat)

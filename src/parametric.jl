@@ -150,12 +150,12 @@ end
 empty_ptrdata(h, t::UniformModifier)  = Vector{Int}[Int[] for _ in h.harmonics]
 
 # Non-uniform case, one vector of (ptr, r, dr) per harmonic
-function empty_ptrdata(h, t::OnsiteModifier)
+function empty_ptrdata(h, t::SiteModifier)
     S = positiontype(h.lattice)
     return Vector{Tuple{Int,S}}[Tuple{Int,S}[] for _ in h.harmonics]
 end
 
-function empty_ptrdata(h, t::HoppingModifier)
+function empty_ptrdata(h, t::HopModifier)
     S = positiontype(h.lattice)
     return Vector{Tuple{Int,S,S}}[Tuple{Int,S,S}[] for _ in h.harmonics]
 end
@@ -167,9 +167,9 @@ empty_ptrdata(h, t::BlockModifier)  = Vector{Tuple{Int,Int}}[Tuple{Int,Int}[] fo
 ptrdatum(t::UniformModifier, lat, ptr, (row, col), dn) = ptr
 
 # Non-uniform case
-ptrdatum(t::OnsiteModifier, lat, ptr, (row, col), dn) = (ptr, allsitepositions(lat)[col])
+ptrdatum(t::SiteModifier, lat, ptr, (row, col), dn) = (ptr, allsitepositions(lat)[col])
 
-function ptrdatum(t::HoppingModifier, lat, ptr, (row, col), dn)
+function ptrdatum(t::HopModifier, lat, ptr, (row, col), dn)
     r, dr = _rdr(allsitepositions(lat)[col], allsitepositions(lat)[row] + bravais(lat) * dn)
     return (ptr, r, dr)
 end

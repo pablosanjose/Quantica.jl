@@ -304,8 +304,8 @@ end
     @test @onsite!((o, r; z, y = 2, kw...) -> 2o)(el, r, z = 2, p = 2) == 2el
     @test @onsite!((o, r; z, y = 2, kw...) -> 2o)(el, r, z = 2, y = 3, p = 2) == 2el
 
-    @test @onsite!((o; z, y = 2, kw...) -> 2o) isa Quantica.UniformOnsiteModifier
-    @test @onsite!((o, r; z, y = 2, kw...) -> 2o) isa Quantica.OnsiteModifier{2}
+    @test @onsite!((o; z, y = 2, kw...) -> 2o) isa Quantica.UniformSiteModifier
+    @test @onsite!((o, r; z, y = 2, kw...) -> 2o) isa Quantica.SiteModifier{2}
 
     @test parameters(@onsite!((o, r; z, y = 2, kw...) -> 2o)) == (:z, :y)
 end
@@ -345,8 +345,8 @@ end
     @test @hopping!((t, r, dr; z, y = 2, kw...) -> 2t)(el, r, dr, z = 2, p = 2) == 2el
     @test @hopping!((t, r, dr; z, y = 2, kw...) -> 2t)(el, r, dr, z = 2, y = 3, p = 2) == 2el
 
-    @test @hopping!((t; z, y = 2, kw...) -> 2t) isa Quantica.UniformHoppingModifier
-    @test @hopping!((t, r, dr; z, y = 2, kw...) -> 2t) isa Quantica.HoppingModifier{3}
+    @test @hopping!((t; z, y = 2, kw...) -> 2t) isa Quantica.UniformHopModifier
+    @test @hopping!((t, r, dr; z, y = 2, kw...) -> 2t) isa Quantica.HopModifier{3}
 
     @test parameters(@hopping!((o, r, dr; z, y = 2, kw...) -> 2o)) == (:z, :y)
 end

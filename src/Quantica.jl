@@ -12,7 +12,7 @@ function __init__()
 end
 
 using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
-      ProgressMeter, LinearMaps, Random, SuiteSparse
+      ProgressMeter, Random, SuiteSparse
 
 using ExprTools
 
@@ -44,26 +44,26 @@ export ishermitian, I
 
 export SparseMatrixCSC
 
-const NameType = Symbol
-const nametype = Symbol
-
 const TOOMANYITERS = 10^8
 
-include("iterators.jl")
-include("tools.jl")
-include("presets.jl")
+include("types.jl")
+include("show.jl")
 include("lattice.jl")
-include("model.jl")
-include("hamiltonian.jl")
-include("ket.jl")
-include("parametric.jl")
-include("slice.jl")
-include("mesh.jl")
-include("diagonalizer.jl")
-include("bandstructure.jl")
-include("KPM.jl")
-include("effective.jl")
-include("greens.jl")
-include("convert.jl")
+# include("iterators.jl")
+# include("tools.jl")
+# include("presets.jl")
+# include("lattice_old.jl")
+# include("model_old.jl")
+# include("hamiltonian.jl")
+# include("ket.jl")
+# include("parametric.jl")
+# include("slice.jl")
+# include("mesh.jl")
+# include("diagonalizer.jl")
+# include("bandstructure.jl")
+# include("KPM.jl")
+# include("effective.jl")
+# include("greens.jl")
+# include("convert.jl")
 
 end
