@@ -51,17 +51,19 @@ end
 # Lattice constructors
 #region
 
-function lattice(ss::Sublat{T´,E´}...;
-    bravais = (), dim::Val{E} = Val(E´), type::Type{T} = T´, names = name.(ss)) where {E,T,E´,T´}
+lattice(s::Sublat, ss::Sublat...; kw...) = _lattice(promote(s, ss...)...; kw...)
+
+function _lattice(ss::Sublat...;
+    bravais = (), dim::Val{E} = valdim(first(ss)), type::Type{T} = numbertype(first(ss)), names = name.(ss)) where {E,T}
     u = unitcell(ss, names, SVector{E,T})
-    b = Bravais(sanitize_Tuple_of_SVectors(SVector{E,T}, bravais))
+    b = Bravais(sanitize_SVector_of_SVectors(SVector{E,T}, bravais))
     return Lattice(b, u)
 end
 
-function lattice(l::Lattice{T´,E´};
-    bravais = bravais(lat), dim::Val{E} = Val(E´), type::Type{T} = T´, names = names(l)) where {E,T,E´,T´}
+function lattice(l::Lattice;
+    bravais = bravais(lat), dim::Val{E} = valdim(l), type::Type{T} = numbertype(l), names = names(l)) where {E,T}
     u = unitcell(unitcell(lat), names, SVector{E,T})
-    b = Bravais(sanitize_Tuple_of_SVectors(SVector{E,T}, bravais))
+    b = Bravais(sanitize_SVector_of_SVectors(SVector{E,T}, bravais))
     return Lattice(b, u)
 end
 

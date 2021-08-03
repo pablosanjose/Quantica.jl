@@ -6,14 +6,14 @@ struct Sublat{T,E}
     name::Symbol
 end
 
-struct Unitcell{T,E}
+struct Unitcell{T<:AbstractFloat,E}
     sites::Vector{SVector{E,T}}
     names::Vector{Symbol}
     offsets::Vector{Int}        # Linear site number offsets for each sublat
 end
 
-struct Bravais{T,E,L}
-    vectors::NTuple{L,SVector{E,T}}
+struct Bravais{T<:AbstractFloat,E,L}
+    vectors::SVector{L,SVector{E,T}}
     function Bravais{T,E,L}(vectors) where {T,E,L}
         L > E &&
             throw(DimensionMismatch("Number $L of Bravais vectors cannot be greater than embedding dimension $E"))
@@ -21,9 +21,9 @@ struct Bravais{T,E,L}
     end
 end
 # outer constructor
-Bravais(vectors::NTuple{L,SVector{E,T}}) where {T,E,L} = Bravais{T,E,L}(vectors)
+Bravais(vectors::SVector{L,SVector{E,T}}) where {T,E,L} = Bravais{T,E,L}(vectors)
 
-mutable struct Lattice{T,E,L}
+mutable struct Lattice{T<:AbstractFloat,E,L}
     bravais::Bravais{T,E,L}
     unitcell::Unitcell{T,E}
 end
@@ -59,6 +59,12 @@ offsets(u::Unitcell) = u.offsets
 
 sublatlengths(lat::Lattice) = sublatlengths(lat.unitcell)
 sublatlengths(u::Unitcell) = diff(u.offsets)
+
+numbertype(::Sublat{T}) where {T} = T
+numbertype(::Lattice{T}) where {T} = T
+
+valdim(::Sublat{<:Any,E}) where {E} = Val(E)
+valdim(::Lattice{<:Any,E}) where {E} = Val(E)
 
 #endregion
 

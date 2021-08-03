@@ -65,6 +65,6 @@ include("presets.jl")
 # include("greens.jl")
 include("convert.jl")
 
-precompile(LatticePresets.honeycomb, ())
+# include("precompile.jl")
 
 end

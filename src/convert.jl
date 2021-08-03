@@ -14,12 +14,11 @@ Sublat{T,E}(s::Sublat, name = s.name) where {T,E} =
     Sublat([sanitize_SVector(SVector{E,T}, site) for site in s.sites], name)
 
 # We need this to promote different sublats into common dimensionality and type to combine
-# into a lattice, while neglecting orbital dimension
+# into a lattice
 Base.promote(ss::Sublat{T,E}...) where {T,E} = ss
+
 function Base.promote_rule(::Type{Sublat{T1,E1}}, ::Type{Sublat{T2,E2}}) where {T1,T2,E1,E2}
     E´ = max(E1, E2)
-    T´ = promote_type(T1, T2)
+    T´ = float(promote_type(T1, T2))
     return Sublat{T´,E´}
 end
-
-# Bravais{T,E,L}(b::Bravais) where {T,E,L} = Bravais(padtotype(b.matrix, SMatrix{E,L,T}))

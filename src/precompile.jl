@@ -1,0 +1,8 @@
+precompile(LatticePresets.linear, ())
+precompile(LatticePresets.square, ())
+precompile(LatticePresets.triangular, ())
+precompile(LatticePresets.honeycomb, ())
+precompile(LatticePresets.cubic, ())
+precompile(LatticePresets.fcc, ())
+precompile(LatticePresets.bcc, ())
+precompile(LatticePresets.hcp, ())

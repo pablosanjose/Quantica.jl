@@ -5,6 +5,7 @@ displayname(s::Sublat) = name(s) == Symbol(:_) ? "pending" : string(":", name(s)
 display_as_tuple(v, prefix = "") = isempty(v) ? "()" :
     string("(", prefix, join(v, string(", ", prefix)), ")")
 
+display_rounded_vectors(vs) = isempty(vs) ? "[]" : display_rounded_vector.(vs)
 display_rounded_vector(v) = round.(v, digits = 6)
 
 #######################################################################
@@ -25,7 +26,7 @@ Base.summary(::Lattice{T,E,L}) where {T,E,L} =
 function Base.show(io::IO, lat::Lattice)
     i = get(io, :indent, "")
     print(io, i, summary(lat), "\n",
-"$i  Bravais vectors : $(display_rounded_vector.(bravais_vectors(lat)))
+"$i  Bravais vectors : $(display_rounded_vectors(bravais_vectors(lat)))
 $i  Sublattices     : $(nsublats(lat))
 $i    Names         : $(displaynames(lat))
 $i    Sites         : $(display_as_tuple(sublatlengths(lat))) --> $(nsites(lat)) total per unit cell")
