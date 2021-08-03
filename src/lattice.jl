@@ -1,5 +1,5 @@
 ############################################################################################
-# Sublat
+# Sublat constructors
 #region
 
 sublat(sites...; name = :_) =
@@ -8,7 +8,7 @@ sublat(sites...; name = :_) =
 #endregion
 
 ############################################################################################
-# Unitcell
+# Unitcell constructors
 #region
 
 function unitcell(sublats, names, ::Type{S}) where {S<:SVector}
@@ -48,7 +48,7 @@ end
 #endregion
 
 ############################################################################################
-# Lattice
+# Lattice constructors
 #region
 
 function lattice(ss::Sublat{T´,E´}...;
@@ -64,5 +64,13 @@ function lattice(l::Lattice{T´,E´};
     b = Bravais(sanitize_Tuple_of_SVectors(SVector{E,T}, bravais))
     return Lattice(b, u)
 end
+
+#endregion
+
+############################################################################################
+# supercell
+#region
+
+
 
 #endregion

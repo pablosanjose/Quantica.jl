@@ -28,19 +28,6 @@ mutable struct Lattice{T,E,L}
     unitcell::Unitcell{T,E}
 end
 
-struct Supercell{L,L´,O<:OffsetArray} # L,L´ are lattice/superlattice dims
-    vectors::NTuple{L´,SVector{L,Int}}
-    sites::UnitRange{Int}
-    cells::CartesianIndices{L,NTuple{L,UnitRange{Int}}}
-    mask::O  # Dimensions of O is L + 1
-end
-
-struct Superlattice{T,E,L,S<:Supercell}
-    bravais::Bravais{T,E,L}
-    unitcell::Unitcell{T,E}
-    supercell::S
-end
-
 #region internal API
 
 unitcell(l::Lattice) = l.unitcell

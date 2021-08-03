@@ -44,13 +44,11 @@ export ishermitian, I
 
 export SparseMatrixCSC
 
-const TOOMANYITERS = 10^8
-
 include("types.jl")
 include("sanitize.jl")
 include("show.jl")
 include("lattice.jl")
-# include("iterators.jl")
+include("iterators.jl")
 # include("tools.jl")
 include("presets.jl")
 # include("lattice_old.jl")
@@ -66,5 +64,7 @@ include("presets.jl")
 # include("effective.jl")
 # include("greens.jl")
 include("convert.jl")
+
+precompile(LatticePresets.honeycomb, ())
 
 end
