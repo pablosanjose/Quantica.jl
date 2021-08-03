@@ -22,7 +22,7 @@ using Statistics: mean
 
 using Compat # for use of argmin/argmax in bandstructure.jl
 
-export sublat, bravais, lattice, dims, supercell, unitcell,
+export sublat, bravais, lattice, dims, cell,
        hopping, onsite, @onsite!, @hopping!, @block!, parameters, siteselector, hopselector, nrange,
        sitepositions, siteindices, not,
        ket, ketmodel, randomkets, basiskets,
@@ -34,7 +34,7 @@ export sublat, bravais, lattice, dims, supercell, unitcell,
        momentaKPM, dosKPM, averageKPM, densityKPM, bandrangeKPM,
        greens, greensolver, Schur1D
 
-export RegionPresets, RP, LatticePresets, LP, HamiltonianPresets, HP
+export LatticePresets, LP #RegionPresets, RP, HamiltonianPresets, HP
 
 export LinearAlgebraPackage, ArpackPackage, ArnoldiMethodPackage, KrylovKitPackage
 
@@ -47,11 +47,12 @@ export SparseMatrixCSC
 const TOOMANYITERS = 10^8
 
 include("types.jl")
+include("sanitize.jl")
 include("show.jl")
 include("lattice.jl")
 # include("iterators.jl")
 # include("tools.jl")
-# include("presets.jl")
+include("presets.jl")
 # include("lattice_old.jl")
 # include("model_old.jl")
 # include("hamiltonian.jl")
@@ -64,6 +65,6 @@ include("lattice.jl")
 # include("KPM.jl")
 # include("effective.jl")
 # include("greens.jl")
-# include("convert.jl")
+include("convert.jl")
 
 end

@@ -14,11 +14,16 @@ end
 
 struct Bravais{T,E,L}
     vectors::NTuple{L,SVector{E,T}}
+    function Bravais{T,E,L}(vectors) where {T,E,L}
+        L > E &&
+            throw(DimensionMismatch("Number $L of Bravais vectors cannot be greater than embedding dimension $E"))
+        return new(vectors)
+    end
 end
+# outer constructor
+Bravais(vectors::NTuple{L,SVector{E,T}}) where {T,E,L} = Bravais{T,E,L}(vectors)
 
-abstract type AbstractLattice{T<:AbstractFloat,E,L} end
-
-mutable struct Lattice{T,E,L} <: AbstractLattice{T,E,L}
+mutable struct Lattice{T,E,L}
     bravais::Bravais{T,E,L}
     unitcell::Unitcell{T,E}
 end
@@ -30,35 +35,40 @@ struct Supercell{L,L´,O<:OffsetArray} # L,L´ are lattice/superlattice dims
     mask::O  # Dimensions of O is L + 1
 end
 
-struct Superlattice{T,E,L,S<:Supercell} <: AbstractLattice{T,E,L}
+struct Superlattice{T,E,L,S<:Supercell}
     bravais::Bravais{T,E,L}
     unitcell::Unitcell{T,E}
     supercell::S
 end
 
-#region Constructors
-sublat(sites::Vector{<:SVector}; name = :_, kw...) =
-    Sublat(sites, Symbol(name))
-sublat(sites...; kw...) =
-    sublat(sanitize_Vector_of_SVectors(sites); kw...)
-
-#endregion
-
 #region internal API
 
-bravais(b::Bravais) = hcat(b.vectors...)
-bravais(l::AbstractLattice) = bravais(l.bravais)
+unitcell(l::Lattice) = l.unitcell
 
-nsublats(l::AbstractLattice) = nsublats(l.unitcell)
+bravais_vectors(b::Bravais) = b.vectors
+bravais_vectors(l::Lattice) = bravais_vectors(l.bravais)
+
+bravais_matrix(b::Bravais) = hcat(b.vectors...)
+bravais_matrix(l::Lattice) = bravais_matrix(l.bravais)
+
+nsublats(l::Lattice) = nsublats(l.unitcell)
 nsublats(u::Unitcell) = length(u.names)
 
 nsites(s::Sublat) = length(s.sites)
 nsites(lat::Lattice, sublat...) = nsites(lat.unitcell, sublat...)
 nsites(u::Unitcell) = length(u.sites)
 nsites(u::Unitcell, sublat) = sublatlengths(u)[sublat]
-nsites(slat::Superlattice, sublats...) = nsites(slat.supercel, sublats...)
-nsites(s::Supercell) = sum(s.mask)
-nsites(s::Supercell{L}, sublat) where {L} = sum(view(s.mask, sublat, ntuple(Returns(:), Val(L))...))
+
+sites(l::Lattice, sublat...) = sites(l.unitcell, sublat...)
+sites(u::Unitcell) = u.sites
+sites(u::Unitcell, sublat) = view(u.sites, u.offsets[i]+1, u.offsets[i+1])
+sites(s::Sublat) = s.sites
+
+names(l::Lattice) = names(l.unitcell)
+names(u::Unitcell) = u.names
+name(s::Sublat) = s.name
+
+offsets(u::Unitcell) = u.offsets
 
 sublatlengths(lat::Lattice) = sublatlengths(lat.unitcell)
 sublatlengths(u::Unitcell) = diff(u.offsets)

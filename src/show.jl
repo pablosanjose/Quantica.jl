@@ -1,15 +1,11 @@
-displaynames(l::AbstractLattice) = display_as_tuple(l.unitcell.names, ":")
+displaynames(l::Lattice) = display_as_tuple(names(l), ":")
 
-displayname(s::Sublat) = s.name == nametype(:_) ? "pending" : string(":", s.name)
+displayname(s::Sublat) = name(s) == Symbol(:_) ? "pending" : string(":", name(s))
 
 display_as_tuple(v, prefix = "") = isempty(v) ? "()" :
     string("(", prefix, join(v, string(", ", prefix)), ")")
 
-displayvectors(mat::SMatrix{E,L,<:AbstractFloat}; kw...) where {E,L} =
-    ntuple(l -> round.(Tuple(mat[:,l]); kw...), Val(L))
-
-displayvectors(mat::SMatrix{E,L,<:Integer}; kw...) where {E,L} =
-    ntuple(l -> Tuple(mat[:,l]), Val(L))
+display_rounded_vector(v) = round.(v, digits = 6)
 
 #######################################################################
 # Lattice
@@ -18,7 +14,7 @@ Base.summary(::Sublat{T,E}) where {T,E} =
     "Sublat{$E,$T} : sublattice of $T-typed sites in $(E)D space"
 
 Base.show(io::IO, s::Sublat) = print(io, summary(s),
-"  Sites    : $(length(s.sites))
+"  Sites    : $(nsites(s))
   Name     : $(displayname(s))")
 
 ###
@@ -29,7 +25,7 @@ Base.summary(::Lattice{T,E,L}) where {T,E,L} =
 function Base.show(io::IO, lat::Lattice)
     i = get(io, :indent, "")
     print(io, i, summary(lat), "\n",
-"$i  Bravais vectors : $(displayvectors(bravais(lat); digits = 6))
+"$i  Bravais vectors : $(display_rounded_vector.(bravais_vectors(lat)))
 $i  Sublattices     : $(nsublats(lat))
 $i    Names         : $(displaynames(lat))
 $i    Sites         : $(display_as_tuple(sublatlengths(lat))) --> $(nsites(lat)) total per unit cell")
@@ -43,9 +39,10 @@ Base.summary(::Supercell{L,L´}) where {L,L´} =
 function Base.show(io::IO, s::Supercell{L,L´}) where {L,L´}
     i = get(io, :indent, "")
     print(io, i, summary(s),
-"$i  Supervectors  : $(displayvectors(s.matrix))
+"$i  Supervectors  : $(supervectors(s.matrix))
 $i  Supersites    : $(nsites(s))")
 end
+
 
 ###
 
@@ -56,7 +53,7 @@ function Base.show(io::IO, lat::Superlattice)
     i = get(io, :indent, "")
     ioindent = IOContext(io, :indent => string(i, "  "))
     print(io, i, summary(lat), "\n",
-"$i  Bravais vectors : $(displayvectors(bravais(lat); digits = 6))
+"$i  Bravais vectors : $(display_rounded_vector.(bravais_vectors(lat)))
 $i  Sublattices     : $(nsublats(lat))
 $i    Names         : $(displaynames(lat))
 $i    Sites         : $(display_as_tuple(sublatlengths(lat))) --> $(nsites(lat)) total per unit cell\n")
