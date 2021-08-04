@@ -8,6 +8,15 @@ sublat(sites...; name = :_) =
 #endregion
 
 ############################################################################################
+# Bravais constructors
+#region
+
+Bravais{T,E}(v::Vararg{<:Any,L}) where {T,E,L} = Bravais{T,E,L}(sanitize_Matrix(T, E, v...))
+Bravais{T,E}(m::AbstractMatrix) where {T,E} = Bravais{T,E,size(m,2)}(sanitize_Matrix(T, E, m))
+
+#endregion
+
+############################################################################################
 # Unitcell constructors
 #region
 
@@ -54,25 +63,19 @@ end
 lattice(s::Sublat, ss::Sublat...; kw...) = _lattice(promote(s, ss...)...; kw...)
 
 function _lattice(ss::Sublat...;
-    bravais = (), dim::Val{E} = valdim(first(ss)), type::Type{T} = numbertype(first(ss)), names = name.(ss)) where {E,T}
+                  bravais = (), dim::Val{E} = valdim(first(ss)),
+                  type::Type{T} = numbertype(first(ss)), names = name.(ss)) where {E,T}
     u = unitcell(ss, names, SVector{E,T})
-    b = Bravais(sanitize_SVector_of_SVectors(SVector{E,T}, bravais))
+    b = Bravais{T,E}(bravais)
     return Lattice(b, u)
 end
 
 function lattice(l::Lattice;
-    bravais = bravais(lat), dim::Val{E} = valdim(l), type::Type{T} = numbertype(l), names = names(l)) where {E,T}
+                 bravais = bravais(lat), dim::Val{E} = valdim(l),
+                 type::Type{T} = numbertype(l), names = names(l)) where {E,T}
     u = unitcell(unitcell(lat), names, SVector{E,T})
-    b = Bravais(sanitize_SVector_of_SVectors(SVector{E,T}, bravais))
+    b = Bravais{T,E}(bravais)
     return Lattice(b, u)
 end
-
-#endregion
-
-############################################################################################
-# supercell
-#region
-
-
 
 #endregion

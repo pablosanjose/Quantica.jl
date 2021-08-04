@@ -22,7 +22,7 @@ using Statistics: mean
 
 using Compat # for use of argmin/argmax in bandstructure.jl
 
-export sublat, bravais, lattice, dims, cell,
+export sublat, bravais, lattice, dims, supercell,
        hopping, onsite, @onsite!, @hopping!, @block!, parameters, siteselector, hopselector, nrange,
        sitepositions, siteindices, not,
        ket, ketmodel, randomkets, basiskets,
@@ -49,7 +49,7 @@ include("sanitize.jl")
 include("show.jl")
 include("lattice.jl")
 include("iterators.jl")
-# include("tools.jl")
+include("tools.jl")
 include("presets.jl")
 # include("lattice_old.jl")
 # include("model_old.jl")

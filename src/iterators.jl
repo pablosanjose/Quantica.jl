@@ -3,7 +3,7 @@
 #region
 
 """
-    BoxIterator(seed::SVector{N,Int}; maxiterations = 0)
+    BoxIterator(seed::SVector{N,Int}; maxiterations = TOOMANYITERS)
 
 Cartesian iterator `iter` over `SVector{N,Int}`s (`cell`s) that starts at `seed` and
 grows outwards in the form of a box of increasing sides (not necesarily equal) until

@@ -12,16 +12,15 @@ struct Unitcell{T<:AbstractFloat,E}
     offsets::Vector{Int}        # Linear site number offsets for each sublat
 end
 
-struct Bravais{T<:AbstractFloat,E,L}
-    vectors::SVector{L,SVector{E,T}}
-    function Bravais{T,E,L}(vectors) where {T,E,L}
+struct Bravais{T,E,L}
+    matrix::Matrix
+    function Bravais{T,E,L}(matrix) where {T,E,L}
+        (E, L) == size(matrix) || throw(ErrorException("Internal error: unexpected matrix size $((E,L)) != $(size(matrix))"))
         L > E &&
             throw(DimensionMismatch("Number $L of Bravais vectors cannot be greater than embedding dimension $E"))
-        return new(vectors)
+        return new(matrix)
     end
 end
-# outer constructor
-Bravais(vectors::SVector{L,SVector{E,T}}) where {T,E,L} = Bravais{T,E,L}(vectors)
 
 mutable struct Lattice{T<:AbstractFloat,E,L}
     bravais::Bravais{T,E,L}
@@ -32,10 +31,10 @@ end
 
 unitcell(l::Lattice) = l.unitcell
 
-bravais_vectors(b::Bravais) = b.vectors
+bravais_vectors(b::Bravais) = eachcol(b.matrix)
 bravais_vectors(l::Lattice) = bravais_vectors(l.bravais)
 
-bravais_matrix(b::Bravais) = hcat(b.vectors...)
+bravais_matrix(b::Bravais{T,E,L}) where {T,E,L} = convert(SMatrix{E,L,T}, b.matrix)
 bravais_matrix(l::Lattice) = bravais_matrix(l.bravais)
 
 nsublats(l::Lattice) = nsublats(l.unitcell)
@@ -60,11 +59,16 @@ offsets(u::Unitcell) = u.offsets
 sublatlengths(lat::Lattice) = sublatlengths(lat.unitcell)
 sublatlengths(u::Unitcell) = diff(u.offsets)
 
+valdim(::Sublat{<:Any,E}) where {E} = Val(E)
+valdim(::Lattice{<:Any,E}) where {E} = Val(E)
+
+latdim(::Lattice{<:Any,<:Any,L}) where {L} = L
+
 numbertype(::Sublat{T}) where {T} = T
 numbertype(::Lattice{T}) where {T} = T
 
-valdim(::Sublat{<:Any,E}) where {E} = Val(E)
-valdim(::Lattice{<:Any,E}) where {E} = Val(E)
+# postype(::Lattice{T,E}) where {T,E} = SVector{E,T}
+# celltype(::Lattice{<:Any,<:Any,L}) where {L} = SVector{L,Int}
 
 #endregion
 
