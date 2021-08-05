@@ -44,9 +44,10 @@ function supercell_masklist(smat::SMatrix{L,L,Int}, cellseed::SVector{L,Int}, la
             counter += 1
             masklist[counter] = (s, cell, i)
         end
+        acceptcell!(iter, c)
         counter == supercell_nsites && break
     end
-    counter == supercell_nsites || throw(ErrorException("Internal error: failed to find all sites in supercell"))
+    counter == supercell_nsites || throw(ErrorException("Internal error: failed to find all sites in supercell, $counter of $supercell_nsites"))
     return masklist
 end
 
