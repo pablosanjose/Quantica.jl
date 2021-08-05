@@ -113,77 +113,6 @@ Sublattice names are renamed to be unique if necessary.
 """
 combine
 
-# """
-#     supercell(lat::AbstractLattice{E,L}, v::NTuple{L,Integer}...; seed = missing, kw...)
-#     supercell(lat::AbstractLattice{E,L}, sc::SMatrix{L,L´,Int}; seed = missing, kw...)
-
-# Generates a `Superlattice` from an `L`-dimensional lattice `lat` with Bravais vectors
-# `br´= br * sc`, where `sc::SMatrix{L,L´,Int}` is the integer supercell matrix with the `L´`
-# vectors `v`s as columns. If no `v` are given, the superlattice will be bounded.
-
-# Only sites selected by `siteselector(; kw...)` will be included in the supercell (see
-# `siteselector` for details on the available keywords `kw`). The search for included sites
-# will start from point `seed::Union{Tuple,SVector}`, or the origin if `seed = missing`. If no
-# keyword `region` is given in `kw`, a Bravais unit cell perpendicular to the `v` axes will be
-# selected for the `L-L´` non-periodic directions.
-
-#     supercell(lattice::AbstractLattice{E,L}, factor::Integer; kw...)
-
-# Calls `supercell` with a uniformly scaled `sc = SMatrix{L,L}(factor * I)`
-
-#     supercell(lattice::AbstractLattice, factors::Integer...; kw...)
-
-# Calls `supercell` with different scaling along each Bravais vector (diagonal supercell
-# with factors along the diagonal)
-
-#     lat |> supercell(v...; kw...)
-
-# Curried syntax, equivalent to `supercell(lat, v...; kw...)
-
-#     supercell(h::Hamiltonian, v...; kw...)
-
-# Promotes the `Lattice` of `h` to a `Superlattice` without changing the Hamiltonian itself,
-# which always refers to the unit cell of the lattice.
-
-# # Examples
-
-# ```jldoctest
-# julia> supercell(LatticePresets.honeycomb(), region = RegionPresets.circle(300))
-# Superlattice{2,2,Float64,0} : 2D lattice in 2D space, filling a 0D supercell
-#   Bravais vectors : ((0.5, 0.866025), (-0.5, 0.866025))
-#   Sublattices     : 2
-#     Names         : (:A, :B)
-#     Sites         : (1, 1) --> 2 total per unit cell
-#   Supercell{2,0} for 0D superlattice of the base 2D lattice
-#     Supervectors  : ()
-#     Supersites    : 652966
-
-# julia> supercell(LatticePresets.triangular(), (1,1), (1, -1))
-# Superlattice{2,2,Float64,2} : 2D lattice in 2D space, filling a 2D supercell
-#   Bravais vectors : ((0.5, 0.866025), (-0.5, 0.866025))
-#   Sublattices     : 1
-#     Names         : (:A)
-#     Sites         : (1) --> 1 total per unit cell
-#   Supercell{2,2} for 2D superlattice of the base 2D lattice
-#     Supervectors  : ((1, 1), (1, -1))
-#     Supersites    : 2
-
-# julia> LatticePresets.square() |> supercell(3)
-# Superlattice{2,2,Float64,2} : 2D lattice in 2D space, filling a 2D supercell
-#   Bravais vectors : ((1.0, 0.0), (0.0, 1.0))
-#   Sublattices     : 1
-#     Names         : (:A)
-#     Sites         : (1) --> 1 total per unit cell
-#   Supercell{2,2} for 2D superlattice of the base 2D lattice
-#     Supervectors  : ((3, 0), (0, 3))
-#     Supersites    : 9
-# ```
-
-# # See also
-#     `cell`, `siteselector`
-# """
-# supercell
-
 """
     supercell(lat::Lattice{E,L}, v::NTuple{L,Integer}...; seed = missing, kw...)
     supercell(lat::Lattice{E,L}, uc::SMatrix{L,L´,Int}; seed = missing, kw...)
@@ -265,3 +194,98 @@ Lattice{2,2,Float64} : 2D lattice in 2D space
     `supercell`, `siteselector`
 """
 supercell
+
+"""
+    not(i)
+
+Wrapper indicating the negation or complement of `i`, typically used to encode excluded site
+indices. See `siteselector` and `hopselector` for applications.
+
+"""
+not
+
+"""
+    siteselector(; region = missing, sublats = missing, indices = missing)
+
+Return a `SiteSelector` object that can be used to select sites in a lattice contained
+within the specified region and sublattices. Only sites with index `i`, at position `r` and
+belonging to a sublattice with name `s::NameType` will be selected if
+
+    `region(r) && s in sublats && i in indices`
+
+Any missing `region`, `sublat` or `indices` will not be used to constraint the selection.
+
+The keyword `sublats` allows the following formats:
+
+    sublats = :A                    # Sites on sublat :A only
+    sublats = (:A,)                 # Same as above
+    sublats = (:A, :B)              # Sites on sublat :A and :B
+
+The keyword `indices` accepts a single integer, or a collection thereof. If several
+collections are given, they are flattened into a single one. Possible combinations:
+
+    indices = 1                     # Site 1 only
+    indices = (1, )                 # Same as above
+    indices = (1, 2, 3)             # Sites 1, 2 or 3
+    indices = [1, 2, 3]             # Same as above
+    indices = 1:3                   # Same as above
+    indices = (1:3, 7, 8)           # Sites 1, 2, 3, 7 or 8
+
+Additionally, indices or sublattices can be wrapped in `not` to exclude them (see `not`):
+
+    sublats = not(:A)               # Any sublat different from :A
+    sublats = not(:A, :B)           # Any sublat different from :A and :B
+    indices = not(8)                # Any site index different from 8
+    indices = not(1, 3:4)           # Any site index different from 1, 3 or 4
+    indices = (not(3:4), 4:6)       # Any site different from 3 and 4, *or* equal to 4, 5 or 6
+"""
+siteselector
+
+"""
+    hopselector(; range = missing, dn = missing, sublats = missing, indices = missing, region = missing)
+
+Return a `HopSelector` object that can be used to select hops between two sites in a
+lattice. Only hops between two sites, with indices `ipair = src => dst`, at positions `r₁ =
+r - dr/2` and `r₂ = r + dr`, belonging to unit cells at integer distance `dn´` and to
+sublattices `s₁` and `s₂` will be selected if:
+
+    `region(r, dr) && s in sublats && dn´ in dn && norm(dr) <= range && ipair in indices`
+
+If any of these is `missing` it will not be used to constraint the selection.
+
+The keyword `range` admits the following possibilities
+
+    max_range                   # i.e. `norm(dr) <= max_range`
+    (min_range, max_range)      # i.e. `min_range <= norm(dr) <= max_range`
+
+Both `max_range` and `min_range` can be a `Real` or a `NeighborRange` created with
+`nrange(n)`. The latter represents the distance of `n`-th nearest neighbors.
+
+The keyword `dn` can be a `Tuple`/`Vector`/`SVector` of `Int`s, or a tuple thereof.
+
+The keyword `sublats` allows the following formats:
+
+    sublats = :A => :B                  # Hopping from :A to :B sublattices, but not from :B to :A
+    sublats = (:A => :B,)               # Same as above
+    sublats = (:A => :B, :C => :D)      # Hopping from :A to :B or :C to :D
+    sublats = (:A, :C) .=> (:B, :D)     # Broadcasted pairs, same as above
+    sublats = (:A, :C) => (:B, :D)      # Direct product, (:A=>:B, :A=:D, :C=>:B, :C=>D)
+
+The keyword `indices` accepts a single `src => dest` pair or a collection thereof. Any `src
+== dest` will be neglected. Possible combinations:
+
+    indices = 1 => 2                    # Hopping from site 1 to 2, but not from 2 to 1
+    indices = (1 => 2, 2 => 1)          # Hoppings from 1 to 2 or from 2 to 1
+    indices = [1 => 2, 2 => 1]          # Same as above
+    indices = [(1, 2) .=> (2, 1)]       # Broadcasted pairs, same as above
+    indices = [1:10 => 20:25, 3 => 30]  # Direct product, any hopping from sites 1:10 to sites 20:25, or from 3 to 30
+
+Additionally, indices or sublattices can be wrapped in `not` to exclude them (see `not`):
+
+    sublats = not(:A => :B, :B => :A)   # Any sublat pairs different from :A => :B or :B => :A
+    sublats = not(:A) => :B             # Any sublat pair s1 => s2 with s1 different from :A and s2 equal to :B
+    indices = not(8 => 9)               # Any site indices different from 8 => 9
+    indices = 1 => not(3:4)             # Any site pair 1 => s with s different from 3, 4
+
+"""
+hopselector

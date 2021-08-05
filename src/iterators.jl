@@ -154,6 +154,29 @@ end
 # Fallback for non-BoxIterators
 acceptcell!(b, cell) = nothing
 
+#######################################################################
+# DisciplinedGenerator
+#region
+
+struct TypedGenerator{T,G}
+    g::G
+    len::Int
+end
+
+TypedGenerator{T}(g::G, len) where {T,G} = TypedGenerator{T,G}(g, len)
+
+Base.iterate(s::TypedGenerator, x...) = iterate(s.g, x...)
+
+Base.IteratorSize(::TypedGenerator) = Base.HasLength()
+
+Base.IteratorEltype(::TypedGenerator) = Base.HasEltype()
+
+Base.eltype(::TypedGenerator{T}) where {T} = T
+
+Base.length(s::TypedGenerator) = s.len
+
+#endregion
+
 # #######################################################################
 # # CoSort
 # #######################################################################

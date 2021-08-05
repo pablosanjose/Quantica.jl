@@ -37,8 +37,15 @@ bravais_vectors(l::Lattice) = bravais_vectors(l.bravais)
 bravais_matrix(b::Bravais{T,E,L}) where {T,E,L} = convert(SMatrix{E,L,T}, b.matrix)
 bravais_matrix(l::Lattice) = bravais_matrix(l.bravais)
 
+names(l::Lattice) = names(l.unitcell)
+names(u::Unitcell) = u.names
+name(s::Sublat) = s.name
+
 nsublats(l::Lattice) = nsublats(l.unitcell)
 nsublats(u::Unitcell) = length(u.names)
+
+sublats(l::Lattice) = sublats(l.unitcell)
+sublats(u::Unitcell) = 1:nsublats(u)
 
 nsites(s::Sublat) = length(s.sites)
 nsites(lat::Lattice, sublat...) = nsites(lat.unitcell, sublat...)
@@ -47,12 +54,15 @@ nsites(u::Unitcell, sublat) = sublatlengths(u)[sublat]
 
 sites(l::Lattice, sublat...) = sites(l.unitcell, sublat...)
 sites(u::Unitcell) = u.sites
-sites(u::Unitcell, sublat) = view(u.sites, u.offsets[i]+1, u.offsets[i+1])
+sites(u::Unitcell, sublat) = view(u.sites, u.offsets[sublat]+1, u.offsets[sublat+1])
 sites(s::Sublat) = s.sites
 
-names(l::Lattice) = names(l.unitcell)
-names(u::Unitcell) = u.names
-name(s::Sublat) = s.name
+siterange(l::Lattice, sublat) = siterange(l.unitcell, sublat)
+siterange(u::Unitcell, sublat) = (1+u.offsets[sublat]):u.offsets[sublat+1]
+
+siteindsublats(l::Lattice) = siteindsublats(l.unitcell)
+siteindsublats(u::Unitcell) = TypedGenerator{Tuple{Int,Int}}(
+    ((i, s) for s in sublats(u) for i in siterange(u, s)), nsites(u))
 
 offsets(u::Unitcell) = u.offsets
 
@@ -66,9 +76,6 @@ latdim(::Lattice{<:Any,<:Any,L}) where {L} = L
 
 numbertype(::Sublat{T}) where {T} = T
 numbertype(::Lattice{T}) where {T} = T
-
-# postype(::Lattice{T,E}) where {T,E} = SVector{E,T}
-# celltype(::Lattice{<:Any,<:Any,L}) where {L} = SVector{L,Int}
 
 #endregion
 
@@ -96,24 +103,24 @@ end
 struct UnresolvedHopSelector <: UnresolvedSelector
     region
     sublats  # Collection of Pair{Symbol,Symbol}
-    dcells
+    cells
     range
     indices
 end
 
-struct ResolvedSiteSelector{T,E,L,F} <: ResolvedSelector
+struct ResolvedSiteSelector{T<:AbstractFloat,E,L,F} <: ResolvedSelector
     region::F
-    sublats::Vector{Int}
-    indices::Vector{Int}  # negative index -i is equivalent to Not(i)
+    sublats::Vector{Int}            # empty sentinel for `all`
+    indices::Vector{Int}            # negative index -i sentinel for Not(i), empty = `all`
     lattice::Lattice{T,E,L}
 end
 
-struct ResolvedHopSelector{T,E,L,F} <: ResolvedSelector
+struct ResolvedHopSelector{T<:AbstractFloat,E,L,F} <: ResolvedSelector
     region::F
-    sublats::Vector{Pair{Int,Int}}
-    indices::Vector{Pair{Int,Int}}  # negative index -i is equivalent to Not(i)
-    dcells::Vector{SVector{L,Int}}
-    range::T
+    sublats::Vector{Pair{Int,Int}}  # empty sentinel for `all`
+    cells::Vector{SVector{L,Int}}   # empty sentinel for `all`
+    range::T                        # can be Inf, because T<:AbstractFloat
+    indices::Vector{Pair{Int,Int}}  # negative index -i sentinel for Not(i), empty = `all`
     lattice::Lattice{T,E,L}
 end
 
@@ -122,10 +129,17 @@ const HopSelector = Union{UnresolvedHopSelector,ResolvedHopSelector}
 const ElementSelector = Union{SiteSelector,HopSelector}
 
 struct BlockSelector{V<:Union{Missing,Vector}} <: Selector
-    dcells::V
+    cells::V
     rows::Vector{Int}
     cols::Vector{Int}
 end
+
+#region internal API
+
+Base.parent(n::Not) = n.i
+Base.parent(n::NeighborRange) = n.n
+
+#endregion
 
 #######################################################################
 # Model
