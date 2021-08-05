@@ -18,10 +18,10 @@ function supercell(lat::Lattice, smat::SMatrix{L,L´,Int};
                    cellseed = zero(SVector{L,Int}), kwselector...) where {L,L´}
     smatfull = makefull(smat)
     masklist = supercell_masklist(smatfull, cellseed, lat)
-    selector = siteselector(lat; kwselector...)
-    smatperp = convert(SMatrix{L, L-L´,Int}, view(smatfull, :, L´+1:L))
-    seedperp = zero(SVector{L-L´,Int})
-    masklist = supercell_selector_masklist(smatperp, seedperp, selector, masklist)
+    # selector = siteselector(lat; kwselector...)
+    # smatperp = convert(SMatrix{L, L-L´,Int}, view(smatfull, :, L´+1:L))
+    # seedperp = zero(SVector{L-L´,Int})
+    # masklist = supercell_selector_masklist(smatperp, seedperp, selector, masklist)
     sort!(masklist, alg = Base.DEFAULT_UNSTABLE)  # sorted by sublat, then cell, then siteidx
     return masklist
 end
@@ -47,7 +47,7 @@ function supercell_masklist(smat::SMatrix{L,L,Int}, cellseed::SVector{L,Int}, la
         acceptcell!(iter, c)
         counter == supercell_nsites && break
     end
-    counter == supercell_nsites || throw(ErrorException("Internal error: failed to find all sites in supercell, $counter of $supercell_nsites"))
+    counter == supercell_nsites || throw(ErrorException("Internal error: failed to find all sites in supercell, only $counter of $supercell_nsites"))
     return masklist
 end
 
