@@ -15,7 +15,7 @@ sanitize_SVector(::Type{SVector{N,T}}, v::SVector{N}) where {N,T} = convert(SVec
 sanitize_SVector(::Type{SVector{N,T}}, v) where {N,T} =
     SVector(ntuple(i -> i > length(v) ? zero(T) : convert(T, v[i]), Val(N)))
 
-function sanitize_SMatrix(::Type{SMatrix{E,L,T}}, x...) where {T<:Number,E,L}
+function sanitize_SMatrix(::Type{SMatrix{E,L,T}}, x) where {T<:Number,E,L}
     t = ntuple(Val(E*L)) do l
         j, i = fldmod1(l, E)
         j > length(x) || i > length(x[j]) ? zero(T) : T(x[j][i])

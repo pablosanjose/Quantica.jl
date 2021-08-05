@@ -34,7 +34,7 @@ export sublat, bravais, lattice, dims, supercell,
        momentaKPM, dosKPM, averageKPM, densityKPM, bandrangeKPM,
        greens, greensolver, Schur1D
 
-export LatticePresets, LP #RegionPresets, RP, HamiltonianPresets, HP
+export LatticePresets, LP, RegionPresets, RP #, HamiltonianPresets, HP
 
 export LinearAlgebraPackage, ArpackPackage, ArnoldiMethodPackage, KrylovKitPackage
 
@@ -45,13 +45,14 @@ export ishermitian, I
 export SparseMatrixCSC
 
 include("types.jl")
+include("tools.jl")
 include("sanitize.jl")
 include("show.jl")
 include("iterators.jl")
-include("tools.jl")
 include("lattice.jl")
-include("selector.jl")
 include("presets.jl")
+include("selector.jl")
+include("supercell.jl")
 # include("lattice_old.jl")
 # include("model_old.jl")
 # include("hamiltonian.jl")

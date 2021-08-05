@@ -9,12 +9,14 @@ struct LatticeMask
     mask
 end
 
-supercell(l::Lattice{<:Any,<:Any,L}, v::Vararg{<:Any,L´}; kw...) where {L} =
-    supercell(x, sanitize_SMatrix(SMatrix{L,L´,Int}, v); kw...)
+supercell(v...) = lat -> supercell(lat, v...)
+
+supercell(l::Lattice{<:Any,<:Any,L}, v::Vararg{<:Any,L´}; kw...) where {L,L´} =
+    supercell(l, sanitize_SMatrix(SMatrix{L,L´,Int}, v); kw...)
 
 function supercell(lat::Lattice, smat::SMatrix{L,L´,Int};
                    cellseed = zero(SVector{L,Int}), kwselector...) where {L,L´}
-    smatfull = prependfull(smat, true)  # added columns come first
+    smatfull = makefull(smat)
     masklist = supercell_masklist(smatfull, cellseed, lat)
     selector = siteselector(lat; kwselector...)
     smatperp = convert(SMatrix{L, L-L´,Int}, view(smatfull, :, L´+1:L))
@@ -50,6 +52,7 @@ end
 
 # build masklist´ = [(siteindex, cell´)] where cell´ varies along axes smatperp not in smat
 function supercell_selector_masklist(smatperp, seedperp, selector, masklist)
+    isempty(seedperp) && return masklist
     masklist´ = similar(masklist, 0)
     iter = BoxIterator(seedperp)
     for c in iter, (s, cell, i) in masklist

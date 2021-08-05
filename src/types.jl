@@ -77,56 +77,37 @@ latdim(::Lattice{<:Any,<:Any,L}) where {L} = L
 numbertype(::Sublat{T}) where {T} = T
 numbertype(::Lattice{T}) where {T} = T
 
+sitesublat(siteidx, lat::Lattice) = sublat_site(siteidx, lat.unitcell.offsets)
+
+function sitesublat(siteidx, offsets)
+    l = length(offsets)
+    for s in 2:l
+        @inbounds offsets[s] + 1 > siteidx && return s - 1
+    end
+    return l
+end
+
 #endregion
 
 #######################################################################
 # Selectors
-#######################################################################
+#region
+
 abstract type Selector end
-abstract type UnresolvedSelector <: Selector end
-abstract type ResolvedSelector <: Selector  end
 
-struct NeighborRange
-    n::Int
+struct SiteSelector{S,I,M} <: Selector
+    region::M
+    sublats::S  # NTuple{N,Symbol} (unresolved) or Vector{Int} (resolved on a lattice)
+    indices::I  # Once resolved, this should be an Union{Integer,Not} container
 end
 
-struct Not{T} # Symbolizes excluded elements
-    i::T
+struct HopSelector{S,I,D,T,M} <: Selector
+    region::M
+    sublats::S  # NTuple{N,Pair{Symbol,Symbol}} (unres) or Vector{Pair{Int,Int}} (res)
+    dns::D
+    range::T
+    indices::I  # Once resolved, this should be a Pair{Int,Int} container
 end
-
-struct UnresolvedSiteSelector <: UnresolvedSelector
-    region
-    sublats  # Collection of Symbol
-    indices
-end
-
-struct UnresolvedHopSelector <: UnresolvedSelector
-    region
-    sublats  # Collection of Pair{Symbol,Symbol}
-    cells
-    range
-    indices
-end
-
-struct ResolvedSiteSelector{T<:AbstractFloat,E,L,F} <: ResolvedSelector
-    region::F
-    sublats::Vector{Int}            # empty sentinel for `all`
-    indices::Vector{Int}            # negative index -i sentinel for Not(i), empty = `all`
-    lattice::Lattice{T,E,L}
-end
-
-struct ResolvedHopSelector{T<:AbstractFloat,E,L,F} <: ResolvedSelector
-    region::F
-    sublats::Vector{Pair{Int,Int}}  # empty sentinel for `all`
-    cells::Vector{SVector{L,Int}}   # empty sentinel for `all`
-    range::T                        # can be Inf, because T<:AbstractFloat
-    indices::Vector{Pair{Int,Int}}  # negative index -i sentinel for Not(i), empty = `all`
-    lattice::Lattice{T,E,L}
-end
-
-const SiteSelector = Union{UnresolvedSiteSelector,ResolvedSiteSelector}
-const HopSelector = Union{UnresolvedHopSelector,ResolvedHopSelector}
-const ElementSelector = Union{SiteSelector,HopSelector}
 
 struct BlockSelector{V<:Union{Missing,Vector}} <: Selector
     cells::V
@@ -134,54 +115,63 @@ struct BlockSelector{V<:Union{Missing,Vector}} <: Selector
     cols::Vector{Int}
 end
 
+struct ResolvedSelector{S<:Selector,L<:Lattice}
+    selector::S
+    lattice::L
+end
+
+struct Not{T} # Symbolizes an excluded elements
+    i::T
+end
+
 #region internal API
 
 Base.parent(n::Not) = n.i
-Base.parent(n::NeighborRange) = n.n
 
 #endregion
+#endregion
 
-#######################################################################
-# Model
-#######################################################################
-abstract type TightbindingModelTerm end
-abstract type AbstractOnsiteTerm <: TightbindingModelTerm end
-abstract type AbstractHoppingTerm <: TightbindingModelTerm end
+# #######################################################################
+# # Model
+# #######################################################################
+# abstract type TightbindingModelTerm end
+# abstract type AbstractOnsiteTerm <: TightbindingModelTerm end
+# abstract type AbstractHoppingTerm <: TightbindingModelTerm end
 
-struct TightbindingModel
-    terms  # Collection of `TightbindingModelTerm`s
-end
+# struct TightbindingModel
+#     terms  # Collection of `TightbindingModelTerm`s
+# end
 
-# These need to be concrete as they are involved in hot construction loops
-struct OnsiteTerm{F,S,T} <: AbstractOnsiteTerm
-    o::F
-    selector::S
-    coefficient::T
-end
+# # These need to be concrete as they are involved in hot construction loops
+# struct OnsiteTerm{F,S,T} <: AbstractOnsiteTerm
+#     o::F
+#     selector::S
+#     coefficient::T
+# end
 
-struct HoppingTerm{F,S,T} <: AbstractHoppingTerm
-    t::F
-    selector::S
-    coefficient::T
-end
+# struct HoppingTerm{F,S,T} <: AbstractHoppingTerm
+#     t::F
+#     selector::S
+#     coefficient::T
+# end
 
-#######################################################################
-# Modifiers
-#######################################################################
-struct ParametricFunction{N,F}
-    f::F
-    params::Vector{Symbol}
-end
+# #######################################################################
+# # Modifiers
+# #######################################################################
+# struct ParametricFunction{N,F}
+#     f::F
+#     params::Vector{Symbol}
+# end
 
-struct Modifier{N,S<:Selector,F}
-    f::ParametricFunction{N,F}
-    selector::S
-end
+# struct Modifier{N,S<:Selector,F}
+#     f::ParametricFunction{N,F}
+#     selector::S
+# end
 
-const ElementModifier{N,S<:ElementSelector,F} = Modifier{N,S,F}
-const HopModifier{N,S<:Union{HopSelector,ResolvedHopSelector},F} = Modifier{N,S,F}
-const SiteModifier{N,S<:Union{SiteSelector,ResolvedSiteSelector},F} = Modifier{N,S,F}
-const BlockModifier{N,S<:BlockSelector,F} = Modifier{N,S,F}
-const UniformModifier = ElementModifier{1}
-const UniformHopModifier = HopModifier{1}
-const UniformSiteModifier = SiteModifier{1}
+# const ElementModifier{N,S<:ElementSelector,F} = Modifier{N,S,F}
+# const HopModifier{N,S<:Union{HopSelector,ResolvedHopSelector},F} = Modifier{N,S,F}
+# const SiteModifier{N,S<:Union{SiteSelector,ResolvedSiteSelector},F} = Modifier{N,S,F}
+# const BlockModifier{N,S<:BlockSelector,F} = Modifier{N,S,F}
+# const UniformModifier = ElementModifier{1}
+# const UniformHopModifier = HopModifier{1}
+# const UniformSiteModifier = SiteModifier{1}
