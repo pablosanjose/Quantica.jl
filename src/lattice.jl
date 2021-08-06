@@ -64,7 +64,7 @@ lattice(s::Sublat, ss::Sublat...; kw...) = _lattice(promote(s, ss...)...; kw...)
 
 function _lattice(ss::Sublat...;
                   bravais = (), dim::Val{E} = valdim(first(ss)),
-                  type::Type{T} = numbertype(first(ss)), names = name.(ss)) where {E,T}
+                  type::Type{T} = numbertype(first(ss)), names = sublatname.(ss)) where {E,T}
     u = unitcell(ss, names, SVector{E,T})
     b = Bravais{T,E}(bravais)
     return Lattice(b, u)

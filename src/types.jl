@@ -31,15 +31,15 @@ end
 
 unitcell(l::Lattice) = l.unitcell
 
-bravais_vectors(b::Bravais) = eachcol(b.matrix)
-bravais_vectors(l::Lattice) = bravais_vectors(l.bravais)
+bravais_vecs(b::Bravais) = eachcol(b.matrix)
+bravais_vecs(l::Lattice) = bravais_vecs(l.bravais)
 
-bravais_matrix(b::Bravais{T,E,L}) where {T,E,L} = convert(SMatrix{E,L,T}, b.matrix)
-bravais_matrix(l::Lattice) = bravais_matrix(l.bravais)
+bravais_mat(b::Bravais{T,E,L}) where {T,E,L} = convert(SMatrix{E,L,T}, b.matrix)
+bravais_mat(l::Lattice) = bravais_mat(l.bravais)
 
-names(l::Lattice) = names(l.unitcell)
-names(u::Unitcell) = u.names
-name(s::Sublat) = s.name
+sublatname(l::Lattice, s) = sublatname(l.unitcell, s)
+sublatname(u::Unitcell, s) = u.names[s]
+sublatname(s::Sublat) = s.name
 
 nsublats(l::Lattice) = nsublats(l.unitcell)
 nsublats(u::Unitcell) = length(u.names)
@@ -57,11 +57,25 @@ sites(u::Unitcell) = u.sites
 sites(u::Unitcell, sublat) = view(u.sites, u.offsets[sublat]+1, u.offsets[sublat+1])
 sites(s::Sublat) = s.sites
 
+site(l::Lattice, i) = sites(l)[i]
+site(l::Lattice, i, dn) = site(l, i) + bravais_mat(l) * dn
+
 siterange(l::Lattice, sublat) = siterange(l.unitcell, sublat)
 siterange(u::Unitcell, sublat) = (1+u.offsets[sublat]):u.offsets[sublat+1]
 
-siteindsublats(l::Lattice) = siteindsublats(l.unitcell)
-siteindsublats(u::Unitcell) = TypedGenerator{Tuple{Int,Int}}(
+sitesublat(siteidx, lat::Lattice) = sitesublat(siteidx, lat.unitcell.offsets)
+function sitesublat(siteidx, offsets)
+    l = length(offsets)
+    for s in 2:l
+        @inbounds offsets[s] + 1 > siteidx && return s - 1
+    end
+    return l
+end
+
+sitesublatname(i, lat) = sublatname(lat, sitesublat(i, lat))
+
+sitesubiter(l::Lattice) = sitesubiter(l.unitcell)
+sitesubiter(u::Unitcell) = TypedGenerator{Tuple{Int,Int}}(
     ((i, s) for s in sublats(u) for i in siterange(u, s)), nsites(u))
 
 offsets(u::Unitcell) = u.offsets
@@ -77,15 +91,7 @@ latdim(::Lattice{<:Any,<:Any,L}) where {L} = L
 numbertype(::Sublat{T}) where {T} = T
 numbertype(::Lattice{T}) where {T} = T
 
-sitesublat(siteidx, lat::Lattice) = sublat_site(siteidx, lat.unitcell.offsets)
-
-function sitesublat(siteidx, offsets)
-    l = length(offsets)
-    for s in 2:l
-        @inbounds offsets[s] + 1 > siteidx && return s - 1
-    end
-    return l
-end
+celltype(::Lattice{<:Any,<:Any,L}) where {L} = SVector{L,Int}
 
 #endregion
 
@@ -95,18 +101,18 @@ end
 
 abstract type Selector end
 
-struct SiteSelector{S,I,M} <: Selector
+struct SiteSelector{M,S,I} <: Selector
     region::M
-    sublats::S  # NTuple{N,Symbol} (unresolved) or Vector{Int} (resolved on a lattice)
-    indices::I  # Once resolved, this should be an Union{Integer,Not} container
+    sublats::S
+    indices::I
 end
 
-struct HopSelector{S,I,D,T,M} <: Selector
+struct HopSelector{M,S,I,D,T} <: Selector
     region::M
-    sublats::S  # NTuple{N,Pair{Symbol,Symbol}} (unres) or Vector{Pair{Int,Int}} (res)
+    sublats::S
+    indices::I
     dns::D
     range::T
-    indices::I  # Once resolved, this should be a Pair{Int,Int} container
 end
 
 struct BlockSelector{V<:Union{Missing,Vector}} <: Selector
@@ -115,18 +121,18 @@ struct BlockSelector{V<:Union{Missing,Vector}} <: Selector
     cols::Vector{Int}
 end
 
-struct ResolvedSelector{S<:Selector,L<:Lattice}
-    selector::S
-    lattice::L
+struct NeighborRange
+    n::Int
 end
 
-struct Not{T} # Symbolizes an excluded elements
-    i::T
+struct Applied{S,D}
+    src::S
+    dst::D
 end
 
 #region internal API
 
-Base.parent(n::Not) = n.i
+Base.parent(n::NeighborRange) = n.n
 
 #endregion
 #endregion

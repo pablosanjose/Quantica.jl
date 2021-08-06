@@ -6,3 +6,5 @@ precompile(LatticePresets.cubic, ())
 precompile(LatticePresets.fcc, ())
 precompile(LatticePresets.bcc, ())
 precompile(LatticePresets.hcp, ())
+
+precompile(supercell, (Lattice{Float64,2,2}, Tuple{Int,Int}, Tuple{Int,Int}))

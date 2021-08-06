@@ -289,3 +289,19 @@ Additionally, indices or sublattices can be wrapped in `not` to exclude them (se
 
 """
 hopselector
+
+"""
+    nrange(n::Int)
+
+Create a `NeighborRange` that represents a hopping range to distances corresponding to the
+n-th nearest neighbors in a given lattice. Such distance is obtained by finding the n-th
+closest pairs of sites in a lattice, irrespective of their sublattice.
+
+    nrange(n::Int, lat::Lattice)
+
+Obtain the actual nth-nearest-neighbot distance between sites in lattice `lat`.
+
+# See also
+    `hopping`
+"""
+nrange

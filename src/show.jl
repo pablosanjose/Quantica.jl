@@ -1,6 +1,6 @@
-displaynames(l::Lattice) = display_as_tuple(names(l), ":")
+displaynames(l::Lattice) = display_as_tuple(sublatname(l, :), ":")
 
-displayname(s::Sublat) = name(s) == Symbol(:_) ? "pending" : string(":", name(s))
+displayname(s::Sublat) = sublatname(s) == Symbol(:_) ? "pending" : string(":", sublatname(s))
 
 display_as_tuple(v, prefix = "") = isempty(v) ? "()" :
     string("(", prefix, join(v, string(", ", prefix)), ")")
@@ -26,7 +26,7 @@ Base.summary(::Lattice{T,E,L}) where {T,E,L} =
 function Base.show(io::IO, lat::Lattice)
     i = get(io, :indent, "")
     print(io, i, summary(lat), "\n",
-"$i  Bravais vectors : $(display_rounded_vectors(bravais_vectors(lat)))
+"$i  Bravais vectors : $(display_rounded_vectors(bravais_vecs(lat)))
 $i  Sublattices     : $(nsublats(lat))
 $i    Names         : $(displaynames(lat))
 $i    Sites         : $(display_as_tuple(sublatlengths(lat))) --> $(nsites(lat)) total per unit cell")

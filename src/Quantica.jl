@@ -67,6 +67,6 @@ include("supercell.jl")
 # include("greens.jl")
 include("convert.jl")
 
-# include("precompile.jl")
+include("precompile.jl")
 
 end

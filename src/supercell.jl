@@ -13,15 +13,17 @@ supercell(v...) = lat -> supercell(lat, v...)
 
 supercell(l::Lattice{<:Any,<:Any,L}, v::Vararg{<:Any,L´}; kw...) where {L,L´} =
     supercell(l, sanitize_SMatrix(SMatrix{L,L´,Int}, v); kw...)
+# supercell(l::Lattice{<:Any,<:Any,L}, v::Vararg{<:Any,L´}; kw...) where {L,L´} =
+#     sanitize_SMatrix(SMatrix{L,L´,Int}, v)
 
 function supercell(lat::Lattice, smat::SMatrix{L,L´,Int};
                    cellseed = zero(SVector{L,Int}), kwselector...) where {L,L´}
     smatfull = makefull(smat)
     masklist = supercell_masklist(smatfull, cellseed, lat)
-    # selector = siteselector(lat; kwselector...)
-    # smatperp = convert(SMatrix{L, L-L´,Int}, view(smatfull, :, L´+1:L))
-    # seedperp = zero(SVector{L-L´,Int})
-    # masklist = supercell_selector_masklist(smatperp, seedperp, selector, masklist)
+    selector = siteselector(lat; kwselector...)
+    smatperp = convert(SMatrix{L, L-L´,Int}, view(smatfull, :, L´+1:L))
+    seedperp = zero(SVector{L-L´,Int})
+    masklist = supercell_selector_masklist(smatperp, seedperp, selector, masklist)
     sort!(masklist, alg = Base.DEFAULT_UNSTABLE)  # sorted by sublat, then cell, then siteidx
     return masklist
 end
@@ -31,14 +33,14 @@ function supercell_masklist(smat::SMatrix{L,L,Int}, cellseed::SVector{L,Int}, la
     supercell_nsites = nsites(lat) * round(Int, abs(det(smat)))
     iszero(supercell_nsites) && throw(ArgumentError("Supercell is empty. Singular supercell matrix?"))
     masklist = Vector{Tuple{Int,SVector{L,Int},Int}}(undef, supercell_nsites)
-    br = bravais_matrix(lat)
+    br = bravais_mat(lat)
     projector = pinverse(br * smat)
-    ss = sites(lat)
+    sites´ = sites(lat)
     counter = 0
     iter = BoxIterator(cellseed)
-    for c in iter, (i, s) in siteindsublats(lat)
+    for c in iter, (i, s) in sitesubiter(lat)
         cell = SVector(Tuple(c))
-        r = ss[i] + br * cell
+        r = sites´[i] + br * cell
         δn = projector * r
         if all(x -> 0 <= x < 1, δn)
             counter += 1

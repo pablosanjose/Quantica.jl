@@ -1,6 +1,8 @@
+# Non-numerical sanitizers
+
 sanitize_Vector_of_Symbols(names) = Symbol[convert(Symbol, name) for name in names]
 
-# conversion of input to vector/matrix type, padding with zeros if necessary
+# Array sanitizers (padding with zeros if necessary)
 
 sanitize_Vector_of_SVectors(vs) =
     eltype(vs) <: Number ? [sanitize_SVector(vs)] : [promote(sanitize_SVector.(vs)...)...]
