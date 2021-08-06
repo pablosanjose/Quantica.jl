@@ -44,11 +44,11 @@ Base.in(i, s::Applied{<:Selector}) = applied_in(i, s.src, s.dst)
 Base.in((j, i)::Pair, s::Applied{<:Selector}) = applied_in((i, j), s.src, s.dst) # reversed
 
 applied_in(((i, j), (celli, cellj))::Tuple{Tuple,Tuple}, sel::SiteSelector, lat) =
-    isonsite((i, j), (celli, cellj)) && applied_in(i, sel, lat)
+    isonsite((i, j), (celli, cellj)) && applied_in((i, celli), sel, lat)
 
-applied_in(i, sel::SiteSelector, lat) =
+applied_in((i, celli), sel::SiteSelector, lat) =
     recursive_in(i, sel.indices) &&
-    recursive_in(site(lat, i, dni), sel.region) &&
+    recursive_in(site(lat, i, celli), sel.region) &&
     recursive_in(sitesublatname(lat, i), sel.sublats)
 
 function applied_in(is::Tuple{Int,Int}, sel::HopSelector, lat)

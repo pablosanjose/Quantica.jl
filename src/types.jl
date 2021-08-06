@@ -63,8 +63,8 @@ site(l::Lattice, i, dn) = site(l, i) + bravais_mat(l) * dn
 siterange(l::Lattice, sublat) = siterange(l.unitcell, sublat)
 siterange(u::Unitcell, sublat) = (1+u.offsets[sublat]):u.offsets[sublat+1]
 
-sitesublat(siteidx, lat::Lattice) = sitesublat(siteidx, lat.unitcell.offsets)
-function sitesublat(siteidx, offsets)
+sitesublat(lat::Lattice, siteidx, ) = sitesublat(lat.unitcell.offsets, siteidx)
+function sitesublat(offsets, siteidx)
     l = length(offsets)
     for s in 2:l
         @inbounds offsets[s] + 1 > siteidx && return s - 1
@@ -72,7 +72,7 @@ function sitesublat(siteidx, offsets)
     return l
 end
 
-sitesublatname(i, lat) = sublatname(lat, sitesublat(i, lat))
+sitesublatname(lat, i) = sublatname(lat, sitesublat(lat, i))
 
 sitesubiter(l::Lattice) = sitesubiter(l.unitcell)
 sitesubiter(u::Unitcell) = TypedGenerator{Tuple{Int,Int}}(
