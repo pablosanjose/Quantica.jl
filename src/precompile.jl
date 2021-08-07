@@ -7,4 +7,6 @@ precompile(LatticePresets.fcc, ())
 precompile(LatticePresets.bcc, ())
 precompile(LatticePresets.hcp, ())
 
-precompile(supercell, (Lattice{Float64,2,2}, Tuple{Int,Int}, Tuple{Int,Int}))
+for E in 0:3, L in 0:E, L´ in 0:L
+    precompile(supercell, (Lattice{Float64,E,L}, Vararg{NTuple{L,Int},L´}))
+end
