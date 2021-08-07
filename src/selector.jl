@@ -40,15 +40,18 @@ padrange(r, m) = r
 # Base.in
 #region
 
-Base.in(i, s::Applied{<:Selector}) = applied_in(i, s.src, s.dst)
-Base.in((j, i)::Pair, s::Applied{<:Selector}) = applied_in((i, j), s.src, s.dst) # reversed
+ # tuple reverse respect to pair
+Base.in((j, i)::Pair, s::Applied{<:Selector}) = applied_in((i, j), source(s), destination(s))
+Base.in(i, s::Applied{<:Selector}) = applied_in(i, source(s), destination(s))
 
 applied_in(((i, j), (celli, cellj))::Tuple{Tuple,Tuple}, sel::SiteSelector, lat) =
     isonsite((i, j), (celli, cellj)) && applied_in((i, celli), sel, lat)
 
-applied_in((i, celli), sel::SiteSelector, lat) =
+applied_in((i, celli), sel::SiteSelector, lat) = applied_in((i, site(lat, i, celli)), sel, lat)
+# This indirection allows to reuse computation of r = site(lat, i, celli)
+applied_in((i, r)::Tuple{Int,SVector{E,T}}, sel::SiteSelector, lat::Lattice{T,E}) where {T,E} =
     recursive_in(i, sel.indices) &&
-    recursive_in(site(lat, i, celli), sel.region) &&
+    recursive_in(r, sel.region) &&
     recursive_in(sitesublatname(lat, i), sel.sublats)
 
 function applied_in(is::Tuple{Int,Int}, sel::HopSelector, lat)

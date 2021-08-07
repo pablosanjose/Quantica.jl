@@ -177,41 +177,49 @@ Base.length(s::TypedGenerator) = s.len
 
 #endregion
 
-# #######################################################################
-# # CoSort
-# #######################################################################
+#######################################################################
+# CoSort
+#region
 
-# struct CoSortTup{T,Tv}
-#     x::T
-#     y::Tv
-# end
+struct CoSortTup{T,Tv}
+    x::T
+    y::Tv
+end
 
-# mutable struct CoSort{T,Tv,S<:AbstractVector{T},C<:AbstractVector{Tv}} <: AbstractVector{CoSortTup{T,Tv}}
-#     sortvector::S
-#     covector::C
-#     offset::Int
-#     function CoSort{T,Tv,S,C}(sortvector, covector, offset) where {T,Tv,S,C}
-#         length(covector) >= length(sortvector) ? new(sortvector, covector, offset) :
-#             throw(DimensionMismatch("Coarray length should exceed sorting array"))
-#     end
-# end
+mutable struct CoSort{T,Tv,S<:AbstractVector{T},C<:AbstractVector{Tv}} <: AbstractVector{CoSortTup{T,Tv}}
+    sortvector::S
+    covector::C
+    offset::Int
+    function CoSort{T,Tv,S,C}(sortvector, covector, offset) where {T,Tv,S,C}
+        length(covector) >= length(sortvector) ? new(sortvector, covector, offset) :
+            throw(DimensionMismatch("Coarray length should exceed sorting array"))
+    end
+end
 
-# CoSort(sortvector::S, covector::C) where {T,Tv,S<:AbstractVector{T},C<:AbstractVector{Tv}} =
-#     CoSort{T,Tv,S,C}(sortvector, covector, 0)
+CoSort(sortvector::S, covector::C) where {T,Tv,S<:AbstractVector{T},C<:AbstractVector{Tv}} =
+    CoSort{T,Tv,S,C}(sortvector, covector, 0)
 
-# Base.size(c::CoSort) = (size(c.sortvector, 1) - c.offset,)
+function cosort!(s, c)
+    cs = CoSort(s, c)
+    sort!(cs)
+    return cs.sortvector, cs.covector
+end
 
-# Base.getindex(c::CoSort, i) =
-#     CoSortTup(getindex(c.sortvector, i + c.offset), getindex(c.covector, i + c.offset))
+Base.size(c::CoSort) = (size(c.sortvector, 1) - c.offset,)
 
-# Base.setindex!(c::CoSort, t::CoSortTup, i) =
-#     (setindex!(c.sortvector, t.x, i + c.offset); setindex!(c.covector, t.y, i + c.offset); c)
+Base.getindex(c::CoSort, i) =
+    CoSortTup(getindex(c.sortvector, i + c.offset), getindex(c.covector, i + c.offset))
 
-# Base.isless(a::CoSortTup, b::CoSortTup) = isless(a.x, b.x)
+Base.setindex!(c::CoSort, t::CoSortTup, i) =
+    (setindex!(c.sortvector, t.x, i + c.offset); setindex!(c.covector, t.y, i + c.offset); c)
 
-# Base.Sort.defalg(v::C) where {T<:Union{Number, Missing}, C<:CoSort{T}} = Base.DEFAULT_UNSTABLE
+Base.isless(a::CoSortTup, b::CoSortTup) = isless(a.x, b.x)
 
-# isgrowing(c::CoSort) = isgrowing(c.sortvector, c.offset + 1)
+Base.Sort.defalg(v::C) where {T<:Union{Number, Missing}, C<:CoSort{T}} = Base.DEFAULT_UNSTABLE
+
+isgrowing(c::CoSort) = isgrowing(c.sortvector, c.offset + 1)
+
+#endregion
 
 # #######################################################################
 # # SparseMatrixBuilder

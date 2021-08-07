@@ -11,25 +11,31 @@ end
 
 supercell(v...) = lat -> supercell(lat, v...)
 
-supercell(l::Lattice{<:Any,<:Any,L}, v::Vararg{<:Any,L´}; kw...) where {L,L´} =
-    supercell(l, sanitize_SMatrix(SMatrix{L,L´,Int}, v); kw...)
-# supercell(l::Lattice{<:Any,<:Any,L}, v::Vararg{<:Any,L´}; kw...) where {L,L´} =
-#     sanitize_SMatrix(SMatrix{L,L´,Int}, v)
-
-function supercell(lat::Lattice, smat::SMatrix{L,L´,Int};
-                   cellseed = zero(SVector{L,Int}), kwselector...) where {L,L´}
-    smatfull = makefull(smat)
-    masklist = supercell_masklist(smatfull, cellseed, lat)
-    selector = siteselector(lat; kwselector...)
-    smatperp = convert(SMatrix{L, L-L´,Int}, view(smatfull, :, L´+1:L))
-    seedperp = zero(SVector{L-L´,Int})
-    masklist = supercell_selector_masklist(smatperp, seedperp, selector, masklist)
-    sort!(masklist, alg = Base.DEFAULT_UNSTABLE)  # sorted by sublat, then cell, then siteidx
-    return masklist
+function supercell(l::Lattice{T,E,L}, v::Vararg{<:Any,L´}; kw...) where {T,E,L,L´}
+    smat = sanitize_SMatrix(SMatrix{L,L´,Int}, v)
+    s, m = supercell_sitelist_masklist(l, smat; kw...)
+    b = Bravais{T,E,L´}(bravais_mat(l) * smat)
+    n = sublatnames(l)
+    o = offsets_from_masklist(m, nsublats(l))
+    u = Unitcell(s, n, o)
+    return Lattice(b, u)
 end
 
-# build masklist = [(sublatindex, cell, siteindex)] for all sites in full supercell defined by smat
-function supercell_masklist(smat::SMatrix{L,L,Int}, cellseed::SVector{L,Int}, lat) where {L}
+function supercell_sitelist_masklist(lat::Lattice, smat::SMatrix{L,L´,Int};
+                   cellseed = zero(SVector{L,Int}), kwselector...) where {L,L´}
+    smatfull = makefull(smat)
+    masklist = supercell_masklist_full(smatfull, cellseed, lat)
+    selector = siteselector(lat; kwselector...)
+    smatperp = convert(SMatrix{L,L-L´,Int}, view(smatfull, :, L´+1:L))
+    seedperp = zero(SVector{L-L´,Int})
+    sitelist = similar(sites(lat), 0)
+    supercell_sitelist!!(sitelist, masklist, smatperp, seedperp, selector)
+    cosort!(masklist, sitelist)  # sorted by sublat, then cell, then siteidx (i.e. masklist)
+    return sitelist, masklist
+end
+
+# build masklist = [(sublatindex, cell, siteindex)] for all sites in full supercell defined by smatfull
+function supercell_masklist_full(smat::SMatrix{L,L,Int}, cellseed::SVector{L,Int}, lat) where {L}
     supercell_nsites = nsites(lat) * round(Int, abs(det(smat)))
     iszero(supercell_nsites) && throw(ArgumentError("Supercell is empty. Singular supercell matrix?"))
     masklist = Vector{Tuple{Int,SVector{L,Int},Int}}(undef, supercell_nsites)
@@ -38,35 +44,49 @@ function supercell_masklist(smat::SMatrix{L,L,Int}, cellseed::SVector{L,Int}, la
     sites´ = sites(lat)
     counter = 0
     iter = BoxIterator(cellseed)
-    for c in iter, (i, s) in sitesubiter(lat)
-        cell = SVector(Tuple(c))
-        r = sites´[i] + br * cell
+    for cell in iter, (i, slat) in sitesublatiter(lat)
+        r = site(lat, i, cell)
         δn = projector * r
         if all(x -> 0 <= x < 1, δn)
             counter += 1
-            masklist[counter] = (s, cell, i)
+            masklist[counter] = (slat, cell, i)
         end
-        acceptcell!(iter, c)
+        acceptcell!(iter, cell)
         counter == supercell_nsites && break
     end
     counter == supercell_nsites || throw(ErrorException("Internal error: failed to find all sites in supercell, only $counter of $supercell_nsites"))
     return masklist
 end
 
-# build masklist´ = [(siteindex, cell´)] where cell´ varies along axes smatperp not in smat
-function supercell_selector_masklist(smatperp, seedperp, selector, masklist)
-    isempty(seedperp) && return masklist
-    masklist´ = similar(masklist, 0)
+# build sitelist = [sitepositions...] and masklist´ = [(sublat, cell´, siteidx)...]
+# where cell´ varies along axes smatperp not in smat, filtered by selector
+function supercell_sitelist!!(sitelist, masklist, smatperp, seedperp, selector)
+    lat = destination(selector)
+    masklist0 = copy(masklist)
+    empty!(masklist)
+    empty!(sitelist)
+    seeperp = zero(smatperp[1,:])
     iter = BoxIterator(seedperp)
-    for c in iter, (s, cell, i) in masklist
-        cell´ = cell + smatperp * SVector(Tuple(c))
-        if (i, cell´) in selector
-            push!(masklist´, (s, cell´, i))
+    for c in iter, (s, cell, i) in masklist0
+        cell´ = cell + smatperp * c
+        r = site(lat, i, cell´)
+        if (i, r) in selector
+            push!(masklist, (s, cell´, i))
+            push!(sitelist, r)
             acceptcell!(iter, c)
         end
     end
-    return masklist´
+    return nothing
 end
 
+function offsets_from_masklist(masklist, nsublats)
+    ds = zeros(Int, nsublats)
+    @simd for m in masklist
+        ds[first(m)] += 1
+    end
+    offsets = cumsum(ds)
+    prepend!(offsets, 0)
+    return offsets
+end
 
 #endregion

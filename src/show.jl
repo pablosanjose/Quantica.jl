@@ -1,4 +1,4 @@
-displaynames(l::Lattice) = display_as_tuple(sublatname(l, :), ":")
+displaynames(l::Lattice) = display_as_tuple(sublatnames(l), ":")
 
 displayname(s::Sublat) = sublatname(s) == Symbol(:_) ? "pending" : string(":", sublatname(s))
 

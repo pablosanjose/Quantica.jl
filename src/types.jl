@@ -13,7 +13,7 @@ struct Unitcell{T<:AbstractFloat,E}
 end
 
 struct Bravais{T,E,L}
-    matrix::Matrix
+    matrix::Matrix{T}
     function Bravais{T,E,L}(matrix) where {T,E,L}
         (E, L) == size(matrix) || throw(ErrorException("Internal error: unexpected matrix size $((E,L)) != $(size(matrix))"))
         L > E &&
@@ -31,12 +31,14 @@ end
 
 unitcell(l::Lattice) = l.unitcell
 
-bravais_vecs(b::Bravais) = eachcol(b.matrix)
 bravais_vecs(l::Lattice) = bravais_vecs(l.bravais)
+bravais_vecs(b::Bravais) = eachcol(b.matrix)
 
-bravais_mat(b::Bravais{T,E,L}) where {T,E,L} = convert(SMatrix{E,L,T}, b.matrix)
 bravais_mat(l::Lattice) = bravais_mat(l.bravais)
+bravais_mat(b::Bravais{T,E,L}) where {T,E,L} =
+    convert(SMatrix{E,L,T}, ntuple(i -> b.matrix[i], Val(E*L)))
 
+sublatnames(l::Lattice) = l.unitcell.names
 sublatname(l::Lattice, s) = sublatname(l.unitcell, s)
 sublatname(u::Unitcell, s) = u.names[s]
 sublatname(s::Sublat) = s.name
@@ -52,10 +54,10 @@ nsites(lat::Lattice, sublat...) = nsites(lat.unitcell, sublat...)
 nsites(u::Unitcell) = length(u.sites)
 nsites(u::Unitcell, sublat) = sublatlengths(u)[sublat]
 
+sites(s::Sublat) = s.sites
 sites(l::Lattice, sublat...) = sites(l.unitcell, sublat...)
 sites(u::Unitcell) = u.sites
 sites(u::Unitcell, sublat) = view(u.sites, u.offsets[sublat]+1, u.offsets[sublat+1])
-sites(s::Sublat) = s.sites
 
 site(l::Lattice, i) = sites(l)[i]
 site(l::Lattice, i, dn) = site(l, i) + bravais_mat(l) * dn
@@ -74,8 +76,8 @@ end
 
 sitesublatname(lat, i) = sublatname(lat, sitesublat(lat, i))
 
-sitesubiter(l::Lattice) = sitesubiter(l.unitcell)
-sitesubiter(u::Unitcell) = TypedGenerator{Tuple{Int,Int}}(
+sitesublatiter(l::Lattice) = sitesublatiter(l.unitcell)
+sitesublatiter(u::Unitcell) = TypedGenerator{Tuple{Int,Int}}(
     ((i, s) for s in sublats(u) for i in siterange(u, s)), nsites(u))
 
 offsets(u::Unitcell) = u.offsets
@@ -131,6 +133,9 @@ struct Applied{S,D}
 end
 
 #region internal API
+
+source(a::Applied) = a.src
+destination(a::Applied) = a.dst
 
 Base.parent(n::NeighborRange) = n.n
 
