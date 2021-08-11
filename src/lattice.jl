@@ -3,7 +3,7 @@
 #region
 
 sublat(sites...; name = :_) =
-    Sublat(sanitize_Vector_of_SVectors(sites), Symbol(name))
+    Sublat(float.(sanitize_Vector_of_SVectors(sites)), Symbol(name))
 
 #endregion
 

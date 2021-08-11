@@ -55,7 +55,7 @@ function applyterm!(builder, term::OnsiteTerm)
     latsel = appliedon(selector(term), lat)
     os = orbitalstructure(builder)
     norbs = norbitals(os)
-    foreach_site(latsel, dn0) do (s, i, r)
+    foreach_site(latsel, dn0) do s, i, r
         n = norbs[s]
         v = sanitize_block(blocktype(os), term(r, r), (n, n))
         push!(ijv, (i, i, v))

@@ -2,7 +2,7 @@
 # Lattice
 #region
 
-struct Sublat{T,E}
+struct Sublat{T<:AbstractFloat,E}
     sites::Vector{SVector{E,T}}
     name::Symbol
 end
