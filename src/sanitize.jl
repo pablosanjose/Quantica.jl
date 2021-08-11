@@ -10,13 +10,16 @@ sanitize_Vector_of_Symbols(names) = Symbol[convert(Symbol, name) for name in nam
 # Array sanitizers (padding with zeros if necessary)
 #region
 
-sanitize_Vector_of_Type(::Type{T}, len, x::T´) where {T,T´<:T} = fill(convert(T, x), len)
+sanitize_Vector_of_Type(::Type{T}, len, x::T´) where {T,T´<:Union{T,Val}} = fill(val_convert(T, x), len)
 
 function sanitize_Vector_of_Type(::Type{T}, len, xs) where {T}
-    xs´ = T[convert(T, x) for x in xs]
+    xs´ = T[val_convert(T, x) for x in xs]
     length(xs´) == len || throw(ArgumentError("Received a collection with $(length(xs´)) elements, should have $len."))
     return xs´
 end
+
+val_convert(T, ::Val{N}) where {N} = convert(T, N)
+val_convert(T, x) = convert(T, x)
 
 sanitize_Vector_of_SVectors(vs) =
     eltype(vs) <: Number ? [sanitize_SVector(vs)] : [promote(sanitize_SVector.(vs)...)...]

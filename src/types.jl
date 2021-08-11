@@ -58,7 +58,7 @@ nsites(u::Unitcell, sublat) = sublatlengths(u)[sublat]
 sites(s::Sublat) = s.sites
 sites(l::Lattice, sublat...) = sites(l.unitcell, sublat...)
 sites(u::Unitcell) = u.sites
-sites(u::Unitcell, sublat) = view(u.sites, u.offsets[sublat]+1, u.offsets[sublat+1])
+sites(u::Unitcell, sublat) = view(u.sites, u.offsets[sublat]+1:u.offsets[sublat+1])
 
 site(l::Lattice, i) = sites(l)[i]
 site(l::Lattice, i, dn) = site(l, i) + bravais_mat(l) * dn
@@ -186,8 +186,8 @@ selector(t::TightbindingModelTerm) = t.selector
 # OrbitalStructure
 #region
 
-struct OrbitalStructure{O<:Union{Number,SVector}}
-    orbtype::Type{O}    # Hamiltonian's orbitaltype
+struct OrbitalStructure{O<:Union{Number,SMatrix}}
+    blocktype::Type{O}    # Hamiltonian's blocktype
     norbitals::Vector{Int}
     offsets::Vector{Int}
     flatoffsets::Vector{Int}
@@ -197,10 +197,10 @@ end
 
 norbitals(o::OrbitalStructure) = o.norbitals
 
-orbtype(o::OrbitalStructure) = o.orbtype
+orbtype(o::OrbitalStructure{O}) where {O<:Number} = O
+orbtype(o::OrbitalStructure{O}) where {N,T,O<:SMatrix{N,N,T}} = SVector{N,T}
 
-blocktype(o::OrbitalStructure{O}) where {O<:Number} = O
-blocktype(o::OrbitalStructure{O}) where {N,T,O<:SVector{N,T}} = SMatrix{N,N,T,N*N}
+blocktype(o::OrbitalStructure) = o.blocktype
 
 offsets(o::OrbitalStructure) = o.offsets
 
@@ -234,8 +234,8 @@ struct Hamiltonian{T,E,L,O}
     end
 end
 
-Hamiltonian(l::Lattice{T,E,L}, h::Vector{HamiltonianHarmonic{L,O}}, o::OrbitalStructure{O}) where {T,E,L,O} =
-    Hamiltonian{T,E,L,O}(l, h, o)
+Hamiltonian(l::Lattice{T,E,L}, o::OrbitalStructure{O}, h::Vector{HamiltonianHarmonic{L,O}},) where {T,E,L,O} =
+    Hamiltonian{T,E,L,O}(l, o, h)
 
 #region internal API
 
@@ -299,7 +299,7 @@ end
 #     return builder
 # end
 
-function Base.getindex(b::IJVBuilder{L,O}, dn::SVector) where {L,O}
+function Base.getindex(b::IJVBuilder{<:Any,<:Any,L,O}, dn::SVector) where {L,O}
     for e in b.ijvs
         e.dn == dn && return e
     end
@@ -319,7 +319,7 @@ Base.isempty(h::IJV) = length(h) == 0
 #     return h
 # end
 
-# Base.push!(ijv::IJV, (i, j, v)::Tuple) = (push!(ijv.i, i); push!(ijv.j, j); push!(ijv.v, v))
+Base.push!(ijv::IJV, (i, j, v)::Tuple) = (push!(ijv.i, i); push!(ijv.j, j); push!(ijv.v, v))
 
 # function push_block!(ijv::IJV{L,M}, h::HamiltonianHarmonic, offset) where {L,M}
 #     I, J, V = findnz(h.h)

@@ -11,7 +11,7 @@ siteselector(lat::Lattice; kw...) =
 
 hopselector(; region = missing, sublats = missing, indices = missing, cells = missing, range = nrange(1)) =
     HopSelector(region, sublats, indices, cells, range)
-hopselector(s::HopSelector; region = s.region, sublats = s.sublats, indices = s.indices, cells = s.cells, range = s.range) =
+hopselector(s::HopSelector; region = s.region, sublats = s.sublats, indices = s.indices, cells = s.dcells, range = s.range) =
     HopSelector(region, sublats, indices, cells, range)
 hopselector(lat::Lattice; kw...) =
     appliedon(hopselector(; kw...), lat)
@@ -19,20 +19,20 @@ hopselector(lat::Lattice; kw...) =
 nrange(n::Int) = NeighborRange(n)
 
 function apply(s::HopSelector, l::Lattice)
-    s.dcells === missing && (s.range === missing || !isfinite(maximum(s.range))) &&
+    s´ = hopselector(s; range = sanitize_minmaxrange(s.range, l))
+    rmin, rmax = s´.range
+    s´.dcells === missing && rmax === missing &&
         throw(ErrorException("Tried to apply an infinite-range HopSelector on an unbounded lattice"))
-    return hopselector(s; range = sanitize_minmaxrange(s.range, l))
+    return s´
 end
 
 sanitize_minmaxrange(r, lat) = sanitize_minmaxrange((zero(numbertype(lat)), r), lat)
 sanitize_minmaxrange((rmin, rmax)::Tuple{Any,Any}, lat) =
-    padrange(applyrange(rmin, lat), applyrange(rmax, lat))
+    padrange(applyrange(rmin, lat), -1), padrange(applyrange(rmax, lat), 1)
 
 applyrange(r::NeighborRange, lat) = nrange(parent(r), lat)
 applyrange(r::Real, lat) = r
 
-padrange(r) = padrange(r, 1)
-padrange((rmin, rmax)::Tuple{Any,Any}) = (padrange(rmin, -1), padrange(rmax, 1))
 padrange(r::Real, m) = isfinite(r) ? float(r) + m * sqrt(eps(float(r))) : missing
 # rmax::Missing needed for type-stable hop_targets with infinite range
 
@@ -90,7 +90,7 @@ function foreach_site(f, latsel::AppliedOn{<:SiteSelector}, cell = zerocell(targ
         in_recursive(sublatname(lat, s), sel.sublats) || continue
         is, check_is = candidates(sel.indices, siterange(lat, s))
         for i in is
-            check_is && in_recursive(i, sel.indices) || continue
+            check_is && !in_recursive(i, sel.indices) && continue
             r = site(lat, i, cell)
             in_recursive(r, sel.region) && f(s, i, r)
         end
@@ -103,7 +103,7 @@ function foreach_cell(f, latsel::AppliedOn{<:HopSelector})
     sel, lat = source(latsel), target(latsel)
     iter_dn, check_dn = candidates(sel.dcells, BoxIterator(zerocell(lat)))
     for dn in iter_dn
-        check_dn && in_recursive(Tuple(dn), sel.dcells) || continue
+        check_dn && !in_recursive(Tuple(dn), sel.dcells) && continue
         f(dn, iter_dn)
     end
     return nothing
@@ -116,11 +116,10 @@ function foreach_hop!(f, iter_dni, latsel::AppliedOn{<:HopSelector}, kdtrees, dn
     found = false
     for si in sublats(lat), sj in sublats(lat)
         in_recursive(sublatname(lat, sj) => sublatname(lat, si), sel.sublats) || continue
-        js = source_candidates(sel.indices, siterange(lat, sj))
+        js = source_candidates(sel.indices, () -> siterange(lat, sj))
         for j in js
-            check_js &&
-            rj = site(lat, j)
-            is = target_candidates(rj, sj, rmax, lat, kdtrees)
+            is = target_candidates(sel.indices,
+                 () -> inrange_targets(site(lat, j, dnj - dni), si, rmax, lat, kdtrees))
             for i in is
                 !isonsite((i, j), (dni, dnj)) && in_recursive(j => i, sel.indices) || continue
                 r, dr = rdr(site(lat, j, dnj), site(lat, i, dni))
@@ -128,7 +127,7 @@ function foreach_hop!(f, iter_dni, latsel::AppliedOn{<:HopSelector}, kdtrees, dn
                 norm(dr) <= rmin && (found = true)
                 if isinposition((r, dr), sel.region, sel.range)
                     found = true
-                    f(s, i, r)
+                    f((si, sj), (i, j), (r, dr))
                 end
             end
         end
@@ -145,27 +144,27 @@ candidates(selection::NTuple{<:Any,T}, default, ::Type{T}) where {T} = selection
 candidates(selection::T, default, ::Type{T}) where {N,T} = (selection,), false
 candidates(selection, default, T) = default, true
 
-source_candidates(selection, default) =
-    vcat_or_default(take_element(selection, first), default)
-target_candidates(selection, default) =
-    vcat_or_default(take_element(selection, last),  default)
+source_candidates(selection, default_func) =
+    vcat_or_default(take_element(selection, first), default_func)
+target_candidates(selection, default_func) =
+    vcat_or_default(take_element(selection, last), default_func)
 
 take_element(selection::Pair, element) = (element(selection),)
 take_element(selection::NTuple{<:Any,Pair}, element) = element.(selection)
 take_element(selection, element) = missing
 
-vcat_or_default(::Missing, default) = default
-vcat_or_default(elements, default) = vcat(elements...)
+vcat_or_default(::Missing, default_func) = default_func()
+vcat_or_default(elements,  default_func) = vcat(elements...)
 
 # Although range can be (rmin, rmax) we return all targets within rmax.
 # Those below rmin get filtered later
-function target_candidates(rj, sj, rmax::Real, lat, kdtrees)
-    if !isassigned(kdtrees, sj)
-        sitepos = sites(lat, sj)
-        (kdtrees[s1] = KDTree(sitepos))
+function inrange_targets(rsource, si, rmax::Real, lat, kdtrees)
+    if !isassigned(kdtrees, si)
+        sitepos = sites(lat, si)
+        kdtrees[si] = KDTree(sitepos)
     end
-    targetlist = inrange(kdtrees[s1], rj, rmax)
-    targetlist .+= offsets(lat)[s1]
+    targetlist = inrange(kdtrees[si], rsource, rmax)
+    targetlist .+= offsets(lat)[si]
     return targetlist
 end
 
@@ -209,7 +208,7 @@ target_candidates(rj, sj, ::Missing, lat, kdtrees) = siterange(lat, sj)
 function nrange(n, lat::Lattice)
     latsites = sites(lat)
     T = numbertype(lat)
-    dns = BoxIterator(zero(eltype(latsites)))
+    dns = BoxIterator(zerocell(lat))
     br = bravais_mat(lat)
     # 128 is a heuristic cutoff for kdtree vs brute-force search
     if length(latsites) <= 128
@@ -262,7 +261,6 @@ function _nrange(n, tree, r::AbstractVector{T}, nmax) where {T}
     return T(Inf)
 end
 
-
 function unique_sorted_approx!(v::AbstractVector{T}) where {T}
     i = 1
     xprev = first(v)
@@ -276,6 +274,14 @@ function unique_sorted_approx!(v::AbstractVector{T}) where {T}
     end
     resize!(v, i)
     return v
+end
+
+function ispositive(ndist)
+    result = false
+    for i in ndist
+        i == 0 || (result = i > 0; break)
+    end
+    return result
 end
 
 #endregion

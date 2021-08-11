@@ -2,7 +2,7 @@
 # Model constructors
 #region
 
-TightbindingModel(ts::TightbindingModelTerm...) = TightbindingModel(ts)
+TightbindingModel(ts::TightbindingModelTerm...) = TightbindingModel(Any[ts...])
 
 OnsiteTerm(t::OnsiteTerm, os::SiteSelector) = OnsiteTerm(t.o, os, t.coefficient)
 

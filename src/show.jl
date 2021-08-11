@@ -59,10 +59,18 @@ function Base.show(io::IO, h::HoppingTerm{F,<:HopSelector}) where {F}
     print(io,
 "$(i)HoppingTerm{$(displayparameter(F))}:
 $(i)  Sublattice pairs : $(h.selector.sublats === missing ? "any" : h.selector.sublats)
-$(i)  dn cell distance : $(h.selector.dns === missing ? "any" : h.selector.dns)
+$(i)  dn cell distance : $(h.selector.dcells === missing ? "any" : h.selector.dcells)
 $(i)  Hopping range    : $(displayrange(h.selector.range))
 $(i)  Coefficient      : $(h.coefficient)")
 end
+
+displayparameter(::Type{<:Function}) = "Function"
+displayparameter(::Type{T}) where {T} = "$T"
+
+displayrange(r::Real) = round(r, digits = 6)
+displayrange(::Missing) = "any"
+displayrange(nr::NeighborRange) = "NeighborRange($(parent(nr)))"
+displayrange(rs::Tuple) = "($(displayrange(first(rs))), $(displayrange(last(rs))))"
 
 #endregion
 
@@ -74,7 +82,7 @@ function Base.show(io::IO, h::Hamiltonian)
     i = get(io, :indent, "")
     print(io, i, summary(h), "\n",
 "$i  Bloch harmonics  : $(length(harmonics(h)))
-$i  Harmonic size    : $((n -> "$n × $n")(size(h, 1))))
+$i  Harmonic size    : $((n -> "$n × $n")(size(h, 1)))
 $i  Orbitals         : $(norbitals(orbitalstructure(h)))
 $i  Element type     : $(displaytype(blocktype(h)))
 $i  Onsites          : $(nonsites(h))
@@ -104,7 +112,7 @@ function nonsites(h::Hamiltonian)
     return count
 end
 
-coordination(h::Hamiltonian) = round(nhoppings(h) / nsites(h), digits = 5)
+coordination(h::Hamiltonian) = round(nhoppings(h) / nsites(lattice(h)), digits = 5)
 
 _nnz(s) = count(!iszero, nonzeros(s)) # Exclude stored zeros
 

@@ -3,22 +3,28 @@
 #region
 
 # norbs is a collection of number of orbitals, one per sublattice (or a single one for all)
+# surprisingly, O type instability has no performance or allocations penalty
 function OrbitalStructure(lat::Lattice, norbs, ::Type{T} = numbertype(lat)) where {T}
     norbs´ = sanitize_Vector_of_Type(Int, nsublats(lat), norbs)
-    O = SVector{maximum(norbs´),Complex{T}}
+    O = blocktype(T, norbs)
     offsets´ = offsets(lat)
-    flatoffsets´ = flatoffsets(offsets, norbs´)
-    return OrbitalStructure(O, norbs´, offsets´, flatoffsets´)
+    flatoffsets´ = flatoffsets(offsets´, norbs´)
+    return OrbitalStructure(O,norbs´, offsets´, flatoffsets´)
 end
 
 # sublat offsets after flattening (without padding zeros)
-function flatoffsets(offsets, norbs)
-    nsites = diff(offsets)
+function flatoffsets(offsets0, norbs)
+    nsites = diff(offsets0)
     nsites´ = norbs .* nsites
     offsets´ = cumsum!(nsites´, nsites´)
     prepend!(offsets´, 0)
     return offsets´
  end
+
+function blocktype(T::Type, norbs)
+    n = maximum(norbs)
+    return n == 1 ? Complex{T} : SMatrix{n,n,Complex{T},n*n}
+end
 
 # Equality does not need equal T
 Base.:(==)(o1::OrbitalStructure, o2::OrbitalStructure) =
@@ -38,18 +44,18 @@ function hamiltonian(lat::Lattice, m = TightbindingModel(); orbitals = 1, type =
     foreach(t -> applyterm!(builder, t), terms(m))
     HT = HamiltonianHarmonic{latdim(lat),blocktype(orbstruct)}
     n = nsites(lat)
-    harmonics = HT[HT(e.dn, sparse(e.i, e.j, e.v, n, n)) for e in ijvs if !isempty(e)]
+    harmonics = HT[HT(e.dn, sparse(e.i, e.j, e.v, n, n)) for e in builder.ijvs if !isempty(e)]
     return Hamiltonian(lat, orbstruct, harmonics)
 end
 
 function applyterm!(builder, term::OnsiteTerm)
     lat = lattice(builder)
-    dn0 = zerocell(builder.lat)
+    dn0 = zerocell(lat)
     ijv = builder[dn0]
-    sel = appliedon(selector(term), lat)
+    latsel = appliedon(selector(term), lat)
     os = orbitalstructure(builder)
     norbs = norbitals(os)
-    foreach_site(sel, dn0) do (s, i, r)
+    foreach_site(latsel, dn0) do (s, i, r)
         n = norbs[s]
         v = sanitize_block(blocktype(os), term(r, r), (n, n))
         push!(ijv, (i, i, v))
@@ -59,13 +65,13 @@ end
 
 function applyterm!(builder::IJVBuilder{L}, term::HoppingTerm) where {L}
     lat = lattice(builder)
-    sel = apply(selector(term), lat)
-    kdtrees = kdtrees(builder)
+    trees = kdtrees(builder)
+    latsel = appliedon(selector(term), lat)
     os = orbitalstructure(builder)
     norbs = norbitals(os)
-    foreach_cell(sel) do dn, iter_dn
+    foreach_cell(latsel) do dn, iter_dn
         ijv = builder[dn]
-        foreach_hop!(iter_dn, sel, kdtrees, dn) do (si, sj), (i, j), (r, dr)
+        foreach_hop!(iter_dn, latsel, trees, dn) do (si, sj), (i, j), (r, dr)
             ni = norbs[si]
             nj = norbs[sj]
             v = sanitize_block(blocktype(os), term(r, dr), (ni, nj))
