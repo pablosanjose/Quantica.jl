@@ -63,18 +63,22 @@ end
 lattice(s::Sublat, ss::Sublat...; kw...) = _lattice(promote(s, ss...)...; kw...)
 
 function _lattice(ss::Sublat...;
-                  bravais = (), dim::Val{E} = valdim(first(ss)),
-                  type::Type{T} = numbertype(first(ss)), names = sublatname.(ss)) where {E,T}
-    u = unitcell(ss, names, SVector{E,T})
-    b = Bravais{T,E}(bravais)
+                  bravais = (),
+                  dim = embdim(first(ss)),
+                  type = numbertype(first(ss)),
+                  names = sublatname.(ss))
+    u = unitcell(ss, names, SVector{dim,type})
+    b = Bravais{type,dim}(bravais)
     return Lattice(b, u)
 end
 
 function lattice(l::Lattice;
-                 bravais = bravais(lat), dim::Val{E} = valdim(l),
-                 type::Type{T} = numbertype(l), names = names(l)) where {E,T}
-    u = unitcell(unitcell(lat), names, SVector{E,T})
-    b = Bravais{T,E}(bravais)
+                 bravais = bravais_mat(lat),
+                 dim = embdim(l),
+                 type = numbertype(l),
+                 names = names(l))
+    u = unitcell(unitcell(lat), names, SVector{dim,type})
+    b = Bravais{type,dim}(bravais)
     return Lattice(b, u)
 end
 

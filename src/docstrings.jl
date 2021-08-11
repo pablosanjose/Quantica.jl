@@ -20,8 +20,8 @@ Sublat{2,Float64} : sublattice of Float64-typed sites in 2D space
 sublat
 
 """
-    bravais(lat::Lattice)
-    bravais(h::Hamiltonian)
+    bravais_mat(lat::Lattice)
+    bravais_mat(h::Hamiltonian)
 
 Obtain the Bravais matrix of lattice `lat` or Hamiltonian `h`
 
@@ -30,7 +30,7 @@ Obtain the Bravais matrix of lattice `lat` or Hamiltonian `h`
 ```jldoctest
 julia> lat = lattice(sublat((0,0)), bravais = ((1.0, 2), (3, 4)));
 
-julia> bravais(lat)
+julia> bravais_mat(lat)
 2×2 SMatrix{2, 2, Float64, 4} with indices SOneTo(2)×SOneTo(2):
  1.0  3.0
  2.0  4.0
@@ -42,12 +42,10 @@ julia> bravais(lat)
 bravais
 
 """
-    lattice(sublats::Sublat...; bravais = (), dim::Val{E}, type::T, names = missing)
+    lattice(sublats::Sublat...; bravais = (), dim, type, names)
 
-Create a `Lattice{E,L,T}` with Bravais vectors `bravais` and sublattices `sublats`
-converted to a common  `E`-dimensional embedding space and type `T`. To override the
-embedding  dimension `E`, use keyword `dim = Val(E)`. Similarly, override type `T` with
-`type = T`.
+Create a `Lattice{dim,L,type}` with `L` Bravais vectors `bravais` and sublattices `sublats`
+converted to a common  `dim`-dimensional embedding space and type `type`.
 
 The keyword `bravais` indicates one or more Bravais vectors in the form of tuples or other
 iterables. It can also be an `AbstractMatrix` of dimension `E×L`. The default `bravais = ()`
@@ -56,7 +54,7 @@ corresponds to a bounded lattice with no Bravais vectors.
 A keyword `names` can be used to rename `sublats`. Given names can be replaced to ensure
 that all sublattice names are unique.
 
-    lattice(lat::AbstractLattice; bravais = missing, dim = missing, type = missing, names = missing)
+    lattice(lat::Lattice; bravais = missing, dim = missing, type = missing, names = missing)
 
 Create a new lattice by applying any non-missing `kw` to `lat`. For performance, allocations
 will be avoided if possible (depends on `kw`), so the result can share memory of `lat`. To
@@ -195,14 +193,6 @@ Lattice{2,2,Float64} : 2D lattice in 2D space
 """
 supercell
 
-"""
-    not(i)
-
-Wrapper indicating the negation or complement of `i`, typically used to encode excluded site
-indices. See `siteselector` and `hopselector` for applications.
-
-"""
-not
 
 """
     siteselector(; region = missing, sublats = missing, indices = missing)
@@ -305,3 +295,98 @@ Obtain the actual nth-nearest-neighbot distance between sites in lattice `lat`.
     `hopping`
 """
 nrange
+
+"""
+    hamiltonian(lat, model; orbitals, orbtype)
+
+Create a `Hamiltonian` by applying `model::TighbindingModel` to the lattice `lat` (see
+`hopping` and `onsite` for details on building tightbinding models).
+
+    lat |> hamiltonian(model; kw...)
+
+Curried form of `hamiltonian` equivalent to `hamiltonian(lat, model; kw...)`.
+
+# Keywords
+
+The number of orbitals on each sublattice can be specified by the keyword `orbitals`
+(otherwise all sublattices have one orbital by default). The following, and obvious
+combinations, are possible formats for the `orbitals` keyword:
+
+    orbitals = :a                # all sublattices have 1 orbital named :a
+    orbitals = (:a,)             # same as above
+    orbitals = (:a, :b, 3)       # all sublattices have 3 orbitals named :a and :b and :3
+    orbitals = ((:a, :b), (:c,)) # first sublattice has 2 orbitals, second has one
+    orbitals = ((:a, :b), :c)    # same as above
+    orbitals = (Val(2), Val(1))  # same as above, with automatic names
+    orbitals = (:A => (:a, :b), :D => :c) # sublattice :A has two orbitals, :D and rest have one
+    orbitals = :D => Val(4)      # sublattice :D has four orbitals, rest have one
+
+The matrix sizes of tightbinding `model` must match the orbitals specified. Internally, we
+define a block size `N = max(num_orbitals)`. If `N = 1` (all sublattices with one orbital)
+the Hamiltonian element type is `orbtype`. Otherwise it is `SMatrix{N,N,orbtype}` blocks,
+padded with the necessary zeros as required. Keyword `orbtype` is `Complex{T}` by default,
+where `T` is the number type of `lat`.
+
+# Indexing
+
+Indexing into a Hamiltonian `h` works as follows. Access the `HamiltonianHarmonic` matrix at
+a given `dn::NTuple{L,Int}` with `h[dn]`. The special `h[]` syntax stands for `h[(0...)]`
+for the zero-harmonic. Assign `v` into element `(i,j)` of said matrix with `h[dn][i,j] = v`.
+Broadcasting with vectors of indices `is` and `js` is supported, `h[dn][is, js] = v_matrix`.
+
+A slicing syntax `h[rows, cols]` (without specifying `dn`) is also available, that creates a
+special `hs::Slice{<:Hamiltonian}` object that represents a slice of the Hamiltonian matrix
+restricted to `rows` and `cols`. Here, `rows` and `cols` are collections of site indices, or
+alternatively `SiteSelector`s (see `siteselector`s for details). If `rows::Integer` or
+`cols::Integer`, they will be converted to a single-element range (to preserve always a
+matrix-like slice, unlike for `AbstractArray` indexing). Slices support `bloch` and `bloch!`
+to produce the corresponding matrices, and can also be indexed as `hs[dn::Tuple]` that
+produces the equivalent to `h[dn][rows, cols]`.
+
+To add an empty harmonic with a given `dn::NTuple{L,Int}`, do `push!(h, dn)`. To delete it,
+do `deleteat!(h, dn)`.
+
+# Examples
+
+```jldoctest
+julia> h = hamiltonian(LatticePresets.honeycomb(), hopping(@SMatrix[1 2; 3 4], range = 1/√3), orbitals = Val(2))
+Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
+  Bloch harmonics  : 5 (SparseMatrixCSC, sparse)
+  Harmonic size    : 2 × 2
+  Orbitals         : ((:a, :a), (:a, :a))
+  Element type     : 2 × 2 blocks (ComplexF64)
+  Onsites          : 0
+  Hoppings         : 6
+  Coordination     : 3.0
+
+julia> push!(h, (3,3)) # Adding a new Hamiltonian harmonic (if not already present)
+Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
+  Bloch harmonics  : 6 (SparseMatrixCSC, sparse)
+  Harmonic size    : 2 × 2
+  Orbitals         : ((:a, :a), (:a, :a))
+  Element type     : 2 × 2 blocks (ComplexF64)
+  Onsites          : 0
+  Hoppings         : 6
+  Coordination     : 3.0
+
+julia> h[(3,3)][1,1] = @SMatrix[1 2; 2 1]; h[(3,3)] # element assignment
+2×2 SparseMatrixCSC{SMatrix{2, 2, ComplexF64, 4}, Int64} with 1 stored entry:
+ [1.0+0.0im 2.0+0.0im; 2.0+0.0im 1.0+0.0im]                      ⋅                     
+                     ⋅                                           ⋅                     
+
+julia> h[(3,3)][[1,2],[1,2]] .= Ref(@SMatrix[1 2; 2 1])
+2×2 SparseMatrixCSC{SMatrix{2, 2, ComplexF64, 4}, Int64} with 4 stored entries:
+ [1.0+0.0im 2.0+0.0im; 2.0+0.0im 1.0+0.0im]  [1.0+0.0im 2.0+0.0im; 2.0+0.0im 1.0+0.0im]
+ [1.0+0.0im 2.0+0.0im; 2.0+0.0im 1.0+0.0im]  [1.0+0.0im 2.0+0.0im; 2.0+0.0im 1.0+0.0im]
+
+ julia> h = unitcell(h); h[]
+2×2 SparseMatrixCSC{SMatrix{2, 2, ComplexF64, 4}, Int64} with 2 stored entries:
+                     ⋅                       [1.0+0.0im 2.0+0.0im; 3.0+0.0im 4.0+0.0im]
+ [1.0+0.0im 2.0+0.0im; 3.0+0.0im 4.0+0.0im]                      ⋅                     
+
+```
+
+# See also
+    `onsite`, `hopping`, `bloch`, `bloch!`
+"""
+hamiltonian

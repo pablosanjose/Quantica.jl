@@ -1,6 +1,7 @@
-#######################################################################
+############################################################################################
 # Lattice
-#######################################################################
+#region
+
 struct Sublat{T,E}
     sites::Vector{SVector{E,T}}
     name::Symbol
@@ -22,7 +23,7 @@ struct Bravais{T,E,L}
     end
 end
 
-mutable struct Lattice{T<:AbstractFloat,E,L}
+struct Lattice{T<:AbstractFloat,E,L}
     bravais::Bravais{T,E,L}
     unitcell::Unitcell{T,E}
 end
@@ -77,27 +78,29 @@ end
 sitesublatname(lat, i) = sublatname(lat, sitesublat(lat, i))
 
 sitesublatiter(l::Lattice) = sitesublatiter(l.unitcell)
-sitesublatiter(u::Unitcell) = TypedGenerator{Tuple{Int,Int}}(
-    ((i, s) for s in sublats(u) for i in siterange(u, s)), nsites(u))
+sitesublatiter(u::Unitcell) = ((i, s) for s in sublats(u) for i in siterange(u, s))
 
+offsets(l::Lattice) = offsets(l.unitcell)
 offsets(u::Unitcell) = u.offsets
 
 sublatlengths(lat::Lattice) = sublatlengths(lat.unitcell)
 sublatlengths(u::Unitcell) = diff(u.offsets)
 
-valdim(::Sublat{<:Any,E}) where {E} = Val(E)
-valdim(::Lattice{<:Any,E}) where {E} = Val(E)
+embdim(::Sublat{<:Any,E}) where {E} = E
+embdim(::Lattice{<:Any,E}) where {E} = E
 
 latdim(::Lattice{<:Any,<:Any,L}) where {L} = L
 
 numbertype(::Sublat{T}) where {T} = T
 numbertype(::Lattice{T}) where {T} = T
 
-celltype(::Lattice{<:Any,<:Any,L}) where {L} = SVector{L,Int}
+zerocell(::Lattice{<:Any,<:Any,L}) where {L} = zero(SVector{L,Int})
 
 #endregion
 
-#######################################################################
+#endregion
+
+############################################################################################
 # Selectors
 #region
 
@@ -113,7 +116,7 @@ struct HopSelector{M,S,I,D,T} <: Selector
     region::M
     sublats::S
     indices::I
-    dns::D
+    dcells::D
     range::T
 end
 
@@ -127,44 +130,212 @@ struct NeighborRange
     n::Int
 end
 
-struct Applied{S,D}
+struct AppliedOn{S,D}
     src::S
     dst::D
 end
 
 #region internal API
 
-source(a::Applied) = a.src
-destination(a::Applied) = a.dst
+appliedon(s, d) = AppliedOn(apply(s, d), d)
+
+apply(s, d) = s  # fallback for no action on s
+
+source(a::AppliedOn) = a.src
+
+target(a::AppliedOn) = a.dst
 
 Base.parent(n::NeighborRange) = n.n
 
 #endregion
+
 #endregion
 
-# #######################################################################
-# # Model
-# #######################################################################
-# abstract type TightbindingModelTerm end
-# abstract type AbstractOnsiteTerm <: TightbindingModelTerm end
-# abstract type AbstractHoppingTerm <: TightbindingModelTerm end
+############################################################################################
+# Model
+#region
+abstract type TightbindingModelTerm end
 
-# struct TightbindingModel
-#     terms  # Collection of `TightbindingModelTerm`s
+struct TightbindingModel
+    terms::Vector{Any}  # Collection of `TightbindingModelTerm`s
+end
+
+# These need to be concrete as they are involved in hot construction loops
+struct OnsiteTerm{F,S<:Selector,T<:Number} <: TightbindingModelTerm
+    o::F
+    selector::S
+    coefficient::T
+end
+
+struct HoppingTerm{F,S<:Selector,T<:Number} <: TightbindingModelTerm
+    t::F
+    selector::S
+    coefficient::T
+end
+
+#region internal API
+
+terms(t::TightbindingModel) = t.terms
+
+selector(t::TightbindingModelTerm) = t.selector
+
+#endregion
+#endregion
+
+############################################################################################
+# OrbitalStructure
+#region
+
+struct OrbitalStructure{O<:Union{Number,SVector}}
+    orbtype::Type{O}    # Hamiltonian's orbitaltype
+    norbitals::Vector{Int}
+    offsets::Vector{Int}
+    flatoffsets::Vector{Int}
+end
+
+#region internal API
+
+norbitals(o::OrbitalStructure) = o.norbitals
+
+orbtype(o::OrbitalStructure) = o.orbtype
+
+blocktype(o::OrbitalStructure{O}) where {O<:Number} = O
+blocktype(o::OrbitalStructure{O}) where {N,T,O<:SVector{N,T}} = SMatrix{N,N,T,N*N}
+
+offsets(o::OrbitalStructure) = o.offsets
+
+flatoffsets(o::OrbitalStructure) = o.flatoffsets
+
+#endregion
+#endregion
+
+############################################################################################
+# Hamiltonian
+#region
+
+struct HamiltonianHarmonic{L,O}
+    dn::SVector{L,Int}
+    h::SparseMatrixCSC{O,Int}
+end
+
+struct Hamiltonian{T,E,L,O}
+    lattice::Lattice{T,E,L}
+    orbstruct::OrbitalStructure{O}
+    harmonics::Vector{HamiltonianHarmonic{L,O}}
+    # Enforce sorted-dns-starting-from-zero invariant onto harmonics
+    function Hamiltonian{T,E,L,O}(lattice, orbstruct, harmonics) where {T,E,L,O}
+        n = nsites(lattice)
+        all(har -> size(matrix(har)) == (n, n), harmonics) ||
+            throw(DimensionMismatch("Harmonic sizes don't match number of sites $n"))
+        length(harmonics) > 0 && iszero(dcell(first(harmonics))) || pushfirst!(harmonics,
+            HamiltonianHarmonic(zero(SVector{L,Int}), sparse(Int[], Int[], O[], n, n)))
+        sort!(harmonics, by = h -> abs.(dcell(h)))
+        return new(lattice, orbstruct, harmonics)
+    end
+end
+
+Hamiltonian(l::Lattice{T,E,L}, h::Vector{HamiltonianHarmonic{L,O}}, o::OrbitalStructure{O}) where {T,E,L,O} =
+    Hamiltonian{T,E,L,O}(l, h, o)
+
+#region internal API
+
+matrix(h::HamiltonianHarmonic) = h.h
+
+dcell(h::HamiltonianHarmonic) = h.dn
+
+orbitalstructure(h::Hamiltonian) = h.orbstruct
+
+lattice(h::Hamiltonian) = h.lattice
+
+harmonics(h::Hamiltonian) = h.harmonics
+
+orbtype(h::Hamiltonian) = orbtype(orbitalstructure(h))
+
+blocktype(h::Hamiltonian) = blocktype(orbitalstructure(h))
+
+Base.size(h::Hamiltonian, i...) = size(matrix(first(harmonics(h))), i...)
+
+#endregion
+#endregion
+
+############################################################################################
+# IJV hamiltonian helper
+#region
+
+struct IJV{L,O}
+    dn::SVector{L,Int}
+    i::Vector{Int}
+    j::Vector{Int}
+    v::Vector{O}
+end
+
+struct IJVBuilder{T,E,L,O}
+    lat::Lattice{T,E,L}
+    orbstruct::OrbitalStructure{O}
+    ijvs::Vector{IJV{L,O}}
+    kdtrees::Vector{KDTree{SVector{E,T},Euclidean,T}}
+end
+
+IJV{L,O}(dn::SVector{L} = zero(SVector{L,Int})) where {L,O} = IJV(dn, Int[], Int[], O[])
+
+function IJVBuilder(lat::Lattice{T,E,L}, orbstruct::OrbitalStructure{O}) where {E,L,T,O}
+    ijvs = IJV{L,O}[]
+    kdtrees = Vector{KDTree{SVector{E,T},Euclidean,T}}(undef, nsublats(lat))
+    return IJVBuilder(lat, orbstruct, ijvs, kdtrees)
+end
+
+# function IJVBuilder(lat::AbstractLattice{E,L}, orbs, hs::Hamiltonian...) where {E,L}
+#     M = promote_blocktype(hs...)
+#     ijvs = IJV{L,M}[]
+#     builder = IJVBuilder(lat, orbs, ijvs)
+#     offset = 0
+#     for h in hs
+#         for har in h.harmonics
+#             ijv = builder[har.dn]
+#             push_block!(ijv, har, offset)
+#         end
+#         offset += size(h, 1)
+#     end
+#     return builder
 # end
 
-# # These need to be concrete as they are involved in hot construction loops
-# struct OnsiteTerm{F,S,T} <: AbstractOnsiteTerm
-#     o::F
-#     selector::S
-#     coefficient::T
+function Base.getindex(b::IJVBuilder{L,O}, dn::SVector) where {L,O}
+    for e in b.ijvs
+        e.dn == dn && return e
+    end
+    e = IJV{L,O}(dn)
+    push!(b.ijvs, e)
+    return e
+end
+
+Base.length(h::IJV) = length(h.i)
+Base.isempty(h::IJV) = length(h) == 0
+# Base.copy(h::IJV) = IJV(h.dn, copy(h.i), copy(h.j), copy(h.v))
+
+# function Base.resize!(h::IJV, n)
+#     resize!(h.i, n)
+#     resize!(h.j, n)
+#     resize!(h.v, n)
+#     return h
 # end
 
-# struct HoppingTerm{F,S,T} <: AbstractHoppingTerm
-#     t::F
-#     selector::S
-#     coefficient::T
+# Base.push!(ijv::IJV, (i, j, v)::Tuple) = (push!(ijv.i, i); push!(ijv.j, j); push!(ijv.v, v))
+
+# function push_block!(ijv::IJV{L,M}, h::HamiltonianHarmonic, offset) where {L,M}
+#     I, J, V = findnz(h.h)
+#     for (i, j, v) in zip(I, J, V)
+#         push!(ijv, (i + offset, j + offset, padtotype(v, M)))
+#     end
+#     return ijv
 # end
+
+orbitalstructure(b::IJVBuilder) = b.orbstruct
+
+lattice(b::IJVBuilder) = b.lat
+
+kdtrees(b::IJVBuilder) = b.kdtrees
+
+#endregion
 
 # #######################################################################
 # # Modifiers

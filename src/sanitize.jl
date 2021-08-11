@@ -1,8 +1,22 @@
+############################################################################################
 # Non-numerical sanitizers
+#region
 
 sanitize_Vector_of_Symbols(names) = Symbol[convert(Symbol, name) for name in names]
 
+#endregion
+
+############################################################################################
 # Array sanitizers (padding with zeros if necessary)
+#region
+
+sanitize_Vector_of_Type(::Type{T}, len, x::T´) where {T,T´<:T} = fill(convert(T, x), len)
+
+function sanitize_Vector_of_Type(::Type{T}, len, xs) where {T}
+    xs´ = T[convert(T, x) for x in xs]
+    length(xs´) == len || throw(ArgumentError("Received a collection with $(length(xs´)) elements, should have $len."))
+    return xs´
+end
 
 sanitize_Vector_of_SVectors(vs) =
     eltype(vs) <: Number ? [sanitize_SVector(vs)] : [promote(sanitize_SVector.(vs)...)...]
@@ -17,19 +31,19 @@ sanitize_SVector(::Type{SVector{N,T}}, v::SVector{N}) where {N,T} = convert(SVec
 sanitize_SVector(::Type{SVector{N,T}}, v) where {N,T} =
     SVector(ntuple(i -> i > length(v) ? zero(T) : convert(T, v[i]), Val(N)))
 
-function sanitize_SMatrix(::Type{SMatrix{E,L,T}}, x) where {T<:Number,E,L}
+function sanitize_SMatrix(::Type{SMatrix{E,L,T}}, x, (rows, cols) = (E, L)) where {T<:Number,E,L}
     t = ntuple(Val(E*L)) do l
         j, i = fldmod1(l, E)
-        j > length(x) || i > length(x[j]) ? zero(T) : T(x[j][i])
+        j > max(cols, length(x)) || i > max(rows, length(x[j])) ? zero(T) : T(x[j][i])
     end
     return SMatrix{E,L,T}(t)
 end
 
-function sanitize_SMatrix(::Type{SMatrix{E,L,T}}, s::SMatrix) where {T<:Number,E,L}
+function sanitize_SMatrix(::Type{SMatrix{E,L,T}}, s::SMatrix, (rows, cols) = (E, L)) where {T<:Number,E,L}
     c = 0
     t = ntuple(Val(E*L)) do l
         j, i = fldmod1(l, E)
-        checkbounds(Bool, s, i, j) ? (c += 1; convert(T, s[c])) : zero(T)
+        checkbounds(Bool, s, i, j) && i <= rows && j <= cols ? (c += 1; convert(T, s[c])) : zero(T)
     end
     return SMatrix{E,L,T}(t)
 end
@@ -47,3 +61,14 @@ function sanitize_Matrix(::Type{T}, E, m::AbstractMatrix) where {T}
     m´[axes(m)...] .= convert.(T, m)
     return m´
 end
+
+#endregion
+
+############################################################################################
+# Block sanitizers
+#region
+
+sanitize_block(S::Type{<:Number}, s, _) = convert(S, first(s))
+sanitize_block(S::Type{<:SMatrix}, s, size) = sanitize_SMatrix(S, s, size)
+
+#endregion

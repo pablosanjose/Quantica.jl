@@ -40,7 +40,6 @@ function supercell_masklist_full(smat::SMatrix{L,L,Int}, cellseed::SVector{L,Int
     masklist = Vector{Tuple{Int,SVector{L,Int},Int}}(undef, supercell_nsites)
     br = bravais_mat(lat)
     projector = pinverse(br * smat)
-    sites´ = sites(lat)
     counter = 0
     iter = BoxIterator(cellseed)
     for cell in iter, (i, slat) in sitesublatiter(lat)
@@ -60,11 +59,10 @@ end
 # build sitelist = [sitepositions...] and masklist´ = [(sublat, cell´, siteidx)...]
 # where cell´ varies along axes smatperp not in smat, filtered by selector
 function supercell_sitelist!!(sitelist, masklist, smatperp, seedperp, applied_selector)
-    lat = destination(applied_selector)
+    lat = target(applied_selector)
     masklist0 = copy(masklist)
     empty!(masklist)
     empty!(sitelist)
-    seeperp = zero(smatperp[1,:])
     iter = BoxIterator(seedperp)
     for c in iter, (s, cell, i) in masklist0
         cell´ = cell + smatperp * c

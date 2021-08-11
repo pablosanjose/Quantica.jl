@@ -6,33 +6,35 @@ siteselector(; region = missing, sublats = missing, indices = missing) =
     SiteSelector(region, sublats, indices)
 siteselector(s::SiteSelector; region = s.region, sublats = s.sublats, indices = s.indices) =
     SiteSelector(region, sublats, indices)
-siteselector(lat::Lattice; kw...) = applied(siteselector(; kw...), lat)
+siteselector(lat::Lattice; kw...) =
+    appliedon(siteselector(; kw...), lat)
 
 hopselector(; region = missing, sublats = missing, indices = missing, cells = missing, range = nrange(1)) =
     HopSelector(region, sublats, indices, cells, range)
 hopselector(s::HopSelector; region = s.region, sublats = s.sublats, indices = s.indices, cells = s.cells, range = s.range) =
     HopSelector(region, sublats, indices, cells, range)
-hopselector(lat::Lattice; kw...) = applied(hopselector(; kw...), lat)
+hopselector(lat::Lattice; kw...) =
+    appliedon(hopselector(; kw...), lat)
 
 nrange(n::Int) = NeighborRange(n)
 
-applied(s::SiteSelector, l::Lattice) = Applied(s, l)
-
-function applied(s::HopSelector, l::Lattice)
-    s´ = hopselector(s; range = applyrange(s.range, l))
-    return Applied(s´, l)
+function apply(s::HopSelector, l::Lattice)
+    s.dcells === missing && (s.range === missing || !isfinite(maximum(s.range))) &&
+        throw(ErrorException("Tried to apply an infinite-range HopSelector on an unbounded lattice"))
+    return hopselector(s; range = sanitize_minmaxrange(s.range, l))
 end
 
-applyrange(r, lat) = padrange(_applyrange(r, lat))
-applyrange((rmin, rmax)::Tuple{Any,Any}, lat) =
-    padrange(_applyrange(rmin, lat), _applyrange(rmax, lat))
-_applyrange(r::NeighborRange, lat) = nrange(parent(r), lat)
-_applyrange(r, lat) = r
+sanitize_minmaxrange(r, lat) = sanitize_minmaxrange((zero(numbertype(lat)), r), lat)
+sanitize_minmaxrange((rmin, rmax)::Tuple{Any,Any}, lat) =
+    padrange(applyrange(rmin, lat), applyrange(rmax, lat))
+
+applyrange(r::NeighborRange, lat) = nrange(parent(r), lat)
+applyrange(r::Real, lat) = r
 
 padrange(r) = padrange(r, 1)
 padrange((rmin, rmax)::Tuple{Any,Any}) = (padrange(rmin, -1), padrange(rmax, 1))
-padrange(r::Real, m) = ifelse(isfinite(r), float(r) + m * sqrt(eps(float(r))), float(r))
-padrange(r, m) = r
+padrange(r::Real, m) = isfinite(r) ? float(r) + m * sqrt(eps(float(r))) : missing
+# rmax::Missing needed for type-stable hop_targets with infinite range
 
 #endregion
 
@@ -41,47 +43,162 @@ padrange(r, m) = r
 #region
 
  # tuple reverse respect to pair
-Base.in((j, i)::Pair, s::Applied{<:Selector}) = applied_in((i, j), source(s), destination(s))
-Base.in(i, s::Applied{<:Selector}) = applied_in(i, source(s), destination(s))
+Base.in((j, i)::Pair, s::AppliedOn{<:Selector}) = in_applied((i, j), source(s), target(s))
+Base.in(is, s::AppliedOn{<:Selector}) = in_applied(is, source(s), target(s))
 
-applied_in(((i, j), (celli, cellj))::Tuple{Tuple,Tuple}, sel::SiteSelector, lat) =
-    isonsite((i, j), (celli, cellj)) && applied_in((i, celli), sel, lat)
+in_applied(i::Int, sel::SiteSelector, lat) = in_applied((i, site(lat, i)), sel, lat)
 
-applied_in((i, celli), sel::SiteSelector, lat) = applied_in((i, site(lat, i, celli)), sel, lat)
-# This indirection allows to reuse computation of r = site(lat, i, celli)
-applied_in((i, r)::Tuple{Int,SVector{E,T}}, sel::SiteSelector, lat::Lattice{T,E}) where {T,E} =
-    recursive_in(i, sel.indices) &&
-    recursive_in(r, sel.region) &&
-    recursive_in(sitesublatname(lat, i), sel.sublats)
+# in_applied((i, celli), sel::SiteSelector, lat) = in_applied((i, site(lat, i, celli)), sel, lat)
+# # This indirection allows to reuse computation of r = site(lat, i, celli)
+in_applied((i, r)::Tuple{Int,SVector{E,T}}, sel::SiteSelector, lat::Lattice{T,E}) where {T,E} =
+    in_recursive(i, sel.indices) &&
+    in_recursive(r, sel.region) &&
+    in_recursive(sitesublatname(lat, i), sel.sublats)
 
-function applied_in(is::Tuple{Int,Int}, sel::HopSelector, lat)
-    cell0 = zero(celltype(lat))
-    return applied_in((is, (cell0, cell0)), sel, lat)
-end
-
-applied_in(((i, j), (dni, dnj)), sel::HopSelector, lat) =
+in_applied(((i, j), (dni, dnj)), sel::HopSelector, lat) =
     !isonsite((i, j), (dni, dnj)) &&
-    recursive_in(j => i, sel.indices) &&
-    recursive_in(Tuple(dni - dnj), sel.dcells) &&
-    recursive_in(sitesublatname(lat, j) => sitesublatname(lat, i), sel.sublats) &&
+    in_recursive(j => i, sel.indices) &&
+    in_recursive(Tuple(dni - dnj), sel.dcells) &&
+    in_recursive(sitesublatname(lat, j) => sitesublatname(lat, i), sel.sublats) &&
     isinposition(rdr(site(lat, i, dni), site(lat, j, dnj)), sel.region, sel.range)
 
 isonsite((i, j), (dni, dnj)) = i == j && dni == dnj
 
-isinposition((r, dr), region, range) = isinrange(dr, range) && recursive_in((r, dr), region)
+isinposition((r, dr), region, range) = isinrange(dr, range) && in_recursive((r, dr), region)
 
-isinrange(dr, rmax::Real) = dr'dr <= rmax^2
 isinrange(dr, (rmin, rmax)::Tuple{Real,Real}) =  rmin^2 <= dr'dr <= rmax^2
 
-recursive_in(i, ::Missing) = true
-recursive_in(i, dn::Tuple{Int,Int}) = i == dn
-recursive_in(i, name::Symbol) = i == name
-recursive_in(i, idx::Number) = i == idx
-recursive_in(i, r::AbstractRange) = i in r
-recursive_in(i, f::Function) = f(i)
-recursive_in((r, dr)::Tuple{SVector,SVector}, region::Function) = region(r, dr)
-recursive_in((i, j)::Pair, (is, js)::Pair) = recursive_in(i, is) && recursive_in(j, js)
-recursive_in(i, cs) = any(is -> recursive_in(i, is), cs)
+in_recursive(i, ::Missing) = true
+in_recursive(i, dn::Tuple{Int,Int}) = i == dn
+in_recursive(i, name::Symbol) = i == name
+in_recursive(i, idx::Number) = i == idx
+in_recursive(i, r::AbstractRange) = i in r
+in_recursive(i, f::Function) = f(i)
+in_recursive((r, dr)::Tuple{SVector,SVector}, region::Function) = region(r, dr)
+in_recursive((i, j)::Pair, (is, js)::Pair) = in_recursive(i, is) && in_recursive(j, js)
+in_recursive(i, cs) = any(is -> in_recursive(i, is), cs)
+
+#endregion
+
+############################################################################################
+# foreach_site, foreach_cell, foreach_hop
+#region
+
+function foreach_site(f, latsel::AppliedOn{<:SiteSelector}, cell = zerocell(target(latsel)))
+    sel, lat = source(latsel), target(latsel)
+    for s in sublats(lat)
+        in_recursive(sublatname(lat, s), sel.sublats) || continue
+        is, check_is = candidates(sel.indices, siterange(lat, s))
+        for i in is
+            check_is && in_recursive(i, sel.indices) || continue
+            r = site(lat, i, cell)
+            in_recursive(r, sel.region) && f(s, i, r)
+        end
+    end
+    return nothing
+end
+
+# f(dn, iter_dn) is a function of cell distance dn and cell iterator iter_dn
+function foreach_cell(f, latsel::AppliedOn{<:HopSelector})
+    sel, lat = source(latsel), target(latsel)
+    iter_dn, check_dn = candidates(sel.dcells, BoxIterator(zerocell(lat)))
+    for dn in iter_dn
+        check_dn && in_recursive(Tuple(dn), sel.dcells) || continue
+        f(dn, iter_dn)
+    end
+    return nothing
+end
+
+function foreach_hop!(f, iter_dni, latsel::AppliedOn{<:HopSelector}, kdtrees, dni = zerocell(target(latsel)))
+    sel, lat = source(latsel), target(latsel)
+    rmin, rmax = sel.range
+    dnj = zero(dni)
+    found = false
+    for si in sublats(lat), sj in sublats(lat)
+        in_recursive(sublatname(lat, sj) => sublatname(lat, si), sel.sublats) || continue
+        js = source_candidates(sel.indices, siterange(lat, sj))
+        for j in js
+            check_js &&
+            rj = site(lat, j)
+            is = target_candidates(rj, sj, rmax, lat, kdtrees)
+            for i in is
+                !isonsite((i, j), (dni, dnj)) && in_recursive(j => i, sel.indices) || continue
+                r, dr = rdr(site(lat, j, dnj), site(lat, i, dni))
+                # Make sure we don't stop searching cells until we reach minimum range
+                norm(dr) <= rmin && (found = true)
+                if isinposition((r, dr), sel.region, sel.range)
+                    found = true
+                    f(s, i, r)
+                end
+            end
+        end
+    end
+    found && acceptcell!(iter_dni, dni)
+    return nothing
+end
+
+# checks whether selection is a known container of the correct eltype(default). If it is,
+# returns selection, needs_check = false. Otherwise, returns default, needs_check = true.
+candidates(selection::Missing, default) = default, false
+candidates(selection, default) = candidates(s, default, eltype(default))
+candidates(selection::NTuple{<:Any,T}, default, ::Type{T}) where {T} = selection, false
+candidates(selection::T, default, ::Type{T}) where {N,T} = (selection,), false
+candidates(selection, default, T) = default, true
+
+source_candidates(selection, default) =
+    vcat_or_default(take_element(selection, first), default)
+target_candidates(selection, default) =
+    vcat_or_default(take_element(selection, last),  default)
+
+take_element(selection::Pair, element) = (element(selection),)
+take_element(selection::NTuple{<:Any,Pair}, element) = element.(selection)
+take_element(selection, element) = missing
+
+vcat_or_default(::Missing, default) = default
+vcat_or_default(elements, default) = vcat(elements...)
+
+# Although range can be (rmin, rmax) we return all targets within rmax.
+# Those below rmin get filtered later
+function target_candidates(rj, sj, rmax::Real, lat, kdtrees)
+    if !isassigned(kdtrees, sj)
+        sitepos = sites(lat, sj)
+        (kdtrees[s1] = KDTree(sitepos))
+    end
+    targetlist = inrange(kdtrees[s1], rj, rmax)
+    targetlist .+= offsets(lat)[s1]
+    return targetlist
+end
+
+target_candidates(rj, sj, ::Missing, lat, kdtrees) = siterange(lat, sj)
+
+#     rsel = resolve(term.selector, lat)
+#     L > 0 && checkinfinite(rsel)
+#     allpos = allsitepositions(lat)
+#     for (s2, s1) in sublats(rsel)  # Each is a Pair s2 => s1
+#         dns = dniter(rsel)
+#         for dn in dns
+#             keepgoing = false
+#             ijv = builder[dn]
+#             for j in source_candidates(rsel, s2)
+#                 sitej = allpos[j]
+#                 rsource = sitej - bravais(lat) * dn
+#                 is = targets(builder, rsel.selector.range, rsource, s1)
+#                 for i in is
+#                     # Make sure we don't stop searching until we reach minimum range
+#                     is_below_min_range((i, j), (dn, zero(dn)), rsel) && (keepgoing = true)
+#                     ((i, j), (dn, zero(dn))) in rsel || continue
+#                     keepgoing = true
+#                     rtarget = allsitepositions(lat)[i]
+#                     r, dr = _rdr(rsource, rtarget)
+#                     v = to_blocktype(term(r, dr), eltype(builder), builder.orbs[s1], builder.orbs[s2])
+#                     push!(ijv, (i, j, v))
+#                 end
+#             end
+#             keepgoing && acceptcell!(dns, dn)
+#         end
+#     end
+#     return nothing
+# end
 
 #endregion
 
@@ -163,74 +280,17 @@ end
 
 #endregion
 
+############################################################################################
+# Lattice - Selector generators
+#region
 
-# ############################################################################################
-# # resolve
-# #region
+siteisr(lat::Lattice; kw...) = siteisr(siteselector(lat; kw...))
 
-# function resolve(s::SiteSelector, lat::Lattice)
-#     s = SiteSelector(s.region, resolve_sublats(s.sublats, lat), s.indices)
-#     return ResolvedSelector(s, lat)
-# end
+function siteisr(as::AppliedOn{<:SiteSelector})
+    R = eltype(sites(target(as)))
+    gen = TypedGenerator{Tuple{Int,Int,R}}(
+        ((i, s, r) for (i, s, r) in siteisr_candidates(as) if (i, r) in as))
+    return gen
+end
 
-# resolve_sublats(::Missing, lat) = missing # must be resolved to iterate over sublats
-# resolve_sublats(n::Not, lat) = Not(resolve_sublats(parent(n), lat))
-# resolve_sublats(s, lat) = resolve_sublat_name.(s, Ref(lat))
-
-# function resolve_sublat_name(name::Union{Symbol,Integer}, lat)
-#     i = findfirst(isequal(name), lat.unitcell.names)
-#     return i === nothing ? 0 : i
-# end
-
-# resolve_sublat_name(s, lat) =
-#     throw(ErrorException( "Unexpected format $s for `sublats`, see `onsite` for supported options"))
-
-# function resolve(s::HopSelector, lat::Lattice)
-#     s = HopSelector(s.region,
-#                     resolve_sublat_pairs(s.sublats, lat),
-#                     check_dn_dims(s.dns, lat),
-#                     resolve_range(s.range, lat),
-#                     s.indices)
-#     return ResolvedSelector(s, lat)
-# end
-
-# resolve_sublats(::Missing, lat) = missing
-# resolve_sublats(n::Not, lat) = Not(resolve_sublats(parent(n), lat))
-# resolve_sublats(s, lat) = resolve_sublat_name.(s, Ref(lat))
-
-# resolve_range(r::Tuple, lat) = padrange(_resolve_range.(r, Ref(lat)))
-# resolve_range(r, lat) = padrange(_resolve_range(r, lat))
-# _resolve_range(r::NeighborRange, lat) = nrange(parent(r), lat)
-# _resolve_range(r, lat) = r
-
-# padrange(::Missing) = missing
-# padrange(r) = shift_eps(r, 1)
-# padrange(r::NTuple{2,Any}) = (shift_eps(first(r), -1), shift_eps(last(r), 1))
-
-# shift_eps(r::Real, m) = ifelse(isfinite(r), float(r) + m * sqrt(eps(float(r))), float(r))
-# shift_eps(r, m) = r
-
-# function resolve_sublat_name(name::Union{Symbol,Integer}, lat)
-#     i = findfirst(isequal(name), lat.unitcell.names)
-#     return i === nothing ? 0 : i
-# end
-
-# resolve_sublat_name(s, lat) =
-#     throw(ErrorException( "Unexpected format $s for `sublats`, see `siteselector` for supported options"))
-
-# resolve_sublat_pairs(::Missing, lat) = missing
-# resolve_sublat_pairs(n::Not, lat) = Not(resolve_sublat_pairs(n.i, lat))
-# resolve_sublat_pairs(s::Tuple, lat) = resolve_sublat_pairs.(s, Ref(lat))
-# resolve_sublat_pairs(s::Vector, lat) = resolve_sublat_pairs.(s, Ref(lat))
-# resolve_sublat_pairs((src, dst)::Pair, lat) = _resolve_sublat_pairs(src, lat) => _resolve_sublat_pairs(dst, lat)
-# _resolve_sublat_pairs(n::Not, lat) = Not(_resolve_sublat_pairs(n.i, lat))
-# _resolve_sublat_pairs(p, lat) = resolve_sublat_name.(p, Ref(lat))
-
-# resolve_sublat_pairs(s, lat) =
-#     throw(ErrorException( "Unexpected format $s for `sublats`, see `hopselector` for supported options"))
-
-# check_dn_dims(dns::Missing, lat::Lattice{<:Any,<:Any,L}) where {L} = dns
-# check_dn_dims(dns::Tuple{Vararg{SVector{L,Int}}}, lat::Lattice{<:Any,<:Any,L}) where {L} = dns
-# check_dn_dims(dns, lat::Lattice{<:Any,<:Any,L}) where {L} =
-#     throw(DimensionMismatch("Specified cell distance `dn` does not match lattice dimension $L"))
-# #endregion
+siteisr_candidates(as) = siteisr_candidates(as, as.indices, as.sublats)
