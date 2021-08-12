@@ -3,7 +3,7 @@
 #region
 
 sublat(sites...; name = :_) =
-    Sublat(float.(sanitize_Vector_of_SVectors(sites)), Symbol(name))
+    Sublat(sanitize_Vector_of_float_SVectors(sites), Symbol(name))
 
 #endregion
 
@@ -11,10 +11,13 @@ sublat(sites...; name = :_) =
 # Bravais constructors
 #region
 
-Bravais(T, E, v...) = Bravais{T,E}(v...)
-Bravais(T, ::Val{E}, v...) where {E} = Bravais{T,E}(v...)
-Bravais{T,E}(v::Vararg{<:Any,L}) where {T,E,L} = Bravais{T,E,L}(sanitize_Matrix(T, E, v...))
-Bravais{T,E}(m::AbstractMatrix) where {T,E} = Bravais{T,E,size(m,2)}(sanitize_Matrix(T, E, m))
+Bravais(::Type{T}, E, m) where {T} = Bravais(T, Val(E), m)
+Bravais(::Type{T}, ::Val{E}, m::NTuple{L,Any}) where {T,E,L} =
+    Bravais{T,E,L}(sanitize_Matrix(T, E, m))
+Bravais(::Type{T}, ::Val{E}, m::SMatrix{E,L}) where {T,E,L} =
+    Bravais{T,E,L}(sanitize_Matrix(T, E, m))
+Bravais(::Type{T}, ::Val{E}, m::AbstractMatrix) where {T,E} =
+    Bravais{T,E,size(m,2)}(sanitize_Matrix(T, E, m))
 
 #endregion
 
@@ -67,8 +70,8 @@ lattice(s::Sublat, ss::Sublat...; kw...) = _lattice(promote(s, ss...)...; kw...)
 function _lattice(ss::Sublat{T,E}...;
                   bravais = (),
                   dim = Val(E),
-                  type = T,
-                  names = sublatname.(ss)) where {T,E}
+                  type::Type{T´} = T,
+                  names = sublatname.(ss)) where {T,E,T´}
     u = unitcell(ss, names, postype(dim, type))
     b = Bravais(type, dim, bravais)
     return Lattice(b, u)
@@ -77,8 +80,8 @@ end
 function lattice(l::Lattice{T,E};
                  bravais = bravais_mat(lat),
                  dim = Val(E),
-                 type = T,
-                 names = names(l)) where {T,E}
+                 type::Type{T´} = T,
+                 names = names(l)) where {T,E,T´}
     u = unitcell(unitcell(lat), names, postype(dim, type))
     b = Bravais(type, dim, bravais)
     return Lattice(b, u)

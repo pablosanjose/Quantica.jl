@@ -21,10 +21,8 @@ end
 val_convert(T, ::Val{N}) where {N} = convert(T, N)
 val_convert(T, x) = convert(T, x)
 
-sanitize_Vector_of_SVectors(vs) =
-    eltype(vs) <: Number ? [sanitize_SVector(vs)] : [promote(sanitize_SVector.(vs)...)...]
-sanitize_Vector_of_SVectors(S::Type, vs) =
-    eltype(vs) <: Number ? [sanitize_SVector(S, vs)] : [promote(sanitize_SVector.(S, vs)...)...]
+sanitize_Vector_of_float_SVectors(vs) =
+    eltype(vs) <: Number ? [float(sanitize_SVector(vs))] : [promote(float.(sanitize_SVector.(vs))...)...]
 
 sanitize_SVector(::Tuple{}) = SVector{0,Float64}()
 sanitize_SVector(x::Number) = SVector{1}(x)
@@ -51,7 +49,7 @@ function sanitize_SMatrix(::Type{SMatrix{E,L,T}}, s::SMatrix, (rows, cols) = (E,
     return SMatrix{E,L,T}(t)
 end
 
-function sanitize_Matrix(::Type{T}, E, cols...) where {T}
+function sanitize_Matrix(::Type{T}, E, cols::Tuple) where {T}
     m = zeros(T, E, length(cols))
     for (j, col) in enumerate(cols), i in 1:E
         @inbounds m[i,j] = col[i]

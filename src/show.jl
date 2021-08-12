@@ -6,7 +6,7 @@
 Base.summary(::Sublat{T,E}) where {T,E} =
     "Sublat{$E,$T} : sublattice of $T-typed sites in $(E)D space"
 
-Base.show(io::IO, s::Sublat) = print(io, summary(s),
+Base.show(io::IO, s::Sublat) = print(io, summary(s), "\n",
 "  Sites    : $(nsites(s))
   Name     : $(displayname(s))")
 
