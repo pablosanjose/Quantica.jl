@@ -21,10 +21,15 @@ function flatoffsets(offsets0, norbs)
     return offsets´
  end
 
-function blocktype(T::Type, norbs)
-    n = maximum(norbs)
-    return n == 1 ? Complex{T} : SMatrix{n,n,Complex{T},n*n}
-end
+blocktype(T::Type, norbs) = blocktype(T, val_maximum(norbs))
+blocktype(::Type{T}, m::Val{1}) where {T} = Complex{T}
+blocktype(::Type{T}, m::Val{N}) where {T,N} = SMatrix{N,N,Complex{T},N*N}
+
+val_maximum(n::Int) = Val(n)
+val_maximum(ns::Tuple) = Val(maximum(argval.(ns)))
+
+argval(::Val{N}) where {N} = N
+argval(n::Int) = n
 
 # Equality does not need equal T
 Base.:(==)(o1::OrbitalStructure, o2::OrbitalStructure) =
@@ -38,28 +43,31 @@ Base.:(==)(o1::OrbitalStructure, o2::OrbitalStructure) =
 
 hamiltonian(m::TightbindingModel = TightbindingModel(); kw...) = lat -> hamiltonian(lat, m; kw...)
 
-function hamiltonian(lat::Lattice, m = TightbindingModel(); orbitals = 1, type = numbertype(lat))
+function hamiltonian(lat::Lattice, m = TightbindingModel(); orbitals = Val(1), type = numbertype(lat))
     orbstruct = OrbitalStructure(lat, orbitals, type)
     builder = IJVBuilder(lat, orbstruct)
-    foreach(t -> applyterm!(builder, t), terms(m))
-    HT = HamiltonianHarmonic{latdim(lat),blocktype(orbstruct)}
-    n = nsites(lat)
-    harmonics = HT[HT(e.dn, sparse(e.i, e.j, e.v, n, n)) for e in builder.ijvs if !isempty(e)]
-    return Hamiltonian(lat, orbstruct, harmonics)
+    # (builder, first(terms(m)))
+    # foreach(t -> applyterm!(builder, t), terms(m))
+    applyterm!(builder, first(terms(m)))
+    # applyterm!.(Ref(builder), terms(m))
+    # HT = HamiltonianHarmonic{latdim(lat),blocktype(orbstruct)}
+    # n = nsites(lat)
+    # harmonics = HT[HT(e.dn, sparse(e.i, e.j, e.v, n, n)) for e in builder.ijvs if !isempty(e)]
+    # return Hamiltonian(lat, orbstruct, harmonics)
 end
 
 function applyterm!(builder, term::OnsiteTerm)
-    lat = lattice(builder)
-    dn0 = zerocell(lat)
-    ijv = builder[dn0]
-    latsel = appliedon(selector(term), lat)
-    os = orbitalstructure(builder)
-    norbs = norbitals(os)
-    foreach_site(latsel, dn0) do s, i, r
-        n = norbs[s]
-        v = sanitize_block(blocktype(os), term(r, r), (n, n))
-        push!(ijv, (i, i, v))
-    end
+    # lat = lattice(builder)
+    # dn0 = zerocell(lat)
+    # ijv = builder[dn0]
+    # latsel = appliedon(selector(term), lat)
+    # os = orbitalstructure(builder)
+    # norbs = norbitals(os)
+    # foreach_site(latsel, dn0) do s, i, r
+    #     n = norbs[s]
+    #     v = sanitize_block(blocktype(os), term(r, r), (n, n))
+    #     push!(ijv, (i, i, v))
+    # end
     return nothing
 end
 
