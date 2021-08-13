@@ -46,28 +46,25 @@ hamiltonian(m::TightbindingModel = TightbindingModel(); kw...) = lat -> hamilton
 function hamiltonian(lat::Lattice, m = TightbindingModel(); orbitals = Val(1), type = numbertype(lat))
     orbstruct = OrbitalStructure(lat, orbitals, type)
     builder = IJVBuilder(lat, orbstruct)
-    # (builder, first(terms(m)))
-    # foreach(t -> applyterm!(builder, t), terms(m))
-    applyterm!(builder, first(terms(m)))
-    # applyterm!.(Ref(builder), terms(m))
-    # HT = HamiltonianHarmonic{latdim(lat),blocktype(orbstruct)}
-    # n = nsites(lat)
-    # harmonics = HT[HT(e.dn, sparse(e.i, e.j, e.v, n, n)) for e in builder.ijvs if !isempty(e)]
-    # return Hamiltonian(lat, orbstruct, harmonics)
+    applyterm!.(Ref(builder), terms(m))
+    HT = HamiltonianHarmonic{latdim(lat),blocktype(orbstruct)}
+    n = nsites(lat)
+    harmonics = HT[HT(e.dn, sparse(e.i, e.j, e.v, n, n)) for e in builder.ijvs if !isempty(e)]
+    return Hamiltonian(lat, orbstruct, harmonics)
 end
 
 function applyterm!(builder, term::OnsiteTerm)
-    # lat = lattice(builder)
-    # dn0 = zerocell(lat)
-    # ijv = builder[dn0]
-    # latsel = appliedon(selector(term), lat)
-    # os = orbitalstructure(builder)
-    # norbs = norbitals(os)
-    # foreach_site(latsel, dn0) do s, i, r
-    #     n = norbs[s]
-    #     v = sanitize_block(blocktype(os), term(r, r), (n, n))
-    #     push!(ijv, (i, i, v))
-    # end
+    lat = lattice(builder)
+    dn0 = zerocell(lat)
+    ijv = builder[dn0]
+    latsel = appliedon(selector(term), lat)
+    os = orbitalstructure(builder)
+    norbs = norbitals(os)
+    foreach_site(latsel, dn0) do s, i, r
+        n = norbs[s]
+        v = sanitize_block(blocktype(os), term(r, r), (n, n))
+        push!(ijv, (i, i, v))
+    end
     return nothing
 end
 

@@ -156,8 +156,8 @@ Base.parent(n::NeighborRange) = n.n
 #region
 abstract type TightbindingModelTerm end
 
-struct TightbindingModel
-    terms::Vector{Any}  # Collection of `TightbindingModelTerm`s
+struct TightbindingModel{T}
+    terms::T  # Collection of `TightbindingModelTerm`s
 end
 
 # These need to be concrete as they are involved in hot construction loops
@@ -229,7 +229,7 @@ struct Hamiltonian{T,E,L,O}
             throw(DimensionMismatch("Harmonic sizes don't match number of sites $n"))
         length(harmonics) > 0 && iszero(dcell(first(harmonics))) || pushfirst!(harmonics,
             HamiltonianHarmonic(zero(SVector{L,Int}), sparse(Int[], Int[], O[], n, n)))
-        sort!(harmonics, by = h -> abs.(dcell(h)))
+        sort!(harmonics)
         return new(lattice, orbstruct, harmonics)
     end
 end
@@ -254,6 +254,8 @@ orbtype(h::Hamiltonian) = orbtype(orbitalstructure(h))
 blocktype(h::Hamiltonian) = blocktype(orbitalstructure(h))
 
 Base.size(h::Hamiltonian, i...) = size(matrix(first(harmonics(h))), i...)
+
+Base.isless(h::HamiltonianHarmonic, h´::HamiltonianHarmonic) = sum(abs2, dcell(h)) < sum(abs2, dcell(h´))
 
 #endregion
 #endregion

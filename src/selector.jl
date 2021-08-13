@@ -170,44 +170,14 @@ end
 
 target_candidates(rj, sj, ::Missing, lat, kdtrees) = siterange(lat, sj)
 
-#     rsel = resolve(term.selector, lat)
-#     L > 0 && checkinfinite(rsel)
-#     allpos = allsitepositions(lat)
-#     for (s2, s1) in sublats(rsel)  # Each is a Pair s2 => s1
-#         dns = dniter(rsel)
-#         for dn in dns
-#             keepgoing = false
-#             ijv = builder[dn]
-#             for j in source_candidates(rsel, s2)
-#                 sitej = allpos[j]
-#                 rsource = sitej - bravais(lat) * dn
-#                 is = targets(builder, rsel.selector.range, rsource, s1)
-#                 for i in is
-#                     # Make sure we don't stop searching until we reach minimum range
-#                     is_below_min_range((i, j), (dn, zero(dn)), rsel) && (keepgoing = true)
-#                     ((i, j), (dn, zero(dn))) in rsel || continue
-#                     keepgoing = true
-#                     rtarget = allsitepositions(lat)[i]
-#                     r, dr = _rdr(rsource, rtarget)
-#                     v = to_blocktype(term(r, dr), eltype(builder), builder.orbs[s1], builder.orbs[s2])
-#                     push!(ijv, (i, j, v))
-#                 end
-#             end
-#             keepgoing && acceptcell!(dns, dn)
-#         end
-#     end
-#     return nothing
-# end
-
 #endregion
 
 ############################################################################################
 # nrange
 #region
 
-function nrange(n, lat::Lattice)
+function nrange(n, lat::Lattice{T}) where {T}
     latsites = sites(lat)
-    T = numbertype(lat)
     dns = BoxIterator(zerocell(lat))
     br = bravais_mat(lat)
     # 128 is a heuristic cutoff for kdtree vs brute-force search
@@ -251,17 +221,17 @@ function _update_dists!(dists, dist)
     return dists
 end
 
-function _nrange(n, tree, r::AbstractVector{T}, nmax) where {T}
+function _nrange(n, tree, r::AbstractVector, nmax)
     for m in n:nmax
         _, dists = knn(tree, r, 1 + m, true)
         popfirst!(dists)
         unique_sorted_approx!(dists)
         length(dists) == n && return maximum(dists)
     end
-    return T(Inf)
+    return convert(eltype(r), Inf)
 end
 
-function unique_sorted_approx!(v::AbstractVector{T}) where {T}
+function unique_sorted_approx!(v::AbstractVector)
     i = 1
     xprev = first(v)
     for j in 2:length(v)
