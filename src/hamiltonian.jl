@@ -12,15 +12,6 @@ function OrbitalStructure(lat::Lattice, norbs, ::Type{T} = numbertype(lat)) wher
     return OrbitalStructure(O,norbs´, offsets´, flatoffsets´)
 end
 
-# sublat offsets after flattening (without padding zeros)
-function flatoffsets(offsets0, norbs)
-    nsites = diff(offsets0)
-    nsites´ = norbs .* nsites
-    offsets´ = cumsum!(nsites´, nsites´)
-    prepend!(offsets´, 0)
-    return offsets´
- end
-
 blocktype(T::Type, norbs) = blocktype(T, val_maximum(norbs))
 blocktype(::Type{T}, m::Val{1}) where {T} = Complex{T}
 blocktype(::Type{T}, m::Val{N}) where {T,N} = SMatrix{N,N,Complex{T},N*N}
@@ -30,6 +21,15 @@ val_maximum(ns::Tuple) = Val(maximum(argval.(ns)))
 
 argval(::Val{N}) where {N} = N
 argval(n::Int) = n
+
+# sublat offsets after flattening (without padding zeros)
+function flatoffsets(offsets0, norbs)
+    nsites = diff(offsets0)
+    nsites´ = norbs .* nsites
+    offsets´ = cumsum!(nsites´, nsites´)
+    prepend!(offsets´, 0)
+    return offsets´
+ end
 
 # Equality does not need equal T
 Base.:(==)(o1::OrbitalStructure, o2::OrbitalStructure) =
