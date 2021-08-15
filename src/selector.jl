@@ -20,7 +20,6 @@ nrange(n::Int) = NeighborRange(n)
 
 function apply(s::HopSelector, l::Lattice)
     s´ = hopselector(s; range = sanitize_minmaxrange(s.range, l))
-    s´ = hopselector(s; range = (0.0, 1.0))
     rmin, rmax = s´.range
     s´.dcells === missing && rmax === missing &&
         throw(ErrorException("Tried to apply an infinite-range HopSelector on an unbounded lattice"))
