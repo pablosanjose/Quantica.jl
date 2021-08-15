@@ -20,6 +20,7 @@ nrange(n::Int) = NeighborRange(n)
 
 function apply(s::HopSelector, l::Lattice)
     s´ = hopselector(s; range = sanitize_minmaxrange(s.range, l))
+    s´ = hopselector(s; range = (0.0, 1.0))
     rmin, rmax = s´.range
     s´.dcells === missing && rmax === missing &&
         throw(ErrorException("Tried to apply an infinite-range HopSelector on an unbounded lattice"))
@@ -33,8 +34,7 @@ sanitize_minmaxrange((rmin, rmax)::Tuple{Any,Any}, lat) =
 applyrange(r::NeighborRange, lat) = nrange(parent(r), lat)
 applyrange(r::Real, lat) = r
 
-padrange(r::Real, m) = isfinite(r) ? float(r) + m * sqrt(eps(float(r))) : missing
-# rmax::Missing needed for type-stable hop_targets with infinite range
+padrange(r::Real, m) = isfinite(r) ? float(r) + m * sqrt(eps(float(r))) : float(r)
 
 #endregion
 
@@ -158,7 +158,7 @@ vcat_or_default(elements,  default_func) = vcat(elements...)
 
 # Although range can be (rmin, rmax) we return all targets within rmax.
 # Those below rmin get filtered later
-function inrange_targets(rsource, si, rmax::Real, lat, kdtrees)
+function inrange_targets(rsource, si, rmax, lat, kdtrees)
     if !isassigned(kdtrees, si)
         sitepos = sites(lat, si)
         kdtrees[si] = KDTree(sitepos)
@@ -167,8 +167,6 @@ function inrange_targets(rsource, si, rmax::Real, lat, kdtrees)
     targetlist .+= offsets(lat)[si]
     return targetlist
 end
-
-target_candidates(rj, sj, ::Missing, lat, kdtrees) = siterange(lat, sj)
 
 #endregion
 
@@ -255,18 +253,3 @@ function ispositive(ndist)
 end
 
 #endregion
-
-############################################################################################
-# Lattice - Selector generators
-#region
-
-siteisr(lat::Lattice; kw...) = siteisr(siteselector(lat; kw...))
-
-function siteisr(as::AppliedOn{<:SiteSelector})
-    R = eltype(sites(target(as)))
-    gen = TypedGenerator{Tuple{Int,Int,R}}(
-        ((i, s, r) for (i, s, r) in siteisr_candidates(as) if (i, r) in as))
-    return gen
-end
-
-siteisr_candidates(as) = siteisr_candidates(as, as.indices, as.sublats)
