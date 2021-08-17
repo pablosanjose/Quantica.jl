@@ -253,6 +253,8 @@ orbtype(h::Hamiltonian) = orbtype(orbitalstructure(h))
 
 blocktype(h::Hamiltonian) = blocktype(orbitalstructure(h))
 
+norbitals(h::Hamiltonian) = norbitals(orbitalstructure(h))
+
 Base.size(h::Hamiltonian, i...) = size(matrix(first(harmonics(h))), i...)
 
 Base.isless(h::HamiltonianHarmonic, h´::HamiltonianHarmonic) = sum(abs2, dcell(h)) < sum(abs2, dcell(h´))

@@ -73,3 +73,18 @@ sanitize_block(S::Type{<:Number}, s, _) = convert(S, first(s))
 sanitize_block(S::Type{<:SMatrix}, s, size) = sanitize_SMatrix(S, s, size)
 
 #endregion
+
+############################################################################################
+# Supercell sanitizers
+#region
+
+sanitize_supercell(::Val{L}, ns::NTuple{L´,NTuple{L,Int}}) where {L,L´} =
+    sanitize_SMatrix(SMatrix{L,L´,Int}, ns)
+sanitize_supercell(::Val{L}, n::Tuple{Int}) where {L} =
+    SMatrix{L,L,Int}(first(n) * I)
+sanitize_supercell(::Val{L}, ns::NTuple{L,Int}) where {L} =
+    SMatrix{L,L,Int}(Diagonal(SVector(ns)))
+sanitize_supercell(::Val{L}, v) where {L} =
+    throw(ArgumentError("Improper supercell specification $v for an $L lattice dimensions, see `supercell`"))
+
+#endregion

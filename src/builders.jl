@@ -66,10 +66,8 @@ kdtrees(b::IJVBuilder) = b.kdtrees
 # CSC Hamiltonian builder
 #region
 
-struct CSC{L,O}
+mutable struct CSC{L,O}
     dn::SVector{L,Int}
-    m::Int
-    n::Int
     colptr::Vector{Int}
     rowval::Vector{Int}
     nzval::Vector{O}
@@ -81,26 +79,23 @@ end
 struct CSCBuilder{T,E,L,O} <: AbstractSparseBuilder{T,E,L,O}
     lat::Lattice{T,E,L}
     orbstruct::OrbitalStructure{O}
-    collector::Vector{CSC{L,O}}
+    collectors::Vector{CSC{L,O}}
 end
 
-function CSC{L,O}(n::Int, dn::SVector = zero(SVector{L,Int})) where {L,O}
-    m = n
+function CSC{L,O}(dn::SVector = zero(SVector{L,Int})) where {L,O}
     colptr = [1]
     rowval = Int[]
     nzval = O[]
     colcounter = 1
     rowvalcounter = 0
     cosorter = CoSort(rowval, nzval)
-    return CSC(dn, m, n, colptr, rowval, nzval, colcounter, rowvalcounter, cosorter)
+    return CSC(dn, colptr, rowval, nzval, colcounter, rowvalcounter, cosorter)
 end
 
 CSCBuilder(lat, orbstruct) =
     CSCBuilder(lat, orbstruct, CSC{latdim(lat),blocktype(orbstruct)}[])
 
 function pushtocolumn!(s::CSC, row::Int, x, skipdupcheck::Bool = true)
-    nrows = s.m
-    1 <= row <= nrows || throw(ArgumentError("tried adding a row $row out of bounds ($nrows)"))
     if skipdupcheck || !isintail(row, s.rowval, s.colptr[s.colcounter])
         push!(s.rowval, row)
         push!(s.nzval, x)
@@ -117,8 +112,6 @@ function isintail(element, container, start::Int)
 end
 
 function finalizecolumn!(s::CSC, sortcol::Bool = true)
-    ncols = s.n
-    s.colcounter > ncols && throw(DimensionMismatch("Pushed too many columns to matrix"))
     if sortcol
         s.cosorter.offset = s.colptr[s.colcounter] - 1
         sort!(s.cosorter)
@@ -136,10 +129,11 @@ function finalizecolumn!(s::CSC, ncols::Int)
     return nothing
 end
 
-function SparseArrays.sparse(s::CSC, n´)
-    s.m == s.n == n´ || throw(error("Internal error: matrix size is inconsistent with lattice size"))
-    completecolptr!(s.colptr, n´, s.rowvalcounter)
-    return SparseMatrixCSC(s.m, s.n, s.colptr, s.rowval, s.nzval)
+function SparseArrays.sparse(s::CSC, dim)
+    completecolptr!(s.colptr, dim, s.rowvalcounter)
+    rows, cols = isempty(s.rowval) ? 0 : maximum(s.rowval), length(s.colptr) - 1
+    rows <= dim && cols == dim || throw(error("Internal error: matrix size $((rows, cols)) is inconsistent with lattice size $dim"))
+    return SparseMatrixCSC(dim, dim, s.colptr, s.rowval, s.nzval)
 end
 
 function completecolptr!(colptr, cols, lastrowptr)

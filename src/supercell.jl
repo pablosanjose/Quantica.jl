@@ -4,21 +4,19 @@ supercell(v...; kw...) = x -> supercell(x, v...; kw...)
 # SupercellData
 #region
 
-struct SupercellData{T,E,L,L´}
+struct SupercellData{T,E,L,L´,S<:SMatrix{L,L´,Int},S´<:SMatrix{L,L,Int}}
     lat::Lattice{T,E,L}
     sitelist::Vector{SVector{E,T}}                     # [sitepositions...]
     masklist::Vector{Tuple{Int,SVector{L,Int},Int}}    # [(sublatindex, cell, siteindex)...]
     bravais´::Bravais{T,E,L´}
-    sm::SMatrix{L,L´,Int}
-    sm´::SMatrix{L,L,Int}
+    sm::S
+    sm´::S´
     detsm´::Int
-    invsm´detsm´::SMatrix{L,L,Int}
+    invsm´detsm´::S´
 end
 
-supercell_data(lat::Lattice{<:Any,<:Any,L}, vs::Vararg{Int,L´}; kw...) where {L,L´} =
-    supercell_data(lat, SMatrix{L,L´,Int}(I) * Diagonal(SVector(vs)); kw...)
-supercell_data(lat::Lattice{<:Any,<:Any,L}, vs::Vararg{<:Tuple,L´}; kw...) where {L,L´} =
-    supercell_data(lat, sanitize_SMatrix(SMatrix{L,L´,Int}, v); kw...)
+supercell_data(lat::Lattice{<:Any,<:Any,L}, vs...; kw...) where {L,L´} =
+    supercell_data(lat, sanitize_supercell(Val(L), vs); kw...)
 
 function supercell_data(lat::Lattice{T,E,L}, sm::SMatrix{L,L´,Int};
                 cellseed = zero(SVector{L,Int}), kw...) where {T,E,L,L´}
@@ -87,9 +85,9 @@ end
 # supercell(lattice, ...)
 #region
 
-supercell(lat::Lattice, vs...; kw...) = supercell(supercell_data(lat, vs...; kw...))
+supercell(lat::Lattice, vs...; kw...) = lattice(supercell_data(lat, vs...; kw...))
 
-function supercell(data::SupercellData)
+function lattice(data::SupercellData)
     n = sublatnames(data.lat)
     o = supercell_offsets(data.masklist, nsublats(data.lat))
     u = Unitcell(data.sitelist, n, o)
@@ -145,13 +143,13 @@ function supercell_harmonics(h, data, builder)
                 checkbounds(Bool, indexlist, c) || continue
                 row´ = indexlist[c]
                 iszero(row´) && continue
-                csc = builder[Tuple(scell)]
+                csc = builder[scell]
                 # val´ = applymodifiers(vals[p], slat, (source_i, target_i), (source_dn, target_dn), modifiers´...)
                 val´ = vals[p]
                 pushtocolumn!(csc, row´, val´)
             end
         end
-        finalizecolumn!.(collectors(builder))
+        foreach(c -> finalizecolumn!(c), collectors(builder))
     end
     return harmonics(builder)
 end
@@ -173,7 +171,7 @@ end
 
 function mask_bounding_box(masklist::Vector{Tuple{Int,SVector{L,Int},Int}}) where {L}
     cellmin = cellmax = ntuple(Returns(0), Val(L))
-    imin, imax = 0
+    imin = imax = 0
     for (s, cell, i) in masklist
         tcell = Tuple(cell)
         cellmin = min.(cellmin, tcell)
