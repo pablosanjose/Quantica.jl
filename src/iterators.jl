@@ -160,23 +160,23 @@ acceptcell!(b, cell) = nothing
 # CoSort
 #region
 
-struct CoSortTup{T,Tv}
+struct CoSortTup{T,T´}
     x::T
-    y::Tv
+    y::T´
 end
 
-mutable struct CoSort{T,Tv,S<:AbstractVector{T},C<:AbstractVector{Tv}} <: AbstractVector{CoSortTup{T,Tv}}
-    sortvector::S
-    covector::C
+mutable struct CoSort{T,T´} <: AbstractVector{CoSortTup{T,T´}}
+    sortvector::Vector{T}
+    covector::Vector{T´}
     offset::Int
-    function CoSort{T,Tv,S,C}(sortvector, covector, offset) where {T,Tv,S,C}
+    function CoSort{T,T´}(sortvector, covector, offset) where {T,T´}
         length(covector) >= length(sortvector) ? new(sortvector, covector, offset) :
             throw(DimensionMismatch("Coarray length should exceed sorting array"))
     end
 end
 
-CoSort(sortvector::S, covector::C) where {T,Tv,S<:AbstractVector{T},C<:AbstractVector{Tv}} =
-    CoSort{T,Tv,S,C}(sortvector, covector, 0)
+CoSort(sortvector::Vector{T}, covector::Vector{T´}) where {T,T´} =
+    CoSort{T,T´}(sortvector, covector, 0)
 
 function cosort!(s, c)
     cs = CoSort(s, c)
@@ -197,6 +197,17 @@ Base.isless(a::CoSortTup, b::CoSortTup) = isless(a.x, b.x)
 Base.Sort.defalg(v::C) where {T<:Union{Number, Missing}, C<:CoSort{T}} = Base.DEFAULT_UNSTABLE
 
 isgrowing(c::CoSort) = isgrowing(c.sortvector, c.offset + 1)
+
+function isgrowing(vs::AbstractVector, i0 = 1)
+    i0 > length(vs) && return true
+    vprev = vs[i0]
+    for i in i0 + 1:length(vs)
+        v = vs[i]
+        v <= vprev && return false
+        vprev = v
+    end
+    return true
+end
 
 #endregion
 

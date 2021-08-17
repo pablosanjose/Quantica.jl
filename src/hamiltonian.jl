@@ -5,11 +5,15 @@
 # norbs is a collection of number of orbitals, one per sublattice (or a single one for all)
 # surprisingly, O type instability has no performance or allocations penalty
 function OrbitalStructure(lat::Lattice, norbs, ::Type{T} = numbertype(lat)) where {T}
-    norbs´ = sanitize_Vector_of_Type(Int, nsublats(lat), norbs)
     O = blocktype(T, norbs)
+    return OrbitalStructure{O}(lat, norbs)
+end
+
+function OrbitalStructure{O}(lat::Lattice, norbs) where {O}
+    norbs´ = sanitize_Vector_of_Type(Int, nsublats(lat), norbs)
     offsets´ = offsets(lat)
     flatoffsets´ = flatoffsets(offsets´, norbs´)
-    return OrbitalStructure(O,norbs´, offsets´, flatoffsets´)
+    return OrbitalStructure{O}(O, norbs´, offsets´, flatoffsets´)
 end
 
 blocktype(T::Type, norbs) = blocktype(T, val_maximum(norbs))
@@ -47,10 +51,8 @@ function hamiltonian(lat::Lattice, m = TightbindingModel(); orbitals = Val(1), t
     orbstruct = OrbitalStructure(lat, orbitals, type)
     builder = IJVBuilder(lat, orbstruct)
     applyterm!.(Ref(builder), terms(m))
-    HT = HamiltonianHarmonic{latdim(lat),blocktype(orbstruct)}
-    n = nsites(lat)
-    harmonics = HT[HT(e.dn, sparse(e.i, e.j, e.v, n, n)) for e in builder.ijvs if !isempty(e)]
-    return Hamiltonian(lat, orbstruct, harmonics)
+    hars = harmonics(builder)
+    return Hamiltonian(lat, orbstruct, hars)
 end
 
 function applyterm!(builder, term::OnsiteTerm)

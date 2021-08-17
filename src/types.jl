@@ -261,81 +261,122 @@ Base.isless(h::HamiltonianHarmonic, h´::HamiltonianHarmonic) = sum(abs2, dcell(
 #endregion
 
 ############################################################################################
-# IJV hamiltonian helper
+# CSC Hamiltonian builder
 #region
 
-struct IJV{L,O}
-    dn::SVector{L,Int}
-    i::Vector{Int}
-    j::Vector{Int}
-    v::Vector{O}
-end
+# struct UnfinalizedSparseMatrixCSC{Tv,Ti} <: AbstractSparseMatrix{Tv,Ti}
+#     m::Int
+#     n::Int
+#     colptr::Vector{Ti}
+#     rowval::Vector{Ti}
+#     nzval::Vector{Tv}
+# end
 
-struct IJVBuilder{T,E,L,O}
-    lat::Lattice{T,E,L}
-    orbstruct::OrbitalStructure{O}
-    ijvs::Vector{IJV{L,O}}
-    kdtrees::Vector{KDTree{SVector{E,T},Euclidean,T}}
-end
-
-IJV{L,O}(dn::SVector{L} = zero(SVector{L,Int})) where {L,O} = IJV(dn, Int[], Int[], O[])
-
-function IJVBuilder(lat::Lattice{T,E,L}, orbstruct::OrbitalStructure{O}) where {E,L,T,O}
-    ijvs = IJV{L,O}[]
-    kdtrees = Vector{KDTree{SVector{E,T},Euclidean,T}}(undef, nsublats(lat))
-    return IJVBuilder(lat, orbstruct, ijvs, kdtrees)
-end
-
-# function IJVBuilder(lat::AbstractLattice{E,L}, orbs, hs::Hamiltonian...) where {E,L}
-#     M = promote_blocktype(hs...)
-#     ijvs = IJV{L,M}[]
-#     builder = IJVBuilder(lat, orbs, ijvs)
-#     offset = 0
-#     for h in hs
-#         for har in h.harmonics
-#             ijv = builder[har.dn]
-#             push_block!(ijv, har, offset)
-#         end
-#         offset += size(h, 1)
-#     end
+# function SparseMatrixBuilder{Tv}(m, n, nnzguess = missing) where {Tv}
+#     colptr = [1]
+#     rowval = Int[]
+#     nzval = Tv[]
+#     matrix = UnfinalizedSparseMatrixCSC(m, n, colptr, rowval, nzval)
+#     builder = SparseMatrixBuilder(matrix, 1, 0, CoSort(rowval, nzval))
+#     nnzguess === missing || sizehint!(builder, nnzguess)
 #     return builder
 # end
 
-function Base.getindex(b::IJVBuilder{<:Any,<:Any,L,O}, dn::SVector) where {L,O}
-    for e in b.ijvs
-        e.dn == dn && return e
-    end
-    e = IJV{L,O}(dn)
-    push!(b.ijvs, e)
-    return e
-end
+# # Unspecified size constructor
+# SparseMatrixBuilder{Tv}() where Tv = SparseMatrixBuilder{Tv}(0, 0)
 
-Base.length(h::IJV) = length(h.i)
-Base.isempty(h::IJV) = length(h) == 0
-# Base.copy(h::IJV) = IJV(h.dn, copy(h.i), copy(h.j), copy(h.v))
-
-# function Base.resize!(h::IJV, n)
-#     resize!(h.i, n)
-#     resize!(h.j, n)
-#     resize!(h.v, n)
-#     return h
+# function SparseMatrixBuilder(s::SparseMatrixCSC{Tv,Int}) where {Tv}
+#     colptr = getcolptr(s)
+#     rowval = rowvals(s)
+#     nzval = nonzeros(s)
+#     nnzguess = length(nzval)
+#     resize!(rowval, 0)
+#     resize!(nzval, 0)
+#     resize!(colptr, 1)
+#     colptr[1] = 1
+#     builder = SparseMatrixBuilder(s, 1, 0, CoSort(rowval, nzval))
+#     sizehint!(builder, nnzguess)
+#     return builder
 # end
 
-Base.push!(ijv::IJV, (i, j, v)::Tuple) = (push!(ijv.i, i); push!(ijv.j, j); push!(ijv.v, v))
+# SparseArrays.getcolptr(s::UnfinalizedSparseMatrixCSC) = s.colptr
+# SparseArrays.nonzeros(s::UnfinalizedSparseMatrixCSC) = s.nzval
+# SparseArrays.rowvals(s::UnfinalizedSparseMatrixCSC) = s.rowval
+# Base.size(s::UnfinalizedSparseMatrixCSC) = (s.m, s.n)
+# Base.size(s::UnfinalizedSparseMatrixCSC, k) = size(s)[k]
 
-# function push_block!(ijv::IJV{L,M}, h::HamiltonianHarmonic, offset) where {L,M}
-#     I, J, V = findnz(h.h)
-#     for (i, j, v) in zip(I, J, V)
-#         push!(ijv, (i + offset, j + offset, padtotype(v, M)))
+# function Base.sizehint!(s::SparseMatrixBuilder, n)
+#     sizehint!(getcolptr(s.matrix), n + 1)
+#     sizehint!(nonzeros(s.matrix), n)
+#     sizehint!(rowvals(s.matrix), n)
+#     return s
+# end
+
+# function pushtocolumn!(s::SparseMatrixBuilder, row::Int, x, skipdupcheck::Bool = true)
+#     nrows = size(s.matrix, 1)
+#     nrows == 0 || 1 <= row <= size(s.matrix, 1) || throw(ArgumentError("tried adding a row $row out of bounds ($(size(s.matrix, 1)))"))
+#     if skipdupcheck || !isintail(row, rowvals(s.matrix), getcolptr(s.matrix)[s.colcounter])
+#         push!(rowvals(s.matrix), row)
+#         push!(nonzeros(s.matrix), x)
+#         s.rowvalcounter += 1
 #     end
-#     return ijv
+#     return s
 # end
 
-orbitalstructure(b::IJVBuilder) = b.orbstruct
+# function isintail(element, container, start::Int)
+#     for i in start:length(container)
+#         container[i] == element && return true
+#     end
+#     return false
+# end
 
-lattice(b::IJVBuilder) = b.lat
+# function finalizecolumn!(s::SparseMatrixBuilder, sortcol::Bool = true)
+#     size(s.matrix, 2) > 0 && s.colcounter > size(s.matrix, 2) && throw(DimensionMismatch("Pushed too many columns to matrix"))
+#     if sortcol
+#         s.cosorter.offset = getcolptr(s.matrix)[s.colcounter] - 1
+#         sort!(s.cosorter)
+#         isgrowing(s.cosorter) || throw(error("Internal error: repeated rows"))
+#     end
+#     s.colcounter += 1
+#     push!(getcolptr(s.matrix), s.rowvalcounter + 1)
+#     return nothing
+# end
 
-kdtrees(b::IJVBuilder) = b.kdtrees
+# function finalizecolumn!(s::SparseMatrixBuilder, ncols::Int)
+#     for _ in 1:ncols
+#         finalizecolumn!(s)
+#     end
+#     return nothing
+# end
+
+# function SparseArrays.sparse(s::SparseMatrixBuilder{<:Any,<:SparseMatrixCSC})
+#     completecolptr!(getcolptr(s.matrix), size(s.matrix, 2), s.rowvalcounter)
+#     return s.matrix
+# end
+
+# function completecolptr!(colptr, cols, lastrowptr)
+#     colcounter = length(colptr)
+#     if colcounter < cols + 1
+#         resize!(colptr, cols + 1)
+#         for col in (colcounter + 1):(cols + 1)
+#             colptr[col] = lastrowptr + 1
+#         end
+#     end
+#     return colptr
+# end
+
+# function SparseArrays.sparse(s::SparseMatrixBuilder{<:Any,<:UnfinalizedSparseMatrixCSC})
+#     m, n = size(s.matrix)
+#     rowval = rowvals(s.matrix)
+#     colptr = getcolptr(s.matrix)
+#     nzval = nonzeros(s.matrix)
+#     if m != 0 && n != 0
+#         completecolptr!(colptr, n, s.rowvalcounter)
+#     else # determine size of matrix after the fact
+#         m, n = isempty(rowval) ? 0 : maximum(rowval), s.colcounter - 1
+#     end
+#     return SparseMatrixCSC(m, n, colptr, rowval, nzval)
+# end
 
 #endregion
 
