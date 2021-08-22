@@ -106,18 +106,32 @@ zerocell(::Lattice{<:Any,<:Any,L}) where {L} = zero(SVector{L,Int})
 
 abstract type Selector end
 
-struct SiteSelector{M,S,I} <: Selector
-    region::M
-    sublats::S
-    indices::I
+struct SiteSelector <: Selector
+    region
+    sublats
+    indices
 end
 
-struct HopSelector{M,S,I,D,T} <: Selector
-    region::M
-    sublats::S
-    indices::I
-    dcells::D
-    range::T
+struct AppliedSiteSelector{T,E}
+    region::FunctionWrapper{Bool,Tuple{SVector{E,T}}}
+    sublats::FunctionWrapper{Bool,Tuple{Symbol}}
+    indices::FunctionWrapper{Bool,Tuple{Int}}
+end
+
+struct HopSelector <: Selector
+    region
+    sublats
+    indices
+    dcells
+    range
+end
+
+struct AppliedHopSelector{T,E,L} <: Selector
+    region::FunctionWrapper{Bool,Tuple{SVector{E,T},SVector{E,T}}}
+    sublats::FunctionWrapper{Bool,Tuple{Pair{Symbol,Symbol}}}
+    indices::FunctionWrapper{Bool,Tuple{Pair{Int,Int}}}
+    dcells::FunctionWrapper{Bool,Tuple{SVector{L,Int}}}
+    range::Tuple{T,T}
 end
 
 struct BlockSelector{V<:Union{Missing,Vector}} <: Selector
@@ -146,6 +160,47 @@ source(a::AppliedOn) = a.src
 target(a::AppliedOn) = a.dst
 
 Base.parent(n::NeighborRange) = n.n
+
+inregion(r, s::AppliedSiteSelector) = s.region(r)
+insublats(n, s::AppliedSiteSelector) = s.sublats(n)
+inindices(i, s::AppliedSiteSelector) = s.indices(i)
+
+inregion((r, dr), s::AppliedHopSelector) = s.region(r, dr)
+insublats(npair::Pair, s::AppliedHopSelector) = s.sublats(npair)
+inindices(ipair::Pair, s::AppliedHopSelector) = s.indices(ipair)
+indcells(dcell, s::AppliedHopSelector) = s.dcells(dcell)
+
+function Base.in((i, r), as::AppliedOn{<:AppliedSiteSelector})
+    lat = target(as)
+    sel = source(as)
+    name = sitesublatname(lat, i)
+    return inindices(i, sel) &&
+           inregion(r, sel) &&
+           insublats(name, sel)
+end
+
+function Base.in(((j, i), (nj, ni))::Tuple{Pair,Pair}, as::AppliedOn{<:AppliedHopSelector})
+    lat = target(as)
+    sel = source(as)
+    namei, namej = sitesublatname(lat, i), sitesublatname(lat, j)
+    dcell = nj - ni
+    ri, rj = site(lat, i, dnj), site(lat, j, dnj)
+    r, dr = rdr(rj => ri)
+    return !isonsite((j, i), (nj, ni)) &&
+            inindices(j => i, sel) &&
+            indcell(dcell, sel) &&
+            insublats(namej => namei, sel) &&
+            iswithinrange(dr, sel) &&
+            inregion((r, dr), sel)
+end
+
+isonsite((j, i), (nj, ni)) = ifelse(i == j && ni == nj, true, false)
+
+iswithinrange(dr, s::AppliedHopSelector) = iswithinrange(dr, s.range)
+iswithinrange(dr, (rmin, rmax)::Tuple{Real,Real}) =  ifelse(rmin^2 <= dr'dr <= rmax^2, true, false)
+
+isbelowrange(dr, s::AppliedHopSelector) = isbelowrange(dr, s.range)
+isbelowrange(dr, (rmin, rmax)::Tuple{Real,Real}) =  ifelse(dr'dr < rmin^2, true, false)
 
 #endregion
 

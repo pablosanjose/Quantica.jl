@@ -14,6 +14,8 @@ end
 using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
       ProgressMeter, Random, SuiteSparse
 
+using FunctionWrappers: FunctionWrapper
+
 using ExprTools
 
 using SparseArrays: getcolptr, AbstractSparseMatrix, AbstractSparseMatrixCSC

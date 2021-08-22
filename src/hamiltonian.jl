@@ -50,7 +50,7 @@ hamiltonian(m::TightbindingModel = TightbindingModel(); kw...) = lat -> hamilton
 function hamiltonian(lat::Lattice, m = TightbindingModel(); orbitals = Val(1), type = numbertype(lat))
     orbstruct = OrbitalStructure(lat, orbitals, type)
     builder = IJVBuilder(lat, orbstruct)
-    applyterm!.(Ref(builder), terms(m))
+    foreach(t -> applyterm!(builder, t), terms(m))
     hars = harmonics(builder)
     return Hamiltonian(lat, orbstruct, hars)
 end

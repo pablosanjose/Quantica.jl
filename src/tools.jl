@@ -16,4 +16,4 @@ end
 # round to integers to preserve eltype
 makefull(m::SMatrix{<:Any,<:Any,Int}) = round.(Int, makefull(float(m)))
 
-rdr(r1, r2) = (0.5 * (r1 + r2), r2 - r1)
+rdr((r1, r2)::Pair) = (0.5 * (r1 + r2), r2 - r1)

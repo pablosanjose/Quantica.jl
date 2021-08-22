@@ -18,12 +18,29 @@ hopselector(lat::Lattice; kw...) =
 
 nrange(n::Int) = NeighborRange(n)
 
-function apply(s::HopSelector, l::Lattice)
-    s´ = hopselector(s; range = sanitize_minmaxrange(s.range, l))
-    rmin, rmax = s´.range
-    s´.dcells === missing && rmax === missing &&
+#endregion
+
+############################################################################################
+# selector apply
+#region
+
+apply(s::SiteSelector, ::Lattice{T,E}) where {T,E} = AppliedSiteSelector{T,E}(
+        r -> in_recursive(r, s.region),
+        n -> in_recursive(n, s.sublats),
+        i -> in_recursive(i, s.indices)
+        )
+
+function apply(s::HopSelector, l::Lattice{T,E,L}) where {T,E,L}
+    rmin, rmax = sanitize_minmaxrange(s.range, l)
+    L > 0 && s.dcells === missing && rmax === missing &&
         throw(ErrorException("Tried to apply an infinite-range HopSelector on an unbounded lattice"))
-    return s´
+    return AppliedHopSelector{T,E,L}(
+        (r, dr) -> in_recursive((r, dr), s.region),
+        npair   -> in_recursive(npair, s.sublats),
+        ipair   -> in_recursive(ipair, s.indices),
+        dn      -> in_recursive(Tuple(dn), s.dcells),
+        (rmin, rmax)
+        )
 end
 
 sanitize_minmaxrange(r, lat) = sanitize_minmaxrange((zero(numbertype(lat)), r), lat)
@@ -35,47 +52,81 @@ applyrange(r::Real, lat) = r
 
 padrange(r::Real, m) = isfinite(r) ? float(r) + m * sqrt(eps(float(r))) : float(r)
 
-#endregion
+in_recursive(i, ::Missing) = true
+in_recursive((r, dr)::Tuple{SVector,SVector}, region::Function) = ifelse(region(r, dr), true, false)
+in_recursive((i, j)::Pair, (is, js)::Pair) = ifelse(in_recursive(i, is) && in_recursive(j, js), true, false)
+# This if-elseif helps the compile infer that in_recursive always returns a Bool (it bails after too much dispath)
+function in_recursive(i, x)
+    result = if x isa Tuple{Int,Int}
+            i === x
+        elseif x isa Symbol
+            i === x
+        elseif x isa Number
+            i === x
+        elseif x isa AbstractRange
+            ifelse(i in x, true, false)
+        elseif x isa Function
+            ifelse(x(i), true, false)
+        else
+            ifelse(any(is -> in_recursive(i, is), x), true, false)
+        end
+    return result
+end
 
 ############################################################################################
-# Base.in
+# isselected
 #region
 
- # tuple reverse respect to pair
-Base.in((j, i)::Pair, s::AppliedOn{<:Selector}) = in_applied((i, j), source(s), target(s))
-Base.in(is, s::AppliedOn{<:Selector}) = in_applied(is, source(s), target(s))
+# isselected(i::Int, sel::SiteSelector, lat) = isselected((i, site(lat, i)), sel, lat)
 
-in_applied(i::Int, sel::SiteSelector, lat) = in_applied((i, site(lat, i)), sel, lat)
+# isselected((i, r)::Tuple{Int,SVector{E,T}}, sel::SiteSelector, lat::Lattice{T,E}) where {T,E} =
+#     in_recursive(i, sel.indices) &&
+#     in_recursive(r, sel.region) &&
+#     in_recursive(sitesublatname(lat, i), sel.sublats)
 
-# in_applied((i, celli), sel::SiteSelector, lat) = in_applied((i, site(lat, i, celli)), sel, lat)
-# # This indirection allows to reuse computation of r = site(lat, i, celli)
-in_applied((i, r)::Tuple{Int,SVector{E,T}}, sel::SiteSelector, lat::Lattice{T,E}) where {T,E} =
-    in_recursive(i, sel.indices) &&
-    in_recursive(r, sel.region) &&
-    in_recursive(sitesublatname(lat, i), sel.sublats)
+# isselected(((i, j), (dni, dnj)), sel::HopSelector, lat) =
+#     !isonsite((i, j), (dni, dnj)) &&
+#     in_recursive(j => i, sel.indices) &&
+#     in_recursive(Tuple(dni - dnj), sel.dcells) &&
+#     in_recursive(sitesublatname(lat, j) => sitesublatname(lat, i), sel.sublats) &&
+#     isinposition(rdr(site(lat, i, dni), site(lat, j, dnj)), sel.region, sel.range)
 
-in_applied(((i, j), (dni, dnj)), sel::HopSelector, lat) =
-    !isonsite((i, j), (dni, dnj)) &&
-    in_recursive(j => i, sel.indices) &&
-    in_recursive(Tuple(dni - dnj), sel.dcells) &&
-    in_recursive(sitesublatname(lat, j) => sitesublatname(lat, i), sel.sublats) &&
-    isinposition(rdr(site(lat, i, dni), site(lat, j, dnj)), sel.region, sel.range)
+# isonsite((i, j), (dni, dnj)) = ifelse(i == j && dni == dnj, true, false)
 
-isonsite((i, j), (dni, dnj)) = i == j && dni == dnj
+# isinposition((r, dr), region, range)::Bool = isinrange(dr, range) && in_recursive((r, dr), region)
 
-isinposition((r, dr), region, range) = isinrange(dr, range) && in_recursive((r, dr), region)
+# isinrange(dr, (rmin, rmax)::Tuple{Real,Real}) =  ifelse(rmin^2 <= dr'dr <= rmax^2, true, false)
 
-isinrange(dr, (rmin, rmax)::Tuple{Real,Real}) =  rmin^2 <= dr'dr <= rmax^2
+# in_recursive(i, ::Missing) = true
+# in_recursive(i, dn::Tuple{Int,Int}) = ifelse(i == dn, true, false)
+# in_recursive(i, name::Symbol) = ifelse(i == name, true, false)
+# in_recursive(i, idx::Number) = ifelse(i == idx, true, false)
+# in_recursive(i, r::AbstractRange) = ifelse(i in r, true, false)
+# in_recursive(i, f::Function) = ifelse(f(i), true, false)
+# in_recursive((r, dr)::Tuple{SVector,SVector}, region::Function) = ifelse(region(r, dr), true, false)
+# in_recursive((i, j)::Pair, (is, js)::Pair) = ifelse(in_recursive(i, is) && in_recursive(j, js), true, false)
+# in_recursive(i, cs) = ifelse(any(is -> in_recursive(i, is), cs), true, false)
 
-in_recursive(i, ::Missing) = true
-in_recursive(i, dn::Tuple{Int,Int}) = i == dn
-in_recursive(i, name::Symbol) = i == name
-in_recursive(i, idx::Number) = i == idx
-in_recursive(i, r::AbstractRange) = i in r
-in_recursive(i, f::Function) = f(i)
-in_recursive((r, dr)::Tuple{SVector,SVector}, region::Function) = region(r, dr)
-in_recursive((i, j)::Pair, (is, js)::Pair) = in_recursive(i, is) && in_recursive(j, js)
-in_recursive(i, cs) = any(is -> in_recursive(i, is), cs)
+# in_recursive(i, ::Missing) = true
+# in_recursive((r, dr)::Tuple{SVector,SVector}, region::Function) = ifelse(region(r, dr), true, false)
+# in_recursive((i, j)::Pair, (is, js)::Pair) = ifelse(in_recursive(i, is) && in_recursive(j, js), true, false)
+# # This if-elseif helps the compile infer that in_recursive always returns a Bool (it bails after too much dispath)
+# function in_recursive(i, x)
+#     result = if x isa Tuple{Int,Int}
+#             i === x
+#         elseif x isa Symbol
+#             i === x
+#         elseif x isa Number
+#             i === x
+#         elseif x isa AbstractRange
+#             ifelse(i in x, true, false)
+#         elseif x isa Function
+#             ifelse(x(i), true, false)
+#         else
+#             ifelse(any(is -> in_recursive(i, is), x), true, false)
+#         end
+#     return result
+# end
 
 #endregion
 
@@ -83,48 +134,47 @@ in_recursive(i, cs) = any(is -> in_recursive(i, is), cs)
 # foreach_site, foreach_cell, foreach_hop
 #region
 
-function foreach_site(f, latsel::AppliedOn{<:SiteSelector}, cell = zerocell(target(latsel)))
+function foreach_site(f, latsel::AppliedOn{<:AppliedSiteSelector}, cell = zerocell(target(latsel)))
     sel, lat = source(latsel), target(latsel)
     for s in sublats(lat)
-        in_recursive(sublatname(lat, s), sel.sublats) || continue
+        insublats(sublatname(lat, s), sel) || continue
         is, check_is = candidates(sel.indices, siterange(lat, s))
         for i in is
-            check_is && !in_recursive(i, sel.indices) && continue
+            check_is && !inindices(i, sel) && continue
             r = site(lat, i, cell)
-            in_recursive(r, sel.region) && f(s, i, r)
+            inregion(r, sel) && f(s, i, r)
         end
     end
     return nothing
 end
 
-# f(dn, iter_dn) is a function of cell distance dn and cell iterator iter_dn
-function foreach_cell(f, latsel::AppliedOn{<:HopSelector})
+function foreach_cell(f, latsel::AppliedOn{<:AppliedHopSelector})
     sel, lat = source(latsel), target(latsel)
     iter_dn, check_dn = candidates(sel.dcells, BoxIterator(zerocell(lat)))
     for dn in iter_dn
-        check_dn && !in_recursive(Tuple(dn), sel.dcells) && continue
+        check_dn && !indcells(dn, sel) && continue
         f(dn, iter_dn)
     end
     return nothing
 end
 
-function foreach_hop!(f, iter_dni, latsel::AppliedOn{<:HopSelector}, kdtrees, dni = zerocell(target(latsel)))
+function foreach_hop!(f, iter_dni, latsel::AppliedOn{<:AppliedHopSelector}, kdtrees, dni = zerocell(target(latsel)))
     sel, lat = source(latsel), target(latsel)
-    rmin, rmax = sel.range
+    _, rmax = sel.range
     dnj = zero(dni)
     found = false
     for si in sublats(lat), sj in sublats(lat)
-        in_recursive(sublatname(lat, sj) => sublatname(lat, si), sel.sublats) || continue
+        insublats(sublatname(lat, sj) => sublatname(lat, si), sel) || continue
         js = source_candidates(sel.indices, () -> siterange(lat, sj))
         for j in js
             is = target_candidates(sel.indices,
                  () -> inrange_targets(site(lat, j, dnj - dni), si, rmax, lat, kdtrees))
             for i in is
-                !isonsite((i, j), (dni, dnj)) && in_recursive(j => i, sel.indices) || continue
-                r, dr = rdr(site(lat, j, dnj), site(lat, i, dni))
+                !isonsite((i, j), (dni, dnj)) && inindices(j => i, sel) || continue
+                r, dr = rdr(site(lat, j, dnj) => site(lat, i, dni))
                 # Make sure we don't stop searching cells until we reach minimum range
-                norm(dr) <= rmin && (found = true)
-                if isinposition((r, dr), sel.region, sel.range)
+                isbelowrange(dr, sel) && (found = true)
+                if iswithinrange(dr, sel) && inregion((r, dr), sel)
                     found = true
                     f((si, sj), (i, j), (r, dr))
                 end
@@ -135,10 +185,12 @@ function foreach_hop!(f, iter_dni, latsel::AppliedOn{<:HopSelector}, kdtrees, dn
     return nothing
 end
 
-# checks whether selection is a known container of the correct eltype(default). If it is,
+# candidates: Build an container of indices, cells, etc... that is guaranteed to include all
+# selection, otherwise return `default` (which includes all)
+# We check whether selection is a known container of the correct eltype(default). If it is,
 # returns selection, needs_check = false. Otherwise, returns default, needs_check = true.
 candidates(selection::Missing, default) = default, false
-candidates(selection, default) = candidates(s, default, eltype(default))
+candidates(selection, default) = candidates(selection, default, eltype(default))
 candidates(selection::NTuple{<:Any,T}, default, ::Type{T}) where {T} = selection, false
 candidates(selection::T, default, ::Type{T}) where {N,T} = (selection,), false
 candidates(selection, default, T) = default, true
