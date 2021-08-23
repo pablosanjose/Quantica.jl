@@ -52,11 +52,11 @@ applyrange(r::Real, lat) = r
 
 padrange(r::Real, m) = isfinite(r) ? float(r) + m * sqrt(eps(float(r))) : float(r)
 
-in_recursive(i, ::Missing) = true
-in_recursive((r, dr)::Tuple{SVector,SVector}, region::Function) = ifelse(region(r, dr), true, false)
-in_recursive((i, j)::Pair, (is, js)::Pair) = ifelse(in_recursive(i, is) && in_recursive(j, js), true, false)
+@inline in_recursive(i, ::Missing) = true
+@inline in_recursive((r, dr)::Tuple{SVector,SVector}, region::Function) = ifelse(region(r, dr), true, false)
+@inline in_recursive((i, j)::Pair, (is, js)::Pair) = ifelse(in_recursive(i, is) && in_recursive(j, js), true, false)
 # This if-elseif helps the compile infer that in_recursive always returns a Bool (it bails after too much dispath)
-function in_recursive(i, x)
+@inline function in_recursive(i, x)
     result = if x isa Tuple{Int,Int}
             i === x
         elseif x isa Symbol
@@ -72,63 +72,6 @@ function in_recursive(i, x)
         end
     return result
 end
-
-############################################################################################
-# isselected
-#region
-
-# isselected(i::Int, sel::SiteSelector, lat) = isselected((i, site(lat, i)), sel, lat)
-
-# isselected((i, r)::Tuple{Int,SVector{E,T}}, sel::SiteSelector, lat::Lattice{T,E}) where {T,E} =
-#     in_recursive(i, sel.indices) &&
-#     in_recursive(r, sel.region) &&
-#     in_recursive(sitesublatname(lat, i), sel.sublats)
-
-# isselected(((i, j), (dni, dnj)), sel::HopSelector, lat) =
-#     !isonsite((i, j), (dni, dnj)) &&
-#     in_recursive(j => i, sel.indices) &&
-#     in_recursive(Tuple(dni - dnj), sel.dcells) &&
-#     in_recursive(sitesublatname(lat, j) => sitesublatname(lat, i), sel.sublats) &&
-#     isinposition(rdr(site(lat, i, dni), site(lat, j, dnj)), sel.region, sel.range)
-
-# isonsite((i, j), (dni, dnj)) = ifelse(i == j && dni == dnj, true, false)
-
-# isinposition((r, dr), region, range)::Bool = isinrange(dr, range) && in_recursive((r, dr), region)
-
-# isinrange(dr, (rmin, rmax)::Tuple{Real,Real}) =  ifelse(rmin^2 <= dr'dr <= rmax^2, true, false)
-
-# in_recursive(i, ::Missing) = true
-# in_recursive(i, dn::Tuple{Int,Int}) = ifelse(i == dn, true, false)
-# in_recursive(i, name::Symbol) = ifelse(i == name, true, false)
-# in_recursive(i, idx::Number) = ifelse(i == idx, true, false)
-# in_recursive(i, r::AbstractRange) = ifelse(i in r, true, false)
-# in_recursive(i, f::Function) = ifelse(f(i), true, false)
-# in_recursive((r, dr)::Tuple{SVector,SVector}, region::Function) = ifelse(region(r, dr), true, false)
-# in_recursive((i, j)::Pair, (is, js)::Pair) = ifelse(in_recursive(i, is) && in_recursive(j, js), true, false)
-# in_recursive(i, cs) = ifelse(any(is -> in_recursive(i, is), cs), true, false)
-
-# in_recursive(i, ::Missing) = true
-# in_recursive((r, dr)::Tuple{SVector,SVector}, region::Function) = ifelse(region(r, dr), true, false)
-# in_recursive((i, j)::Pair, (is, js)::Pair) = ifelse(in_recursive(i, is) && in_recursive(j, js), true, false)
-# # This if-elseif helps the compile infer that in_recursive always returns a Bool (it bails after too much dispath)
-# function in_recursive(i, x)
-#     result = if x isa Tuple{Int,Int}
-#             i === x
-#         elseif x isa Symbol
-#             i === x
-#         elseif x isa Number
-#             i === x
-#         elseif x isa AbstractRange
-#             ifelse(i in x, true, false)
-#         elseif x isa Function
-#             ifelse(x(i), true, false)
-#         else
-#             ifelse(any(is -> in_recursive(i, is), x), true, false)
-#         end
-#     return result
-# end
-
-#endregion
 
 ############################################################################################
 # foreach_site, foreach_cell, foreach_hop

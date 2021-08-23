@@ -18,7 +18,7 @@ function hopping(t; plusadjoint = false, kw...)
     return plusadjoint ? hop + hop' : hop
 end
 
-hopping(t, sel::Selector) = TightbindingModel(HoppingTerm(t, sel, 1))
+hopping(t, sel::HopSelector) = TightbindingModel(HoppingTerm(t, sel, 1))
 hopping(m::TightbindingModel; kw...) = TightbindingModel(
     Tuple(Any[HoppingTerm(t, hopselector(t.selector; kw...)) for t in terms(m) if t isa HoppingTerm]))
 

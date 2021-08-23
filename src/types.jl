@@ -101,12 +101,29 @@ zerocell(::Lattice{<:Any,<:Any,L}) where {L} = zero(SVector{L,Int})
 #endregion
 
 ############################################################################################
+# AppliedOn
+#region
+
+struct AppliedOn{S,D}
+    src::S
+    dst::D
+end
+
+appliedon(s, d) = AppliedOn(apply(s, d), d)
+
+apply(s, d) = s  # fallback for no action on s
+
+source(a::AppliedOn) = a.src
+
+target(a::AppliedOn) = a.dst
+
+#endregion
+
+############################################################################################
 # Selectors
 #region
 
-abstract type Selector end
-
-struct SiteSelector <: Selector
+struct SiteSelector
     region
     sublats
     indices
@@ -118,7 +135,7 @@ struct AppliedSiteSelector{T,E}
     indices::FunctionWrapper{Bool,Tuple{Int}}
 end
 
-struct HopSelector <: Selector
+struct HopSelector
     region
     sublats
     indices
@@ -126,7 +143,7 @@ struct HopSelector <: Selector
     range
 end
 
-struct AppliedHopSelector{T,E,L} <: Selector
+struct AppliedHopSelector{T,E,L}
     region::FunctionWrapper{Bool,Tuple{SVector{E,T},SVector{E,T}}}
     sublats::FunctionWrapper{Bool,Tuple{Pair{Symbol,Symbol}}}
     indices::FunctionWrapper{Bool,Tuple{Pair{Int,Int}}}
@@ -134,30 +151,17 @@ struct AppliedHopSelector{T,E,L} <: Selector
     range::Tuple{T,T}
 end
 
-struct BlockSelector{V<:Union{Missing,Vector}} <: Selector
-    cells::V
-    rows::Vector{Int}
-    cols::Vector{Int}
-end
+# struct BlockSelector{V<:Union{Missing,Vector}}
+#     cells::V
+#     rows::Vector{Int}
+#     cols::Vector{Int}
+# end
 
 struct NeighborRange
     n::Int
 end
 
-struct AppliedOn{S,D}
-    src::S
-    dst::D
-end
-
 #region internal API
-
-appliedon(s, d) = AppliedOn(apply(s, d), d)
-
-apply(s, d) = s  # fallback for no action on s
-
-source(a::AppliedOn) = a.src
-
-target(a::AppliedOn) = a.dst
 
 Base.parent(n::NeighborRange) = n.n
 
@@ -216,13 +220,13 @@ struct TightbindingModel{T}
 end
 
 # These need to be concrete as they are involved in hot construction loops
-struct OnsiteTerm{F,S<:Selector,T<:Number} <: TightbindingModelTerm
+struct OnsiteTerm{F,S<:SiteSelector,T<:Number} <: TightbindingModelTerm
     o::F
     selector::S
     coefficient::T
 end
 
-struct HoppingTerm{F,S<:Selector,T<:Number} <: TightbindingModelTerm
+struct HoppingTerm{F,S<:HopSelector,T<:Number} <: TightbindingModelTerm
     t::F
     selector::S
     coefficient::T
