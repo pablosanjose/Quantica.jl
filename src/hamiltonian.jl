@@ -50,38 +50,39 @@ hamiltonian(m::TightbindingModel = TightbindingModel(); kw...) = lat -> hamilton
 function hamiltonian(lat::Lattice, m = TightbindingModel(); orbitals = Val(1), type = numbertype(lat))
     orbstruct = OrbitalStructure(lat, orbitals, type)
     builder = IJVBuilder(lat, orbstruct)
-    applyterm!.(Ref(builder), terms(m))
+    apmod = apply(m, (lat, orbstruct))
+    applyterm!.(Ref(builder), terms(apmod))
     hars = harmonics(builder)
     return Hamiltonian(lat, orbstruct, hars)
 end
 
-function applyterm!(builder, term::OnsiteTerm)
+function applyterm!(builder, term::AppliedOnsiteTerm)
     lat = lattice(builder)
     dn0 = zerocell(lat)
     ijv = builder[dn0]
-    latsel = appliedon(selector(term), lat)
+    sel = apply(selector(term), lat)
     os = orbitalstructure(builder)
     norbs = norbitals(os)
-    foreach_site(latsel, dn0) do s, i, r
+    foreach_site(lat, sel, dn0) do s, i, r
         n = norbs[s]
-        v = sanitize_block(blocktype(os), term(r, r), (n, n))
+        v = term(r, n)
         push!(ijv, (i, i, v))
     end
     return nothing
 end
 
-function applyterm!(builder::IJVBuilder{L}, term::HoppingTerm) where {L}
+function applyterm!(builder, term::AppliedHoppingTerm)
     lat = lattice(builder)
     trees = kdtrees(builder)
-    latsel = appliedon(selector(term), lat)
+    sel = apply(selector(term), lat)
     os = orbitalstructure(builder)
     norbs = norbitals(os)
-    foreach_cell(latsel) do dn, iter_dn
+    foreach_cell(lat, sel) do dn, iter_dn
         ijv = builder[dn]
-        foreach_hop!(iter_dn, latsel, trees, dn) do (si, sj), (i, j), (r, dr)
+        foreach_hop!(lat, sel, iter_dn, trees, dn) do (si, sj), (i, j), (r, dr)
             ni = norbs[si]
             nj = norbs[sj]
-            v = sanitize_block(blocktype(os), term(r, dr), (ni, nj))
+            v = term(r, dr, (ni, nj))
             push!(ijv, (i, j, v))
         end
     end

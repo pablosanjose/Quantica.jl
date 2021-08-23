@@ -101,32 +101,13 @@ zerocell(::Lattice{<:Any,<:Any,L}) where {L} = zero(SVector{L,Int})
 #endregion
 
 ############################################################################################
-# AppliedOn
-#region
-
-struct AppliedOn{S,D}
-    src::S
-    dst::D
-end
-
-appliedon(s, d) = AppliedOn(apply(s, d), d)
-
-apply(s, d) = s  # fallback for no action on s
-
-source(a::AppliedOn) = a.src
-
-target(a::AppliedOn) = a.dst
-
-#endregion
-
-############################################################################################
 # Selectors
 #region
 
-struct SiteSelector
-    region
-    sublats
-    indices
+struct SiteSelector{F,S,I}
+    region::F
+    sublats::S
+    indices::I
 end
 
 struct AppliedSiteSelector{T,E}
@@ -135,12 +116,12 @@ struct AppliedSiteSelector{T,E}
     indices::FunctionWrapper{Bool,Tuple{Int}}
 end
 
-struct HopSelector
-    region
-    sublats
-    indices
-    dcells
-    range
+struct HopSelector{F,S,I,D,R}
+    region::F
+    sublats::S
+    indices::I
+    dcells::D
+    range::R
 end
 
 struct AppliedHopSelector{T,E,L}
@@ -213,30 +194,53 @@ isbelowrange(dr, (rmin, rmax)::Tuple{Real,Real}) =  ifelse(dr'dr < rmin^2, true,
 ############################################################################################
 # Model
 #region
-abstract type TightbindingModelTerm end
 
 struct TightbindingModel{T}
     terms::T  # Collection of `TightbindingModelTerm`s
 end
 
 # These need to be concrete as they are involved in hot construction loops
-struct OnsiteTerm{F,S<:SiteSelector,T<:Number} <: TightbindingModelTerm
+struct OnsiteTerm{F,S<:SiteSelector,T<:Number}
     o::F
     selector::S
     coefficient::T
 end
 
-struct HoppingTerm{F,S<:HopSelector,T<:Number} <: TightbindingModelTerm
+struct AppliedOnsiteTerm{T,E,O}
+    o::FunctionWrapper{O,Tuple{SVector{E,T},Int}}  # o(r, sublat_orbitals)
+    selector::AppliedSiteSelector{T,E}
+end
+
+struct HoppingTerm{F,S<:HopSelector,T<:Number}
     t::F
     selector::S
     coefficient::T
 end
+
+struct AppliedHoppingTerm{T,E,L,O}
+    t::FunctionWrapper{O,Tuple{SVector{E,T},SVector{E,T},Tuple{Int,Int}}}  # t(r, dr, (orbs1, orbs2))
+    selector::AppliedHopSelector{T,E,L}
+end
+
+const TightbindingModelTerm = Union{OnsiteTerm,HoppingTerm,AppliedOnsiteTerm,AppliedHoppingTerm}
 
 #region internal API
 
 terms(t::TightbindingModel) = t.terms
 
 selector(t::TightbindingModelTerm) = t.selector
+
+(term::OnsiteTerm)(r) = term.coefficient * term.o(r)
+(term::OnsiteTerm{<:Number})(r) = term.coefficient * term.o
+(term::OnsiteTerm{<:SMatrix})(r) = term.coefficient * term.o
+
+(term::AppliedOnsiteTerm)(r, orbs) = term.o(r, orbs)
+
+(term::HoppingTerm)(r, dr) = term.coefficient * term.t(r, dr)
+(term::HoppingTerm{<:Number})(r, dr) = term.coefficient * term.t
+(term::HoppingTerm{<:SMatrix})(r, dr) = term.coefficient * term.t
+
+(term::AppliedHoppingTerm)(r, dr, orbs) = term.t(r, dr, orbs)
 
 #endregion
 #endregion
@@ -256,8 +260,8 @@ end
 
 norbitals(o::OrbitalStructure) = o.norbitals
 
-orbtype(o::OrbitalStructure{O}) where {O<:Number} = O
-orbtype(o::OrbitalStructure{O}) where {N,T,O<:SMatrix{N,N,T}} = SVector{N,T}
+orbtype(::OrbitalStructure{O}) where {O<:Number} = O
+orbtype(::OrbitalStructure{O}) where {N,T,O<:SMatrix{N,N,T}} = SVector{N,T}
 
 blocktype(o::OrbitalStructure) = o.blocktype
 

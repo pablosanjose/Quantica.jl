@@ -25,22 +25,6 @@ hopping(m::TightbindingModel; kw...) = TightbindingModel(
 #endregion
 
 ############################################################################################
-# Model call and apply
-#region
-
-(o::OnsiteTerm{<:Function})(r,dr) = o.coefficient * o.o(r)
-(o::OnsiteTerm)(r,dr) = o.coefficient * o.o
-
-(h::HoppingTerm{<:Function})(r, dr) = h.coefficient * h.t(r, dr)
-(h::HoppingTerm)(r, dr) = h.coefficient * h.t
-
-apply(t::OnsiteTerm, lat::Lattice) = OnsiteTerm(t.o, apply(t.selector, lat), t.coefficient)
-apply(t::HoppingTerm, lat::Lattice) = HoppingTerm(t.t, apply(t.selector, lat), t.coefficient)
-apply(m::TightbindingModel, lat::Lattice) = TightbindingModel(apply.(terms(m), Ref(lat)))
-
-#endregion
-
-############################################################################################
 # Model algebra
 #region
 

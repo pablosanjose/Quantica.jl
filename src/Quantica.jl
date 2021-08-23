@@ -47,9 +47,7 @@ export ishermitian, I
 export SparseMatrixCSC
 
 include("types.jl")
-include("tools.jl")
-include("sanitize.jl")
-include("show.jl")
+include("apply.jl")
 include("iterators.jl")
 include("builders.jl")
 include("lattice.jl")
@@ -67,6 +65,9 @@ include("hamiltonian.jl")
 # include("KPM.jl")
 # include("effective.jl")
 # include("greens.jl")
+include("sanitize.jl")
+include("show.jl")
+include("tools.jl")
 include("convert.jl")
 
 include("precompile.jl")
