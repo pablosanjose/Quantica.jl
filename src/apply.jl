@@ -36,25 +36,13 @@ padrange(r::Real, m) = isfinite(r) ? float(r) + m * sqrt(eps(float(r))) : float(
 in_recursive(i, ::Missing) = true
 in_recursive((r, dr)::Tuple{SVector,SVector}, region::Function) = ifelse(region(r, dr), true, false)
 in_recursive((i, j)::Pair, (is, js)::Pair) = ifelse(in_recursive(i, is) && in_recursive(j, js), true, false)
-# This if-elseif helps the compile infer that in_recursive always returns a Bool (it bails after too much dispath)
-function in_recursive(i, x)
-    result = if x isa Tuple{Int,Int}
-            i === x
-        elseif x isa Symbol
-            i === x
-        elseif x isa Number
-            i === x
-        elseif x isa AbstractRange
-            ifelse(i in x, true, false)
-        elseif x isa AbstractArray
-            ifelse(i in x, true, false)
-        elseif x isa Function
-            ifelse(x(i), true, false)
-        else
-            ifelse(any(is -> in_recursive(i, is), x), true, false)
-        end
-    return result
-end
+in_recursive(i, dn::NTuple{<:Any,Int}) = i === dn
+in_recursive(i, j::Number) = i === j
+in_recursive(n, name::Symbol) = n === name
+in_recursive(i, rng::AbstractRange) = ifelse(i in rng, true, false)
+in_recursive(r, region::Function) = ifelse(region(r), true, false)
+in_recursive(i, tup) = ifelse(any(is -> in_recursive(i, is), tup), true, false)
+
 
 #endregion
 

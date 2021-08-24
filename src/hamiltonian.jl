@@ -51,7 +51,8 @@ function hamiltonian(lat::Lattice, m = TightbindingModel(); orbitals = Val(1), t
     orbstruct = OrbitalStructure(lat, orbitals, type)
     builder = IJVBuilder(lat, orbstruct)
     apmod = apply(m, (lat, orbstruct))
-    applyterm!.(Ref(builder), terms(apmod))
+    # applyterm!.(Ref(builder), terms(apmod))
+    foreach(t -> applyterm!(builder, t), terms(apmod))
     hars = harmonics(builder)
     return Hamiltonian(lat, orbstruct, hars)
 end

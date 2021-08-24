@@ -27,9 +27,9 @@ nrange(n::Int) = NeighborRange(n)
 function foreach_site(f, lat, sel::AppliedSiteSelector, cell = zerocell(target(latsel)))
     for s in sublats(lat)
         insublats(sublatname(lat, s), sel) || continue
-        is, check_is = candidates(sel.indices, siterange(lat, s))
+        is = siterange(lat, s)
         for i in is
-            check_is && !inindices(i, sel) && continue
+            !inindices(i, sel) && continue
             r = site(lat, i, cell)
             inregion(r, sel) && f(s, i, r)
         end
@@ -38,9 +38,9 @@ function foreach_site(f, lat, sel::AppliedSiteSelector, cell = zerocell(target(l
 end
 
 function foreach_cell(f, lat, sel)
-    iter_dn, check_dn = candidates(sel.dcells, BoxIterator(zerocell(lat)))
+    iter_dn = BoxIterator(zerocell(lat))
     for dn in iter_dn
-        check_dn && !indcells(dn, sel) && continue
+        !indcells(dn, sel) && continue
         f(dn, iter_dn)
     end
     return nothing
@@ -52,10 +52,9 @@ function foreach_hop!(f, lat, sel::AppliedHopSelector, iter_dni, kdtrees, dni = 
     found = false
     for si in sublats(lat), sj in sublats(lat)
         insublats(sublatname(lat, sj) => sublatname(lat, si), sel) || continue
-        js = source_candidates(sel.indices, () -> siterange(lat, sj))
+        js = siterange(lat, sj)
         for j in js
-            is = target_candidates(sel.indices,
-                 () -> inrange_targets(site(lat, j, dnj - dni), si, rmax, lat, kdtrees))
+            is = inrange_targets(site(lat, j, dnj - dni), lat, si, rmax, kdtrees)
             for i in is
                 !isonsite((i, j), (dni, dnj)) && inindices(j => i, sel) || continue
                 r, dr = rdr(site(lat, j, dnj) => site(lat, i, dni))
@@ -72,31 +71,9 @@ function foreach_hop!(f, lat, sel::AppliedHopSelector, iter_dni, kdtrees, dni = 
     return nothing
 end
 
-# candidates: Build an container of indices, cells, etc... that is guaranteed to include all
-# selection, otherwise return `default` (which includes all)
-# We check whether selection is a known container of the correct eltype(default). If it is,
-# returns selection, needs_check = false. Otherwise, returns default, needs_check = true.
-candidates(selection::Missing, default) = default, false
-candidates(selection, default) = candidates(selection, default, eltype(default))
-candidates(selection::NTuple{<:Any,T}, default, ::Type{T}) where {T} = selection, false
-candidates(selection::T, default, ::Type{T}) where {N,T} = (selection,), false
-candidates(selection, default, T) = default, true
-
-source_candidates(selection, default_func) =
-    vcat_or_default(take_element(selection, first), default_func)
-target_candidates(selection, default_func) =
-    vcat_or_default(take_element(selection, last), default_func)
-
-take_element(selection::Pair, element) = (element(selection),)
-take_element(selection::NTuple{<:Any,Pair}, element) = element.(selection)
-take_element(selection, element) = missing
-
-vcat_or_default(::Missing, default_func) = default_func()
-vcat_or_default(elements,  default_func) = vcat(elements...)
-
 # Although range can be (rmin, rmax) we return all targets within rmax.
 # Those below rmin get filtered later
-function inrange_targets(rsource, si, rmax, lat, kdtrees)
+function inrange_targets(rsource, lat, si, rmax, kdtrees)
     if !isassigned(kdtrees, si)
         sitepos = sites(lat, si)
         kdtrees[si] = KDTree(sitepos)
