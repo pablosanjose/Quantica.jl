@@ -60,7 +60,7 @@ function applyterm!(builder, term::AppliedOnsiteTerm)
     lat = lattice(builder)
     dn0 = zerocell(lat)
     ijv = builder[dn0]
-    sel = apply(selector(term), lat)
+    sel = selector(term)
     os = orbitalstructure(builder)
     norbs = norbitals(os)
     foreach_site(lat, sel, dn0) do s, i, r
@@ -74,7 +74,7 @@ end
 function applyterm!(builder, term::AppliedHoppingTerm)
     lat = lattice(builder)
     trees = kdtrees(builder)
-    sel = apply(selector(term), lat)
+    sel = selector(term)
     os = orbitalstructure(builder)
     norbs = norbitals(os)
     foreach_cell(lat, sel) do dn, iter_dn

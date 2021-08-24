@@ -24,20 +24,21 @@ function supercell_data(lat::Lattice{T,E,L}, sm::SMatrix{L,L´,Int};
     detsm´ = round(Int, det(sm´))
     iszero(detsm´) && throw(ArgumentError("Supercell is empty. Singular supercell matrix?"))
     invsm´detsm´ = round.(Int, inv(sm´) * detsm´)
-    applied_selector = siteselector(lat; kw...)
-    check_finite_supercell(sm, applied_selector)
+    selector = siteselector(; kw...)
+    check_finite_supercell(sm, selector)
+    applied_selector = apply(selector, lat)
     bravais´ = Bravais{T,E,L´}(bravais_mat(lat) * sm)
     masklist = supercell_masklist_full(invsm´detsm´, detsm´, cellseed, lat)
     smperp = convert(SMatrix{L,L-L´,Int}, view(sm´, :, L´+1:L))
     seedperp = zero(SVector{L-L´,Int})
     sitelist = similar(sites(lat), 0)
-    supercell_sitelist!!(sitelist, masklist, smperp, seedperp, applied_selector)
+    supercell_sitelist!!(sitelist, masklist, smperp, seedperp, lat, applied_selector)
     cosort!(masklist, sitelist)  # sorted by sublat, then cell, then siteidx
     return SupercellData(lat, sitelist, masklist, bravais´, sm, sm´, detsm´, invsm´detsm´)
 end
 
-check_finite_supercell(smat, latselector) =
-    size(smat, 2) == size(smat, 1) || source(latselector).region !== missing ||
+check_finite_supercell(smat, selector) =
+    size(smat, 2) == size(smat, 1) || selector.region !== missing ||
         throw(ArgumentError("Cannot reduce supercell dimensions without a bounding region."))
 
 # build masklist = [(sublatindex, cell, siteindex)] for all sites in full supercell defined by smatfull
@@ -61,8 +62,7 @@ end
 
 # build sitelist = [sitepositions...] and masklist´ = [(sublat, cell´, siteidx)...]
 # where cell´ varies along axes smatperp not in smat, filtered by selector
-function supercell_sitelist!!(sitelist, masklist, smatperp, seedperp, applied_selector)
-    lat = target(applied_selector)
+function supercell_sitelist!!(sitelist, masklist, smatperp, seedperp, lat, applied_selector)
     masklist0 = copy(masklist)
     empty!(masklist)
     empty!(sitelist)
@@ -70,7 +70,7 @@ function supercell_sitelist!!(sitelist, masklist, smatperp, seedperp, applied_se
     for c in iter, (s, cell, i) in masklist0
         cell´ = cell + smatperp * c
         r = site(lat, i, cell´)
-        if (i, r) in applied_selector
+        if (i, r) in (lat, applied_selector)
             push!(masklist, (s, cell´, i))
             push!(sitelist, r)
             acceptcell!(iter, c)

@@ -155,18 +155,14 @@ insublats(npair::Pair, s::AppliedHopSelector) = s.sublats(npair)
 inindices(ipair::Pair, s::AppliedHopSelector) = s.indices(ipair)
 indcells(dcell, s::AppliedHopSelector) = s.dcells(dcell)
 
-function Base.in((i, r), as::AppliedOn{<:AppliedSiteSelector})
-    lat = target(as)
-    sel = source(as)
+function Base.in((i, r), (lat, sel)::Tuple{Lattice,AppliedSiteSelector})
     name = sitesublatname(lat, i)
     return inindices(i, sel) &&
            inregion(r, sel) &&
            insublats(name, sel)
 end
 
-function Base.in(((j, i), (nj, ni))::Tuple{Pair,Pair}, as::AppliedOn{<:AppliedHopSelector})
-    lat = target(as)
-    sel = source(as)
+function Base.in(((j, i), (nj, ni))::Tuple{Pair,Pair}, (lat, sel)::Tuple{Lattice,AppliedHopSelector})
     namei, namej = sitesublatname(lat, i), sitesublatname(lat, j)
     dcell = nj - ni
     ri, rj = site(lat, i, dnj), site(lat, j, dnj)
