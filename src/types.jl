@@ -110,7 +110,8 @@ struct SiteSelector{F,S,I}
     indices::I
 end
 
-struct AppliedSiteSelector{T,E}
+struct AppliedSiteSelector{T,E,L}
+    lat::Lattice{T,E,L}
     region::FunctionWrapper{Bool,Tuple{SVector{E,T}}}
     sublats::FunctionWrapper{Bool,Tuple{Symbol}}
     indices::FunctionWrapper{Bool,Tuple{Int}}
@@ -125,6 +126,7 @@ struct HopSelector{F,S,I,D,R}
 end
 
 struct AppliedHopSelector{T,E,L}
+    lat::Lattice{T,E,L}
     region::FunctionWrapper{Bool,Tuple{SVector{E,T},SVector{E,T}}}
     sublats::FunctionWrapper{Bool,Tuple{Pair{Symbol,Symbol}}}
     indices::FunctionWrapper{Bool,Tuple{Pair{Int,Int}}}
@@ -146,6 +148,9 @@ end
 
 Base.parent(n::NeighborRange) = n.n
 
+lattice(ap::AppliedSiteSelector) = ap.lat
+lattice(ap::AppliedHopSelector) = ap.lat
+
 inregion(r, s::AppliedSiteSelector) = s.region(r)
 insublats(n, s::AppliedSiteSelector) = s.sublats(n)
 inindices(i, s::AppliedSiteSelector) = s.indices(i)
@@ -155,14 +160,16 @@ insublats(npair::Pair, s::AppliedHopSelector) = s.sublats(npair)
 inindices(ipair::Pair, s::AppliedHopSelector) = s.indices(ipair)
 indcells(dcell, s::AppliedHopSelector) = s.dcells(dcell)
 
-function Base.in((i, r), (lat, sel)::Tuple{Lattice,AppliedSiteSelector})
+function Base.in((i, r), sel::AppliedSiteSelector)
+    lat = lattice(sel)
     name = sitesublatname(lat, i)
     return inindices(i, sel) &&
            inregion(r, sel) &&
            insublats(name, sel)
 end
 
-function Base.in(((j, i), (nj, ni))::Tuple{Pair,Pair}, (lat, sel)::Tuple{Lattice,AppliedHopSelector})
+function Base.in(((j, i), (nj, ni))::Tuple{Pair,Pair}, sel::AppliedHopSelector)
+    lat = lattice(sel)
     namei, namej = sitesublatname(lat, i), sitesublatname(lat, j)
     dcell = nj - ni
     ri, rj = site(lat, i, dnj), site(lat, j, dnj)
@@ -202,9 +209,9 @@ struct OnsiteTerm{F,S<:SiteSelector,T<:Number}
     coefficient::T
 end
 
-struct AppliedOnsiteTerm{T,E,O}
+struct AppliedOnsiteTerm{T,E,L,O}
     o::FunctionWrapper{O,Tuple{SVector{E,T},Int}}  # o(r, sublat_orbitals)
-    selector::AppliedSiteSelector{T,E}
+    selector::AppliedSiteSelector{T,E,L}
 end
 
 struct HoppingTerm{F,S<:HopSelector,T<:Number}

@@ -1,7 +1,7 @@
 supercell(v...; kw...) = x -> supercell(x, v...; kw...)
 
 ############################################################################################
-# SupercellData
+# SupercellData (required to build lattice supercell)
 #region
 
 struct SupercellData{T,E,L,L´,S<:SMatrix{L,L´,Int},S´<:SMatrix{L,L,Int}}
@@ -15,18 +15,20 @@ struct SupercellData{T,E,L,L´,S<:SMatrix{L,L´,Int},S´<:SMatrix{L,L,Int}}
     invsm´detsm´::S´
 end
 
-supercell_data(lat::Lattice{<:Any,<:Any,L}, vs...; kw...) where {L,L´} =
-    supercell_data(lat, sanitize_supercell(Val(L), vs); kw...)
+function supercell_data(lat::Lattice{<:Any,<:Any,L}, vs...; kw...) where {L,L´}
+    smat = sanitize_supercell(Val(L), vs)
+    selector = siteselector(; kw...)
+    check_finite_supercell(smat, selector)
+    applied_selector = apply(selector, lat)
+    cellseed = zero(SVector{L,Int})
+    return supercell_data(lat, smat, cellseed, applied_selector)
+end
 
-function supercell_data(lat::Lattice{T,E,L}, sm::SMatrix{L,L´,Int};
-                cellseed = zero(SVector{L,Int}), kw...) where {T,E,L,L´}
+function supercell_data(lat::Lattice{T,E,L}, sm::SMatrix{L,L´,Int}, cellseed::SVector{L,Int}, applied_selector::AppliedSiteSelector{T,E}) where {T,E,L,L´}
     sm´ = makefull(sm)
     detsm´ = round(Int, det(sm´))
     iszero(detsm´) && throw(ArgumentError("Supercell is empty. Singular supercell matrix?"))
     invsm´detsm´ = round.(Int, inv(sm´) * detsm´)
-    selector = siteselector(; kw...)
-    check_finite_supercell(sm, selector)
-    applied_selector = apply(selector, lat)
     bravais´ = Bravais{T,E,L´}(bravais_mat(lat) * sm)
     masklist = supercell_masklist_full(invsm´detsm´, detsm´, cellseed, lat)
     smperp = convert(SMatrix{L,L-L´,Int}, view(sm´, :, L´+1:L))
@@ -70,7 +72,7 @@ function supercell_sitelist!!(sitelist, masklist, smatperp, seedperp, lat, appli
     for c in iter, (s, cell, i) in masklist0
         cell´ = cell + smatperp * c
         r = site(lat, i, cell´)
-        if (i, r) in (lat, applied_selector)
+        if (i, r) in applied_selector
             push!(masklist, (s, cell´, i))
             push!(sitelist, r)
             acceptcell!(iter, c)

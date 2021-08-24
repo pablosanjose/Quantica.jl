@@ -3,17 +3,19 @@
 # selector apply
 #region
 
-apply(s::SiteSelector, ::Lattice{T,E}) where {T,E} = AppliedSiteSelector{T,E}(
+apply(s::SiteSelector, lat::Lattice{T,E,L}) where {T,E,L} = AppliedSiteSelector{T,E,L}(
+        lat,
         r -> in_recursive(r, s.region),
         n -> in_recursive(n, s.sublats),
         i -> in_recursive(i, s.indices)
         )
 
-function apply(s::HopSelector, l::Lattice{T,E,L}) where {T,E,L}
-    rmin, rmax = sanitize_minmaxrange(s.range, l)
+function apply(s::HopSelector, lat::Lattice{T,E,L}) where {T,E,L}
+    rmin, rmax = sanitize_minmaxrange(s.range, lat)
     L > 0 && s.dcells === missing && rmax === missing &&
         throw(ErrorException("Tried to apply an infinite-range HopSelector on an unbounded lattice"))
     return AppliedHopSelector{T,E,L}(
+        lat,
         (r, dr) -> in_recursive((r, dr), s.region),
         npair   -> in_recursive(npair, s.sublats),
         ipair   -> in_recursive(ipair, s.indices),
