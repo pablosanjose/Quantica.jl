@@ -35,7 +35,7 @@ sanitize_SVector(::Type{SVector{N,T}}, v) where {N,T} =
 function sanitize_SMatrix(::Type{S}, x, (rows, cols) = (E, L)) where {T<:Number,E,L,S<:SMatrix{E,L,T}}
     t = ntuple(Val(E*L)) do l
         j, i = fldmod1(l, E)
-        j > max(cols, length(x)) || i > max(rows, length(x[j])) ? zero(T) : T(x[j][i])
+        i <= max(rows, length(x[j])) && j <= max(cols, length(x)) ? T(x[j][i]) : zero(T)
     end
     return SMatrix{E,L,T}(t)
 end
@@ -43,7 +43,7 @@ end
 function sanitize_SMatrix(::Type{S}, s::SMatrix, (rows, cols) = (E, L)) where {T<:Number,E,L,S<:SMatrix{E,L,T}}
     t = ntuple(Val(E*L)) do l
         j, i = fldmod1(l, E)
-        checkbounds(Bool, s, i, j) && i <= rows && j <= cols ? convert(T, s[i,j]) : zero(T)
+        i <= rows && j <= cols && checkbounds(Bool, s, i, j) ? convert(T, s[i,j]) : zero(T)
     end
     return SMatrix{E,L,T}(t)
 end

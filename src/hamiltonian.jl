@@ -90,8 +90,8 @@ flatten(h::Hamiltonian{<:Any,<:Any,<:Any,<:Number}) = h
 
 function flatten(h::Hamiltonian)
     blocktype´ = eltype(blocktype(h))
-    norbitals´ = copy(norbitals(h))
-    flatoffsets´ = flatoffsets(offsets(orbstruct(h)), norbitals´)
+    norbitals´ = [1 for _ in norbitals(h)]
+    flatoffsets´ = flatoffsets(offsets(orbitalstructure(h)), norbitals´)
     orbstruct´ = OrbitalStructure(blocktype´, norbitals´, flatoffsets´)
     return FlatHamiltonian(h, orbstruct´)
 end

@@ -78,7 +78,7 @@ displayrange(rs::Tuple) = "($(displayrange(first(rs))), $(displayrange(last(rs))
 # Hamiltonian
 #region
 
-function Base.show(io::IO, h::Hamiltonian)
+function Base.show(io::IO, h::MaybeFlatHamiltonian)
     i = get(io, :indent, "")
     print(io, i, summary(h), "\n",
 "$i  Bloch harmonics  : $(length(harmonics(h)))
@@ -90,13 +90,16 @@ $i  Hoppings         : $(nhoppings(h))
 $i  Coordination     : $(coordination(h))")
 end
 
-Base.summary(h::Hamiltonian{T,E,L,O}) where {T,E,L,O} =
-    "Hamiltonian{$T,$E,$L,$O}: Hamiltonian on a $(L)D Lattice in $(E)D space"
+Base.summary(h::Hamiltonian{T,E,L}) where {T,E,L} =
+    "Hamiltonian{$T,$E,$L}: Hamiltonian on a $(L)D Lattice in $(E)D space"
+
+Base.summary(h::FlatHamiltonian{T,E,L}) where {T,E,L} =
+    "FlatHamiltonian{$T,$E,$L}: Flattened Hamiltonian on a $(L)D Lattice in $(E)D space"
 
 displaytype(::Type{S}) where {N,T,S<:SMatrix{N,N,T}} = "$N × $N blocks ($T)"
 displaytype(::Type{T}) where {T} = "scalar ($T)"
 
-function nhoppings(h::Hamiltonian)
+function nhoppings(h::MaybeFlatHamiltonian)
     count = 0
     for har in harmonics(h)
         count += iszero(dcell(har)) ? (_nnz(matrix(har)) - _nnzdiag(matrix(har))) : _nnz(matrix(har))
@@ -104,7 +107,7 @@ function nhoppings(h::Hamiltonian)
     return count
 end
 
-function nonsites(h::Hamiltonian)
+function nonsites(h::MaybeFlatHamiltonian)
     count = 0
     for har in harmonics(h)
         iszero(dcell(har)) && (count += _nnzdiag(matrix(har)))
@@ -112,7 +115,7 @@ function nonsites(h::Hamiltonian)
     return count
 end
 
-coordination(h::Hamiltonian) = round(nhoppings(h) / nsites(lattice(h)), digits = 5)
+coordination(h::MaybeFlatHamiltonian) = round(nhoppings(h) / nsites(lattice(h)), digits = 5)
 
 _nnz(s) = count(!iszero, nonzeros(s)) # Exclude stored zeros
 

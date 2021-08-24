@@ -334,11 +334,23 @@ end
 
 const MaybeFlatHamiltonian{T,E,L,O} = Union{Hamiltonian{T,E,L,O}, FlatHamiltonian{T,E,L,O}}
 
-orbstruct(h::FlatHamiltonian) = h.flatorbstruct
-
-Base.parent(h::FlatHamiltonian) = h.h
+orbitalstructure(h::FlatHamiltonian) = h.flatorbstruct
 
 unflatten(h::FlatHamiltonian) = parent(h)
+
+lattice(h::FlatHamiltonian) = lattice(parent(h))
+
+harmonics(h::FlatHamiltonian) = harmonics(parent(h))
+
+orbtype(h::FlatHamiltonian) = orbtype(orbitalstructure(h))
+
+blocktype(h::FlatHamiltonian) = blocktype(orbitalstructure(h))
+
+norbitals(h::FlatHamiltonian) = norbitals(orbitalstructure(h))
+
+Base.size(h::FlatHamiltonian, i...) = size(parent(h), i...)
+
+Base.parent(h::FlatHamiltonian) = h.h
 
 #endregion
 
