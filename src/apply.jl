@@ -33,11 +33,11 @@ applyrange(r::Real, lat) = r
 
 padrange(r::Real, m) = isfinite(r) ? float(r) + m * sqrt(eps(float(r))) : float(r)
 
-@inline in_recursive(i, ::Missing) = true
-@inline in_recursive((r, dr)::Tuple{SVector,SVector}, region::Function) = ifelse(region(r, dr), true, false)
-@inline in_recursive((i, j)::Pair, (is, js)::Pair) = ifelse(in_recursive(i, is) && in_recursive(j, js), true, false)
+in_recursive(i, ::Missing) = true
+in_recursive((r, dr)::Tuple{SVector,SVector}, region::Function) = ifelse(region(r, dr), true, false)
+in_recursive((i, j)::Pair, (is, js)::Pair) = ifelse(in_recursive(i, is) && in_recursive(j, js), true, false)
 # This if-elseif helps the compile infer that in_recursive always returns a Bool (it bails after too much dispath)
-@inline function in_recursive(i, x)
+function in_recursive(i, x)
     result = if x isa Tuple{Int,Int}
             i === x
         elseif x isa Symbol
@@ -45,6 +45,8 @@ padrange(r::Real, m) = isfinite(r) ? float(r) + m * sqrt(eps(float(r))) : float(
         elseif x isa Number
             i === x
         elseif x isa AbstractRange
+            ifelse(i in x, true, false)
+        elseif x isa AbstractArray
             ifelse(i in x, true, false)
         elseif x isa Function
             ifelse(x(i), true, false)

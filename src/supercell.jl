@@ -24,7 +24,10 @@ function supercell_data(lat::Lattice{<:Any,<:Any,L}, vs...; kw...) where {L,L´}
     return supercell_data(lat, smat, cellseed, applied_selector)
 end
 
-function supercell_data(lat::Lattice{T,E,L}, sm::SMatrix{L,L´,Int}, cellseed::SVector{L,Int}, applied_selector::AppliedSiteSelector{T,E}) where {T,E,L,L´}
+function supercell_data(lat::Lattice{T,E,L},
+                        sm::SMatrix{L,L´,Int},
+                        cellseed::SVector{L,Int},
+                        applied_selector::AppliedSiteSelector{T,E}) where {T,E,L,L´}
     sm´ = makefull(sm)
     detsm´ = round(Int, det(sm´))
     iszero(detsm´) && throw(ArgumentError("Supercell is empty. Singular supercell matrix?"))
@@ -43,7 +46,8 @@ check_finite_supercell(smat, selector) =
     size(smat, 2) == size(smat, 1) || selector.region !== missing ||
         throw(ArgumentError("Cannot reduce supercell dimensions without a bounding region."))
 
-# build masklist = [(sublatindex, cell, siteindex)] for all sites in full supercell defined by smatfull
+# build masklist = [(sublatindex, cell, siteindex)] for all sites
+# in full supercell defined by smatfull
 function supercell_masklist_full(smat´⁻¹N::SMatrix{L,L,Int}, N, cellseed::SVector{L,Int}, lat) where {L}
     supercell_nsites = nsites(lat) * N
     masklist = Vector{Tuple{Int,SVector{L,Int},Int}}(undef, supercell_nsites)
@@ -58,7 +62,8 @@ function supercell_masklist_full(smat´⁻¹N::SMatrix{L,L,Int}, N, cellseed::SV
         acceptcell!(iter, cell)
         counter == supercell_nsites && break
     end
-    counter == supercell_nsites || throw(ErrorException("Internal error: failed to find all sites in supercell, only $counter of $supercell_nsites"))
+    counter == supercell_nsites || throw(ErrorException(
+        "Internal error: failed to find all sites in supercell, only $counter of $supercell_nsites"))
     return masklist
 end
 
@@ -128,14 +133,18 @@ end
 # function supercell_harmonics(h, data, builder, modifiers)
 function supercell_harmonics(h, data, builder)
     indexlist, offset = supercell_indexlist(data)
+    # This is the inverse of the full supercell matrix sm´ (i.e. made square),
+    # times N = det(sm´) to make it integer, and projected onto the actual L supercell dims
     psmat⁻¹N = smat_projector(data) * data.invsm´detsm´
     N = data.detsm´
     smat = data.sm
     for (_, cell0, col) in data.masklist
         for har in harmonics(h)
             celldst = cell0 + dcell(har)
+            # scell is the indices of the supercell where the destination cell celldst lives
             scell   = fld.(psmat⁻¹N * celldst, N)
-            cell    = celldst - smat * scell  # celldst wrapped back onto unit cell
+            # cell is the position of celldst within its supercell scell
+            cell    = celldst - smat * scell
             m       = matrix(har)
             rows    = rowvals(m)
             vals    = nonzeros(m)
@@ -157,8 +166,6 @@ function supercell_harmonics(h, data, builder)
 end
 
 smat_projector(::SupercellData{<:Any,<:Any,L,L´}) where {L,L´} = SMatrix{L´,L,Bool}(I)
-empty_harmonics(::Hamiltonian{<:Any,<:Any,<:Any,O}, ::SupercellData{<:Any,<:Any,L´}) where {O,L´} =
-    HamiltonianHarmonic{L´,O}[]
 
 function supercell_indexlist(data)
     (cellmin, cellmax), (imin, imax) = mask_bounding_box(data.masklist)
