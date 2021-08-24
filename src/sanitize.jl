@@ -32,7 +32,7 @@ sanitize_SVector(::Type{SVector{N,T}}, v::SVector{N}) where {N,T} = convert(SVec
 sanitize_SVector(::Type{SVector{N,T}}, v) where {N,T} =
     SVector(ntuple(i -> i > length(v) ? zero(T) : convert(T, v[i]), Val(N)))
 
-function sanitize_SMatrix(::Type{SMatrix{E,L,T}}, x, (rows, cols) = (E, L)) where {T<:Number,E,L}
+function sanitize_SMatrix(::Type{S}, x, (rows, cols) = (E, L)) where {T<:Number,E,L,S<:SMatrix{E,L,T}}
     t = ntuple(Val(E*L)) do l
         j, i = fldmod1(l, E)
         j > max(cols, length(x)) || i > max(rows, length(x[j])) ? zero(T) : T(x[j][i])
@@ -40,11 +40,10 @@ function sanitize_SMatrix(::Type{SMatrix{E,L,T}}, x, (rows, cols) = (E, L)) wher
     return SMatrix{E,L,T}(t)
 end
 
-function sanitize_SMatrix(::Type{SMatrix{E,L,T}}, s::SMatrix, (rows, cols) = (E, L)) where {T<:Number,E,L}
-    c = 0
+function sanitize_SMatrix(::Type{S}, s::SMatrix, (rows, cols) = (E, L)) where {T<:Number,E,L,S<:SMatrix{E,L,T}}
     t = ntuple(Val(E*L)) do l
         j, i = fldmod1(l, E)
-        checkbounds(Bool, s, i, j) && i <= rows && j <= cols ? (c += 1; convert(T, s[c])) : zero(T)
+        checkbounds(Bool, s, i, j) && i <= rows && j <= cols ? convert(T, s[i,j]) : zero(T)
     end
     return SMatrix{E,L,T}(t)
 end
@@ -70,7 +69,10 @@ end
 #region
 
 sanitize_block(S::Type{<:Number}, s, _) = convert(S, first(s))
-sanitize_block(S::Type{<:SMatrix}, s, size) = sanitize_SMatrix(S, s, size)
+sanitize_block(S::Type{<:SMatrix}, s::SMatrix, size) = sanitize_SMatrix(S, s, size)
+sanitize_block(::Type{S}, s::Number, size) where {S<:SMatrix} = sanitize_SMatrix(S, S(s*I), size)
+sanitize_block(::Type{S}, s::UniformScaling, size) where {S<:SMatrix} =
+    sanitize_SMatrix(S, S(s), size)
 
 #endregion
 

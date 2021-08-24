@@ -50,15 +50,15 @@ in_recursive(i, tup) = ifelse(any(is -> in_recursive(i, is), tup), true, false)
 # model apply
 #region
 
-function apply(t::OnsiteTerm, (lat, os)::Tuple{Lattice{T,E},OrbitalStructure{O}}) where {T,E,O}
-    asel = apply(selector(t), lat)
+function apply(t::OnsiteTerm, (lat, os)::Tuple{Lattice{T,E,L},OrbitalStructure{O}}) where {T,E,L,O}
     aons = (r, orbs) -> sanitize_block(blocktype(os), t(r), (orbs, orbs))
-    return AppliedOnsiteTerm{T,E,O}(aons, asel)
+    asel = apply(selector(t), lat)
+    return AppliedOnsiteTerm{T,E,L,O}(aons, asel)
 end
 
 function apply(t::HoppingTerm, (lat, os)::Tuple{Lattice{T,E,L},OrbitalStructure{O}}) where {T,E,L,O}
-    asel = apply(selector(t), lat)
     ahop = (r, dr, orbs) -> sanitize_block(blocktype(os), t(r, dr), orbs)
+    asel = apply(selector(t), lat)
     return AppliedHoppingTerm{T,E,L,O}(ahop, asel)
 end
 

@@ -233,15 +233,13 @@ terms(t::TightbindingModel) = t.terms
 
 selector(t::TightbindingModelTerm) = t.selector
 
-(term::OnsiteTerm)(r) = term.coefficient * term.o(r)
-(term::OnsiteTerm{<:Number})(r) = term.coefficient * term.o
-(term::OnsiteTerm{<:SMatrix})(r) = term.coefficient * term.o
+(term::OnsiteTerm{<:Function})(r) = term.coefficient * term.o(r)
+(term::OnsiteTerm)(r) = term.coefficient * term.o
 
 (term::AppliedOnsiteTerm)(r, orbs) = term.o(r, orbs)
 
-(term::HoppingTerm)(r, dr) = term.coefficient * term.t(r, dr)
-(term::HoppingTerm{<:Number})(r, dr) = term.coefficient * term.t
-(term::HoppingTerm{<:SMatrix})(r, dr) = term.coefficient * term.t
+(term::HoppingTerm{<:Function})(r, dr) = term.coefficient * term.t(r, dr)
+(term::HoppingTerm)(r, dr) = term.coefficient * term.t
 
 (term::AppliedHoppingTerm)(r, dr, orbs) = term.t(r, dr, orbs)
 
@@ -256,7 +254,6 @@ struct OrbitalStructure{O<:Union{Number,SMatrix}}
     blocktype::Type{O}    # Hamiltonian's blocktype
     norbitals::Vector{Int}
     offsets::Vector{Int}
-    flatoffsets::Vector{Int}
 end
 
 #region internal API
@@ -269,8 +266,6 @@ orbtype(::OrbitalStructure{O}) where {N,T,O<:SMatrix{N,N,T}} = SVector{N,T}
 blocktype(o::OrbitalStructure) = o.blocktype
 
 offsets(o::OrbitalStructure) = o.offsets
-
-flatoffsets(o::OrbitalStructure) = o.flatoffsets
 
 #endregion
 #endregion
@@ -329,122 +324,21 @@ Base.isless(h::HamiltonianHarmonic, h´::HamiltonianHarmonic) = sum(abs2, dcell(
 #endregion
 
 ############################################################################################
-# CSC Hamiltonian builder
+# Flat
 #region
 
-# struct UnfinalizedSparseMatrixCSC{Tv,Ti} <: AbstractSparseMatrix{Tv,Ti}
-#     m::Int
-#     n::Int
-#     colptr::Vector{Ti}
-#     rowval::Vector{Ti}
-#     nzval::Vector{Tv}
-# end
+struct FlatHamiltonian{T,E,L,O}
+    h::Hamiltonian{T,E,L,O}
+    flatorbstruct::OrbitalStructure{Complex{T}}
+end
 
-# function SparseMatrixBuilder{Tv}(m, n, nnzguess = missing) where {Tv}
-#     colptr = [1]
-#     rowval = Int[]
-#     nzval = Tv[]
-#     matrix = UnfinalizedSparseMatrixCSC(m, n, colptr, rowval, nzval)
-#     builder = SparseMatrixBuilder(matrix, 1, 0, CoSort(rowval, nzval))
-#     nnzguess === missing || sizehint!(builder, nnzguess)
-#     return builder
-# end
+const MaybeFlatHamiltonian{T,E,L,O} = Union{Hamiltonian{T,E,L,O}, FlatHamiltonian{T,E,L,O}}
 
-# # Unspecified size constructor
-# SparseMatrixBuilder{Tv}() where Tv = SparseMatrixBuilder{Tv}(0, 0)
+orbstruct(h::FlatHamiltonian) = h.flatorbstruct
 
-# function SparseMatrixBuilder(s::SparseMatrixCSC{Tv,Int}) where {Tv}
-#     colptr = getcolptr(s)
-#     rowval = rowvals(s)
-#     nzval = nonzeros(s)
-#     nnzguess = length(nzval)
-#     resize!(rowval, 0)
-#     resize!(nzval, 0)
-#     resize!(colptr, 1)
-#     colptr[1] = 1
-#     builder = SparseMatrixBuilder(s, 1, 0, CoSort(rowval, nzval))
-#     sizehint!(builder, nnzguess)
-#     return builder
-# end
+Base.parent(h::FlatHamiltonian) = h.h
 
-# SparseArrays.getcolptr(s::UnfinalizedSparseMatrixCSC) = s.colptr
-# SparseArrays.nonzeros(s::UnfinalizedSparseMatrixCSC) = s.nzval
-# SparseArrays.rowvals(s::UnfinalizedSparseMatrixCSC) = s.rowval
-# Base.size(s::UnfinalizedSparseMatrixCSC) = (s.m, s.n)
-# Base.size(s::UnfinalizedSparseMatrixCSC, k) = size(s)[k]
-
-# function Base.sizehint!(s::SparseMatrixBuilder, n)
-#     sizehint!(getcolptr(s.matrix), n + 1)
-#     sizehint!(nonzeros(s.matrix), n)
-#     sizehint!(rowvals(s.matrix), n)
-#     return s
-# end
-
-# function pushtocolumn!(s::SparseMatrixBuilder, row::Int, x, skipdupcheck::Bool = true)
-#     nrows = size(s.matrix, 1)
-#     nrows == 0 || 1 <= row <= size(s.matrix, 1) || throw(ArgumentError("tried adding a row $row out of bounds ($(size(s.matrix, 1)))"))
-#     if skipdupcheck || !isintail(row, rowvals(s.matrix), getcolptr(s.matrix)[s.colcounter])
-#         push!(rowvals(s.matrix), row)
-#         push!(nonzeros(s.matrix), x)
-#         s.rowvalcounter += 1
-#     end
-#     return s
-# end
-
-# function isintail(element, container, start::Int)
-#     for i in start:length(container)
-#         container[i] == element && return true
-#     end
-#     return false
-# end
-
-# function finalizecolumn!(s::SparseMatrixBuilder, sortcol::Bool = true)
-#     size(s.matrix, 2) > 0 && s.colcounter > size(s.matrix, 2) && throw(DimensionMismatch("Pushed too many columns to matrix"))
-#     if sortcol
-#         s.cosorter.offset = getcolptr(s.matrix)[s.colcounter] - 1
-#         sort!(s.cosorter)
-#         isgrowing(s.cosorter) || throw(error("Internal error: repeated rows"))
-#     end
-#     s.colcounter += 1
-#     push!(getcolptr(s.matrix), s.rowvalcounter + 1)
-#     return nothing
-# end
-
-# function finalizecolumn!(s::SparseMatrixBuilder, ncols::Int)
-#     for _ in 1:ncols
-#         finalizecolumn!(s)
-#     end
-#     return nothing
-# end
-
-# function SparseArrays.sparse(s::SparseMatrixBuilder{<:Any,<:SparseMatrixCSC})
-#     completecolptr!(getcolptr(s.matrix), size(s.matrix, 2), s.rowvalcounter)
-#     return s.matrix
-# end
-
-# function completecolptr!(colptr, cols, lastrowptr)
-#     colcounter = length(colptr)
-#     if colcounter < cols + 1
-#         resize!(colptr, cols + 1)
-#         for col in (colcounter + 1):(cols + 1)
-#             colptr[col] = lastrowptr + 1
-#         end
-#     end
-#     return colptr
-# end
-
-# function SparseArrays.sparse(s::SparseMatrixBuilder{<:Any,<:UnfinalizedSparseMatrixCSC})
-#     m, n = size(s.matrix)
-#     rowval = rowvals(s.matrix)
-#     colptr = getcolptr(s.matrix)
-#     nzval = nonzeros(s.matrix)
-#     if m != 0 && n != 0
-#         completecolptr!(colptr, n, s.rowvalcounter)
-#     else # determine size of matrix after the fact
-#         m, n = isempty(rowval) ? 0 : maximum(rowval), s.colcounter - 1
-#     end
-#     return SparseMatrixCSC(m, n, colptr, rowval, nzval)
-# end
+unflatten(h::FlatHamiltonian) = parent(h)
 
 #endregion
 

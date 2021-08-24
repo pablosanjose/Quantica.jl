@@ -12,8 +12,7 @@ end
 function OrbitalStructure{O}(lat::Lattice, norbs) where {O}
     norbs´ = sanitize_Vector_of_Type(Int, nsublats(lat), norbs)
     offsets´ = offsets(lat)
-    flatoffsets´ = flatoffsets(offsets´, norbs´)
-    return OrbitalStructure{O}(O, norbs´, offsets´, flatoffsets´)
+    return OrbitalStructure{O}(O, norbs´, offsets´)
 end
 
 blocktype(T::Type, norbs) = blocktype(T, val_maximum(norbs))
@@ -25,15 +24,6 @@ val_maximum(ns::Tuple) = Val(maximum(argval.(ns)))
 
 argval(::Val{N}) where {N} = N
 argval(n::Int) = n
-
-# sublat offsets after flattening (without padding zeros)
-function flatoffsets(offsets0, norbs)
-    nsites = diff(offsets0)
-    nsites´ = norbs .* nsites
-    offsets´ = cumsum!(nsites´, nsites´)
-    prepend!(offsets´, 0)
-    return offsets´
- end
 
 # Equality does not need equal T
 Base.:(==)(o1::OrbitalStructure, o2::OrbitalStructure) =
@@ -91,3 +81,28 @@ function applyterm!(builder, term::AppliedHoppingTerm)
 end
 
 #endregion
+
+############################################################################################
+# FlatHamiltonian constructors
+#region
+
+flatten(h::Hamiltonian{<:Any,<:Any,<:Any,<:Number}) = h
+
+function flatten(h::Hamiltonian)
+    blocktype´ = eltype(blocktype(h))
+    norbitals´ = copy(norbitals(h))
+    flatoffsets´ = flatoffsets(offsets(orbstruct(h)), norbitals´)
+    orbstruct´ = OrbitalStructure(blocktype´, norbitals´, flatoffsets´)
+    return FlatHamiltonian(h, orbstruct´)
+end
+
+# sublat offsets after flattening (without padding zeros)
+function flatoffsets(offsets0, norbs)
+    nsites = diff(offsets0)
+    nsites´ = norbs .* nsites
+    offsets´ = cumsum!(nsites´, nsites´)
+    prepend!(offsets´, 0)
+    return offsets´
+ end
+
+ #endregion
