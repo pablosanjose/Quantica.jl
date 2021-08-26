@@ -69,10 +69,10 @@ function foreach_cell(f, sel::AppliedHopSelector)
     lat = lattice(sel)
     dcells_list = dcells(sel)
     if isempty(dcells_list) # no dcells specified
-        iter_dn = BoxIterator(zerocell(lat))
-        for dn in iter_dn
+        dcells_iter = BoxIterator(zerocell(lat))
+        for dn in dcells_iter
             !indcells(dn, sel) && continue
-            f(dn, iter_dn)
+            f(dn, dcells_iter)
         end
     else
         for dn in dcells_list
@@ -82,19 +82,20 @@ function foreach_cell(f, sel::AppliedHopSelector)
     return nothing
 end
 
-function foreach_hop!(f, sel::AppliedHopSelector, iter_dni, kdtrees, dni = zerocell(lattice(sel)))
+function foreach_hop!(f, sel::AppliedHopSelector, iter_ni, kdtrees, ni = zerocell(lattice(sel)))
     lat = lattice(sel)
     _, rmax = sel.range
-    dnj = zero(dni)
+    # source cell at origin
+    nj = zero(ni)
     found = false
     for si in sublats(lat), sj in sublats(lat)
         insublats(sublatname(lat, sj) => sublatname(lat, si), sel) || continue
         js = siterange(lat, sj)
         for j in js
-            is = inrange_targets(site(lat, j, dnj - dni), lat, si, rmax, kdtrees)
+            is = inrange_targets(site(lat, j, nj - ni), lat, si, rmax, kdtrees)
             for i in is
-                !isonsite((i, j), (dni, dnj)) || continue
-                r, dr = rdr(site(lat, j, dnj) => site(lat, i, dni))
+                !isonsite((i, j), (ni, nj)) || continue
+                r, dr = rdr(site(lat, j, nj) => site(lat, i, ni))
                 # Make sure we don't stop searching cells until we reach minimum range
                 isbelowrange(dr, sel) && (found = true)
                 if iswithinrange(dr, sel) && inregion((r, dr), sel)
@@ -104,7 +105,7 @@ function foreach_hop!(f, sel::AppliedHopSelector, iter_dni, kdtrees, dni = zeroc
             end
         end
     end
-    found && acceptcell!(iter_dni, dni)
+    found && acceptcell!(iter_ni, ni)
     return nothing
 end
 

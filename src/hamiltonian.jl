@@ -68,9 +68,9 @@ function applyterm!(builder, term::AppliedHoppingTerm)
     sel = selector(term)
     os = orbitalstructure(builder)
     norbs = norbitals(os)
-    foreach_cell(sel) do dn, iter_dn
+    foreach_cell(sel) do dn, cell_iter
         ijv = builder[dn]
-        foreach_hop!(sel, iter_dn, trees, dn) do (si, sj), (i, j), (r, dr)
+        foreach_hop!(sel, cell_iter, trees, dn) do (si, sj), (i, j), (r, dr)
             ni = norbs[si]
             nj = norbs[sj]
             v = term(r, dr, (ni, nj))

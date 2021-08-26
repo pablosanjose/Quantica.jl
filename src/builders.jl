@@ -4,7 +4,7 @@
 
 abstract type AbstractSparseBuilder{T,E,L,O} end
 
-function Base.getindex(b::AbstractSparseBuilder{<:Any,<:Any,L,O}, dn::SVector{L,Int}) where {L,O}
+function Base.getindex(b::AbstractSparseBuilder{<:Any,<:Any,L}, dn::SVector{L,Int}) where {L}
     for c in b.collectors
         c.dn == dn && return c
     end

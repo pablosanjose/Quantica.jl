@@ -257,9 +257,9 @@ struct Hamiltonian{T,E,L,O}
         n = nsites(lattice)
         all(har -> size(matrix(har)) == (n, n), harmonics) ||
             throw(DimensionMismatch("Harmonic sizes don't match number of sites $n"))
+        sort!(harmonics)
         length(harmonics) > 0 && iszero(dcell(first(harmonics))) || pushfirst!(harmonics,
             HamiltonianHarmonic(zero(SVector{L,Int}), sparse(Int[], Int[], O[], n, n)))
-        sort!(harmonics)
         return new(lattice, orbstruct, harmonics)
     end
 end
