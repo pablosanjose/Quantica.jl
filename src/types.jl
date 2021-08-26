@@ -113,8 +113,7 @@ end
 struct AppliedSiteSelector{T,E,L}
     lat::Lattice{T,E,L}
     region::FunctionWrapper{Bool,Tuple{SVector{E,T}}}
-    sublats::FunctionWrapper{Bool,Tuple{Symbol}}
-    indices::FunctionWrapper{Bool,Tuple{Int}}
+    sublats::Vector{Symbol}
 end
 
 struct HopSelector{F,S,I,D,R}
@@ -128,61 +127,31 @@ end
 struct AppliedHopSelector{T,E,L}
     lat::Lattice{T,E,L}
     region::FunctionWrapper{Bool,Tuple{SVector{E,T},SVector{E,T}}}
-    sublats::FunctionWrapper{Bool,Tuple{Pair{Symbol,Symbol}}}
-    indices::FunctionWrapper{Bool,Tuple{Pair{Int,Int}}}
-    dcells::FunctionWrapper{Bool,Tuple{SVector{L,Int}}}
+    sublats::Vector{Pair{Symbol,Symbol}}
+    dcells::Vector{SVector{L,Int}}
     range::Tuple{T,T}
 end
 
-# struct BlockSelector{V<:Union{Missing,Vector}}
-#     cells::V
-#     rows::Vector{Int}
-#     cols::Vector{Int}
-# end
-
-struct NeighborRange
+struct Neighbors
     n::Int
 end
 
 #region internal API
 
-Base.parent(n::NeighborRange) = n.n
+Base.parent(n::Neighbors) = n.n
 
 lattice(ap::AppliedSiteSelector) = ap.lat
 lattice(ap::AppliedHopSelector) = ap.lat
 
+dcells(ap::AppliedHopSelector) = ap.dcells
+
+# if isempty(s.dcells) or isempty(s.sublats), none were specified, so we must accept any
 inregion(r, s::AppliedSiteSelector) = s.region(r)
-insublats(n, s::AppliedSiteSelector) = s.sublats(n)
-inindices(i, s::AppliedSiteSelector) = s.indices(i)
-
 inregion((r, dr), s::AppliedHopSelector) = s.region(r, dr)
-insublats(npair::Pair, s::AppliedHopSelector) = s.sublats(npair)
-inindices(ipair::Pair, s::AppliedHopSelector) = s.indices(ipair)
-indcells(dcell, s::AppliedHopSelector) = s.dcells(dcell)
 
-function Base.in((i, r), sel::AppliedSiteSelector)
-    lat = lattice(sel)
-    name = sitesublatname(lat, i)
-    return inindices(i, sel) &&
-           inregion(r, sel) &&
-           insublats(name, sel)
-end
-
-function Base.in(((j, i), (nj, ni))::Tuple{Pair,Pair}, sel::AppliedHopSelector)
-    lat = lattice(sel)
-    namei, namej = sitesublatname(lat, i), sitesublatname(lat, j)
-    dcell = nj - ni
-    ri, rj = site(lat, i, dnj), site(lat, j, dnj)
-    r, dr = rdr(rj => ri)
-    return !isonsite((j, i), (nj, ni)) &&
-            inindices(j => i, sel) &&
-            indcell(dcell, sel) &&
-            insublats(namej => namei, sel) &&
-            iswithinrange(dr, sel) &&
-            inregion((r, dr), sel)
-end
-
-isonsite((j, i), (nj, ni)) = ifelse(i == j && ni == nj, true, false)
+insublats(n, s::AppliedSiteSelector) = isempty(s.sublats) || n in s.sublats
+insublats(npair::Pair, s::AppliedHopSelector) = isempty(s.sublats) || npair in s.sublats
+indcells(dcell, s::AppliedHopSelector) = isempty(s.dcells) || dcell in s.dcells
 
 iswithinrange(dr, s::AppliedHopSelector) = iswithinrange(dr, s.range)
 iswithinrange(dr, (rmin, rmax)::Tuple{Real,Real}) =  ifelse(rmin^2 <= dr'dr <= rmax^2, true, false)

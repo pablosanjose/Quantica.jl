@@ -3,46 +3,44 @@
 # selector apply
 #region
 
-apply(s::SiteSelector, lat::Lattice{T,E,L}) where {T,E,L} = AppliedSiteSelector{T,E,L}(
-        lat,
-        r -> in_recursive(r, s.region),
-        n -> in_recursive(n, s.sublats),
-        i -> in_recursive(i, s.indices)
-        )
+function apply(s::SiteSelector, lat::Lattice{T,E,L}) where {T,E,L}
+    region = r -> region_apply(r, s.region)
+    sublats = Symbol[]
+    recursive_push!(sublats, s.sublats)
+    return AppliedSiteSelector{T,E,L}(lat, region, sublats)
+end
 
 function apply(s::HopSelector, lat::Lattice{T,E,L}) where {T,E,L}
     rmin, rmax = sanitize_minmaxrange(s.range, lat)
     L > 0 && s.dcells === missing && rmax === missing &&
         throw(ErrorException("Tried to apply an infinite-range HopSelector on an unbounded lattice"))
-    return AppliedHopSelector{T,E,L}(
-        lat,
-        (r, dr) -> in_recursive((r, dr), s.region),
-        npair   -> in_recursive(npair, s.sublats),
-        ipair   -> in_recursive(ipair, s.indices),
-        dn      -> in_recursive(Tuple(dn), s.dcells),
-        (rmin, rmax)
-        )
+    region = (r, dr) -> region_apply((r, dr), s.region)
+    sublats = Pair{Symbol,Symbol}[]
+    recursive_push!(sublats, s.sublats)
+    dcells = SVector{L,Int}[]
+    recursive_push!(dcells, s.dcells)
+    return AppliedHopSelector{T,E,L}(lat, region, sublats, dcells, (rmin, rmax))
 end
 
 sanitize_minmaxrange(r, lat) = sanitize_minmaxrange((zero(numbertype(lat)), r), lat)
 sanitize_minmaxrange((rmin, rmax)::Tuple{Any,Any}, lat) =
     padrange(applyrange(rmin, lat), -1), padrange(applyrange(rmax, lat), 1)
 
-applyrange(r::NeighborRange, lat) = nrange(parent(r), lat)
+applyrange(r::Neighbors, lat) = nrange(parent(r), lat)
 applyrange(r::Real, lat) = r
 
 padrange(r::Real, m) = isfinite(r) ? float(r) + m * sqrt(eps(float(r))) : float(r)
 
-in_recursive(i, ::Missing) = true
-in_recursive((r, dr)::Tuple{SVector,SVector}, region::Function) = ifelse(region(r, dr), true, false)
-in_recursive((i, j)::Pair, (is, js)::Pair) = ifelse(in_recursive(i, is) && in_recursive(j, js), true, false)
-in_recursive(i, dn::NTuple{<:Any,Int}) = i === dn
-in_recursive(i, j::Number) = i === j
-in_recursive(n, name::Symbol) = n === name
-in_recursive(i, rng::AbstractRange) = ifelse(i in rng, true, false)
-in_recursive(r, region::Function) = ifelse(region(r), true, false)
-in_recursive(i, tup) = ifelse(any(is -> in_recursive(i, is), tup), true, false)
+region_apply(r, ::Missing) = true
+region_apply((r, dr)::Tuple{SVector,SVector}, region::Function) = ifelse(region(r, dr), true, false)
+region_apply(r::SVector, region::Function) = ifelse(region(r), true, false)
 
+recursive_push!(v::Vector, ::Missing) = v
+recursive_push!(v::Vector{T}, x::T) where {T} = push!(v, x)
+recursive_push!(v::Vector{Pair{T,T}}, x::T) where {T} = push!(v, x => x)
+recursive_push!(v::Vector{Pair{T,T}}, (x, y)::Tuple{T,T}) where {T} = push!(v, x => y)
+recursive_push!(v::Vector{Pair{T,T}}, (x, y)::Pair) where {T} = push!(v, Iterators.product(x, y))
+recursive_push!(v::Vector, xs)= foreach(x -> recursive_push!(v, x), xs)
 
 #endregion
 

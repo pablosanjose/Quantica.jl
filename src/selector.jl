@@ -9,14 +9,42 @@ siteselector(s::SiteSelector; region = s.region, sublats = s.sublats, indices = 
 siteselector(lat::Lattice; kw...) =
     appliedon(siteselector(; kw...), lat)
 
-hopselector(; region = missing, sublats = missing, indices = missing, cells = missing, range = nrange(1)) =
+hopselector(; region = missing, sublats = missing, indices = missing, cells = missing, range = neighbors(1)) =
     HopSelector(region, sublats, indices, cells, range)
 hopselector(s::HopSelector; region = s.region, sublats = s.sublats, indices = s.indices, cells = s.dcells, range = s.range) =
     HopSelector(region, sublats, indices, cells, range)
 hopselector(lat::Lattice; kw...) =
     appliedon(hopselector(; kw...), lat)
 
-nrange(n::Int) = NeighborRange(n)
+neighbors(n::Int) = Neighbors(n)
+
+#endregion
+
+############################################################################################
+# Base.in constructors
+#region
+
+function Base.in((i, r), sel::AppliedSiteSelector)
+    lat = lattice(sel)
+    name = sitesublatname(lat, i)
+    return inregion(r, sel) &&
+           insublats(name, sel)
+end
+
+function Base.in(((j, i), (nj, ni))::Tuple{Pair,Pair}, sel::AppliedHopSelector)
+    lat = lattice(sel)
+    namei, namej = sitesublatname(lat, i), sitesublatname(lat, j)
+    dcell = nj - ni
+    ri, rj = site(lat, i, dnj), site(lat, j, dnj)
+    r, dr = rdr(rj => ri)
+    return !isonsite((j, i), (nj, ni)) &&
+            indcell(dcell, sel) &&
+            insublats(namej => namei, sel) &&
+            iswithinrange(dr, sel) &&
+            inregion((r, dr), sel)
+end
+
+isonsite((j, i), (nj, ni)) = ifelse(i == j && ni == nj, true, false)
 
 #endregion
 
@@ -24,12 +52,12 @@ nrange(n::Int) = NeighborRange(n)
 # foreach_site, foreach_cell, foreach_hop
 #region
 
-function foreach_site(f, lat, sel::AppliedSiteSelector, cell = zerocell(target(latsel)))
+function foreach_site(f, sel::AppliedSiteSelector, cell = zerocell(lattice(sel)))
+    lat = lattice(sel)
     for s in sublats(lat)
         insublats(sublatname(lat, s), sel) || continue
         is = siterange(lat, s)
         for i in is
-            !inindices(i, sel) && continue
             r = site(lat, i, cell)
             inregion(r, sel) && f(s, i, r)
         end
@@ -37,16 +65,25 @@ function foreach_site(f, lat, sel::AppliedSiteSelector, cell = zerocell(target(l
     return nothing
 end
 
-function foreach_cell(f, lat, sel)
-    iter_dn = BoxIterator(zerocell(lat))
-    for dn in iter_dn
-        !indcells(dn, sel) && continue
-        f(dn, iter_dn)
+function foreach_cell(f, sel::AppliedHopSelector)
+    lat = lattice(sel)
+    dcells_list = dcells(sel)
+    if isempty(dcells_list) # no dcells specified
+        iter_dn = BoxIterator(zerocell(lat))
+        for dn in iter_dn
+            !indcells(dn, sel) && continue
+            f(dn, iter_dn)
+        end
+    else
+        for dn in dcells_list
+            f(dn, missing)
+        end
     end
     return nothing
 end
 
-function foreach_hop!(f, lat, sel::AppliedHopSelector, iter_dni, kdtrees, dni = zerocell(target(latsel)))
+function foreach_hop!(f, sel::AppliedHopSelector, iter_dni, kdtrees, dni = zerocell(lattice(sel)))
+    lat = lattice(sel)
     _, rmax = sel.range
     dnj = zero(dni)
     found = false
@@ -56,7 +93,7 @@ function foreach_hop!(f, lat, sel::AppliedHopSelector, iter_dni, kdtrees, dni = 
         for j in js
             is = inrange_targets(site(lat, j, dnj - dni), lat, si, rmax, kdtrees)
             for i in is
-                !isonsite((i, j), (dni, dnj)) && inindices(j => i, sel) || continue
+                !isonsite((i, j), (dni, dnj)) || continue
                 r, dr = rdr(site(lat, j, dnj) => site(lat, i, dni))
                 # Make sure we don't stop searching cells until we reach minimum range
                 isbelowrange(dr, sel) && (found = true)
@@ -74,19 +111,24 @@ end
 # Although range can be (rmin, rmax) we return all targets within rmax.
 # Those below rmin get filtered later
 function inrange_targets(rsource, lat, si, rmax, kdtrees)
-    if !isassigned(kdtrees, si)
-        sitepos = sites(lat, si)
-        kdtrees[si] = KDTree(sitepos)
+    if isfinite(rmax)
+        if !isassigned(kdtrees, si)
+            sitepos = sites(lat, si)
+            kdtrees[si] = KDTree(sitepos)
+        end
+        targetlist = inrange(kdtrees[si], rsource, rmax)
+        targetlist .+= offsets(lat)[si]
+    else
+        # need collect for type-stability
+        targetlist = collect(siterange(lat, si))
     end
-    targetlist = inrange(kdtrees[si], rsource, rmax)
-    targetlist .+= offsets(lat)[si]
     return targetlist
 end
 
 #endregion
 
 ############################################################################################
-# nrange
+# neighbors
 #region
 
 function nrange(n, lat::Lattice{T}) where {T}

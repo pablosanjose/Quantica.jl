@@ -54,7 +54,7 @@ function applyterm!(builder, term::AppliedOnsiteTerm)
     sel = selector(term)
     os = orbitalstructure(builder)
     norbs = norbitals(os)
-    foreach_site(lat, sel, dn0) do s, i, r
+    foreach_site(sel, dn0) do s, i, r
         n = norbs[s]
         v = term(r, n)
         push!(ijv, (i, i, v))
@@ -68,9 +68,9 @@ function applyterm!(builder, term::AppliedHoppingTerm)
     sel = selector(term)
     os = orbitalstructure(builder)
     norbs = norbitals(os)
-    foreach_cell(lat, sel) do dn, iter_dn
+    foreach_cell(sel) do dn, iter_dn
         ijv = builder[dn]
-        foreach_hop!(lat, sel, iter_dn, trees, dn) do (si, sj), (i, j), (r, dr)
+        foreach_hop!(sel, iter_dn, trees, dn) do (si, sj), (i, j), (r, dr)
             ni = norbs[si]
             nj = norbs[sj]
             v = term(r, dr, (ni, nj))
