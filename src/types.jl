@@ -236,6 +236,8 @@ blocktype(o::OrbitalStructure) = o.blocktype
 
 offsets(o::OrbitalStructure) = o.offsets
 
+nsites(o::OrbitalStructure) = last(offsets(o))
+
 #endregion
 #endregion
 
@@ -243,12 +245,15 @@ offsets(o::OrbitalStructure) = o.offsets
 # Hamiltonian
 #region
 
+# Any Hamiltonian that can be passed to `flatten` and `bloch`
+abstract type AbstractHamiltonian{T,E,L,O} end
+
 struct HamiltonianHarmonic{L,O}
     dn::SVector{L,Int}
     h::SparseMatrixCSC{O,Int}
 end
 
-struct Hamiltonian{T,E,L,O}
+struct Hamiltonian{T,E,L,O} <: AbstractHamiltonian{T,E,L,O}
     lattice::Lattice{T,E,L}
     orbstruct::OrbitalStructure{O}
     harmonics::Vector{HamiltonianHarmonic{L,O}}
@@ -269,6 +274,8 @@ Hamiltonian(l::Lattice{T,E,L}, o::OrbitalStructure{O}, h::Vector{HamiltonianHarm
 
 #region internal API
 
+hamiltonian(h::Hamiltonian) = h
+
 matrix(h::HamiltonianHarmonic) = h.h
 
 dcell(h::HamiltonianHarmonic) = h.dn
@@ -285,7 +292,8 @@ blocktype(h::Hamiltonian) = blocktype(orbitalstructure(h))
 
 norbitals(h::Hamiltonian) = norbitals(orbitalstructure(h))
 
-Base.size(h::Hamiltonian, i...) = size(matrix(first(harmonics(h))), i...)
+Base.size(h::HamiltonianHarmonic, i...) = size(matrix(h), i...)
+Base.size(h::Hamiltonian, i...) = size(first(harmonics(h)), i...)
 
 Base.isless(h::HamiltonianHarmonic, h´::HamiltonianHarmonic) = sum(abs2, dcell(h)) < sum(abs2, dcell(h´))
 
@@ -296,30 +304,50 @@ Base.isless(h::HamiltonianHarmonic, h´::HamiltonianHarmonic) = sum(abs2, dcell(
 # Flat
 #region
 
-struct FlatHamiltonian{T,E,L,O}
-    h::Hamiltonian{T,E,L,O}
-    flatorbstruct::OrbitalStructure{Complex{T}}
+abstract type AbstractFlatHamiltonian{T,E,L,O} <: AbstractHamiltonian{T,E,L,O} end
+
+struct FlatHamiltonian{T,E,L,O<:Number,H<:Hamiltonian{T,E,L,<:SMatrix}} <: AbstractFlatHamiltonian{T,E,L,O}
+    h::H
+    flatorbstruct::OrbitalStructure{O}
 end
 
-const MaybeFlatHamiltonian{T,E,L,O} = Union{Hamiltonian{T,E,L,O}, FlatHamiltonian{T,E,L,O}}
+orbitalstructure(h::AbstractFlatHamiltonian) = h.flatorbstruct
 
-orbitalstructure(h::FlatHamiltonian) = h.flatorbstruct
+unflatten(h::AbstractFlatHamiltonian) = parent(h)
 
-unflatten(h::FlatHamiltonian) = parent(h)
+lattice(h::AbstractFlatHamiltonian) = lattice(parent(h))
 
-lattice(h::FlatHamiltonian) = lattice(parent(h))
+harmonics(h::AbstractFlatHamiltonian) = harmonics(parent(h))
 
-harmonics(h::FlatHamiltonian) = harmonics(parent(h))
+orbtype(h::AbstractFlatHamiltonian) = orbtype(orbitalstructure(h))
 
-orbtype(h::FlatHamiltonian) = orbtype(orbitalstructure(h))
+blocktype(h::AbstractFlatHamiltonian) = blocktype(orbitalstructure(h))
 
-blocktype(h::FlatHamiltonian) = blocktype(orbitalstructure(h))
+norbitals(h::AbstractFlatHamiltonian) = norbitals(orbitalstructure(h))
 
-norbitals(h::FlatHamiltonian) = norbitals(orbitalstructure(h))
+Base.size(h::AbstractFlatHamiltonian, i...) = size(parent(h), i...)
 
-Base.size(h::FlatHamiltonian, i...) = size(parent(h), i...)
+Base.parent(h::AbstractFlatHamiltonian) = h.h
 
-Base.parent(h::FlatHamiltonian) = h.h
+#endregion
+
+############################################################################################
+# Bloch
+#region
+
+struct Bloch{L,O,O´,H<:AbstractHamiltonian{<:Any,<:Any,L,O´}}
+    h::H
+    output::SparseMatrixCSC{O,Int}  # output has same structure as merged harmonics(h)
+end                                 # or its flattened version if O != O´
+
+
+(b::Bloch{L})(φs::Vararg{Number,L} ; kw...) where {L} = b(φs; kw...)
+(b::Bloch{L})(φs::NTuple{L,Number} ; kw...) where {L} = b(SVector(φs); kw...)
+
+(b::Bloch)(φs::SVector; kw...) =
+    maybe_flatten_bloch!(b.output, hamiltonian(parent(b); kw...), φs)  # see bloch.jl
+
+Base.parent(b::Bloch) = b.h
 
 #endregion
 

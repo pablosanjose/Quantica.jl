@@ -46,6 +46,18 @@ check_finite_supercell(smat, selector) =
     size(smat, 2) == size(smat, 1) || selector.region !== missing ||
         throw(ArgumentError("Cannot reduce supercell dimensions without a bounding region."))
 
+# Make matrix square by appending (or prepending) independent columns if possible
+function makefull(m::SMatrix{L,L´}) where {L,L´}
+    Q = qr(Matrix(m), NoPivot()).Q * I
+    for i in 1:L * L´
+        @inbounds Q[i] = m[i]         # overwrite first L´ cols with originals
+    end
+    return SMatrix{L,L}(Q)
+end
+
+# round to integers to preserve eltype
+makefull(m::SMatrix{<:Any,<:Any,Int}) = round.(Int, makefull(float(m)))
+
 # build masklist = [(sublatindex, cell, siteindex)] for all sites
 # in full supercell defined by smatfull
 function supercell_masklist_full(smat´⁻¹N::SMatrix{L,L,Int}, N, cellseed::SVector{L,Int}, lat) where {L}
@@ -133,14 +145,15 @@ end
 # function supercell_harmonics(h, data, builder, modifiers)
 function supercell_harmonics(h, data, builder)
     indexlist, offset = supercell_indexlist(data)
-    # This is the inverse of the full supercell matrix sm´ (i.e. made square),
+    # This is the inverse of the full supercell matrix sm´ (i.e. full-rank square),
     # times N = det(sm´) to make it integer, and projected onto the actual L supercell dims
     psmat⁻¹N = smat_projector(data) * data.invsm´detsm´
     N = data.detsm´
     smat = data.sm
-    for (_, cell0, col) in data.masklist
+    # Note: masklist = [(sublat, old_cell, old_siteindex)...]
+    for (col´, (_, cellsrc, col)) in enumerate(data.masklist)
         for har in harmonics(h)
-            celldst = cell0 + dcell(har)
+            celldst = cellsrc + dcell(har)
             # scell is the indices of the supercell where the destination cell celldst lives
             scell   = fld.(psmat⁻¹N * celldst, N)
             # cell is the position of celldst within its supercell scell
@@ -152,15 +165,18 @@ function supercell_harmonics(h, data, builder)
                 row = rows[p]
                 c = CartesianIndex((row, Tuple(cell)...)) + offset
                 checkbounds(Bool, indexlist, c) || continue
+                # Note: indexlist[(old_site_index, old_site_cell...) + offset] = new_site_index
                 row´ = indexlist[c]
                 iszero(row´) && continue
                 csc = builder[scell]
+                # if csc is a newly created collector, advance column to current col´
+                ensure_column_sync!(csc, col´)
                 # val´ = applymodifiers(vals[p], slat, (source_i, target_i), (source_dn, target_dn), modifiers´...)
                 val´ = vals[p]
                 pushtocolumn!(csc, row´, val´)
             end
         end
-        foreach(c -> finalizecolumn!(c), collectors(builder))
+        finalizecolumn!(builder)
     end
     return harmonics(builder)
 end

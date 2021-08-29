@@ -11,8 +11,13 @@ function __init__()
       @require VegaLite = "112f6efa-9a02-5b7d-90c0-432ed331239a" include("plot_vegalite.jl")
 end
 
-using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
-      ProgressMeter, Random, SuiteSparse
+using StaticArrays
+using NearestNeighbors
+using SparseArrays
+using LinearAlgebra
+using ProgressMeter
+using Random
+using SuiteSparse
 
 using FunctionWrappers: FunctionWrapper
 
@@ -55,6 +60,7 @@ include("model.jl")
 include("builders.jl")
 include("hamiltonian.jl")
 include("supercell.jl")
+include("bloch.jl")
 # include("ket.jl")
 # include("parametric.jl")
 # include("slice.jl")

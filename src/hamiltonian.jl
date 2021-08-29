@@ -63,7 +63,6 @@ function applyterm!(builder, term::AppliedOnsiteTerm)
 end
 
 function applyterm!(builder, term::AppliedHoppingTerm)
-    lat = lattice(builder)
     trees = kdtrees(builder)
     sel = selector(term)
     os = orbitalstructure(builder)
@@ -83,18 +82,20 @@ end
 #endregion
 
 ############################################################################################
-# FlatHamiltonian constructors
+# FlatHamiltonian constructors (flatten)
 #region
 
 flatten(h::Hamiltonian{<:Any,<:Any,<:Any,<:Number}) = h
+flatten(h::FlatHamiltonian) = h
 
-function flatten(h::Hamiltonian)
-    blocktype´ = eltype(blocktype(h))
-    norbitals´ = [1 for _ in norbitals(h)]
-    flatoffsets´ = flatoffsets(offsets(orbitalstructure(h)), norbitals´)
-    orbstruct´ = OrbitalStructure(blocktype´, norbitals´, flatoffsets´)
-    return FlatHamiltonian(h, orbstruct´)
+function flatten(os::OrbitalStructure)
+    blocktype´ = eltype(blocktype(os))
+    norbitals´ = [1 for _ in norbitals(os)]
+    flatoffsets´ = flatoffsets(offsets(os), norbitals´)
+    return OrbitalStructure(blocktype´, norbitals´, flatoffsets´)
 end
+
+flatten(h::Hamiltonian) = FlatHamiltonian(h, flatten(orbitalstructure(h)))
 
 # sublat offsets after flattening (without padding zeros)
 function flatoffsets(offsets0, norbs)
@@ -103,6 +104,14 @@ function flatoffsets(offsets0, norbs)
     offsets´ = cumsum!(nsites´, nsites´)
     prepend!(offsets´, 0)
     return offsets´
- end
+end
+
+function hamiltonian(f::FlatHamiltonian{<:Any,<:Any,L,O}) where {L,O}
+    lat = lattice(f)
+    flatos = orbitalstructure(f)
+    HT = HamiltonianHarmonic{L,O}
+    hars = HT[HT(dcell(har), flatten(matrix(har), flatos)) for har in harmonics(f)]  # see tools.jl
+    return Hamiltonian(lat, flatos, hars)
+end
 
  #endregion
