@@ -86,16 +86,16 @@ end
 #region
 
 flatten(h::Hamiltonian{<:Any,<:Any,<:Any,<:Number}) = h
+flatten(h::Hamiltonian) = FlatHamiltonian(h, flatten(orbitalstructure(h)))
 flatten(h::FlatHamiltonian) = h
+flatten(os::OrbitalStructure{<:Number}) = os
 
-function flatten(os::OrbitalStructure)
+function flatten(os::OrbitalStructure{<:SMatrix})
     blocktype´ = eltype(blocktype(os))
     norbitals´ = [1 for _ in norbitals(os)]
-    flatoffsets´ = flatoffsets(offsets(os), norbitals´)
+    flatoffsets´ = flatoffsets(offsets(os), norbitals(os))
     return OrbitalStructure(blocktype´, norbitals´, flatoffsets´)
 end
-
-flatten(h::Hamiltonian) = FlatHamiltonian(h, flatten(orbitalstructure(h)))
 
 # sublat offsets after flattening (without padding zeros)
 function flatoffsets(offsets0, norbs)
@@ -106,11 +106,28 @@ function flatoffsets(offsets0, norbs)
     return offsets´
 end
 
+function flatten(lat::Lattice, os)
+    norbs = norbitals(os)
+    sites´ = similar(sites(lat), 0)
+    names´ = sublatnames(lat)
+    offsets´ = [0]
+    for s in sublats(lat)
+        norb = norbs[s]
+        for r in sites(lat, s), _ in 1:norb
+            push!(sites´, r)
+        end
+        push!(offsets´, length(sites´))
+    end
+    lat = Lattice(bravais(lat), Unitcell(sites´, names´, offsets´))
+    return lat
+end
+
 function hamiltonian(f::FlatHamiltonian{<:Any,<:Any,L,O}) where {L,O}
-    lat = lattice(f)
+    os = orbitalstructure(parent(f))
     flatos = orbitalstructure(f)
+    lat = flatten(lattice(f), os)
     HT = HamiltonianHarmonic{L,O}
-    hars = HT[HT(dcell(har), flatten(matrix(har), flatos)) for har in harmonics(f)]  # see tools.jl
+    hars = HT[HT(dcell(har), flatten(matrix(har), os, flatos)) for har in harmonics(f)]  # see tools.jl
     return Hamiltonian(lat, flatos, hars)
 end
 

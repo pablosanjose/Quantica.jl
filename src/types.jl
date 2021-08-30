@@ -32,6 +32,8 @@ end
 
 unitcell(l::Lattice) = l.unitcell
 
+bravais(l::Lattice) = l.bravais
+
 bravais_vecs(l::Lattice) = bravais_vecs(l.bravais)
 bravais_vecs(b::Bravais) = eachcol(b.matrix)
 
@@ -261,7 +263,7 @@ struct Hamiltonian{T,E,L,O} <: AbstractHamiltonian{T,E,L,O}
     function Hamiltonian{T,E,L,O}(lattice, orbstruct, harmonics) where {T,E,L,O}
         n = nsites(lattice)
         all(har -> size(matrix(har)) == (n, n), harmonics) ||
-            throw(DimensionMismatch("Harmonic sizes don't match number of sites $n"))
+            throw(DimensionMismatch("Harmonic $(size.(matrix.(harmonics), 1)) sizes don't match number of sites $n"))
         sort!(harmonics)
         length(harmonics) > 0 && iszero(dcell(first(harmonics))) || pushfirst!(harmonics,
             HamiltonianHarmonic(zero(SVector{L,Int}), sparse(Int[], Int[], O[], n, n)))
@@ -325,7 +327,8 @@ blocktype(h::AbstractFlatHamiltonian) = blocktype(orbitalstructure(h))
 
 norbitals(h::AbstractFlatHamiltonian) = norbitals(orbitalstructure(h))
 
-Base.size(h::AbstractFlatHamiltonian, i...) = size(parent(h), i...)
+Base.size(h::AbstractFlatHamiltonian) = nsites(orbitalstructure(h)), nsites(orbitalstructure(h))
+Base.size(h::AbstractFlatHamiltonian, i) = i <= 0 ? throw(BoundsError()) : ifelse(1 <= i <= 2, nsites(orbitalstructure(h)), 1)
 
 Base.parent(h::AbstractFlatHamiltonian) = h.h
 
@@ -345,9 +348,7 @@ end                                 # or its flattened version if O != O´
 (b::Bloch{L})(φs::NTuple{L,Number} ; kw...) where {L} = b(SVector(φs); kw...)
 
 (b::Bloch)(φs::SVector; kw...) =
-    maybe_flatten_bloch!(b.output, hamiltonian(parent(b); kw...), φs)  # see bloch.jl
-
-Base.parent(b::Bloch) = b.h
+    maybe_flatten_bloch!(b.output, b.h, φs)  # see bloch.jl
 
 #endregion
 

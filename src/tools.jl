@@ -33,10 +33,9 @@ function flatten(src::SparseMatrixCSC{O}, os::OrbitalStructure{O}, flatos::Orbit
         for j in 1:norbs[scol]
             for p in nzrange(src, col)
                 row = rowvals(src)[p]
-                srow = site_to_sublat(row, os)
-                rowoffset´ = site_to_flatoffset(row, os, flatos)
+                rowoffset´, nrow = site_to_flatoffset_norbs(row, os, flatos)
                 val = nonzeros(src)[p]
-                for i in 1:norbs[srow]
+                for i in 1:nrow
                     pushtocolumn!(collector, rowoffset´ + i, val[i, j])
                 end
             end
@@ -47,36 +46,35 @@ function flatten(src::SparseMatrixCSC{O}, os::OrbitalStructure{O}, flatos::Orbit
     return matrix
 end
 
-site_to_sublat(siteidx, o::OrbitalStructure) = site_to_sublat(siteidx, offsets(o))
-
-function site_to_sublat(siteidx, offsets)
-    l = length(offsets)
+function site_to_sublat(siteidx, orbstruct)
+    offsets´ = offsets(orbstruct)
+    l = length(offsets´)
     for s in 2:l
-        @inbounds offsets[s] + 1 > siteidx && return s - 1
+        @inbounds offsets´[s] + 1 > siteidx && return s - 1
     end
     return l
 end
 
-function site_to_flatoffset(siteidx, orbstruct, flatorbstruct)
+function site_to_flatoffset_norbs(siteidx, orbstruct, flatorbstruct)
     s = site_to_sublat(siteidx, orbstruct)
     N = norbitals(orbstruct)[s]
     offset = offsets(orbstruct)[s]
     offset´ = offsets(flatorbstruct)[s]
     Δi = siteidx - offset
-    siteidx´ = offset´ + (Δi - 1) * N
-    return siteidx´
+    flatoffset = offset´ + (Δi - 1) * N
+    return flatoffset, N
 end
 
 # merged_mul! (mul! specializations assuming target does not need to change structure [is "merged"])
 
-maybe_flatten_merged_mul!(C::SparseMatrixCSC{<:Number}, os, A::SparseMatrixCSC{<:Number}, b::Number, β) =
-    merged_mul!(C, A, b, 1, β)
+maybe_flatten_merged_mul!(C::SparseMatrixCSC{<:Number}, _, A::SparseMatrixCSC{<:Number}, b::Number, α, β) =
+    merged_mul!(C, A, b, α, β)
 
-maybe_flatten_merged_mul!(C::SparseMatrixCSC{<:SMatrix{N,N}}, os, A::SparseMatrixCSC{<:SMatrix{N,N}}, b::Number, β) where {N} =
-    merged_mul!(C, A, b, 1, β)
+maybe_flatten_merged_mul!(C::SparseMatrixCSC{<:SMatrix{N,N}}, _, A::SparseMatrixCSC{<:SMatrix{N,N}}, b::Number, α, β) where {N} =
+    merged_mul!(C, A, b, α, β)
 
-maybe_flatten_merged_mul!(C::SparseMatrixCSC{<:Number}, os, A::SparseMatrixCSC{<:SMatrix}, b::Number, β) =
-    flatten_mul!(C, os, A, b, 1, β)
+maybe_flatten_merged_mul!(C::SparseMatrixCSC{<:Number}, os, A::SparseMatrixCSC{<:SMatrix}, b::Number, α, β) =
+    flatten_merged_mul!(C, os, A, b, α, β)
 
 function merged_mul!(C::SparseMatrixCSC, A::SparseMatrixCSC, b::Number, α = 1, β = 0)
     nzA = nonzeros(A)
@@ -98,29 +96,33 @@ function merged_mul!(C::SparseMatrixCSC, A::SparseMatrixCSC, b::Number, α = 1, 
     return C
 end
 
-function merged_flatten_mul!(C::SparseMatrixCSC, os::OrbitalStructure, A::SparseMatrixCSC, b::Number, α , β = 0)
-    cols  = axes(A, 2)
-    rows  = rowvals(A)
-    vals  = nonzeros(A)
-    norb  = norbitals(A)
-    idxC  = 0
+function flatten_merged_mul!(C::SparseMatrixCSC, (os, flatos), A::SparseMatrixCSC, b::Number, α , β = 0)
+    colsA = axes(A, 2)
+    rowsA = rowvals(A)
+    valsA = nonzeros(A)
+    rowsC = rowvals(C)
     valsC = nonzeros(C)
-    for col in cols
-        scol = site_to_sublat(col, os)
-        ncol = norb[scol]
-        for ocol in 1:ncol, p in nzrange(A, col)
-            valA = vals[p]
-            row  = rows[p]
-            srow = site_to_sublat(row, os)
-            nrow = norb[srow]
-            for orow in 1:nrow
-                idxC += 1
-                valsC[idxC] = β * valsC[idxC] + α * b * valA[orow, ocol]
+    for col in colsA
+        coloffset´, ncol = site_to_flatoffset_norbs(col, os, flatos)
+        for p in nzrange(A, col)
+            valA = valsA[p]
+            row  = rowsA[p]
+            rowoffset´, nrow = site_to_flatoffset_norbs(row, os, flatos)
+            rowfirst´ = rowoffset´ + 1
+            for ocol in 1:ncol
+                col´ = coloffset´ + ocol
+                for p´ in nzrange(C, col´)
+                    if rowsC[p´] == rowfirst´
+                        for orow in 1:nrow
+                            p´´ = p´ + orow - 1
+                            valsC[p´´] = β * valsC[p´´] + α * b * valA[orow, ocol]
+                        end
+                        break
+                    end
+                end
             end
         end
     end
-    idxC == length(valsC) ||
-        throw(ArgumentError("Attempted to do a flattening mul! onto a matrix with incompatible structure"))
     return C
 end
 

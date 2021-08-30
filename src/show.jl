@@ -85,8 +85,8 @@ function Base.show(io::IO, h::Union{Hamiltonian,FlatHamiltonian})
 $i  Harmonic size    : $((n -> "$n × $n")(size(h, 1)))
 $i  Orbitals         : $(norbitals(orbitalstructure(h)))
 $i  Element type     : $(displaytype(blocktype(h)))
-$i  Onsites          : $(nonsites(h))
-$i  Hoppings         : $(nhoppings(h))
+$i  Onsites $(parentstring(h))   : $(nonsites(h))
+$i  Hoppings $(parentstring(h))  : $(nhoppings(h))
 $i  Coordination     : $(coordination(h))")
 end
 
@@ -98,6 +98,9 @@ Base.summary(h::FlatHamiltonian{T,E,L}) where {T,E,L} =
 
 displaytype(::Type{S}) where {N,T,S<:SMatrix{N,N,T}} = "$N × $N blocks ($T)"
 displaytype(::Type{T}) where {T} = "scalar ($T)"
+
+parentstring(::Hamiltonian)     = "      "
+parentstring(::FlatHamiltonian) = "parent"
 
 function nhoppings(h::Union{Hamiltonian,FlatHamiltonian})
     count = 0
