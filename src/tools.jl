@@ -85,7 +85,7 @@ function merged_mul!(C::SparseMatrixCSC, A::SparseMatrixCSC, b::Number, α = 1, 
         for col in axes(A, 2), p in nzrange(A, col)
             row = rowvals(A)[p]
             for p´ in nzrange(C, col)
-                row´ = rowvals(C)[p]
+                row´ = rowvals(C)[p´]
                 if row == row´
                     nzC[p´] = β * nzC[p´] + α * b * nzA[p]
                     break

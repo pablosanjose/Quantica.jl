@@ -29,7 +29,7 @@ function maybe_flatten_bloch!(output, h::Hamiltonian{<:Any,<:Any,L}, φs::SVecto
     os = orbitalstructure(h)
     flatos = flatten(os)
     fill!(nonzeros(output), zero(eltype(output)))
-    for (n, har) in enumerate(hars)
+    for har in hars
         e⁻ⁱᵠᵈⁿ = cis(-dot(φs, dcell(har)))
         maybe_flatten_merged_mul!(output, (os, flatos), matrix(har), e⁻ⁱᵠᵈⁿ, 1, 1)  # see tools.jl
     end
