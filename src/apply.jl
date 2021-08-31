@@ -116,7 +116,7 @@ end
 
 function pointers(h::Hamiltonian{T,E}, s::AppliedHopSelector{T,E}) where {T,E}
     hars = harmonics(h)
-    ptrs = [Tuple{Int,SVector{E,T},SVector{E,T},Tuple{Int,Int}}[] for _ in hars]
+    ptr_r_dr = [Tuple{Int,SVector{E,T},SVector{E,T},Tuple{Int,Int}}[] for _ in hars]
     lat = lattice(h)
     os = orbitalstructure(h)
     dn0 = zerocell(lat)
