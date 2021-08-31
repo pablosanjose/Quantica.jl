@@ -5,17 +5,19 @@ rdr((r1, r2)::Pair) = (0.5 * (r1 + r2), r2 - r1)
 # all merged_* functions assume matching structure of sparse matrices
 #region
 
-# merge several sparse matrices using only structural zeros
-function merge_structure(mats::Vector{<:SparseMatrixCSC{O}}) where {O}
-    nrows, ncols = size(first(mats))
+# merge several sparse matrices onto the first using only structural zeros
+function merge_sparse(mats::Vector{<:SparseMatrixCSC{O}}) where {O}
+    nrows, ncols = size(first(hars))
     nrows == ncols || throw(ArgumentError("Internal error: matrix not square"))
-    nnzguess = sum(nnz, mats)
+    nnzguess = sum(mat -> nnz(mat), mats)
     collector = CSC{O}(ncols, nnzguess)
     for col in 1:ncols
-        for (i, mat) in enumerate(mats)
+        for (n, mat) in enumerate(mats)
+            vals = nonzeros(mat)
+            rows = rowvals(mat)
             for p in nzrange(mat, col)
-                val = i == 1 ? nonzeros(mat)[p] : zero(O)
-                row = rowvals(mat)[p]
+                val = n == 1 ? vals[p] : zero(O)
+                row = rows[p]
                 pushtocolumn!(collector, row, val, false) # skips repeated rows
             end
         end
@@ -25,29 +27,42 @@ function merge_structure(mats::Vector{<:SparseMatrixCSC{O}}) where {O}
     return matrix
 end
 
-# flatten a sparse matrix according to OrbitalStructures
-function flatten(src::SparseMatrixCSC{O}, os::OrbitalStructure{O}, flatos::OrbitalStructure{T} = flatten(os)) where {T<:Number,O<:SMatrix}
+# flatten and merge several sparse matrices onto first according to OrbitalStructures
+function merge_flatten_sparse(mats,
+                                 os::OrbitalStructure{<:SMatrix},
+                                 flatos::OrbitalStructure{T} = flatten(os)) where {T<:Number}
+    mat0 = first(mats)
+    check_orbstruct_consistency(mat0, os)
     norbs = norbitals(os)
-    ncolsflatguess = size(src, 2) * maximum(norbs)
-    nnzflatguess = nnz(src) * maximum(norbs)
+    ncolsflatguess = size(mat0, 2) * maximum(norbs)
+    nnzflatguess = nnz(mat0) * maximum(norbs)
     collector = CSC{T}(ncolsflatguess, nnzflatguess)
-    for col in 1:size(src, 2)
-        scol = site_to_sublat(col, os)
-        for j in 1:norbs[scol]
-            for p in nzrange(src, col)
-                row = rowvals(src)[p]
-                rowoffset´, nrow = site_to_flatoffset_norbs(row, os, flatos)
-                val = nonzeros(src)[p]
-                for i in 1:nrow
-                    pushtocolumn!(collector, rowoffset´ + i, val[i, j])
+    multiple_matrices = length(mats) == 1
+    needs_column_sort = multiple_matrices
+    skip_column_dupcheck = !multiple_matrices
+    for scol in sublats(os), col in siterange(os, scol)
+        for (n, mat) in enumerate(mats)
+            vals = nonzeros(mat)
+            rows = rowvals(mat)
+            for j in 1:norbs[scol]  # block column
+                for p in nzrange(mat, col)
+                    row = rows[p]
+                    rowoffset´, nrow = site_to_flatoffset_norbs(row, os, flatos)
+                    for i in 1:nrow
+                        val´ = n == 1 ? vals[p][i, j] : zero(T)
+                        pushtocolumn!(collector, rowoffset´ + i, val´, skip_column_dupcheck)
+                    end
                 end
             end
-            finalizecolumn!(collector, false)
         end
+        finalizecolumn!(collector, needs_column_sort)
     end
-    matrix = sparse(collector, nsites(flatos))
-    return matrix
+    flatmat = sparse(collector, nsites(flatos))
+    return flatmat
 end
+
+check_orbstruct_consistency(mat, os) = nsites(os) == size(mat, 1) == size(mat, 2) ||
+    throw(ArgumentError("Matrix size $(size(mat)) inconsistent with number of sites $(nsites(os))"))
 
 function site_to_sublat(siteidx, orbstruct)
     offsets´ = offsets(orbstruct)
@@ -67,6 +82,9 @@ function site_to_flatoffset_norbs(siteidx, orbstruct, flatorbstruct)
     flatoffset = offset´ + (Δi - 1) * N
     return flatoffset, N
 end
+
+flatten(mat::SparseMatrixCSC{O}, os::OrbitalStructure{O}, flatos::OrbitalStructure{<:Number} = flatten(os)) where {O<:SMatrix} =
+    merge_flatten_sparse((mat,), os, flatos)
 
 # merged_mul! (mul! specializations assuming target does not need to change structure [is "merged"])
 

@@ -287,7 +287,7 @@ pointers(m::AppliedModifier) = m.ptrs
 struct OrbitalStructure{O<:Union{Number,SMatrix}}
     blocktype::Type{O}    # Hamiltonian's blocktype
     norbitals::Vector{Int}
-    offsets::Vector{Int}
+    offsets::Vector{Int}  # index offset for each sublattice (== offsets(::Lattice))
 end
 
 #region internal API
@@ -302,6 +302,12 @@ blocktype(o::OrbitalStructure) = o.blocktype
 offsets(o::OrbitalStructure) = o.offsets
 
 nsites(o::OrbitalStructure) = last(offsets(o))
+
+nsublats(o::OrbitalStructure) = length(norbitals(o))
+
+sublats(o::OrbitalStructure) = 1:nsublats(o)
+
+siterange(o::OrbitalStructure, sublat) = (1+o.offsets[sublat]):o.offsets[sublat+1]
 
 #endregion
 #endregion
