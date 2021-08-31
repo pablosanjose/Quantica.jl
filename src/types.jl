@@ -235,15 +235,8 @@ struct OnsiteModifier{N,S<:SiteSelector,F<:ParametricFunction{N}}
     selector::S
 end
 
-struct PartiallyAppliedOnsiteModifier{N,T,E,F<:ParametricFunction{N}}
+struct AppliedOnsiteModifier{N,T,E,F<:ParametricFunction{N}}
     f::F
-    ptrs::Vector{Tuple{Int,SVector{E,T},Int}}
-    # [(ptr, r, norbs)...] for each selected site, dn = 0 harmonic
-end
-
-struct AppliedOnsiteModifier{T,E,L,O}
-    f::FunctionWrapper{O,Tuple{O,SVector{E,T},Int}}
-    # o(old_o, r, norbs)
     ptrs::Vector{Tuple{Int,SVector{E,T},Int}}
     # [(ptr, r, norbs)...] for each selected site, dn = 0 harmonic
 end
@@ -253,42 +246,30 @@ struct HoppingModifier{N,S<:HopSelector,F<:ParametricFunction{N}}
     selector::S
 end
 
-struct PartiallyAppliedHoppingModifier{N,T,E,F<:ParametricFunction{N}}
+struct AppliedHoppingModifier{N,T,E,F<:ParametricFunction{N}}
     f::F
     ptrs::Vector{Vector{Tuple{Int,SVector{E,T},SVector{E,T},Tuple{Int,Int}}}}
     # [[(ptr, r, dr, (norbs, norbs´)), ...], ...] for each selected hop on each harmonic
 end
 
-struct AppliedHoppingModifier{T,E,L,O}
-    f::FunctionWrapper{O,Tuple{O,SVector{E,T},SVector{E,T},Tuple{Int,Int}}}
-    # t(old_t, r, dr, (orbs1, orbs2))
-    ptrs::Vector{Vector{Tuple{Int,SVector{E,T},SVector{E,T},Tuple{Int,Int}}}}
-    # [[(ptr, r, dr, (norbs, norbs´)), ...], ...] for each selected hop on each harmonic
-end
-
 const Modifier = Union{OnsiteModifier,HoppingModifier}
-const PartiallyAppliedModifier = Union{PartiallyAppliedOnsiteModifier,PartiallyAppliedHoppingModifier}
 const AppliedModifier = Union{AppliedOnsiteModifier,AppliedHoppingModifier}
 
 #region Modifier internal API
 
 selector(m::Modifier) = m.selector
 
-parameters(m::Union{Modifier,PartiallyAppliedModifier}) = m.f.params
+parameters(m::Union{Modifier,AppliedModifier}) = m.f.params
 
-parametric_function(m::Union{Modifier,PartiallyAppliedModifier,AppliedModifier}) = m.f
+parametric_function(m::Union{Modifier,AppliedModifier}) = m.f
 
-pointers(m::Union{PartiallyAppliedModifier,AppliedModifier}) = m.ptrs
+pointers(m::AppliedModifier) = m.ptrs
 
-(m::PartiallyAppliedOnsiteModifier{1})(o, r; kw...) = m.f.f(o; kw...)
-(m::PartiallyAppliedOnsiteModifier{2})(o, r; kw...) = m.f.f(o, r; kw...)
+(m::AppliedOnsiteModifier{1})(o, r; kw...) = m.f.f(o; kw...)
+(m::AppliedOnsiteModifier{2})(o, r; kw...) = m.f.f(o, r; kw...)
 
-(m::AppliedOnsiteModifier)(o, r, orbs) = m.f(o, r, orbs)
-
-(m::PartiallyAppliedHoppingModifier{1})(t, r, dr; kw...) = m.f.f(t; kw...)
-(m::PartiallyAppliedHoppingModifier{3})(t, r, dr; kw...) = m.f.f(t, r, dr; kw...)
-
-(m::AppliedHoppingModifier)(t, r, dr, orbs) = m.f(t, r, dr, orbs)
+(m::AppliedHoppingModifier{1})(t, r, dr; kw...) = m.f.f(t; kw...)
+(m::AppliedHoppingModifier{3})(t, r, dr; kw...) = m.f.f(t, r, dr; kw...)
 
 #endregion
 #endregion
@@ -392,10 +373,10 @@ end
 # Parametric
 #region
 
-struct ParametricHamiltonian{T,E,L,O,M<:NTuple{<:Any,PartiallyAppliedModifier}} <: AbstractHamiltonian{T,E,L,O}
+struct ParametricHamiltonian{T,E,L,O,M<:NTuple{<:Any,AppliedModifier}} <: AbstractHamiltonian{T,E,L,O}
     hparent::Hamiltonian{T,E,L,O}
     h::Hamiltonian{T,E,L,O}
-    modifiers::M                   # Tuple of PartiallyAppliedModifier's (unwrapped until kwargs are known)
+    modifiers::M                   # Tuple of AppliedModifier's
     allptrs::Vector{Vector{Int}}   # allptrs are all modified ptrs in each harmonic (needed for reset!)
     allparams::Vector{Symbol}
 end

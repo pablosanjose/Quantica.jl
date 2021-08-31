@@ -89,7 +89,7 @@ end
 parametric(modifiers::Modifier...) = h -> parametric(h, modifiers...)
 
 function parametric(hparent::Hamiltonian, modifiers::Modifier...)
-    modifiers´ = apply.(modifiers, Ref(hparent))  # PartiallyAppliedModifiers
+    modifiers´ = apply.(modifiers, Ref(hparent))
     allptrs = merge_pointers(hparent, modifiers´...)
     allparams = merge_parameters(modifiers´...)
     h = copy_harmonics(hparent)
@@ -107,7 +107,7 @@ function merge_pointers!(p)
     return p
 end
 
-function merge_pointers!(p, m::PartiallyAppliedOnsiteModifier)
+function merge_pointers!(p, m::AppliedOnsiteModifier)
     p0 = first(p)
     for (ptr, _) in pointers(m)
         push!(p0, ptr)
@@ -115,7 +115,7 @@ function merge_pointers!(p, m::PartiallyAppliedOnsiteModifier)
     return p
 end
 
-function _merge_pointers!(p, m::PartiallyAppliedHoppingModifier)
+function _merge_pointers!(p, m::AppliedHoppingModifier)
     for (pn, pm) in zip(p, pointers(m)), (ptr, _, _) in pm
         push!(pn, ptr)
     end
@@ -135,11 +135,9 @@ _merge_parameters(p) = unique!(sort!(p))
 (ph::ParametricHamiltonian)(; kw...) = copy_harmonics(hamiltonian!(ph; kw...))
 
 function hamiltonian!(ph::ParametricHamiltonian; kw...)
-    hparent = parent(ph)
     h = hamiltonian(ph)
     reset_pointers!(ph)
-    modifiers´ = apply.(modifiers(ph), Ref(hparent); kw...)
-    applymodifiers!(h, modifiers´...)
+    applymodifiers!(h, modifiers...; kw...)
     return h
 end
 
@@ -156,15 +154,19 @@ function reset_pointers!(ph::ParametricHamiltonian)
     return ph
 end
 
-function applymodifiers!(h, m::AppliedOnsiteModifier, ms...)
+applymodifiers!(h, m, ms...; kw...) = applymodifiers!(_applymodifiers!(h, m; kw...), ms...; kw...)
+
+applymodifiers!(h; kw...) = h
+
+function _applymodifiers!(h, m::AppliedOnsiteModifier; kw...)
     nz = nonzeros(matrix(first(harmonics(h))))
     for (ptr, r, norbs) in pointers(m)
         nz[ptr] = m(nz[ptr], r, norbs)
     end
-    return applymodifiers!(h, ms...)
+    return h
 end
 
-function applymodifiers!(h, m::AppliedHoppingModifier, ms...)
+function _applymodifiers!(h, m::AppliedHoppingModifier; kw...)
     nz = nonzeros(h)
     for (har, p) in zip(harmonics(h), pointers(m))
         nz = nonzeros(matrix(har))
@@ -172,10 +174,8 @@ function applymodifiers!(h, m::AppliedHoppingModifier, ms...)
             nz[ptr] = m(nz[ptr], r, dr, norbs)
         end
     end
-    return applymodifiers!(h, ms...)
+    return h
 end
-
-applymodifiers!(h) = h
 
 #endregion
 
