@@ -1,5 +1,5 @@
 ############################################################################################
-# Lattice
+# Lattice  -  see lattice.jl for methods
 #region
 
 struct Sublat{T<:AbstractFloat,E}
@@ -103,7 +103,7 @@ zerocell(::Lattice{<:Any,<:Any,L}) where {L} = zero(SVector{L,Int})
 #endregion
 
 ############################################################################################
-# Selectors
+# Selectors  -  see selector.jl for methods
 #region
 
 struct SiteSelector{F,S,I}
@@ -166,7 +166,7 @@ isbelowrange(dr, (rmin, rmax)::Tuple{Real,Real}) =  ifelse(dr'dr < rmin^2, true,
 #endregion
 
 ############################################################################################
-# Model Terms
+# Model Terms  -  see model.jl for methods
 #region
 
 # Terms #
@@ -219,7 +219,7 @@ selector(t::TightbindingModelTerm) = t.selector
 #endregion
 
 ############################################################################################
-# Model Modifiers
+# Model Modifiers  -  see model.jl for methods
 #region
 
 # wrapper of a function f(x1, ... xN; kw...) with N arguments and the kwargs in params
@@ -235,9 +235,10 @@ struct OnsiteModifier{N,S<:SiteSelector,F<:ParametricFunction{N}}
     selector::S
 end
 
-struct AppliedOnsiteModifier{N,T,E,F<:ParametricFunction{N}}
+struct AppliedOnsiteModifier{N,O,R<:SVector,F<:ParametricFunction{N}}
+    blocktype::Type{O}
     f::F
-    ptrs::Vector{Tuple{Int,SVector{E,T},Int}}
+    ptrs::Vector{Tuple{Int,R,Int}}
     # [(ptr, r, norbs)...] for each selected site, dn = 0 harmonic
 end
 
@@ -246,9 +247,10 @@ struct HoppingModifier{N,S<:HopSelector,F<:ParametricFunction{N}}
     selector::S
 end
 
-struct AppliedHoppingModifier{N,T,E,F<:ParametricFunction{N}}
+struct AppliedHoppingModifier{N,O,R<:SVector,F<:ParametricFunction{N}}
+    blocktype::Type{O}
     f::F
-    ptrs::Vector{Vector{Tuple{Int,SVector{E,T},SVector{E,T},Tuple{Int,Int}}}}
+    ptrs::Vector{Vector{Tuple{Int,R,R,Tuple{Int,Int}}}}
     # [[(ptr, r, dr, (norbs, norbs´)), ...], ...] for each selected hop on each harmonic
 end
 
@@ -265,17 +267,21 @@ parametric_function(m::Union{Modifier,AppliedModifier}) = m.f
 
 pointers(m::AppliedModifier) = m.ptrs
 
-(m::AppliedOnsiteModifier{1})(o, r; kw...) = m.f.f(o; kw...)
-(m::AppliedOnsiteModifier{2})(o, r; kw...) = m.f.f(o, r; kw...)
+(m::AppliedOnsiteModifier{1,O})(o, r, orbs; kw...) where {O} =
+    sanitize_block(O, m.f.f(o; kw...), (orbs, orbs))
+(m::AppliedOnsiteModifier{2,O})(o, r, orbs; kw...) where {O} =
+    sanitize_block(O, m.f.f(o, r; kw...), (orbs, orbs))
 
-(m::AppliedHoppingModifier{1})(t, r, dr; kw...) = m.f.f(t; kw...)
-(m::AppliedHoppingModifier{3})(t, r, dr; kw...) = m.f.f(t, r, dr; kw...)
+(m::AppliedHoppingModifier{1,O})(t, r, dr, orbs; kw...) where {O} =
+    sanitize_block(O, m.f.f(t; kw...), orbs)
+(m::AppliedHoppingModifier{3,O})(t, r, dr, orbs; kw...) where {O} =
+    sanitize_block(O, m.f.f(t, r, dr; kw...), orbs)
 
 #endregion
 #endregion
 
 ############################################################################################
-# OrbitalStructure
+# OrbitalStructure  -  see hamiltonian.jl for methods
 #region
 
 struct OrbitalStructure{O<:Union{Number,SMatrix}}
@@ -301,7 +307,7 @@ nsites(o::OrbitalStructure) = last(offsets(o))
 #endregion
 
 ############################################################################################
-# Hamiltonian
+# Hamiltonian  -  see hamiltonian.jl for methods
 #region
 
 # Any Hamiltonian that can be passed to `flatten` and `bloch`
@@ -370,7 +376,7 @@ end
 #endregion
 
 ############################################################################################
-# Parametric
+# ParametricHamiltonian  -  see hamiltonian.jl for methods
 #region
 
 struct ParametricHamiltonian{T,E,L,O,M<:NTuple{<:Any,AppliedModifier}} <: AbstractHamiltonian{T,E,L,O}
@@ -404,39 +410,37 @@ Base.size(h::ParametricHamiltonian, i...) = size(parent(h), i...)
 #endregion
 
 ############################################################################################
-# Flat
+# FlatHamiltonian  -  see hamiltonian.jl for methods
 #region
 
-abstract type AbstractFlatHamiltonian{T,E,L,O} <: AbstractHamiltonian{T,E,L,O} end
-
-struct FlatHamiltonian{T,E,L,O<:Number,H<:AbstractHamiltonian{T,E,L,<:SMatrix}} <: AbstractFlatHamiltonian{T,E,L,O}
+struct FlatHamiltonian{T,E,L,O<:Number,H<:AbstractHamiltonian{T,E,L,<:SMatrix}} <: AbstractHamiltonian{T,E,L,O}
     h::H
     flatorbstruct::OrbitalStructure{O}
 end
 
-orbitalstructure(h::AbstractFlatHamiltonian) = h.flatorbstruct
+orbitalstructure(h::FlatHamiltonian) = h.flatorbstruct
 
-unflatten(h::AbstractFlatHamiltonian) = parent(h)
+unflatten(h::FlatHamiltonian) = parent(h)
 
-lattice(h::AbstractFlatHamiltonian) = lattice(parent(h))
+lattice(h::FlatHamiltonian) = lattice(parent(h))
 
-harmonics(h::AbstractFlatHamiltonian) = harmonics(parent(h))
+harmonics(h::FlatHamiltonian) = harmonics(parent(h))
 
-orbtype(h::AbstractFlatHamiltonian) = orbtype(orbitalstructure(h))
+orbtype(h::FlatHamiltonian) = orbtype(orbitalstructure(h))
 
-blocktype(h::AbstractFlatHamiltonian) = blocktype(orbitalstructure(h))
+blocktype(h::FlatHamiltonian) = blocktype(orbitalstructure(h))
 
-norbitals(h::AbstractFlatHamiltonian) = norbitals(orbitalstructure(h))
+norbitals(h::FlatHamiltonian) = norbitals(orbitalstructure(h))
 
-Base.size(h::AbstractFlatHamiltonian) = nsites(orbitalstructure(h)), nsites(orbitalstructure(h))
-Base.size(h::AbstractFlatHamiltonian, i) = i <= 0 ? throw(BoundsError()) : ifelse(1 <= i <= 2, nsites(orbitalstructure(h)), 1)
+Base.size(h::FlatHamiltonian) = nsites(orbitalstructure(h)), nsites(orbitalstructure(h))
+Base.size(h::FlatHamiltonian, i) = i <= 0 ? throw(BoundsError()) : ifelse(1 <= i <= 2, nsites(orbitalstructure(h)), 1)
 
-Base.parent(h::AbstractFlatHamiltonian) = h.h
+Base.parent(h::FlatHamiltonian) = h.h
 
 #endregion
 
 ############################################################################################
-# Bloch
+# Bloch  -  see bloch.jl for methods
 #region
 
 struct Bloch{L,O,O´,H<:AbstractHamiltonian{<:Any,<:Any,L,O´}}

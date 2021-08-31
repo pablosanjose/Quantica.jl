@@ -137,7 +137,7 @@ _merge_parameters(p) = unique!(sort!(p))
 function hamiltonian!(ph::ParametricHamiltonian; kw...)
     h = hamiltonian(ph)
     reset_pointers!(ph)
-    applymodifiers!(h, modifiers...; kw...)
+    applymodifiers!(h, modifiers(ph)...; kw...)
     return h
 end
 

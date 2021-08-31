@@ -73,15 +73,23 @@ function apply(m::OnsiteModifier, h::Hamiltonian)
     f = parametric_function(m)
     asel = apply(selector(m), lattice(h))
     ptrs = pointers(h, asel)
-    return AppliedOnsiteModifier(f, ptrs)
+    O = blocktype(h)
+    return AppliedOnsiteModifier(O, f, ptrs)
 end
 
 function apply(m::HoppingModifier, h::Hamiltonian)
     f = parametric_function(m)
     asel = apply(selector(m), lattice(h))
     ptrs = pointers(h, asel)
-    return AppliedHoppingModifier(f, ptrs)
+    O = blocktype(h)
+    return AppliedHoppingModifier(O, f, ptrs)
 end
+
+# function apply(m::PartiallyAppliedHoppingModifier, h::Hamiltonian{T,E,L,O}; kw...) where {T,E,L,O}
+#     f = (t, r, dr, orbs) -> sanitize_block(O, m(t, r, dr; kw...), (orbs, orbs))
+#     ptrs = pointers(m)
+#     return AppliedHoppingModifier{T,E,L,O}(f, ptrs) # f gets wrapped in a FunctionWrapper
+# end
 
 function pointers(h::Hamiltonian{T,E}, s::AppliedSiteSelector{T,E}) where {T,E}
     ptr_r = Tuple{Int,SVector{E,T},Int}[]

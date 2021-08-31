@@ -2,6 +2,7 @@
 # Bloch constructor
 #region
 
+bloch(φs::Tuple; kw...) = h -> bloch(h, φs; kw...)
 bloch(h, φs; kw...) = copy(bloch!(h, φs; kw...))
 bloch(h::AbstractHamiltonian, φs::Tuple; kw...) = bloch(h)(φs...; kw...)
 
