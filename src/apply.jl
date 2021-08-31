@@ -1,6 +1,6 @@
 
 ############################################################################################
-# selector apply
+# apply selector
 #region
 
 function apply(s::SiteSelector, lat::Lattice{T,E,L}) where {T,E,L}
@@ -46,21 +46,97 @@ recursive_push!(v::Vector, xs)= foreach(x -> recursive_push!(v, x), xs)
 #endregion
 
 ############################################################################################
-# model apply
+# apply model terms
 #region
 
 function apply(t::OnsiteTerm, (lat, os)::Tuple{Lattice{T,E,L},OrbitalStructure{O}}) where {T,E,L,O}
-    aons = (r, orbs) -> sanitize_block(blocktype(os), t(r), (orbs, orbs))
+    f = (r, orbs) -> sanitize_block(O, t(r), (orbs, orbs))
     asel = apply(selector(t), lat)
-    return AppliedOnsiteTerm{T,E,L,O}(aons, asel)
+    return AppliedOnsiteTerm{T,E,L,O}(f, asel)   # f gets wrapped in a FunctionWrapper
 end
 
 function apply(t::HoppingTerm, (lat, os)::Tuple{Lattice{T,E,L},OrbitalStructure{O}}) where {T,E,L,O}
-    ahop = (r, dr, orbs) -> sanitize_block(blocktype(os), t(r, dr), orbs)
+    f = (r, dr, orbs) -> sanitize_block(O, t(r, dr), orbs)
     asel = apply(selector(t), lat)
-    return AppliedHoppingTerm{T,E,L,O}(ahop, asel)
+    return AppliedHoppingTerm{T,E,L,O}(f, asel)  # f gets wrapped in a FunctionWrapper
 end
 
 apply(m::TightbindingModel, latos) = TightbindingModel(apply.(terms(m), Ref(latos)))
+
+#endregion
+
+############################################################################################
+# apply parametric modifiers
+#region
+
+function apply(m::OnsiteModifier, h::Hamiltonian)
+    f = parametric_function(m)
+    asel = apply(selector(m), lattice(h))
+    ptrs = pointers(h, asel)
+    return PartiallyAppliedOnsiteModifier(f, ptrs)
+end
+
+function apply(m::PartiallyAppliedOnsiteModifier, h::Hamiltonian{T,E,L,O}) where {T,E,L,O}
+    f = (o, r, orbs) -> sanitize_block(O, m(o, r; kw...), (orbs, orbs))
+    ptrs = pointers(m)
+    return AppliedOnsiteModifier{T,E,L,O}(f, ptrs)  # f gets wrapped in a FunctionWrapper
+end
+
+function apply(m::HoppingModifier, h::Hamiltonian)
+    f = parametric_function(m)
+    asel = apply(selector(m), lattice(h))
+    ptrs = pointers(h, asel)
+    return PartiallyAppliedHoppingModifier(f, ptrs)
+end
+
+function apply(m::PartiallyAppliedHoppingModifier, h::Hamiltonian{T,E,L,O}) where {T,E,L,O}
+    f = (t, r, dr, orbs) -> sanitize_block(O, m(t, r, dr; kw...), (orbs, orbs))
+    ptrs = pointers(m)
+    return AppliedHoppingModifier{T,E,L,O}(f, ptrs) # f gets wrapped in a FunctionWrapper
+end
+
+function pointers(h::Hamiltonian{T,E}, s::AppliedSiteSelector{T,E}) where {T,E}
+    ptr_r = Tuple{Int,SVector{E,T},Int}[]
+    lat = lattice(h)
+    har0 = first(harmonics(h))
+    mh = matrix(har0)
+    rows = rowvals(mh)
+    norbs = norbitals(h)
+    for s in sublats(lat), col in siterange(lat, s), p in nzrange(mh, col)
+        row = rows[p]
+        col == row || continue
+        r = site(lat, row)
+        if (row, r) in s
+            n = norbs[s]
+            push!(ptr_r, (p, r, n))
+        end
+    end
+    return ptr_r
+end
+
+function pointers(h::Hamiltonian{T,E}, s::AppliedHopSelector{T,E}) where {T,E}
+    hars = harmonics(h)
+    ptrs = [Tuple{Int,SVector{E,T},SVector{E,T},Tuple{Int,Int}}[] for _ in hars]
+    lat = lattice(h)
+    os = orbitalstructure(h)
+    dn0 = zerocell(lat)
+    norbs = norbitals(h)
+    for (har, ptr_r_dr) in zip(hars, ptrs)
+        mh = matrix(har)
+        rows = rowvals(mh)
+        for scol in sublats(lat), col in siterange(lat, scol), p in nzrange(mh, col)
+            row = rows[p]
+            dn = dcell(har)
+            r, dr = rdr(site(lat, col, dn0) => site(lat, row, dn))
+            if (col => row, (r, dr), dn) in s
+                ncol = norbs[scol]
+                srow = site_to_sublat(row, os)
+                nrow = norbs[srow]
+                push!(ptr_r_dr, (p, r, dr, (nrow, ncol)))
+            end
+        end
+    end
+    return ptrs
+end
 
 #endregion

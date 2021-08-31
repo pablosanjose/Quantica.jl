@@ -82,6 +82,106 @@ end
 #endregion
 
 ############################################################################################
+# ParametricHamiltonian constructors
+#region
+
+parametric(modifiers::Modifier...) = h -> parametric(h, modifiers...)
+
+function parametric(hparent::Hamiltonian, modifiers::Modifier...)
+    modifiers´ = apply.(modifiers, Ref(hparent))  # PartiallyAppliedModifiers
+    allptrs = merge_pointers(hparent, modifiers´...)
+    allparams = merge_parameters(modifiers´...)
+    h = copy_harmonics(hparent)
+    return ParametricHamiltonian(hparent, h, modifiers´, allptrs, allparams)
+end
+
+merge_pointers(h, m...) = merge_pointers!([Int[] for _ in harmonics(h)], m...)
+
+function merge_pointers!(p, m::PartiallyAppliedOnsiteModifier, ms...)
+    p0 = first(p)
+    for (ptr, _) in pointers(m)
+        push!(p0, ptr)
+    end
+    return merge_pointers!(p, ms...)
+end
+
+function merge_pointers!(p, m::PartiallyAppliedHoppingModifier, ms...)
+    for (pn, pm) in zip(p, pointers(m)), (ptr, _, _) in pm
+        push!(pn, ptr)
+    end
+    return merge_pointers!(p, ms...)
+end
+
+function merge_pointers!(p)
+    for pn in p
+        unique!(sort!(pn))
+    end
+    return p
+end
+
+merge_parameters(m...) = _merge_parameters(Symbol[], m...)
+_merge_parameters(p, m, ms...) = _merge_parameters(append!(p, parameters(m)), ms...)
+_merge_parameters(p) = unique!(sort!(p))
+
+# Call API #
+
+function (ph::ParametricHamiltonian)(; kw...)
+    hparent = parent(ph)
+    h = hamiltonian(ph)
+    reset_pointers!(ph)
+    modifiers´ = apply.(modifiers(ph), Ref(hparent))
+    applymodifiers!(h, modifiers´...)
+    return h
+end
+
+function reset_pointers!(ph::ParametricHamiltonian)
+    h = hamiltonian(ph)
+    hparent = parent(ph)
+    for (har, har´, ptrs) in zip(harmonics(h), harmonics(hparent), pointers(ph))
+        nz = nonzeros(matrix(har))
+        nz´ = nonzeros(matrix(har´))
+        for ptr in ptrs
+            nz[ptr] = nz´[ptr]
+        end
+    end
+    return ph
+end
+
+# function reset_pointers!(ph::ParametricHamiltonian)
+#     h = hamiltonian(ph)
+#     hparent = parent(ph)
+#     for (har, har´) in zip(harmonics(h), harmonics(hparent))
+#         copy!(nonzeros(matrix(har)), nonzeros(matrix(har´)))
+#     end
+#     return ph
+# end
+
+function applymodifiers!(h, m::AppliedOnsiteModifier, ms...)
+    f = parametric_function(m)
+    nz = nonzeros(matrix(first(harmonics(h))))
+    for (ptr, r, norbs) in pointers(m)
+        nz[ptr] = f(nz[ptr], r, norbs)
+    end
+    return applymodifiers!(h, ms...)
+end
+
+function applymodifiers!(h, m::AppliedHoppingModifier, ms...)
+    f = parametric_function(m)
+    nz = nonzeros(h)
+    for (har, p) in zip(harmonics(h), pointers(m))
+        nz = nonzeros(matrix(har))
+        for (ptr, r, dr, norbs) in p
+            nz[ptr] = f(nz[ptr], r, dr, norbs)
+        end
+    end
+    return applymodifiers!(h, ms...)
+end
+
+applymodifiers!(h) = h
+
+#endregion
+
+############################################################################################
 # FlatHamiltonian constructors (flatten)
 #region
 

@@ -18,8 +18,9 @@ function bloch(f::FlatHamiltonian)
     return Bloch(f, output)
 end
 
-#eager flattening of Hamiltonian for performance (avoids a flatten on each call later)
-# bloch(f::FlatHamiltonian) = bloch(hamiltonian(f))
+(b::Bloch{L})(φs::Vararg{Number,L} ; kw...) where {L} = b(φs; kw...)
+(b::Bloch{L})(φs::NTuple{L,Number} ; kw...) where {L} = b(SVector(φs); kw...)
+(b::Bloch)(φs::SVector; kw...) = maybe_flatten_bloch!(b.output, b.h, φs)
 
 maybe_flatten_bloch!(output, h::FlatHamiltonian, φs) = maybe_flatten_bloch!(output, parent(h), φs)
 

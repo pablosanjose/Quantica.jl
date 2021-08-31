@@ -166,14 +166,15 @@ isbelowrange(dr, (rmin, rmax)::Tuple{Real,Real}) =  ifelse(dr'dr < rmin^2, true,
 #endregion
 
 ############################################################################################
-# Model
+# Model Terms
 #region
+
+# Terms #
 
 struct TightbindingModel{T}
     terms::T  # Collection of `TightbindingModelTerm`s
 end
 
-# These need to be concrete as they are involved in hot construction loops
 struct OnsiteTerm{F,S<:SiteSelector,T<:Number}
     o::F
     selector::S
@@ -198,7 +199,7 @@ end
 
 const TightbindingModelTerm = Union{OnsiteTerm,HoppingTerm,AppliedOnsiteTerm,AppliedHoppingTerm}
 
-#region internal API
+#region Term internal API
 
 terms(t::TightbindingModel) = t.terms
 
@@ -213,6 +214,81 @@ selector(t::TightbindingModelTerm) = t.selector
 (term::HoppingTerm)(r, dr) = term.coefficient * term.t
 
 (term::AppliedHoppingTerm)(r, dr, orbs) = term.t(r, dr, orbs)
+
+#endregion
+#endregion
+
+############################################################################################
+# Model Modifiers
+#region
+
+# wrapper of a function f(x1, ... xN; kw...) with N arguments and the kwargs in params
+struct ParametricFunction{N,F}
+    f::F
+    params::Vector{Symbol}
+end
+
+ParametricFunction{N}(f::F, params) where {N,F} = ParametricFunction{N,F}(f, params)
+
+struct OnsiteModifier{N,S<:SiteSelector,F<:ParametricFunction{N}}
+    f::F
+    selector::S
+end
+
+struct PartiallyAppliedOnsiteModifier{N,T,E,F<:ParametricFunction{N}}
+    f::F
+    ptrs::Vector{Tuple{Int,SVector{E,T},Int}}
+    # [(ptr, r, norbs)...] for each selected site, dn = 0 harmonic
+end
+
+struct AppliedOnsiteModifier{T,E,L,O}
+    f::FunctionWrapper{O,Tuple{O,SVector{E,T},Int}}
+    # o(old_o, r, norbs)
+    ptrs::Vector{Tuple{Int,SVector{E,T},Int}}
+    # [(ptr, r, norbs)...] for each selected site, dn = 0 harmonic
+end
+
+struct HoppingModifier{N,S<:HopSelector,F<:ParametricFunction{N}}
+    f::F
+    selector::S
+end
+
+struct PartiallyAppliedHoppingModifier{N,T,E,F<:ParametricFunction{N}}
+    f::F
+    ptrs::Vector{Vector{Tuple{Int,SVector{E,T},SVector{E,T},Tuple{Int,Int}}}}
+    # [[(ptr, r, dr, (norbs, norbs´)), ...], ...] for each selected hop on each harmonic
+end
+
+struct AppliedHoppingModifier{T,E,L,O}
+    f::FunctionWrapper{O,Tuple{O,SVector{E,T},SVector{E,T},Tuple{Int,Int}}}
+    # t(old_t, r, dr, (orbs1, orbs2))
+    ptrs::Vector{Vector{Tuple{Int,SVector{E,T},SVector{E,T},Tuple{Int,Int}}}}
+    # [[(ptr, r, dr, (norbs, norbs´)), ...], ...] for each selected hop on each harmonic
+end
+
+const Modifier = Union{OnsiteModifier,HoppingModifier}
+const PartiallyAppliedModifier = Union{PartiallyAppliedOnsiteModifier,PartiallyAppliedHoppingModifier}
+const AppliedModifier = Union{AppliedOnsiteModifier,AppliedHoppingModifier}
+
+#region Modifier internal API
+
+selector(m::Modifier) = m.selector
+
+parameters(m::Union{Modifier,PartiallyAppliedModifier}) = m.f.params
+
+parametric_function(m::Union{Modifier,PartiallyAppliedModifier,AppliedModifier}) = m.f
+
+pointers(m::Union{PartiallyAppliedModifier,AppliedModifier}) = m.ptrs
+
+(m::PartiallyAppliedOnsiteModifier{1})(o, r; kw...) = m.f(o; kw...)
+(m::PartiallyAppliedOnsiteModifier{2})(o, r; kw...) = m.f(o, r; kw...)
+
+(m::AppliedOnsiteModifier)(o, r, orbs) = m.f(o, r, orbs)
+
+(m::PartiallyAppliedHoppingModifier{1})(t, r, dr; kw...) = m.f(t; kw...)
+(m::PartiallyAppliedHoppingModifier{3})(t, r, dr; kw...) = m.f(t, r, dr; kw...)
+
+(m::AppliedHoppingModifier)(t, r, dr, orbs) = m.f(t, r, dr, orbs)
 
 #endregion
 #endregion
@@ -299,7 +375,51 @@ Base.size(h::Hamiltonian, i...) = size(first(harmonics(h)), i...)
 
 Base.isless(h::HamiltonianHarmonic, h´::HamiltonianHarmonic) = sum(abs2, dcell(h)) < sum(abs2, dcell(h´))
 
+copy_harmonics(h::Hamiltonian) = Hamiltonian(lattice(h), orbitalstructure(h), deepcopy(harmonics(h)))
+
+function LinearAlgebra.ishermitian(h::Hamiltonian)
+    for hh in h.harmonics
+        isassigned(h, -hh.dn) || return false
+        hh.h ≈ h[-hh.dn]' || return false
+    end
+    return true
+end
+
 #endregion
+#endregion
+
+############################################################################################
+# Parametric
+#region
+
+struct ParametricHamiltonian{T,E,L,O,M<:NTuple{<:Any,PartiallyAppliedModifier}} <: AbstractHamiltonian{T,E,L,O}
+    hparent::Hamiltonian{T,E,L,O}
+    h::Hamiltonian{T,E,L,O}
+    modifiers::M                   # Tuple of PartiallyAppliedModifier's (unwrapped until kwargs are known)
+    allptrs::Vector{Vector{Int}}   # allptrs are all modified ptrs in each harmonic (needed for reset!)
+    allparams::Vector{Symbol}
+end
+
+Base.parent(h::ParametricHamiltonian) = h.hparent
+
+hamiltonian(h::ParametricHamiltonian) = h.h
+
+parameters(h::ParametricHamiltonian) = h.allparams
+
+modifiers(h::ParametricHamiltonian) = h.modifiers
+
+pointers(h::ParametricHamiltonian) = h.allptrs
+
+harmonics(h::ParametricHamiltonian) = harmonics(parent(h))
+
+orbitalstructure(h::ParametricHamiltonian) = orbitalstructure(parent(h))
+
+blocktype(h::ParametricHamiltonian) = blocktype(parent(h))
+
+lattice(h::ParametricHamiltonian) = lattice(parent(h))
+
+Base.size(h::ParametricHamiltonian, i...) = size(parent(h), i...)
+
 #endregion
 
 ############################################################################################
@@ -343,32 +463,4 @@ struct Bloch{L,O,O´,H<:AbstractHamiltonian{<:Any,<:Any,L,O´}}
     output::SparseMatrixCSC{O,Int}  # output has same structure as merged harmonics(h)
 end                                 # or its flattened version if O != O´
 
-
-(b::Bloch{L})(φs::Vararg{Number,L} ; kw...) where {L} = b(φs; kw...)
-(b::Bloch{L})(φs::NTuple{L,Number} ; kw...) where {L} = b(SVector(φs); kw...)
-
-(b::Bloch)(φs::SVector; kw...) =
-    maybe_flatten_bloch!(b.output, b.h, φs)  # see bloch.jl
-
 #endregion
-
-# #######################################################################
-# # Modifiers
-# #######################################################################
-# struct ParametricFunction{N,F}
-#     f::F
-#     params::Vector{Symbol}
-# end
-
-# struct Modifier{N,S<:Selector,F}
-#     f::ParametricFunction{N,F}
-#     selector::S
-# end
-
-# const ElementModifier{N,S<:ElementSelector,F} = Modifier{N,S,F}
-# const HopModifier{N,S<:Union{HopSelector,ResolvedHopSelector},F} = Modifier{N,S,F}
-# const SiteModifier{N,S<:Union{SiteSelector,ResolvedSiteSelector},F} = Modifier{N,S,F}
-# const BlockModifier{N,S<:BlockSelector,F} = Modifier{N,S,F}
-# const UniformModifier = ElementModifier{1}
-# const UniformHopModifier = HopModifier{1}
-# const UniformSiteModifier = SiteModifier{1}

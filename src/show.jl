@@ -78,7 +78,7 @@ displayrange(rs::Tuple) = "($(displayrange(first(rs))), $(displayrange(last(rs))
 # Hamiltonian
 #region
 
-function Base.show(io::IO, h::Union{Hamiltonian,FlatHamiltonian})
+function Base.show(io::IO, h::AbstractHamiltonian)
     i = get(io, :indent, "")
     print(io, i, summary(h), "\n",
 "$i  Bloch harmonics  : $(length(harmonics(h)))
@@ -88,6 +88,7 @@ $i  Element type     : $(displaytype(blocktype(h)))
 $i  Onsites $(parentstring(h))   : $(nonsites(h))
 $i  Hoppings $(parentstring(h))  : $(nhoppings(h))
 $i  Coordination     : $(coordination(h))")
+    showextrainfo(io, i, h)
 end
 
 Base.summary(h::Hamiltonian{T,E,L}) where {T,E,L} =
@@ -96,13 +97,17 @@ Base.summary(h::Hamiltonian{T,E,L}) where {T,E,L} =
 Base.summary(h::FlatHamiltonian{T,E,L}) where {T,E,L} =
     "FlatHamiltonian{$T,$E,$L}: Flattened Hamiltonian on a $(L)D Lattice in $(E)D space"
 
+Base.summary(h::ParametricHamiltonian{T,E,L}) where {T,E,L} =
+    "ParametricHamiltonian{$T,$E,$L}: Parametric Hamiltonian on a $(L)D Lattice in $(E)D space"
+
 displaytype(::Type{S}) where {N,T,S<:SMatrix{N,N,T}} = "$N × $N blocks ($T)"
 displaytype(::Type{T}) where {T} = "scalar ($T)"
 
-parentstring(::Hamiltonian)     = "      "
-parentstring(::FlatHamiltonian) = "parent"
+parentstring(::Hamiltonian)           = "      "
+parentstring(::ParametricHamiltonian) = "      "
+parentstring(::FlatHamiltonian)       = "parent"
 
-function nhoppings(h::Union{Hamiltonian,FlatHamiltonian})
+function nhoppings(h::AbstractHamiltonian)
     count = 0
     for har in harmonics(h)
         count += iszero(dcell(har)) ? (_nnz(matrix(har)) - _nnzdiag(matrix(har))) : _nnz(matrix(har))
@@ -110,7 +115,7 @@ function nhoppings(h::Union{Hamiltonian,FlatHamiltonian})
     return count
 end
 
-function nonsites(h::Union{Hamiltonian,FlatHamiltonian})
+function nonsites(h::AbstractHamiltonian)
     count = 0
     for har in harmonics(h)
         iszero(dcell(har)) && (count += _nnzdiag(matrix(har)))
@@ -118,7 +123,7 @@ function nonsites(h::Union{Hamiltonian,FlatHamiltonian})
     return count
 end
 
-coordination(h::Union{Hamiltonian,FlatHamiltonian}) = round(nhoppings(h) / nsites(lattice(h)), digits = 5)
+coordination(h::AbstractHamiltonian) = round(nhoppings(h) / nsites(lattice(h)), digits = 5)
 
 _nnz(s) = count(!iszero, nonzeros(s)) # Exclude stored zeros
 
@@ -133,6 +138,12 @@ function _nnzdiag(s)
     end
     return count
 end
+
+# fallback
+showextrainfo(io, i, h) = nothing
+
+showextrainfo(io, i, h::ParametricHamiltonian) = print(io, i, "\n",
+"$i  Parameters       : $(parameters(h))")
 
 #endregion
 

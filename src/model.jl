@@ -1,5 +1,5 @@
 ############################################################################################
-# Model constructors
+# Model terms constructors
 #region
 
 TightbindingModel(ts::TightbindingModelTerm...) = TightbindingModel(ts)
@@ -25,7 +25,7 @@ hopping(m::TightbindingModel; kw...) = TightbindingModel(
 #endregion
 
 ############################################################################################
-# Model algebra
+# Model terms algebra
 #region
 
 Base.:*(x::Number, m::TightbindingModel) = TightbindingModel(x .* terms(m))
@@ -43,5 +43,56 @@ Base.adjoint(t::OnsiteTerm{<:Function}) = OnsiteTerm(r -> t.o(r)', t.selector, t
 Base.adjoint(t::OnsiteTerm) = OnsiteTerm(t.o', t.selector, t.coefficient')
 Base.adjoint(t::HoppingTerm{<:Function}) = HoppingTerm((r, dr) -> t.t(r, -dr)', t.selector', t.coefficient')
 Base.adjoint(t::HoppingTerm) = HoppingTerm(t.t', t.selector', t.coefficient')
+
+#endregion
+
+############################################################################################
+# Model modifiers constructors
+#region
+
+macro onsite!(kw, f)
+    f, N, params = get_f_N_params(f, "Only @onsite!(args -> body; kw...) syntax supported. Mind the `;`.")
+    return esc(:(Quantica.OnsiteModifier(Quantica.ParametricFunction{$N}($f, $(params)), Quantica.siteselector($kw))))
+end
+
+macro onsite!(f)
+    f, N, params = get_f_N_params(f, "Only @onsite!(args -> body; kw...) syntax supported.  Mind the `;`.")
+    return esc(:(Quantica.OnsiteModifier(Quantica.ParametricFunction{$N}($f, $(params)), Quantica.siteselector())))
+end
+
+macro hopping!(kw, f)
+    f, N, params = get_f_N_params(f, "Only @hopping!(args -> body; kw...) syntax supported. Mind the `;`.")
+    return esc(:(Quantica.HoppingModifier(Quantica.ParametricFunction{$N}($f, $(params)), Quantica.hopselector($kw))))
+end
+
+macro hopping!(f)
+    f, N, params = get_f_N_params(f, "Only @hopping!(args -> body; kw...) syntax supported. Mind the `;`.")
+    return esc(:(Quantica.HoppingModifier(Quantica.ParametricFunction{$N}($f, $(params)), Quantica.hopselector())))
+end
+
+# Extracts normalized f, number of arguments and kwarg names from an anonymous function f
+function get_f_N_params(f, msg)
+    (f isa Expr && f.head == :->) || throw(ArgumentError(msg))
+    d = ExprTools.splitdef(f)
+    kwargs = convert(Vector{Any}, get!(d, :kwargs, []))
+    d[:kwargs] = kwargs  # in case it wasn't Vector{Any} originally
+    if isempty(kwargs)
+        params = Symbol[]
+        push!(kwargs, :(_...))  # normalization : append _... to kwargs
+    else
+        params = get_kwname.(kwargs)
+        if !isempty(params) && last(params) == :...
+            params = params[1:end-1]  # drop _... kwarg from params
+        else
+            push!(kwargs, :(_...))  # normalization : append _... to kwargs
+        end
+    end
+    N = haskey(d, :args) ? length(d[:args]) : 0
+    f´ = ExprTools.combinedef(d)
+    return f´, N, params
+end
+
+get_kwname(x::Symbol) = x
+get_kwname(x::Expr) = x.head === :kw ? x.args[1] : x.head  # x.head == :...
 
 #endregion
