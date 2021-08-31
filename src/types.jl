@@ -428,7 +428,7 @@ Base.size(h::ParametricHamiltonian, i...) = size(parent(h), i...)
 
 abstract type AbstractFlatHamiltonian{T,E,L,O} <: AbstractHamiltonian{T,E,L,O} end
 
-struct FlatHamiltonian{T,E,L,O<:Number,H<:Hamiltonian{T,E,L,<:SMatrix}} <: AbstractFlatHamiltonian{T,E,L,O}
+struct FlatHamiltonian{T,E,L,O<:Number,H<:AbstractHamiltonian{T,E,L,<:SMatrix}} <: AbstractFlatHamiltonian{T,E,L,O}
     h::H
     flatorbstruct::OrbitalStructure{O}
 end

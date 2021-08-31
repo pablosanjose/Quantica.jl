@@ -78,34 +78,34 @@ displayrange(rs::Tuple) = "($(displayrange(first(rs))), $(displayrange(last(rs))
 # Hamiltonian
 #region
 
-function Base.show(io::IO, h::AbstractHamiltonian)
+function Base.show(io::IO, h::Union{Hamiltonian,ParametricHamiltonian})
     i = get(io, :indent, "")
     print(io, i, summary(h), "\n",
 "$i  Bloch harmonics  : $(length(harmonics(h)))
 $i  Harmonic size    : $((n -> "$n × $n")(size(h, 1)))
 $i  Orbitals         : $(norbitals(orbitalstructure(h)))
 $i  Element type     : $(displaytype(blocktype(h)))
-$i  Onsites $(parentstring(h))   : $(nonsites(h))
-$i  Hoppings $(parentstring(h))  : $(nhoppings(h))
+$i  Onsites          : $(nonsites(h))
+$i  Hoppings         : $(nhoppings(h))
 $i  Coordination     : $(coordination(h))")
     showextrainfo(io, i, h)
 end
 
+function Base.show(io::IO, h::FlatHamiltonian)
+    i = get(io, :indent, "")
+    print(io, i, "FlatHamiltonian: orbital-flattening wrapper for\n")
+    ioindent = IOContext(io, :indent => "  ")
+    show(ioindent, parent(h))
+end
+
 Base.summary(h::Hamiltonian{T,E,L}) where {T,E,L} =
     "Hamiltonian{$T,$E,$L}: Hamiltonian on a $(L)D Lattice in $(E)D space"
-
-Base.summary(h::FlatHamiltonian{T,E,L}) where {T,E,L} =
-    "FlatHamiltonian{$T,$E,$L}: Flattened Hamiltonian on a $(L)D Lattice in $(E)D space"
 
 Base.summary(h::ParametricHamiltonian{T,E,L}) where {T,E,L} =
     "ParametricHamiltonian{$T,$E,$L}: Parametric Hamiltonian on a $(L)D Lattice in $(E)D space"
 
 displaytype(::Type{S}) where {N,T,S<:SMatrix{N,N,T}} = "$N × $N blocks ($T)"
 displaytype(::Type{T}) where {T} = "scalar ($T)"
-
-parentstring(::Hamiltonian)           = "      "
-parentstring(::ParametricHamiltonian) = "      "
-parentstring(::FlatHamiltonian)       = "parent"
 
 function nhoppings(h::AbstractHamiltonian)
     count = 0

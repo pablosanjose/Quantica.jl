@@ -147,15 +147,6 @@ function reset_pointers!(ph::ParametricHamiltonian)
     return ph
 end
 
-# function reset_pointers!(ph::ParametricHamiltonian)
-#     h = hamiltonian(ph)
-#     hparent = parent(ph)
-#     for (har, har´) in zip(harmonics(h), harmonics(hparent))
-#         copy!(nonzeros(matrix(har)), nonzeros(matrix(har´)))
-#     end
-#     return ph
-# end
-
 function applymodifiers!(h, m::AppliedOnsiteModifier, ms...)
     nz = nonzeros(matrix(first(harmonics(h))))
     for (ptr, r, norbs) in pointers(m)
@@ -180,12 +171,13 @@ applymodifiers!(h) = h
 #endregion
 
 ############################################################################################
-# FlatHamiltonian constructors (flatten)
+# Flat constructors (flatten)
 #region
 
-flatten(h::Hamiltonian{<:Any,<:Any,<:Any,<:Number}) = h
-flatten(h::Hamiltonian) = FlatHamiltonian(h, flatten(orbitalstructure(h)))
+flatten(h::AbstractHamiltonian{<:Any,<:Any,<:Any,<:Number}) = h
+flatten(h::Union{Hamiltonian,ParametricHamiltonian}) = FlatHamiltonian(h, flatten(orbitalstructure(h)))
 flatten(h::FlatHamiltonian) = h
+
 flatten(os::OrbitalStructure{<:Number}) = os
 
 function flatten(os::OrbitalStructure{<:SMatrix})
