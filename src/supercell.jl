@@ -142,7 +142,6 @@ function supercell(h::Hamiltonian, v...; kw...)
     return Hamiltonian(lat´, orb´, har´)
 end
 
-# function supercell_harmonics(h, data, builder, modifiers)
 function supercell_harmonics(h, data, builder)
     indexlist, offset = supercell_indexlist(data)
     # This is the inverse of the full supercell matrix sm´ (i.e. full-rank square),

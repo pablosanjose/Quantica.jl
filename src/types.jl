@@ -463,6 +463,8 @@ struct Bloch{L,O,O´,H<:AbstractHamiltonian{<:Any,<:Any,L,O´}}
     output::SparseMatrixCSC{O,Int}  # output has same structure as merged harmonics(h)
 end                                 # or its flattened version if O != O´
 
-Base.parent(b::Bloch) = b.h
+matrix(b::Bloch) = b.output
+
+hamiltonian(b::Bloch) = b.h
 
 #endregion

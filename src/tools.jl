@@ -7,14 +7,12 @@ rdr((r1, r2)::Pair) = (0.5 * (r1 + r2), r2 - r1)
 
 # merge several sparse matrices using only structural zeros
 function merge_structure(mats::Vector{<:SparseMatrixCSC{O}}) where {O}
-    n, m = size(first(mats))
-    n == m || throw(ArgumentError("Internal error: matrix not square"))
+    nrows, ncols = size(first(mats))
+    nrows == ncols || throw(ArgumentError("Internal error: matrix not square"))
     nnzguess = sum(nnz, mats)
-    collector = CSC{O}(n, nnzguess)
-    # val = zero(O)
-    for col in 1:m
+    collector = CSC{O}(ncols, nnzguess)
+    for col in 1:ncols
         for (i, mat) in enumerate(mats)
-        # for mat in mats
             for p in nzrange(mat, col)
                 val = i == 1 ? nonzeros(mat)[p] : zero(O)
                 row = rowvals(mat)[p]
@@ -23,14 +21,16 @@ function merge_structure(mats::Vector{<:SparseMatrixCSC{O}}) where {O}
         end
         finalizecolumn!(collector)
     end
-    matrix = sparse(collector, n)
+    matrix = sparse(collector, ncols)
     return matrix
 end
 
 # flatten a sparse matrix according to OrbitalStructures
 function flatten(src::SparseMatrixCSC{O}, os::OrbitalStructure{O}, flatos::OrbitalStructure{T} = flatten(os)) where {T<:Number,O<:SMatrix}
     norbs = norbitals(os)
-    collector = CSC{T}()
+    ncolsflatguess = size(src, 2) * maximum(norbs)
+    nnzflatguess = nnz(src) * maximum(norbs)
+    collector = CSC{T}(ncolsflatguess, nnzflatguess)
     for col in 1:size(src, 2)
         scol = site_to_sublat(col, os)
         for j in 1:norbs[scol]

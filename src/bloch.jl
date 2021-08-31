@@ -2,9 +2,10 @@
 # Bloch constructor
 #region
 
+bloch(h, φs; kw...) = copy(bloch!(h, φs; kw...))
 bloch(h::AbstractHamiltonian, φs::Tuple; kw...) = bloch(h)(φs...; kw...)
 
-function bloch(h::Hamiltonian)
+function bloch(h::Union{Hamiltonian,ParametricHamiltonian})
     mats = matrix.(harmonics(h))
     output = merge_structure(mats)  # see tools.jl
     return Bloch(h, output)
@@ -18,9 +19,17 @@ function bloch(f::FlatHamiltonian)
     return Bloch(f, output)
 end
 
+#endregion
+
+############################################################################################
+# Bloch call API
+#region
+
 (b::Bloch{L})(φs::Vararg{Number,L} ; kw...) where {L} = b(φs; kw...)
 (b::Bloch{L})(φs::NTuple{L,Number} ; kw...) where {L} = b(SVector(φs); kw...)
-(b::Bloch)(φs::SVector; kw...) = maybe_flatten_bloch!(b.output, b.h, φs; kw...)
+(b::Bloch)(φs::SVector; kw...) = copy(matrix!(b, φs; kw...))
+
+matrix!(b::Bloch, φs; kw...) = maybe_flatten_bloch!(matrix(b), hamiltonian(b), φs; kw...)
 
 maybe_flatten_bloch!(output, h::FlatHamiltonian, φs; kw...) = maybe_flatten_bloch!(output, parent(h), φs; kw...)
 maybe_flatten_bloch!(output, h::ParametricHamiltonian, φs; kw...) = maybe_flatten_bloch!(output, h(; kw...), φs)

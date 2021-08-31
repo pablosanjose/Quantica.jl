@@ -3,8 +3,8 @@
 #region
 
 # norbs is a collection of number of orbitals, one per sublattice (or a single one for all)
-# surprisingly, O type instability has no performance or allocations penalty
-function OrbitalStructure(lat::Lattice, norbs, ::Type{T} = numbertype(lat)) where {T}
+# O type instability when calling from `hamiltonian` is removed by @inline
+@inline function OrbitalStructure(lat::Lattice, norbs, T = numbertype(lat))
     O = blocktype(T, norbs)
     return OrbitalStructure{O}(lat, norbs)
 end
@@ -37,7 +37,8 @@ Base.:(==)(o1::OrbitalStructure, o2::OrbitalStructure) =
 
 hamiltonian(m::TightbindingModel = TightbindingModel(); kw...) = lat -> hamiltonian(lat, m; kw...)
 
-function hamiltonian(lat::Lattice, m = TightbindingModel(); orbitals = Val(1), type = numbertype(lat))
+# @aggressive_constprop needed for type-stable non-Val orbitals
+Base.@aggressive_constprop function hamiltonian(lat::Lattice, m = TightbindingModel(); orbitals = Val(1), type = numbertype(lat))
     orbstruct = OrbitalStructure(lat, orbitals, type)
     builder = IJVBuilder(lat, orbstruct)
     apmod = apply(m, (lat, orbstruct))
@@ -97,20 +98,7 @@ end
 
 merge_pointers(h, m...) = merge_pointers!([Int[] for _ in harmonics(h)], m...)
 
-function merge_pointers!(p, m::PartiallyAppliedOnsiteModifier, ms...)
-    p0 = first(p)
-    for (ptr, _) in pointers(m)
-        push!(p0, ptr)
-    end
-    return merge_pointers!(p, ms...)
-end
-
-function merge_pointers!(p, m::PartiallyAppliedHoppingModifier, ms...)
-    for (pn, pm) in zip(p, pointers(m)), (ptr, _, _) in pm
-        push!(pn, ptr)
-    end
-    return merge_pointers!(p, ms...)
-end
+merge_pointers!(p, m, ms...) = merge_pointers!(_merge_pointers!(p, m), ms...)
 
 function merge_pointers!(p)
     for pn in p
@@ -119,13 +107,34 @@ function merge_pointers!(p)
     return p
 end
 
+function merge_pointers!(p, m::PartiallyAppliedOnsiteModifier)
+    p0 = first(p)
+    for (ptr, _) in pointers(m)
+        push!(p0, ptr)
+    end
+    return p
+end
+
+function _merge_pointers!(p, m::PartiallyAppliedHoppingModifier)
+    for (pn, pm) in zip(p, pointers(m)), (ptr, _, _) in pm
+        push!(pn, ptr)
+    end
+    return p
+end
+
 merge_parameters(m...) = _merge_parameters(Symbol[], m...)
 _merge_parameters(p, m, ms...) = _merge_parameters(append!(p, parameters(m)), ms...)
 _merge_parameters(p) = unique!(sort!(p))
 
-# Call API #
+#endregion
 
-function (ph::ParametricHamiltonian)(; kw...)
+############################################################################################
+# ParametricHamiltonian call API
+#region
+
+(ph::ParametricHamiltonian)(; kw...) = copy_harmonics(hamiltonian!(ph; kw...))
+
+function hamiltonian!(ph::ParametricHamiltonian; kw...)
     hparent = parent(ph)
     h = hamiltonian(ph)
     reset_pointers!(ph)
