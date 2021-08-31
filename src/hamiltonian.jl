@@ -129,7 +129,7 @@ function (ph::ParametricHamiltonian)(; kw...)
     hparent = parent(ph)
     h = hamiltonian(ph)
     reset_pointers!(ph)
-    modifiers´ = apply.(modifiers(ph), Ref(hparent))
+    modifiers´ = apply.(modifiers(ph), Ref(hparent); kw...)
     applymodifiers!(h, modifiers´...)
     return h
 end
@@ -157,21 +157,19 @@ end
 # end
 
 function applymodifiers!(h, m::AppliedOnsiteModifier, ms...)
-    f = parametric_function(m)
     nz = nonzeros(matrix(first(harmonics(h))))
     for (ptr, r, norbs) in pointers(m)
-        nz[ptr] = f(nz[ptr], r, norbs)
+        nz[ptr] = m(nz[ptr], r, norbs)
     end
     return applymodifiers!(h, ms...)
 end
 
 function applymodifiers!(h, m::AppliedHoppingModifier, ms...)
-    f = parametric_function(m)
     nz = nonzeros(h)
     for (har, p) in zip(harmonics(h), pointers(m))
         nz = nonzeros(matrix(har))
         for (ptr, r, dr, norbs) in p
-            nz[ptr] = f(nz[ptr], r, dr, norbs)
+            nz[ptr] = m(nz[ptr], r, dr, norbs)
         end
     end
     return applymodifiers!(h, ms...)

@@ -76,7 +76,7 @@ function apply(m::OnsiteModifier, h::Hamiltonian)
     return PartiallyAppliedOnsiteModifier(f, ptrs)
 end
 
-function apply(m::PartiallyAppliedOnsiteModifier, h::Hamiltonian{T,E,L,O}) where {T,E,L,O}
+function apply(m::PartiallyAppliedOnsiteModifier, h::Hamiltonian{T,E,L,O}; kw...) where {T,E,L,O}
     f = (o, r, orbs) -> sanitize_block(O, m(o, r; kw...), (orbs, orbs))
     ptrs = pointers(m)
     return AppliedOnsiteModifier{T,E,L,O}(f, ptrs)  # f gets wrapped in a FunctionWrapper
@@ -89,7 +89,7 @@ function apply(m::HoppingModifier, h::Hamiltonian)
     return PartiallyAppliedHoppingModifier(f, ptrs)
 end
 
-function apply(m::PartiallyAppliedHoppingModifier, h::Hamiltonian{T,E,L,O}) where {T,E,L,O}
+function apply(m::PartiallyAppliedHoppingModifier, h::Hamiltonian{T,E,L,O}; kw...) where {T,E,L,O}
     f = (t, r, dr, orbs) -> sanitize_block(O, m(t, r, dr; kw...), (orbs, orbs))
     ptrs = pointers(m)
     return AppliedHoppingModifier{T,E,L,O}(f, ptrs) # f gets wrapped in a FunctionWrapper

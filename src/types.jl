@@ -280,13 +280,13 @@ parametric_function(m::Union{Modifier,PartiallyAppliedModifier,AppliedModifier})
 
 pointers(m::Union{PartiallyAppliedModifier,AppliedModifier}) = m.ptrs
 
-(m::PartiallyAppliedOnsiteModifier{1})(o, r; kw...) = m.f(o; kw...)
-(m::PartiallyAppliedOnsiteModifier{2})(o, r; kw...) = m.f(o, r; kw...)
+(m::PartiallyAppliedOnsiteModifier{1})(o, r; kw...) = m.f.f(o; kw...)
+(m::PartiallyAppliedOnsiteModifier{2})(o, r; kw...) = m.f.f(o, r; kw...)
 
 (m::AppliedOnsiteModifier)(o, r, orbs) = m.f(o, r, orbs)
 
-(m::PartiallyAppliedHoppingModifier{1})(t, r, dr; kw...) = m.f(t; kw...)
-(m::PartiallyAppliedHoppingModifier{3})(t, r, dr; kw...) = m.f(t, r, dr; kw...)
+(m::PartiallyAppliedHoppingModifier{1})(t, r, dr; kw...) = m.f.f(t; kw...)
+(m::PartiallyAppliedHoppingModifier{3})(t, r, dr; kw...) = m.f.f(t, r, dr; kw...)
 
 (m::AppliedHoppingModifier)(t, r, dr, orbs) = m.f(t, r, dr, orbs)
 
