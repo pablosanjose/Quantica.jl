@@ -2,22 +2,23 @@
 # Bloch constructor
 #region
 
+bloch(φs::Number...; kw...) = h -> bloch(h, φs; kw...)
 bloch(φs::Tuple; kw...) = h -> bloch(h, φs; kw...)
-bloch(h, φs; kw...) = copy(bloch!(h, φs; kw...))
 bloch(h::AbstractHamiltonian, φs::Tuple; kw...) = bloch(h)(φs...; kw...)
 
 function bloch(h::Union{Hamiltonian,ParametricHamiltonian})
-    output = merge_sparse(harmonics(h))  # see tools.jl
+    output = merge_sparse(harmonics(h))
     return Bloch(h, output)
 end
 
 function bloch(f::FlatHamiltonian)
     os = orbitalstructure(parent(f))
     flatos = orbitalstructure(f)
-    output = merge_flatten_sparse(harmonics(f), os, flatos)  # see tools.jl
+    output = merge_flatten_sparse(harmonics(f), os, flatos)
     return Bloch(f, output)
 end
 
+# see tools.jl
 merge_sparse(hars::Vector{<:HamiltonianHarmonic}) = merge_sparse(matrix(har) for har in hars)
 
 merge_flatten_sparse(hars::Vector{<:HamiltonianHarmonic}, os::OrbitalStructure{<:SMatrix}, flatos::OrbitalStructure{<:Number}) =

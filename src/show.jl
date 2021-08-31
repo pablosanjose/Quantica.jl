@@ -155,7 +155,7 @@ function Base.show(io::IO, b::Bloch)
     i = get(io, :indent, "")
     ioindent = IOContext(io, :indent => "  ")
     print(io, i, summary(b), " for \n")
-    show(ioindent, parent(b))
+    show(ioindent, hamiltonian(b))
 end
 
 Base.summary(h::Bloch{L,O}) where {L,O} =

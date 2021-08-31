@@ -6,8 +6,10 @@ rdr((r1, r2)::Pair) = (0.5 * (r1 + r2), r2 - r1)
 #region
 
 # merge several sparse matrices onto the first using only structural zeros
-function merge_sparse(mats::Vector{<:SparseMatrixCSC{O}}) where {O}
-    nrows, ncols = size(first(hars))
+function merge_sparse(mats)
+    mat0 = first(mats)
+    O = eltype(mat0)
+    nrows, ncols = size(mat0)
     nrows == ncols || throw(ArgumentError("Internal error: matrix not square"))
     nnzguess = sum(mat -> nnz(mat), mats)
     collector = CSC{O}(ncols, nnzguess)
@@ -29,22 +31,23 @@ end
 
 # flatten and merge several sparse matrices onto first according to OrbitalStructures
 function merge_flatten_sparse(mats,
-                                 os::OrbitalStructure{<:SMatrix},
-                                 flatos::OrbitalStructure{T} = flatten(os)) where {T<:Number}
+                              os::OrbitalStructure{<:SMatrix},
+                              flatos::OrbitalStructure{T} = flatten(os)) where {T<:Number}
     mat0 = first(mats)
     check_orbstruct_consistency(mat0, os)
     norbs = norbitals(os)
     ncolsflatguess = size(mat0, 2) * maximum(norbs)
     nnzflatguess = nnz(mat0) * maximum(norbs)
     collector = CSC{T}(ncolsflatguess, nnzflatguess)
-    multiple_matrices = length(mats) == 1
+    multiple_matrices = length(mats) > 1
     needs_column_sort = multiple_matrices
     skip_column_dupcheck = !multiple_matrices
     for scol in sublats(os), col in siterange(os, scol)
-        for (n, mat) in enumerate(mats)
-            vals = nonzeros(mat)
-            rows = rowvals(mat)
-            for j in 1:norbs[scol]  # block column
+        ncol = norbs[scol]
+        for j in 1:ncol  # block column
+            for (n, mat) in enumerate(mats)
+                vals = nonzeros(mat)
+                rows = rowvals(mat)
                 for p in nzrange(mat, col)
                     row = rows[p]
                     rowoffset´, nrow = site_to_flatoffset_norbs(row, os, flatos)
@@ -54,8 +57,8 @@ function merge_flatten_sparse(mats,
                     end
                 end
             end
+            finalizecolumn!(collector, needs_column_sort)
         end
-        finalizecolumn!(collector, needs_column_sort)
     end
     flatmat = sparse(collector, nsites(flatos))
     return flatmat
