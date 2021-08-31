@@ -102,12 +102,12 @@ function pointers(h::Hamiltonian{T,E}, s::AppliedSiteSelector{T,E}) where {T,E}
     mh = matrix(har0)
     rows = rowvals(mh)
     norbs = norbitals(h)
-    for s in sublats(lat), col in siterange(lat, s), p in nzrange(mh, col)
+    for scol in sublats(lat), col in siterange(lat, scol), p in nzrange(mh, col)
         row = rows[p]
         col == row || continue
         r = site(lat, row)
         if (row, r) in s
-            n = norbs[s]
+            n = norbs[scol]
             push!(ptr_r, (p, r, n))
         end
     end
