@@ -13,8 +13,7 @@ function Base.getindex(b::AbstractSparseBuilder{<:Any,<:Any,L}, dn::SVector{L,In
     for har in hars
         har.dn == dn && return collector(har)
     end
-    C = eltype(hars)
-    har = C(dn)
+    har = empty_harmonic(b, dn)
     push!(hars, har)
     return collector(har)
 end
@@ -52,9 +51,17 @@ struct IJVBuilder{T,E,L,O} <: AbstractSparseBuilder{T,E,L,O}
     kdtrees::Vector{KDTree{SVector{E,T},Euclidean,T}}
 end
 
-IJV{O}() where {O} = IJV(Int[], Int[], O[])
+function IJV{O}(nnzguess = missing) where {O}
+    i, j, v = Int[], Int[], O[]
+    if nnzguess isa Integer
+        sizehint!(i, nnzguess)
+        sizehint!(j, nnzguess)
+        sizehint!(v, nnzguess)
+    end
+    return IJV(i, j, v)
+end
 
-IJVHarmonic{L,O}(dn = zero(SVector{L,Int})) where {L,O} = IJVHarmonic(dn, IJV{O}())
+empty_harmonic(::IJVBuilder{<:Any,<:Any,L,O}, dn) where {L,O} = IJVHarmonic{L,O}(dn, IJV{O}())
 
 function IJVBuilder(lat::Lattice{T,E,L}, orbstruct::OrbitalStructure{O}) where {E,L,T,O}
     harmonics = IJVHarmonic{L,O}[]
@@ -97,19 +104,25 @@ struct CSCBuilder{T,E,L,O} <: AbstractSparseBuilder{T,E,L,O}
     harmonics::Vector{CSCHarmonic{L,O}}
 end
 
-function CSC{O}() where {O}
+function CSC{O}(cols = missing, nnzguess = missing) where {O}
     colptr = [1]
     rowval = Int[]
     nzval = O[]
+    if cols isa Integer
+        sizehint!(colptr, cols + 1)
+    end
+    if nnzguess isa Integer
+        sizehint!(nzval, nnzguess)
+        sizehint!(rowval, nnzguess)
+    end
     colcounter = 1
     rowvalcounter = 0
     cosorter = CoSort(rowval, nzval)
     return CSC(colptr, rowval, nzval, colcounter, rowvalcounter, cosorter)
 end
 
-function CSCHarmonic{L,O}(dn::SVector = zero(SVector{L,Int})) where {L,O}
-    return CSCHarmonic{L,O}(dn, CSC{O}())
-end
+empty_harmonic(b::CSCBuilder{<:Any,<:Any,L,O}, dn) where {L,O} =
+    CSCHarmonic{L,O}(dn, CSC{O}(nsites(b.lat)))
 
 CSCBuilder(lat, orbstruct) =
     CSCBuilder(lat, orbstruct, CSCHarmonic{latdim(lat),blocktype(orbstruct)}[])
@@ -130,7 +143,7 @@ function isintail(element, container, start::Int)
     return false
 end
 
-function ensure_column_sync!(s::CSC, col)
+function sync_columns!(s::CSC, col)
     missing_cols = col - s.colcounter
     for _ in 1:missing_cols
         finalizecolumn!(s)

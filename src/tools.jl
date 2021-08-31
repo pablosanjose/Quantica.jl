@@ -5,13 +5,16 @@ rdr((r1, r2)::Pair) = (0.5 * (r1 + r2), r2 - r1)
 # all merged_* functions assume matching structure of sparse matrices
 #region
 
-# merge several sparse matrices onto the first as structural zeros
+# merge several sparse matrices using only structural zeros
 function merge_structure(mats::Vector{<:SparseMatrixCSC{O}}) where {O}
     n, m = size(first(mats))
     n == m || throw(ArgumentError("Internal error: matrix not square"))
-    collector = CSC{O}()
+    nnzguess = sum(nnz, mats)
+    collector = CSC{O}(n, nnzguess)
+    # val = zero(O)
     for col in 1:m
         for (i, mat) in enumerate(mats)
+        # for mat in mats
             for p in nzrange(mat, col)
                 val = i == 1 ? nonzeros(mat)[p] : zero(O)
                 row = rowvals(mat)[p]

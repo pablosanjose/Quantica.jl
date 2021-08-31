@@ -170,7 +170,7 @@ function supercell_harmonics(h, data, builder)
                 iszero(row´) && continue
                 csc = builder[scell]
                 # if csc is a newly created collector, advance column to current col´
-                ensure_column_sync!(csc, col´)
+                sync_columns!(csc, col´)
                 # val´ = applymodifiers(vals[p], slat, (source_i, target_i), (source_dn, target_dn), modifiers´...)
                 val´ = vals[p]
                 pushtocolumn!(csc, row´, val´)
