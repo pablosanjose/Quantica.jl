@@ -6,12 +6,9 @@
 Base.convert(::Type{T}, l::T) where T<:Sublat = l
 Base.convert(::Type{T}, l::Sublat) where T<:Sublat = T(l)
 
-# Base.convert(::Type{T}, l::T) where T<:Bravais = l
-# Base.convert(::Type{T}, l::Bravais) where T<:Bravais = T(l)
-
 # Constructors for conversion
-Sublat{T,E}(s::Sublat, name = s.name) where {T,E} =
-    Sublat([sanitize_SVector(SVector{E,T}, site) for site in s.sites], name)
+Sublat{T,E}(s::Sublat, name = s.name) where {T<:AbstractFloat,E} =
+    Sublat{T,E}([sanitize_SVector(SVector{E,T}, site) for site in sites(s)], name)
 
 # We need this to promote different sublats into common dimensionality and type to combine
 # into a lattice

@@ -29,12 +29,12 @@ using Statistics: mean
 
 using Compat # for use of argmin/argmax in bandstructure.jl
 
-export sublat, bravais, lattice, dims, supercell,
+export sublat, bravais_matrix, lattice, dims, supercell,
        hopping, onsite, @onsite!, @hopping!, @block!, parameters, siteselector, hopselector, neighbors,
-       sitepositions, siteindices, not,
+       sites, siteindices, not,
        ket, ketmodel, randomkets, basiskets,
        hamiltonian, parametric, bloch, bloch!, similarmatrix,
-       flatten, unflatten, orbitalstructure, wrap, transform!, combine,
+       flatten, unflatten, orbitalstructure, wrap, transform, translate, combine,
        spectrum, bandstructure, diagonalizer, cuboid, isometric, splitbands,
        bands, vertices, minima, maxima, gapedge, gap, isinband,
        energies, states, degeneracy,

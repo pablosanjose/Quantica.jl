@@ -18,7 +18,7 @@ Base.summary(::Lattice{T,E,L}) where {T,E,L} =
 function Base.show(io::IO, lat::Lattice)
     i = get(io, :indent, "")
     print(io, i, summary(lat), "\n",
-"$i  Bravais vectors : $(display_rounded_vectors(bravais_vecs(lat)))
+"$i  Bravais vectors : $(display_rounded_vectors(bravais_vectors(lat)))
 $i  Sublattices     : $(nsublats(lat))
 $i    Names         : $(displaynames(lat))
 $i    Sites         : $(display_as_tuple(sublatlengths(lat))) --> $(nsites(lat)) total per unit cell")
@@ -87,7 +87,7 @@ $i  Orbitals         : $(norbitals(orbitalstructure(h)))
 $i  Element type     : $(displaytype(blocktype(h)))
 $i  Onsites          : $(nonsites(h))
 $i  Hoppings         : $(nhoppings(h))
-$i  Coordination     : $(coordination(h))")
+$i  Coordination     : $(round(coordination(h), digits = 5))")
     showextrainfo(io, i, h)
 end
 
@@ -106,38 +106,6 @@ Base.summary(h::ParametricHamiltonian{T,E,L}) where {T,E,L} =
 
 displaytype(::Type{S}) where {N,T,S<:SMatrix{N,N,T}} = "$N × $N blocks ($T)"
 displaytype(::Type{T}) where {T} = "scalar ($T)"
-
-function nhoppings(h::AbstractHamiltonian)
-    count = 0
-    for har in harmonics(h)
-        count += iszero(dcell(har)) ? (_nnz(matrix(har)) - _nnzdiag(matrix(har))) : _nnz(matrix(har))
-    end
-    return count
-end
-
-function nonsites(h::AbstractHamiltonian)
-    count = 0
-    for har in harmonics(h)
-        iszero(dcell(har)) && (count += _nnzdiag(matrix(har)))
-    end
-    return count
-end
-
-coordination(h::AbstractHamiltonian) = round(nhoppings(h) / nsites(lattice(h)), digits = 5)
-
-_nnz(s) = count(!iszero, nonzeros(s)) # Exclude stored zeros
-
-function _nnzdiag(s)
-    count = 0
-    rowptrs = rowvals(s)
-    nz = nonzeros(s)
-    for col in 1:size(s,2)
-        for ptr in nzrange(s, col)
-            rowptrs[ptr] == col && (count += !iszero(nz[ptr]); break)
-        end
-    end
-    return count
-end
 
 # fallback
 showextrainfo(io, i, h) = nothing

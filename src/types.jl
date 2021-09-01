@@ -34,12 +34,14 @@ unitcell(l::Lattice) = l.unitcell
 
 bravais(l::Lattice) = l.bravais
 
-bravais_vecs(l::Lattice) = bravais_vecs(l.bravais)
-bravais_vecs(b::Bravais) = eachcol(b.matrix)
+bravais_vectors(l::Lattice) = bravais_vectors(l.bravais)
+bravais_vectors(b::Bravais) = eachcol(b.matrix)
 
-bravais_mat(l::Lattice) = bravais_mat(l.bravais)
-bravais_mat(b::Bravais{T,E,L}) where {T,E,L} =
+bravais_matrix(l::Lattice) = bravais_matrix(l.bravais)
+bravais_matrix(b::Bravais{T,E,L}) where {T,E,L} =
     convert(SMatrix{E,L,T}, ntuple(i -> b.matrix[i], Val(E*L)))
+
+matrix(b::Bravais) = b.matrix
 
 sublatnames(l::Lattice) = l.unitcell.names
 sublatname(l::Lattice, s) = sublatname(l.unitcell, s)
@@ -63,7 +65,7 @@ sites(u::Unitcell) = u.sites
 sites(u::Unitcell, sublat) = view(u.sites, u.offsets[sublat]+1:u.offsets[sublat+1])
 
 site(l::Lattice, i) = sites(l)[i]
-site(l::Lattice, i, dn) = site(l, i) + bravais_mat(l) * dn
+site(l::Lattice, i, dn) = site(l, i) + bravais_matrix(l) * dn
 
 siterange(l::Lattice, sublat) = siterange(l.unitcell, sublat)
 siterange(u::Unitcell, sublat) = (1+u.offsets[sublat]):u.offsets[sublat+1]
@@ -97,6 +99,8 @@ numbertype(::Sublat{T}) where {T} = T
 numbertype(::Lattice{T}) where {T} = T
 
 zerocell(::Lattice{<:Any,<:Any,L}) where {L} = zero(SVector{L,Int})
+
+Base.copy(l::Lattice) = deepcopy(l)
 
 #endregion
 
@@ -141,6 +145,8 @@ end
 #region internal API
 
 Base.parent(n::Neighbors) = n.n
+
+region(s::Union{SiteSelector,HopSelector}) = s.region
 
 lattice(ap::AppliedSiteSelector) = ap.lat
 lattice(ap::AppliedHopSelector) = ap.lat

@@ -4,47 +4,49 @@ supercell(v...; kw...) = x -> supercell(x, v...; kw...)
 # SupercellData (required to build lattice supercell)
 #region
 
-struct SupercellData{T,E,L,L´,S<:SMatrix{L,L´,Int},S´<:SMatrix{L,L,Int}}
+struct SupercellData{T,E,L,L´,LL´}
     lat::Lattice{T,E,L}
     sitelist::Vector{SVector{E,T}}                     # [sitepositions...]
     masklist::Vector{Tuple{Int,SVector{L,Int},Int}}    # [(sublatindex, cell, siteindex)...]
     bravais´::Bravais{T,E,L´}
-    sm::S
-    sm´::S´
+    sm::SMatrix{L,L´,Int,LL´}
     detsm´::Int
-    invsm´detsm´::S´
+    proj_invsm´_detsm´::SMatrix{L´,L,Int,LL´}
 end
 
-function supercell_data(lat::Lattice{<:Any,<:Any,L}, vs...; kw...) where {L,L´}
+function supercell_data(lat::Lattice{<:Any,<:Any,L}, vs...; kw...) where {L}
     smat = sanitize_supercell(Val(L), vs)
     selector = siteselector(; kw...)
-    check_finite_supercell(smat, selector)
     applied_selector = apply(selector, lat)
+    # if lattice dimensions are reduced and there is no bounding region, stop at a single perp unit cell
+    only_one_perp = size(smat, 2) < size(smat, 1) && region(selector) === missing
     cellseed = zero(SVector{L,Int})
-    return supercell_data(lat, smat, cellseed, applied_selector)
+    return supercell_data(lat, smat, cellseed, applied_selector, only_one_perp)
 end
 
 function supercell_data(lat::Lattice{T,E,L},
                         sm::SMatrix{L,L´,Int},
                         cellseed::SVector{L,Int},
-                        applied_selector::AppliedSiteSelector{T,E}) where {T,E,L,L´}
+                        applied_selector::AppliedSiteSelector{T,E},
+                        only_one_perp::Bool = false) where {T,E,L,L´}
     sm´ = makefull(sm)
     detsm´ = round(Int, det(sm´))
     iszero(detsm´) && throw(ArgumentError("Supercell is empty. Singular supercell matrix?"))
-    invsm´detsm´ = round.(Int, inv(sm´) * detsm´)
-    bravais´ = Bravais{T,E,L´}(bravais_mat(lat) * sm)
-    masklist = supercell_masklist_full(invsm´detsm´, detsm´, cellseed, lat)
+    # inverse of full supercell sm´ (times det(sm´) to make it integer)
+    # projected back onto superlattice axes L´
+    invsm´_detsm´ = round.(Int, inv(sm´) * detsm´)
+    proj_invsm´_detsm´ = SMatrix{L´,L,Bool}(I) * invsm´_detsm´
+    bravais´ = Bravais{T,E,L´}(bravais_matrix(lat) * sm)
+    masklist = supercell_masklist_full(invsm´_detsm´, detsm´, cellseed, lat)
     smperp = convert(SMatrix{L,L-L´,Int}, view(sm´, :, L´+1:L))
     seedperp = zero(SVector{L-L´,Int})
     sitelist = similar(sites(lat), 0)
-    supercell_sitelist!!(sitelist, masklist, smperp, seedperp, lat, applied_selector)
+    supercell_sitelist!!(sitelist, masklist, smperp, seedperp, lat, applied_selector, only_one_perp)
     cosort!(masklist, sitelist)  # sorted by sublat, then cell, then siteidx
-    return SupercellData(lat, sitelist, masklist, bravais´, sm, sm´, detsm´, invsm´detsm´)
+    return SupercellData(lat, sitelist, masklist, bravais´, sm, detsm´, proj_invsm´_detsm´)
 end
 
-check_finite_supercell(smat, selector) =
-    size(smat, 2) == size(smat, 1) || selector.region !== missing ||
-        throw(ArgumentError("Cannot reduce supercell dimensions without a bounding region."))
+smat_projector(::SupercellData{<:Any,<:Any,L,L´}) where {L,L´} = SMatrix{L´,L,Bool}(I)
 
 # Make matrix square by appending (or prepending) independent columns if possible
 function makefull(m::SMatrix{L,L´}) where {L,L´}
@@ -81,19 +83,22 @@ end
 
 # build sitelist = [sitepositions...] and masklist´ = [(sublat, cell´, siteidx)...]
 # where cell´ varies along axes smatperp not in smat, filtered by selector
-function supercell_sitelist!!(sitelist, masklist, smatperp, seedperp, lat, applied_selector)
+function supercell_sitelist!!(sitelist, masklist, smatperp, seedperp, lat, applied_selector, only_one_perp)
     masklist0 = copy(masklist)
     empty!(masklist)
     empty!(sitelist)
     iter = BoxIterator(seedperp)
-    for c in iter, (s, cell, i) in masklist0
-        cell´ = cell + smatperp * c
-        r = site(lat, i, cell´)
-        if (i, r) in applied_selector
-            push!(masklist, (s, cell´, i))
-            push!(sitelist, r)
-            acceptcell!(iter, c)
+    for c in iter
+        for (s, cell, i) in masklist0
+            cell´ = cell + smatperp * c
+            r = site(lat, i, cell´)
+            if (i, r) in applied_selector
+                push!(masklist, (s, cell´, i))
+                push!(sitelist, r)
+                acceptcell!(iter, c)
+            end
         end
+        only_one_perp && break
     end
     return nothing
 end
@@ -129,41 +134,37 @@ end
 # supercell(::Hamiltonian, ...)
 #region
 
-# function supercell(h::Hamiltonian, v...; modifiers = (), mincoordination = missing, kw...)
-function supercell(h::Hamiltonian, v...; kw...)
+function supercell(h::Hamiltonian, v...; mincoordination = 0, kw...)
     data = supercell_data(lattice(h), v...; kw...)
-    # remove_low_coordination_sites!(data, h, mincoordination)
+    # data.sitelist === sites(lat´), so any change to data will reflect in lat´ too
     lat´ = lattice(data)
     O = blocktype(h)
     orb´ = OrbitalStructure{O}(lat´, norbitals(h))
     builder = CSCBuilder(lat´, orb´)
-    # har´ = supercell_harmonics(h, data, builder, modifiers)
-    har´ = supercell_harmonics(h, data, builder)
+    har´ = supercell_harmonics(h, data, builder, mincoordination)
     return Hamiltonian(lat´, orb´, har´)
 end
 
-function supercell_harmonics(h, data, builder)
+function supercell_harmonics(h, data, builder, mincoordination)
     indexlist, offset = supercell_indexlist(data)
-    # This is the inverse of the full supercell matrix sm´ (i.e. full-rank square),
-    # times N = det(sm´) to make it integer, and projected onto the actual L supercell dims
-    psmat⁻¹N = smat_projector(data) * data.invsm´detsm´
-    N = data.detsm´
-    smat = data.sm
+    if mincoordination > 0
+        indexlist, offset = remove_low_coordination_sites!(data, indexlist, offset, h, mincoordination)
+    end
+
     # Note: masklist = [(sublat, old_cell, old_siteindex)...]
     for (col´, (_, cellsrc, col)) in enumerate(data.masklist)
         for har in harmonics(h)
             celldst = cellsrc + dcell(har)
-            # scell is the indices of the supercell where the destination cell celldst lives
-            scell   = fld.(psmat⁻¹N * celldst, N)
             # cell is the position of celldst within its supercell scell
-            cell    = celldst - smat * scell
-            m       = matrix(har)
-            rows    = rowvals(m)
-            vals    = nonzeros(m)
+            cell, scell = wrap_cell_onto_supercell(celldst, data)
+            m = matrix(har)
+            rows = rowvals(m)
+            vals = nonzeros(m)
             for p in nzrange(m, col)
                 row = rows[p]
                 c = CartesianIndex((row, Tuple(cell)...)) + offset
-                checkbounds(Bool, indexlist, c) || continue
+                # If any row is out of bounds, all rows are (because cell is out of bounds)
+                checkbounds(Bool, indexlist, c) || break
                 # Note: indexlist[(old_site_index, old_site_cell...) + offset] = new_site_index
                 row´ = indexlist[c]
                 iszero(row´) && continue
@@ -180,7 +181,18 @@ function supercell_harmonics(h, data, builder)
     return harmonics(builder)
 end
 
-smat_projector(::SupercellData{<:Any,<:Any,L,L´}) where {L,L´} = SMatrix{L´,L,Bool}(I)
+function wrap_cell_onto_supercell(cell, data)
+    # This psmat⁻¹N is the inverse of the full supercell matrix sm´ (i.e. full-rank square),
+    # times N = det(sm´) to make it integer, and projected onto the actual L supercell dims
+    psmat⁻¹N = data.proj_invsm´_detsm´
+    N = data.detsm´
+    smat = data.sm
+    # `scell` is the indices of the supercell where `cell` lives
+    scell = fld.(psmat⁻¹N * cell, N)
+    # `cell´` is `cell` shifted back to the zero supercell
+    cell´ = cell - smat * scell
+    return cell´, scell
+end
 
 function supercell_indexlist(data)
     (cellmin, cellmax), (imin, imax) = mask_bounding_box(data.masklist)
@@ -204,6 +216,54 @@ function mask_bounding_box(masklist::Vector{Tuple{Int,SVector{L,Int},Int}}) wher
         imax = max(imax, i)
     end
     return (cellmin, cellmax), (imin, imax)
+end
+
+function remove_low_coordination_sites!(data, indexlist, offset, h, mincoordination)
+    # remove low-coordination sites in masklist and sitelist until they don't change
+    # when a site is removed, it becomes a zero in indexlist, but the other indices
+    # are not changed. Hence, at the end we must recompute indexlist with the final
+    # masklist and sitelist. Note that lat´ in the calling context is updated through
+    # sitelist too, since sites(lat´) === data.sitelist
+    masklist  = data.masklist
+    masklist´ = similar(masklist)
+    sitelist  = data.sitelist
+    sitelist´ = similar(sitelist)
+    while true
+        resize!(masklist´, 0)
+        resize!(sitelist´, 0)
+        for (r, (sj, cellj, j)) in zip(sitelist, masklist)
+            coordination = 0
+            for har in harmonics(h)
+                dn = dcell(har)
+                celli, _ = wrap_cell_onto_supercell(cellj + dn, data)
+                m = matrix(har)
+                rows = rowvals(m)
+                vals = nonzeros(m)
+                for p in nzrange(m, j)
+                    i = rows[p]
+                    c = CartesianIndex((i, Tuple(celli)...)) + offset
+                    checkbounds(Bool, indexlist, c) || break
+                    isonsite = i == j && iszero(dn)
+                    if !isonsite && !iszero(indexlist[c]) && !iszero(vals[p])
+                        coordination += 1
+                    end
+                end
+            end
+            if coordination >= mincoordination
+                push!(sitelist´, r)
+                push!(masklist´, (sj, cellj, j))
+            else
+                c = CartesianIndex((j, Tuple(cellj)...)) + offset
+                indexlist[c] = 0
+            end
+        end
+        length(sitelist´) == length(sitelist) && break
+        sitelist´, sitelist = sitelist, sitelist´
+        masklist´, masklist = masklist, masklist´
+    end
+    data.masklist .= masklist´
+    data.sitelist .= sitelist´
+    return supercell_indexlist(data)
 end
 
 #endregion

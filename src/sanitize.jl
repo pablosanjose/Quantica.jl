@@ -51,7 +51,9 @@ end
 function sanitize_Matrix(::Type{T}, E, cols::Tuple) where {T}
     m = zeros(T, E, length(cols))
     for (j, col) in enumerate(cols), i in 1:E
-        @inbounds m[i,j] = col[i]
+        if i <= length(col)
+            m[i, j] = col[i]
+        end
     end
     return m
 end

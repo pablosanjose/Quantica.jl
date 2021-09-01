@@ -100,6 +100,7 @@ const LP = LatticePresets
 module RegionPresets
 
 using StaticArrays
+using Quantica: sanitize_SVector
 
 struct Region{E,F} <: Function
     f::F
@@ -107,7 +108,10 @@ end
 
 Region{E}(f::F) where {E,F<:Function} = Region{E,F}(f)
 
-(region::Region{E})(r::SVector{E2}) where {E,E2} = region.f(r)
+(region::Region{E})(r::SVector{E}) where {E} = region.f(r)
+
+(region::Region{E})(r) where {E} = region.f(sanitize_SVector(SVector{E,Float64}, r))
+(region::Region{E})(r::Number...) where {E} = region(r)
 
 Base.show(io::IO, ::Region{E}) where {E} =
     print(io, "Region{$E} : region in $(E)D space")

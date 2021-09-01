@@ -5,6 +5,9 @@
 sublat(sites...; name = :_) =
     Sublat(sanitize_Vector_of_float_SVectors(sites), Symbol(name))
 
+sublat(sites::Vector; name = :_) =
+    Sublat(sanitize_Vector_of_float_SVectors(sites), Symbol(name))
+
 #endregion
 
 ############################################################################################
@@ -12,6 +15,8 @@ sublat(sites...; name = :_) =
 #region
 
 Bravais(::Type{T}, E, m) where {T} = Bravais(T, Val(E), m)
+Bravais(::Type{T}, ::Val{E}, m::NTuple{E´,Number}) where {T,E,E´} =
+    Bravais{T,E,1}(sanitize_Matrix(T, E, (m,)))
 Bravais(::Type{T}, ::Val{E}, m::NTuple{L,Any}) where {T,E,L} =
     Bravais{T,E,L}(sanitize_Matrix(T, E, m))
 Bravais(::Type{T}, ::Val{E}, m::SMatrix{E,L}) where {T,E,L} =
@@ -77,11 +82,11 @@ function _lattice(ss::Sublat{T,E}...;
     return Lattice(b, u)
 end
 
-function lattice(l::Lattice{T,E};
-                 bravais = bravais_mat(lat),
+function lattice(lat::Lattice{T,E};
+                 bravais = bravais_matrix(lat),
                  dim = Val(E),
                  type::Type{T´} = T,
-                 names = names(l)) where {T,E,T´}
+                 names = sublatnames(lat)) where {T,E,T´}
     u = unitcell(unitcell(lat), names, postype(dim, type))
     b = Bravais(type, dim, bravais)
     return Lattice(b, u)
@@ -89,5 +94,41 @@ end
 
 postype(dim, type) = SVector{dim,type}
 postype(::Val{E}, type) where {E} = SVector{E,type}
+
+#endregion
+
+############################################################################################
+# Lattice transformations
+#region
+
+transform(f::Function) = x -> transform(f, x)
+
+transform!(f::Function) = x -> transform!(f, x)
+
+transform(f::Function, l::Lattice) = transform!(f, copy(l))
+
+transform!(f::Function, l::Lattice) =
+    Lattice(transform!(f, bravais(l)), transform!(f, unitcell(l)))
+
+function transform!(f::Function, b::Bravais{<:Any,E}) where {E}
+    m = matrix(b)
+    for j in axes(m, 2)
+        v = SVector(ntuple(i -> m[i, j], Val(E)))
+        m[:, j] .= f(v) - f(zero(v))
+    end
+    return b
+end
+
+transform!(f::Function, u::Unitcell) = (map!(f, sites(u), sites(u)); u)
+
+translate(δr) = x -> translate(x, δr)
+
+translate!(δr) = x -> translate!(x, δr)
+
+translate(lat::Lattice, δr) = translate!(copy(lat), δr)
+
+translate!(lat::Lattice{T,E}, δr) where {T,E} = translate!(lat, sanitize_SVector(SVector{E,T}, δr))
+
+translate!(lat::Lattice{T,E}, δr::SVector{E,T}) where {T,E} = transform!(r -> r + δr, lat)
 
 #endregion

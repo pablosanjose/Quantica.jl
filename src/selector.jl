@@ -139,7 +139,7 @@ end
 function nrange(n, lat::Lattice{T}) where {T}
     latsites = sites(lat)
     dns = BoxIterator(zerocell(lat))
-    br = bravais_mat(lat)
+    br = bravais_matrix(lat)
     # 128 is a heuristic cutoff for kdtree vs brute-force search
     if length(latsites) <= 128
         dists = fill(T(Inf), n)

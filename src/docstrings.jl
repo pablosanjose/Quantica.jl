@@ -2,11 +2,11 @@
 # Lattice
 #######################################################################
 """
-    sublat(sites...; name::$(NameType))
-    sublat(sites::Vector{<:SVector}; name::$(NameType))
+    sublat(sites...; name::Symbol)
+    sublat(sites::Vector; name::Symbol)
 
-Create a `Sublat{E,T,D}` that adds a sublattice, of name `name`, with sites at positions
-`sites` in `E` dimensional space. Sites can be entered as tuples or `SVectors`.
+Create a `Sublat{E,T}` that adds a sublattice, of name `name`, with sites at positions
+`sites` in `E` dimensional space. Sites positions can be entered as tuples or `SVectors`.
 
 # Examples
 
@@ -20,8 +20,8 @@ Sublat{2,Float64} : sublattice of Float64-typed sites in 2D space
 sublat
 
 """
-    bravais_mat(lat::Lattice)
-    bravais_mat(h::Hamiltonian)
+    bravais_matrix(lat::Lattice)
+    bravais_matrix(h::Hamiltonian)
 
 Obtain the Bravais matrix of lattice `lat` or Hamiltonian `h`
 
@@ -30,10 +30,11 @@ Obtain the Bravais matrix of lattice `lat` or Hamiltonian `h`
 ```jldoctest
 julia> lat = lattice(sublat((0,0)), bravais = ((1.0, 2), (3, 4)));
 
-julia> bravais_mat(lat)
+julia> bravais_matrix(lat)
 2×2 SMatrix{2, 2, Float64, 4} with indices SOneTo(2)×SOneTo(2):
  1.0  3.0
  2.0  4.0
+
 ```
 
 # See also
@@ -44,8 +45,9 @@ bravais
 """
     lattice(sublats::Sublat...; bravais = (), dim, type, names)
 
-Create a `Lattice{dim,L,type}` with `L` Bravais vectors `bravais` and sublattices `sublats`
-converted to a common  `dim`-dimensional embedding space and type `type`.
+Create a `Lattice{T,E,L}` from sublattices `sublats`, where `L` is the number of Bravais
+vectors `bravais`, `T = type` is the `AbstractFloat` type of spatial site coordinates, and
+`E = dim` is the spatial embedding dimension.
 
 The keyword `bravais` indicates one or more Bravais vectors in the form of tuples or other
 iterables. It can also be an `AbstractMatrix` of dimension `E×L`. The default `bravais = ()`
@@ -56,75 +58,162 @@ that all sublattice names are unique.
 
     lattice(lat::Lattice; bravais = missing, dim = missing, type = missing, names = missing)
 
-Create a new lattice by applying any non-missing `kw` to `lat`. For performance, allocations
-will be avoided if possible (depends on `kw`), so the result can share memory of `lat`. To
-avoid that, do `lattice(copy(lat); kw...)`.
+Create a new lattice by applying any non-missing `kw` to `lat`.
 
 See also `LatticePresets` for built-in lattices.
 
 # Examples
 
 ```jldoctest
-julia> lattice(sublat((0, 0)), sublat((0, Float32(1))); bravais = (1, 0), dim = Val(3))
-Lattice{3,1,Float32} : 1D lattice in 3D space
-  Bravais vectors : ((1.0f0, 0.0f0, 0.0f0),)
+julia> lat = lattice(sublat((0, 0)), sublat((0, 1)); bravais = (1, 0), type = Float32, dim = 3, names = (:up, :down))
+Lattice{Float32,3,1} : 1D lattice in 3D space
+  Bravais vectors : Vector{Float32}[[1.0, 0.0, 0.0]]
+  Sublattices     : 2
+    Names         : (:up, :down)
+    Sites         : (1, 1) --> 2 total per unit cell
+
+julia> lattice(lat; type = Float64, names = (:A, :B))
+Lattice{Float64,3,1} : 1D lattice in 3D space
+  Bravais vectors : [[1.0, 0.0, 0.0]]
   Sublattices     : 2
     Names         : (:A, :B)
     Sites         : (1, 1) --> 2 total per unit cell
 
+```
+
+# See also
+    `LatticePresets`, `bravais`, `sublat`, `supercell`
+"""
+lattice
+
+"""
+`LatticePresets` is a Quantica submodule containing severeal pre-defined lattices. The
+alias `LP` can be used in place of `LatticePresets`. Supported lattices are
+
+    LP.linear(; a0 = 1, kw...)      # linear lattice in 1D
+    LP.square(; a0 = 1, kw...)      # square lattice in 2D
+    LP.triangular(; a0 = 1, kw...)  # triangular lattice in 2D
+    LP.honeycomb(; a0 = 1, kw...)   # honeycomb lattice in 2D
+    LP.cubic(; a0 = 1, kw...)       # cubic lattice in 3D
+    LP.fcc(; a0 = 1, kw...)         # face-centered-cubic lattice in 3D
+    LP.bcc(; a0 = 1, kw...)         # body-centered-cubic lattice in 3D
+    LP.hcp(; a0 = 1, kw...)         # hexagonal-closed-packed lattice in 3D
+
+In all cases `a0` denotes the lattice constant, and `kw...` are extra keywords forwarded to
+`lattice`.
+
+# Examples
+
+```jldoctest
 julia> LatticePresets.honeycomb(names = (:C, :D))
-Lattice{2,2,Float64} : 2D lattice in 2D space
-  Bravais vectors : ((0.5, 0.866025), (-0.5, 0.866025))
+Lattice{Float64,2,2} : 2D lattice in 2D space
+  Bravais vectors : [[0.5, 0.866025], [-0.5, 0.866025]]
   Sublattices     : 2
     Names         : (:C, :D)
     Sites         : (1, 1) --> 2 total per unit cell
 
 julia> LatticePresets.cubic(bravais = ((1, 0), (0, 2)))
-Lattice{3,2,Float64} : 2D lattice in 3D space
-  Bravais vectors : ((1.0, 0.0, 0.0), (0.0, 2.0, 0.0))
+Lattice{Float64,3,2} : 2D lattice in 3D space
+  Bravais vectors : [[1.0, 0.0, 1.0], [0.0, 2.0, 1.0]]
   Sublattices     : 1
     Names         : (:A)
     Sites         : (1) --> 1 total per unit cell
 ```
 
 # See also
-    `LatticePresets`, `bravais`, `sublat`, `supercell`, `intracell`
+    `RegionPresets`, `HamiltonianPresets`
 """
-lattice
-
-"""
-    x |> transform!(f::Function)
-
-Curried version of `transform!`, equivalent to `transform!(f, x)`
-
-    transform!(f::Function, lat::Lattice)
-
-Transform the site positions of `lat` by applying `f` to them in place.
-"""
-transform!
+LatticePresets
 
 """
-    combine(lats::Lattice...)
+`RegionPresets` is a Quantica submodule containing several pre-defined regions of type
+`Region{E}`, where `E` is the space dimension. The alias `RP` can be used in place of
+`RegionPresets`. Supported regions are
 
-If all `lats` have compatible Bravais vectors, combine them into a single lattice.
-Sublattice names are renamed to be unique if necessary.
+    RP.circle(radius = 10, center = (0, 0))                         # 2D
+    RP.ellipse((rx, ry) = (10, 15), center = (0, 0))                # 2D
+    RP.square(side = 10, center = (0, 0))                           # 2D
+    RP.rectangle((sx, sy) = (10, 15), center = (0, 0))              # 2D
+    RP.sphere(radius = 10, center = (0, 0, 0))                      # 3D
+    RP.spheroid((rx, ry, rz) = (10, 15, 20), center = (0, 0, 0))    # 3D
+    RP.cube(side = 10, center = (0, 0, 0))                          # 3D
+    RP.cuboid((sx, sy, sz) = (10, 15, 20), center = (0, 0, 0))      # 3D
+
+
+Calling a `f::Region{E}` object on a `r::Tuple` or `r::SVector` as in `f(r)` or `f(r...)`
+returns `true` or `false` if `r` is inside the region or not. Note that only the first `E`
+coordinates of `r` will be checked. Arbitrary boolean functions can also be wrapped in
+`Region{E}`, e.g. `f = Region{2}(r -> r[1]^2 < r[2])`.
+
+# Examples
+
+```jldoctest
+julia> RegionPresets.circle(10)(20, 0, 0)
+false
+
+julia> RegionPresets.circle(10)(0, 0, 20)
+true
+```
+
+# See also
+    `LatticePresets`, `HamiltonianPresets`
 """
-combine
+RegionPresets
+
+"""
+    transform(f::Function, lat::Lattice)
+
+Build a new lattice transforming each site positions `r` into `f(r)`.
+
+    x |> transform(f::Function)
+
+Curried version of `transform`, equivalent to `transform(f, x)`
+
+# See also
+    `translate`
+
+"""
+transform
+
+"""
+    translate(lat::Lattice, δr)
+
+Build a new lattice translating each site positions from `r` to `r + δr`.
+
+    x |> translate(δr)
+
+Curried version of `translate`, equivalent to `translate(x, δr)`
+
+# See also
+    `transform`
+
+"""
+translate
+
+# """
+#     combine(lats::Lattice...)
+
+# If all `lats` have compatible Bravais vectors, combine them into a single lattice.
+# Sublattice names are renamed to be unique if necessary.
+# """
+# combine
 
 """
     supercell(lat::Lattice{E,L}, v::NTuple{L,Integer}...; seed = missing, kw...)
     supercell(lat::Lattice{E,L}, uc::SMatrix{L,L´,Int}; seed = missing, kw...)
 
-Generates a `Lattice` from an `L`-dimensional lattice `lat` and a larger unit cell, such
+Generates a `Lattice` from an `L`-dimensional lattice `lat` with a larger unit cell, such
 that its Bravais vectors are `br´= br * uc`. Here `uc::SMatrix{L,L´,Int}` is the integer
-supercell matrix, with the `L´` vectors `v`s as columns. If no `v` are given, the new
-lattice will be bounded.
+supercell matrix, with the `L´` vectors `v`s as its columns. If no `v` are given, the new
+lattice will have no Bravais vectors (i.e. it will be bounded, with its shape determined by
+keywords `kw...`). Likewise, if `L´ < L`, the resulting lattice will be bounded along `L´ -
+L` directions, as dictated by `kw...`.
 
 Only sites selected by `siteselector(; kw...)` will be included in the supercell (see
 `siteselector` for details on the available keywords `kw`). The search for included sites
 will start from point `seed::Union{Tuple,SVector}`, or the origin if `seed = missing`. If no
-keyword `region` is given in `kw`, a Bravais unit cell perpendicular to the `v` axes will be
-selected for the `L-L´` non-periodic directions.
+keyword `region` is given in `kw`, a single Bravais unit cell perpendicular to the `v` axes
+will be selected along the `L-L´` bounded directions.
 
     supercell(lattice::Lattice{E,L}, factor::Integer; kw...)
 
@@ -132,10 +221,10 @@ Calls `supercell` with a uniformly scaled `uc = SMatrix{L,L}(factor * I)`
 
     supercell(lattice::Lattice{E,L}, factors::Integer...; kw...)
 
-Calls `supercell` with different scaling along each Bravais vector (diagonal supercell
-with factors along the diagonal)
+Calls `supercell` with different scaling along each Bravais vector (diagonal supercell `uc`
+with `factors` along the diagonal)
 
-    supercell(h::Hamiltonian, v...; mincoordination, modifiers = (), kw...)
+    supercell(h::Hamiltonian, v...; mincoordination = 0, kw...)
 
 Transforms the `Lattice` of `h` to have a larger unit cell, while expanding the Hamiltonian
 accordingly.
@@ -143,14 +232,6 @@ accordingly.
 A nonzero `mincoordination` indicates a minimum number of nonzero hopping neighbors required
 for sites to be included in the resulting unit cell. Sites with inferior coordination will
 be removed recursively, until all remaining satisfy `mincoordination`.
-
-The `modifiers` (a tuple of `ElementModifier`s, either `@onsite!` or `@hopping!` with no
-free parameters) will be applied to onsite and hoppings as the hamiltonian is expanded. See
-`@onsite!` and `@hopping!` for details.
-
-Note: for performance reasons, in sparse hamiltonians only the stored onsites and hoppings
-will be transformed by `ElementModifier`s, so you might want to add zero onsites or hoppings
-when building `h` to have a modifier applied to them later.
 
     lat_or_h |> supercell(v...; kw...)
 
