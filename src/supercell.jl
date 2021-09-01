@@ -263,7 +263,8 @@ function remove_low_coordination_sites!(data, indexlist, offset, h, mincoordinat
     end
     data.masklist .= masklist´
     data.sitelist .= sitelist´
-    return supercell_indexlist(data)
+    indexlist´, offset´ = supercell_indexlist(data)
+    return indexlist´, offset´
 end
 
 #endregion
