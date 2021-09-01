@@ -3,7 +3,7 @@
 #region
 
 # norbs is a collection of number of orbitals, one per sublattice (or a single one for all)
-# O type instability when calling from `hamiltonian` is removed by @inline
+# O type instability when calling from `hamiltonian` is removed by @inline (const prop)
 @inline function OrbitalStructure(lat::Lattice, norbs, T = numbertype(lat))
     O = blocktype(T, norbs)
     return OrbitalStructure{O}(lat, norbs)
@@ -132,9 +132,9 @@ _merge_parameters(p) = unique!(sort!(p))
 # ParametricHamiltonian call API
 #region
 
-(ph::ParametricHamiltonian)(; kw...) = copy_harmonics(hamiltonian!(ph; kw...))
+(ph::ParametricHamiltonian)(; kw...) = copy_harmonics(call!(ph; kw...))
 
-function hamiltonian!(ph::ParametricHamiltonian; kw...)
+function call!(ph::ParametricHamiltonian; kw...)
     h = hamiltonian(ph)
     reset_pointers!(ph)
     applymodifiers!(h, modifiers(ph)...; kw...)
@@ -231,3 +231,59 @@ function hamiltonian(f::FlatHamiltonian{<:Any,<:Any,L,O}) where {L,O}
 end
 
  #endregion
+
+ ############################################################################################
+# Bloch constructor
+#region
+
+bloch(φs::Number...; kw...) = h -> bloch(h, φs; kw...)
+bloch(φs::Tuple; kw...) = h -> bloch(h, φs; kw...)
+bloch(h::AbstractHamiltonian, φs::Tuple; kw...) = bloch(h)(φs...; kw...)
+
+function bloch(h::Union{Hamiltonian,ParametricHamiltonian})
+    output = merge_sparse(harmonics(h))
+    return Bloch(h, output)
+end
+
+function bloch(f::FlatHamiltonian)
+    os = orbitalstructure(parent(f))
+    flatos = orbitalstructure(f)
+    output = merge_flatten_sparse(harmonics(f), os, flatos)
+    return Bloch(f, output)
+end
+
+# see tools.jl
+merge_sparse(hars::Vector{<:HamiltonianHarmonic}) = merge_sparse(matrix(har) for har in hars)
+
+merge_flatten_sparse(hars::Vector{<:HamiltonianHarmonic}, os::OrbitalStructure{<:SMatrix}, flatos::OrbitalStructure{<:Number}) =
+    merge_flatten_sparse((matrix(har) for har in hars), os, flatos)
+
+#endregion
+
+############################################################################################
+# Bloch call API
+#region
+
+(b::Bloch)(φs...; kw...) = copy(call!(b, φs...; kw...))
+
+call!(b::Bloch{L}, φs::Vararg{Number,L} ; kw...) where {L} = call!(b, φs; kw...)
+call!(b::Bloch{L}, φs::NTuple{L,Number} ; kw...) where {L} = call!(b, SVector(φs); kw...)
+call!(b::Bloch, φs::SVector; kw...) = maybe_flatten_bloch!(matrix(b), hamiltonian(b), φs; kw...)
+
+maybe_flatten_bloch!(output, h::FlatHamiltonian, φs; kw...) = maybe_flatten_bloch!(output, parent(h), φs; kw...)
+maybe_flatten_bloch!(output, h::ParametricHamiltonian, φs; kw...) = maybe_flatten_bloch!(output, h(; kw...), φs)
+
+# Adds harmonics, assuming output has same structure of merged harmonics
+function maybe_flatten_bloch!(output, h::Hamiltonian{<:Any,<:Any,L}, φs::SVector{L}) where {L}
+    hars = harmonics(h)
+    os = orbitalstructure(h)
+    flatos = flatten(os)
+    fill!(nonzeros(output), zero(eltype(output)))
+    for har in hars
+        e⁻ⁱᵠᵈⁿ = cis(-dot(φs, dcell(har)))
+        maybe_flatten_merged_mul!(output, (os, flatos), matrix(har), e⁻ⁱᵠᵈⁿ, 1, 1)  # see tools.jl
+    end
+    return output
+end
+
+#endregion

@@ -446,7 +446,7 @@ Base.parent(h::FlatHamiltonian) = h.h
 #endregion
 
 ############################################################################################
-# Bloch  -  see bloch.jl for methods
+# Bloch  -  see hamiltonian.jl for methods
 #region
 
 struct Bloch{L,O,O´,H<:AbstractHamiltonian{<:Any,<:Any,L,O´}}
