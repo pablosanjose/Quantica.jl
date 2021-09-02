@@ -42,7 +42,7 @@ function Base.in(((j, i), (r, dr), dcell)::Tuple{Pair,Tuple,SVector}, sel::Appli
     lat = lattice(sel)
     namei, namej = sitesublatname(lat, i), sitesublatname(lat, j)
     return !isonsite((j, i), dcell) &&
-            indcell(dcell, sel) &&
+            indcells(dcell, sel) &&
             insublats(namej => namei, sel) &&
             iswithinrange(dr, sel) &&
             inregion((r, dr), sel)
@@ -128,90 +128,6 @@ function inrange_targets(rsource, lat, si, rmax, kdtrees)
         targetlist = collect(siterange(lat, si))
     end
     return targetlist
-end
-
-#endregion
-
-############################################################################################
-# neighbors
-#region
-
-function nrange(n, lat::Lattice{T}) where {T}
-    latsites = sites(lat)
-    dns = BoxIterator(zerocell(lat))
-    br = bravais_matrix(lat)
-    # 128 is a heuristic cutoff for kdtree vs brute-force search
-    if length(latsites) <= 128
-        dists = fill(T(Inf), n)
-        for dn in dns
-            iszero(dn) || ispositive(dn) || continue
-            for (i, ri) in enumerate(latsites), (j, rj) in enumerate(latsites)
-                j <= i && iszero(dn) && continue
-                r = ri - rj + br * dn
-                _update_dists!(dists, r'r)
-            end
-            isfinite(last(dists)) || acceptcell!(dns, dn)
-        end
-        dist = sqrt(last(dists))
-    else
-        tree = KDTree(latsites)
-        dist = T(Inf)
-        for dn in dns
-            iszero(dn) || ispositive(dn) || continue
-            for r0 in latsites
-                r = r0 + br * dn
-                dist = min(dist, _nrange(n, tree, r, nsites(lat)))
-            end
-            isfinite(dist) || acceptcell!(dns, dn)
-        end
-    end
-    return dist
-end
-
-function _update_dists!(dists, dist)
-    len = length(dists)
-    for (n, d) in enumerate(dists)
-        isapprox(dist, d) && break
-        if dist < d
-            dists[n+1:len] .= dists[n:len-1]
-            dists[n] = dist
-            break
-        end
-    end
-    return dists
-end
-
-function _nrange(n, tree, r::AbstractVector, nmax)
-    for m in n:nmax
-        _, dists = knn(tree, r, 1 + m, true)
-        popfirst!(dists)
-        unique_sorted_approx!(dists)
-        length(dists) == n && return maximum(dists)
-    end
-    return convert(eltype(r), Inf)
-end
-
-function unique_sorted_approx!(v::AbstractVector)
-    i = 1
-    xprev = first(v)
-    for j in 2:length(v)
-        if v[j] ≈ xprev
-            xprev = v[j]
-        else
-            i += 1
-            xprev = v[i] = v[j]
-        end
-    end
-    resize!(v, i)
-    return v
-end
-
-function ispositive(ndist)
-    result = false
-    for i in ndist
-        i == 0 || (result = i > 0; break)
-    end
-    return result
 end
 
 #endregion

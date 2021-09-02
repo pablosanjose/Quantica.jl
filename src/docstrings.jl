@@ -2,91 +2,6 @@
 # Lattice
 #######################################################################
 """
-    sublat(sites...; name::Symbol)
-    sublat(sites::Vector; name::Symbol)
-
-Create a `Sublat{E,T}` that adds a sublattice, of name `name`, with sites at positions
-`sites` in `E` dimensional space. Sites positions can be entered as tuples or `SVectors`.
-
-# Examples
-
-```jldoctest
-julia> sublat((0.0, 0), (1, 1), (1, -1), name = :A)
-Sublat{2,Float64} : sublattice of Float64-typed sites in 2D space
-  Sites    : 3
-  Name     : :A
-```
-"""
-sublat
-
-"""
-    bravais_matrix(lat::Lattice)
-    bravais_matrix(h::Hamiltonian)
-
-Obtain the Bravais matrix of lattice `lat` or Hamiltonian `h`
-
-# Examples
-
-```jldoctest
-julia> lat = lattice(sublat((0,0)), bravais = ((1.0, 2), (3, 4)));
-
-julia> bravais_matrix(lat)
-2×2 SMatrix{2, 2, Float64, 4} with indices SOneTo(2)×SOneTo(2):
- 1.0  3.0
- 2.0  4.0
-
-```
-
-# See also
-    `lattice`
-"""
-bravais
-
-"""
-    lattice(sublats::Sublat...; bravais = (), dim, type, names)
-
-Create a `Lattice{T,E,L}` from sublattices `sublats`, where `L` is the number of Bravais
-vectors `bravais`, `T = type` is the `AbstractFloat` type of spatial site coordinates, and
-`E = dim` is the spatial embedding dimension.
-
-The keyword `bravais` indicates one or more Bravais vectors in the form of tuples or other
-iterables. It can also be an `AbstractMatrix` of dimension `E×L`. The default `bravais = ()`
-corresponds to a bounded lattice with no Bravais vectors.
-
-A keyword `names` can be used to rename `sublats`. Given names can be replaced to ensure
-that all sublattice names are unique.
-
-    lattice(lat::Lattice; bravais = missing, dim = missing, type = missing, names = missing)
-
-Create a new lattice by applying any non-missing `kw` to `lat`.
-
-See also `LatticePresets` for built-in lattices.
-
-# Examples
-
-```jldoctest
-julia> lat = lattice(sublat((0, 0)), sublat((0, 1)); bravais = (1, 0), type = Float32, dim = 3, names = (:up, :down))
-Lattice{Float32,3,1} : 1D lattice in 3D space
-  Bravais vectors : Vector{Float32}[[1.0, 0.0, 0.0]]
-  Sublattices     : 2
-    Names         : (:up, :down)
-    Sites         : (1, 1) --> 2 total per unit cell
-
-julia> lattice(lat; type = Float64, names = (:A, :B))
-Lattice{Float64,3,1} : 1D lattice in 3D space
-  Bravais vectors : [[1.0, 0.0, 0.0]]
-  Sublattices     : 2
-    Names         : (:A, :B)
-    Sites         : (1, 1) --> 2 total per unit cell
-
-```
-
-# See also
-    `LatticePresets`, `bravais`, `sublat`, `supercell`
-"""
-lattice
-
-"""
 `LatticePresets` is a Quantica submodule containing severeal pre-defined lattices. The
 alias `LP` can be used in place of `LatticePresets`. Supported lattices are
 
@@ -159,6 +74,91 @@ true
     `LatticePresets`, `HamiltonianPresets`
 """
 RegionPresets
+
+"""
+    sublat(sites...; name::Symbol)
+    sublat(sites::Vector; name::Symbol)
+
+Create a `Sublat{E,T}` that adds a sublattice, of name `name`, with sites at positions
+`sites` in `E` dimensional space. Sites positions can be entered as tuples or `SVectors`.
+
+# Examples
+
+```jldoctest
+julia> sublat((0.0, 0), (1, 1), (1, -1), name = :A)
+Sublat{2,Float64} : sublattice of Float64-typed sites in 2D space
+  Sites    : 3
+  Name     : :A
+```
+"""
+sublat
+
+"""
+    bravais_matrix(lat::Lattice)
+    bravais_matrix(h::Hamiltonian)
+
+Obtain the Bravais matrix of lattice `lat` or Hamiltonian `h`
+
+# Examples
+
+```jldoctest
+julia> lat = lattice(sublat((0,0)), bravais = ((1.0, 2), (3, 4)));
+
+julia> bravais_matrix(lat)
+2×2 SMatrix{2, 2, Float64, 4} with indices SOneTo(2)×SOneTo(2):
+ 1.0  3.0
+ 2.0  4.0
+
+```
+
+# See also
+    `lattice`
+"""
+bravais_matrix
+
+"""
+    lattice(sublats::Sublat...; bravais = (), dim, type, names)
+
+Create a `Lattice{T,E,L}` from sublattices `sublats`, where `L` is the number of Bravais
+vectors `bravais`, `T = type` is the `AbstractFloat` type of spatial site coordinates, and
+`E = dim` is the spatial embedding dimension.
+
+The keyword `bravais` indicates one or more Bravais vectors in the form of tuples or other
+iterables. It can also be an `AbstractMatrix` of dimension `E×L`. The default `bravais = ()`
+corresponds to a bounded lattice with no Bravais vectors.
+
+A keyword `names` can be used to rename `sublats`. Given names can be replaced to ensure
+that all sublattice names are unique.
+
+    lattice(lat::Lattice; bravais = missing, dim = missing, type = missing, names = missing)
+
+Create a new lattice by applying any non-missing `kw` to `lat`.
+
+See also `LatticePresets` for built-in lattices.
+
+# Examples
+
+```jldoctest
+julia> lat = lattice(sublat((0, 0)), sublat((0, 1)); bravais = (1, 0), type = Float32, dim = 3, names = (:up, :down))
+Lattice{Float32,3,1} : 1D lattice in 3D space
+  Bravais vectors : Vector{Float32}[[1.0, 0.0, 0.0]]
+  Sublattices     : 2
+    Names         : (:up, :down)
+    Sites         : (1, 1) --> 2 total per unit cell
+
+julia> lattice(lat; type = Float64, names = (:A, :B))
+Lattice{Float64,3,1} : 1D lattice in 3D space
+  Bravais vectors : [[1.0, 0.0, 0.0]]
+  Sublattices     : 2
+    Names         : (:A, :B)
+    Sites         : (1, 1) --> 2 total per unit cell
+
+```
+
+# See also
+    `LatticePresets`, `bravais`, `sublat`, `supercell`
+"""
+lattice
 
 """
     transform(f::Function, lat::Lattice)

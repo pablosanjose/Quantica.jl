@@ -154,24 +154,23 @@ function reset_pointers!(ph::ParametricHamiltonian)
     return ph
 end
 
-applymodifiers!(h, m, ms...; kw...) = applymodifiers!(_applymodifiers!(h, m; kw...), ms...; kw...)
+applymodifiers!(h, m, m´, ms...; kw...) = applymodifiers!(applymodifiers!(h, m; kw...), m´, ms...; kw...)
 
-applymodifiers!(h; kw...) = h
+applymodifiers!(h, m::Modifier; kw...) = applymodifiers!(h, apply(m, h); kw...)
 
-function _applymodifiers!(h, m::AppliedOnsiteModifier; kw...)
+function applymodifiers!(h, m::AppliedOnsiteModifier; kw...)
     nz = nonzeros(matrix(first(harmonics(h))))
     for (ptr, r, norbs) in pointers(m)
-        nz[ptr] = m(nz[ptr], r, norbs)
+        nz[ptr] = m(nz[ptr], r, norbs; kw...)
     end
     return h
 end
 
-function _applymodifiers!(h, m::AppliedHoppingModifier; kw...)
-    nz = nonzeros(h)
+function applymodifiers!(h, m::AppliedHoppingModifier; kw...)
     for (har, p) in zip(harmonics(h), pointers(m))
         nz = nonzeros(matrix(har))
         for (ptr, r, dr, norbs) in p
-            nz[ptr] = m(nz[ptr], r, dr, norbs)
+            nz[ptr] = m(nz[ptr], r, dr, norbs; kw...)
         end
     end
     return h
@@ -236,10 +235,6 @@ end
 # Bloch constructor
 #region
 
-bloch(φs::Number...; kw...) = h -> bloch(h, φs; kw...)
-bloch(φs::Tuple; kw...) = h -> bloch(h, φs; kw...)
-bloch(h::AbstractHamiltonian, φs::Tuple; kw...) = bloch(h)(φs...; kw...)
-
 function bloch(h::Union{Hamiltonian,ParametricHamiltonian})
     output = merge_sparse(harmonics(h))
     return Bloch(h, output)
@@ -264,6 +259,10 @@ merge_flatten_sparse(hars::Vector{<:HamiltonianHarmonic}, os::OrbitalStructure{<
 # Bloch call API
 #region
 
+bloch(φs::Number...; kw...) = h -> bloch(h, φs; kw...)
+bloch(φs::Tuple; kw...) = h -> bloch(h, φs; kw...)
+bloch(h::AbstractHamiltonian, φs::Tuple; kw...) = bloch(h)(φs...; kw...)
+
 (b::Bloch)(φs...; kw...) = copy(call!(b, φs...; kw...))
 
 call!(b::Bloch{L}, φs::Vararg{Number,L} ; kw...) where {L} = call!(b, φs; kw...)
@@ -271,7 +270,7 @@ call!(b::Bloch{L}, φs::NTuple{L,Number} ; kw...) where {L} = call!(b, SVector(�
 call!(b::Bloch, φs::SVector; kw...) = maybe_flatten_bloch!(matrix(b), hamiltonian(b), φs; kw...)
 
 maybe_flatten_bloch!(output, h::FlatHamiltonian, φs; kw...) = maybe_flatten_bloch!(output, parent(h), φs; kw...)
-maybe_flatten_bloch!(output, h::ParametricHamiltonian, φs; kw...) = maybe_flatten_bloch!(output, h(; kw...), φs)
+maybe_flatten_bloch!(output, h::ParametricHamiltonian, φs; kw...) = maybe_flatten_bloch!(output, call!(h; kw...), φs)
 
 # Adds harmonics, assuming output has same structure of merged harmonics
 function maybe_flatten_bloch!(output, h::Hamiltonian{<:Any,<:Any,L}, φs::SVector{L}) where {L}
@@ -299,7 +298,7 @@ function Base.getindex(h::AbstractHamiltonian{<:Any,<:Any,L}, dn::NTuple{L,Int})
     throw(BoundsError(harmonics(h), dn))
 end
 
-Base.getindex(h::AbstractHamiltonian, dn, i...) = h[dn][i...]
+Base.getindex(h::AbstractHamiltonian, dn, i, is...) = h[dn][i, is...]
 
 #endregion
 

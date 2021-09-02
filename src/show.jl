@@ -69,7 +69,7 @@ displayparameter(::Type{T}) where {T} = "$T"
 
 displayrange(r::Real) = round(r, digits = 6)
 displayrange(::Missing) = "any"
-displayrange(nr::Neighbors) = "Neighbors($(parent(nr)))"
+displayrange(nr::Neighbors) = "Neighbors($(Int(nr)))"
 displayrange(rs::Tuple) = "($(displayrange(first(rs))), $(displayrange(last(rs))))"
 
 #endregion

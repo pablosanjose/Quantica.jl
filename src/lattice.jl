@@ -72,6 +72,9 @@ end
 
 lattice(s::Sublat, ss::Sublat...; kw...) = _lattice(promote(s, ss...)...; kw...)
 
+# Start with an empty list of nranges, to be filled as they are requested
+Lattice(b::Bravais{T}, u::Unitcell{T}) where {T} = Lattice(b, u, Tuple{Int,T}[])
+
 function _lattice(ss::Sublat{T,E}...;
                   bravais = (),
                   dim = Val(E),
@@ -97,38 +100,97 @@ postype(::Val{E}, type) where {E} = SVector{E,type}
 
 #endregion
 
+
 ############################################################################################
-# Lattice transformations
+# neighbors
 #region
 
-transform(f::Function) = x -> transform(f, x)
-
-transform!(f::Function) = x -> transform!(f, x)
-
-transform(f::Function, l::Lattice) = transform!(f, copy(l))
-
-transform!(f::Function, l::Lattice) =
-    Lattice(transform!(f, bravais(l)), transform!(f, unitcell(l)))
-
-function transform!(f::Function, b::Bravais{<:Any,E}) where {E}
-    m = matrix(b)
-    for j in axes(m, 2)
-        v = SVector(ntuple(i -> m[i, j], Val(E)))
-        m[:, j] .= f(v) - f(zero(v))
+function nrange(n, lat)
+    for (n´, r) in nranges(lat)
+        n == n´ && return r
     end
-    return b
+    r = compute_nrange(n, lat)
+    push!(nranges(lat), (n, r))
+    return r
 end
 
-transform!(f::Function, u::Unitcell) = (map!(f, sites(u), sites(u)); u)
 
-translate(δr) = x -> translate(x, δr)
+function compute_nrange(n, lat::Lattice{T}) where {T}
+    latsites = sites(lat)
+    dns = BoxIterator(zerocell(lat))
+    br = bravais_matrix(lat)
+    # 128 is a heuristic cutoff for kdtree vs brute-force search
+    if length(latsites) <= 128
+        dists = fill(T(Inf), n)
+        for dn in dns
+            iszero(dn) || ispositive(dn) || continue
+            for (i, ri) in enumerate(latsites), (j, rj) in enumerate(latsites)
+                j <= i && iszero(dn) && continue
+                r = ri - rj + br * dn
+                update_dists!(dists, r'r)
+            end
+            isfinite(last(dists)) || acceptcell!(dns, dn)
+        end
+        dist = sqrt(last(dists))
+    else
+        tree = KDTree(latsites)
+        dist = T(Inf)
+        for dn in dns
+            iszero(dn) || ispositive(dn) || continue
+            for r0 in latsites
+                r = r0 + br * dn
+                dist = min(dist, compute_nrange(n, tree, r, nsites(lat)))
+            end
+            isfinite(dist) || acceptcell!(dns, dn)
+        end
+    end
+    return dist
+end
 
-translate!(δr) = x -> translate!(x, δr)
+function update_dists!(dists, dist)
+    len = length(dists)
+    for (n, d) in enumerate(dists)
+        isapprox(dist, d) && break
+        if dist < d
+            dists[n+1:len] .= dists[n:len-1]
+            dists[n] = dist
+            break
+        end
+    end
+    return dists
+end
 
-translate(lat::Lattice, δr) = translate!(copy(lat), δr)
+function compute_nrange(n, tree, r::AbstractVector, nmax)
+    for m in n:nmax
+        _, dists = knn(tree, r, 1 + m, true)
+        popfirst!(dists)
+        unique_sorted_approx!(dists)
+        length(dists) == n && return maximum(dists)
+    end
+    return convert(eltype(r), Inf)
+end
 
-translate!(lat::Lattice{T,E}, δr) where {T,E} = translate!(lat, sanitize_SVector(SVector{E,T}, δr))
+function unique_sorted_approx!(v::AbstractVector)
+    i = 1
+    xprev = first(v)
+    for j in 2:length(v)
+        if v[j] ≈ xprev
+            xprev = v[j]
+        else
+            i += 1
+            xprev = v[i] = v[j]
+        end
+    end
+    resize!(v, i)
+    return v
+end
 
-translate!(lat::Lattice{T,E}, δr::SVector{E,T}) where {T,E} = transform!(r -> r + δr, lat)
+function ispositive(ndist)
+    result = false
+    for i in ndist
+        i == 0 || (result = i > 0; break)
+    end
+    return result
+end
 
 #endregion

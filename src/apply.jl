@@ -26,7 +26,7 @@ sanitize_minmaxrange(r, lat) = sanitize_minmaxrange((zero(numbertype(lat)), r), 
 sanitize_minmaxrange((rmin, rmax)::Tuple{Any,Any}, lat) =
     padrange(applyrange(rmin, lat), -1), padrange(applyrange(rmax, lat), 1)
 
-applyrange(r::Neighbors, lat) = nrange(parent(r), lat)
+applyrange(r::Neighbors, lat) = nrange(Int(r), lat)
 applyrange(r::Real, lat) = r
 
 padrange(r::Real, m) = isfinite(r) ? float(r) + m * sqrt(eps(float(r))) : float(r)
@@ -85,12 +85,6 @@ function apply(m::HoppingModifier, h::Hamiltonian)
     return AppliedHoppingModifier(O, f, ptrs)
 end
 
-# function apply(m::PartiallyAppliedHoppingModifier, h::Hamiltonian{T,E,L,O}; kw...) where {T,E,L,O}
-#     f = (t, r, dr, orbs) -> sanitize_block(O, m(t, r, dr; kw...), (orbs, orbs))
-#     ptrs = pointers(m)
-#     return AppliedHoppingModifier{T,E,L,O}(f, ptrs) # f gets wrapped in a FunctionWrapper
-# end
-
 function pointers(h::Hamiltonian{T,E}, s::AppliedSiteSelector{T,E}) where {T,E}
     ptr_r = Tuple{Int,SVector{E,T},Int}[]
     lat = lattice(h)
@@ -117,7 +111,7 @@ function pointers(h::Hamiltonian{T,E}, s::AppliedHopSelector{T,E}) where {T,E}
     os = orbitalstructure(h)
     dn0 = zerocell(lat)
     norbs = norbitals(h)
-    for (har, ptr_r_dr) in zip(hars, ptrs)
+    for (har, ptr_r_dr) in zip(hars, ptr_r_dr)
         mh = matrix(har)
         rows = rowvals(mh)
         for scol in sublats(lat), col in siterange(lat, scol), p in nzrange(mh, col)
@@ -132,7 +126,7 @@ function pointers(h::Hamiltonian{T,E}, s::AppliedHopSelector{T,E}) where {T,E}
             end
         end
     end
-    return ptrs
+    return ptr_r_dr
 end
 
 #endregion

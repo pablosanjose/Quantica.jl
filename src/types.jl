@@ -26,13 +26,16 @@ end
 struct Lattice{T<:AbstractFloat,E,L}
     bravais::Bravais{T,E,L}
     unitcell::Unitcell{T,E}
+    nranges::Vector{Tuple{Int,T}}  # [(nth_neighbor, min_nth_neighbor_distance)...]
 end
 
 #region internal API
 
+bravais(l::Lattice) = l.bravais
+
 unitcell(l::Lattice) = l.unitcell
 
-bravais(l::Lattice) = l.bravais
+nranges(l::Lattice) = l.nranges
 
 bravais_vectors(l::Lattice) = bravais_vectors(l.bravais)
 bravais_vectors(b::Bravais) = eachcol(b.matrix)
@@ -144,7 +147,7 @@ end
 
 #region internal API
 
-Base.parent(n::Neighbors) = n.n
+Base.Int(n::Neighbors) = n.n
 
 region(s::Union{SiteSelector,HopSelector}) = s.region
 
@@ -159,6 +162,7 @@ inregion((r, dr), s::AppliedHopSelector) = s.region(r, dr)
 
 insublats(n, s::AppliedSiteSelector) = isempty(s.sublats) || n in s.sublats
 insublats(npair::Pair, s::AppliedHopSelector) = isempty(s.sublats) || npair in s.sublats
+
 indcells(dcell, s::AppliedHopSelector) = isempty(s.dcells) || dcell in s.dcells
 
 iswithinrange(dr, s::AppliedHopSelector) = iswithinrange(dr, s.range)
@@ -376,6 +380,8 @@ Base.isless(h::HamiltonianHarmonic, h´::HamiltonianHarmonic) = sum(abs2, dcell(
 
 copy_harmonics(h::Hamiltonian) = Hamiltonian(lattice(h), orbitalstructure(h), deepcopy(harmonics(h)))
 
+threadcopy(h::Hamiltonian) = h
+
 function LinearAlgebra.ishermitian(h::Hamiltonian)
     for hh in h.harmonics
         isassigned(h, -hh.dn) || return false
@@ -417,6 +423,9 @@ blocktype(h::ParametricHamiltonian) = blocktype(parent(h))
 
 lattice(h::ParametricHamiltonian) = lattice(parent(h))
 
+threadcopy(h::ParametricHamiltonian) =
+    ParametricHamiltonian(h.hparent, threadcopy(h.h), h.modifiers, h.allptrs, h.allparams)
+
 Base.size(h::ParametricHamiltonian, i...) = size(parent(h), i...)
 
 #endregion
@@ -444,6 +453,8 @@ blocktype(h::FlatHamiltonian) = blocktype(orbitalstructure(h))
 
 norbitals(h::FlatHamiltonian) = norbitals(orbitalstructure(h))
 
+threadcopy(h::FlatHamiltonian) = FlatHamiltonian(threadcopy(parent(h)), orbitalstructure(h))
+
 Base.size(h::FlatHamiltonian) = nsites(orbitalstructure(h)), nsites(orbitalstructure(h))
 Base.size(h::FlatHamiltonian, i) = i <= 0 ? throw(BoundsError()) : ifelse(1 <= i <= 2, nsites(orbitalstructure(h)), 1)
 
@@ -463,5 +474,7 @@ end                                 # or its flattened version if O != O´
 matrix(b::Bloch) = b.output
 
 hamiltonian(b::Bloch) = b.h
+
+threadcopy(b::Bloch) = Bloch(threadcopy(b.h), copy(b.output))
 
 #endregion
