@@ -224,7 +224,7 @@ function hamiltonian(f::FlatHamiltonian{<:Any,<:Any,L,O}) where {L,O}
     os = orbitalstructure(parent(f))
     flatos = orbitalstructure(f)
     lat = flatten(lattice(f), os)
-    HT = HamiltonianHarmonic{L,O}
+    HT = Harmonic{L,SparseMatrixCSC{O,Int}}
     hars = HT[HT(dcell(har), flatten(matrix(har), os, flatos)) for har in harmonics(f)]  # see tools.jl
     return Hamiltonian(lat, flatos, hars)
 end
@@ -235,22 +235,35 @@ end
 # Bloch constructor
 #region
 
-function bloch(h::Union{Hamiltonian,ParametricHamiltonian})
-    output = merge_sparse(harmonics(h))
+function bloch(h::Union{Hamiltonian,ParametricHamiltonian}, ::Type{M} = SparseMatrixCSC) where {M<:AbstractSparseMatrixCSC}
+    output = convert(M, merge_sparse(harmonics(h)))
     return Bloch(h, output)
 end
 
-function bloch(f::FlatHamiltonian)
+function bloch(h::Union{Hamiltonian,ParametricHamiltonian}, ::Type{M}) where {M<:AbstractMatrix}
+    output = convert(M, first(harmonics(h)))
+    return Bloch(h, output)
+end
+
+function bloch(f::FlatHamiltonian, ::Type{M} = SparseMatrixCSC) where {M<:AbstractSparseMatrixCSC}
     os = orbitalstructure(parent(f))
     flatos = orbitalstructure(f)
-    output = merge_flatten_sparse(harmonics(f), os, flatos)
+    output = convert(M, merge_flatten_sparse(harmonics(f), os, flatos))
+    return Bloch(f, output)
+end
+
+function bloch(f::FlatHamiltonian, ::Type{M}) where {M<:AbstractMatrix}
+    flatos = orbitalstructure(f)
+    O = orbtype(flatos)
+    n = nsites(flatos)
+    output = convert(M, zeros(O, n, n))
     return Bloch(f, output)
 end
 
 # see tools.jl
-merge_sparse(hars::Vector{<:HamiltonianHarmonic}) = merge_sparse(matrix(har) for har in hars)
+merge_sparse(hars::Vector{<:Harmonic}) = merge_sparse(matrix(har) for har in hars)
 
-merge_flatten_sparse(hars::Vector{<:HamiltonianHarmonic}, os::OrbitalStructure{<:SMatrix}, flatos::OrbitalStructure{<:Number}) =
+merge_flatten_sparse(hars::Vector{<:Harmonic}, os::OrbitalStructure{<:SMatrix}, flatos::OrbitalStructure{<:Number}) =
     merge_flatten_sparse((matrix(har) for har in hars), os, flatos)
 
 #endregion
@@ -272,15 +285,16 @@ call!(b::Bloch, φs::SVector; kw...) = maybe_flatten_bloch!(matrix(b), hamiltoni
 maybe_flatten_bloch!(output, h::FlatHamiltonian, φs; kw...) = maybe_flatten_bloch!(output, parent(h), φs; kw...)
 maybe_flatten_bloch!(output, h::ParametricHamiltonian, φs; kw...) = maybe_flatten_bloch!(output, call!(h; kw...), φs)
 
-# Adds harmonics, assuming output has same structure of merged harmonics
-function maybe_flatten_bloch!(output, h::Hamiltonian{<:Any,<:Any,L}, φs::SVector{L}) where {L}
+# Adds harmonics, assuming sparse output with the same structure of merged harmonics
+function maybe_flatten_bloch!(output,
+                              h::Hamiltonian{<:Any,<:Any,L}, φs::SVector{L}) where {L}
     hars = harmonics(h)
     os = orbitalstructure(h)
     flatos = flatten(os)
-    fill!(nonzeros(output), zero(eltype(output)))
+    fill!(output, zero(eltype(output)))
     for har in hars
         e⁻ⁱᵠᵈⁿ = cis(-dot(φs, dcell(har)))
-        maybe_flatten_merged_mul!(output, (os, flatos), matrix(har), e⁻ⁱᵠᵈⁿ, 1, 1)  # see tools.jl
+        maybe_flatten_mul!(output, (os, flatos), matrix(har), e⁻ⁱᵠᵈⁿ, 1, 1)  # see tools.jl
     end
     return output
 end
@@ -288,17 +302,56 @@ end
 #endregion
 
 ############################################################################################
-# indexing AbstractHamiltonian
+# indexing into AbstractHamiltonian
 #region
 
-function Base.getindex(h::AbstractHamiltonian{<:Any,<:Any,L}, dn::NTuple{L,Int}) where {L}
+Base.getindex(h::AbstractHamiltonian{<:Any,<:Any,L}) where {L} = h[zero(SVector{L,Int})]
+Base.getindex(h::AbstractHamiltonian, is::Int...) = h[][is...]
+Base.getindex(h::AbstractHamiltonian, dn::SVector, i, is...) = h[dn][i, is...]
+Base.getindex(h::AbstractHamiltonian, dn::Tuple, is...) = getindex(h, SVector(dn), is...)
+
+function Base.getindex(h::AbstractHamiltonian{<:Any,<:Any,L}, dn::SVector{L,Int}) where {L}
     for har in harmonics(h)
-        dn == Tuple(dcell(har)) && return matrix(har)
+        dn == dcell(har) && return matrix(har)
     end
     throw(BoundsError(harmonics(h), dn))
 end
 
-Base.getindex(h::AbstractHamiltonian, dn, i, is...) = h[dn][i, is...]
+Base.isassigned(h::AbstractHamiltonian, dn::Tuple) = isassigned(h, SVector(dn))
+
+function Base.isassigned(h::AbstractHamiltonian{<:Any,<:Any,L}, dn::SVector{L,Int}) where {L}
+    for har in harmonics(h)
+        dn == dcell(har) && return true
+    end
+    return false
+end
+
+#endregion
+
+############################################################################################
+# push! and deleteat! of a Harmonic into AbstractHamiltonian
+#region
+
+Base.deleteat!(h::AbstractHamiltonian, dn::Tuple) = deleteat!(h, SVector(dn))
+
+function Base.deleteat!(h::AbstractHamiltonian{<:Any,<:Any,L}, dn::SVector{L,Int}) where {L}
+    iszero(dn) && throw(ArgumentError("Cannot delete base harmonic"))
+    hars = harmonics(h)
+    for (i, har) in enumerate(hars)
+        dn == dcell(har) && return deleteat!(hars, i)
+    end
+    return hars
+end
+
+Base.push!(h::AbstractHamiltonian, dn::Tuple) = push!(h, SVector(dn))
+
+function Base.push!(h::AbstractHamiltonian{<:Any,<:Any,L,O}, dn::SVector{L,Int}) where {L,O}
+    if !isassigned(h, dn)
+        har = Harmonic(dn, spzeros(O, size(h)))
+        push!(harmonics(h), har)
+    end
+    return h
+end
 
 #endregion
 

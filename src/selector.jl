@@ -2,21 +2,18 @@
 # selector constructors
 #region
 
-siteselector(; region = missing, sublats = missing, indices = missing) =
-    SiteSelector(region, sublats, indices)
-siteselector(s::SiteSelector; region = s.region, sublats = s.sublats, indices = s.indices) =
-    SiteSelector(region, sublats, indices)
-siteselector(lat::Lattice; kw...) =
-    appliedon(siteselector(; kw...), lat)
+siteselector(; region = missing, sublats = missing) =
+    SiteSelector(region, sublats)
+siteselector(s::SiteSelector; region = s.region, sublats = s.sublats) =
+    SiteSelector(region, sublats)
 
-hopselector(; region = missing, sublats = missing, indices = missing, cells = missing, range = neighbors(1)) =
-    HopSelector(region, sublats, indices, cells, range)
-hopselector(s::HopSelector; region = s.region, sublats = s.sublats, indices = s.indices, cells = s.dcells, range = s.range) =
-    HopSelector(region, sublats, indices, cells, range)
-hopselector(lat::Lattice; kw...) =
-    appliedon(hopselector(; kw...), lat)
+hopselector(; region = missing, sublats = missing, dcells = missing, range = neighbors(1)) =
+    HopSelector(region, sublats, dcells, range)
+hopselector(s::HopSelector; region = s.region, sublats = s.sublats, dcells = s.dcells, range = s.range) =
+    HopSelector(region, sublats, dcells, range)
 
 neighbors(n::Int) = Neighbors(n)
+neighbors(n::Int, lat::Lattice) = nrange(n, lat)
 
 #endregion
 

@@ -1,14 +1,13 @@
 rdr((r1, r2)::Pair) = (0.5 * (r1 + r2), r2 - r1)
 
 ############################################################################################
-# Sparse matrix transformations [involves OrbitalStructure's]
+# Matrix transformations [involves OrbitalStructure's]
 # all merged_* functions assume matching structure of sparse matrices
 #region
 
 # merge several sparse matrices onto the first using only structural zeros
-function merge_sparse(mats)
+function merge_sparse(mats, ::Type{O} = eltype(first(mats))) where {O}
     mat0 = first(mats)
-    O = eltype(mat0)
     nrows, ncols = size(mat0)
     nrows == ncols || throw(ArgumentError("Internal error: matrix not square"))
     nnzguess = sum(mat -> nnz(mat), mats)
@@ -89,16 +88,25 @@ end
 flatten(mat::SparseMatrixCSC{O}, os::OrbitalStructure{O}, flatos::OrbitalStructure{<:Number} = flatten(os)) where {O<:SMatrix} =
     merge_flatten_sparse((mat,), os, flatos)
 
-# merged_mul! (mul! specializations assuming target does not need to change structure [is "merged"])
+# flattening mul! specializations assuming the target, if sparse, does not need to change structure [is "merged"]
 
-maybe_flatten_merged_mul!(C::SparseMatrixCSC{<:Number}, _, A::SparseMatrixCSC{<:Number}, b::Number, α, β) =
+maybe_flatten_mul!(C::SparseMatrixCSC{<:Number}, _, A::SparseMatrixCSC{<:Number}, b::Number, α, β) =
     merged_mul!(C, A, b, α, β)
 
-maybe_flatten_merged_mul!(C::SparseMatrixCSC{<:SMatrix{N,N}}, _, A::SparseMatrixCSC{<:SMatrix{N,N}}, b::Number, α, β) where {N} =
+maybe_flatten_mul!(C::SparseMatrixCSC{<:SMatrix{N,N}}, _, A::SparseMatrixCSC{<:SMatrix{N,N}}, b::Number, α, β) where {N} =
     merged_mul!(C, A, b, α, β)
 
-maybe_flatten_merged_mul!(C::SparseMatrixCSC{<:Number}, os, A::SparseMatrixCSC{<:SMatrix}, b::Number, α, β) =
-    flatten_merged_mul!(C, os, A, b, α, β)
+maybe_flatten_mul!(C::SparseMatrixCSC{<:Number}, osflatos, A::SparseMatrixCSC{<:SMatrix}, b::Number, α, β) =
+    merged_flatten_mul!(C, osflatos, A, b, α, β)
+
+maybe_flatten_mul!(C::StridedMatrix{<:Number}, _, A::SparseMatrixCSC{<:Number}, b::Number, α, β) =
+    sparse_to_dense_mul!(C, A, b, α, β)
+
+maybe_flatten_mul!(C::StridedMatrix{<:SMatrix}, _, A::SparseMatrixCSC{<:SMatrix}, b::Number, α, β) =
+    sparse_to_dense_mul!(C, A, b, α, β)
+
+maybe_flatten_mul!(C::StridedMatrix{<:Number}, osflatos, A::SparseMatrixCSC{<:SMatrix}, b::Number, α, β) =
+    sparse_to_dense_flatten_mul!(C, osflatos, A, b, α, β)
 
 function merged_mul!(C::SparseMatrixCSC, A::SparseMatrixCSC, b::Number, α = 1, β = 0)
     nzA = nonzeros(A)
@@ -120,7 +128,7 @@ function merged_mul!(C::SparseMatrixCSC, A::SparseMatrixCSC, b::Number, α = 1, 
     return C
 end
 
-function flatten_merged_mul!(C::SparseMatrixCSC, (os, flatos), A::SparseMatrixCSC, b::Number, α , β = 0)
+function merged_flatten_mul!(C::SparseMatrixCSC, (os, flatos), A::SparseMatrixCSC, b::Number, α , β = 0)
     colsA = axes(A, 2)
     rowsA = rowvals(A)
     valsA = nonzeros(A)
@@ -146,6 +154,21 @@ function flatten_merged_mul!(C::SparseMatrixCSC, (os, flatos), A::SparseMatrixCS
                 end
             end
         end
+    end
+    return C
+end
+
+function sparse_to_dense_mul!(C::StridedMatrix, A::SparseMatrixCSC, b::Number, α = 1, β = 0)
+    vals = nonzeros(A)
+    rows = rowvals(A)
+    if iszero(β)
+        fill!(C, zero(eltype(C)))
+    else
+        C .*= β
+    end
+    for col in axes(A, 2), p in nzrange(A, col)
+        row = rows[p]
+        C[row, col] += α * vals[p]
     end
     return C
 end

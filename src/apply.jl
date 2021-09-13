@@ -1,4 +1,10 @@
 
+# apply: takes generic user input (model/selector/modifier/etc), and specializes it
+# to a given object (Lattice/Hamiltonian/etc), performing some preprocessing task on the
+# input that allows to use it on that object (it gets transformed into an AppliedInput)
+# Example: a HopSelector input with a `range = neighbors(1)` gets applied onto a lattice
+# by computing the actual range for nearest neighbors in that lattice.
+
 ############################################################################################
 # apply selector
 #region
@@ -40,8 +46,15 @@ recursive_push!(v::Vector{T}, x::T) where {T} = push!(v, x)
 recursive_push!(v::Vector{S}, x::NTuple{<:Any,Int}) where {S<:SVector,T} = push!(v, S(x))
 recursive_push!(v::Vector{Pair{T,T}}, x::T) where {T} = push!(v, x => x)
 recursive_push!(v::Vector{Pair{T,T}}, (x, y)::Tuple{T,T}) where {T} = push!(v, x => y)
-recursive_push!(v::Vector{Pair{T,T}}, (x, y)::Pair) where {T} = push!(v, Iterators.product(x, y))
+recursive_push!(v::Vector{Pair{T,T}}, x::Pair{T,T}) where {T} = push!(v, x)
 recursive_push!(v::Vector, xs)= foreach(x -> recursive_push!(v, x), xs)
+
+function recursive_push!(v::Vector{Pair{T,T}}, (xs, ys)::Pair) where {T}
+    for (x, y) in Iterators.product(xs, ys)
+        push!(v, x => y)
+    end
+    return v
+end
 
 #endregion
 

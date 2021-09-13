@@ -19,7 +19,7 @@ function Base.getindex(b::AbstractSparseBuilder{<:Any,<:Any,L}, dn::SVector{L,In
 end
 
 function harmonics(builder::AbstractSparseBuilder{<:Any,<:Any,L,O}) where {L,O}
-    HT = HamiltonianHarmonic{L,O}
+    HT = Harmonic{L,SparseMatrixCSC{O,Int}}
     n = nsites(lattice(builder))
     hars = HT[HT(har.dn, sparse(collector(har), n)) for har in builder.harmonics if !isempty(har)]
     return hars

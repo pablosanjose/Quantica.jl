@@ -127,12 +127,18 @@ The keyword `bravais` indicates one or more Bravais vectors in the form of tuple
 iterables. It can also be an `AbstractMatrix` of dimension `E×L`. The default `bravais = ()`
 corresponds to a bounded lattice with no Bravais vectors.
 
-A keyword `names` can be used to rename `sublats`. Given names can be replaced to ensure
-that all sublattice names are unique.
+A keyword `names` can be used to rename `sublats`. Given `sublats` names will be replaced if
+necessary by `:A`, `:B` etc. to ensure that all sublattice names are unique.
 
     lattice(lat::Lattice; bravais = missing, dim = missing, type = missing, names = missing)
 
 Create a new lattice by applying any non-missing `kw` to `lat`.
+
+    lat[kw...]
+
+Indexing into a lattice `lat` with keywords returns a generator of `(i, r)`, the index `i`
+and positions `r` of sites in `lat`, filtered by `siteselector(; kw...)`. See `siteselector`
+for details on possible `kw`.
 
 See also `LatticePresets` for built-in lattices.
 
@@ -156,18 +162,58 @@ Lattice{Float64,3,1} : 1D lattice in 3D space
 ```
 
 # See also
-    `LatticePresets`, `bravais`, `sublat`, `supercell`
+    `LatticePresets`, `bravais`, `sublat`, `supercell`, `siteindices`, `sitepositions`
 """
 lattice
 
 """
-    transform(f::Function, lat::Lattice)
+    sitepositions(l::Lattice; kw...)
+
+Returns a vector with site positions in lattice `l`, filtered by `siteselector(; kw...)`.
+Equivalent to `last.(l[kw...])`. See `siteselector` for details on possible `kw`.
+
+# Examples
+```jldoctest
+julia> sitepositions(LatticePresets.honeycomb(); sublats = :A)
+1-element Vector{SVector{2, Float64}}:
+ [0.0, -0.2886751345948129]
+```
+
+"""
+sitepositions
+
+"""
+    sitepositions(l::Lattice; kw...)
+
+Returns a vector with site indices in lattice `l`, filtered by `siteselector(; kw...)`.
+Equivalent to `first.(l[kw...])`. See `siteselector` for details on possible `kw`.
+
+# Examples
+```jldoctest
+julia> siteindices(LatticePresets.honeycomb(); sublats = :B)
+1-element Vector{Int64}:
+ 2
+```
+
+"""
+siteindices
+
+"""
+    transform(lat::Lattice, f::Function)
 
 Build a new lattice transforming each site positions `r` into `f(r)`.
+
+    transform(h::Hamiltonian, ms::Modifier...)
+
+Build a new Hamiltonian by applying `Modifier`s `ms` onto `h`, see `@onsite!`, `@hopping!`
+for details on building `Modifier`s.
 
     x |> transform(f::Function)
 
 Curried version of `transform`, equivalent to `transform(f, x)`
+
+Note: `Quantica.transform!` is also available for in-place transforms. Use with care, as
+aliasing (i.e. several objects sharing the modified one) can produce unexpected results.
 
 # See also
     `translate`
@@ -183,6 +229,9 @@ Build a new lattice translating each site positions from `r` to `r + δr`.
     x |> translate(δr)
 
 Curried version of `translate`, equivalent to `translate(x, δr)`
+
+Note: `Quantica.translate!` is also available for in-place translations. Use with care, as
+aliasing (i.e. several objects sharing the modified one) can produce unexpected results.
 
 # See also
     `transform`
@@ -230,8 +279,8 @@ Transforms the `Lattice` of `h` to have a larger unit cell, while expanding the 
 accordingly.
 
 A nonzero `mincoordination` indicates a minimum number of nonzero hopping neighbors required
-for sites to be included in the resulting unit cell. Sites with inferior coordination will
-be removed recursively, until all remaining satisfy `mincoordination`.
+for sites to be included in the resulting unit cell. Sites with less coordination will be
+removed recursively, until all remaining sites satisfy `mincoordination`.
 
     lat_or_h |> supercell(v...; kw...)
 
@@ -274,53 +323,56 @@ Lattice{2,2,Float64} : 2D lattice in 2D space
 """
 supercell
 
-
 """
-    siteselector(; region = missing, sublats = missing, indices = missing)
+    siteselector(; region = missing, sublats = missing)
 
 Return a `SiteSelector` object that can be used to select sites in a lattice contained
-within the specified region and sublattices. Only sites with index `i`, at position `r` and
-belonging to a sublattice with name `s::NameType` will be selected if
+within the specified region and sublattices. Sites at position `r` and belonging to a
+sublattice with name `s::Symbol` will be selected only if
 
-    `region(r) && s in sublats && i in indices`
+    `region(r) && s in sublats`
 
 Any missing `region`, `sublat` or `indices` will not be used to constraint the selection.
 
-The keyword `sublats` allows the following formats:
+The constructor `siteselector(; kw...)` is not meant to be called by the end user. Instead,
+the kwargs `kw` are input into different functions that allow filtering sites, which
+themselves call `siteselector` internally as needed. Some of these functions are
 
-    sublats = :A                    # Sites on sublat :A only
-    sublats = (:A,)                 # Same as above
-    sublats = (:A, :B)              # Sites on sublat :A and :B
+    - getindex(l::Lattice; kw...) : return site indices and positions filtered by `kw` (also `l[kw...]`)
+    - onsite(...; kw...)          : onsite model term to be applied to sites specified by `kw`
+    - @onsite!(...; kw...)        : onsite modifier to be applied to sites specified by `kw`
 
-The keyword `indices` accepts a single integer, or a collection thereof. If several
-collections are given, they are flattened into a single one. Possible combinations:
+# Examples
 
-    indices = 1                     # Site 1 only
-    indices = (1, )                 # Same as above
-    indices = (1, 2, 3)             # Sites 1, 2 or 3
-    indices = [1, 2, 3]             # Same as above
-    indices = 1:3                   # Same as above
-    indices = (1:3, 7, 8)           # Sites 1, 2, 3, 7 or 8
+```jldoctest
+julia> lat = LP.honeycomb() |> supercell(region = RegionPresets.circle(100))
+Lattice{Float64,2,0} : 0D lattice in 2D space
+  Bravais vectors : []
+  Sublattices     : 2
+    Names         : (:A, :B)
+    Sites         : (36281, 36281) --> 72562 total per unit cell
 
-Additionally, indices or sublattices can be wrapped in `not` to exclude them (see `not`):
+julia> lat[] == sites(lat)
+true
 
-    sublats = not(:A)               # Any sublat different from :A
-    sublats = not(:A, :B)           # Any sublat different from :A and :B
-    indices = not(8)                # Any site index different from 8
-    indices = not(1, 3:4)           # Any site index different from 1, 3 or 4
-    indices = (not(3:4), 4:6)       # Any site different from 3 and 4, *or* equal to 4, 5 or 6
+julia> lat[sublats = :A, region = RP.circle(50)] |> length
+9062
+```
+
+# See also
+    `hopselector`, `lattice`, `onsite`, `@onsite!`
 """
 siteselector
 
 """
-    hopselector(; range = missing, dn = missing, sublats = missing, indices = missing, region = missing)
+    hopselector(; range = neighbors(1), dcells = missing, sublats = missing, region = missing)
 
 Return a `HopSelector` object that can be used to select hops between two sites in a
-lattice. Only hops between two sites, with indices `ipair = src => dst`, at positions `r₁ =
-r - dr/2` and `r₂ = r + dr`, belonging to unit cells at integer distance `dn´` and to
-sublattices `s₁` and `s₂` will be selected if:
+lattice. Hops between two sites at positions `r₁ = r - dr/2` and `r₂ = r + dr`, belonging to
+unit cells at integer distance `dcell` and to sublattices with names `s₁::Symbol` and
+`s₂::Symbol` will be selected if:
 
-    `region(r, dr) && s in sublats && dn´ in dn && norm(dr) <= range && ipair in indices`
+    `region(r, dr) && (s₁ => s₂ in sublats) && (dcell in dcells) && (norm(dr) <= range)`
 
 If any of these is `missing` it will not be used to constraint the selection.
 
@@ -329,34 +381,55 @@ The keyword `range` admits the following possibilities
     max_range                   # i.e. `norm(dr) <= max_range`
     (min_range, max_range)      # i.e. `min_range <= norm(dr) <= max_range`
 
-Both `max_range` and `min_range` can be a `Real` or a `NeighborRange` created with
-`neighbors(n)`. The latter represents the distance of `n`-th nearest neighbors.
+Both `max_range` and `min_range` can be a `Real` or a `Neighbors` object created with
+`neighbors(n)`. The latter represents the distance of the `n`-th nearest neighbors in
+lattice `lat` (see `neighbors`).
 
-The keyword `dn` can be a `Tuple`/`Vector`/`SVector` of `Int`s, or a tuple thereof.
+The keyword `dcells` can be a `Tuple`/`SVector` of `Int`s, or a collection of them.
 
-The keyword `sublats` allows the following formats:
+The keyword `sublats` allows various forms, including:
 
-    sublats = :A => :B                  # Hopping from :A to :B sublattices, but not from :B to :A
-    sublats = (:A => :B,)               # Same as above
-    sublats = (:A => :B, :C => :D)      # Hopping from :A to :B or :C to :D
-    sublats = (:A, :C) .=> (:B, :D)     # Broadcasted pairs, same as above
-    sublats = (:A, :C) => (:B, :D)      # Direct product, (:A=>:B, :A=:D, :C=>:B, :C=>D)
+    sublats = :A                          # Hops from :A to :A
+    sublats = :A => :B                    # Hops from :A to :B sublattices, but not from :B to :A
+    sublats = (:A => :B,)                 # Same as above
+    sublats = (:A => :B, :C => :D)        # Hopping from :A to :B or :C to :D
+    sublats = (:A, :C) .=> (:B, :D)       # Broadcasted pairs, same as above
+    sublats = (:A, :C) => (:B, :D)        # Direct product, (:A=>:B, :A=:D, :C=>:B, :C=>D)
+    sublats = (spec₁, spec₂, ...)         # Hops matching any of the `spec`'s with any form as above
 
-The keyword `indices` accepts a single `src => dest` pair or a collection thereof. Any `src
-== dest` will be neglected. Possible combinations:
+The constructor `hopselector(; kw...)` is not meant to be called by the end user. Instead,
+the kwargs `kw` are input into different functions that allow filtering pairs of sites,
+which themselves call `hopselector` internally as needed. Some of these functions are
 
-    indices = 1 => 2                    # Hopping from site 1 to 2, but not from 2 to 1
-    indices = (1 => 2, 2 => 1)          # Hoppings from 1 to 2 or from 2 to 1
-    indices = [1 => 2, 2 => 1]          # Same as above
-    indices = [(1, 2) .=> (2, 1)]       # Broadcasted pairs, same as above
-    indices = [1:10 => 20:25, 3 => 30]  # Direct product, any hopping from sites 1:10 to sites 20:25, or from 3 to 30
+    - hopping(...; kw...)   : hopping model term to be applied to site pairs specified by `kw`
+    - @onsite!(...; kw...)  : hopping modifier to be applied to site pairs specified by `kw`
 
-Additionally, indices or sublattices can be wrapped in `not` to exclude them (see `not`):
+# Examples
 
-    sublats = not(:A => :B, :B => :A)   # Any sublat pairs different from :A => :B or :B => :A
-    sublats = not(:A) => :B             # Any sublat pair s1 => s2 with s1 different from :A and s2 equal to :B
-    indices = not(8 => 9)               # Any site indices different from 8 => 9
-    indices = 1 => not(3:4)             # Any site pair 1 => s with s different from 3, 4
+```jldoctest
+julia> lat = LP.honeycomb() |> hamiltonian(hopping(1, range = neighbors(2), sublats = (:A, :B) .=> (:A, :B)))
+Hamiltonian{Float64,2,2}: Hamiltonian on a 2D Lattice in 2D space
+  Bloch harmonics  : 7
+  Harmonic size    : 2 × 2
+  Orbitals         : [1, 1]
+  Element type     : scalar (ComplexF64)
+  Onsites          : 0
+  Hoppings         : 12
+  Coordination     : 6.0
+
+julia> lat = LP.honeycomb() |> hamiltonian(hopping(1, range = neighbors(2), sublats = (:A, :B) => (:A, :B)))
+Hamiltonian{Float64,2,2}: Hamiltonian on a 2D Lattice in 2D space
+  Bloch harmonics  : 7
+  Harmonic size    : 2 × 2
+  Orbitals         : [1, 1]
+  Element type     : scalar (ComplexF64)
+  Onsites          : 0
+  Hoppings         : 18
+  Coordination     : 9.0
+```
+
+# See also
+    `siteselector`, `hopping`, `@hopping!`
 
 """
 hopselector
@@ -364,9 +437,9 @@ hopselector
 """
     neighbors(n::Int)
 
-Create a `NeighborRange` that represents a hopping range to distances corresponding to the
-n-th nearest neighbors in a given lattice. Such distance is obtained by finding the n-th
-closest pairs of sites in a lattice, irrespective of their sublattice.
+Create a `Neighbors(n)` object that represents a hopping range to distances corresponding to
+the n-th nearest neighbors in a given lattice, irrespective of their sublattice. Neighbors
+at equal distance do not count towards `n`.
 
     neighbors(n::Int, lat::Lattice)
 
@@ -378,51 +451,35 @@ Obtain the actual nth-nearest-neighbot distance between sites in lattice `lat`.
 neighbors
 
 """
-    hamiltonian(lat, model; orbitals, orbtype)
+    hamiltonian(lat::Lattice{T}, model; orbitals = 1, type = T)
 
-Create a `Hamiltonian` by applying `model::TighbindingModel` to the lattice `lat` (see
-`hopping` and `onsite` for details on building tightbinding models).
+Create a `Hamiltonian` with a given number of `orbitals` per sublattice of type
+`Complex{type}` by applying `model::TighbindingModel` to the lattice `lat` (see `hopping`
+and `onsite` for details on building tightbinding models).
 
     lat |> hamiltonian(model; kw...)
 
 Curried form of `hamiltonian` equivalent to `hamiltonian(lat, model; kw...)`.
 
-# Keywords
+# Orbitals
 
-The number of orbitals on each sublattice can be specified by the keyword `orbitals`
-(otherwise all sublattices have one orbital by default). The following, and obvious
-combinations, are possible formats for the `orbitals` keyword:
-
-    orbitals = :a                # all sublattices have 1 orbital named :a
-    orbitals = (:a,)             # same as above
-    orbitals = (:a, :b, 3)       # all sublattices have 3 orbitals named :a and :b and :3
-    orbitals = ((:a, :b), (:c,)) # first sublattice has 2 orbitals, second has one
-    orbitals = ((:a, :b), :c)    # same as above
-    orbitals = (Val(2), Val(1))  # same as above, with automatic names
-    orbitals = (:A => (:a, :b), :D => :c) # sublattice :A has two orbitals, :D and rest have one
-    orbitals = :D => Val(4)      # sublattice :D has four orbitals, rest have one
-
-The matrix sizes of tightbinding `model` must match the orbitals specified. Internally, we
-define a block size `N = max(num_orbitals)`. If `N = 1` (all sublattices with one orbital)
-the Hamiltonian element type is `orbtype`. Otherwise it is `SMatrix{N,N,orbtype}` blocks,
-padded with the necessary zeros as required. Keyword `orbtype` is `Complex{T}` by default,
-where `T` is the number type of `lat`.
+Each matrix element in the Hamiltonian corresponds to a pair of sites, each of which may
+have one or more orbitals. Sites in the same sublattice have an equal number of orbitals
+given by `orbitals`. If `orbitals = (n₁, n₂, ...)` is a collection of integers, one per
+sublattice, sites in each sublattice will contain the corresponding number `nᵢ` of orbitals.
+For type stability, the matrix elements of Hamiltonians are stored as blocks of equal size
+`N = max(orbitals)`. If `N = 1` (all sublattices with one orbital) the Hamiltonian matrix
+element type is `Complex{type}`. Otherwise it is `SMatrix{N,N,Complex{type}}`, with each
+block padded with the necessary zeros as required. Keyword `type` is `T` by default, where
+`T <: AbstractFloat` is the number type of `lat`.
 
 # Indexing
 
-Indexing into a Hamiltonian `h` works as follows. Access the `HamiltonianHarmonic` matrix at
-a given `dn::NTuple{L,Int}` with `h[dn]`. The special `h[]` syntax stands for `h[(0...)]`
-for the zero-harmonic. Assign `v` into element `(i,j)` of said matrix with `h[dn][i,j] = v`.
-Broadcasting with vectors of indices `is` and `js` is supported, `h[dn][is, js] = v_matrix`.
-
-A slicing syntax `h[rows, cols]` (without specifying `dn`) is also available, that creates a
-special `hs::Slice{<:Hamiltonian}` object that represents a slice of the Hamiltonian matrix
-restricted to `rows` and `cols`. Here, `rows` and `cols` are collections of site indices, or
-alternatively `SiteSelector`s (see `siteselector`s for details). If `rows::Integer` or
-`cols::Integer`, they will be converted to a single-element range (to preserve always a
-matrix-like slice, unlike for `AbstractArray` indexing). Slices support `bloch` and `bloch!`
-to produce the corresponding matrices, and can also be indexed as `hs[dn::Tuple]` that
-produces the equivalent to `h[dn][rows, cols]`.
+Indexing into a Hamiltonian `h` works as follows. Access the `Harmonic` matrix at a given
+unit cell distance `dn::NTuple{L,Int}` with `h[dn]`. The special `h[]` syntax stands for
+`h[(0...)]` for the zero-harmonic. Assign `v` into element `(i,j)` of said matrix with
+`h[dn][i,j] = v`. Broadcasting with vectors of indices `is` and `js` is supported,
+`h[dn][is, js] .= v_matrix`.
 
 To add an empty harmonic with a given `dn::NTuple{L,Int}`, do `push!(h, dn)`. To delete it,
 do `deleteat!(h, dn)`.
@@ -430,21 +487,21 @@ do `deleteat!(h, dn)`.
 # Examples
 
 ```jldoctest
-julia> h = hamiltonian(LatticePresets.honeycomb(), hopping(@SMatrix[1 2; 3 4], range = 1/√3), orbitals = Val(2))
-Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
-  Bloch harmonics  : 5 (SparseMatrixCSC, sparse)
+julia> h = hamiltonian(LatticePresets.honeycomb(), hopping(SA[1 2; 2 4], range = 1/√3), orbitals = 2)
+Hamiltonian{Float64,2,2}: Hamiltonian on a 2D Lattice in 2D space
+  Bloch harmonics  : 5
   Harmonic size    : 2 × 2
-  Orbitals         : ((:a, :a), (:a, :a))
+  Orbitals         : [2, 2]
   Element type     : 2 × 2 blocks (ComplexF64)
   Onsites          : 0
   Hoppings         : 6
   Coordination     : 3.0
 
 julia> push!(h, (3,3)) # Adding a new Hamiltonian harmonic (if not already present)
-Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
-  Bloch harmonics  : 6 (SparseMatrixCSC, sparse)
+Hamiltonian{Float64,2,2}: Hamiltonian on a 2D Lattice in 2D space
+  Bloch harmonics  : 6
   Harmonic size    : 2 × 2
-  Orbitals         : ((:a, :a), (:a, :a))
+  Orbitals         : [2, 2]
   Element type     : 2 × 2 blocks (ComplexF64)
   Onsites          : 0
   Hoppings         : 6
@@ -455,15 +512,15 @@ julia> h[(3,3)][1,1] = @SMatrix[1 2; 2 1]; h[(3,3)] # element assignment
  [1.0+0.0im 2.0+0.0im; 2.0+0.0im 1.0+0.0im]                      ⋅                     
                      ⋅                                           ⋅                     
 
-julia> h[(3,3)][[1,2],[1,2]] .= Ref(@SMatrix[1 2; 2 1])
+julia> h[(3,3)][[1,2],[1,2]] .= Ref(SA[1 2; 2 1])  # multiple element assignment
 2×2 SparseMatrixCSC{SMatrix{2, 2, ComplexF64, 4}, Int64} with 4 stored entries:
  [1.0+0.0im 2.0+0.0im; 2.0+0.0im 1.0+0.0im]  [1.0+0.0im 2.0+0.0im; 2.0+0.0im 1.0+0.0im]
  [1.0+0.0im 2.0+0.0im; 2.0+0.0im 1.0+0.0im]  [1.0+0.0im 2.0+0.0im; 2.0+0.0im 1.0+0.0im]
 
- julia> h = unitcell(h); h[]
+julia> h[]                                        # inspect matrix of zero harmonic
 2×2 SparseMatrixCSC{SMatrix{2, 2, ComplexF64, 4}, Int64} with 2 stored entries:
-                     ⋅                       [1.0+0.0im 2.0+0.0im; 3.0+0.0im 4.0+0.0im]
- [1.0+0.0im 2.0+0.0im; 3.0+0.0im 4.0+0.0im]                      ⋅                     
+                     ⋅                       [1.0+0.0im 2.0+0.0im; 2.0+0.0im 4.0+0.0im]
+ [1.0+0.0im 2.0+0.0im; 2.0+0.0im 4.0+0.0im]                      ⋅                     
 
 ```
 

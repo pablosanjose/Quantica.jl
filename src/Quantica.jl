@@ -4,13 +4,6 @@ module Quantica
 using Base.Threads: Iterators
 @doc read(joinpath(dirname(@__DIR__), "README.md"), String) Quantica
 
-using Requires
-
-function __init__()
-      @require GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a" include("plot_makie.jl")
-      @require VegaLite = "112f6efa-9a02-5b7d-90c0-432ed331239a" include("plot_vegalite.jl")
-end
-
 using StaticArrays
 using NearestNeighbors
 using SparseArrays
@@ -18,20 +11,14 @@ using LinearAlgebra
 using ProgressMeter
 using Random
 using SuiteSparse
-
 using FunctionWrappers: FunctionWrapper
-
 using ExprTools
-
 using SparseArrays: getcolptr, AbstractSparseMatrix, AbstractSparseMatrixCSC
-
 using Statistics: mean
-
 using Compat # for use of argmin/argmax in bandstructure.jl
 
-export sublat, lattice, dims, supercell,
-       hopping, onsite, @onsite!, @hopping!, @block!, parameters, siteselector, hopselector, neighbors,
-       bravais_matrix, sites, siteindices, not,
+export sublat, lattice, dims, supercell, bravais_matrix, siteindices, sitepositions,
+       hopping, onsite, @onsite!, @hopping!, @block!, parameters, neighbors,
        ket, ketmodel, randomkets, basiskets,
        hamiltonian, parametric, bloch, bloch!, similarmatrix,
        flatten, unflatten, orbitalstructure, wrap, transform, translate, combine,
@@ -41,15 +28,11 @@ export sublat, lattice, dims, supercell,
        momentaKPM, dosKPM, averageKPM, densityKPM, bandrangeKPM,
        greens, greensolver, Schur1D
 
-export LatticePresets, LP, RegionPresets, RP #, HamiltonianPresets, HP
+export eigensolver
 
-export LinearAlgebraPackage, ArpackPackage, ArnoldiMethodPackage, KrylovKitPackage
-
+export LatticePresets, LP, RegionPresets, RP, Eigensolvers, ES #, HamiltonianPresets, HP
 export @SMatrix, @SVector, SMatrix, SVector, SA
-
 export ishermitian, I
-
-export SparseMatrixCSC
 
 include("types.jl")
 include("apply.jl")
@@ -61,6 +44,7 @@ include("builders.jl")
 include("hamiltonian.jl")
 include("supercell.jl")
 include("transform.jl")
+include("eigensolver.jl")
 # include("ket.jl")
 # include("parametric.jl")
 # include("slice.jl")

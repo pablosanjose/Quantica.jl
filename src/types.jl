@@ -113,10 +113,9 @@ Base.copy(l::Lattice) = deepcopy(l)
 # Selectors  -  see selector.jl for methods
 #region
 
-struct SiteSelector{F,S,I}
+struct SiteSelector{F,S}
     region::F
     sublats::S
-    indices::I
 end
 
 struct AppliedSiteSelector{T,E,L}
@@ -125,10 +124,9 @@ struct AppliedSiteSelector{T,E,L}
     sublats::Vector{Symbol}
 end
 
-struct HopSelector{F,S,I,D,R}
+struct HopSelector{F,S,D,R}
     region::F
     sublats::S
-    indices::I
     dcells::D
     range::R
 end
@@ -323,21 +321,34 @@ siterange(o::OrbitalStructure, sublat) = (1+o.offsets[sublat]):o.offsets[sublat+
 #endregion
 
 ############################################################################################
+# Harmonic  -  see hamiltonian.jl for methods
+#region
+
+struct Harmonic{L,M<:AbstractArray}
+    dn::SVector{L,Int}
+    h::M
+end
+
+matrix(h::Harmonic) = h.h
+
+dcell(h::Harmonic) = h.dn
+
+Base.size(h::Harmonic, i...) = size(matrix(h), i...)
+
+Base.isless(h::Harmonic, h´::Harmonic) = sum(abs2, dcell(h)) < sum(abs2, dcell(h´))
+
+#endregion
+
+############################################################################################
 # Hamiltonian  -  see hamiltonian.jl for methods
 #region
 
-# Any Hamiltonian that can be passed to `flatten` and `bloch`
 abstract type AbstractHamiltonian{T,E,L,O} end
-
-struct HamiltonianHarmonic{L,O}
-    dn::SVector{L,Int}
-    h::SparseMatrixCSC{O,Int}
-end
 
 struct Hamiltonian{T,E,L,O} <: AbstractHamiltonian{T,E,L,O}
     lattice::Lattice{T,E,L}
     orbstruct::OrbitalStructure{O}
-    harmonics::Vector{HamiltonianHarmonic{L,O}}
+    harmonics::Vector{Harmonic{L,SparseMatrixCSC{O,Int}}}
     # Enforce sorted-dns-starting-from-zero invariant onto harmonics
     function Hamiltonian{T,E,L,O}(lattice, orbstruct, harmonics) where {T,E,L,O}
         n = nsites(lattice)
@@ -345,21 +356,17 @@ struct Hamiltonian{T,E,L,O} <: AbstractHamiltonian{T,E,L,O}
             throw(DimensionMismatch("Harmonic $(size.(matrix.(harmonics), 1)) sizes don't match number of sites $n"))
         sort!(harmonics)
         length(harmonics) > 0 && iszero(dcell(first(harmonics))) || pushfirst!(harmonics,
-            HamiltonianHarmonic(zero(SVector{L,Int}), sparse(Int[], Int[], O[], n, n)))
+            Harmonic(zero(SVector{L,Int}), spzeros(O, n, n)))
         return new(lattice, orbstruct, harmonics)
     end
 end
 
-Hamiltonian(l::Lattice{T,E,L}, o::OrbitalStructure{O}, h::Vector{HamiltonianHarmonic{L,O}},) where {T,E,L,O} =
+Hamiltonian(l::Lattice{T,E,L}, o::OrbitalStructure{O}, h::Vector{Harmonic{L,SparseMatrixCSC{O,Int}}}) where {T,E,L,O} =
     Hamiltonian{T,E,L,O}(l, o, h)
 
 #region internal API
 
 hamiltonian(h::Hamiltonian) = h
-
-matrix(h::HamiltonianHarmonic) = h.h
-
-dcell(h::HamiltonianHarmonic) = h.dn
 
 orbitalstructure(h::Hamiltonian) = h.orbstruct
 
@@ -373,14 +380,11 @@ blocktype(h::Hamiltonian) = blocktype(orbitalstructure(h))
 
 norbitals(h::Hamiltonian) = norbitals(orbitalstructure(h))
 
-Base.size(h::HamiltonianHarmonic, i...) = size(matrix(h), i...)
 Base.size(h::Hamiltonian, i...) = size(first(harmonics(h)), i...)
-
-Base.isless(h::HamiltonianHarmonic, h´::HamiltonianHarmonic) = sum(abs2, dcell(h)) < sum(abs2, dcell(h´))
 
 copy_harmonics(h::Hamiltonian) = Hamiltonian(lattice(h), orbitalstructure(h), deepcopy(harmonics(h)))
 
-threadcopy(h::Hamiltonian) = h
+# threadcopy(h::Hamiltonian) = h
 
 function LinearAlgebra.ishermitian(h::Hamiltonian)
     for hh in h.harmonics
@@ -423,58 +427,71 @@ blocktype(h::ParametricHamiltonian) = blocktype(parent(h))
 
 lattice(h::ParametricHamiltonian) = lattice(parent(h))
 
-threadcopy(h::ParametricHamiltonian) =
-    ParametricHamiltonian(h.hparent, threadcopy(h.h), h.modifiers, h.allptrs, h.allparams)
+# threadcopy(h::ParametricHamiltonian) =
+#     ParametricHamiltonian(h.hparent, threadcopy(h.h), h.modifiers, h.allptrs, h.allparams)
 
 Base.size(h::ParametricHamiltonian, i...) = size(parent(h), i...)
 
 #endregion
 
 ############################################################################################
-# FlatHamiltonian  -  see hamiltonian.jl for methods
+# Ket  -  see ket.jl for methods
 #region
 
-struct FlatHamiltonian{T,E,L,O<:Number,H<:AbstractHamiltonian{T,E,L,<:SMatrix}} <: AbstractHamiltonian{T,E,L,O}
-    h::H
-    flatorbstruct::OrbitalStructure{O}
+struct Ket{T,E,L,O}
+    lattice::Lattice{T,E,L}
+    orbstruct::OrbitalStructure{O}
+    harmonics::Vector{Harmonic{L,Matrix{O}}}
 end
 
-orbitalstructure(h::FlatHamiltonian) = h.flatorbstruct
-
-unflatten(h::FlatHamiltonian) = parent(h)
-
-lattice(h::FlatHamiltonian) = lattice(parent(h))
-
-harmonics(h::FlatHamiltonian) = harmonics(parent(h))
-
-orbtype(h::FlatHamiltonian) = orbtype(orbitalstructure(h))
-
-blocktype(h::FlatHamiltonian) = blocktype(orbitalstructure(h))
-
-norbitals(h::FlatHamiltonian) = norbitals(orbitalstructure(h))
-
-threadcopy(h::FlatHamiltonian) = FlatHamiltonian(threadcopy(parent(h)), orbitalstructure(h))
-
-Base.size(h::FlatHamiltonian) = nsites(orbitalstructure(h)), nsites(orbitalstructure(h))
-Base.size(h::FlatHamiltonian, i) = i <= 0 ? throw(BoundsError()) : ifelse(1 <= i <= 2, nsites(orbitalstructure(h)), 1)
-
-Base.parent(h::FlatHamiltonian) = h.h
-
+const HamOrKet{T,E,L,O} = Union{Ket{T,E,L,O},AbstractHamiltonian{T,E,L,O}}
 #endregion
+
+# ############################################################################################
+# # FlatHamiltonian  -  see hamiltonian.jl for methods
+# #region
+
+# struct FlatHamiltonian{T,E,L,O<:Number,H<:AbstractHamiltonian{T,E,L,<:SMatrix}} <: AbstractHamiltonian{T,E,L,O}
+#     h::H
+#     flatorbstruct::OrbitalStructure{O}
+# end
+
+# orbitalstructure(h::FlatHamiltonian) = h.flatorbstruct
+
+# unflatten(h::FlatHamiltonian) = parent(h)
+
+# lattice(h::FlatHamiltonian) = lattice(parent(h))
+
+# harmonics(h::FlatHamiltonian) = harmonics(parent(h))
+
+# orbtype(h::FlatHamiltonian) = orbtype(orbitalstructure(h))
+
+# blocktype(h::FlatHamiltonian) = blocktype(orbitalstructure(h))
+
+# norbitals(h::FlatHamiltonian) = norbitals(orbitalstructure(h))
+
+# # threadcopy(h::FlatHamiltonian) = FlatHamiltonian(threadcopy(parent(h)), orbitalstructure(h))
+
+# Base.size(h::FlatHamiltonian) = nsites(orbitalstructure(h)), nsites(orbitalstructure(h))
+# Base.size(h::FlatHamiltonian, i) = i <= 0 ? throw(BoundsError()) : ifelse(1 <= i <= 2, nsites(orbitalstructure(h)), 1)
+
+# Base.parent(h::FlatHamiltonian) = h.h
+
+# #endregion
 
 ############################################################################################
 # Bloch  -  see hamiltonian.jl for methods
 #region
 
-struct Bloch{L,O,O´,H<:AbstractHamiltonian{<:Any,<:Any,L,O´}}
+struct Bloch{L,M<:AbstractMatrix,H<:HamOrKet{<:Any,<:Any,L}}
     h::H
-    output::SparseMatrixCSC{O,Int}  # output has same structure as merged harmonics(h)
-end                                 # or its flattened version if O != O´
+    output::M       # output has same structure as merged harmonics(h)
+end                 # or its flattened version if O != O´
 
 matrix(b::Bloch) = b.output
 
 hamiltonian(b::Bloch) = b.h
 
-threadcopy(b::Bloch) = Bloch(threadcopy(b.h), copy(b.output))
+# threadcopy(b::Bloch) = Bloch(threadcopy(b.h), copy(b.output))
 
 #endregion
