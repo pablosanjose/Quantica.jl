@@ -183,7 +183,7 @@ julia> sitepositions(LatticePresets.honeycomb(); sublats = :A)
 sitepositions
 
 """
-    sitepositions(l::Lattice; kw...)
+    siteindices(l::Lattice; kw...)
 
 Returns a vector with site indices in lattice `l`, filtered by `siteselector(; kw...)`.
 Equivalent to `first.(l[kw...])`. See `siteselector` for details on possible `kw`.
