@@ -55,7 +55,7 @@ REMARKS:
         and their subsequent cross correlation to build new S and H matrices
 """
 function DACP(h::Union{ParametricHamiltonian, Hamiltonian}, a, d)
-    @checkloaded(:ArnoldiMethod)
+    checkloaded(:ArnoldiMethod)
     builder = semicircle_filter(h, a)
     s_mat, h_mat = proj_h_s(builder, d)
     return s_mat, h_mat
