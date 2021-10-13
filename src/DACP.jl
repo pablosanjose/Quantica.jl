@@ -42,7 +42,7 @@ end
 given a `h::Union{ParametricHamiltonian, Hamiltonian}` returns
 its projection to a lower subspace 𝕃 with eigenvalues inside the energy interval:
 (-`a`, `a`). The dimension of the desired subspace must be given as an input `d`
-and `a < min(Emax, |Emin|)
+and `a < min(Emax, |Emin|)`
 
 REMARKS:
     - Validity is conditioned to the requirement a << emax

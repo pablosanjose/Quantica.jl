@@ -32,7 +32,7 @@ export sublat, bravais, lattice, dims, supercell, unitcell,
        bands, vertices, minima, maxima, gapedge, gap, isinband,
        energies, states, degeneracy,
        momentaKPM, dosKPM, averageKPM, densityKPM, bandrangeKPM,
-       greens, greensolver, Schur1D
+       greens, greensolver, Schur1D, DACP, DACPdiagonaliser
 
 export RegionPresets, RP, LatticePresets, LP, HamiltonianPresets, HP
 
@@ -62,6 +62,7 @@ include("mesh.jl")
 include("diagonalizer.jl")
 include("bandstructure.jl")
 include("KPM.jl")
+include("DACP.jl")
 include("effective.jl")
 include("greens.jl")
 include("convert.jl")
