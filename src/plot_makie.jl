@@ -1,9 +1,8 @@
 using GeometryBasics
-using .GLMakie: AbstractPlotting
-using .GLMakie.AbstractPlotting: to_value, RGBAf0, Vec3f0, FRect, @recipe, LineSegments, Theme,
+using .GLMakie: to_value, RGBAf0, Vec3f0, FRect, @recipe, LineSegments, Theme,
     lift, campixel, SceneSpace, Node, Axis, text!, on, mouse_selection, poly!, scale!,
     translate!, linesegments!, mesh!, scatter!, meshscatter!
-import .GLMakie.AbstractPlotting: plot!, plot
+import .GLMakie: plot!, plot
 
 """
     plot(h::Hamiltonian)
