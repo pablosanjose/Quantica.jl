@@ -1,5 +1,5 @@
 using GeometryBasics
-using .GLMakie: to_value, RGBAf0, Vec3f0, FRect, @recipe, LineSegments, Theme,
+using .GLMakie: to_value, RGBAf, @recipe, LineSegments, Theme,
     lift, campixel, SceneSpace, Node, Axis, text!, on, mouse_selection, poly!, scale!,
     translate!, linesegments!, mesh!, scatter!, meshscatter!
 import .GLMakie: plot!, plot
@@ -28,13 +28,13 @@ end
 
 matrixidx(h::DenseMatrix, row, col) = LinearIndices(h)[row, col]
 
-transparent(rgba::RGBAf0, v = 0.5) = RGBAf0(rgba.r, rgba.g, rgba.b, rgba.alpha * v)
+transparent(rgba::RGBAf, v = 0.5) = RGBAf(rgba.r, rgba.g, rgba.b, rgba.alpha * v)
 
-function darken(rgba::RGBAf0, v = 0.66)
+function darken(rgba::RGBAf, v = 0.66)
     r = max(0, min(rgba.r * (1 - v), 1))
     g = max(0, min(rgba.g * (1 - v), 1))
     b = max(0, min(rgba.b * (1 - v), 1))
-    RGBAf0(r,g,b,rgba.alpha)
+    RGBAf(r,g,b,rgba.alpha)
 end
 function lighten(rgba, v = 0.66)
     darken(rgba, -v)
@@ -76,12 +76,12 @@ end
         linkthickness = 6, linkoffset = 0, linkradius = 0.1,
         tooltips = true, digits = 3,
         _tooltips_rowcolhar = Vector{Tuple{Int,Int,Int}}[],
-        ssao = true, ambient = Vec3f0(0.5), diffuse = Vec3f0(0.5),
-        colors = map(t -> RGBAf0(t...),
+        ssao = true, ambient = Vec3f(0.5), diffuse = Vec3f(0.5),
+        colors = map(t -> RGBAf(t...),
             ((0.960,0.600,.327), (0.410,0.067,0.031),(0.940,0.780,0.000),
             (0.640,0.760,0.900),(0.310,0.370,0.650),(0.600,0.550,0.810),
             (0.150,0.051,0.100),(0.870,0.530,0.640),(0.720,0.130,0.250))),
-        light = Vec3f0[[0, 0, 10], [0, 10, 0], [10, 0, 0], [10, 10, 10], [-10, -10, -10]]
+        light = Vec3f[[0, 0, 10], [0, 10, 0], [10, 0, 0], [10, 10, 10], [-10, -10, -10]]
     )
 end
 
@@ -184,8 +184,8 @@ function plotlinks_hi!(plot, links, color)
     positions = [(r1 + r2) / 2 for (r1, r2) in links]
     rotvectors = [r2 - r1 for (r1, r2) in links]
     radius = plot[:linkradius][]
-    scales = [Vec3f0(radius, radius, norm(r2 - r1)/2) for (r1, r2) in links]
-    cylinder = Cylinder(Point3f0(0., 0., -1.0), Point3f0(0., 0, 1.0), Float32(1))
+    scales = [Vec3f(radius, radius, norm(r2 - r1)/2) for (r1, r2) in links]
+    cylinder = Cylinder(Point3f(0., 0., -1.0), Point3f(0., 0, 1.0), Float32(1))
     meshscatter!(plot, positions;
         ssao = plot[:ssao][], ambient = plot[:ambient][], diffuse = plot[:diffuse][],
         color = color, marker = cylinder, markersize = scales, rotations = rotvectors,
@@ -198,13 +198,13 @@ function addtooltips!(scene, h)
     visible = Node(false)
     N = Quantica.blockdim(h)
     poprect = lift(scene.events.mouseposition) do mp
-        FRect((mp .+ 5), 1,1)
+        Rectf((mp .+ 5), 1,1)
     end
     textpos = lift(scene.events.mouseposition) do mp
-        Vec3f0((mp .+ 5 .+ (0, -50))..., 0)
+        Vec3f((mp .+ 5 .+ (0, -50))..., 0)
     end
-    popup = poly!(campixel(scene), poprect, raw = true, color = RGBAf0(1,1,1,0), visible = visible)
-    translate!(popup, Vec3f0(0, 0, 10000))
+    popup = poly!(campixel(scene), poprect, raw = true, color = RGBAf(1,1,1,0), visible = visible)
+    translate!(popup, Vec3f(0, 0, 10000))
     text!(popup, " ", textsize = 30, position = textpos, align = (:center, :center),
         color = :black, strokewidth = 4, strokecolor = :white, raw = true, visible = visible)
     text_field = popup.plots[end]
@@ -261,7 +261,7 @@ end
     Theme(
     linethickness = 3.0,
     wireframe = true,
-    colors = map(t -> RGBAf0((0.8 .* t)...),
+    colors = map(t -> RGBAf((0.8 .* t)...),
         ((0.973, 0.565, 0.576), (0.682, 0.838, 0.922), (0.742, 0.91, 0.734),
          (0.879, 0.744, 0.894), (1.0, 0.84, 0.0), (1.0, 1.0, 0.669),
          (0.898, 0.762, 0.629), (0.992, 0.843, 0.93), (0.88, 0.88, 0.88)))
@@ -287,8 +287,8 @@ function plot!(plot::BandPlot2D)
     linethickness = 1.0,
     wireframe = true,
     linedarken = 0.5,
-    ssao = true, ambient = Vec3f0(0.55), diffuse = Vec3f0(0.4),
-    colors = map(t -> RGBAf0(t...),
+    ssao = true, ambient = Vec3f(0.55), diffuse = Vec3f(0.4),
+    colors = map(t -> RGBAf(t...),
         ((0.973, 0.565, 0.576), (0.682, 0.838, 0.922), (0.742, 0.91, 0.734),
          (0.879, 0.744, 0.894), (1.0, 0.84, 0.0), (1.0, 1.0, 0.669),
          (0.898, 0.762, 0.629), (0.992, 0.843, 0.93), (0.88, 0.88, 0.88)))
