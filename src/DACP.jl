@@ -59,12 +59,6 @@ REMARKS:
     - for a given `d`, `a` must be appropriately chosen to ensure that the number of
         eigenstates in [−a, a] is a little less than the dimension of constructed basis, 
         i.e. < 2n + 1. This require prior knowledge of the spectrum (Weak point)
-    - Precision can be improved using block evolution of a set of random eigenstates
-        and their subsequent cross validation to build new S and H matrices. This is 
-        particularly important when there are exact or near degeneracies. These is
-        called the block Chebyshev–Davidson algorithm, 
-            see: https://doi.org/10.1016/j.jcp.2010.08.032
-        Therefore, it is advisable to break any intrinsic degeneracy if possible.
 
 """
 function DACP(h::Union{ParametricHamiltonian, Hamiltonian}, 
