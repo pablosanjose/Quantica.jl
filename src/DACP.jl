@@ -215,6 +215,20 @@ function proj_h_s(h, ψe, bounds, d, store_basis::Val{true}; kw...)
     mul!(hmat, basis', h * basis)
     return smat, hmat, basis
 end
+
+"returns the projected S and H matrices without the requirement to store the basis.
+Only ⟨ψE|Tₖ|ψE⟩ and ⟨ψE|ℍTₖ|ψE⟩ are stored at 4 different \"instants\" for each k_m"
+
+function proj_h_s(h, ψe, bounds, d, store_basis::Val{false}; kw...)
+    l = 1.5
+    n = Int(ceil((l * d - 1)/2))
+    Kp = 2n #the factor two is required
+    ar = bounds[3]/abs(bounds[1])
+    indices = Int.(floor.(vcat([[m*π/ar-2, m*π/ar-1, m*π/ar, m*π/ar+1] for m in 1:Kp]...)))
+    pushfirst!(indices, 1) # the 𝕀 in {𝕀, T_{k-1}, T_k...}
+    return chebyshev_proj(ar, indices, ψe, h, bounds)
+end
+
  
 function chebyshev_basis(indices, ψ0::Vector{Matrix{T}}, h, bounds) where {T}
     pmeter = Progress(length(indices), 
@@ -235,28 +249,15 @@ function chebyshev_basis(indices, ψ0::Vector{Matrix{T}}, h, bounds) where {T}
     return basis
 end
 
-"returns the projected S and H matrices without the requirement to store the basis.
-Only ⟨ψE|Tₖ|ψE⟩ and ⟨ψE|ℍTₖ|ψE⟩ are stored at 4 different \"instants\" for each k_m"
-
-function proj_h_s(h, ψe, bounds, d, store_basis::Val{false}; kw...)
-    l = 1.5
-    n = Int(ceil((l * d - 1)/2))
-    Kp = 2n #the factor two is required
-    ar = bounds[3]/abs(bounds[1])
-    indices = Int.(floor.(vcat([[m*π/ar-2, m*π/ar-1, m*π/ar, m*π/ar+1] for m in 1:Kp]...)))
-    pushfirst!(indices, 1) # the 𝕀 in {𝕀, T_{k-1}, T_k...}
-    return chebyshev_proj(ar, indices, ψe, h, bounds)
-end
-
 function chebyshev_proj(ar, indices, ψ0::Vector{Matrix{ComplexF64}}, h, bounds)
     Kp = length(indices)
     ψh = similar(ψ0[1])
     aux_vec = zeros(ComplexF64, Kp, 2)
     pmeter = Progress(Kp, "Computing $(Kp+1) order Chebyshev pol...")
-    for it in 1:1#length(ψ0)
+    for it in 1:length(ψ0)
         count = 0
         ψi = copy(ψ0[it])
-        ψe = copy(ψ0[it]) #redundant?
+        ψe = copy(ψ0[it]) 
         mul!(ψh, h, ψi)
         for i in 1:indices[end]
             ProgressMeter.next!(pmeter; showvalues = ())
@@ -270,7 +271,7 @@ function chebyshev_proj(ar, indices, ψ0::Vector{Matrix{ComplexF64}}, h, bounds)
     end
     return build_matrices(aux_vec, indices, ar)
 end
- 
+
 
 function build_matrices(v, indices, ar)
     dim = Int64((length(v[:,1])-1)/4 +1)
@@ -311,6 +312,8 @@ function ijselector(ar, i, j)
     k_m = ifelse(k_m <= 0.5, 1., k_m)
     return [Int(floor(k_p)), Int(floor(k_m))]
 end
+
+
 
 function _chebyshev_loop!(ψ0, ψi, h, bounds, i)
     if i == 1
