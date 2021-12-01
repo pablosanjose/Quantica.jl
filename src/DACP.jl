@@ -8,6 +8,8 @@
 #    2(b). Chebyshev Evolution
 #    3. Subspace diagonalization
 # To do:  
+#    0. Use SVectors structs. Body and return type instability in the proj_h_s method ->
+#        store_base = true
 #    1. Subspace is smaller than expected although there is oversampling 
 #          - negligible amplitudes of the filtered vectors in (-a, -a+ϵ) and (a-ϵ, a)
 #            ϵ -> 0
@@ -17,14 +19,15 @@ using NumericalIntegration
 
 # Builders and structs
 
-struct DACPbuilder{H<:AbstractMatrix}
+struct DACPbuilder{H<:SparseMatrixCSC{ComplexF64, Int64}, N<:Float64, 
+    V<:Vector{Matrix{ComplexF64}}, V1<:Matrix{ComplexF64}}
     h::H
     hsquared::H
-    emax
-    emin
-    a
-    ψ0
-    ψ1
+    emax::N
+    emin::N
+    a::N
+    ψ0::V
+    ψ1::V1
 end
 
 function DACPbuilder(h::Hamiltonian, a, ψ; eps = 1e-4)
@@ -38,35 +41,50 @@ function DACPbuilder(h::Hamiltonian, a, ψ; eps = 1e-4)
     return DACPbuilder(hmat, hmat * hmat, emax, emin, a, ψ, similar(ψ[1]))
 end
 
-struct DACPsubspace{H<:AbstractMatrix}
+struct DACPsubspace{H<:SparseMatrixCSC{ComplexF64, Int64}, N<:Float64}
     h::H
-    emax
-    emin
-    a
-    ψe
+    emax::N
+    emin::N
+    a::N
+    ψe::Vector{Matrix{ComplexF64}}
 end
 
 """
 given a `h::Union{ParametricHamiltonian, Hamiltonian}` returns
-its projection to a lower subspace 𝕃 with eigenvalues inside the energy interval:
-(-`a`, `a`). The dimension of the desired subspace must be given as an input `d`
-and `a < min(Emax, |Emin|)`
+the projection of `h` and of the overlap matrix, `s` to a lower subspace 𝕃 with eigenvalues
+inside the energy interval: (-`a`, `a`). 
+The dimension of the desired subspace must be given as an input `d` and 
+`a < min(Emax, |Emin|)`
 
 REMARKS:
-    - Validity is conditioned to the requirement a << emax
+    - Validity is conditioned to the requirement `a << emax`
     - in order to accurately span 𝕃, we form a basis by Chebyshev evolution of 
         `ψe` using `n = (l*d-1)/2` states with l>=1 (set by default to l = 1.5).
     - for a given `d`, `a` must be appropriately chosen to ensure that the number of
-        eigenstates in [−a, a] is a little less than the dimension of constructed basis, 
-        i.e. < 2n + 1. This require prior knowledge of the spectrum (Weak point)
-
+        eigenstates in `[−a, a]` is a little less than the dimension of constructed basis, 
+        i.e. < 2n + 1 (overestimation). This requires prior knowledge about the spectrum
+        edges. However, the subspace dimension, `d`, can be efficiently determined using 
+        the KPM method. 
 """
-function DACP(h::Union{ParametricHamiltonian, Hamiltonian}, 
-    a::T; d = missing::Union{Missing, T}, kw...) where {T}
-    builder = semicircle_filter(h, a; kw...)
-    smat, hmat = proj_h_s(builder, h, d)
-    return smat, hmat
+proj_DACP(h::Union{ParametricHamiltonian, Hamiltonian}, a;
+    store_basis= true::Bool, d = missing::Union{Missing, Real}, maxdeg = 1) =
+    proj_DACP(h::Union{ParametricHamiltonian, Hamiltonian}, a, Val(store_basis);
+        d = missing::Union{Missing, Real}, maxdeg = maxdeg) 
+
+
+proj_DACP(h::Union{ParametricHamiltonian, Hamiltonian}, a, store_basis::Val{true}; 
+    d = missing::Union{Missing, Real}, maxdeg = 1) = _proj_DACP(h, a, d, store_basis; maxdeg = maxdeg)
+
+
+proj_DACP(h::Union{ParametricHamiltonian, Hamiltonian}, a, store_basis::Val{false};
+    d = missing::Union{Missing, Real}, maxdeg = 1) = _proj_DACP(h, a, d, store_basis; maxdeg = maxdeg)
+
+function _proj_DACP(h, a, d, store_basis; maxdeg = 1)
+    println(maxdeg)
+    builder = semicircle_filter(h, a; numkets = maxdeg)
+    return proj_h_s(builder, h, d, store_basis)
 end
+
 
 ############################################################################################
 #    1. Exponential (semi_circle) filtering of n-random vectors
@@ -102,13 +120,13 @@ eps != 0 adds performs the exponential filtering in a slighlty larger interval
 """
 function chebyshev_filter(b::DACPbuilder, eps = 0.)
     checkloaded(:ArnoldiMethod)
-    ψ0, ψ1, emax, emin, a, hsquared, h =  
-        b.ψ0, b.ψ1, b.emax, b.emin, b.a, b.hsquared, b.h
+    ψ0, ψ1, emax, emin, a, h =  
+        b.ψ0, b.ψ1, b.emax, b.emin, b.a, b.h
     a += (a/emax * eps)
     bounds = (maximum([abs(emax), abs(emin)]), a)
     K = Int(ceil(12*emax/a))
     return DACPsubspace(h, emax, emin, a/emax, 
-        iterate_chebyshev(K, ψ0, ψ1, hsquared, bounds))
+        iterate_chebyshev(K, ψ0, ψ1, b.hsquared, bounds))
 end
 
 """
@@ -120,18 +138,7 @@ independent randomkets with dimension `numkets` passed as a kwarg.
 returns the action TK(𝔽)|ψ0⟩ on a random vector `ψ0`, where `K` is the cutoff of the Cheby
 iteration and `ψ1` an auxiliary ket.
     see: `semicircle_filter()`
-"""
-function iterate_chebyshev(K, ψ0::Vector{Matrix{T}}, ψ1,
-    hsquared, bounds; thrs = 1e-6) where {T}
-    psi_filt = iterate_chebyshev(K, ψ0[1], ψ1, hsquared, bounds)[:,1] # 1 filtered ket
-    subspace_indices = findall(x -> abs(x) > thrs, psi_filt) # undamped amplitude indices
-    rand_block = [reshape(copy(psi_filt[:,1]),:,1) for i in 1:length(ψ0)] # initialize block
-    if length(ψ0) > 1 
-        [rand_block[i][subspace_indices] = 
-            psi_filt[shuffle(subspace_indices)] for i in 2:length(ψ0)]
-    else nothing end
-    return rand_block
-end
+"""                         
 
 function iterate_chebyshev(K, ψ0::Matrix{ComplexF64}, ψ1, hsquared, bounds) 
     pmeter = Progress(K, "Computing $(K) order Chebyshev pol...")
@@ -144,14 +151,14 @@ function iterate_chebyshev(K, ψ0::Matrix{ComplexF64}, ψ1, hsquared, bounds)
     return normalize!(ψ0)
 end
 
-# """
-# (Deprecated)
-#     `iterate_chebyshev(K, ψ0::Vector{Matrix{ComplexF64}}, ψ1, hsquared, bounds)`
-# returns the action TK(𝔽)|ψ0⟩ on a block of random vectors `ψ0` see: `semicircle_filter()`.
-# numkets Cheby loops are required. 
-# """
-# iterate_chebyshev(K, ψ0::Vector{Matrix{ComplexF64}}, ψ1, hsquared, bounds) =
-#     [iterate_chebyshev(K, ψ0[i], ψ1, hsquared, bounds) for i in 1:length(ψ0)]
+"""
+
+    `iterate_chebyshev(K, ψ0::Vector{Matrix{ComplexF64}}, ψ1, hsquared, bounds)`
+returns the action TK(𝔽)|ψ0⟩ on a block of random vectors `ψ0` see: `semicircle_filter()`.
+numkets Cheby loops are required. 
+"""
+iterate_chebyshev(K, ψ0::Vector{Matrix{ComplexF64}}, ψ1, hsquared, bounds) =
+    [iterate_chebyshev(K, ψ0[i], ψ1, hsquared, bounds) for i in 1:length(ψ0)]
 
 ############################################################################################
 #   (2a) Estimation of subspace dimension using the KPM
@@ -164,11 +171,11 @@ interval `(-a, a)`, i.e. `N = bandwidth/a` Arguments: `b::DACPbuilder`
  """
 function subspace_dimension(h, b)
     a, emax, emin = b.a, b.emax, b.emin
-    @warning "If the subspace dimension, `d`, is known set `d = d` as a kw argument in
-        `DACP()` or `DACPdiagonaliser()` for a speed boost"
+    # @warning "If the subspace dimension, `d`, is known set `d = d` as a kw argument in
+    #     `DACP()` or `DACPdiagonaliser()` for a speed boost"
     checkloaded(:NumericalIntegration)
     order = Int(ceil(10*(emax - emin)/a))
-    es, dos = dosKPM(h, order = order, resolution = 2, bandrange = (b.emin, b.emax))
+    es, dos = dosKPM(flatten(h), order = order, resolution = 2, bandrange = (b.emin, b.emax))
     indices = findall(x -> x <= a, abs.(es))
     subspace_dim = Int(ceil(abs(integrate(es[indices], dos[indices])*size(h,1))))
     println("subspace dimension: ", subspace_dim)
@@ -181,35 +188,34 @@ end
 """
 computes the reduced h and s matrices
 """
-proj_h_s(builder::DACPsubspace, h, d::Missing) =
-    proj_h_s(builder::DACPsubspace, subspace_dimension(h, builder))
+proj_h_s(builder::DACPsubspace, h, d::Missing, store_basis; kw...) =
+    proj_h_s(builder::DACPsubspace, subspace_dimension(h, builder), store_basis; kw...)
 
-proj_h_s(builder::DACPsubspace, h, d::Real) =
-    proj_h_s(builder::DACPsubspace, d)
+proj_h_s(builder::DACPsubspace, h, d::Real, store_basis; kw...) =
+    proj_h_s(builder::DACPsubspace, d, store_basis; kw...)
 
-function proj_h_s(b, d::Number; l = 1.5)
-    h, ψe, bounds = b.h, b.ψe, (b.emax, b.emin, b.a)
+
+proj_h_s(b, d, store_basis; kw...) = 
+    proj_h_s(b.h, b.ψe, (b.emax, b.emin, b.a), d, store_basis; kw...)
+
+
+function proj_h_s(h, ψe, bounds, d, store_basis::Val{true}; kw...)
+    l = 1.5
     n = Int(ceil((l * d - 1)/2))
-    Kp = Int(2n+1)
-    
-    # @info "computing basis..."
+    Kp = n
     ar = bounds[3]/abs(bounds[1])
-    indices = [m*π/ar for m in 1:Kp]
-    append!(indices, [m*π/ar-1 for m in 1:Kp])
-    indices = sort(Int.(floor.(indices)))
+    indices = Int.(floor.(vcat([[m*π/ar-1, m*π/ar] for m in 1:Kp]...)))
+    pushfirst!(indices, 1) # the 𝕀 in {𝕀, T_{k-1}, T_k...}
 
     basis = chebyshev_basis(indices, ψe, h, bounds)
-   
-    # @info "building S and H matrices..."
     smat = zeros(ComplexF64, size(basis, 2), size(basis, 2))
     hmat = similar(smat)
+    
     mul!(smat, basis', basis)
     mul!(hmat, basis', h * basis)
-    return smat, hmat
+    return smat, hmat, basis
 end
-
-
-
+ 
 function chebyshev_basis(indices, ψ0::Vector{Matrix{T}}, h, bounds) where {T}
     pmeter = Progress(length(indices), 
         "Computing $(length(indices)+1) order Chebyshev pol...")
@@ -219,14 +225,7 @@ function chebyshev_basis(indices, ψ0::Vector{Matrix{T}}, h, bounds) where {T}
         count = 0
         for i in 1:indices[end]
             ProgressMeter.next!(pmeter; showvalues = ())
-            if i == 1
-                copy!(ψ0[it], ψi)
-            elseif i == 2
-                mul_g!(ψ0[it], h, ψi, bounds)
-            else
-                iterateDACP_g!(ψi, h, ψ0[it], bounds)
-                ψ0[it], ψi = ψi, ψ0[it]
-            end
+            ψ0[it], ψi = _chebyshev_loop!(ψ0[it], ψi, h, bounds, i) # Evolution loop
             if i in indices
                 count += 1
                 basis[:, Int(count+(it-1)*length(indices))] = ψ0[it]./norm(ψ0[it])
@@ -234,6 +233,95 @@ function chebyshev_basis(indices, ψ0::Vector{Matrix{T}}, h, bounds) where {T}
         end
     end
     return basis
+end
+
+"returns the projected S and H matrices without the requirement to store the basis.
+Only ⟨ψE|Tₖ|ψE⟩ and ⟨ψE|ℍTₖ|ψE⟩ are stored at 4 different \"instants\" for each k_m"
+
+function proj_h_s(h, ψe, bounds, d, store_basis::Val{false}; kw...)
+    l = 1.5
+    n = Int(ceil((l * d - 1)/2))
+    Kp = 2n #the factor two is required
+    ar = bounds[3]/abs(bounds[1])
+    indices = Int.(floor.(vcat([[m*π/ar-2, m*π/ar-1, m*π/ar, m*π/ar+1] for m in 1:Kp]...)))
+    pushfirst!(indices, 1) # the 𝕀 in {𝕀, T_{k-1}, T_k...}
+    return chebyshev_proj(ar, indices, ψe, h, bounds)
+end
+
+function chebyshev_proj(ar, indices, ψ0::Vector{Matrix{ComplexF64}}, h, bounds)
+    Kp = length(indices)
+    ψh = similar(ψ0[1])
+    aux_vec = zeros(ComplexF64, Kp, 2)
+    pmeter = Progress(Kp, "Computing $(Kp+1) order Chebyshev pol...")
+    for it in 1:1#length(ψ0)
+        count = 0
+        ψi = copy(ψ0[it])
+        ψe = copy(ψ0[it]) #redundant?
+        mul!(ψh, h, ψi)
+        for i in 1:indices[end]
+            ProgressMeter.next!(pmeter; showvalues = ())
+            ψ0[it], ψi = _chebyshev_loop!(ψ0[it], ψi, h, bounds, i) # Evolution loop
+            if i in indices #storing ⟨ψE|Tₖ|ψE⟩, ⟨ψE|ℍTₖ|ψE⟩ for those T_k with k ∈ indices
+                count +=1
+                aux_vec[count,1] = dot(ψe, ψ0[it])#/(norm(ψ0[it]))
+                aux_vec[count,2] = dot(ψh, ψ0[it])#/(norm(ψ0[it]))
+            else nothing end
+        end
+    end
+    return build_matrices(aux_vec, indices, ar)
+end
+ 
+
+function build_matrices(v, indices, ar)
+    dim = Int64((length(v[:,1])-1)/4 +1)
+    smat = zeros(ComplexF64, dim, dim)
+    hmat = similar(smat) 
+    println(indices)
+    for j in 1:dim
+        for i in 1:dim
+            println("i: ", i, "j: ", j)
+            println(ijselector(ar, i, j))
+            indexp, indexm = [findall(x -> x == ijselector(ar, i, j)[ite], indices)[1] for ite in 1:2]
+            smat[i,j] = 1/2 * (v[indexp, 1] + v[indexm, 1])
+            hmat[i,j] = 1/2 * (v[indexp, 2] + v[indexm, 2])
+        end
+    end
+    return smat, hmat     
+end
+"""
+aux_vec is organized s.t. {1, Tk_1-2, Tk_1-1, Tk_1, Tk_1+1, Tk_2-1}, given two indices 
+`(i,j)`, `ijselector(i, j)` returns  a couple of indices `x+y, abs(x-y)` for the calculation
+of s and h see eq (22) of scipost_202106_00048v3.
+"""
+function ijselector(ar, i, j)
+    if i % 2 == 0 && j % 2 == 0
+        k_p = π/ar * (i+j)÷2 - 2
+        k_m = π/ar * abs((i-j)÷2)
+    elseif i % 2 == 1 && j % 2 == 0 
+        k_p = π/ar * (i+j-1)÷2 -1
+        k_m = abs(π/ar * (i-j-1)÷2 + 1)
+    elseif i % 2 == 0 && j % 2 == 1
+        k_p = π/ar *(i+j-1)÷2 -1
+        k_m = abs(π/ar * (i-j+1)÷2 -1)
+    else
+        k_p = π/ar *(i+j-2)÷2
+        k_m = π/ar * abs((i-j)÷2)
+    end
+    k_p = ifelse(k_p <= 0.5, 1., k_p)
+    k_m = ifelse(k_m <= 0.5, 1., k_m)
+    return [Int(floor(k_p)), Int(floor(k_m))]
+end
+
+function _chebyshev_loop!(ψ0, ψi, h, bounds, i)
+    if i == 1
+        copy!(ψ0, ψi)
+    elseif i == 2
+        mul_g!(ψ0, h, ψi, bounds)
+    else
+        iterateDACP_g!(ψi, h, ψ0, bounds)
+        ψ0, ψi = ψi, ψ0
+    end
+    return ψ0, ψi
 end
 
 """
@@ -284,8 +372,9 @@ end
 Diagonaliser, uses a Generalize Schur Decomposition (QZ) to solve the GEP
 so we are taking care of possible degeneracies
 """
-function DACPdiagonaliser(h::Hamiltonian, a; kw...) 
-    smat, hmat = DACP(h, a; kw...)
+function DACPdiagonaliser(h::Hamiltonian, a; store_basis = true, maxdeg = 1, 
+    d = missing::Union{Missing, Real})
+    smat, hmat = proj_DACP(h, a, Val(store_basis), maxdeg = maxdeg, d = d)[1:2]
     return DACPdiagonaliser(hmat, smat)
 end
 

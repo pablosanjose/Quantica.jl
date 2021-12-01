@@ -32,7 +32,7 @@ export sublat, bravais, lattice, dims, supercell, unitcell,
        bands, vertices, minima, maxima, gapedge, gap, isinband,
        energies, states, degeneracy,
        momentaKPM, dosKPM, averageKPM, densityKPM, bandrangeKPM,
-       greens, greensolver, Schur1D, DACP, DACPdiagonaliser
+       greens, greensolver, Schur1D, proj_DACP, DACPdiagonaliser
 
 export RegionPresets, RP, LatticePresets, LP, HamiltonianPresets, HP
 
