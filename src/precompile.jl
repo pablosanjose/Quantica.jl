@@ -16,13 +16,13 @@ for E in 0:2, L in 0:E
     precompile(nrange, (Int, Lattice{T,E,L}))
     precompile(site, (Lattice{T,E,L}, Int, SVector{L,Int}))
 
-    Os = (Complex{T}, Base.tail(ntuple(N -> SMatrix{N,N,Complex{T},N*N}, Val(4)))...)
-    for (N, O) in enumerate(Os)
+    Bs = (Complex{T}, Base.tail(ntuple(N -> SMatrix{N,N,Complex{T},N*N}, Val(4)))...)
+    for (N, B) in enumerate(Bs)
         for L´ in 0:L
-            precompile(supercell_harmonics, (Hamiltonian{T,E,L,O}, SupercellData{T,E,L,L´,L*L´}, CSCBuilder{T,E,L´,O}, Int))
+            precompile(supercell_harmonics, (Hamiltonian{T,E,L,B}, SupercellData{T,E,L,L´,L*L´}, CSCBuilder{T,E,L´,B}, Int))
         end
-        precompile(OrbitalStructure{O}, (Lattice{T,E,L}, Val{N}))
-        precompile(applyterm!, (IJVBuilder{T,E,L,O}, AppliedOnsiteTerm{T,E,L,O}))
-        precompile(applyterm!, (IJVBuilder{T,E,L,O}, AppliedHoppingTerm{T,E,L,O}))
+        precompile(OrbitalStructure{B}, (Lattice{T,E,L}, Val{N}))
+        precompile(applyterm!, (IJVBuilder{T,E,L,B}, AppliedOnsiteTerm{T,E,L,B}))
+        precompile(applyterm!, (IJVBuilder{T,E,L,B}, AppliedHoppingTerm{T,E,L,B}))
     end
 end

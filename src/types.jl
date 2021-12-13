@@ -481,6 +481,10 @@ matrix(b::Bloch) = b.output
 
 hamiltonian(b::Bloch) = b.h
 
+blocktype(::Bloch{<:Any,B}) where {B} = B
+
+orbtype(::Bloch{<:Any,B}) where {B} = orbtype(B)
+
 latdim(b::Bloch) = latdim(lattice(b.h))
 
 # threadcopy(b::Bloch) = Bloch(threadcopy(b.h), copy(b.output))

@@ -3,16 +3,16 @@
 #region
 
 # norbs is a collection of number of orbitals, one per sublattice (or a single one for all)
-# O type instability when calling from `hamiltonian` is removed by @inline (const prop)
+# B type instability when calling from `hamiltonian` is removed by @inline (const prop)
 @inline function OrbitalStructure(lat::Lattice, norbs, T = numbertype(lat))
-    O = blocktype(T, norbs)
-    return OrbitalStructure{O}(lat, norbs)
+    B = blocktype(T, norbs)
+    return OrbitalStructure{B}(lat, norbs)
 end
 
-function OrbitalStructure{O}(lat::Lattice, norbs) where {O}
+function OrbitalStructure{B}(lat::Lattice, norbs) where {B}
     norbs´ = sanitize_Vector_of_Type(Int, nsublats(lat), norbs)
     offsets´ = offsets(lat)
-    return OrbitalStructure{O}(O, norbs´, offsets´)
+    return OrbitalStructure{B}(B, norbs´, offsets´)
 end
 
 blocktype(T::Type, norbs) = blocktype(T, val_maximum(norbs))
@@ -224,11 +224,11 @@ function flatten(lat::Lattice, os)
     return lat
 end
 
-function hamiltonian(f::FlatHamiltonian{<:Any,<:Any,L,O}) where {L,O}
+function hamiltonian(f::FlatHamiltonian{<:Any,<:Any,L,B}) where {L,B}
     os = orbitalstructure(parent(f))
     flatos = orbitalstructure(f)
     lat = flatten(lattice(f), os)
-    HT = Harmonic{L,SparseMatrixCSC{O,Int}}
+    HT = Harmonic{L,SparseMatrixCSC{B,Int}}
     hars = HT[HT(dcell(har), flatten(matrix(har), os, flatos)) for har in harmonics(f)]  # see tools.jl
     return Hamiltonian(lat, flatos, hars)
 end
@@ -258,9 +258,9 @@ end
 
 function bloch(f::FlatHamiltonian, ::Type{M}) where {M<:AbstractMatrix}
     flatos = orbitalstructure(f)
-    O = orbtype(flatos)
+    B = blocktype(flatos)
     n = nsites(flatos)
-    output = convert(M, zeros(O, n, n))
+    output = convert(M, zeros(B, n, n))
     return Bloch(f, output)
 end
 
@@ -282,10 +282,13 @@ bloch(h::AbstractHamiltonian, φs::Tuple; kw...) = bloch(h)(φs...; kw...)
 
 (b::Bloch)(φs...; kw...) = copy(call!(b, φs...; kw...))
 
-call!(b::Bloch{L}, φs::Vararg{Number,L} ; kw...) where {L} = call!(b, φs; kw...)
-call!(b::Bloch{L}, φs::NTuple{L,Number} ; kw...) where {L} = call!(b, SVector(φs); kw...)
+call!(b::Bloch{L}, φs::Vararg{Number,L}; kw...) where {L} = call!(b, φs; kw...)
+call!(b::Bloch{L}, φs::NTuple{L,Number}; kw...) where {L} = call!(b, SVector(φs); kw...)
 call!(b::Bloch, φs::SVector; kw...) = maybe_flatten_bloch!(matrix(b), hamiltonian(b), φs; kw...)
-call!(b::Bloch, φs...; kw...) = throw(ArgumentError("Mismatch between input Bloch phases $(length(φs)) and lattice dimention $(latdim(b))."))
+call!(b::Bloch, φskw::Tuple{<:Any,NamedTuple}) = call!(b, first(φskw); last(φskw)...) # support for (φs, (; kw...)) 
+call!(b::Bloch, φskw::Tuple) = call!(b, Base.front(φskw); last(φskw)...) # support for (φs..., (; kw...))
+call!(b::Bloch, φs...; kw...) =
+    throw(ArgumentError("Wrong call! argument syntax. Possible mismatch between input Bloch phases $(length(φs)) and lattice dimention $(latdim(b))."))
 
 maybe_flatten_bloch!(output, h::FlatHamiltonian, φs; kw...) = maybe_flatten_bloch!(output, parent(h), φs; kw...)
 maybe_flatten_bloch!(output, h::ParametricHamiltonian, φs; kw...) = maybe_flatten_bloch!(output, call!(h; kw...), φs)
@@ -350,9 +353,9 @@ end
 
 Base.push!(h::AbstractHamiltonian, dn::Tuple) = push!(h, SVector(dn))
 
-function Base.push!(h::AbstractHamiltonian{<:Any,<:Any,L,O}, dn::SVector{L,Int}) where {L,O}
+function Base.push!(h::AbstractHamiltonian{<:Any,<:Any,L,B}, dn::SVector{L,Int}) where {L,B}
     if !isassigned(h, dn)
-        har = Harmonic(dn, spzeros(O, size(h)))
+        har = Harmonic(dn, spzeros(B, size(h)))
         push!(harmonics(h), har)
     end
     return h

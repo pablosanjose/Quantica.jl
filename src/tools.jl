@@ -6,18 +6,18 @@ rdr((r1, r2)::Pair) = (0.5 * (r1 + r2), r2 - r1)
 #region
 
 # merge several sparse matrices onto the first using only structural zeros
-function merge_sparse(mats, ::Type{O} = eltype(first(mats))) where {O}
+function merge_sparse(mats, ::Type{B} = eltype(first(mats))) where {B}
     mat0 = first(mats)
     nrows, ncols = size(mat0)
     nrows == ncols || throw(ArgumentError("Internal error: matrix not square"))
     nnzguess = sum(mat -> nnz(mat), mats)
-    collector = CSC{O}(ncols, nnzguess)
+    collector = CSC{B}(ncols, nnzguess)
     for col in 1:ncols
         for (n, mat) in enumerate(mats)
             vals = nonzeros(mat)
             rows = rowvals(mat)
             for p in nzrange(mat, col)
-                val = n == 1 ? vals[p] : zero(O)
+                val = n == 1 ? vals[p] : zero(B)
                 row = rows[p]
                 pushtocolumn!(collector, row, val, false) # skips repeated rows
             end
@@ -85,7 +85,7 @@ function site_to_flatoffset_norbs(siteidx, orbstruct, flatorbstruct)
     return flatoffset, N
 end
 
-flatten(mat::SparseMatrixCSC{O}, os::OrbitalStructure{O}, flatos::OrbitalStructure{<:Number} = flatten(os)) where {O<:SMatrix} =
+flatten(mat::SparseMatrixCSC{B}, os::OrbitalStructure{B}, flatos::OrbitalStructure{<:Number} = flatten(os)) where {B<:SMatrix} =
     merge_flatten_sparse((mat,), os, flatos)
 
 # flattening mul! specializations assuming the target, if sparse, does not need to change structure [is "merged"]

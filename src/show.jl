@@ -126,7 +126,7 @@ function Base.show(io::IO, b::Bloch)
     show(ioindent, hamiltonian(b))
 end
 
-Base.summary(h::Bloch{L,O}) where {L,O} =
-    "Bloch{$L,$O}: Bloch matrix constructor with target eltype $O"
+Base.summary(h::Bloch{L,B}) where {L,B} =
+    "Bloch{$L,$B}: Bloch matrix constructor with target eltype $B"
 
 #endregion

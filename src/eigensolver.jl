@@ -27,7 +27,7 @@ using FunctionWrappers: FunctionWrapper
 using LinearAlgebra: Eigen
 using SparseArrays: SparseMatrixCSC
 using Quantica: Quantica, Bloch, ensureloaded, AbstractHamiltonian, bloch, call!, orbtype,
-    blocktype, OrbitalStructure, orbitalstructure
+    blocktype, OrbitalStructure, orbitalstructure, SVector, SMatrix
 
 export eigensolver
 
@@ -39,34 +39,6 @@ export eigensolver
 
 const Spectrum{E,S} = Eigen{S,E,Matrix{S},Vector{E}}
 Spectrum(x...) = Eigen(x...)
-
-#endregion
-
-############################################################################################
-# Eigensolver
-#region
-
-# The idea is that bandstructure and spectrum take (AbstractHamiltonian, ::EigensolverBackend)
-# and transform that into (::Bloch, ::EigensolverBackend), and then into (::Eigensolver)
-# which is the complex function that has a simple type but contains the Hamiltonian/Bloch.
-# Eigensolver only FunctionWraps the relevant solver method once it knows what eltype the
-# eigenstates will have (eltype(bloch.output))
-
-struct Eigensolver{L,S<:Spectrum,Φ<:SVector{L}}
-    solver::FunctionWrapper{S,Tuple{Φ}}
-end
-
-function Eigensolver{L}(s::EigensolverBackend, o::Bloch{<:Any,B}, mapping::Function) where {L,B}
-    E = complex(eltype(B))
-    S = orbtype(o)
-    return Eigensolver{Spectrum{E,S},SparseMatrixCSC{B,Int}}(s.spectrum)
-end
-
-(s::Eigensolver)(m::AbstractMatrix) = s.solver(m)
-(s::Eigensolver{<:Any,<:Number})(h::AbstractHamiltonian, φs...; flatten = true, kw...) =
-    flatten ? s(bloch(flatten(h), φs; kw...)) : s(bloch(h, φs; kw...))
-
-(s::Eigensolver)(b::Bloch, φs...; kw...) = s.solver(call!(b, φs; kw...))
 
 #endregion
 
@@ -100,17 +72,10 @@ eigensolver(s::Arpack, ::OrbitalStructure{T}) where {T<:Number} =
 eigensolver(::Arpack, ::OrbitalStructure) =
     throw(ArgumentError("Arpack only admits scalar eltypes. Try flattening your Hamiltonian."))
 
-function test()
-    f(x::Int) = "Int"
-    f(x::Complex) = "Complex"
-    f(x, y) = "Two"
-    return f
-end
-
 #### KrylovKit #####
 
 struct KrylovKit{F} <: EigensolverBackend
-    εΨ::F
+    spectrum::F
 end
 
 function KrylovKit(; howmany = 6, which = :LM, kw...)
@@ -118,18 +83,45 @@ function KrylovKit(; howmany = 6, which = :LM, kw...)
     if which isa Number # use shift-invert
         return KrylovKitShiftInvert(which; howmany, kw...)
     else
-        function εΨ(mat::AbstractMatrix{<:Number})
+        function spectrum(mat::AbstractMatrix{<:Number})
             ε, Ψ, _ = Quantica.Arpack.eigs(mat; sigma, nev, kw...)
             return Spectrum(ε, Ψ)
         end
-        return KrylovKit(εΨ)
+        return KrylovKit(spectrum)
     end
 end
 
-function KrylovKitShiftInvert(which; howmany = 6, kw...)
-    ensureloaded(:LinearMaps)
-    l = LinearMap
+
+#endregion
+
+############################################################################################
+# Eigensolver
+#region
+
+# The idea is that bandstructure and spectrum take (AbstractHamiltonian, ::EigensolverBackend)
+# and transform that into (::Bloch, ::EigensolverBackend), and then into (::Eigensolver)
+# which is the complex function that has a simple type but contains the Hamiltonian/Bloch.
+# Eigensolver only FunctionWraps the relevant solver method once it knows what eltype the
+# eigenstates will have (eltype(bloch.output))
+
+struct Eigensolver{T,L,S<:Spectrum}
+    solver::FunctionWrapper{S,Tuple{SVector{L,T}}}
 end
+
+function Eigensolver{T,L}(s::EigensolverBackend, b::Bloch, mapping = missing) where {T,L}
+    E = complex(eltype(blocktype(b)))
+    S = orbtype(b)
+    solver = mappedsolver(s, b, mapping)
+    return Eigensolver(FunctionWrapper{Spectrum{E,S},Tuple{SVector{L,T}}}(solver))
+end
+mappedsolver(s, b, ::Missing) = φs -> s.spectrum(call!(b, φs))
+mappedsolver(s, b, mapping::Function) = φs -> s.spectrum(call!(b, mapping(Tuple(φs)...)))
+
+(s::Eigensolver)(m::AbstractMatrix) = s.solver(m)
+(s::Eigensolver{<:Any,<:Number})(h::AbstractHamiltonian, φs...; flatten = true, kw...) =
+    flatten ? s(bloch(flatten(h), φs; kw...)) : s(bloch(h, φs; kw...))
+
+(s::Eigensolver)(b::Bloch, φs...; kw...) = s.solver(call!(b, φs; kw...))
 
 #endregion
 
