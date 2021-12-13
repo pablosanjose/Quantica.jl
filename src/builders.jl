@@ -2,7 +2,7 @@
 # Abstract Hamiltonian builders
 #region
 
-abstract type AbstractSparseBuilder{T,E,L,O} end
+abstract type AbstractSparseBuilder{T,E,L,B} end
 
 lattice(b::AbstractSparseBuilder) = b.lat
 
@@ -18,8 +18,8 @@ function Base.getindex(b::AbstractSparseBuilder{<:Any,<:Any,L}, dn::SVector{L,In
     return collector(har)
 end
 
-function harmonics(builder::AbstractSparseBuilder{<:Any,<:Any,L,O}) where {L,O}
-    HT = Harmonic{L,SparseMatrixCSC{O,Int}}
+function harmonics(builder::AbstractSparseBuilder{<:Any,<:Any,L,B}) where {L,B}
+    HT = Harmonic{L,SparseMatrixCSC{B,Int}}
     n = nsites(lattice(builder))
     hars = HT[HT(har.dn, sparse(collector(har), n)) for har in builder.harmonics if !isempty(har)]
     return hars
@@ -33,26 +33,26 @@ collector(har) = har.collector  # for IJVHarmonic and CSCHarmonic
 # IJV Hamiltonian builders
 #region
 
-struct IJV{O}
+struct IJV{B}
     i::Vector{Int}
     j::Vector{Int}
-    v::Vector{O}
+    v::Vector{B}
 end
 
-struct IJVHarmonic{L,O}
+struct IJVHarmonic{L,B}
     dn::SVector{L,Int}
-    collector::IJV{O}
+    collector::IJV{B}
 end
 
-struct IJVBuilder{T,E,L,O} <: AbstractSparseBuilder{T,E,L,O}
+struct IJVBuilder{T,E,L,B} <: AbstractSparseBuilder{T,E,L,B}
     lat::Lattice{T,E,L}
-    orbstruct::OrbitalStructure{O}
-    harmonics::Vector{IJVHarmonic{L,O}}
+    orbstruct::OrbitalStructure{B}
+    harmonics::Vector{IJVHarmonic{L,B}}
     kdtrees::Vector{KDTree{SVector{E,T},Euclidean,T}}
 end
 
-function IJV{O}(nnzguess = missing) where {O}
-    i, j, v = Int[], Int[], O[]
+function IJV{B}(nnzguess = missing) where {B}
+    i, j, v = Int[], Int[], B[]
     if nnzguess isa Integer
         sizehint!(i, nnzguess)
         sizehint!(j, nnzguess)
@@ -61,10 +61,10 @@ function IJV{O}(nnzguess = missing) where {O}
     return IJV(i, j, v)
 end
 
-empty_harmonic(::IJVBuilder{<:Any,<:Any,L,O}, dn) where {L,O} = IJVHarmonic{L,O}(dn, IJV{O}())
+empty_harmonic(::IJVBuilder{<:Any,<:Any,L,B}, dn) where {L,B} = IJVHarmonic{L,B}(dn, IJV{B}())
 
-function IJVBuilder(lat::Lattice{T,E,L}, orbstruct::OrbitalStructure{O}) where {E,L,T,O}
-    harmonics = IJVHarmonic{L,O}[]
+function IJVBuilder(lat::Lattice{T,E,L}, orbstruct::OrbitalStructure{B}) where {E,L,T,B}
+    harmonics = IJVHarmonic{L,B}[]
     kdtrees = Vector{KDTree{SVector{E,T},Euclidean,T}}(undef, nsublats(lat))
     return IJVBuilder(lat, orbstruct, harmonics, kdtrees)
 end
@@ -84,30 +84,30 @@ kdtrees(b::IJVBuilder) = b.kdtrees
 # CSC Hamiltonian builder
 #region
 
-mutable struct CSC{O}
+mutable struct CSC{B}
     colptr::Vector{Int}
     rowval::Vector{Int}
-    nzval::Vector{O}
+    nzval::Vector{B}
     colcounter::Int
     rowvalcounter::Int
-    cosorter::CoSort{Int,O}
+    cosorter::CoSort{Int,B}
 end
 
-mutable struct CSCHarmonic{L,O}
+mutable struct CSCHarmonic{L,B}
     dn::SVector{L,Int}
-    collector::CSC{O}
+    collector::CSC{B}
 end
 
-struct CSCBuilder{T,E,L,O} <: AbstractSparseBuilder{T,E,L,O}
+struct CSCBuilder{T,E,L,B} <: AbstractSparseBuilder{T,E,L,B}
     lat::Lattice{T,E,L}
-    orbstruct::OrbitalStructure{O}
-    harmonics::Vector{CSCHarmonic{L,O}}
+    orbstruct::OrbitalStructure{B}
+    harmonics::Vector{CSCHarmonic{L,B}}
 end
 
-function CSC{O}(cols = missing, nnzguess = missing) where {O}
+function CSC{B}(cols = missing, nnzguess = missing) where {B}
     colptr = [1]
     rowval = Int[]
-    nzval = O[]
+    nzval = B[]
     if cols isa Integer
         sizehint!(colptr, cols + 1)
     end
@@ -121,8 +121,8 @@ function CSC{O}(cols = missing, nnzguess = missing) where {O}
     return CSC(colptr, rowval, nzval, colcounter, rowvalcounter, cosorter)
 end
 
-empty_harmonic(b::CSCBuilder{<:Any,<:Any,L,O}, dn) where {L,O} =
-    CSCHarmonic{L,O}(dn, CSC{O}(nsites(b.lat)))
+empty_harmonic(b::CSCBuilder{<:Any,<:Any,L,B}, dn) where {L,B} =
+    CSCHarmonic{L,B}(dn, CSC{B}(nsites(b.lat)))
 
 CSCBuilder(lat, orbstruct) =
     CSCBuilder(lat, orbstruct, CSCHarmonic{latdim(lat),blocktype(orbstruct)}[])

@@ -62,16 +62,16 @@ end
 # apply model terms
 #region
 
-function apply(t::OnsiteTerm, (lat, os)::Tuple{Lattice{T,E,L},OrbitalStructure{O}}) where {T,E,L,O}
-    f = (r, orbs) -> sanitize_block(O, t(r), (orbs, orbs))
+function apply(t::OnsiteTerm, (lat, os)::Tuple{Lattice{T,E,L},OrbitalStructure{B}}) where {T,E,L,B}
+    f = (r, orbs) -> sanitize_block(B, t(r), (orbs, orbs))
     asel = apply(selector(t), lat)
-    return AppliedOnsiteTerm{T,E,L,O}(f, asel)   # f gets wrapped in a FunctionWrapper
+    return AppliedOnsiteTerm{T,E,L,B}(f, asel)   # f gets wrapped in a FunctionWrapper
 end
 
-function apply(t::HoppingTerm, (lat, os)::Tuple{Lattice{T,E,L},OrbitalStructure{O}}) where {T,E,L,O}
-    f = (r, dr, orbs) -> sanitize_block(O, t(r, dr), orbs)
+function apply(t::HoppingTerm, (lat, os)::Tuple{Lattice{T,E,L},OrbitalStructure{B}}) where {T,E,L,B}
+    f = (r, dr, orbs) -> sanitize_block(B, t(r, dr), orbs)
     asel = apply(selector(t), lat)
-    return AppliedHoppingTerm{T,E,L,O}(f, asel)  # f gets wrapped in a FunctionWrapper
+    return AppliedHoppingTerm{T,E,L,B}(f, asel)  # f gets wrapped in a FunctionWrapper
 end
 
 apply(m::TightbindingModel, latos) = TightbindingModel(apply.(terms(m), Ref(latos)))
@@ -86,16 +86,16 @@ function apply(m::OnsiteModifier, h::Hamiltonian)
     f = parametric_function(m)
     asel = apply(selector(m), lattice(h))
     ptrs = pointers(h, asel)
-    O = blocktype(h)
-    return AppliedOnsiteModifier(O, f, ptrs)
+    B = blocktype(h)
+    return AppliedOnsiteModifier(B, f, ptrs)
 end
 
 function apply(m::HoppingModifier, h::Hamiltonian)
     f = parametric_function(m)
     asel = apply(selector(m), lattice(h))
     ptrs = pointers(h, asel)
-    O = blocktype(h)
-    return AppliedHoppingModifier(O, f, ptrs)
+    B = blocktype(h)
+    return AppliedHoppingModifier(B, f, ptrs)
 end
 
 function pointers(h::Hamiltonian{T,E}, s::AppliedSiteSelector{T,E}) where {T,E}

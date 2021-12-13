@@ -37,8 +37,8 @@ Base.:(==)(o1::OrbitalStructure, o2::OrbitalStructure) =
 
 hamiltonian(m::TightbindingModel = TightbindingModel(); kw...) = lat -> hamiltonian(lat, m; kw...)
 
-# @aggressive_constprop needed for type-stable non-Val orbitals
-Base.@aggressive_constprop function hamiltonian(lat::Lattice, m = TightbindingModel(); orbitals = Val(1), type = numbertype(lat))
+# Base.@constprop :aggressive needed for type-stable non-Val orbitals
+Base.@constprop :aggressive function hamiltonian(lat::Lattice, m = TightbindingModel(); orbitals = Val(1), type = numbertype(lat))
     orbstruct = OrbitalStructure(lat, orbitals, type)
     builder = IJVBuilder(lat, orbstruct)
     apmod = apply(m, (lat, orbstruct))
@@ -87,6 +87,9 @@ end
 #region
 
 parametric(modifiers::Modifier...) = h -> parametric(h, modifiers...)
+
+parametric(hparent::FlatHamiltonian, modifiers::Modifier...) =
+    parametric(hamiltonian(hparent), modifiers...)
 
 function parametric(hparent::Hamiltonian, modifiers::Modifier...)
     modifiers´ = apply.(modifiers, Ref(hparent))
@@ -182,9 +185,10 @@ end
 # Flat constructors (flatten)
 #region
 
-flatten(h::AbstractHamiltonian{<:Any,<:Any,<:Any,<:Number}) = h
-flatten(h::Union{Hamiltonian,ParametricHamiltonian}) = FlatHamiltonian(h, flatten(orbitalstructure(h)))
 flatten(h::FlatHamiltonian) = h
+flatten(h::AbstractHamiltonian{<:Any,<:Any,<:Any,<:Number}) = h
+flatten(h::AbstractHamiltonian{<:Any,<:Any,<:Any,<:SMatrix}) =
+    FlatHamiltonian(h, flatten(orbitalstructure(h)))
 
 flatten(os::OrbitalStructure{<:Number}) = os
 
@@ -231,7 +235,7 @@ end
 
  #endregion
 
- ############################################################################################
+############################################################################################
 # Bloch constructor
 #region
 
@@ -281,6 +285,7 @@ bloch(h::AbstractHamiltonian, φs::Tuple; kw...) = bloch(h)(φs...; kw...)
 call!(b::Bloch{L}, φs::Vararg{Number,L} ; kw...) where {L} = call!(b, φs; kw...)
 call!(b::Bloch{L}, φs::NTuple{L,Number} ; kw...) where {L} = call!(b, SVector(φs); kw...)
 call!(b::Bloch, φs::SVector; kw...) = maybe_flatten_bloch!(matrix(b), hamiltonian(b), φs; kw...)
+call!(b::Bloch, φs...; kw...) = throw(ArgumentError("Mismatch between input Bloch phases $(length(φs)) and lattice dimention $(latdim(b))."))
 
 maybe_flatten_bloch!(output, h::FlatHamiltonian, φs; kw...) = maybe_flatten_bloch!(output, parent(h), φs; kw...)
 maybe_flatten_bloch!(output, h::ParametricHamiltonian, φs; kw...) = maybe_flatten_bloch!(output, call!(h; kw...), φs)
