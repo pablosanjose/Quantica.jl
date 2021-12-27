@@ -550,7 +550,7 @@ check_unflatten_eltypes(::AbstractArray{T}, o::OrbitalStructure) where {T} =
 # unflatten_orbitals_or_reinterpret: call unflatten_orbitals but only if we cannot unflatten via reinterpret
 unflatten_orbitals_or_reinterpret(vflat, ::Missing) = vflat
 # source is already of the correct orbitaltype(h)
-function unflatten_orbitals_or_reinterpret(vflat::AbstractArray{<:SArray{N}}, o::OrbitalStructure{<:SMatrix{N}}) where {N}
+function unflatten_orbitals_or_reinterpret(vflat::AbstractArray{<:SArray{N}}, o::OrbitalStructure{<:SArray{N}}) where {N}
     check_unflatten_dst_dims(vflat, dimh(o))
     return vflat
 end
