@@ -19,6 +19,10 @@ eigensolver(x...; kw...) = Eigensolvers.eigensolver(x...; kw...)
 
 ############################################################################################
 # Eigensolvers module
+# Strategy: combine a EigensolverBackend with a Hamiltonian (or Bloch) to produce an
+# Eigensolver, is essentially a FunctionWrapper from an SVector to a Spectrum === Eigen
+# An EigensolverBackend is defined by a set of kwargs for the eigensolver and a set of
+# methods AbstractMatrix -> Eigen associated to that EigensolverBackend
 #region
 
 module Eigensolvers
@@ -34,10 +38,11 @@ export eigensolver
 #endregion
 
 ############################################################################################
-# Spectrum (alias of Eigen)
+# Spectrum (alias of LinearAlgebra.Eigen)
 #region
 
 const Spectrum{E,S} = Eigen{S,E,Matrix{S},Vector{E}}
+
 Spectrum(x...) = Eigen(x...)
 
 #endregion
@@ -47,50 +52,64 @@ Spectrum(x...) = Eigen(x...)
 #region
 
 abstract type EigensolverBackend end
+abstract type ShiftInvertBackend <: EigensolverBackend end
 
 #### Arpack #####
 
-struct Arpack{F} <: EigensolverBackend
-    spectrum::F
+struct Arpack{K} <: EigensolverBackend
+    kwargs::K
 end
 
-function Arpack(; sigma = 0.0, nev = 6, kw...)
+function Arpack(; kw...)
     ensureloaded(:Arpack)
-    function spectrum(mat::AbstractMatrix{<:Number})
-        ε, Ψ, _ = Quantica.Arpack.eigs(mat; sigma, nev, kw...)
-        return Spectrum(ε, Ψ)
-    end
-    function spectrum(::AbstractMatrix{<:SMatrix})
-        throw(ArgumentError("Arpack only admits scalar eltypes. Try flattening your Hamiltonian."))
-    end
-    return Arpack(spectrum)
+    return Arpack(kw)
 end
 
-eigensolver(s::Arpack, ::OrbitalStructure{T}) where {T<:Number} =
-    Eigensolver{Spectrum{complex(T),T},SparseMatrixCSC{T,Int}}(s.εΨ)
+function (backend::Arpack)(mat::AbstractMatrix{<:Number})
+    ε, Ψ, _ = Quantica.Arpack.eigs(mat; backend.kwargs...)
+    return Spectrum(ε, Ψ)
+end
 
-eigensolver(::Arpack, ::OrbitalStructure) =
+function (::Arpack)(::AbstractMatrix{<:SMatrix})
     throw(ArgumentError("Arpack only admits scalar eltypes. Try flattening your Hamiltonian."))
+end
 
 #### KrylovKit #####
 
-struct KrylovKit{F} <: EigensolverBackend
-    spectrum::F
+struct KrylovKit{P,K} <: EigensolverBackend
+    params::P
+    kwargs::K
 end
 
-function KrylovKit(; howmany = 6, which = :LM, kw...)
+function KrylovKit(params; kw...)
     ensureloaded(:KrylovKit)
-    if which isa Number # use shift-invert
-        return KrylovKitShiftInvert(which; howmany, kw...)
-    else
-        function spectrum(mat::AbstractMatrix{<:Number})
-            ε, Ψ, _ = Quantica.Arpack.eigs(mat; sigma, nev, kw...)
-            return Spectrum(ε, Ψ)
-        end
-        return KrylovKit(spectrum)
-    end
+    return KrylovKit(params, kw)
 end
 
+function (backend::KrylovKit)(mat::AbstractMatrix)
+    ε, Ψ, _ = Quantica.KrylovKit.eigsolve(mat, backend.params...; backend.kwargs...)
+    return Spectrum(ε, Ψ)
+end
+
+#### SparseSuiteShiftInvert ####
+
+struct SparseSuiteShiftInvert{T,E<:EigensolverBackend} <: ShiftInvertBackend
+    origin::T
+    eigensolver::E
+end
+
+function SparseSuiteShiftInvert(e::EigensolverBackend, origin)
+    ensureloaded(:SparseArrays)
+    ensureloaded(:LinearMaps)
+    return SparseSuiteShiftInvert(e)
+end
+
+function (backend::SparseSuiteShiftInvert)(mat::AbstractSparseMatrix{T}) where {T}
+    shiftdiagonal!(mat, backend.origin)
+    F = lu(mat)
+    lmap = LinearMap{T}((x, y) -> ldiv!(x, F, y), size(mat)...; ismutating = true, ishermitian = false)
+    return backend(lmap)
+end
 
 #endregion
 
@@ -98,30 +117,21 @@ end
 # Eigensolver
 #region
 
-# The idea is that bandstructure and spectrum take (AbstractHamiltonian, ::EigensolverBackend)
-# and transform that into (::Bloch, ::EigensolverBackend), and then into (::Eigensolver)
-# which is the complex function that has a simple type but contains the Hamiltonian/Bloch.
-# Eigensolver only FunctionWraps the relevant solver method once it knows what eltype the
-# eigenstates will have (eltype(bloch.output))
-
 struct Eigensolver{T,L,S<:Spectrum}
     solver::FunctionWrapper{S,Tuple{SVector{L,T}}}
 end
 
-function Eigensolver{T,L}(s::EigensolverBackend, b::Bloch, mapping = missing) where {T,L}
-    E = complex(eltype(blocktype(b)))
-    S = orbtype(b)
-    solver = mappedsolver(s, b, mapping)
+function Eigensolver{T,L}(backend::EigensolverBackend, bloch::Bloch, mapping = missing) where {T,L}
+    E = complex(eltype(blocktype(bloch)))
+    S = orbtype(bloch)
+    solver = mappedsolver(backend, bloch, mapping)
     return Eigensolver(FunctionWrapper{Spectrum{E,S},Tuple{SVector{L,T}}}(solver))
 end
-mappedsolver(s, b, ::Missing) = φs -> s.spectrum(call!(b, φs))
-mappedsolver(s, b, mapping::Function) = φs -> s.spectrum(call!(b, mapping(Tuple(φs)...)))
 
-(s::Eigensolver)(m::AbstractMatrix) = s.solver(m)
-(s::Eigensolver{<:Any,<:Number})(h::AbstractHamiltonian, φs...; flatten = true, kw...) =
-    flatten ? s(bloch(flatten(h), φs; kw...)) : s(bloch(h, φs; kw...))
-
-(s::Eigensolver)(b::Bloch, φs...; kw...) = s.solver(call!(b, φs; kw...))
+mappedsolver(backend::EigensolverBackend, bloch, ::Missing) =
+    φs -> backend(call!(bloch, φs))
+mappedsolver(backend::EigensolverBackend, bloch, mapping) =
+    φs -> backend(call!(bloch, mapping(Tuple(φs)...)))
 
 #endregion
 
