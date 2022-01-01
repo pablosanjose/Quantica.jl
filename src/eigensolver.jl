@@ -44,6 +44,21 @@ abstract type EigensolverBackend end
 (b::EigensolverBackend)(m) =
     throw(ArgumentError("The eigensolver backend $(typeof(b)) is not defined to work on $(typeof(m))"))
 
+#### LinearAlgebra #####
+
+struct LinearAlgebra{K} <: EigensolverBackend
+    kwargs::K
+end
+
+function LinearAlgebra(; kw...)
+    return LinearAlgebra(kw)
+end
+
+function (backend::LinearAlgebra)(mat::AbstractMatrix{<:Number})
+    ε, Ψ = Quantica.LinearAlgebra.eigen(mat; backend.kwargs...)
+    return Spectrum(ε, Ψ)
+end
+
 #### Arpack #####
 
 struct Arpack{K} <: EigensolverBackend

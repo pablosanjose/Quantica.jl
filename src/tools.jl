@@ -138,8 +138,8 @@ function merged_flatten_mul!(C::SparseMatrixCSC, (os, flatos), A::SparseMatrixCS
         coloffset´, ncol = site_to_flatoffset_norbs(col, os, flatos)
         for p in nzrange(A, col)
             valA = valsA[p]
-            row  = rowsA[p]
-            rowoffset´, nrow = site_to_flatoffset_norbs(row, os, flatos)
+            rowA = rowsA[p]
+            rowoffset´, nrow = site_to_flatoffset_norbs(rowA, os, flatos)
             rowfirst´ = rowoffset´ + 1
             for ocol in 1:ncol
                 col´ = coloffset´ + ocol
@@ -159,16 +159,39 @@ function merged_flatten_mul!(C::SparseMatrixCSC, (os, flatos), A::SparseMatrixCS
 end
 
 function sparse_to_dense_mul!(C::StridedMatrix, A::SparseMatrixCSC, b::Number, α = 1, β = 0)
-    vals = nonzeros(A)
-    rows = rowvals(A)
+    valsA = nonzeros(A)
+    rowsA = rowvals(A)
     if iszero(β)
         fill!(C, zero(eltype(C)))
     else
         C .*= β
     end
     for col in axes(A, 2), p in nzrange(A, col)
-        row = rows[p]
-        C[row, col] += α * vals[p]
+        row = rowsA[p]
+        C[row, col] += α * b * valsA[p]
+    end
+    return C
+end
+
+function sparse_to_dense_flatten_mul!(C::StridedMatrix, (os, flatos), A::SparseMatrixCSC, b::Number, α = 1, β = 0)
+    colsA = axes(A, 2)
+    rowsA = rowvals(A)
+    valsA = nonzeros(A)
+    if iszero(β)
+        fill!(C, zero(eltype(C)))
+    else
+        C .*= β
+    end
+    for col in colsA
+        coloffset´, ncol = site_to_flatoffset_norbs(col, os, flatos)
+        for p in nzrange(A, col)
+            valA = valsA[p]
+            rowA = rowsA[p]
+            rowoffset´, nrow = site_to_flatoffset_norbs(rowA, os, flatos)
+            for ocol in 1:ncol, orow in 1:nrow
+                C[rowoffset´ + orow, coloffset´ + ocol] += α * b * valA[orow, ocol]
+            end
+        end
     end
     return C
 end
