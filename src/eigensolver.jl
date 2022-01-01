@@ -143,6 +143,15 @@ struct Eigensolver{T,L,S<:Spectrum}
     solver::FunctionWrapper{S,Tuple{SVector{L,T}}}
 end
 
+(s::Eigensolver{<:Any,L})(φs::Vararg{<:Any,L}) where {L} = s.solver(SVector(φs))
+(s::Eigensolver{<:Any,L})(φs::SVector{L}) where {L} = s.solver(φs)
+(s::Eigensolver{<:Any,L})(φs...) where {L} =
+    throw(ArgumentError("Eigensolver call requires $L parameters/Bloch phases"))
+
+# default Eigensolver uses the LinearAlgebra backend
+Eigensolver{T,L}(bloch::Bloch, mapping = missing) where {T,L} =
+    Eigensolver{T,L}(LinearAlgebra(), bloch, mapping)
+
 function Eigensolver{T,L}(backend::EigensolverBackend, bloch::Bloch, mapping = missing) where {T,L}
     E = complex(eltype(blocktype(bloch)))
     S = orbtype(bloch)
