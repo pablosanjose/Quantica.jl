@@ -487,6 +487,8 @@ orbtype(::Bloch{<:Any,B}) where {B} = orbtype(B)
 
 latdim(b::Bloch) = latdim(lattice(b.h))
 
+Base.size(b::Bloch, dims...) = size(b.output, dims...)
+
 # threadcopy(b::Bloch) = Bloch(threadcopy(b.h), copy(b.output))
 
 #endregion

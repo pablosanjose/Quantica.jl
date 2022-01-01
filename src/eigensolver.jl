@@ -13,7 +13,7 @@ function ensureloaded(package::Symbol)
     return nothing
 end
 
-eigensolver(x...; kw...) = Eigensolvers.eigensolver(x...; kw...)
+# eigensolver(x...; kw...) = Eigensolvers.eigensolver(x...; kw...)
 
 #endregion
 
@@ -28,8 +28,8 @@ eigensolver(x...; kw...) = Eigensolvers.eigensolver(x...; kw...)
 module Eigensolvers
 
 using FunctionWrappers: FunctionWrapper
-using LinearAlgebra: Eigen
-using SparseArrays: SparseMatrixCSC
+using LinearAlgebra: Eigen, I, lu, ldiv!
+using SparseArrays: SparseMatrixCSC, AbstractSparseMatrix
 using Quantica: Quantica, Bloch, ensureloaded, AbstractHamiltonian, bloch, call!, orbtype,
     blocktype, OrbitalStructure, orbitalstructure, SVector, SMatrix
 
@@ -38,21 +38,12 @@ export eigensolver
 #endregion
 
 ############################################################################################
-# Spectrum (alias of LinearAlgebra.Eigen)
-#region
-
-const Spectrum{E,S} = Eigen{S,E,Matrix{S},Vector{E}}
-
-Spectrum(x...) = Eigen(x...)
-
-#endregion
-
-############################################################################################
 # EigensolverBackend's
 #region
 
 abstract type EigensolverBackend end
-abstract type ShiftInvertBackend <: EigensolverBackend end
+
+(b::EigensolverBackend)(m) = throw(ArgumentError("The eigensolver backend $(typeof(b)) is not defined to work on $(typeof(m))"))
 
 #### Arpack #####
 
@@ -70,10 +61,6 @@ function (backend::Arpack)(mat::AbstractMatrix{<:Number})
     return Spectrum(ε, Ψ)
 end
 
-function (::Arpack)(::AbstractMatrix{<:SMatrix})
-    throw(ArgumentError("Arpack only admits scalar eltypes. Try flattening your Hamiltonian."))
-end
-
 #### KrylovKit #####
 
 struct KrylovKit{P,K} <: EigensolverBackend
@@ -81,34 +68,53 @@ struct KrylovKit{P,K} <: EigensolverBackend
     kwargs::K
 end
 
-function KrylovKit(params; kw...)
+function KrylovKit(params...; kw...)
     ensureloaded(:KrylovKit)
     return KrylovKit(params, kw)
 end
 
-function (backend::KrylovKit)(mat::AbstractMatrix)
+function (backend::KrylovKit)(mat)
     ε, Ψ, _ = Quantica.KrylovKit.eigsolve(mat, backend.params...; backend.kwargs...)
     return Spectrum(ε, Ψ)
 end
 
-#### SparseSuiteShiftInvert ####
+#### ArnoldiMethod #####
 
-struct SparseSuiteShiftInvert{T,E<:EigensolverBackend} <: ShiftInvertBackend
+struct ArnoldiMethod{K} <: EigensolverBackend
+    kwargs::K
+end
+
+function ArnoldiMethod(; kw...)
+    ensureloaded(:ArnoldiMethod)
+    return ArnoldiMethod(kw)
+end
+
+function (backend::ArnoldiMethod)(mat)
+    pschur, _ = Quantica.ArnoldiMethod.partialschur(mat; backend.kwargs...)
+    ε, Ψ = Quantica.ArnoldiMethod.partialeigen(pschur)
+    return Spectrum(ε, Ψ)
+end
+
+#### ShiftInvertSparse ####
+
+struct ShiftInvertSparse{T,E<:EigensolverBackend} <: EigensolverBackend
     origin::T
     eigensolver::E
 end
 
-function SparseSuiteShiftInvert(e::EigensolverBackend, origin)
-    ensureloaded(:SparseArrays)
+function ShiftInvertSparse(e::EigensolverBackend, origin)
     ensureloaded(:LinearMaps)
-    return SparseSuiteShiftInvert(e)
+    return ShiftInvertSparse(origin, e)
 end
 
-function (backend::SparseSuiteShiftInvert)(mat::AbstractSparseMatrix{T}) where {T}
-    shiftdiagonal!(mat, backend.origin)
-    F = lu(mat)
-    lmap = LinearMap{T}((x, y) -> ldiv!(x, F, y), size(mat)...; ismutating = true, ishermitian = false)
-    return backend(lmap)
+function (backend::ShiftInvertSparse)(mat::AbstractSparseMatrix{T}) where {T<:Number}
+    mat´ = mat - I*backend.origin
+    F = lu(mat´)
+    lmap = Quantica.LinearMaps.LinearMap{T}((x, y) -> ldiv!(x, F, y), size(mat)...;
+        ismutating = true, ishermitian = false)
+    spectrum = backend.eigensolver(lmap)
+    @. spectrum.values = 1 / (spectrum.values) + backend.origin
+    return spectrum
 end
 
 #endregion
@@ -116,6 +122,8 @@ end
 ############################################################################################
 # Eigensolver
 #region
+
+const Spectrum{E<:Complex,S} = Eigen{S,E,Matrix{S},Vector{E}}
 
 struct Eigensolver{T,L,S<:Spectrum}
     solver::FunctionWrapper{S,Tuple{SVector{L,T}}}
@@ -133,8 +141,13 @@ mappedsolver(backend::EigensolverBackend, bloch, ::Missing) =
 mappedsolver(backend::EigensolverBackend, bloch, mapping) =
     φs -> backend(call!(bloch, mapping(Tuple(φs)...)))
 
-#endregion
+Spectrum(args...) = Eigen(args...)
+Spectrum(evals::AbstractVector, evecs::AbstractVector{<:AbstractVector}) =
+    Spectrum(evals, hcat(evecs...))
+Spectrum(evals::AbstractVector{<:Real}, evecs::AbstractMatrix) =
+    Spectrum(complex.(evals), evecs)
 
+#endregion
 
 ############################################################################################
 # ShiftInvert
