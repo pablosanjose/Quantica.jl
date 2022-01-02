@@ -168,6 +168,29 @@ Spectrum(evals::AbstractVector{<:Real}, evecs::AbstractMatrix) =
 
 #endregion
 
+############################################################################################
+# show
+#region
+
+function Base.show(io::IO, s::EigensolverBackend)
+    i = get(io, :indent, "")
+    print(io, i, summary(s))
+end
+
+Base.summary(s::EigensolverBackend) =
+    "EigensolverBackend ($(Base.nameof(typeof(s))))"
+
+function Base.show(io::IO, s::Eigensolver)
+    i = get(io, :indent, "")
+    ioindent = IOContext(io, :indent => "  ")
+    print(io, i, summary(s), "\n")
+end
+
+Base.summary(::Eigensolver{T,L}) where {T,L} =
+    "Eigensolver{$T,$L}: Eigensolver over an $L-dimensional parameter manifold of type $T"
+
+#endregion
+
 end # module
 
 const ES = Eigensolvers

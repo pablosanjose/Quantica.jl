@@ -492,3 +492,22 @@ Base.size(b::Bloch, dims...) = size(b.output, dims...)
 # threadcopy(b::Bloch) = Bloch(threadcopy(b.h), copy(b.output))
 
 #endregion
+
+############################################################################################
+# Mesh  -  see bandstructure.jl for methods
+#region
+
+struct Mesh{T,L}
+    verts::Vector{SVector{L,T}}
+    neighs::Vector{Vector{Int}}
+    simps::Vector{Vector{Int}}
+end
+
+#endregion
+
+############################################################################################
+# Bandstructure  -  see bandstructure.jl for methods
+#region
+
+
+#endregion
