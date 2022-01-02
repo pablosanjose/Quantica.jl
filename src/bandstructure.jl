@@ -8,9 +8,8 @@ function mesh(rngs::Vararg{<:AbstractRange,L}) where {L}
     verts  = vec(vmat)
     cinds  = CartesianIndices(vmat)
     neighs = marching_neighbors(cinds)     # a Vector of Vectors of point indices (Ints)
-    # simps  = find_simplices(neighs, L+1)   # a Vector of Vectors of L+1 point indices (Ints)
-    simps  = marching_simplices(cinds)
-    # return Mesh(verts, neighs, simps)
+    simps  = find_simplices(neighs, L+1)   # a Vector of Vectors of L+1 point indices (Ints)
+    return Mesh(verts, neighs, simps)
 end
 
 # cind is a CartesianRange over vertices
