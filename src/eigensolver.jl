@@ -148,10 +148,6 @@ end
 (s::Eigensolver{<:Any,L})(φs...) where {L} =
     throw(ArgumentError("Eigensolver call requires $L parameters/Bloch phases"))
 
-# default Eigensolver uses the LinearAlgebra backend
-Eigensolver{T,L}(bloch::Bloch, mapping = missing) where {T,L} =
-    Eigensolver{T,L}(LinearAlgebra(), bloch, mapping)
-
 function Eigensolver{T,L}(backend::EigensolverBackend, bloch::Bloch, mapping = missing) where {T,L}
     E = complex(eltype(blocktype(bloch)))
     S = orbtype(bloch)
