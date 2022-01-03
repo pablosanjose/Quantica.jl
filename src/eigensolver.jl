@@ -28,8 +28,9 @@ module Eigensolvers
 using FunctionWrappers: FunctionWrapper
 using LinearAlgebra: Eigen, I, lu, ldiv!
 using SparseArrays: SparseMatrixCSC, AbstractSparseMatrix
-using Quantica: Quantica, Bloch, ensureloaded, AbstractHamiltonian, bloch, call!, orbtype,
+using Quantica: Quantica, Bloch, ensureloaded, AbstractHamiltonian, call!, orbtype,
     blocktype, OrbitalStructure, orbitalstructure, SVector, SMatrix
+import Quantica: bloch
 
 export eigensolver
 
@@ -81,7 +82,7 @@ Spectrum(evals::AbstractVector{<:Real}, evecs::AbstractMatrix) =
 
 ## Fallbacks
 
-bloch(h::AbstractHamiltonian, ::EigensolverBackend) = bloch(h)
+Quantica.bloch(h::AbstractHamiltonian, ::EigensolverBackend) = bloch(h)
 
 (b::EigensolverBackend)(m) =
     throw(ArgumentError("The eigensolver backend $(typeof(b)) is not defined to work on $(typeof(m))"))
@@ -101,7 +102,7 @@ function (backend::LinearAlgebra)(mat::AbstractMatrix{<:Number})
     return Spectrum(ε, Ψ)
 end
 
-bloch(h::AbstractHamiltonian, ::LinearAlgebra) = bloch(flatten(h), Matrix)
+Quantica.bloch(h::AbstractHamiltonian, ::LinearAlgebra) = bloch(flatten(h), Matrix)
 
 #### Arpack #####
 
@@ -119,7 +120,7 @@ function (backend::Arpack)(mat::AbstractMatrix{<:Number})
     return Spectrum(ε, Ψ)
 end
 
-bloch(h::AbstractHamiltonian, ::Arpack) = bloch(flatten(h))
+Quantica.bloch(h::AbstractHamiltonian, ::Arpack) = bloch(flatten(h))
 
 #### KrylovKit #####
 
@@ -177,7 +178,7 @@ function (backend::ShiftInvertSparse)(mat::AbstractSparseMatrix{T}) where {T<:Nu
     return spectrum
 end
 
-bloch(h::AbstractHamiltonian, ::ShiftInvertSparse) = bloch(flatten(h))
+Quantica.bloch(h::AbstractHamiltonian, ::ShiftInvertSparse) = bloch(flatten(h))
 
 #endregion
 

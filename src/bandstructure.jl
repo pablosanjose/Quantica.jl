@@ -7,62 +7,49 @@ function mesh(rngs::Vararg{<:AbstractRange,L}) where {L}
     vmat   = [SVector(pt) for pt in Iterators.product(rngs...)]
     verts  = vec(vmat)
     cinds  = CartesianIndices(vmat)
-    neighs = marching_neighbors(cinds)     # a Vector of Vectors of point indices (Ints)
+    neighs = marching_neighbors_forward(cinds)  # sorted neighbors of i, with n[i][j] > i
     simps  = build_cliques(neighs, L+1)    # a Vector of Vectors of L+1 point indices (Ints)
     return Mesh(verts, neighs, simps)
 end
 
-# cind is a CartesianRange over vertices
-function marching_neighbors(cinds)
+# forward neighbors, cind is a CartesianRange over vertices
+function marching_neighbors_forward(cinds)
     linds = LinearIndices(cinds)
     nmat = [Int[] for _ in cinds]
     for cind in cinds
         nlist = nmat[cind]
         forward = max(cind, first(cinds)):min(cind + oneunit(cind), last(cinds))
-        backward = max(cind - oneunit(cind), first(cinds)):min(cind, last(cinds))
-        for cind´ in Iterators.flatten((forward, backward))
+        for cind´ in forward
             cind === cind´ && continue
             push!(nlist, linds[cind´])
         end
+        sort!(nlist)
     end
     neighs = vec(nmat)
     return neighs
 end
 
-function marching_simplices(cinds)
-    
-end
-
-# groups of n all-to-first connected neighbors, ordered
+# groups of n all-to-all connected neighbors, sorted
 function build_cliques(neighs, nverts)
-    counter = nverts
-    simps = [[i] for i in eachindex(neighs)]
-    push_simplices!(simps, neighs, nverts, counter - 1)
-    # a single final filter! is faster than one per pass
-    filter!(simp -> length(simp) == nverts, simps)
-    return simps
-end
-
-function push_cliques!(simps, neighs, nverts, counter)
-    counter > 0 || return simps
-    sinds = eachindex(simps)
-    for n in sinds
-        simp = simps[n]
-        lastvert = last(simp)
-        isfirst = true
-        for neigh in neighs[lastvert]
-            neigh > lastvert && first(simp) in neighs[neigh] || continue
-            if !isfirst
-                simp = copy(simps[n])
-                simp[end] = neigh
-                push!(simps, simp)
-            else
-                push!(simp, neigh)
-            end
-            isfirst = false
+    cliques = Vector{Int}[]
+    for (src, dsts) in enumerate(neighs), ids in Combinations(length(dsts), nverts - 1)
+        if all_adjacent(ids, dsts, neighs)
+            clique = prepend!(dsts[ids], src)
+            push!(cliques, clique)
         end
     end
-    return push_simplices!(simps, neighs, nverts, counter - 1)
+    return cliques
 end
+
+# Check whether dsts[ids] are all mutual neighbors. ids are a total of nverts-1 indices of dsts = neighs[src].
+function all_adjacent(ids, dsts, neighs)
+    nids = length(ids)
+    for (n, id) in enumerate(ids), n´ in n+1:nids
+        dst = dsts[ids[n´]]
+        dst in neighs[dsts[id]] || return false
+    end
+    return true
+end
+
 
 #endregion

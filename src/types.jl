@@ -499,7 +499,7 @@ Base.size(b::Bloch, dims...) = size(b.output, dims...)
 
 struct Mesh{T,L}
     verts::Vector{SVector{L,T}}
-    neighs::Vector{Vector{Int}}
+    neighs::Vector{Vector{Int}}  # forward neighbors of vertex i, with neighs[i][j] > i
     simps::Vector{Vector{Int}}
 end
 
