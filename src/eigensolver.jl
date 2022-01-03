@@ -36,10 +36,52 @@ export eigensolver
 #endregion
 
 ############################################################################################
-# EigensolverBackend's
+# Types
 #region
 
 abstract type EigensolverBackend end
+
+const Spectrum{E<:Complex,S} = Eigen{S,E,Matrix{S},Vector{E}}
+
+struct Eigensolver{T,L,S<:Spectrum}
+    solver::FunctionWrapper{S,Tuple{SVector{L,T}}}
+end
+
+(s::Eigensolver{<:Any,L})(φs::Vararg{<:Any,L}) where {L} = s.solver(SVector(φs))
+(s::Eigensolver{<:Any,L})(φs::SVector{L}) where {L} = s.solver(φs)
+(s::Eigensolver{<:Any,L})(φs...) where {L} =
+    throw(ArgumentError("Eigensolver call requires $L parameters/Bloch phases"))
+
+function Eigensolver{T,L}(backend::EigensolverBackend, bloch::Bloch, mapping = missing) where {T,L}
+    E = complex(eltype(blocktype(bloch)))
+    S = orbtype(bloch)
+    solver = mappedsolver(backend, bloch, mapping)
+    return Eigensolver(FunctionWrapper{Spectrum{E,S},Tuple{SVector{L,T}}}(solver))
+end
+
+Eigensolver{T,L}(backend::EigensolverBackend, h::AbstractHamiltonian, mapping = missing) where {T,L} =
+    Eigensolver{T,L}(backend, bloch(h, backend), mapping)
+
+mappedsolver(backend::EigensolverBackend, bloch, ::Missing) =
+    φs -> backend(call!(bloch, φs))
+mappedsolver(backend::EigensolverBackend, bloch, mapping) =
+    φs -> backend(call!(bloch, mapping(Tuple(φs)...)))
+
+Spectrum(args...) = Eigen(args...)
+Spectrum(evals::AbstractVector, evecs::AbstractVector{<:AbstractVector}) =
+    Spectrum(evals, hcat(evecs...))
+Spectrum(evals::AbstractVector{<:Real}, evecs::AbstractMatrix) =
+    Spectrum(complex.(evals), evecs)
+
+#endregion
+
+############################################################################################
+# EigensolverBackend's
+#region
+
+## Fallbacks
+
+bloch(h::AbstractHamiltonian, ::EigensolverBackend) = bloch(h)
 
 (b::EigensolverBackend)(m) =
     throw(ArgumentError("The eigensolver backend $(typeof(b)) is not defined to work on $(typeof(m))"))
@@ -59,6 +101,8 @@ function (backend::LinearAlgebra)(mat::AbstractMatrix{<:Number})
     return Spectrum(ε, Ψ)
 end
 
+bloch(h::AbstractHamiltonian, ::LinearAlgebra) = bloch(flatten(h), Matrix)
+
 #### Arpack #####
 
 struct Arpack{K} <: EigensolverBackend
@@ -74,6 +118,8 @@ function (backend::Arpack)(mat::AbstractMatrix{<:Number})
     ε, Ψ, _ = Quantica.Arpack.eigs(mat; backend.kwargs...)
     return Spectrum(ε, Ψ)
 end
+
+bloch(h::AbstractHamiltonian, ::Arpack) = bloch(flatten(h))
 
 #### KrylovKit #####
 
@@ -131,40 +177,7 @@ function (backend::ShiftInvertSparse)(mat::AbstractSparseMatrix{T}) where {T<:Nu
     return spectrum
 end
 
-#endregion
-
-############################################################################################
-# Eigensolver
-#region
-
-const Spectrum{E<:Complex,S} = Eigen{S,E,Matrix{S},Vector{E}}
-
-struct Eigensolver{T,L,S<:Spectrum}
-    solver::FunctionWrapper{S,Tuple{SVector{L,T}}}
-end
-
-(s::Eigensolver{<:Any,L})(φs::Vararg{<:Any,L}) where {L} = s.solver(SVector(φs))
-(s::Eigensolver{<:Any,L})(φs::SVector{L}) where {L} = s.solver(φs)
-(s::Eigensolver{<:Any,L})(φs...) where {L} =
-    throw(ArgumentError("Eigensolver call requires $L parameters/Bloch phases"))
-
-function Eigensolver{T,L}(backend::EigensolverBackend, bloch::Bloch, mapping = missing) where {T,L}
-    E = complex(eltype(blocktype(bloch)))
-    S = orbtype(bloch)
-    solver = mappedsolver(backend, bloch, mapping)
-    return Eigensolver(FunctionWrapper{Spectrum{E,S},Tuple{SVector{L,T}}}(solver))
-end
-
-mappedsolver(backend::EigensolverBackend, bloch, ::Missing) =
-    φs -> backend(call!(bloch, φs))
-mappedsolver(backend::EigensolverBackend, bloch, mapping) =
-    φs -> backend(call!(bloch, mapping(Tuple(φs)...)))
-
-Spectrum(args...) = Eigen(args...)
-Spectrum(evals::AbstractVector, evecs::AbstractVector{<:AbstractVector}) =
-    Spectrum(evals, hcat(evecs...))
-Spectrum(evals::AbstractVector{<:Real}, evecs::AbstractMatrix) =
-    Spectrum(complex.(evals), evecs)
+bloch(h::AbstractHamiltonian, ::ShiftInvertSparse) = bloch(flatten(h))
 
 #endregion
 

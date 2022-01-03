@@ -8,7 +8,7 @@ function mesh(rngs::Vararg{<:AbstractRange,L}) where {L}
     verts  = vec(vmat)
     cinds  = CartesianIndices(vmat)
     neighs = marching_neighbors(cinds)     # a Vector of Vectors of point indices (Ints)
-    simps  = find_simplices(neighs, L+1)   # a Vector of Vectors of L+1 point indices (Ints)
+    simps  = build_cliques(neighs, L+1)    # a Vector of Vectors of L+1 point indices (Ints)
     return Mesh(verts, neighs, simps)
 end
 
@@ -29,8 +29,12 @@ function marching_neighbors(cinds)
     return neighs
 end
 
+function marching_simplices(cinds)
+    
+end
+
 # groups of n all-to-first connected neighbors, ordered
-function find_simplices(neighs, nverts)
+function build_cliques(neighs, nverts)
     counter = nverts
     simps = [[i] for i in eachindex(neighs)]
     push_simplices!(simps, neighs, nverts, counter - 1)
@@ -39,7 +43,7 @@ function find_simplices(neighs, nverts)
     return simps
 end
 
-function push_simplices!(simps, neighs, nverts, counter)
+function push_cliques!(simps, neighs, nverts, counter)
     counter > 0 || return simps
     sinds = eachindex(simps)
     for n in sinds

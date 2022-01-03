@@ -22,11 +22,11 @@ end
 
 const TOOMANYITERS = 10^8
 
-Base.IteratorSize(::BoxIterator) = Base.SizeUnknown()
+Base.IteratorSize(::Type{BoxIterator}) = Base.SizeUnknown()
 
-Base.IteratorEltype(::BoxIterator) = Base.HasEltype()
+Base.IteratorEltype(::Type{BoxIterator}) = Base.HasEltype()
 
-Base.eltype(::BoxIterator{N}) where {N} = SVector{N,Int}
+Base.eltype(::Type{BoxIterator{N}}) where {N} = SVector{N,Int}
 
 Base.CartesianIndices(b::BoxIterator) =
     CartesianIndices(UnitRange.(Tuple(b.npos), Tuple(b.ppos)))
@@ -210,6 +210,125 @@ function isgrowing(vs::AbstractVector, i0 = 1)
 end
 
 #endregion
+
+#######################################################################
+# Combinations -- gratefully borrowed from Combinatorics.jl
+#region
+
+struct Combinations
+    n::Int
+    t::Int
+end
+
+@inline function Base.iterate(c::Combinations, s = [min(c.t - 1, i) for i in 1:c.t])
+    if c.t == 0 # special case to generate 1 result for t==0
+        isempty(s) && return (s, [1])
+        return
+    end
+    # for i in c.t:-1:1
+    for ii in 1:c.t
+        i = c.t + 1 - ii
+        s[i] += 1
+        if s[i] > (c.n - (c.t - i))
+            continue
+        end
+        for j in i+1:c.t
+            s[j] = s[j-1] + 1
+        end
+        break
+    end
+    s[1] > c.n - c.t + 1 && return
+    (s, s)
+end
+
+Base.length(c::Combinations) = binomial(c.n, c.t)
+
+Base.eltype(::Type{Combinations}) = Vector{Int}
+
+Base.IteratorSize(::Type{Combinations}) = Base.HasLength()
+
+Base.IteratorEltype(::Type{Combinations}) = Base.HasEltype()
+
+
+# #######################################################################
+# # MarchingSimplices
+# #######################################################################
+# struct MarchingSimplices{D,D´}
+#     cinds::CartesianIndices{D´,NTuple{D´,Base.OneTo{Int}}}
+#     simps::Vector{NTuple{D´,CartesianIndex{D}}}  # simplices verts in unit cuboid
+#     unitperms::Vector{NTuple{D,Int}}             # unit vector order of simplices
+# end
+
+# # c is a CartesianIndices over all vertices
+# function marchingsimplices(c::CartesianIndices{D}) where {D}
+#     unitperms = marchingsimplices_unitperms(Val(D))
+#     edgeperms = map(edge -> unitvector.(CartesianIndex{D}, edge), unitperms)
+#     simps = marchingsimplices_verts.(edgeperms)
+#     srange = eachindex(simps)
+#     refverts = ntuple(i -> Base.OneTo(c.indices[i][1:end-1]), Val(D))
+#     cinds = CartesianIndices((refverts..., srange))
+#     return MarchingSimplices(cinds, simps, unitperms)
+# end
+
+# # indices of unit vectors in a unit cuboid, taken in any order
+# marchingsimplices_unitperms(::Val{D}) where {D} = permutations(ntuple(identity, Val(D)))
+
+# # simplex vertices as the sum of unit vectors in any permutation
+# marchingsimplices_verts(edges::NTuple{D}) where {D} =
+#     (zero(CartesianIndex{D}), edges...) |> cumsum |> orientsimp
+
+# function orientsimp(sverts)
+#     volume = det(hcat(SVector.(Tuple.(Base.tail(sverts)))...))
+#     sverts´ = ifelse(volume >= 0, sverts, switchlast(sverts))
+#     return sverts´
+# end
+
+# switchlast(s::NTuple{N,T}) where {N,T} = ntuple(i -> i < N - 1 ? s[i] : s[2N - i - 1] , Val(N))
+
+# function Base.iterate(m::MarchingSimplices, s...)
+#     it = iterate(m.cinds, s...)
+#     it === nothing && return nothing
+#     c, s´ = it
+#     t = Tuple(c)
+#     nsimp = last(t)
+#     refvert = CartesianIndex(Base.front(t))
+#     verts = Ref(refvert) .+ m.simps[nsimp]
+#     return verts, s´
+# end
+
+# Base.IteratorSize(::MarchingSimplices{D}) where {D} = Base.HasShape{D}()
+
+# Base.axes(m::MarchingSimplices, i...) = axes(m.cinds, i...)
+
+# Base.size(m::MarchingSimplices, i...) = size(m.cinds, i...)
+
+# Base.CartesianIndices(m::MarchingSimplices) = m.cinds
+
+# Base.IteratorEltype(::MarchingSimplices) = Base.HasEltype()
+
+# Base.eltype(::MarchingSimplices{D,D´}) where {D,D´} = NTuple{D´,CartesianIndex{D}}
+
+# Base.length(m::MarchingSimplices) = prod(length.(axes(m)))
+
+
+# permutations(ss::NTuple) = permutations!(typeof(ss)[], ss, ())
+
+# function permutations!(p, s1, s2)
+#     for (i, s) in enumerate(s1)
+#         permutations!(p, delete(s1, i), (s2..., s))
+#     end
+#     return p
+# end
+
+# permutations!(p, ::Tuple{}, s2) = push!(p, s2)
+
+# delete(t::NTuple{N,Any}, i) where {N} = ntuple(j -> j < i ? t[j] : t[j+1], Val(N-1))
+
+
+# unitvector(::Type{SVector{L,T}}, i) where {L,T} = SVector{L,T}(unitvector(NTuple{L,T}, i))
+# unitvector(::Type{CartesianIndex{L}}, i) where {L} = CartesianIndex(unitvector(NTuple{L,Int}, i))
+# unitvector(::Type{NTuple{L,T}}, i) where {L,T} =ntuple(j -> j == i ? one(T) : zero(T), Val(L))
+
 
 # #######################################################################
 # # SparseMatrixBuilder
