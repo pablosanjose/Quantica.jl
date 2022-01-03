@@ -28,8 +28,6 @@ export sublat, lattice, dims, supercell, bravais_matrix, siteindices, sitepositi
        momentaKPM, dosKPM, averageKPM, densityKPM, bandrangeKPM,
        greens, greensolver, Schur1D
 
-export eigensolver
-
 export LatticePresets, LP, RegionPresets, RP, Eigensolvers, ES #, HamiltonianPresets, HP
 export @SMatrix, @SVector, SMatrix, SVector, SA
 export ishermitian, I

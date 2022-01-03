@@ -29,6 +29,12 @@ function marching_neighbors_forward(cinds)
     return neighs
 end
 
+#endregion
+
+############################################################################################
+# Cliques
+#region
+
 # groups of n all-to-all connected neighbors, sorted
 function build_cliques(neighs, nverts)
     cliques = Vector{Int}[]
@@ -51,5 +57,36 @@ function all_adjacent(ids, dsts, neighs)
     return true
 end
 
+#endregion
+
+############################################################################################
+# bandstructure
+#region
+
+function bandstructure(h::AbstractHamiltonian, mesh::Mesh{T,L};
+    mapping = missing, solver = ES.LinearAlgebra()) where {T,L}
+    nth = Threads.nthreads()
+    return nth == 1 ? bandstructure(Eigensolver{T,L}(solver, bloch(h, solver), mapping), mesh) :
+        bandstructure([Eigensolver{T,L}(solver, bloch(h, solver), mapping) for t in 1:nth], mesh)
+end
+
+function bandstructure(eigsolvers::Vector{Eigensolver{T,L,S}}, mesh::Mesh{T,L}) where {T,L,S}
+    verts = vertices(mesh)
+    spectra = Vector{S}(undef, length(verts))
+    Threads.@threads for i in eachindex(verts)
+        vert = verts[i]
+        spectra[i] = eigsolvers[Threads.threadid()](vert)
+    end
+    return spectra
+end
+
+function bandstructure(eigsolver::Eigensolver{T,L,S}, mesh::Mesh{T,L}) where {T,L,S}
+    verts = vertices(mesh)
+    spectra = Vector{S}(undef, length(verts))
+    for (i, vert) in enumerate(verts)
+        spectra[i] = eigsolver(vert)
+    end
+    return spectra
+end
 
 #endregion

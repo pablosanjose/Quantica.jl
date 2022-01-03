@@ -503,6 +503,13 @@ struct Mesh{T,L}
     simps::Vector{Vector{Int}}
 end
 
+vertices(m::Mesh) = m.verts
+
+neighbors(m::Mesh) = m.neighs
+neighbors(m::Mesh, i::Int) = m.neighs[i]
+
+simplices(m::Mesh) = m.simps
+
 #endregion
 
 ############################################################################################

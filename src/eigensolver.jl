@@ -28,11 +28,11 @@ module Eigensolvers
 using FunctionWrappers: FunctionWrapper
 using LinearAlgebra: Eigen, I, lu, ldiv!
 using SparseArrays: SparseMatrixCSC, AbstractSparseMatrix
-using Quantica: Quantica, Bloch, ensureloaded, AbstractHamiltonian, call!, orbtype,
+using Quantica: Quantica, Bloch, ensureloaded, AbstractHamiltonian, call!, flatten, orbtype,
     blocktype, OrbitalStructure, orbitalstructure, SVector, SMatrix
 import Quantica: bloch
 
-export eigensolver
+export Eigensolver
 
 #endregion
 
@@ -208,5 +208,6 @@ Base.summary(::Eigensolver{T,L}) where {T,L} =
 end # module
 
 const ES = Eigensolvers
+const Eigensolver = ES.Eigensolver
 
 #endregion
