@@ -1,4 +1,30 @@
 ############################################################################################
+# Eigensolver and Spectrum
+#region
+
+(s::Eigensolver{<:Any,L})(φs::Vararg{<:Any,L}) where {L} = s.solver(SVector(φs))
+(s::Eigensolver{<:Any,L})(φs::SVector{L}) where {L} = s.solver(φs)
+(s::Eigensolver{<:Any,L})(φs...) where {L} =
+    throw(ArgumentError("Eigensolver call requires $L parameters/Bloch phases"))
+
+Spectrum(evals, evecs) = Eigen(sorteigs!(evals, evecs)...)
+Spectrum(evals::AbstractVector, evecs::AbstractVector{<:AbstractVector}) =
+    Spectrum(evals, hcat(evecs...))
+Spectrum(evals::AbstractVector{<:Real}, evecs::AbstractMatrix) =
+    Spectrum(complex.(evals), evecs)
+
+function sorteigs!(ϵ::AbstractVector, ψ::AbstractMatrix)
+    p = Vector{Int}(undef, length(ϵ))
+    p´ = similar(p)
+    sortperm!(p, ϵ, by = real, alg = Base.DEFAULT_UNSTABLE)
+    Base.permute!!(ϵ, copy!(p´, p))
+    Base.permutecols!!(ψ, copy!(p´, p))
+    return ϵ, ψ
+end
+
+#endregion
+
+############################################################################################
 # Dynamic package loader
 #   This is in global Quantica scope to avoid name collisions between package and
 #   Eigensolvers.EigensolverBackend. We `import` instead of `using` to avoid collisions

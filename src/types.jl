@@ -522,16 +522,9 @@ struct Eigensolver{T,L,S<:Spectrum}
     solver::FunctionWrapper{S,Tuple{SVector{L,T}}}
 end
 
-(s::Eigensolver{<:Any,L})(φs::Vararg{<:Any,L}) where {L} = s.solver(SVector(φs))
-(s::Eigensolver{<:Any,L})(φs::SVector{L}) where {L} = s.solver(φs)
-(s::Eigensolver{<:Any,L})(φs...) where {L} =
-    throw(ArgumentError("Eigensolver call requires $L parameters/Bloch phases"))
+energies(s::Spectrum) = s.values
 
-Spectrum(args...) = Eigen(args...)
-Spectrum(evals::AbstractVector, evecs::AbstractVector{<:AbstractVector}) =
-    Spectrum(evals, hcat(evecs...))
-Spectrum(evals::AbstractVector{<:Real}, evecs::AbstractMatrix) =
-    Spectrum(complex.(evals), evecs)
+states(s::Spectrum) = s.vectors
 
 #endregion
 
