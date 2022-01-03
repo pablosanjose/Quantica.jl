@@ -15,15 +15,15 @@ using FunctionWrappers: FunctionWrapper
 using ExprTools
 using SparseArrays: getcolptr, AbstractSparseMatrix, AbstractSparseMatrixCSC
 using Statistics: mean
-using Compat # for use of argmin/argmax in bandstructure.jl
+# using Compat # for use of argmin/argmax in bands.jl
 
 export sublat, lattice, dims, supercell, bravais_matrix, siteindices, sitepositions,
        hopping, onsite, @onsite!, @hopping!, @block!, parameters, neighbors,
        ket, ketmodel, randomkets, basiskets,
        hamiltonian, parametric, bloch, bloch!, similarmatrix,
        flatten, unflatten, orbitalstructure, wrap, transform, translate, combine,
-       spectrum, bandstructure, diagonalizer, mesh, isometric, splitbands,
-       bands, vertices, minima, maxima, gapedge, gap, isinband,
+       spectrum, bands, mesh, isometric, splitbands,
+       vertices, minima, maxima, gapedge, gap, isinband,
        energies, states, degeneracy,
        momentaKPM, dosKPM, averageKPM, densityKPM, bandrangeKPM,
        greens, greensolver, Schur1D
@@ -48,7 +48,7 @@ include("eigensolver.jl")
 # include("slice.jl")
 # include("mesh.jl")
 # include("diagonalizer.jl")
-include("bandstructure.jl")
+include("bands.jl")
 # include("KPM.jl")
 # include("effective.jl")
 # include("greens.jl")

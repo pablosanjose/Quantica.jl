@@ -3,7 +3,7 @@
 #region
 
 # Marching Tetrahedra mesh
-function mesh(rngs::Vararg{<:AbstractRange,L}) where {L}
+function mesh(rngs::Vararg{<:Any,L}) where {L}
     vmat   = [SVector(pt) for pt in Iterators.product(rngs...)]
     verts  = vec(vmat)
     cinds  = CartesianIndices(vmat)
@@ -60,33 +60,40 @@ end
 #endregion
 
 ############################################################################################
-# bandstructure
+# bands
 #region
 
-function bandstructure(h::AbstractHamiltonian, mesh::Mesh{T,L};
-    mapping = missing, solver = ES.LinearAlgebra()) where {T,L}
-    nth = Threads.nthreads()
-    return nth == 1 ? bandstructure(Eigensolver{T,L}(solver, bloch(h, solver), mapping), mesh) :
-        bandstructure([Eigensolver{T,L}(solver, bloch(h, solver), mapping) for t in 1:nth], mesh)
+bands(h::AbstractHamiltonian, mesh::Mesh; solver = ES.LinearAlgebra(), kw...) =
+    bands(bloch(h, solver), mesh; solver, kw...)
+
+function bands(bloch::Bloch, mesh::Mesh{SVector{L,T}};
+    mapping = missing, solver = ES.LinearAlgebra(), showprogress = true) where {T,L}
+    thread_solvers = [Eigensolver{T,L}(solver, bloch, mapping) for _ in 1:Threads.nthreads()]
+    # Step 1/2 - Diagonalize:
+    spectra = bands_diagonalize(thread_solvers, mesh, showprogress)
+    return spectra
 end
 
-function bandstructure(eigsolvers::Vector{Eigensolver{T,L,S}}, mesh::Mesh{T,L}) where {T,L,S}
+function bands_diagonalize(thread_solvers::Vector{Eigensolver{T,L,S}}, mesh::Mesh{SVector{L,T}},
+    showprogress) where {T,L,S}
+    meter = Progress(length(vertices(mesh)), "Step 1/2 - Diagonalizing: ")
     verts = vertices(mesh)
     spectra = Vector{S}(undef, length(verts))
     Threads.@threads for i in eachindex(verts)
         vert = verts[i]
-        spectra[i] = eigsolvers[Threads.threadid()](vert)
+        solver = thread_solvers[Threads.threadid()]
+        spectra[i] = solver(vert)
+        showprogress && ProgressMeter.next!(meter)
     end
     return spectra
 end
 
-function bandstructure(eigsolver::Eigensolver{T,L,S}, mesh::Mesh{T,L}) where {T,L,S}
-    verts = vertices(mesh)
-    spectra = Vector{S}(undef, length(verts))
-    for (i, vert) in enumerate(verts)
-        spectra[i] = eigsolver(vert)
-    end
-    return spectra
-end
+#endregion
+
+############################################################################################
+# splitbands
+#region
+
+# splitbands(b) = b
 
 #endregion

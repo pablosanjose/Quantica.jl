@@ -497,8 +497,8 @@ Base.size(b::Bloch, dims...) = size(b.output, dims...)
 # Mesh  -  see bandstructure.jl for methods
 #region
 
-struct Mesh{T,L}
-    verts::Vector{SVector{L,T}}
+struct Mesh{S}
+    verts::Vector{S}
     neighs::Vector{Vector{Int}}  # forward neighbors of vertex i, with neighs[i][j] > i
     simps::Vector{Vector{Int}}
 end
@@ -513,8 +513,48 @@ simplices(m::Mesh) = m.simps
 #endregion
 
 ############################################################################################
-# Bandstructure  -  see bandstructure.jl for methods
+# Eigensolver  -  see eigensolver.jl for methods and solver backends
 #region
 
+const Spectrum{E<:Complex,O} = Eigen{O,E,Matrix{O},Vector{E}}
+
+struct Eigensolver{T,L,S<:Spectrum}
+    solver::FunctionWrapper{S,Tuple{SVector{L,T}}}
+end
+
+(s::Eigensolver{<:Any,L})(φs::Vararg{<:Any,L}) where {L} = s.solver(SVector(φs))
+(s::Eigensolver{<:Any,L})(φs::SVector{L}) where {L} = s.solver(φs)
+(s::Eigensolver{<:Any,L})(φs...) where {L} =
+    throw(ArgumentError("Eigensolver call requires $L parameters/Bloch phases"))
+
+Spectrum(args...) = Eigen(args...)
+Spectrum(evals::AbstractVector, evecs::AbstractVector{<:AbstractVector}) =
+    Spectrum(evals, hcat(evecs...))
+Spectrum(evals::AbstractVector{<:Real}, evecs::AbstractMatrix) =
+    Spectrum(complex.(evals), evecs)
+
+#endregion
+
+############################################################################################
+# Band  -  see bands.jl for methods
+#region
+
+const MatrixView{O} = SubArray{O,2,Matrix{O},Tuple{Base.Slice{Base.OneTo{Int}}, UnitRange{Int}}, true}
+
+struct BandVertex{T<:AbstractFloat,L,O}
+    momentum::SVector{L,T}
+    energy::T
+    basis::MatrixView{O}
+end
+
+struct Band{T,L,O}
+    solvers::Vector{Eigensolver{T,L}}                # one per Julia thread
+    mesh::Mesh{BandVertex{T,L,O}}
+    # simpbases::Vector{NTuple{D,Matrix{Complex{T}}}}  # basis transformations on each simplex
+end
+
+vertex(v::BandVertex) = SA[v.momentum..., v.energy]
+
+basis(v::BandVertex) = v.basis
 
 #endregion

@@ -28,11 +28,9 @@ module Eigensolvers
 using FunctionWrappers: FunctionWrapper
 using LinearAlgebra: Eigen, I, lu, ldiv!
 using SparseArrays: SparseMatrixCSC, AbstractSparseMatrix
-using Quantica: Quantica, Bloch, ensureloaded, AbstractHamiltonian, call!, flatten, orbtype,
-    blocktype, OrbitalStructure, orbitalstructure, SVector, SMatrix
-import Quantica: bloch
-
-export Eigensolver
+using Quantica: Quantica, Bloch, Spectrum, ensureloaded, AbstractHamiltonian, call!,
+    flatten, orbtype, blocktype, OrbitalStructure, orbitalstructure, SVector, SMatrix
+import Quantica: bloch, Eigensolver
 
 #endregion
 
@@ -42,37 +40,20 @@ export Eigensolver
 
 abstract type EigensolverBackend end
 
-const Spectrum{E<:Complex,S} = Eigen{S,E,Matrix{S},Vector{E}}
-
-struct Eigensolver{T,L,S<:Spectrum}
-    solver::FunctionWrapper{S,Tuple{SVector{L,T}}}
-end
-
-(s::Eigensolver{<:Any,L})(φs::Vararg{<:Any,L}) where {L} = s.solver(SVector(φs))
-(s::Eigensolver{<:Any,L})(φs::SVector{L}) where {L} = s.solver(φs)
-(s::Eigensolver{<:Any,L})(φs...) where {L} =
-    throw(ArgumentError("Eigensolver call requires $L parameters/Bloch phases"))
-
-function Eigensolver{T,L}(backend::EigensolverBackend, bloch::Bloch, mapping = missing) where {T,L}
+function Quantica.Eigensolver{T,L}(backend::EigensolverBackend, bloch::Bloch, mapping = missing) where {T,L}
     E = complex(eltype(blocktype(bloch)))
     S = orbtype(bloch)
     solver = mappedsolver(backend, bloch, mapping)
     return Eigensolver(FunctionWrapper{Spectrum{E,S},Tuple{SVector{L,T}}}(solver))
 end
 
-Eigensolver{T,L}(backend::EigensolverBackend, h::AbstractHamiltonian, mapping = missing) where {T,L} =
+Quantica.Eigensolver{T,L}(backend::EigensolverBackend, h::AbstractHamiltonian, mapping = missing) where {T,L} =
     Eigensolver{T,L}(backend, bloch(h, backend), mapping)
 
 mappedsolver(backend::EigensolverBackend, bloch, ::Missing) =
     φs -> backend(call!(bloch, φs))
 mappedsolver(backend::EigensolverBackend, bloch, mapping) =
     φs -> backend(call!(bloch, mapping(Tuple(φs)...)))
-
-Spectrum(args...) = Eigen(args...)
-Spectrum(evals::AbstractVector, evecs::AbstractVector{<:AbstractVector}) =
-    Spectrum(evals, hcat(evecs...))
-Spectrum(evals::AbstractVector{<:Real}, evecs::AbstractMatrix) =
-    Spectrum(complex.(evals), evecs)
 
 #endregion
 
@@ -208,6 +189,5 @@ Base.summary(::Eigensolver{T,L}) where {T,L} =
 end # module
 
 const ES = Eigensolvers
-const Eigensolver = ES.Eigensolver
 
 #endregion
