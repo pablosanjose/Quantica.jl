@@ -277,7 +277,7 @@ function plot!(plot::BandPlot2D)
         vertices = band.verts
         simplices = band.simps
         linesegments!(plot, (t -> vertices[first(t)] => vertices[last(t)]).(simplices),
-                      linewidth = plot[:linethickness][], color = color, xlabel = "φ", ylabel = "ε")
+                      linewidth = plot[:linethickness][], color = color)
     end
     return plot
  end
@@ -304,11 +304,10 @@ function plot!(plot::BandPlot3D)
         vertices = band.verts
         connectivity = [s[j] for s in band.simps, j in 1:3]
         if isempty(connectivity)
-            scatter!(plot, vertices, color = color, xlabel = "φ₁", ylabel = "φ₂", zlabel = "ε")
+            scatter!(plot, vertices, color = color)
         else
             mesh!(plot, vertices, connectivity, color = color, transparency = false,
-                ssao = plot[:ssao][], ambient = plot[:ambient][], diffuse = plot[:diffuse][],
-                xlabel = "φ₁", ylabel = "φ₂", zlabel = "ε")
+                ssao = plot[:ssao][], ambient = plot[:ambient][], diffuse = plot[:diffuse][])
             if plot[:wireframe][]
                 edgevertices = collect(Quantica.edgevertices(band))
                 linesegments!(plot, edgevertices, color = darken(color, plot[:linedarken][]), linewidth = plot[:linethickness][])
