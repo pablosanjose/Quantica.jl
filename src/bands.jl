@@ -60,14 +60,122 @@ end
 #endregion
 
 ############################################################################################
-# append_subspaces!
+# bands
 #region
 
-function append_subspaces!(bandverts::Vector{V}, basevert, spectrum) where {T,V<:BandVertex{T}}
+bands(h::AbstractHamiltonian, mesh::Mesh; solver = ES.LinearAlgebra(), kw...) =
+    bands(bloch(h, solver), mesh; solver, kw...)
+
+function bands(bloch::Bloch, basemesh::Mesh{SVector{L,T}};
+    mapping = missing, solver = ES.LinearAlgebra(), showprogress = true) where {T,L}
+    thread_solvers = [Eigensolver{T,L}(solver, bloch, mapping) for _ in 1:Threads.nthreads()]
+    # Step 1/2 - Diagonalize:
+    spectra = bands_diagonalize(thread_solvers, basemesh, showprogress)
+    # Step 2/2 - Knit bands:
+    bandmesh = bands_knit(spectra, basemesh, showprogress) 
+    return bandmesh
+end
+
+function bands_diagonalize(thread_solvers::Vector{Eigensolver{T,L,S}}, basemesh::Mesh{SVector{L,T}},
+    showprogress) where {T,L,S}
+    meter = Progress(length(vertices(basemesh)), "Step 1/2 - Diagonalizing: ")
+    verts = vertices(basemesh)
+    spectra = Vector{S}(undef, length(verts))
+    Threads.@threads for i in eachindex(verts)
+        vert = verts[i]
+        solver = thread_solvers[Threads.threadid()]
+        spectra[i] = solver(vert)
+        showprogress && ProgressMeter.next!(meter)
+    end
+    return spectra
+end
+
+function bands_knit(spectra::Vector{S}, basemesh::Mesh{SVector{L,T}}, showprogress) where {L,T,O,S<:Spectrum{<:Any,O}}
+    # Build band vertices
+    baseverts = vertices(basemesh)
+    length(spectra) == length(baseverts) ||
+        throw(error("Unexpected bands_knit error: spectra and base vertices not of equal length"))
+    bandverts = BandVertex{T,L,O}[]
+    coloffsets = [0] # offsets for intervals of bandverts corresponding to each basevertex
+    for (basevert, spectrum) in zip(baseverts, spectra)
+        append_band_column!(bandverts, basevert, spectrum)
+        push!(coloffsets, length(bandverts))
+    end
+
+    # Build band neighbors
+    meter = Progress(length(vertices(basemesh)), "Step 2/2 - Knitting: ")
+    baseneighs = neighbors_forward(basemesh)
+    bandneighs = [Int[] for _ in bandverts]
+    for isrcbase in eachindex(baseverts)
+        for idstbase in baseneighs[isrcbase]
+            colsrc = coloffsets[isrcbase]+1:coloffsets[isrcbase+1]
+            coldst = coloffsets[idstbase]+1:coloffsets[idstbase+1]
+            colproj = states(spectra[idstbase])' * states(spectra[isrcbase])
+            for isrc in colsrc
+                src = bandverts[isrc]
+                available_connections = degeneracy(src)
+                for idst in coldst
+                    dst = bandverts[idst]
+                    proj = view(colproj, parentcols(dst), parentcols(src))
+                    connections = connection_rank(proj)
+                    iszero(connections) && continue
+                    push!(bandneighs[isrc], idst)
+                    available_connections -= connections
+                    available_connections <= 0 && break
+                end
+            end
+        end
+        showprogress && ProgressMeter.next!(meter)
+    end
+
+    # Build band simplices
+    bandsimps = build_cliques(bandneighs, L+1)
+
+    return Mesh(bandverts, bandneighs, bandsimps)
+end
+
+# equivalent to r = round(Int, tr(proj'proj)), but if r > 0, must compute and count singular values
+function connection_rank(proj)
+    r = round(Int, sum(abs2, proj))
+    (iszero(r) || minimum(size(proj)) == 1) && return r
+    s = svdvals(proj)
+    r = count(s -> abs2(s) >= 0.5, s)
+    return r
+end
+
+# function push_adjs!((I, J, V), ssrc, sdst, rsrc, rdst)
+#     ψdst = sdst.states
+#     ψsrc = ssrc.states
+#     proj = ψdst' * ψsrc
+#     proj´ = copy(proj')
+#     for (is, rs) in enumerate(ssrc.subs)
+#         srcdim = length(rs)
+#         for (id, rd) in enumerate(sdst.subs)
+#             crange = CartesianIndices((rd, rs))
+#             crange´ = CartesianIndices((rs, rd))
+#             rank = rankproj(proj, crange)
+#             if !iszero(rank)
+#                 srcdim -= rank
+#                 srcdim < 0 && @warn("Unexpected band connectivity between $(ssrc.basevert) and $(sdst.basevert). Rank $rank in $(size(crange)) projector.")
+#                 append!(I, (rdst[id], rsrc[is]))
+#                 append!(J, (rsrc[is], rdst[id]))
+#                 append!(V, (view(proj, crange), view(proj´, crange´)))
+#             end
+#         end
+#     end
+#     return nothing
+# end
+
+
+
+
+# collect spectrum into a band column (vector of BandVertices for equal base vertex)
+function append_band_column!(bandverts, basevert, spectrum)
+    T = eltype(basevert)
     energies´ = T[T(real(ε)) for ε in energies(spectrum)]
     states´ = states(spectrum)
     subs = collect(approxruns(energies´))
-    for rng in subs
+    for (i, rng) in enumerate(subs)
         state = orthonormalize!(view(states´, :, rng))
         energy = mean(i -> energies´[i], rng)
         push!(bandverts, BandVertex(basevert, energy, state))
@@ -93,96 +201,6 @@ function orthonormalize!(m::AbstractMatrix, threshold = 0)
     return m
 end
 
-#endregion
-
-############################################################################################
-# bands
-#region
-
-bands(h::AbstractHamiltonian, mesh::Mesh; solver = ES.LinearAlgebra(), kw...) =
-    bands(bloch(h, solver), mesh; solver, kw...)
-
-function bands(bloch::Bloch, basemesh::Mesh{SVector{L,T}};
-    mapping = missing, solver = ES.LinearAlgebra(), showprogress = true) where {T,L}
-    thread_solvers = [Eigensolver{T,L}(solver, bloch, mapping) for _ in 1:Threads.nthreads()]
-    # Step 1/2 - Diagonalize:
-    spectra = bands_diagonalize(thread_solvers, basemesh, showprogress)
-    # Step 2/2 - Knit bands:
-    bandmesh = bands_knit(spectra, basemesh, showprogress) 
-    return spectra
-end
-
-function bands_diagonalize(thread_solvers::Vector{Eigensolver{T,L,S}}, basemesh::Mesh{SVector{L,T}},
-    showprogress) where {T,L,S}
-    meter = Progress(length(vertices(basemesh)), "Step 1/2 - Diagonalizing: ")
-    verts = vertices(basemesh)
-    spectra = Vector{S}(undef, length(verts))
-    Threads.@threads for i in eachindex(verts)
-        vert = verts[i]
-        solver = thread_solvers[Threads.threadid()]
-        spectra[i] = solver(vert)
-        showprogress && ProgressMeter.next!(meter)
-    end
-    return spectra
-end
-
-function bands_knit(spectra::Vector{S}, basemesh::Mesh{SVector{L,T}}, showprogress) where {L,T,O,S<:Spectrum{<:Any,O}}
-    bandverts = BandVertex{T,L,O}[]
-    baseverts = vertices(basemesh)
-    for (spectrum, basevert) in zip(spectra, baseverts)
-        append_subspaces!(bandverts, basevert, spectrum)
-    end
-
-    
-    simps = simplices(basemesh)
-    
-    simpitr = marchingsimplices(basemesh) # D+1 - dimensional iterator over simplices
-
-    S       = basis_slice_type(first(spectra))
-    verts   = SVector{D+1,T}[]
-    vbases  = S[]
-    vptrs   = Array{UnitRange{Int}}(undef, size(vertices(basemesh)))
-    simps   = NTuple{D+1,Int}[]
-    sbases  = NTuple{D+1,Matrix{C}}[]
-    sptrs   = Array{UnitRange{Int}}(undef, size(simpitr))
-
-    cbase = eachindex(basemesh)
-    lbase = LinearIndices(cbase)
-
-    # Collect vertices
-    for csrc in cbase
-        len = length(verts)
-        push_verts!((verts, vbases), spectra[csrc])
-        vptrs[csrc] = len+1:length(verts)
-    end
-
-    # Store subspace projections in vertex adjacency matrix
-    prog = Progress(length(cbase), "Step 2/2 - Knitting bands: ")
-    S´ = basis_block_type(first(spectra))
-    I, J, V = Int[], Int[], S´[]
-    for csrc in cbase
-        for cdst in neighbors_forward(basemesh, csrc)
-            push_adjs!((I, J, V), spectra[csrc], spectra[cdst], vptrs[csrc], vptrs[cdst])
-        end
-        showprog && ProgressMeter.next!(prog)
-    end
-    n = length(verts)
-    adjprojs = sparse(I, J, V, n, n)
-    adjmat = sparsealiasbool(adjprojs)
-
-    # Build simplices from stable cycles around base simplices
-    buffers = NTuple{D+1,Int}[], NTuple{D+1,Int}[]
-    emptybases = filltuple(fill(zero(C), 0, 0), Val(D+1))  # sentinel bases for deg == 1 simplices
-    for (csimp, vs) in zip(CartesianIndices(simpitr), simpitr)  # vs isa NTuple{D+1,CartesianIndex{D}}
-        len = length(simps)
-        ranges = getindex.(Ref(vptrs), vs)
-        push_simps!((simps, sbases, verts), buffers, ranges, adjprojs, emptybases)
-        sptrs[csimp] = len+1:length(simps)
-    end
-
-    bands = [Band(basemesh, verts, vbases, vptrs, adjmat, simps, sbases, sptrs)]
-    return bands
-end
 
 #endregion
 

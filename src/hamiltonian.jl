@@ -245,7 +245,7 @@ function bloch(h::Union{Hamiltonian,ParametricHamiltonian}, ::Type{M} = SparseMa
 end
 
 function bloch(h::Union{Hamiltonian,ParametricHamiltonian}, ::Type{M}) where {M<:AbstractMatrix}
-    output = convert(M, first(harmonics(h)))
+    output = convert(M, matrix(first(harmonics(h))))
     return Bloch(h, output)
 end
 

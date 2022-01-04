@@ -505,8 +505,8 @@ end
 
 vertices(m::Mesh) = m.verts
 
-neighbors(m::Mesh) = m.neighs
-neighbors(m::Mesh, i::Int) = m.neighs[i]
+neighbors_forward(m::Mesh) = m.neighs
+neighbors_forward(m::Mesh, i::Int) = m.neighs[i]
 
 simplices(m::Mesh) = m.simps
 
@@ -537,7 +537,7 @@ const MatrixView{O} = SubArray{O,2,Matrix{O},Tuple{Base.Slice{Base.OneTo{Int}}, 
 struct BandVertex{T<:AbstractFloat,L,O}
     momentum::SVector{L,T}
     energy::T
-    basis::MatrixView{O}
+    states::MatrixView{O}
 end
 
 struct Band{T,L,O}
@@ -548,6 +548,10 @@ end
 
 vertex(v::BandVertex) = SA[v.momentum..., v.energy]
 
-basis(v::BandVertex) = v.basis
+states(v::BandVertex) = v.states
+
+degeneracy(v::BandVertex) = size(v.states, 2)
+
+parentcols(v::BandVertex) = last(parentindices(v.states))
 
 #endregion
