@@ -1,5 +1,5 @@
 ############################################################################################
-# Mesh
+# mesh
 #region
 
 # Marching Tetrahedra mesh
@@ -32,7 +32,7 @@ end
 #endregion
 
 ############################################################################################
-# Cliques
+# build_cliques
 #region
 
 # groups of n all-to-all connected neighbors, sorted
@@ -130,6 +130,7 @@ function bands_knit(spectra::Vector{S}, basemesh::Mesh{SVector{L,T}}, showprogre
 
     # Build band simplices
     bandsimps = build_cliques(bandneighs, L+1)
+    orient_simplices!(bandsimps, bandverts)
 
     return Mesh(bandverts, bandneighs, bandsimps)
 end
@@ -143,36 +144,10 @@ function connection_rank(proj)
     return r
 end
 
-# function push_adjs!((I, J, V), ssrc, sdst, rsrc, rdst)
-#     ψdst = sdst.states
-#     ψsrc = ssrc.states
-#     proj = ψdst' * ψsrc
-#     proj´ = copy(proj')
-#     for (is, rs) in enumerate(ssrc.subs)
-#         srcdim = length(rs)
-#         for (id, rd) in enumerate(sdst.subs)
-#             crange = CartesianIndices((rd, rs))
-#             crange´ = CartesianIndices((rs, rd))
-#             rank = rankproj(proj, crange)
-#             if !iszero(rank)
-#                 srcdim -= rank
-#                 srcdim < 0 && @warn("Unexpected band connectivity between $(ssrc.basevert) and $(sdst.basevert). Rank $rank in $(size(crange)) projector.")
-#                 append!(I, (rdst[id], rsrc[is]))
-#                 append!(J, (rsrc[is], rdst[id]))
-#                 append!(V, (view(proj, crange), view(proj´, crange´)))
-#             end
-#         end
-#     end
-#     return nothing
-# end
-
-
-
-
 # collect spectrum into a band column (vector of BandVertices for equal base vertex)
 function append_band_column!(bandverts, basevert, spectrum)
     T = eltype(basevert)
-    energies´ = T[T(real(ε)) for ε in energies(spectrum)]
+    energies´ = [maybereal(ε, T) for ε in energies(spectrum)]
     states´ = states(spectrum)
     subs = collect(approxruns(energies´))
     for (i, rng) in enumerate(subs)
@@ -182,6 +157,9 @@ function append_band_column!(bandverts, basevert, spectrum)
     end
     return bandverts
 end
+
+maybereal(energy, ::Type{T}) where {T<:Real} = T(real(energy))
+maybereal(energy, ::Type{T}) where {T<:Complex} = T(energy)
 
 # Gram-Schmidt but with column normalization only when norm^2 >= threshold (otherwise zero!)
 function orthonormalize!(m::AbstractMatrix, threshold = 0)
@@ -201,6 +179,17 @@ function orthonormalize!(m::AbstractMatrix, threshold = 0)
     return m
 end
 
+function orient_simplices!(simplices, vertices::Vector{B}) where {L,B<:BandVertex{<:Any,L}}
+    for simplex in simplices
+        k0 = base_coordinates(vertices[simplex[1]])
+        edges = ntuple(i -> base_coordinates(vertices[simplex[i+1]])-k0, Val(L))
+        volume = det(hcat(edges...))
+        if volume < 0 # switch last
+            simplex[end], simplex[end-1] = simplex[end-1], simplex[end]
+        end
+    end
+    return simplices
+end
 
 #endregion
 

@@ -61,7 +61,8 @@ function Base.show(io::IO, h::HoppingTerm{F,<:HopSelector}) where {F}
 $(i)  Sublattice pairs : $(h.selector.sublats === missing ? "any" : h.selector.sublats)
 $(i)  dn cell distance : $(h.selector.dcells === missing ? "any" : h.selector.dcells)
 $(i)  Hopping range    : $(displayrange(h.selector.range))
-$(i)  Coefficient      : $(h.coefficient)")
+$(i)  Coefficient      : $(h.coefficient)
+$(i)  Reverse hops     : $(h.selector.adjoint)")
 end
 
 displayparameter(::Type{<:Function}) = "Function"

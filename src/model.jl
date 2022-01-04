@@ -25,28 +25,6 @@ hopping(m::TightbindingModel; kw...) = TightbindingModel(
 #endregion
 
 ############################################################################################
-# Model terms algebra
-#region
-
-Base.:*(x::Number, m::TightbindingModel) = TightbindingModel(x .* terms(m))
-Base.:*(m::TightbindingModel, x::Number) = x * m
-Base.:-(m::TightbindingModel) = (-1) * m
-
-Base.:+(m::TightbindingModel, m´::TightbindingModel) = TightbindingModel((terms(m)..., terms(m´)...))
-Base.:-(m::TightbindingModel, m´::TightbindingModel) = m + (-m´)
-
-Base.:*(x::Number, o::OnsiteTerm) = OnsiteTerm(o.o, o.selector, x * o.coefficient)
-Base.:*(x::Number, t::HoppingTerm) = HoppingTerm(t.t, t.selector, x * t.coefficient)
-
-Base.adjoint(m::TightbindingModel) = TightbindingModel(adjoint.(terms(m)))
-Base.adjoint(t::OnsiteTerm{<:Function}) = OnsiteTerm(r -> t.o(r)', t.selector, t.coefficient')
-Base.adjoint(t::OnsiteTerm) = OnsiteTerm(t.o', t.selector, t.coefficient')
-Base.adjoint(t::HoppingTerm{<:Function}) = HoppingTerm((r, dr) -> t.t(r, -dr)', t.selector', t.coefficient')
-Base.adjoint(t::HoppingTerm) = HoppingTerm(t.t', t.selector', t.coefficient')
-
-#endregion
-
-############################################################################################
 # Model modifiers constructors
 #region
 

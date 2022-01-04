@@ -29,8 +29,6 @@ struct Lattice{T<:AbstractFloat,E,L}
     nranges::Vector{Tuple{Int,T}}  # [(nth_neighbor, min_nth_neighbor_distance)...]
 end
 
-#region internal API
-
 bravais(l::Lattice) = l.bravais
 
 unitcell(l::Lattice) = l.unitcell
@@ -107,8 +105,6 @@ Base.copy(l::Lattice) = deepcopy(l)
 
 #endregion
 
-#endregion
-
 ############################################################################################
 # Selectors  -  see selector.jl for methods
 #region
@@ -129,7 +125,10 @@ struct HopSelector{F,S,D,R}
     sublats::S
     dcells::D
     range::R
+    adjoint::Bool  # make apply take the "adjoint" of the selector
 end
+
+HopSelector(re, su, dc, ra) = HopSelector(re, su, dc, ra, false)
 
 struct AppliedHopSelector{T,E,L}
     lat::Lattice{T,E,L}
@@ -142,8 +141,6 @@ end
 struct Neighbors
     n::Int
 end
-
-#region internal API
 
 Base.Int(n::Neighbors) = n.n
 
@@ -169,7 +166,9 @@ iswithinrange(dr, (rmin, rmax)::Tuple{Real,Real}) =  ifelse(rmin^2 <= dr'dr <= r
 isbelowrange(dr, s::AppliedHopSelector) = isbelowrange(dr, s.range)
 isbelowrange(dr, (rmin, rmax)::Tuple{Real,Real}) =  ifelse(dr'dr < rmin^2, true, false)
 
-#endregion
+Base.adjoint(s::SiteSelector) = s
+
+Base.adjoint(s::HopSelector) = HopSelector(s.region, s.sublats, s.dcells, s.range, !s.adjoint)
 
 #endregion
 
@@ -207,8 +206,6 @@ end
 
 const TightbindingModelTerm = Union{OnsiteTerm,HoppingTerm,AppliedOnsiteTerm,AppliedHoppingTerm}
 
-#region Term internal API
-
 terms(t::TightbindingModel) = t.terms
 
 selector(t::TightbindingModelTerm) = t.selector
@@ -223,7 +220,24 @@ selector(t::TightbindingModelTerm) = t.selector
 
 (term::AppliedHoppingTerm)(r, dr, orbs) = term.t(r, dr, orbs)
 
-#endregion
+# Model term algebra
+
+Base.:*(x::Number, m::TightbindingModel) = TightbindingModel(x .* terms(m))
+Base.:*(m::TightbindingModel, x::Number) = x * m
+Base.:-(m::TightbindingModel) = (-1) * m
+
+Base.:+(m::TightbindingModel, m´::TightbindingModel) = TightbindingModel((terms(m)..., terms(m´)...))
+Base.:-(m::TightbindingModel, m´::TightbindingModel) = m + (-m´)
+
+Base.:*(x::Number, o::OnsiteTerm) = OnsiteTerm(o.o, o.selector, x * o.coefficient)
+Base.:*(x::Number, t::HoppingTerm) = HoppingTerm(t.t, t.selector, x * t.coefficient)
+
+Base.adjoint(m::TightbindingModel) = TightbindingModel(adjoint.(terms(m)))
+Base.adjoint(t::OnsiteTerm{<:Function}) = OnsiteTerm(r -> t.o(r)', t.selector, t.coefficient')
+Base.adjoint(t::OnsiteTerm) = OnsiteTerm(t.o', t.selector, t.coefficient')
+Base.adjoint(t::HoppingTerm{<:Function}) = HoppingTerm((r, dr) -> t.t(r, -dr)', t.selector', t.coefficient')
+Base.adjoint(t::HoppingTerm) = HoppingTerm(t.t', t.selector', t.coefficient')
+
 #endregion
 
 ############################################################################################
@@ -265,8 +279,6 @@ end
 const Modifier = Union{OnsiteModifier,HoppingModifier}
 const AppliedModifier = Union{AppliedOnsiteModifier,AppliedHoppingModifier}
 
-#region Modifier internal API
-
 selector(m::Modifier) = m.selector
 
 parameters(m::Union{Modifier,AppliedModifier}) = m.f.params
@@ -286,7 +298,6 @@ pointers(m::AppliedModifier) = m.ptrs
     sanitize_block(B, m.f.f(t, r, dr; kw...), orbs)
 
 #endregion
-#endregion
 
 ############################################################################################
 # OrbitalStructure  -  see hamiltonian.jl for methods
@@ -297,8 +308,6 @@ struct OrbitalStructure{B<:Union{Number,SMatrix}}
     norbitals::Vector{Int}
     offsets::Vector{Int}  # index offset for each sublattice (== offsets(::Lattice))
 end
-
-#region internal API
 
 norbitals(o::OrbitalStructure) = o.norbitals
 
@@ -318,7 +327,6 @@ sublats(o::OrbitalStructure) = 1:nsublats(o)
 
 siterange(o::OrbitalStructure, sublat) = (1+o.offsets[sublat]):o.offsets[sublat+1]
 
-#endregion
 #endregion
 
 ############################################################################################
@@ -365,8 +373,6 @@ end
 Hamiltonian(l::Lattice{T,E,L}, o::OrbitalStructure{B}, h::Vector{Harmonic{L,SparseMatrixCSC{B,Int}}}) where {T,E,L,B} =
     Hamiltonian{T,E,L,B}(l, o, h)
 
-#region internal API
-
 hamiltonian(h::Hamiltonian) = h
 
 orbitalstructure(h::Hamiltonian) = h.orbstruct
@@ -385,8 +391,6 @@ Base.size(h::Hamiltonian, i...) = size(first(harmonics(h)), i...)
 
 copy_harmonics(h::Hamiltonian) = Hamiltonian(lattice(h), orbitalstructure(h), deepcopy(harmonics(h)))
 
-# threadcopy(h::Hamiltonian) = h
-
 function LinearAlgebra.ishermitian(h::Hamiltonian)
     for hh in h.harmonics
         isassigned(h, -hh.dn) || return false
@@ -395,7 +399,6 @@ function LinearAlgebra.ishermitian(h::Hamiltonian)
     return true
 end
 
-#endregion
 #endregion
 
 ############################################################################################
@@ -430,9 +433,6 @@ blocktype(h::ParametricHamiltonian) = blocktype(parent(h))
 
 lattice(h::ParametricHamiltonian) = lattice(parent(h))
 
-# threadcopy(h::ParametricHamiltonian) =
-#     ParametricHamiltonian(h.hparent, threadcopy(h.h), h.modifiers, h.allptrs, h.allparams)
-
 Base.size(h::ParametricHamiltonian, i...) = size(parent(h), i...)
 
 #endregion
@@ -459,8 +459,6 @@ orbtype(h::FlatHamiltonian) = orbtype(orbitalstructure(h))
 blocktype(h::FlatHamiltonian) = blocktype(orbitalstructure(h))
 
 norbitals(h::FlatHamiltonian) = norbitals(orbitalstructure(h))
-
-# threadcopy(h::FlatHamiltonian) = FlatHamiltonian(threadcopy(parent(h)), orbitalstructure(h))
 
 Base.size(h::FlatHamiltonian) = nsites(orbitalstructure(h)), nsites(orbitalstructure(h))
 Base.size(h::FlatHamiltonian, i) = i <= 0 ? throw(BoundsError()) : ifelse(1 <= i <= 2, nsites(orbitalstructure(h)), 1)
@@ -489,8 +487,6 @@ latdim(b::Bloch) = latdim(lattice(b.h))
 
 Base.size(b::Bloch, dims...) = size(b.output, dims...)
 
-# threadcopy(b::Bloch) = Bloch(threadcopy(b.h), copy(b.output))
-
 #endregion
 
 ############################################################################################
@@ -505,8 +501,14 @@ end
 
 vertices(m::Mesh) = m.verts
 
+vertex_coordinates(m::Mesh) = (coordinates(v) for v in vertices(m))
+vertex_coordinates(m::Mesh, i) = coordinates(vertices(m)[i])
+
 neighbors_forward(m::Mesh) = m.neighs
 neighbors_forward(m::Mesh, i::Int) = m.neighs[i]
+
+edge_coordinates(m::Mesh) =
+    ((vertex_coordinates(m, i), vertex_coordinates(m, j)) for i in eachindex(vertices(m)) for j in neighbors_forward(m, i))
 
 simplices(m::Mesh) = m.simps
 
@@ -546,7 +548,12 @@ struct Band{T,L,O}
     # simpbases::Vector{NTuple{D,Matrix{Complex{T}}}}  # basis transformations on each simplex
 end
 
-vertex(v::BandVertex) = SA[v.momentum..., v.energy]
+
+coordinates(v::BandVertex) = SA[v.momentum..., v.energy]
+
+base_coordinates(v::BandVertex) = v.momentum
+
+energy(v::BandVertex) = v.energy
 
 states(v::BandVertex) = v.states
 

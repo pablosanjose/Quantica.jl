@@ -20,11 +20,16 @@ function apply(s::HopSelector, lat::Lattice{T,E,L}) where {T,E,L}
     rmin, rmax = sanitize_minmaxrange(s.range, lat)
     L > 0 && s.dcells === missing && rmax === missing &&
         throw(ErrorException("Tried to apply an infinite-range HopSelector on an unbounded lattice"))
-    region = (r, dr) -> region_apply((r, dr), s.region)
+    region = s.adjoint ? (r, dr) -> region_apply((r, -dr), s.region) :
+                         (r, dr) -> region_apply((r, dr), s.region)
     sublats = Pair{Symbol,Symbol}[]
     recursive_push!(sublats, s.sublats)
     dcells = SVector{L,Int}[]
     recursive_push!(dcells, s.dcells)
+    if s.adjoint
+        sublats .= reverse.(sublats)
+        dcells .*= -1
+    end
     return AppliedHopSelector{T,E,L}(lat, region, sublats, dcells, (rmin, rmax))
 end
 
