@@ -90,6 +90,9 @@ function bands_diagonalize(thread_solvers::Vector{Eigensolver{T,L,S}}, basemesh:
     return spectra
 end
 
+# Each base vertex holds a column of subspaces. Each subspace s of degeneracy d will connect
+# to up to d other subspaces s´ in columns of a neighboring base vertex. N connections are
+# possible if the projector ⟨s'|s⟩ has N singular values greater than 1/2
 function bands_knit(spectra::Vector{S}, basemesh::Mesh{SVector{L,T}}, showprogress) where {L,T,O,S<:Spectrum{<:Any,O}}
     # Build band vertices
     baseverts = vertices(basemesh)
