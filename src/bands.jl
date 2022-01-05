@@ -7,26 +7,25 @@ function mesh(rngs::Vararg{<:Any,L}) where {L}
     vmat   = [SVector(pt) for pt in Iterators.product(rngs...)]
     verts  = vec(vmat)
     cinds  = CartesianIndices(vmat)
-    neighs = marching_neighbors_forward(cinds)  # sorted neighbors of i, with n[i][j] > i
-    simps  = build_cliques(neighs, L+1)    # a Vector of Vectors of L+1 point indices (Ints)
-    return Mesh(verts, neighs, simps)
+    neighs_forward = marching_neighbors_forward(cinds)  # sorted neighbors of i, with n[i][j] > i
+    simps  = build_cliques(neighs_forward, L+1)    # a Vector of Vectors of L+1 point indices (Ints)
+    return Mesh(verts, neighs_forward, simps)
 end
 
 # forward neighbors, cind is a CartesianRange over vertices
 function marching_neighbors_forward(cinds)
     linds = LinearIndices(cinds)
-    nmat = [Int[] for _ in cinds]
+    matrix_forward = [Int[] for _ in cinds]
     for cind in cinds
-        nlist = nmat[cind]
-        forward = max(cind, first(cinds)):min(cind + oneunit(cind), last(cinds))
+        nlist = matrix_forward[cind]
+        forward  = max(cind, first(cinds)):min(cind + oneunit(cind), last(cinds))
         for cind´ in forward
             cind === cind´ && continue
             push!(nlist, linds[cind´])
         end
-        sort!(nlist)
     end
-    neighs = vec(nmat)
-    return neighs
+    neighs_forward = vec(matrix_forward)
+    return neighs_forward
 end
 
 #endregion
@@ -72,7 +71,7 @@ function bands(bloch::Bloch, basemesh::Mesh{SVector{L,T}};
     # Step 1/2 - Diagonalize:
     spectra = bands_diagonalize(thread_solvers, basemesh, showprogress)
     # Step 2/2 - Knit bands:
-    bandmesh = bands_knit(spectra, basemesh, showprogress) 
+    bandmesh = bands_knit(spectra, first(thread_solvers), basemesh, showprogress) 
     return bandmesh
 end
 
@@ -93,7 +92,7 @@ end
 # Each base vertex holds a column of subspaces. Each subspace s of degeneracy d will connect
 # to up to d other subspaces s´ in columns of a neighboring base vertex. N connections are
 # possible if the projector ⟨s'|s⟩ has N singular values greater than 1/2
-function bands_knit(spectra::Vector{S}, basemesh::Mesh{SVector{L,T}}, showprogress) where {L,T,O,S<:Spectrum{<:Any,O}}
+function bands_knit(spectra::Vector{S}, solver, basemesh::Mesh{SVector{L,T}}, showprogress) where {L,T,O,S<:Spectrum{<:Any,O}}
     # Build band vertices
     baseverts = vertices(basemesh)
     length(spectra) == length(baseverts) ||
@@ -106,29 +105,36 @@ function bands_knit(spectra::Vector{S}, basemesh::Mesh{SVector{L,T}}, showprogre
     end
 
     # Build band neighbors
-    meter = Progress(length(vertices(basemesh)), "Step 2/2 - Knitting: ")
+    meter = Progress(length(spectra), "Step 2/2 - Knitting: ")
     baseneighs = neighbors_forward(basemesh)
+    baseneighs_extra = similar(baseneighs, 0)
+    len = length(baseneighs)
     bandneighs = [Int[] for _ in bandverts]
-    for isrcbase in eachindex(baseverts)
-        for idstbase in baseneighs[isrcbase]
-            colsrc = coloffsets[isrcbase]+1:coloffsets[isrcbase+1]
-            coldst = coloffsets[idstbase]+1:coloffsets[idstbase+1]
-            colproj = states(spectra[idstbase])' * states(spectra[isrcbase])
-            for isrc in colsrc
-                src = bandverts[isrc]
-                available_connections = degeneracy(src)
-                for idst in coldst
-                    dst = bandverts[idst]
-                    proj = view(colproj, parentcols(dst), parentcols(src))
-                    connections = connection_rank(proj)
-                    iszero(connections) && continue
-                    push!(bandneighs[isrc], idst)
-                    available_connections -= connections
-                    available_connections <= 0 && break
-                end
+    # `enumerate` (unlike `eachindex`) allows loop to continue if `spectra` grows in loop
+    for (isrcbase, srcspect) in enumerate(spectra)
+        knit_refined = isrcbase > len
+        srcneighs = knit_refined ? baseneighs_extra[isrcbase - len] : baseneighs[isrcbase]
+        for idstbase in srcneighs
+            srcrange  = coloffsets[isrcbase]+1:coloffsets[isrcbase+1]
+            dstrange  = coloffsets[idstbase]+1:coloffsets[idstbase+1]
+            dstspect  = spectra[idstbase]
+            colproj   = states(dstspect)' * states(srcspect)
+            validedge = knit_base_edge!(bandneighs, bandverts, srcrange, dstrange, colproj, knit_refined)
+            if !validedge && isrcbase <= length(baseverts) # (only check non-refined edges)
+                # refine base edge (non-recursive), adding a new column mid-edge
+                newvertex = 0.5 * (baseverts[isrcbase] + baseverts[idstbase])
+                newspectrum = solver(newvertex)
+                push!(spectra, newspectrum)  # this extends the outermost loop
+                append_band_column!(bandverts, newvertex, newspectrum)
+                # don'f forget to add empty neighbors to added bandverts
+                append!(bandneighs, [Int[] for _ in length(bandneighs)+1:length(bandverts)])
+                push!(coloffsets, length(bandverts))
+                newneighs = intersect(neighbors(basemesh, isrcbase), neighbors(basemesh, idstbase))
+                push!(newneighs, isrcbase, idstbase)
+                push!(baseneighs_extra, newneighs)
             end
         end
-        showprogress && ProgressMeter.next!(meter)
+        showprogress && ProgressMeter.next!(meter)  # This might run over if we refine
     end
 
     # Build band simplices
@@ -136,15 +142,6 @@ function bands_knit(spectra::Vector{S}, basemesh::Mesh{SVector{L,T}}, showprogre
     orient_simplices!(bandsimps, bandverts)
 
     return Mesh(bandverts, bandneighs, bandsimps)
-end
-
-# equivalent to r = round(Int, tr(proj'proj)), but if r > 0, must compute and count singular values
-function connection_rank(proj)
-    r = round(Int, sum(abs2, proj))
-    (iszero(r) || minimum(size(proj)) == 1) && return r
-    s = svdvals(proj)
-    r = count(s -> abs2(s) >= 0.5, s)
-    return r
 end
 
 # collect spectrum into a band column (vector of BandVertices for equal base vertex)
@@ -180,6 +177,45 @@ function orthonormalize!(m::AbstractMatrix, threshold = 0)
         col .*= factor
     end
     return m
+end
+
+# Take two intervals (srcrange, dstrange) of bandverts (linked by base mesh)
+# and fill bandneighs with their connections, using the projector colproj
+# If knit_refined, reverse src <-> dst in bandneighs (so they remain "forward" neighs)
+function knit_base_edge!(bandneighs, bandverts, srcrange, dstrange, colproj, knit_refined)
+    for isrc in srcrange
+        src = bandverts[isrc]
+        # available_connections = degeneracy(src)
+        for idst in dstrange
+            dst = bandverts[idst]
+            proj = view(colproj, parentcols(dst), parentcols(src))
+            connections = connection_rank(proj) # sentinel for invalid link: -1
+            if connections > 0
+                knit_refined ? push!(bandneighs[idst], isrc) : push!(bandneighs[isrc], idst)
+            elseif connections < 0 && !knit_refined
+                # for i in srcrange
+                #     # undo all added neighbors for all sources in this base edge
+                #     empty!(bandneighs[i])
+                # end
+                return false              # stop processing this edge, return valid = false
+            end
+        end
+        # available_connections == 0 || @show "incomplete"
+    end
+    return true  # return valid = true
+end
+
+# equivalent to r = round(Int, tr(proj'proj)), but if r > 0, must compute and count singular values
+# if the rank is borderline (any singular value is ≈ 1/√2), return -1 (sentinel value)
+function connection_rank(proj)
+    if size(proj, 1) == 1 || size(proj, 2) == 1
+        rfloat = sum(abs2, proj)
+        return rfloat ≈ 0.5 ? -1 : round(Int, rfloat)
+    else
+        sv = svdvals(proj)
+        sv .= abs2.(sv)
+        return any(≈(0.5), sv) ? -1 : count(>(0.5), sv)
+    end
 end
 
 function orient_simplices!(simplices, vertices::Vector{B}) where {L,B<:BandVertex{<:Any,L}}

@@ -495,8 +495,19 @@ Base.size(b::Bloch, dims...) = size(b.output, dims...)
 
 struct Mesh{S}
     verts::Vector{S}
-    neighs::Vector{Vector{Int}}  # forward neighbors of vertex i, with neighs[i][j] > i
-    simps::Vector{Vector{Int}}
+    neighs::Vector{Vector{Int}}          # all neighbors neighs[i][j] of vertex i
+    neighs_forward::Vector{Vector{Int}}  # forward neighbors neighs_forward[i][j] > i of vertex i
+    simps::Vector{Vector{Int}}           # list of simplices, each one a group of neighboring vertex indices
+end
+
+Mesh(v, n_forward, s) = Mesh(v, neighbors_from_forward(n_forward), n_forward, s)
+
+function neighbors_from_forward(neighs_forward)
+    neighs = deepcopy(neighs_forward)
+    for (src, dsts) in enumerate(neighs_forward), dst in dsts
+        push!(neighs[dst], src)
+    end
+    return neighs
 end
 
 vertices(m::Mesh) = m.verts
@@ -504,8 +515,11 @@ vertices(m::Mesh) = m.verts
 vertex_coordinates(m::Mesh) = (coordinates(v) for v in vertices(m))
 vertex_coordinates(m::Mesh, i) = coordinates(vertices(m)[i])
 
-neighbors_forward(m::Mesh) = m.neighs
-neighbors_forward(m::Mesh, i::Int) = m.neighs[i]
+neighbors_forward(m::Mesh) = m.neighs_forward
+neighbors_forward(m::Mesh, i::Int) = m.neighs_forward[i]
+
+neighbors(m::Mesh) = m.neighs
+neighbors(m::Mesh, i::Int) = m.neighs[i]
 
 edge_coordinates(m::Mesh) =
     ((vertex_coordinates(m, i), vertex_coordinates(m, j)) for i in eachindex(vertices(m)) for j in neighbors_forward(m, i))
