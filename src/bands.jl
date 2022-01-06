@@ -106,7 +106,7 @@ bands(h::AbstractHamiltonian, mesh::Mesh; solver = ES.LinearAlgebra(), kw...) =
     bands(bloch(h, solver), mesh; solver, kw...)
 
 function bands(bloch::Bloch, basemesh::Mesh{SVector{L,T}};
-    mapping = missing, solver = ES.LinearAlgebra(), showprogress = true) where {T,L}
+    mapping = missing, solver = ES.LinearAlgebra(), showprogress = true, cleanorder = 0) where {T,L}
 
     # Step 1 - Diagonalize:
     baseverts = vertices(basemesh)
@@ -128,6 +128,7 @@ function bands(bloch::Bloch, basemesh::Mesh{SVector{L,T}};
         append_band_column!(bandverts, basevert, spectrum)
         push!(coloffsets, length(bandverts))
     end
+    ProgressMeter.finish!(meter)
 
     # Step 2 - Knit seams:
     # Each base vertex holds a column of subspaces. Each subspace s of degeneracy d will connect
@@ -144,32 +145,47 @@ function bands(bloch::Bloch, basemesh::Mesh{SVector{L,T}};
         end
         showprogress && ProgressMeter.next!(meter)
     end
+    ProgressMeter.finish!(meter)
 
     # Step 3 - Clean seams:
-    meter = Progress(length(crossed_seams), "Step 3 - Cleaning: ")
-    onesolver = first(thread_solvers)
-    bandneighs_all = neighbors_from_forward(bandneighs)
-    basemesh = copy(basemesh)  # to avoid changing parent mesh
-    maxnewcols = 0
-    newcols = 0
-    for (isrcbase, idstbase) in crossed_seams
-        column_added = on_dislocation_add_column!((bandverts, spectra, coloffsets, basemesh),
-                       isrcbase, idstbase, bandneighs, bandneighs_all, onesolver)
-        newcols += column_added
-        if column_added && newcols <= maxnewcols
-            cut_seam!(bandneighs, isrcbase, idstbase, coloffsets)
-            idstbase´ = length(spectra) # index of new vertex
-            newneighs = neighbors(basemesh, idstbase´)
-            for isrcbase´ in newneighs  # neighbors of new vertex are new edge sources
-                crossed = knit_seam!(bandneighs, bandverts, spectra, coloffsets, isrcbase´, idstbase´)
-                crossed && push!(crossed_seams, (isrcbase´, idstbase´))
-                # grow and fill bandneighs_all with newly added bandneighs
-                start = length(bandneighs_all) + 1
-                foreach(_ -> push!(bandneighs_all, Int[]), start:length(bandverts))
-                # append_backward_neighbors!(bandneighs_all, bandneighs, start)
-                bandneighs_all = neighbors_from_forward(bandneighs)
+    if cleanorder > 0
+        meter = Progress(cleanorder, "Step 3 - Cleaning: ")
+        onesolver = first(thread_solvers)
+        bandneighs_all = neighbors_from_forward(bandneighs)
+        basemesh = copy(basemesh)  # to avoid changing parent mesh
+        num_original_baseverts = length(baseverts) # to distinguish new base vertices
+        newcols = 0
+        for (ind_cs, (isrcbase, idstbase)) in enumerate(crossed_seams)
+            column_added = on_dislocation_add_column!((bandverts, spectra, coloffsets, basemesh),
+                        isrcbase, idstbase, bandneighs, bandneighs_all, num_original_baseverts, onesolver)
+            newcols += column_added
+            if column_added && newcols <= cleanorder
+                # zero-out the seam from crossed_seams, signaling it must not be processed again
+                crossed_seams[ind_cs] = (0, 0)
+                # first check if added base vertex is a neighbor of processed crossed_seams
+                # if so, re-add it at the end to process again (since it is now connected to a new vertex)
+                newvertex = length(spectra) # index of new vertex
+                newneighs = neighbors(basemesh, newvertex)
+                for ind_cs´ in 1:ind_cs-1
+                    (i, j) = crossed_seams[ind_cs´]
+                    i in newneighs && j in newneighs && push!(crossed_seams, (i, j))
+                end
+                # remove old seam neighbors
+                cut_seam!(bandneighs, isrcbase, idstbase, coloffsets)
+                idstbase´ = newvertex
+                for isrcbase´ in newneighs  # neighbors of new vertex are new edge sources
+                    crossed = knit_seam!(bandneighs, bandverts, spectra, coloffsets, isrcbase´, idstbase´)
+                    crossed && push!(crossed_seams, (isrcbase´, idstbase´))
+                    # grow and fill bandneighs_all with newly added bandneighs
+                    start = length(bandneighs_all) + 1
+                    foreach(_ -> push!(bandneighs_all, Int[]), start:length(bandverts))
+                    # append_backward_neighbors!(bandneighs_all, bandneighs, start)
+                    bandneighs_all = neighbors_from_forward(bandneighs)
+                end
+                showprogress && ProgressMeter.next!(meter)
             end
         end
+        ProgressMeter.finish!(meter)
     end
 
     # Build band simplices
@@ -253,7 +269,8 @@ function connection_rank(proj)
     end
 end
 
-function on_dislocation_add_column!((bandverts, spectra, coloffsets, basemesh), isrcbase, idstbase, bandneighs, bandneighs_all, solver)
+function on_dislocation_add_column!((bandverts, spectra, coloffsets, basemesh),
+    isrcbase, idstbase, bandneighs, bandneighs_all, num_original_baseverts, solver)
     # Check for dislocation
     srcrange = coloffsets[isrcbase]+1:coloffsets[isrcbase+1]
     dstrange = coloffsets[idstbase]+1:coloffsets[idstbase+1]
@@ -265,14 +282,11 @@ function on_dislocation_add_column!((bandverts, spectra, coloffsets, basemesh), 
             neigh_dst, neigh_dst´ = bandneighs[idst], bandneighs[idst´]
             # If cross neighbors (forward plus backward) have different intersections
             # there is a dislocation i.e. some simplex is frustrated
-            isdislocation = !equal_intersection(bandneighs_all, (isrc, idst´), (isrc´, idst))
-            # @show isdislocation
-            # @show (isrc, idst´), (isrc´, idst)
-            # i1, i2, i3, i4 = bandneighs_all[isrc], bandneighs_all[idst´], bandneighs_all[isrc´], bandneighs_all[idst]
-            # @show i1, i2, i3, i4
-            # @show i1 ∩ i2, i3 ∩ i4
-            # @show bandneighs_all
-            if isdislocation
+            is_near_dislocation =
+                !equal_intersection(bandneighs_all, (isrc, idst´), (isrc´, idst)) ||
+                seam_near_new_vertex(basemesh, isrcbase, idstbase, num_original_baseverts)
+            # @show is_dislocation, is_near_dislocation, isrcbase, idstbase
+            if is_near_dislocation
                 # in such case, split base edge
                 εs, εs´, εd, εd´ = energy.(getindex.(Ref(bandverts), (isrc, isrc´, idst, idst´)))
                 ks, kd = vertices(basemesh, isrcbase), vertices(basemesh, idstbase)
@@ -318,6 +332,14 @@ function first_inside_second((s1, s2), (p1, p2))
         end
     end
     return true
+end
+
+function seam_near_new_vertex(basemesh, isrcbase, idstbase, num_original_vertices)
+    for nsrc in neighbors(basemesh, isrcbase)
+        nsrc <= num_original_vertices && continue
+        nsrc in neighbors(basemesh, idstbase) && return true
+    end
+    return false
 end
 
 function orient_simplices!(simplices, vertices::Vector{B}) where {L,B<:BandVertex{<:Any,L}}
