@@ -1,5 +1,5 @@
 ############################################################################################
-# mesh
+# mesh methods
 #region
 
 # Marching Tetrahedra mesh
@@ -29,7 +29,7 @@ function marching_neighbors_forward(cinds)
 end
 
 # simplices are not recomputed for performance
-function splitedge!(m, (i, j), k)
+function split_edge!(m, (i, j), k)
     i == j && return m
     if i > j
         i, j = j, i
@@ -68,11 +68,6 @@ function fast_setdiff!(c, rng)
     resize!(c, i)
     return c
 end
-#endregion
-
-############################################################################################
-# build_cliques
-#region
 
 # groups of n all-to-all connected neighbors, sorted
 function build_cliques(neighs, nverts)
@@ -292,7 +287,7 @@ function on_dislocation_add_column!((bandverts, spectra, coloffsets, basemesh),
                 ks, kd = vertices(basemesh, isrcbase), vertices(basemesh, idstbase)
                 λ = (εs - εs´) / (εd´ - εs´ - εd + εs)
                 k = ks + λ * (kd - ks)
-                splitedge!(basemesh, (isrcbase, idstbase), k)
+                split_edge!(basemesh, (isrcbase, idstbase), k)
                 spectrum = solver(k)
                 push!(spectra, spectrum)
                 # collect spectrum into a set of new band vertices
