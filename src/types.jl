@@ -483,6 +483,12 @@ blocktype(::Bloch{<:Any,B}) where {B} = B
 
 orbtype(::Bloch{<:Any,B}) where {B} = orbtype(B)
 
+function spectrumtype(b::Bloch)
+    E = complex(eltype(blocktype(b)))
+    O = orbtype(b)
+    return Spectrum{E,O}
+end
+
 latdim(b::Bloch) = latdim(lattice(b.h))
 
 Base.size(b::Bloch, dims...) = size(b.output, dims...)
@@ -502,18 +508,19 @@ end
 
 Mesh(v, n_forward, s) = Mesh(v, neighbors_from_forward(n_forward), n_forward, s)
 
-function neighbors_from_forward(neighs_forward)
-    neighs = deepcopy(neighs_forward)
-    for (src, dsts) in enumerate(neighs_forward), dst in dsts
-        push!(neighs[dst], src)
+neighbors_from_forward(n_forward) =
+    append_backward_neighbors!(deepcopy(n_forward), n_forward)
+
+# append backward neighbors to neighbors of sites >= start
+function append_backward_neighbors!(neighs, n_forward, start = 1)
+    for (src, dsts) in enumerate(n_forward), dst in dsts
+        dst >= start && push!(neighs[dst], src)
     end
     return neighs
 end
 
 vertices(m::Mesh) = m.verts
-
-vertex_coordinates(m::Mesh) = (coordinates(v) for v in vertices(m))
-vertex_coordinates(m::Mesh, i) = coordinates(vertices(m)[i])
+vertices(m::Mesh, i) = m.verts[i]
 
 neighbors_forward(m::Mesh) = m.neighs_forward
 neighbors_forward(m::Mesh, i::Int) = m.neighs_forward[i]
@@ -521,10 +528,9 @@ neighbors_forward(m::Mesh, i::Int) = m.neighs_forward[i]
 neighbors(m::Mesh) = m.neighs
 neighbors(m::Mesh, i::Int) = m.neighs[i]
 
-edge_coordinates(m::Mesh) =
-    ((vertex_coordinates(m, i), vertex_coordinates(m, j)) for i in eachindex(vertices(m)) for j in neighbors_forward(m, i))
-
 simplices(m::Mesh) = m.simps
+
+Base.copy(m::Mesh) = Mesh(copy(m.verts), deepcopy(m.neighs), deepcopy(m.neighs_forward), deepcopy(m.simps))
 
 #endregion
 
@@ -562,10 +568,15 @@ struct Band{T,L,O}
     # simpbases::Vector{NTuple{D,Matrix{Complex{T}}}}  # basis transformations on each simplex
 end
 
-
 coordinates(v::BandVertex) = SA[v.momentum..., v.energy]
 
 base_coordinates(v::BandVertex) = v.momentum
+
+vertex_coordinates(m::Mesh{<:BandVertex}) = (coordinates(v) for v in vertices(m))
+vertex_coordinates(m::Mesh{<:BandVertex}, i) = coordinates(vertices(m)[i])
+
+edge_coordinates(m::Mesh{<:BandVertex}) =
+    ((vertex_coordinates(m, i), vertex_coordinates(m, j)) for i in eachindex(vertices(m)) for j in neighbors_forward(m, i))
 
 energy(v::BandVertex) = v.energy
 

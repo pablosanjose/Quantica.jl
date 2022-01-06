@@ -28,6 +28,46 @@ function marching_neighbors_forward(cinds)
     return neighs_forward
 end
 
+# simplices are not recomputed for performance
+function splitedge!(m, (i, j), k)
+    i == j && return m
+    if i > j
+        i, j = j, i
+    end
+    cut_edge!(m, (i, j))
+    verts = vertices(m)
+    push!(verts, k)
+    push!(neighbors(m), Int[])
+    push!(neighbors_forward(m), Int[])
+    dst = length(verts)
+    newneighs = intersect(neighbors(m, i), neighbors(m, j))
+    push!(newneighs, i, j)
+    for src in newneighs
+        push!(neighbors_forward(m, src), dst)
+        push!(neighbors(m, src), dst)
+        push!(neighbors(m, dst), src)
+    end
+    return m
+end
+
+function cut_edge!(m, (i, j))
+    @assert i < j
+    fast_setdiff!(neighbors_forward(m, i), j)
+    fast_setdiff!(neighbors(m, i), j)
+    fast_setdiff!(neighbors(m, j), i)
+    return m
+end
+
+function fast_setdiff!(c, rng)
+    i = 0
+    for x in c
+        x in rng && continue
+        i += 1
+        c[i] = x
+    end
+    resize!(c, i)
+    return c
+end
 #endregion
 
 ############################################################################################
@@ -67,36 +107,21 @@ bands(h::AbstractHamiltonian, mesh::Mesh; solver = ES.LinearAlgebra(), kw...) =
 
 function bands(bloch::Bloch, basemesh::Mesh{SVector{L,T}};
     mapping = missing, solver = ES.LinearAlgebra(), showprogress = true) where {T,L}
-    thread_solvers = [Eigensolver{T,L}(solver, bloch, mapping) for _ in 1:Threads.nthreads()]
-    # Step 1/2 - Diagonalize:
-    spectra = bands_diagonalize(thread_solvers, basemesh, showprogress)
-    # Step 2/2 - Knit bands:
-    bandmesh = bands_knit(spectra, first(thread_solvers), basemesh, showprogress) 
-    return bandmesh
-end
 
-function bands_diagonalize(thread_solvers::Vector{Eigensolver{T,L,S}}, basemesh::Mesh{SVector{L,T}},
-    showprogress) where {T,L,S}
-    meter = Progress(length(vertices(basemesh)), "Step 1/2 - Diagonalizing: ")
-    verts = vertices(basemesh)
-    spectra = Vector{S}(undef, length(verts))
-    Threads.@threads for i in eachindex(verts)
-        vert = verts[i]
+    # Step 1 - Diagonalize:
+    baseverts = vertices(basemesh)
+    meter = Progress(length(baseverts), "Step 1 - Diagonalizing: ")
+    thread_solvers = [Eigensolver{T,L}(solver, bloch, mapping) for _ in 1:Threads.nthreads()]
+    S = spectrumtype(bloch)
+    spectra = Vector{S}(undef, length(baseverts))
+    Threads.@threads for i in eachindex(baseverts)
+        vert = baseverts[i]
         solver = thread_solvers[Threads.threadid()]
         spectra[i] = solver(vert)
         showprogress && ProgressMeter.next!(meter)
     end
-    return spectra
-end
-
-# Each base vertex holds a column of subspaces. Each subspace s of degeneracy d will connect
-# to up to d other subspaces s´ in columns of a neighboring base vertex. N connections are
-# possible if the projector ⟨s'|s⟩ has N singular values greater than 1/2
-function bands_knit(spectra::Vector{S}, solver, basemesh::Mesh{SVector{L,T}}, showprogress) where {L,T,O,S<:Spectrum{<:Any,O}}
-    # Build band vertices
-    baseverts = vertices(basemesh)
-    length(spectra) == length(baseverts) ||
-        throw(error("Unexpected bands_knit error: spectra and base vertices not of equal length"))
+    # Collect band vertices and store column offsets
+    O = orbtype(bloch)
     bandverts = BandVertex{T,L,O}[]
     coloffsets = [0] # offsets for intervals of bandverts corresponding to each basevertex
     for (basevert, spectrum) in zip(baseverts, spectra)
@@ -104,37 +129,47 @@ function bands_knit(spectra::Vector{S}, solver, basemesh::Mesh{SVector{L,T}}, sh
         push!(coloffsets, length(bandverts))
     end
 
-    # Build band neighbors
-    meter = Progress(length(spectra), "Step 2/2 - Knitting: ")
+    # Step 2 - Knit seams:
+    # Each base vertex holds a column of subspaces. Each subspace s of degeneracy d will connect
+    # to other subspaces s´ in columns of a neighboring base vertex. Connections are
+    # possible if the projector ⟨s'|s⟩ has any singular value greater than 1/2
+    meter = Progress(length(spectra), "Step 2 - Knitting: ")
     baseneighs = neighbors_forward(basemesh)
-    baseneighs_extra = similar(baseneighs, 0)
-    len = length(baseneighs)
     bandneighs = [Int[] for _ in bandverts]
-    # `enumerate` (unlike `eachindex`) allows loop to continue if `spectra` grows in loop
-    for (isrcbase, srcspect) in enumerate(spectra)
-        knit_refined = isrcbase > len
-        srcneighs = knit_refined ? baseneighs_extra[isrcbase - len] : baseneighs[isrcbase]
-        for idstbase in srcneighs
-            srcrange  = coloffsets[isrcbase]+1:coloffsets[isrcbase+1]
-            dstrange  = coloffsets[idstbase]+1:coloffsets[idstbase+1]
-            dstspect  = spectra[idstbase]
-            colproj   = states(dstspect)' * states(srcspect)
-            validedge = knit_base_edge!(bandneighs, bandverts, srcrange, dstrange, colproj, knit_refined)
-            if !validedge && isrcbase <= length(baseverts) # (only check non-refined edges)
-                # refine base edge (non-recursive), adding a new column mid-edge
-                newvertex = 0.5 * (baseverts[isrcbase] + baseverts[idstbase])
-                newspectrum = solver(newvertex)
-                push!(spectra, newspectrum)  # this extends the outermost loop
-                append_band_column!(bandverts, newvertex, newspectrum)
-                # don'f forget to add empty neighbors to added bandverts
-                append!(bandneighs, [Int[] for _ in length(bandneighs)+1:length(bandverts)])
-                push!(coloffsets, length(bandverts))
-                newneighs = intersect(neighbors(basemesh, isrcbase), neighbors(basemesh, idstbase))
-                push!(newneighs, isrcbase, idstbase)
-                push!(baseneighs_extra, newneighs)
+    crossed_seams = Tuple{Int,Int}[]
+    for isrcbase in eachindex(spectra)
+        for idstbase in baseneighs[isrcbase]
+            crossed = knit_seam!(bandneighs, bandverts, spectra, coloffsets, isrcbase, idstbase)
+            crossed && push!(crossed_seams, (isrcbase, idstbase))
+        end
+        showprogress && ProgressMeter.next!(meter)
+    end
+
+    # Step 3 - Clean seams:
+    meter = Progress(length(crossed_seams), "Step 3 - Cleaning: ")
+    onesolver = first(thread_solvers)
+    bandneighs_all = neighbors_from_forward(bandneighs)
+    basemesh = copy(basemesh)  # to avoid changing parent mesh
+    maxnewcols = 0
+    newcols = 0
+    for (isrcbase, idstbase) in crossed_seams
+        column_added = on_dislocation_add_column!((bandverts, spectra, coloffsets, basemesh),
+                       isrcbase, idstbase, bandneighs, bandneighs_all, onesolver)
+        newcols += column_added
+        if column_added && newcols <= maxnewcols
+            cut_seam!(bandneighs, isrcbase, idstbase, coloffsets)
+            idstbase´ = length(spectra) # index of new vertex
+            newneighs = neighbors(basemesh, idstbase´)
+            for isrcbase´ in newneighs  # neighbors of new vertex are new edge sources
+                crossed = knit_seam!(bandneighs, bandverts, spectra, coloffsets, isrcbase´, idstbase´)
+                crossed && push!(crossed_seams, (isrcbase´, idstbase´))
+                # grow and fill bandneighs_all with newly added bandneighs
+                start = length(bandneighs_all) + 1
+                foreach(_ -> push!(bandneighs_all, Int[]), start:length(bandverts))
+                # append_backward_neighbors!(bandneighs_all, bandneighs, start)
+                bandneighs_all = neighbors_from_forward(bandneighs)
             end
         end
-        showprogress && ProgressMeter.next!(meter)  # This might run over if we refine
     end
 
     # Build band simplices
@@ -181,41 +216,108 @@ end
 
 # Take two intervals (srcrange, dstrange) of bandverts (linked by base mesh)
 # and fill bandneighs with their connections, using the projector colproj
-# If knit_refined, reverse src <-> dst in bandneighs (so they remain "forward" neighs)
-function knit_base_edge!(bandneighs, bandverts, srcrange, dstrange, colproj, knit_refined)
+# hascrossing signals some crossing of energies across the seam
+function knit_seam!(bandneighs, bandverts, spectra, coloffsets, isrcbase, idstbase)
+    srcrange = coloffsets[isrcbase]+1:coloffsets[isrcbase+1]
+    dstrange = coloffsets[idstbase]+1:coloffsets[idstbase+1]
+    colproj  = states(spectra[idstbase])' * states(spectra[isrcbase])
+    idsthigh = 0
+    hascrossing = false
     for isrc in srcrange
         src = bandverts[isrc]
         # available_connections = degeneracy(src)
         for idst in dstrange
             dst = bandverts[idst]
             proj = view(colproj, parentcols(dst), parentcols(src))
-            connections = connection_rank(proj) # sentinel for invalid link: -1
+            connections = connection_rank(proj)
             if connections > 0
-                knit_refined ? push!(bandneighs[idst], isrc) : push!(bandneighs[isrc], idst)
-            elseif connections < 0 && !knit_refined
-                # for i in srcrange
-                #     # undo all added neighbors for all sources in this base edge
-                #     empty!(bandneighs[i])
-                # end
-                return false              # stop processing this edge, return valid = false
+                push!(bandneighs[isrc], idst)
+                hascrossing = hascrossing || idst < idsthigh
+                idsthigh = idst
             end
         end
         # available_connections == 0 || @show "incomplete"
     end
-    return true  # return valid = true
+    return hascrossing
 end
 
 # equivalent to r = round(Int, tr(proj'proj)), but if r > 0, must compute and count singular values
-# if the rank is borderline (any singular value is ≈ 1/√2), return -1 (sentinel value)
 function connection_rank(proj)
-    if size(proj, 1) == 1 || size(proj, 2) == 1
-        rfloat = sum(abs2, proj)
-        return rfloat ≈ 0.5 ? -1 : round(Int, rfloat)
+    frank = sum(abs2, proj)
+    fastrank = frank ≈ 0.5 ? 1 : round(Int, frank)  # upon doubt, connect
+    if iszero(fastrank) || size(proj, 1) == 1 || size(proj, 2) == 1
+        return fastrank
     else
         sv = svdvals(proj)
-        sv .= abs2.(sv)
-        return any(≈(0.5), sv) ? -1 : count(>(0.5), sv)
+        return count(s -> abs2(s) >= 0.5 || abs2(s) ≈ 0.5, sv)
     end
+end
+
+function on_dislocation_add_column!((bandverts, spectra, coloffsets, basemesh), isrcbase, idstbase, bandneighs, bandneighs_all, solver)
+    # Check for dislocation
+    srcrange = coloffsets[isrcbase]+1:coloffsets[isrcbase+1]
+    dstrange = coloffsets[idstbase]+1:coloffsets[idstbase+1]
+    # @show isrcbase, idstbase
+    for isrc in srcrange, isrc´ in isrc+1:coloffsets[isrcbase+1]
+        for idst in bandneighs[isrc], idst´ in bandneighs[isrc´]
+            # Check whether band vertices are in correct column and whether they cross
+            idst in dstrange && idst´ in dstrange && idst´ < idst || continue
+            neigh_dst, neigh_dst´ = bandneighs[idst], bandneighs[idst´]
+            # If cross neighbors (forward plus backward) have different intersections
+            # there is a dislocation i.e. some simplex is frustrated
+            isdislocation = !equal_intersection(bandneighs_all, (isrc, idst´), (isrc´, idst))
+            # @show isdislocation
+            # @show (isrc, idst´), (isrc´, idst)
+            # i1, i2, i3, i4 = bandneighs_all[isrc], bandneighs_all[idst´], bandneighs_all[isrc´], bandneighs_all[idst]
+            # @show i1, i2, i3, i4
+            # @show i1 ∩ i2, i3 ∩ i4
+            # @show bandneighs_all
+            if isdislocation
+                # in such case, split base edge
+                εs, εs´, εd, εd´ = energy.(getindex.(Ref(bandverts), (isrc, isrc´, idst, idst´)))
+                ks, kd = vertices(basemesh, isrcbase), vertices(basemesh, idstbase)
+                λ = (εs - εs´) / (εd´ - εs´ - εd + εs)
+                k = ks + λ * (kd - ks)
+                splitedge!(basemesh, (isrcbase, idstbase), k)
+                spectrum = solver(k)
+                push!(spectra, spectrum)
+                # collect spectrum into a set of new band vertices
+                append_band_column!(bandverts, k, spectrum)
+                # add empty neighbor lists for new band vertices
+                foreach(_ -> push!(bandneighs, Int[]), length(bandneighs)+1:length(bandverts))
+                # update coloffsets
+                push!(coloffsets, length(bandverts))
+                # stop searching, report new column added
+                return true
+            end
+        end
+    end
+    return false
+end
+
+function cut_seam!(bandneighs, isrcbase, idstbase, coloffsets)
+    srcrange = coloffsets[isrcbase]+1:coloffsets[isrcbase+1]
+    dstrange = coloffsets[idstbase]+1:coloffsets[idstbase+1]
+    for isrc in srcrange
+        fast_setdiff!(bandneighs[isrc], dstrange)
+    end
+    return bandneighs
+end
+
+# Define s = (s₁ ,s₂), p = (p₁, p₂). Is s₁ ∩ s₂ == p₁ ∩ p₂ ?
+# This happens iif (s₁ ∩ s₂) ∈ pᵢ and (p₁ ∩ p₂) ∈ sᵢ
+equal_intersection(ns, (i, j), (i´, j´)) =
+    equal_intersection((ns[i], ns[j]), (ns[i´], ns[j´]))
+equal_intersection(s, p) =
+    first_inside_second(s, p) && first_inside_second(p, s)
+
+function first_inside_second((s1, s2), (p1, p2))
+    for s in s1
+        if s in s2 # s ∈ (s1 ∩ s2)
+            s in p1 && s in p2 || return false
+        end
+    end
+    return true
 end
 
 function orient_simplices!(simplices, vertices::Vector{B}) where {L,B<:BandVertex{<:Any,L}}

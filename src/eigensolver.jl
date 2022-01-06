@@ -55,7 +55,7 @@ using FunctionWrappers: FunctionWrapper
 using LinearAlgebra: Eigen, I, lu, ldiv!
 using SparseArrays: SparseMatrixCSC, AbstractSparseMatrix
 using Quantica: Quantica, Bloch, Spectrum, ensureloaded, AbstractHamiltonian, call!,
-    flatten, orbtype, blocktype, OrbitalStructure, orbitalstructure, SVector, SMatrix
+    flatten, spectrumtype, SVector, SMatrix
 import Quantica: bloch, Eigensolver
 
 #endregion
@@ -67,10 +67,9 @@ import Quantica: bloch, Eigensolver
 abstract type EigensolverBackend end
 
 function Quantica.Eigensolver{T,L}(backend::EigensolverBackend, bloch::Bloch, mapping = missing) where {T,L}
-    E = complex(eltype(blocktype(bloch)))
-    S = orbtype(bloch)
+    S = spectrumtype(bloch)
     solver = mappedsolver(backend, bloch, mapping)
-    return Eigensolver(FunctionWrapper{Spectrum{E,S},Tuple{SVector{L,T}}}(solver))
+    return Eigensolver(FunctionWrapper{S,Tuple{SVector{L,T}}}(solver))
 end
 
 Quantica.Eigensolver{T,L}(backend::EigensolverBackend, h::AbstractHamiltonian, mapping = missing) where {T,L} =
