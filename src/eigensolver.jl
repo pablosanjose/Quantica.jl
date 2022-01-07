@@ -1,11 +1,11 @@
 ############################################################################################
-# Eigensolver and Spectrum
+# AppliedEigensolver and Spectrum
 #region
 
-(s::Eigensolver{<:Any,L})(φs::Vararg{<:Any,L}) where {L} = s.solver(SVector(φs))
-(s::Eigensolver{<:Any,L})(φs::SVector{L}) where {L} = s.solver(φs)
-(s::Eigensolver{<:Any,L})(φs...) where {L} =
-    throw(ArgumentError("Eigensolver call requires $L parameters/Bloch phases"))
+(s::AppliedEigensolver{<:Any,L})(φs::Vararg{<:Any,L}) where {L} = s.solver(SVector(φs))
+(s::AppliedEigensolver{<:Any,L})(φs::SVector{L}) where {L} = s.solver(φs)
+(s::AppliedEigensolver{<:Any,L})(φs...) where {L} =
+    throw(ArgumentError("AppliedEigensolver call requires $L parameters/Bloch phases"))
 
 Spectrum(evals, evecs) = Eigen(sorteigs!(evals, evecs)...)
 Spectrum(evals::AbstractVector, evecs::AbstractVector{<:AbstractVector}) =
@@ -27,7 +27,7 @@ end
 ############################################################################################
 # Dynamic package loader
 #   This is in global Quantica scope to avoid name collisions between package and
-#   Eigensolvers.EigensolverBackend. We `import` instead of `using` to avoid collisions
+#   Eigensolvers.AbstractEigensolver. We `import` instead of `using` to avoid collisions
 #   between several backends
 #region
 
@@ -43,10 +43,11 @@ end
 
 ############################################################################################
 # Eigensolvers module
-#   Strategy: combine a EigensolverBackend with a Hamiltonian (or Bloch) to produce an
-#   Eigensolver, is essentially a FunctionWrapper from an SVector to a Spectrum === Eigen
-#   An EigensolverBackend is defined by a set of kwargs for the eigensolver and a set of
-#   methods AbstractMatrix -> Eigen associated to that EigensolverBackend
+#   Strategy: apply an AbstractEigensolver to a Hamiltonian (or Bloch) to produce an
+#   AppliedEigensolver, which is essentially a FunctionWrapper from an SVector to a 
+#   Spectrum === Eigen. An AbstractEigensolver is defined by a set of kwargs for the
+#   eigensolver and a set of methods AbstractMatrix -> Eigen associated to that
+#   AbstractEigensolver
 #region
 
 module Eigensolvers
@@ -54,48 +55,26 @@ module Eigensolvers
 using FunctionWrappers: FunctionWrapper
 using LinearAlgebra: Eigen, I, lu, ldiv!
 using SparseArrays: SparseMatrixCSC, AbstractSparseMatrix
-using Quantica: Quantica, Bloch, Spectrum, ensureloaded, AbstractHamiltonian, call!,
-    flatten, spectrumtype, SVector, SMatrix
-import Quantica: bloch, Eigensolver
+using Quantica: Quantica, Bloch, Spectrum, AbstractEigensolver, AbstractHamiltonian, call!,
+      ensureloaded, flatten, spectrumtype, SVector, SMatrix
+import Quantica: bloch
 
 #endregion
 
 ############################################################################################
-# Types
-#region
-
-abstract type EigensolverBackend end
-
-function Quantica.Eigensolver{T,L}(backend::EigensolverBackend, bloch::Bloch, mapping = missing) where {T,L}
-    S = spectrumtype(bloch)
-    solver = mappedsolver(backend, bloch, mapping)
-    return Eigensolver(FunctionWrapper{S,Tuple{SVector{L,T}}}(solver))
-end
-
-Quantica.Eigensolver{T,L}(backend::EigensolverBackend, h::AbstractHamiltonian, mapping = missing) where {T,L} =
-    Eigensolver{T,L}(backend, bloch(h, backend), mapping)
-
-mappedsolver(backend::EigensolverBackend, bloch, ::Missing) =
-    φs -> backend(call!(bloch, φs))
-mappedsolver(backend::EigensolverBackend, bloch, mapping) =
-    φs -> backend(call!(bloch, mapping(Tuple(φs)...)))
-
-#endregion
-
-############################################################################################
-# EigensolverBackend's
+# AbstractEigensolvers
 #region
 
 ## Fallbacks
 
-Quantica.bloch(h::AbstractHamiltonian, ::EigensolverBackend) = bloch(h)
+Quantica.bloch(h::AbstractHamiltonian, ::AbstractEigensolver) = bloch(h)
 
-(b::EigensolverBackend)(m) =
+(b::AbstractEigensolver)(m) =
     throw(ArgumentError("The eigensolver backend $(typeof(b)) is not defined to work on $(typeof(m))"))
 
 #### LinearAlgebra #####
 
-struct LinearAlgebra{K} <: EigensolverBackend
+struct LinearAlgebra{K} <: AbstractEigensolver
     kwargs::K
 end
 
@@ -112,7 +91,7 @@ Quantica.bloch(h::AbstractHamiltonian, ::LinearAlgebra) = bloch(flatten(h), Matr
 
 #### Arpack #####
 
-struct Arpack{K} <: EigensolverBackend
+struct Arpack{K} <: AbstractEigensolver
     kwargs::K
 end
 
@@ -130,7 +109,7 @@ Quantica.bloch(h::AbstractHamiltonian, ::Arpack) = bloch(flatten(h))
 
 #### KrylovKit #####
 
-struct KrylovKit{P,K} <: EigensolverBackend
+struct KrylovKit{P,K} <: AbstractEigensolver
     params::P
     kwargs::K
 end
@@ -145,9 +124,12 @@ function (backend::KrylovKit)(mat)
     return Spectrum(ε, Ψ)
 end
 
+# KrylovKit gives strange error with SMatrix eltypes
+Quantica.bloch(h::AbstractHamiltonian, ::KrylovKit) = bloch(flatten(h))
+
 #### ArnoldiMethod #####
 
-struct ArnoldiMethod{K} <: EigensolverBackend
+struct ArnoldiMethod{K} <: AbstractEigensolver
     kwargs::K
 end
 
@@ -162,14 +144,17 @@ function (backend::ArnoldiMethod)(mat)
     return Spectrum(ε, Ψ)
 end
 
+# ArnoldiMethod complains of missing eps method with SMatrix eltypes
+Quantica.bloch(h::AbstractHamiltonian, ::ArnoldiMethod) = bloch(flatten(h))
+
 #### ShiftInvertSparse ####
 
-struct ShiftInvertSparse{T,E<:EigensolverBackend} <: EigensolverBackend
+struct ShiftInvertSparse{T,E<:AbstractEigensolver} <: AbstractEigensolver
     origin::T
     eigensolver::E
 end
 
-function ShiftInvertSparse(e::EigensolverBackend, origin)
+function ShiftInvertSparse(e::AbstractEigensolver, origin)
     ensureloaded(:LinearMaps)
     return ShiftInvertSparse(origin, e)
 end
@@ -185,29 +170,6 @@ function (backend::ShiftInvertSparse)(mat::AbstractSparseMatrix{T}) where {T<:Nu
 end
 
 Quantica.bloch(h::AbstractHamiltonian, ::ShiftInvertSparse) = bloch(flatten(h))
-
-#endregion
-
-############################################################################################
-# show
-#region
-
-function Base.show(io::IO, s::EigensolverBackend)
-    i = get(io, :indent, "")
-    print(io, i, summary(s))
-end
-
-Base.summary(s::EigensolverBackend) =
-    "EigensolverBackend ($(Base.nameof(typeof(s))))"
-
-function Base.show(io::IO, s::Eigensolver)
-    i = get(io, :indent, "")
-    ioindent = IOContext(io, :indent => "  ")
-    print(io, i, summary(s), "\n")
-end
-
-Base.summary(::Eigensolver{T,L}) where {T,L} =
-    "Eigensolver{$T,$L}: Eigensolver over an $L-dimensional parameter manifold of type $T"
 
 #endregion
 

@@ -123,7 +123,7 @@ function bands(bloch::Bloch, basemesh::Mesh{SVector{L,T}};
     coloffsets = Int[]
     crossed_seams = Tuple{Int,Int}[]
     basemesh = patchlevel > 0 ? copy(basemesh) : basemesh
-    solvers = [Eigensolver{T,L}(solver, bloch, mapping) for _ in 1:Threads.nthreads()]
+    solvers = [apply(solver, bloch, SVector{L,T}, mapping) for _ in 1:Threads.nthreads()]
     data = (; spectra, bandverts, bandneighs, coloffsets, crossed_seams, solvers, basemesh, patchlevel, showprogress)
 
     # Step 1 - Diagonalize:

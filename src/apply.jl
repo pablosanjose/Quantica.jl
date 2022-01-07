@@ -148,3 +148,20 @@ function pointers(h::Hamiltonian{T,E}, s::AppliedHopSelector{T,E}) where {T,E}
 end
 
 #endregion
+
+############################################################################################
+# apply AbstractEigensolver
+#region
+
+function apply(backend::AbstractEigensolver, bloch::Bloch, ::Type{SVector{L,T}}, mapping = missing) where {L,T}
+    S = spectrumtype(bloch)
+    solver = apply(backend, bloch, mapping)
+    return AppliedEigensolver(FunctionWrapper{S,Tuple{SVector{L,T}}}(solver))
+end
+
+apply(backend::AbstractEigensolver, h::AbstractHamiltonian, t::Type, mapping = missing)=
+   apply(backend, bloch(h, backend), t, mapping)
+apply(backend::AbstractEigensolver, bloch, ::Missing) = φs -> backend(call!(bloch, φs))
+apply(backend::AbstractEigensolver, bloch, mapping) = φs -> backend(call!(bloch, mapping(Tuple(φs)...)))
+
+#endregion

@@ -521,12 +521,14 @@ Base.copy(m::Mesh) = Mesh(copy(m.verts), deepcopy(m.neighs), deepcopy(m.simps))
 #endregion
 
 ############################################################################################
-# Eigensolver  -  see eigensolver.jl for methods and solver backends
+# Eigensolvers  -  see eigensolver.jl for methods and solver backends <: AbstractEigensolver
 #region
+
+abstract type AbstractEigensolver end
 
 const Spectrum{E<:Complex,O} = Eigen{O,E,Matrix{O},Vector{E}}
 
-struct Eigensolver{T,L,S<:Spectrum}
+struct AppliedEigensolver{T,L,S<:Spectrum}
     solver::FunctionWrapper{S,Tuple{SVector{L,T}}}
 end
 
@@ -548,11 +550,11 @@ struct BandVertex{T<:AbstractFloat,L,O}
     states::MatrixView{O}
 end
 
-struct Band{T,L,O}
-    solvers::Vector{Eigensolver{T,L}}                # one per Julia thread
-    mesh::Mesh{BandVertex{T,L,O}}
-    # simpbases::Vector{NTuple{D,Matrix{Complex{T}}}}  # basis transformations on each simplex
-end
+# struct Band{T,L,O}
+#     solvers::Vector{AppliedEigensolver{T,L}}                # one per Julia thread
+#     mesh::Mesh{BandVertex{T,L,O}}
+#     # simpbases::Vector{NTuple{D,Matrix{Complex{T}}}}  # basis transformations on each simplex
+# end
 
 coordinates(v::BandVertex) = SA[v.momentum..., v.energy]
 

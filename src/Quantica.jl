@@ -33,7 +33,6 @@ export @SMatrix, @SVector, SMatrix, SVector, SA
 export ishermitian, I
 
 include("types.jl")
-include("apply.jl")
 include("iterators.jl")
 include("selector.jl")
 include("lattice.jl")
@@ -43,6 +42,7 @@ include("hamiltonian.jl")
 include("supercell.jl")
 include("transform.jl")
 include("eigensolver.jl")
+include("apply.jl")
 # include("ket.jl")
 # include("parametric.jl")
 # include("slice.jl")
