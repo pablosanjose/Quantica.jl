@@ -44,7 +44,7 @@ end
 ############################################################################################
 # Eigensolvers module
 #   Strategy: apply an AbstractEigensolver to a Hamiltonian (or Bloch) to produce an
-#   AppliedEigensolver, which is essentially a FunctionWrapper from an SVector to a 
+#   AppliedEigensolver, which is essentially a FunctionWrapper from an SVector to a
 #   Spectrum === Eigen. An AbstractEigensolver is defined by a set of kwargs for the
 #   eigensolver and a set of methods AbstractMatrix -> Eigen associated to that
 #   AbstractEigensolver
@@ -82,8 +82,8 @@ function LinearAlgebra(; kw...)
     return LinearAlgebra(kw)
 end
 
-function (backend::LinearAlgebra)(mat::AbstractMatrix{<:Number})
-    ε, Ψ = Quantica.LinearAlgebra.eigen(mat; backend.kwargs...)
+function (solver::LinearAlgebra)(mat::AbstractMatrix{<:Number})
+    ε, Ψ = Quantica.LinearAlgebra.eigen(mat; solver.kwargs...)
     return Spectrum(ε, Ψ)
 end
 
@@ -100,8 +100,8 @@ function Arpack(; kw...)
     return Arpack(kw)
 end
 
-function (backend::Arpack)(mat::AbstractMatrix{<:Number})
-    ε, Ψ, _ = Quantica.Arpack.eigs(mat; backend.kwargs...)
+function (solver::Arpack)(mat::AbstractMatrix{<:Number})
+    ε, Ψ, _ = Quantica.Arpack.eigs(mat; solver.kwargs...)
     return Spectrum(ε, Ψ)
 end
 
@@ -119,8 +119,8 @@ function KrylovKit(params...; kw...)
     return KrylovKit(params, kw)
 end
 
-function (backend::KrylovKit)(mat)
-    ε, Ψ, _ = Quantica.KrylovKit.eigsolve(mat, backend.params...; backend.kwargs...)
+function (solver::KrylovKit)(mat)
+    ε, Ψ, _ = Quantica.KrylovKit.eigsolve(mat, solver.params...; solver.kwargs...)
     return Spectrum(ε, Ψ)
 end
 
@@ -138,8 +138,8 @@ function ArnoldiMethod(; kw...)
     return ArnoldiMethod(kw)
 end
 
-function (backend::ArnoldiMethod)(mat)
-    pschur, _ = Quantica.ArnoldiMethod.partialschur(mat; backend.kwargs...)
+function (solver::ArnoldiMethod)(mat)
+    pschur, _ = Quantica.ArnoldiMethod.partialschur(mat; solver.kwargs...)
     ε, Ψ = Quantica.ArnoldiMethod.partialeigen(pschur)
     return Spectrum(ε, Ψ)
 end
@@ -159,13 +159,13 @@ function ShiftInvertSparse(e::AbstractEigensolver, origin)
     return ShiftInvertSparse(origin, e)
 end
 
-function (backend::ShiftInvertSparse)(mat::AbstractSparseMatrix{T}) where {T<:Number}
-    mat´ = mat - I*backend.origin
+function (solver::ShiftInvertSparse)(mat::AbstractSparseMatrix{T}) where {T<:Number}
+    mat´ = mat - I * solver.origin
     F = lu(mat´)
     lmap = Quantica.LinearMaps.LinearMap{T}((x, y) -> ldiv!(x, F, y), size(mat)...;
         ismutating = true, ishermitian = false)
-    spectrum = backend.eigensolver(lmap)
-    @. spectrum.values = 1 / (spectrum.values) + backend.origin
+    spectrum = solver.eigensolver(lmap)
+    @. spectrum.values = 1 / (spectrum.values) + solver.origin
     return spectrum
 end
 

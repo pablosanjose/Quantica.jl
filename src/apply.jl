@@ -153,15 +153,15 @@ end
 # apply AbstractEigensolver
 #region
 
-function apply(backend::AbstractEigensolver, bloch::Bloch, ::Type{SVector{L,T}}, mapping = missing) where {L,T}
+function apply(solver::AbstractEigensolver, bloch::Bloch, ::Type{SVector{L,T}}, mapping = missing) where {L,T}
     S = spectrumtype(bloch)
-    solver = apply(backend, bloch, mapping)
+    solver = apply(solver, bloch, mapping)
     return AppliedEigensolver(FunctionWrapper{S,Tuple{SVector{L,T}}}(solver))
 end
 
-apply(backend::AbstractEigensolver, h::AbstractHamiltonian, t::Type, mapping = missing)=
-   apply(backend, bloch(h, backend), t, mapping)
-apply(backend::AbstractEigensolver, bloch, ::Missing) = φs -> backend(call!(bloch, φs))
-apply(backend::AbstractEigensolver, bloch, mapping) = φs -> backend(call!(bloch, mapping(Tuple(φs)...)))
+apply(solver::AbstractEigensolver, h::AbstractHamiltonian, t::Type, mapping = missing)=
+   apply(solver, bloch(h, solver), t, mapping)
+apply(solver::AbstractEigensolver, bloch, ::Missing) = φs -> solver(call!(bloch, φs))
+apply(solver::AbstractEigensolver, bloch, mapping) = φs -> solver(call!(bloch, mapping(Tuple(φs)...)))
 
 #endregion
