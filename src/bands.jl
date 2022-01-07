@@ -127,18 +127,28 @@ function bands(bloch::Bloch, basemesh::Mesh{SVector{L,T}};
     data = (; spectra, bandverts, bandneighs, coloffsets, crossed_seams, solvers, basemesh, patchlevel, showprogress)
 
     # Step 1 - Diagonalize:
+    # Uses multiple AppliedEigensolvers (one per Julia thread) to diagonalize bloch at each
+    # vertex of basemesh. Then, it collects each of the produced Spectrum (aka "columns")
+    # into a bandverts::Vector{BandVertex}, recording the coloffsets for each column
     band_diagonalize!(data)
 
     # Step 2 - Knit seams:
-    # Each base vertex holds a column of subspaces. Each subspace s of degeneracy d will connect
-    # to other subspaces s´ in columns of a neighboring base vertex. Connections are
+    # Each base vertex holds a column of subspaces. Each subspace s of degeneracy d will
+    # connect to other subspaces s´ in columns of a neighboring base vertex. Connections are
     # possible if the projector ⟨s'|s⟩ has any singular value greater than 1/2
     band_knit!(data)
 
     # Step 3 - Patch seams:
+    # Dirac points and other topological band defects will usually produce dislocations in
+    # mesh connectivity that results in missing simplices. We patch these defects by
+    # recursively refining (a copy of) basemesh to a certain patchlevel, and rediagonalizing
+    # bloch at each new vertex. A sufficiently high patchlevel will usually converge to a
+    # band mesh without defects
+    @show count_band_defects(data)
     if patchlevel > 0
         band_patch!(data)
     end
+    @show count_band_defects(data)
 
     # Build band simplices
     bandsimps = build_cliques(bandneighs, L+1)
@@ -224,23 +234,25 @@ function band_knit!(data)
         data.showprogress && ProgressMeter.next!(meter)
     end
     ProgressMeter.finish!(meter)
+    return data
 end
 
 # Take two intervals (srcrange, dstrange) of bandverts (linked by base mesh)
 # and fill bandneighs with their connections, using the projector colproj
 # hascrossing signals some crossing of energies across the seam
 function knit_seam!(data, isrcbase, idstbase)
-    srcrange = data.coloffsets[isrcbase]+1:data.coloffsets[isrcbase+1]
-    dstrange = data.coloffsets[idstbase]+1:data.coloffsets[idstbase+1]
+    srcrange = column_range(data, isrcbase)
+    dstrange = column_range(data, idstbase)
     colproj  = states(data.spectra[idstbase])' * states(data.spectra[isrcbase])
     idsthigh = 0
     hascrossing = false
+    threshold = 0.5
     for isrc in srcrange
         src = data.bandverts[isrc]
         for idst in dstrange
             dst = data.bandverts[idst]
             proj = view(colproj, parentcols(dst), parentcols(src))
-            connections = connection_rank(proj)
+            connections = connection_rank(proj, threshold)
             if connections > 0
                 push!(data.bandneighs[isrc], idst)
                 push!(data.bandneighs[idst], isrc)
@@ -252,17 +264,31 @@ function knit_seam!(data, isrcbase, idstbase)
     return hascrossing
 end
 
-# equivalent to r = round(Int, tr(proj'proj)), but if r > 0, must compute and count singular values
-function connection_rank(proj)
-    frank = sum(abs2, proj)
-    fastrank = frank ≈ 0.5 ? 1 : round(Int, frank)  # upon doubt, connect
+# number of singular values greater than √threshold. Fast rank-1 |svd|^2 is r = tr(proj'proj)
+# For higher ranks and r > 0 we must compute and count singular values
+function connection_rank(proj, threshold)
+    rankf = sum(abs2, proj)
+    fastrank = ifelse(rankf >= threshold || rankf ≈ threshold, 1, 0)  # For rank=1 proj: upon doubt, connect
     if iszero(fastrank) || size(proj, 1) == 1 || size(proj, 2) == 1
         return fastrank
     else
         sv = svdvals(proj)
-        return count(s -> abs2(s) >= 0.5 || abs2(s) ≈ 0.5, sv)
+        return count(s -> abs2(s) >= threshold || abs2(s) ≈ threshold, sv)
     end
 end
+
+# function connection_rank(proj, threshold)
+#     frank = sum(abs2, proj)
+#     fastrank = frank ≈ threshold ? 1 : round(Int, frank)  # upon doubt, connect
+#     if iszero(fastrank) || size(proj, 1) == 1 || size(proj, 2) == 1
+#         return fastrank
+#     else
+#         sv = svdvals(proj)
+#         return count(s -> abs2(s) >= threshold || abs2(s) ≈ threshold, sv)
+#     end
+# end
+
+column_range(data, ibase) = data.coloffsets[ibase]+1:data.coloffsets[ibase+1]
 
 #endregion
 
@@ -273,24 +299,17 @@ end
 function band_patch!(data)
     meter = Progress(data.patchlevel, "Step 3 - Patching: ")
     baseverts = vertices(data.basemesh)
-    num_original_baseverts = length(baseverts) # to distinguish new base vertices
     newcols = 0
-    for (ind_cs, (isrcbase, idstbase)) in enumerate(data.crossed_seams)
-        column_added = on_dislocation_add_column!(data, isrcbase, idstbase, num_original_baseverts)
+    while newcols < data.patchlevel && !isempty(data.crossed_seams)
+        (isrcbase, idstbase) = popfirst!(data.crossed_seams)
+        column_added = on_dislocation_add_column!(data, isrcbase, idstbase)
         newcols += column_added
-        if column_added && newcols <= data.patchlevel
-            # zero-out the seam from crossed_seams, signaling it must not be processed again
-            data.crossed_seams[ind_cs] = (0, 0)
-            # first check if added base vertex is a neighbor of processed crossed_seams
-            # if so, re-add it at the end to process again (since it is now connected to a new vertex)
-            newvertex = length(data.spectra) # index of new vertex
-            newneighs = neighbors(data.basemesh, newvertex)
-            for ind_cs´ in 1:ind_cs-1
-                (i, j) = data.crossed_seams[ind_cs´]
-                i in newneighs && j in newneighs && push!(data.crossed_seams, (i, j))
-            end
+        if column_added
+            @show newcols
             # remove old seam neighbors
             cut_seam!(data, isrcbase, idstbase)
+            newvertex = length(data.spectra) # index of new vertex
+            newneighs = neighbors(data.basemesh, newvertex)
             idstbase´ = newvertex
             for isrcbase´ in newneighs  # neighbors of new vertex are new edge sources
                 crossed = knit_seam!(data, isrcbase´, idstbase´)
@@ -299,12 +318,13 @@ function band_patch!(data)
             data.showprogress && ProgressMeter.next!(meter)
         end
     end
+    return data
 end
 
-function on_dislocation_add_column!(data, isrcbase, idstbase, num_original_baseverts)
+function on_dislocation_add_column!(data, isrcbase, idstbase)
     # Check for dislocation
-    srcrange = data.coloffsets[isrcbase]+1:data.coloffsets[isrcbase+1]
-    dstrange = data.coloffsets[idstbase]+1:data.coloffsets[idstbase+1]
+    srcrange = column_range(data, isrcbase)
+    dstrange = column_range(data, idstbase)
     solver = first(data.solvers)
     for isrc in srcrange, isrc´ in isrc+1:last(srcrange)
         for idst  in neighbors_forward(data.bandneighs, isrc),
@@ -314,9 +334,9 @@ function on_dislocation_add_column!(data, isrcbase, idstbase, num_original_basev
             # If cross neighbors (forward plus backward) have different intersections
             # there is a dislocation i.e. some simplex is frustrated
             is_near_dislocation =
-                !equal_intersection(data.bandneighs, (isrc, idst´), (isrc´, idst)) ||
-                seam_near_new_vertex(data.basemesh, num_original_baseverts, isrcbase, idstbase)
-            # @show is_dislocation, is_near_dislocation, isrcbase, idstbase
+                is_frustrated_crossing(data, (isrc, isrc´), (idst, idst´)) ||
+                is_next_to_frustrated_crossing(data, (isrcbase, idstbase), (isrc, isrc´), (idst, idst´)) ||
+                is_next_to_frustrated_crossing(data, (idstbase, isrcbase), (idst, idst´), (isrc, isrc´))
             if is_near_dislocation
                 # in such case, split base edge
                 εs, εs´, εd, εd´ = energy.(getindex.(Ref(data.bandverts), (isrc, isrc´, idst, idst´)))
@@ -341,8 +361,8 @@ function on_dislocation_add_column!(data, isrcbase, idstbase, num_original_basev
 end
 
 function cut_seam!(data, isrcbase, idstbase)
-    srcrange = data.coloffsets[isrcbase]+1:data.coloffsets[isrcbase+1]
-    dstrange = data.coloffsets[idstbase]+1:data.coloffsets[idstbase+1]
+    srcrange = column_range(data, isrcbase)
+    dstrange = column_range(data, idstbase)
     for isrc in srcrange
         fast_setdiff!(data.bandneighs[isrc], dstrange)
     end
@@ -352,10 +372,13 @@ function cut_seam!(data, isrcbase, idstbase)
     return data
 end
 
+function is_frustrated_crossing(data, (i, i´), (j, j´))
+    ns = data.bandneighs
+    return !equal_intersection((ns[i], ns[j´]), (ns[i´], ns[j]))
+end
+
 # Define s = (s₁ ,s₂), p = (p₁, p₂). Is s₁ ∩ s₂ == p₁ ∩ p₂ ?
 # This happens iif (s₁ ∩ s₂) ∈ pᵢ and (p₁ ∩ p₂) ∈ sᵢ
-equal_intersection(ns, (i, j), (i´, j´)) =
-    equal_intersection((ns[i], ns[j]), (ns[i´], ns[j´]))
 equal_intersection(s, p) =
     first_inside_second(s, p) && first_inside_second(p, s)
 
@@ -368,12 +391,41 @@ function first_inside_second((s1, s2), (p1, p2))
     return true
 end
 
-function seam_near_new_vertex(basemesh, num_original_vertices, isrcbase, idstbase)
-    for nsrc in neighbors(basemesh, isrcbase)
-        nsrc <= num_original_vertices && continue
-        nsrc in neighbors(basemesh, idstbase) && return true
+# we shift j, j´ to a nearest column
+function is_next_to_frustrated_crossing(data, (ib, jb), (i, i´), (j, j´))
+    @show 1
+    @show ib, jb
+    for kb in neighbors(data.basemesh, jb)
+        colrng = column_range(data, kb)
+        for k in data.bandneighs[j]
+            k in colrng && k in data.bandneighs[i] || continue
+            for k´ in data.bandneighs[j´]
+                k´ < k && k´ in colrng && k´ in data.bandneighs[i´] || continue
+                is_frustrated_edge(data, (i, k), (i´, k´)) && return true
+            end
+        end
     end
+    @show 2
     return false
+end
+
+
+function count_band_defects(data)
+    count = 0
+    for (ind_cs, (isrcbase, idstbase)) in enumerate(data.crossed_seams)
+        isrcbase == idstbase == 0 && continue
+        srcrange = column_range(data, isrcbase)
+        dstrange = column_range(data, idstbase)
+        for isrc in srcrange, isrc´ in isrc+1:last(srcrange)
+            for idst  in neighbors_forward(data.bandneighs, isrc),
+                idst´ in neighbors_forward(data.bandneighs, isrc´)
+                # Check whether band vertices are in correct column and whether they cross
+                idst in dstrange && idst´ in dstrange && idst´ < idst || continue
+                count += is_frustrated_crossing(data, (isrc, isrc´), (idst, idst´))
+            end
+        end
+    end
+    return count
 end
 
 #endregion
