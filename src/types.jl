@@ -502,35 +502,21 @@ Base.size(b::Bloch, dims...) = size(b.output, dims...)
 struct Mesh{S}
     verts::Vector{S}
     neighs::Vector{Vector{Int}}          # all neighbors neighs[i][j] of vertex i
-    neighs_forward::Vector{Vector{Int}}  # forward neighbors neighs_forward[i][j] > i of vertex i
     simps::Vector{Vector{Int}}           # list of simplices, each one a group of neighboring vertex indices
-end
-
-Mesh(v, n_forward, s) = Mesh(v, neighbors_from_forward(n_forward), n_forward, s)
-
-neighbors_from_forward(n_forward) =
-    append_backward_neighbors!(deepcopy(n_forward), n_forward)
-
-# append backward neighbors to neighbors of sites >= start
-function append_backward_neighbors!(neighs, n_forward, start = 1)
-    for (src, dsts) in enumerate(n_forward), dst in dsts
-        dst >= start && push!(neighs[dst], src)
-    end
-    return neighs
 end
 
 vertices(m::Mesh) = m.verts
 vertices(m::Mesh, i) = m.verts[i]
 
-neighbors_forward(m::Mesh) = m.neighs_forward
-neighbors_forward(m::Mesh, i::Int) = m.neighs_forward[i]
-
 neighbors(m::Mesh) = m.neighs
 neighbors(m::Mesh, i::Int) = m.neighs[i]
 
+neighbors_forward(m::Mesh, i::Int) = Iterators.filter(>(i), m.neighs[i])
+neighbors_forward(v::Vector, i::Int) = Iterators.filter(>(i), v[i])
+
 simplices(m::Mesh) = m.simps
 
-Base.copy(m::Mesh) = Mesh(copy(m.verts), deepcopy(m.neighs), deepcopy(m.neighs_forward), deepcopy(m.simps))
+Base.copy(m::Mesh) = Mesh(copy(m.verts), deepcopy(m.neighs), deepcopy(m.simps))
 
 #endregion
 
