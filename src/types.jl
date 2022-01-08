@@ -536,6 +536,8 @@ energies(s::Spectrum) = s.values
 
 states(s::Spectrum) = s.vectors
 
+Base.size(s::Spectrum, i...) = size(s.vectors, i...)
+
 #endregion
 
 ############################################################################################
@@ -572,6 +574,7 @@ states(v::BandVertex) = v.states
 
 degeneracy(v::BandVertex) = size(v.states, 2)
 
+parentrows(v::BandVertex) = first(parentindices(v.states))
 parentcols(v::BandVertex) = last(parentindices(v.states))
 
 #endregion

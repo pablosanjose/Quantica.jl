@@ -260,7 +260,7 @@ struct Runs{T,F}
 end
 
 equalruns(xs) = Runs(xs, ==)
-approxruns(xs::Vector{T}) where {T<:Number} = Runs(xs, (x, y) -> isapprox(x, y; atol = sqrt(eps(real(T)))))
+approxruns(xs::Vector{T}, atol = sqrt(eps(real(T)))) where {T<:Number} = Runs(xs, (x, y) -> isapprox(x, y; atol))
 
 function last_in_run(xs::Vector{T}, i, istogether) where {T}
     xi = xs[i]
