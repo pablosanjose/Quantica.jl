@@ -304,7 +304,7 @@ function band_patch!(data)
     classify_crossed!(data)
     data.patchlevel == 0 && return data
     meter = 0 < data.patchlevel < Inf ? Progress(data.patchlevel, "Step 3 - Patching: ") :
-                                        ProgressUnknown("Step 3 - Patching: ")    
+                                        ProgressUnknown("Step 3 - Patching: ")
     baseverts = vertices(data.basemesh)
     newcols = 0
     done = false
