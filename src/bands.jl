@@ -268,14 +268,16 @@ end
 
 # number of singular values greater than √threshold. Fast rank-1 |svd|^2 is r = tr(proj'proj)
 # For higher ranks and r > 0 we must compute and count singular values
+# The threshold is arbitrary, and is fixed heuristically to a high enough value to connect
+# in the coarsest base lattices
 function connection_rank(proj, threshold = 0.4)
     rankf = sum(abs2, proj)
-    fastrank = ifelse(rankf >= threshold || rankf ≈ threshold, 1, 0)  # For rank=1 proj: upon doubt, connect
+    fastrank = ifelse(rankf >= threshold, 1, 0)  # For rank=1 proj: upon doubt, connect
     if iszero(fastrank) || size(proj, 1) == 1 || size(proj, 2) == 1
         return fastrank
     else
         sv = svdvals(proj)
-        return count(s -> abs2(s) >= threshold || abs2(s) ≈ threshold, sv)
+        return count(s -> abs2(s) >= threshold, sv)
     end
 end
 
