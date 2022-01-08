@@ -132,7 +132,7 @@ function bands(bloch::Bloch, basemesh::Mesh{SVector{L,T}};
     crossed = NTuple{6,Int}[] # isrcbase, idstbase, isrc, isrc´, idst, idst´
     crossed_frust = similar(crossed)
     crossed_frust_neigh = similar(crossed)
-    data = (; basemesh, spectra, bandverts, bandneighs, coloffsets, solvers,
+    data = (; basemesh, spectra, bandverts, bandneighs, coloffsets, solvers, L,
               crossed, crossed_frust, crossed_frust_neigh, patchlevel, showprogress, degtol)
 
     # Step 1 - Diagonalize:
@@ -153,16 +153,17 @@ function bands(bloch::Bloch, basemesh::Mesh{SVector{L,T}};
     # recursively refining (a copy of) basemesh to a certain patchlevel, and rediagonalizing
     # bloch at each new vertex. A sufficiently high patchlevel will usually converge to a
     # band mesh without defects
-    band_patch!(data)
+    if L>1
+        band_patch!(data)
+        ndefects = length(data.crossed_frust)
+        iszero(ndefects) || @warn "Band with $ndefects dislocation defects. Consider increasing `patchlevel`"
+    end
 
     # Build band simplices
     bandsimps = build_cliques(bandneighs, L+1)
     orient_simplices!(bandsimps, bandverts)
     # Rebuild basemesh simplices
     build_cliques!(simplices(basemesh), neighbors(basemesh), L+1)
-
-    ndefects = length(data.crossed_frust)
-    iszero(ndefects) || @warn "Band with $ndefects dislocation defects. Consider increasing `patchlevel`"
 
     bandmesh = Mesh(bandverts, bandneighs, bandsimps, )
     return Band(bandmesh, basemesh, solvers)
@@ -264,12 +265,14 @@ function knit_seam!(data, isrcbase, idstbase)
             if connections > 0
                 push!(data.bandneighs[isrc], idst)
                 push!(data.bandneighs[idst], isrc)
-                # populate crossed with all crossed links
-                for isrc´ in first(srcrange):isrc-1, idst´ in data.bandneighs[isrc´]
-                    idst´ in dstrange || continue
-                    # if crossed, push! with ordered isrc´ < isrc, idst´ > idst
-                    idst´ > idst && push!(data.crossed,
-                                         (isrcbase, idstbase, isrc´, isrc, idst´, idst))
+                # populate crossed with all crossed links if lattice dimension > 1
+                if data.L > 1
+                    for isrc´ in first(srcrange):isrc-1, idst´ in data.bandneighs[isrc´]
+                        idst´ in dstrange || continue
+                        # if crossed, push! with ordered isrc´ < isrc, idst´ > idst
+                        idst´ > idst && push!(data.crossed,
+                                            (isrcbase, idstbase, isrc´, isrc, idst´, idst))
+                    end
                 end
             end
         end
