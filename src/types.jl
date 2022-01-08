@@ -528,8 +528,8 @@ abstract type AbstractEigensolver end
 
 const Spectrum{E<:Complex,O} = Eigen{O,E,Matrix{O},Vector{E}}
 
-struct AppliedEigensolver{T,L,S<:Spectrum}
-    solver::FunctionWrapper{S,Tuple{SVector{L,T}}}
+struct AppliedEigensolver{T,L,E,O}
+    solver::FunctionWrapper{Spectrum{E,O},Tuple{SVector{L,T}}}
 end
 
 energies(s::Spectrum) = s.values
@@ -552,11 +552,11 @@ struct BandVertex{T<:AbstractFloat,L,O}
     states::MatrixView{O}
 end
 
-# struct Band{T,L,O}
-#     solvers::Vector{AppliedEigensolver{T,L}}                # one per Julia thread
-#     mesh::Mesh{BandVertex{T,L,O}}
-#     # simpbases::Vector{NTuple{D,Matrix{Complex{T}}}}  # basis transformations on each simplex
-# end
+struct Band{T,L,E,O}
+    bandmesh::Mesh{BandVertex{T,L,O}}
+    basemesh::Mesh{SVector{L,T}}
+    solvers::Vector{AppliedEigensolver{T,L,E,O}}  # one per Julia thread
+end
 
 coordinates(v::BandVertex) = SA[v.momentum..., v.energy]
 
@@ -576,5 +576,9 @@ degeneracy(v::BandVertex) = size(v.states, 2)
 
 parentrows(v::BandVertex) = first(parentindices(v.states))
 parentcols(v::BandVertex) = last(parentindices(v.states))
+
+mesh(b::Band) = b.bandmesh
+
+basemesh(b::Band) = b.basemesh
 
 #endregion

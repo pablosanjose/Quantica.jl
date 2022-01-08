@@ -34,7 +34,7 @@ function split_edge!(m, (i, j), k)
     if i > j
         i, j = j, i
     end
-    cut_edge!(m, (i, j))
+    delete_edge!(m, (i, j))
     verts = vertices(m)
     push!(verts, k)
     push!(neighbors(m), Int[])
@@ -48,7 +48,7 @@ function split_edge!(m, (i, j), k)
     return m
 end
 
-function cut_edge!(m, (i, j))
+function delete_edge!(m, (i, j))
     i == j && return m
     if i > j
         i, j = j, i
@@ -70,23 +70,29 @@ function fast_setdiff!(c, rng)
 end
 
 # groups of n all-to-all connected neighbors, sorted
-function build_cliques(neighs, nverts)
-    cliques = Vector{Int}[]
-    for (src, dsts) in enumerate(neighs), ids in Combinations(length(dsts), nverts - 1)
-        if all_adjacent(ids, dsts, neighs)
-            clique = prepend!(dsts[ids], src)
-            push!(cliques, clique)
+build_cliques(neighs, nverts) = build_cliques!(Vector{Int}[], neighs, nverts)
+
+function build_cliques!(cliques, neighs, nverts)
+    empty!(cliques)
+    for (src, dsts) in enumerate(neighs)
+        dsts_f = filter(>(src), dsts)  # indexable forward neighbors
+        for ids in Combinations(length(dsts_f), nverts - 1)
+            if all_adjacent(ids, dsts_f, neighs)
+                clique = prepend!(dsts_f[ids], src)
+                push!(cliques, clique)
+            end
         end
     end
     return cliques
 end
 
-# Check whether dsts[ids] are all mutual neighbors. ids are a total of nverts-1 indices of dsts = neighs[src].
-function all_adjacent(ids, dsts, neighs)
+# Check whether dsts_f[ids] are all mutual neighbors. ids are a total of nverts-1 indices
+# of dsts_f = neighbor_forward(neighs, src)
+function all_adjacent(ids, dsts_f, neighs)
     nids = length(ids)
     for (n, id) in enumerate(ids), n´ in n+1:nids
-        dst = dsts[ids[n´]]
-        dst in neighbors_forward(neighs, dsts[id]) || return false
+        dst = dsts_f[ids[n´]]
+        dst in neighs[dsts_f[id]] || return false
     end
     return true
 end
@@ -115,7 +121,7 @@ bands(h::AbstractHamiltonian, mesh::Mesh; solver = ES.LinearAlgebra(), kw...) =
 function bands(bloch::Bloch, basemesh::Mesh{SVector{L,T}};
     mapping = missing, solver = ES.LinearAlgebra(), showprogress = true, patchlevel = 0, degtol = missing) where {T,L}
 
-    basemesh = patchlevel > 0 ? copy(basemesh) : basemesh
+    basemesh = copy(basemesh) # will be part of Band, possibly refined
     S = spectrumtype(bloch)
     spectra = Vector{S}(undef, length(vertices(basemesh)))
     O = orbtype(bloch)
@@ -152,8 +158,14 @@ function bands(bloch::Bloch, basemesh::Mesh{SVector{L,T}};
     # Build band simplices
     bandsimps = build_cliques(bandneighs, L+1)
     orient_simplices!(bandsimps, bandverts)
+    # Rebuild basemesh simplices
+    build_cliques!(simplices(basemesh), neighbors(basemesh), L+1)
 
-    return Mesh(bandverts, bandneighs, bandsimps)
+    ndefects = length(data.crossed_frust)
+    iszero(ndefects) || @warn "Band with $ndefects dislocation defects. Consider increasing `patchlevel`"
+
+    bandmesh = Mesh(bandverts, bandneighs, bandsimps, )
+    return Band(bandmesh, basemesh, solvers)
 end
 
 #endregion
@@ -252,13 +264,12 @@ function knit_seam!(data, isrcbase, idstbase)
             if connections > 0
                 push!(data.bandneighs[isrc], idst)
                 push!(data.bandneighs[idst], isrc)
-                if !iszero(data.patchlevel)  # populate crossed with all crossed links
-                    for isrc´ in first(srcrange):isrc-1, idst´ in data.bandneighs[isrc´]
-                        idst´ in dstrange || continue
-                        # if crossed, push! with ordered isrc´ < isrc, idst´ > idst
-                        idst´ > idst && push!(data.crossed,
-                                             (isrcbase, idstbase, isrc´, isrc, idst´, idst))
-                    end
+                # populate crossed with all crossed links
+                for isrc´ in first(srcrange):isrc-1, idst´ in data.bandneighs[isrc´]
+                    idst´ in dstrange || continue
+                    # if crossed, push! with ordered isrc´ < isrc, idst´ > idst
+                    idst´ > idst && push!(data.crossed,
+                                         (isrcbase, idstbase, isrc´, isrc, idst´, idst))
                 end
             end
         end
@@ -290,13 +301,13 @@ column_range(data, ibase) = data.coloffsets[ibase]+1:data.coloffsets[ibase+1]
 #region
 
 function band_patch!(data)
+    classify_crossed!(data)
     data.patchlevel == 0 && return data
-    meter = Progress(data.patchlevel, "Step 3 - Patching: ")
+    meter = 0 < data.patchlevel < Inf ? Progress(data.patchlevel, "Step 3 - Patching: ") :
+                                        ProgressUnknown("Step 3 - Patching: ")    
     baseverts = vertices(data.basemesh)
     newcols = 0
     done = false
-    classify_crossed!(data)
-    @show length(data.crossed_frust)
     cf, cfn = data.crossed_frust, data.crossed_frust_neigh
     solver = first(data.solvers)
     while !isempty(cf) && !done
@@ -306,7 +317,7 @@ function band_patch!(data)
         newcols += 1
         done = newcols == data.patchlevel
         # remove all bandneighs in this seam
-        cut_seam!(data, ib, jb)
+        delete_seam!(data, ib, jb)
         # compute crossing momentum
         εi, εi´, εj, εj´ = energy.(getindex.(Ref(data.bandverts), (i, i´, j, j´)))
         ki, kj = vertices(data.basemesh, ib), vertices(data.basemesh, jb)
@@ -326,11 +337,11 @@ function band_patch!(data)
         for isrcbase in newbaseneighs  # neighbors of new vertex are new edge sources
             knit_seam!(data, isrcbase, idstbase)
         end
+        # classifies crossed band neighbors into frustrated (cf) and their neighbors (cfn)
         classify_crossed!(data)
         data.showprogress && ProgressMeter.next!(meter)
     end
-    @show length(data.crossed_frust)
-    @show newcols
+    data.showprogress && ProgressMeter.finish!(meter)
     return data
 end
 
@@ -357,7 +368,7 @@ end
 
 sorteq((i, i´), (j, j´)) = (i == j && i´ == j´) || (i == j´ && i´ == j)
 
-function cut_seam!(data, isrcbase, idstbase)
+function delete_seam!(data, isrcbase, idstbase)
     srcrange = column_range(data, isrcbase)
     dstrange = column_range(data, idstbase)
     for isrc in srcrange
@@ -387,25 +398,5 @@ function first_inside_second((s1, s2), (p1, p2))
     end
     return true
 end
-
-# count_band_defects(data) = length(data.crossed_frust)
-
-# function count_band_defects(data)
-#     count = 0
-#     for (ind_cs, (isrcbase, idstbase)) in enumerate(data.crossed)
-#         isrcbase == idstbase == 0 && continue
-#         srcrange = column_range(data, isrcbase)
-#         dstrange = column_range(data, idstbase)
-#         for isrc in srcrange, isrc´ in isrc+1:last(srcrange)
-#             for idst  in neighbors_forward(data.bandneighs, isrc),
-#                 idst´ in neighbors_forward(data.bandneighs, isrc´)
-#                 # Check whether band vertices are in correct column and whether they cross
-#                 idst in dstrange && idst´ in dstrange && idst´ < idst || continue
-#                 count += is_frustrated_crossing(data, (isrc, isrc´), (idst, idst´))
-#             end
-#         end
-#     end
-#     return count
-# end
 
 #endregion
