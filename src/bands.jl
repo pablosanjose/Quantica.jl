@@ -112,23 +112,27 @@ end
 #endregion
 
 ############################################################################################
-# bands
+# band
 #region
 
-bands(h::AbstractHamiltonian, mesh::Mesh; solver = ES.LinearAlgebra(), kw...) =
-    bands(bloch(h, solver), mesh; solver, kw...)
+band(h::AbstractHamiltonian, mesh::Mesh; solver = ES.LinearAlgebra(), kw...) =
+    band(bloch(h, solver), mesh; solver, kw...)
 
-function bands(bloch::Bloch, basemesh::Mesh{SVector{L,T}};
-    mapping = missing, solver = ES.LinearAlgebra(), showprogress = true, patchlevel = 0, degtol = missing) where {T,L}
+function band(bloch::Bloch, basemesh::Mesh{SVector{L,T}}; mapping = missing,
+    solver = ES.LinearAlgebra(), showprogress = true, patchlevel = 0, degtol = missing) where {T,L}
+    solvers = [apply(solver, bloch, SVector{L,T}, mapping) for _ in 1:Threads.nthreads()]
+    degtol´ = degtol === missing ? sqrt(eps(real(T))) : degtol
+    return band_precompilable(solvers, basemesh, showprogress, patchlevel, degtol´)
+end
 
-    basemesh = copy(basemesh) # will be part of Band, possibly refined
-    S = spectrumtype(bloch)
-    spectra = Vector{S}(undef, length(vertices(basemesh)))
-    O = orbtype(bloch)
+function band_precompilable(solvers::Vector{A}, basemesh::Mesh{SVector{L,T}},
+    showprogress, patchlevel, degtol) where {T,L,E,O,A<:AppliedEigensolver{T,L,E,O}}
+
+    basemesh = copy(basemesh) # will become part of Band, possibly refined
+    spectra = Vector{Spectrum{E,O}}(undef, length(vertices(basemesh)))
     bandverts = BandVertex{T,L,O}[]
     bandneighs = Vector{Int}[]
     coloffsets = Int[]
-    solvers = [apply(solver, bloch, SVector{L,T}, mapping) for _ in 1:Threads.nthreads()]
     crossed = NTuple{6,Int}[] # isrcbase, idstbase, isrc, isrc´, idst, idst´
     crossed_frust = similar(crossed)
     crossed_frust_neigh = similar(crossed)
@@ -147,6 +151,7 @@ function bands(bloch::Bloch, basemesh::Mesh{SVector{L,T}};
     # possible if the projector ⟨s'|s⟩ has any singular value greater than 1/2
     band_knit!(data)
 
+    l = length(data.bandneighs)
     # Step 3 - Patch seams:
     # Dirac points and other topological band defects will usually produce dislocations in
     # mesh connectivity that results in missing simplices. We patch these defects by
@@ -159,13 +164,21 @@ function bands(bloch::Bloch, basemesh::Mesh{SVector{L,T}};
         iszero(ndefects) || @warn "Band with $ndefects dislocation defects. Consider increasing `patchlevel`"
     end
 
+    for i in 1:l
+        empty!(data.bandneighs[i])
+    end
+
+    # for (_,_,i, _,_,_) in data.crossed_frust
+    #     @show energy(data.bandverts[i])
+    # end
+
     # Build band simplices
-    bandsimps = build_cliques(bandneighs, L+1)
-    orient_simplices!(bandsimps, bandverts)
+    bandimps = build_cliques(bandneighs, L+1)
+    orient_simplices!(bandimps, bandverts)
     # Rebuild basemesh simplices
     build_cliques!(simplices(basemesh), neighbors(basemesh), L+1)
 
-    bandmesh = Mesh(bandverts, bandneighs, bandsimps, )
+    bandmesh = Mesh(bandverts, bandneighs, bandimps, )
     return Band(bandmesh, basemesh, solvers)
 end
 
@@ -198,8 +211,7 @@ function append_band_column!(data, basevert, spectrum)
     T = eltype(basevert)
     energies´ = [maybereal(ε, T) for ε in energies(spectrum)]
     states´ = states(spectrum)
-    subs = data.degtol === missing ? collect(approxruns(energies´)) :
-                                     collect(approxruns(energies´, data.degtol))
+    subs = collect(approxruns(energies´, data.degtol))
     for (i, rng) in enumerate(subs)
         state = orthonormalize!(view(states´, :, rng))
         energy = mean(i -> energies´[i], rng)
@@ -313,6 +325,7 @@ function band_patch!(data)
     done = false
     cf, cfn = data.crossed_frust, data.crossed_frust_neigh
     solver = first(data.solvers)
+    @show length(cf), length(cfn)
     while !isempty(cf) && !done
         (ib, jb, i, i´, j, j´) = isempty(cfn) ? popfirst!(cf) : popfirst!(cfn)
         # check edge has not been previously split
@@ -322,10 +335,7 @@ function band_patch!(data)
         # remove all bandneighs in this seam
         delete_seam!(data, ib, jb)
         # compute crossing momentum
-        εi, εi´, εj, εj´ = energy.(getindex.(Ref(data.bandverts), (i, i´, j, j´)))
-        ki, kj = vertices(data.basemesh, ib), vertices(data.basemesh, jb)
-        λ = (εi - εi´) / (εj´ - εi´ - εj + εi)
-        k = ki + λ * (kj - ki)
+        k = newvertex(data, (ib, jb), (i, i´, j, j´))
         # create new vertex in basemesh by splitting the edge, and connect to neighbors
         split_edge!(data.basemesh, (ib, jb), k)
         # compute spectrum at new vertex
@@ -342,6 +352,7 @@ function band_patch!(data)
         end
         # classifies crossed band neighbors into frustrated (cf) and their neighbors (cfn)
         classify_crossed!(data)
+        @show length(cf), length(cfn)
         data.showprogress && ProgressMeter.next!(meter)
     end
     data.showprogress && ProgressMeter.finish!(meter)
@@ -370,6 +381,14 @@ function classify_crossed!(data)
 end
 
 sorteq((i, i´), (j, j´)) = (i == j && i´ == j´) || (i == j´ && i´ == j)
+
+function newvertex(data, (ib, jb), (i, i´, j, j´))
+    εi, εi´, εj, εj´ = energy.(getindex.(Ref(data.bandverts), (i, i´, j, j´)))
+    ki, kj = vertices(data.basemesh, ib), vertices(data.basemesh, jb)
+    λ = (εi - εi´) / (εj´ - εi´ - εj + εi)
+    k = ki + λ * (kj - ki)
+    return k
+end
 
 function delete_seam!(data, isrcbase, idstbase)
     srcrange = column_range(data, isrcbase)
