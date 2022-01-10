@@ -151,7 +151,6 @@ function band_precompilable(solvers::Vector{A}, basemesh::Mesh{SVector{L,T}},
     # possible if the projector ⟨s'|s⟩ has any singular value greater than 1/2
     band_knit!(data)
 
-    l = length(data.bandneighs)
     # Step 3 - Patch seams:
     # Dirac points and other topological band defects will usually produce dislocations in
     # mesh connectivity that results in missing simplices. We patch these defects by
@@ -163,14 +162,6 @@ function band_precompilable(solvers::Vector{A}, basemesh::Mesh{SVector{L,T}},
         ndefects = length(data.crossed_frust)
         iszero(ndefects) || @warn "Band with $ndefects dislocation defects. Consider increasing `patchlevel`"
     end
-
-    for i in 1:l
-        empty!(data.bandneighs[i])
-    end
-
-    # for (_,_,i, _,_,_) in data.crossed_frust
-    #     @show energy(data.bandverts[i])
-    # end
 
     # Build band simplices
     bandimps = build_cliques(bandneighs, L+1)
@@ -325,7 +316,6 @@ function band_patch!(data)
     done = false
     cf, cfn = data.crossed_frust, data.crossed_frust_neigh
     solver = first(data.solvers)
-    @show length(cf), length(cfn)
     while !isempty(cf) && !done
         (ib, jb, i, i´, j, j´) = isempty(cfn) ? popfirst!(cf) : popfirst!(cfn)
         # check edge has not been previously split
@@ -352,7 +342,6 @@ function band_patch!(data)
         end
         # classifies crossed band neighbors into frustrated (cf) and their neighbors (cfn)
         classify_crossed!(data)
-        @show length(cf), length(cfn)
         data.showprogress && ProgressMeter.next!(meter)
     end
     data.showprogress && ProgressMeter.finish!(meter)
