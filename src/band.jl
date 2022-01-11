@@ -189,8 +189,7 @@ column_range(data, ibase) = data.coloffsets[ibase]+1:data.coloffsets[ibase+1]
 
 function band_patch!(data)
     data.patches > 0 || return data
-    isempty(data.defects) && find_defects!(data)
-    incorporate_defects!(data)
+    insert_defects!(data)
     queue_frustrated!(data)
     data.warn && isempty(data.defects) &&
         @warn "Trying to patch $(length(data.frustrated)) band dislocations without a list `defects` of defect positions."
@@ -219,17 +218,20 @@ function band_patch!(data)
     return data
 end
 
-function find_defects!(data)
+function insert_defects!(data)
+    # insert user-provided defects as new columns in bands
+    foreach(k -> insert_defect!(data, k), data.defects)
+    # add possible defects already in bands
     mindeg = minimum(degeneracy, data.bandverts)
     for v in data.bandverts
+        k = base_coordinates(v)
+        any(kd -> kd ≈ k, data.defects) && continue
         degeneracy(v) > mindeg && push!(data.defects, base_coordinates(v))
     end
     return data
 end
 
-incorporate_defects!(data) = foreach(k -> incorporate_defect!(data, k), data.defects)
-
-function incorporate_defect!(data, kdefect)
+function insert_defect!(data, kdefect)
     base = data.basemesh
     for k in vertices(base)
         k ≈ kdefect && return data
