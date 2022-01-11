@@ -496,7 +496,7 @@ Base.size(b::Bloch, dims...) = size(b.output, dims...)
 #endregion
 
 ############################################################################################
-# Mesh  -  see bandstructure.jl for methods
+# Mesh  -  see mesh.jl for methods
 #region
 
 struct Mesh{S}
@@ -541,7 +541,7 @@ Base.size(s::Spectrum, i...) = size(s.vectors, i...)
 #endregion
 
 ############################################################################################
-# Band  -  see bands.jl for methods
+# Band  -  see band.jl for methods
 #region
 
 const MatrixView{O} = SubArray{O,2,Matrix{O},Tuple{Base.Slice{Base.OneTo{Int}}, UnitRange{Int}}, true}

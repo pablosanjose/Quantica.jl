@@ -24,6 +24,10 @@ val_convert(T, x) = convert(T, x)
 sanitize_Vector_of_float_SVectors(vs) =
     eltype(vs) <: Number ? [float(sanitize_SVector(vs))] : [promote(float.(sanitize_SVector.(vs))...)...]
 
+sanitize_Vector_of_SVectors(::Type{T}, ::Tuple{}) where {T} = T[]
+sanitize_Vector_of_SVectors(::Type{T}, vs) where {T} =
+    eltype(vs) <: Number ? [sanitize_SVector(T, vs)] : [sanitize_SVector.(T, vs)...]
+
 sanitize_SVector(::Tuple{}) = SVector{0,Float64}()
 sanitize_SVector(x::Number) = SVector{1}(x)
 sanitize_SVector(v) = convert(SVector, v)

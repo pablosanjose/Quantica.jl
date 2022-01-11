@@ -72,7 +72,7 @@ function plot!(plot::BandPlot2D)
 
 @recipe(BandPlot3D, mesh) do scene
     Theme(
-    linethickness = 1.0,
+    linethickness = 1.3,
     wireframe = true,
     linedarken = 0.5,
     ssao = true, ambient = Vec3f0(0.55), diffuse = Vec3f0(0.4),
@@ -100,9 +100,21 @@ function plot!(plot::BandPlot3D)
                 ssao = plot[:ssao][], ambient = plot[:ambient][], diffuse = plot[:diffuse][])
             if plot[:wireframe][]
                 edgevertices = collect(Quantica.edge_coordinates(mesh))
+                wireframe_shift!(edgevertices, 1)
                 linesegments!(plot, edgevertices, color = darken(color, plot[:linedarken][]), linewidth = plot[:linethickness][])
             end
         end
     # end
     return plot
  end
+
+ wireframe_shift(::Type{SVector{L,T}}) where {L,T} = SVector(ntuple(i->sqrt(sqrt(eps(T)))*(i==L), Val(L)))
+
+ function wireframe_shift!(edges::Vector{Tuple{S,S}}, x) where {S}
+    δ = x * wireframe_shift(S)
+    for (i, (r1, r2)) in enumerate(edges)
+        edges[i] = (r1+δ, r2+δ)
+    end
+    return edges
+end
+

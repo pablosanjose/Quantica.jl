@@ -15,7 +15,6 @@ using FunctionWrappers: FunctionWrapper
 using ExprTools
 using SparseArrays: getcolptr, AbstractSparseMatrix, AbstractSparseMatrixCSC
 using Statistics: mean
-# using Compat # for use of argmin/argmax in bands.jl
 
 export sublat, lattice, dims, supercell, bravais_matrix, siteindices, sitepositions,
        hopping, onsite, @onsite!, @hopping!, @block!, parameters, neighbors,
@@ -48,7 +47,8 @@ include("apply.jl")
 # include("slice.jl")
 # include("mesh.jl")
 # include("diagonalizer.jl")
-include("bands.jl")
+include("mesh.jl")
+include("band.jl")
 # include("KPM.jl")
 # include("effective.jl")
 # include("greens.jl")
