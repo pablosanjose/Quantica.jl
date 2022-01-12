@@ -561,6 +561,33 @@ Base.copy(m::Mesh) = Mesh(copy(m.verts), deepcopy(m.neighs), deepcopy(m.simps))
 #endregion
 
 ############################################################################################
+# MeshView  -  see mesh.jl for methods
+#region
+
+# struct MeshView{S} <: AbstractMesh{S}
+#     parent::Mesh{S}
+#     vrange::UnitRange{Int}
+#     srange::UnitRange{Int}
+# end
+
+# vertices(m::MeshView) = view(vertices(m.parent), m.vrange)
+
+# vertices(m::MeshView, i) = vertices(m)[i]
+
+# neighbors(m::MeshView) = (n - first(m.vrange) + 1 for ns in view(neighbors(m.parent), m.vrange))
+# neighbors(m::MeshView, i::Int) = (n - first(m.vrange) + 1 for n in view(neighbors(m.parent), m.vrange)[i])
+
+# neighbors_forward(m::MeshView, i::Int) = Iterators.filter(>(i), neighbors(m, i))
+
+# simplices(m::MeshView) = (s- first(m.srange) + 1 for ss in view(simplices(m.parent), m.srange) for s in ss)
+
+# Base.parent(m::MeshView) = m.parent
+
+# Base.copy(m::MeshView) = MeshView(copy(m.parent), copy(m.vrange), copy(m.srange))
+
+#endregion
+
+############################################################################################
 # Eigensolvers  -  see eigensolver.jl for methods and solver backends <: AbstractEigensolver
 #region
 
@@ -581,7 +608,7 @@ Base.size(s::Spectrum, i...) = size(s.vectors, i...)
 #endregion
 
 ############################################################################################
-# Bands  -  see bands.jl for methods
+# Band  -  see band.jl for methods
 #region
 
 const MatrixView{O} = SubArray{O,2,Matrix{O},Tuple{Base.Slice{Base.OneTo{Int}}, UnitRange{Int}}, true}
@@ -592,7 +619,7 @@ struct BandVertex{T<:AbstractFloat,L,O}
     states::MatrixView{O}
 end
 
-struct Bands{T,L,E,O}
+struct Band{T,L,E,O}
     bandmesh::Mesh{BandVertex{T,L,O}}
     basemesh::Mesh{SVector{L,T}}
     solvers::Vector{AppliedEigensolver{T,L,E,O}}  # one per Julia thread
@@ -617,8 +644,8 @@ degeneracy(v::BandVertex) = size(v.states, 2)
 parentrows(v::BandVertex) = first(parentindices(v.states))
 parentcols(v::BandVertex) = last(parentindices(v.states))
 
-band(b::Bands) = b.bandmesh
+bandmesh(b::Band) = b.bandmesh
 
-basemesh(b::Bands) = b.basemesh
+basemesh(b::Band) = b.basemesh
 
 #endregion

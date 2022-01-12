@@ -1,19 +1,19 @@
 ############################################################################################
-# bands
+# band
 #region
 
-bands(h::AbstractHamiltonian, mesh::Mesh; solver = ES.LinearAlgebra(), kw...) =
-    bands(bloch(h, solver), mesh; solver, kw...)
+band(h::AbstractHamiltonian, mesh::Mesh; solver = ES.LinearAlgebra(), kw...) =
+    band(bloch(h, solver), mesh; solver, kw...)
 
-function bands(bloch::Bloch, basemesh::Mesh{SVector{L,T}}; mapping = missing,
+function band(bloch::Bloch, basemesh::Mesh{SVector{L,T}}; mapping = missing,
     solver = ES.LinearAlgebra(), showprogress = true, defects = (), patches = 0, degtol = missing, warn = true) where {T,L}
     solvers = [apply(solver, bloch, SVector{L,T}, mapping) for _ in 1:Threads.nthreads()]
     defects´ = sanitize_Vector_of_SVectors(SVector{L,T}, defects)
     degtol´ = degtol isa Number ? degtol : sqrt(eps(real(T)))
-    return bands_precompilable(solvers, basemesh, showprogress, defects´, patches, degtol´, warn)
+    return band_precompilable(solvers, basemesh, showprogress, defects´, patches, degtol´, warn)
 end
 
-function bands_precompilable(solvers::Vector{A}, basemesh::Mesh{SVector{L,T}},
+function band_precompilable(solvers::Vector{A}, basemesh::Mesh{SVector{L,T}},
     showprogress, defects, patches, degtol, warn) where {T,L,E,O,A<:AppliedEigensolver{T,L,E,O}}
 
     basemesh = copy(basemesh) # will become part of Band, possibly refined
@@ -30,19 +30,19 @@ function bands_precompilable(solvers::Vector{A}, basemesh::Mesh{SVector{L,T}},
     # Uses multiple AppliedEigensolvers (one per Julia thread) to diagonalize bloch at each
     # vertex of basemesh. Then, it collects each of the produced Spectrum (aka "columns")
     # into a bandverts::Vector{BandVertex}, recording the coloffsets for each column
-    bands_diagonalize!(data)
+    band_diagonalize!(data)
 
     # Step 2 - Knit seams:
     # Each base vertex holds a column of subspaces. Each subspace s of degeneracy d will
     # connect to other subspaces s´ in columns of a neighboring base vertex. Connections are
     # possible if the projector ⟨s'|s⟩ has any singular value greater than 1/2
-    bands_knit!(data)
+    band_knit!(data)
 
     # Step 3 - Patch seams:
     # Dirac points and other topological band defects will usually produce dislocations in
     # mesh connectivity that results in missing simplices.
     if L>1
-        bands_patch!(data)
+        band_patch!(data)
     end
 
     # Build band simplices
@@ -52,16 +52,16 @@ function bands_precompilable(solvers::Vector{A}, basemesh::Mesh{SVector{L,T}},
     build_cliques!(simplices(basemesh), neighbors(basemesh), L+1)
 
     bandmesh = Mesh(bandverts, bandneighs, bandimps, )
-    return Bands(bandmesh, basemesh, solvers)
+    return Band(bandmesh, basemesh, solvers)
 end
 
 #endregion
 
 ############################################################################################
-# bands_diagonalize!
+# band_diagonalize!
 #region
 
-function bands_diagonalize!(data)
+function band_diagonalize!(data)
     baseverts = vertices(data.basemesh)
     meter = Progress(length(baseverts), "Step 1 - Diagonalizing: ")
     push!(data.coloffsets, 0) # first element
@@ -119,10 +119,10 @@ end
 #endregion
 
 ############################################################################################
-# bands_knit!
+# band_knit!
 #region
 
-function bands_knit!(data)
+function band_knit!(data)
     meter = Progress(length(data.spectra), "Step 2 - Knitting: ")
     for isrcbase in eachindex(data.spectra)
         for idstbase in neighbors_forward(data.basemesh, isrcbase)
@@ -184,10 +184,10 @@ column_range(data, ibase) = data.coloffsets[ibase]+1:data.coloffsets[ibase+1]
 #endregion
 
 ############################################################################################
-# bands_patch!
+# band_patch!
 #region
 
-function bands_patch!(data)
+function band_patch!(data)
     data.patches > 0 || return data
     insert_defects!(data)
     queue_frustrated!(data)
@@ -219,9 +219,9 @@ function bands_patch!(data)
 end
 
 function insert_defects!(data)
-    # insert user-provided defects as new columns in bands
+    # insert user-provided defects as new columns in band
     foreach(k -> insert_defect_column!(data, k), data.defects)
-    # detect possible defects in bands and append them to data.defects
+    # detect possible defects in band and append them to data.defects
     mindeg = minimum(degeneracy, data.bandverts)
     for (v, ns) in zip(data.bandverts, data.bandneighs)
         k = base_coordinates(v)
@@ -328,7 +328,7 @@ end
 #endregion
 
 ############################################################################################
-# bands_split!
+# band_split!
 #region
 
 

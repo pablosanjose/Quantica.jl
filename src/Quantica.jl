@@ -21,7 +21,7 @@ export sublat, lattice, dims, supercell, bravais_matrix, siteindices, sitepositi
        ket, ketmodel, randomkets, basiskets,
        hamiltonian, parametric, bloch, bloch!, similarmatrix,
        flatten, unflatten, orbitalstructure, wrap, transform, translate, combine,
-       spectrum, bands, mesh, isometric, splitbands,
+       spectrum, band, mesh, isometric, splitbands,
        vertices, minima, maxima, gapedge, gap, isinband,
        energies, states, degeneracy,
        momentaKPM, dosKPM, averageKPM, densityKPM, bandrangeKPM,
@@ -48,7 +48,7 @@ include("apply.jl")
 # include("mesh.jl")
 # include("diagonalizer.jl")
 include("mesh.jl")
-include("bands.jl")
+include("band.jl")
 # include("KPM.jl")
 # include("effective.jl")
 # include("greens.jl")
