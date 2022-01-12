@@ -470,7 +470,10 @@ Base.parent(h::FlatHamiltonian) = h.h
 ############################################################################################
 # Bloch  -  see hamiltonian.jl for methods
 #region
-struct Bloch{L,B,M<:AbstractMatrix{B},H<:AbstractHamiltonian{<:Any,<:Any,L}}
+
+abstract type AbstractBloch{L} end
+
+struct Bloch{L,B,M<:AbstractMatrix{B},H<:AbstractHamiltonian{<:Any,<:Any,L}} <: AbstractBloch{L}
     h::H
     output::M       # output has same structure as merged harmonics(h)
 end                 # or its flattened version if eltype(M) != blocktype(H)
@@ -492,6 +495,41 @@ end
 latdim(b::Bloch) = latdim(lattice(b.h))
 
 Base.size(b::Bloch, dims...) = size(b.output, dims...)
+
+#endregion
+
+############################################################################################
+# Velocity  -  see hamiltonian.jl for call API
+#region
+
+struct Velocity{L,B<:Bloch{L}} <: AbstractBloch{L}
+    bloch::B
+    axis::Int
+    function Velocity{L,B}(b, axis) where {L,B<:Bloch{L}}
+        1 <= axis <= L || throw(ArgumentError("Velocity axis for this system should be between 1 and $L"))
+        return new(b, axis)
+    end
+end
+
+Velocity(b::B, axis) where {L,B<:Bloch{L}} = Velocity{L,B}(b, axis)
+
+velocity(b, axis) = Velocity(b, axis)
+
+matrix(v::Velocity) = matrix(v.bloch)
+
+hamiltonian(v::Velocity) = hamiltonian(v.bloch)
+
+blocktype(v::Velocity) = blocktype(v.bloch)
+
+orbtype(v::Velocity) = orbtype(v.bloch)
+
+spectrumtype(v::Velocity) = spectrumtype(v.bloch)
+
+latdim(v::Velocity) = latdim(v.bloch)
+
+Base.size(v::Velocity, dims...) = size(v.bloch, dims...)
+
+axis(v::Velocity) = v.axis
 
 #endregion
 

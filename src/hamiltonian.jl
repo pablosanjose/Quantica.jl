@@ -236,7 +236,7 @@ end
  #endregion
 
 ############################################################################################
-# Bloch constructor
+# Bloch constructors
 #region
 
 function bloch(h::Union{Hamiltonian,ParametricHamiltonian}, ::Type{M} = SparseMatrixCSC) where {M<:AbstractSparseMatrixCSC}
@@ -264,6 +264,10 @@ function bloch(f::FlatHamiltonian, ::Type{M}) where {M<:AbstractMatrix}
     return Bloch(f, output)
 end
 
+bloch(φs::Number...; kw...) = h -> bloch(h, φs; kw...)
+bloch(φs::Tuple; kw...) = h -> bloch(h, φs; kw...)
+bloch(h::AbstractHamiltonian, φs::Tuple; kw...) = bloch(h)(φs...; kw...)
+
 # see tools.jl
 merge_sparse(hars::Vector{<:Harmonic}) = merge_sparse(matrix(har) for har in hars)
 
@@ -273,35 +277,36 @@ merge_flatten_sparse(hars::Vector{<:Harmonic}, os::OrbitalStructure{<:SMatrix}, 
 #endregion
 
 ############################################################################################
-# Bloch call API
+# AbstractBloch call API
 #region
 
-bloch(φs::Number...; kw...) = h -> bloch(h, φs; kw...)
-bloch(φs::Tuple; kw...) = h -> bloch(h, φs; kw...)
-bloch(h::AbstractHamiltonian, φs::Tuple; kw...) = bloch(h)(φs...; kw...)
+(b::AbstractBloch)(φs...; kw...) = copy(call!(b, φs...; kw...))
 
-(b::Bloch)(φs...; kw...) = copy(call!(b, φs...; kw...))
-
-call!(b::Bloch{L}, φs::Vararg{Number,L}; kw...) where {L} = call!(b, φs; kw...)
-call!(b::Bloch{L}, φs::NTuple{L,Number}; kw...) where {L} = call!(b, SVector(φs); kw...)
-call!(b::Bloch, φs::SVector; kw...) = maybe_flatten_bloch!(matrix(b), hamiltonian(b), φs; kw...)
-call!(b::Bloch, φskw::Tuple{<:Any,NamedTuple}) = call!(b, first(φskw); last(φskw)...) # support for (φs, (; kw...)) 
-call!(b::Bloch, φskw::Tuple) = call!(b, Base.front(φskw); last(φskw)...) # support for (φs..., (; kw...))
-call!(b::Bloch, φs...; kw...) =
+call!(b::AbstractBloch{L}, φs::Vararg{Number,L}; kw...) where {L} = call!(b, φs; kw...)
+call!(b::AbstractBloch{L}, φs::NTuple{L,Number}; kw...) where {L} = call!(b, SVector(φs); kw...)
+call!(b::AbstractBloch, φskw::Tuple{<:Any,NamedTuple}) = call!(b, first(φskw); last(φskw)...) # support for (φs, (; kw...)) 
+call!(b::AbstractBloch, φskw::Tuple) = call!(b, Base.front(φskw); last(φskw)...) # support for (φs..., (; kw...))
+call!(b::AbstractBloch, φs...; kw...) =
     throw(ArgumentError("Wrong call! argument syntax. Possible mismatch between input Bloch phases $(length(φs)) and lattice dimention $(latdim(b))."))
 
-maybe_flatten_bloch!(output, h::FlatHamiltonian, φs; kw...) = maybe_flatten_bloch!(output, parent(h), φs; kw...)
-maybe_flatten_bloch!(output, h::ParametricHamiltonian, φs; kw...) = maybe_flatten_bloch!(output, call!(h; kw...), φs)
+call!(b::Bloch, φs::SVector; kw...) = maybe_flatten_bloch!(matrix(b), hamiltonian(b), φs; kw...)
+call!(b::Velocity, φs::SVector; kw...) = maybe_flatten_bloch!(matrix(b), hamiltonian(b), φs, axis(b); kw...)
 
-# Adds harmonics, assuming sparse output with the same structure of merged harmonics
-function maybe_flatten_bloch!(output,
-                              h::Hamiltonian{<:Any,<:Any,L}, φs::SVector{L}) where {L}
+maybe_flatten_bloch!(output, h::FlatHamiltonian, φs, axis...; kw...) = maybe_flatten_bloch!(output, parent(h), φs, axis...; kw...)
+maybe_flatten_bloch!(output, h::ParametricHamiltonian, φs, axis...; kw...) = maybe_flatten_bloch!(output, call!(h; kw...), φs, axis...)
+
+# Adds harmonics, assuming sparse output with the same structure of merged harmonics.
+# If axis !== missing, compute velocity[axis]
+function maybe_flatten_bloch!(output, h::Hamiltonian{<:Any,<:Any,L}, φs::SVector{L}, axis = missing) where {L}
     hars = harmonics(h)
     os = orbitalstructure(h)
     flatos = flatten(os)
     fill!(output, zero(eltype(output)))
+    isvelocity = axis !== missing
     for har in hars
+        iszero(dcell(har)) && isvelocity && continue
         e⁻ⁱᵠᵈⁿ = cis(-dot(φs, dcell(har)))
+        isvelocity && (e⁻ⁱᵠᵈⁿ *= - im * dcell(har)[axis])
         maybe_flatten_mul!(output, (os, flatos), matrix(har), e⁻ⁱᵠᵈⁿ, 1, 1)  # see tools.jl
     end
     return output
