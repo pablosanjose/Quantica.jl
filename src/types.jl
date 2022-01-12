@@ -499,7 +499,9 @@ Base.size(b::Bloch, dims...) = size(b.output, dims...)
 # Mesh  -  see mesh.jl for methods
 #region
 
-struct Mesh{S}
+abstract type AbstractMesh{S} end
+
+struct Mesh{S} <: AbstractMesh{S}
     verts::Vector{S}
     neighs::Vector{Vector{Int}}          # all neighbors neighs[i][j] of vertex i
     simps::Vector{Vector{Int}}           # list of simplices, each one a group of neighboring vertex indices
@@ -541,7 +543,7 @@ Base.size(s::Spectrum, i...) = size(s.vectors, i...)
 #endregion
 
 ############################################################################################
-# Band  -  see band.jl for methods
+# Bands  -  see bands.jl for methods
 #region
 
 const MatrixView{O} = SubArray{O,2,Matrix{O},Tuple{Base.Slice{Base.OneTo{Int}}, UnitRange{Int}}, true}
@@ -552,7 +554,7 @@ struct BandVertex{T<:AbstractFloat,L,O}
     states::MatrixView{O}
 end
 
-struct Band{T,L,E,O}
+struct Bands{T,L,E,O}
     bandmesh::Mesh{BandVertex{T,L,O}}
     basemesh::Mesh{SVector{L,T}}
     solvers::Vector{AppliedEigensolver{T,L,E,O}}  # one per Julia thread
@@ -577,8 +579,8 @@ degeneracy(v::BandVertex) = size(v.states, 2)
 parentrows(v::BandVertex) = first(parentindices(v.states))
 parentcols(v::BandVertex) = last(parentindices(v.states))
 
-mesh(b::Band) = b.bandmesh
+band(b::Bands) = b.bandmesh
 
-basemesh(b::Band) = b.basemesh
+basemesh(b::Bands) = b.basemesh
 
 #endregion
