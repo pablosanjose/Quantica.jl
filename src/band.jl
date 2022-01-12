@@ -220,18 +220,24 @@ end
 
 function insert_defects!(data)
     # insert user-provided defects as new columns in bands
-    foreach(k -> insert_defect!(data, k), data.defects)
-    # add possible defects already in bands
+    foreach(k -> insert_defect_column!(data, k), data.defects)
+    # detect possible defects in bands and append them to data.defects
     mindeg = minimum(degeneracy, data.bandverts)
-    for v in data.bandverts
+    for (v, ns) in zip(data.bandverts, data.bandneighs)
         k = base_coordinates(v)
+        d = degeneracy(v)
+        # exclude v if v does not increase degeneracy over minimum
+        degeneracy(v) == mindeg && continue
+        # only select vertices that have greater degeneracy than all its neighbors
+        any(n -> degeneracy(data.bandverts[n]) >= d, ns) && continue
+        # exclude v if it is already in data.defects
         any(kd -> kd ≈ k, data.defects) && continue
-        degeneracy(v) > mindeg && push!(data.defects, base_coordinates(v))
+        push!(data.defects, base_coordinates(v))
     end
     return data
 end
 
-function insert_defect!(data, kdefect)
+function insert_defect_column!(data, kdefect)
     base = data.basemesh
     for k in vertices(base)
         k ≈ kdefect && return data
