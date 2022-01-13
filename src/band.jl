@@ -20,11 +20,13 @@ function band_precompilable(solvers::Vector{A}, basemesh::Mesh{SVector{L,T}},
     spectra = Vector{Spectrum{E,O}}(undef, length(vertices(basemesh)))
     bandverts = BandVertex{T,L,O}[]
     bandneighs = Vector{Int}[]
+    bandnedegs = similar(bandneighs)
     coloffsets = Int[]
     crossed = NTuple{6,Int}[]
     frustrated = similar(crossed)
-    data = (; basemesh, spectra, bandverts, bandneighs, coloffsets, solvers, L,
-              crossed, frustrated, defects, patches, showprogress, degtol, warn)
+    subbands = Subband{T,L,O}[]
+    data = (; basemesh, spectra, bandverts, bandneighs, bandnedegs, coloffsets, solvers, L,
+              crossed, frustrated, subbands, defects, patches, showprogress, degtol, warn)
 
     # Step 1 - Diagonalize:
     # Uses multiple AppliedEigensolvers (one per Julia thread) to diagonalize bloch at each
@@ -45,14 +47,10 @@ function band_precompilable(solvers::Vector{A}, basemesh::Mesh{SVector{L,T}},
         band_patch!(data)
     end
 
-    # Build band simplices
-    bandimps = build_cliques(bandneighs, L+1)
-    orient_simplices!(bandimps, bandverts)
-    # Rebuild basemesh simplices
-    build_cliques!(simplices(basemesh), neighbors(basemesh), L+1)
+    # Step 4 - Split subbands
+    band_split!(data)
 
-    bandmesh = Mesh(bandverts, bandneighs, bandimps, )
-    return Band(bandmesh, basemesh, solvers)
+    return Band(subbands, basemesh, solvers)
 end
 
 #endregion
@@ -91,6 +89,7 @@ function append_band_column!(data, basevert, spectrum)
         push!(data.bandverts, BandVertex(basevert, energy, state))
     end
     push!(data.coloffsets, length(data.bandverts))
+    foreach(_ -> push!(data.bandnedegs, Int[]), length(data.bandnedegs)+1:length(data.bandverts))
     foreach(_ -> push!(data.bandneighs, Int[]), length(data.bandneighs)+1:length(data.bandverts))
     return data
 end
@@ -150,6 +149,8 @@ function knit_seam!(data, ib, jb)
             if connections > 0
                 push!(data.bandneighs[i], j)
                 push!(data.bandneighs[j], i)
+                push!(data.bandnedegs[i], connections)
+                push!(data.bandnedegs[j], connections)
                 # populate crossed with all crossed links if lattice dimension > 1
                 if data.L > 1
                     for i´ in first(srcrange):i-1, j´ in data.bandneighs[i´]
@@ -194,7 +195,7 @@ function band_patch!(data)
     data.warn && isempty(data.defects) &&
         @warn "Trying to patch $(length(data.frustrated)) band dislocations without a list `defects` of defect positions."
     meter = data.patches < Inf ? Progress(data.patches, "Step 3 - Patching: ") :
-                                    ProgressUnknown("Step 3 - Patching: ")
+                                 ProgressUnknown("Step 3 - Patching: ")
     newcols = 0
     done = false
     while !isempty(data.frustrated) && !done
@@ -211,6 +212,8 @@ function band_patch!(data)
         queue_frustrated!(data)
         data.showprogress && ProgressMeter.next!(meter)
     end
+    # If we added new columns, base edges will have split -> rebuild base simplices
+    newcols > 0 && build_cliques!(simplices(data.basemesh), neighbors(data.basemesh), data.L + 1)
     data.showprogress && ProgressMeter.finish!(meter)
     ndefects = length(data.frustrated)
     data.warn && !iszero(ndefects) &&
@@ -286,23 +289,28 @@ function distance_to_defects(data, ic)
     return minimum(d -> sum(abs2, kc - d), data.defects)
 end
 
-function is_frustrated_crossing(data, (ib, jb, i, i´, j, j´))
-    ns = data.bandneighs
-    return !equal_intersection((ns[i], ns[j´]), (ns[i´], ns[j]))
+is_frustrated_crossing(data, (ib, jb, i, i´, j, j´)) =
+    is_frustrated_link(data, (ib, jb, i, j)) || is_frustrated_link(data, (ib, jb, i´, j´))
+
+function is_frustrated_link(data, (ib, jb, i, j))
+    deg = degeneracy_link(data, i, j)
+    for kb in neighbors(data.basemesh, ib), kb´ in neighbors(data.basemesh, jb)
+        kb == kb´ || continue
+        count = 0
+        for k in data.bandneighs[i], k´ in data.bandneighs[j]
+            k == k´ && k in column_range(data, kb) || continue
+            count += min(degeneracy_link(data, i, k), degeneracy_link(data, j, k))
+        end
+        count < deg && return true
+    end
+    return false
 end
 
-# Define s = (s₁ ,s₂), p = (p₁, p₂). Is s₁ ∩ s₂ == p₁ ∩ p₂ ?
-# This happens iif (s₁ ∩ s₂) ∈ pᵢ and (p₁ ∩ p₂) ∈ sᵢ
-equal_intersection(s, p) =
-    first_inside_second(s, p) && first_inside_second(p, s)
-
-function first_inside_second((s1, s2), (p1, p2))
-    for s in s1
-        if s in s2 # s ∈ (s1 ∩ s2)
-            s in p1 && s in p2 || return false
-        end
+function degeneracy_link(data, i, j)
+    for (k, d) in zip(data.bandneighs[i], data.bandnedegs[i])
+        k == j && return d
     end
-    return true
+    return 0
 end
 
 function crossing(data, (ib, jb, i, i´, j, j´))
@@ -317,10 +325,10 @@ function delete_seam!(data, isrcbase, idstbase)
     srcrange = column_range(data, isrcbase)
     dstrange = column_range(data, idstbase)
     for isrc in srcrange
-        fast_setdiff!(data.bandneighs[isrc], dstrange)
+        fast_setdiff!((data.bandneighs[isrc], data.bandnedegs[isrc]), dstrange)
     end
     for idst in dstrange
-        fast_setdiff!(data.bandneighs[idst], srcrange)
+        fast_setdiff!((data.bandneighs[idst], data.bandnedegs[idst]), srcrange)
     end
     return data
 end
@@ -331,5 +339,25 @@ end
 # band_split!
 #region
 
+function band_split!(data)
+    # vsinds are the subband index of each vertex index
+    # svinds is lists of band vertex indices that belong to the same subband
+    vsinds, svinds = subsets(data.bandneighs)
+    meter = Progress(length(svinds), "Step 4 - Splitting: ")
+    new2old = sortperm(vsinds)
+    old2new = invperm(new2old)
+    offset = 0
+    for subset in svinds
+        sverts  = data.bandverts[subset]
+        sneighs = [ [old2new[dstold] - offset for dstold in data.bandneighs[srcold]]
+                  for srcold in subset]
+        offset += length(sverts)
+        ssimps  = build_cliques(sneighs, data.L + 1)
+        orient_simplices!(ssimps, sverts)
+        push!(data.subbands, Subband(sverts, sneighs, ssimps))
+        data.showprogress && ProgressMeter.next!(meter)
+    end
+    return data
+end
 
 #endregion

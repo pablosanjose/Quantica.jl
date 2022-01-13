@@ -44,7 +44,7 @@ function plot(m::Quantica.Mesh{Quantica.BandVertex{<:Any,2}}; kw...)
     return bandplot3d(m; kw...)
 end
 
-@recipe(BandPlot2D, mesh) do scene
+@recipe(BandPlot2D, band) do scene
     Theme(
     linethickness = 3.0,
     wireframe = true,
@@ -70,7 +70,7 @@ function plot!(plot::BandPlot2D)
     return plot
  end
 
-@recipe(BandPlot3D, mesh) do scene
+@recipe(BandPlot3D, band) do scene
     Theme(
     linethickness = 1.3,
     wireframe = true,
@@ -84,14 +84,13 @@ function plot!(plot::BandPlot2D)
 end
 
 function plot!(plot::BandPlot3D)
-    mesh = to_value(plot[1])
-    # bandinds = haskey(plot, :bands) ? to_value(plot[:bands]) : eachindex(bs.bands)
+    sbands = Quantica.subbands(to_value(plot[1]))
     colors = Iterators.cycle(plot[:colors][])
-    color = first(colors)
-    # for (nb, color) in zip(bandinds, colors)
-        # band = bs.bands[nb]
-        vertices = collect(Quantica.vertex_coordinates(mesh))
-        simplices = Quantica.simplices(mesh)
+    for (sidx, color) in zip(eachindex(sbands), colors)
+        !haskey(plot, :bands) || sidx in to_value(plot[:bands]) || continue
+        sband = sbands[sidx]
+        vertices = collect(Quantica.vertex_coordinates(sband))
+        simplices = Quantica.simplices(sband)
         connectivity = [s[j] for s in simplices, j in 1:3]
         if isempty(connectivity)
             scatter!(plot, vertices, color = color)
@@ -99,12 +98,13 @@ function plot!(plot::BandPlot3D)
             mesh!(plot, vertices, connectivity; color = color, transparency = false,
                 ssao = plot[:ssao][], ambient = plot[:ambient][], diffuse = plot[:diffuse][])
             if plot[:wireframe][]
-                edgevertices = collect(Quantica.edge_coordinates(mesh))
+                edgevertices = collect(Quantica.edge_coordinates(sband))
                 wireframe_shift!(edgevertices, 1)
                 linesegments!(plot, edgevertices, color = darken(color, plot[:linedarken][]), linewidth = plot[:linethickness][])
+
             end
         end
-    # end
+    end
     return plot
  end
 

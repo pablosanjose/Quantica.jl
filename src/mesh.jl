@@ -59,7 +59,22 @@ function delete_edge!(m, (i, j))
     return m
 end
 
-function fast_setdiff!(c, rng)
+# delete elements in c and d if the one in c is not in rng
+function fast_setdiff!((c, d)::Tuple, rng)
+    i = 0
+    for (i´, x) in enumerate(c)
+        x in rng && continue
+        i += 1
+        c[i] = x
+        d[i] = d[i´]
+    end
+    resize!(c, i)
+    resize!(d, i)
+    return (c, d)
+end
+
+# delete elements in c and d if the one in c is not in rng
+function fast_setdiff!(c::Vector, rng)
     i = 0
     for x in c
         x in rng && continue
@@ -110,35 +125,30 @@ function orient_simplices!(simplices, vertices::Vector{B}) where {L,B<:BandVerte
     return simplices
 end
 
-# Base.append!(m::Mesh, u) = foreach(v -> push!(m, v), u)
+# Computes connected subsets in a mesh, in the form of a (vsinds, svinds)
+# vsinds::Vector{Int} is the subset index for each band vertex
+# svinds::Vector{Vector{Int}} is a list of vertex indices for each subset
+subsets(m::Mesh) = subsets(neighbors(m))
 
-# function Base.push!(m::Mesh, v)
-#     # check if already there
-#     for v´ in vertices(m)
-#         v ≈ v´ && return m
-#     end
-#     #check which simplex contains v
-#     c = coordinates_in_simplex(m, v)
-#     c === nothing && return m
-#     (is, w) = c
-#     #incomplete
-
-# function coordinates_in_simplex(m::Mesh, v)
-#     for (i, s) in enumerate(simplices(m))
-#         v0 = simplex_vertex(m, s)
-#         smat = simplex_matrix(m, s)
-#         w = smat \ (v - v0)
-#         all(>=(0), w) && sum(w) < 1 && return i, w
-#     end
-#     return nothing
-# end
-
-# simplex_vertex(m::Mesh, s) = vertices(m, first(s))
-
-# function simplex_matrix(m::Mesh{SVector{L,T}}, s) where {L,T}
-#     v0 = simplex_vertex(m, s)
-#     edges = ntuple(i -> vertices(m, s[i+1]) - v0, Val(L))
-#     return hcat(edges...)
-# end
+function subsets(neighs::Vector{Vector{Int}})
+    vsinds = zeros(Int, length(neighs))
+    svinds = Vector{Int}[]
+    sidx = 0
+    vidx = 1
+    while vidx !== nothing
+        sidx += 1
+        sv = [vidx]
+        push!(svinds, sv)
+        vsinds[vidx] = sidx
+        for i in sv, j in neighs[i]
+            iszero(vsinds[j]) || continue
+            vsinds[j] = sidx
+            push!(sv, j)
+        end
+        sort!(sv)
+        vidx = findfirst(iszero, vsinds)
+    end
+    return vsinds, svinds
+end
 
 #endregion

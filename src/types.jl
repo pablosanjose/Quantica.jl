@@ -561,33 +561,6 @@ Base.copy(m::Mesh) = Mesh(copy(m.verts), deepcopy(m.neighs), deepcopy(m.simps))
 #endregion
 
 ############################################################################################
-# MeshView  -  see mesh.jl for methods
-#region
-
-# struct MeshView{S} <: AbstractMesh{S}
-#     parent::Mesh{S}
-#     vrange::UnitRange{Int}
-#     srange::UnitRange{Int}
-# end
-
-# vertices(m::MeshView) = view(vertices(m.parent), m.vrange)
-
-# vertices(m::MeshView, i) = vertices(m)[i]
-
-# neighbors(m::MeshView) = (n - first(m.vrange) + 1 for ns in view(neighbors(m.parent), m.vrange))
-# neighbors(m::MeshView, i::Int) = (n - first(m.vrange) + 1 for n in view(neighbors(m.parent), m.vrange)[i])
-
-# neighbors_forward(m::MeshView, i::Int) = Iterators.filter(>(i), neighbors(m, i))
-
-# simplices(m::MeshView) = (s- first(m.srange) + 1 for ss in view(simplices(m.parent), m.srange) for s in ss)
-
-# Base.parent(m::MeshView) = m.parent
-
-# Base.copy(m::MeshView) = MeshView(copy(m.parent), copy(m.vrange), copy(m.srange))
-
-#endregion
-
-############################################################################################
 # Eigensolvers  -  see eigensolver.jl for methods and solver backends <: AbstractEigensolver
 #region
 
@@ -619,8 +592,12 @@ struct BandVertex{T<:AbstractFloat,L,O}
     states::MatrixView{O}
 end
 
+const Subband{T,L,O} = Mesh{BandVertex{T,L,O}}
+
+Subband(verts::Vector{<:BandVertex}, neighs, simps) = Mesh(verts, neighs, simps)
+
 struct Band{T,L,E,O}
-    bandmesh::Mesh{BandVertex{T,L,O}}
+    subbands::Vector{Subband{T,L,O}}
     basemesh::Mesh{SVector{L,T}}
     solvers::Vector{AppliedEigensolver{T,L,E,O}}  # one per Julia thread
 end
@@ -628,12 +605,6 @@ end
 coordinates(v::BandVertex) = SA[v.momentum..., v.energy]
 
 base_coordinates(v::BandVertex) = v.momentum
-
-vertex_coordinates(m::Mesh{<:BandVertex}) = (coordinates(v) for v in vertices(m))
-vertex_coordinates(m::Mesh{<:BandVertex}, i) = coordinates(vertices(m)[i])
-
-edge_coordinates(m::Mesh{<:BandVertex}) =
-    ((vertex_coordinates(m, i), vertex_coordinates(m, j)) for i in eachindex(vertices(m)) for j in neighbors_forward(m, i))
 
 energy(v::BandVertex) = v.energy
 
@@ -644,8 +615,18 @@ degeneracy(v::BandVertex) = size(v.states, 2)
 parentrows(v::BandVertex) = first(parentindices(v.states))
 parentcols(v::BandVertex) = last(parentindices(v.states))
 
-bandmesh(b::Band) = b.bandmesh
+vertex_coordinates(m::Subband) = (coordinates(v) for v in vertices(m))
+vertex_coordinates(m::Subband, i) = coordinates(vertices(m)[i])
+
+edge_coordinates(m::Subband) =
+    ((vertex_coordinates(m, i), vertex_coordinates(m, j)) for i in eachindex(vertices(m)) for j in neighbors_forward(m, i))
+edge_indices(m::Subband) =
+    ((i, j) for i in eachindex(vertices(m)) for j in neighbors_forward(m, i))
 
 basemesh(b::Band) = b.basemesh
+
+subbands(b::Band) = b.subbands
+
+subbands(b::Band, i...) = getindex(b.subbands, i...)
 
 #endregion
