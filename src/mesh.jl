@@ -59,8 +59,20 @@ function delete_edge!(m, (i, j))
     return m
 end
 
+# delete elements in c if it is not in rng
+function fast_setdiff!(c::Vector, rng)
+    i = 0
+    for x in c
+        x in rng && continue
+        i += 1
+        c[i] = x
+    end
+    resize!(c, i)
+    return c
+end
+
 # delete elements in c and d if the one in c is not in rng
-function fast_setdiff!((c, d)::Tuple, rng)
+function fast_setdiff!((c, d)::Tuple{Vector,Vector}, rng)
     i = 0
     for (i´, x) in enumerate(c)
         x in rng && continue
@@ -71,18 +83,6 @@ function fast_setdiff!((c, d)::Tuple, rng)
     resize!(c, i)
     resize!(d, i)
     return (c, d)
-end
-
-# delete elements in c and d if the one in c is not in rng
-function fast_setdiff!(c::Vector, rng)
-    i = 0
-    for x in c
-        x in rng && continue
-        i += 1
-        c[i] = x
-    end
-    resize!(c, i)
-    return c
 end
 
 # groups of n all-to-all connected neighbors, sorted
@@ -125,11 +125,9 @@ function orient_simplices!(simplices, vertices::Vector{B}) where {L,B<:BandVerte
     return simplices
 end
 
-# Computes connected subsets in a mesh, in the form of a (vsinds, svinds)
+# Computes connected subsets from a list of neighbors, in the form of a (vsinds, svinds)
 # vsinds::Vector{Int} is the subset index for each band vertex
 # svinds::Vector{Vector{Int}} is a list of vertex indices for each subset
-subsets(m::Mesh) = subsets(neighbors(m))
-
 function subsets(neighs::Vector{Vector{Int}})
     vsinds = zeros(Int, length(neighs))
     svinds = Vector{Int}[]
