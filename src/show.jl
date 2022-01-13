@@ -154,3 +154,21 @@ Base.summary(::AppliedEigensolver{T,L}) where {T,L} =
     "AppliedEigensolver{$T,$L}: Eigensolver applied over an $L-dimensional parameter manifold of type $T"
 
 #endregion
+
+############################################################################################
+# Band
+#region
+
+function Base.show(io::IO, b::Band)
+    i = get(io, :indent, "")
+    print(io, i, summary(b), "\n",
+"$i  Subbands  : $(length(subbands(b)))
+$i  Vertices  : $(sum(s->length(vertices(s)), subbands(b)))
+$i  Edges     : $(sum(s -> sum(length, neighbors(s)), subbands(b)) ÷ 2)
+$i  Simplices : $(sum(s->length(simplices(s)), subbands(b)))")
+end
+
+Base.summary(::Band{T,L}) where {T,L} =
+    "Band{$T,$L}: Band structure over a $L-dimensional parameter space of type $T"
+
+#endregion

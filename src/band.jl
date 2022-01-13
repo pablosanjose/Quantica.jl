@@ -6,15 +6,16 @@ band(h::AbstractHamiltonian, mesh::Mesh; solver = ES.LinearAlgebra(), kw...) =
     band(bloch(h, solver), mesh; solver, kw...)
 
 function band(bloch::Bloch, basemesh::Mesh{SVector{L,T}}; mapping = missing,
-    solver = ES.LinearAlgebra(), showprogress = true, defects = (), patches = 0, degtol = missing, warn = true) where {T,L}
+    solver = ES.LinearAlgebra(), showprogress = true, defects = (), patches = 0,
+    degtol = missing, split = true, warn = true) where {T,L}
     solvers = [apply(solver, bloch, SVector{L,T}, mapping) for _ in 1:Threads.nthreads()]
     defects´ = sanitize_Vector_of_SVectors(SVector{L,T}, defects)
     degtol´ = degtol isa Number ? degtol : sqrt(eps(real(T)))
-    return band_precompilable(solvers, basemesh, showprogress, defects´, patches, degtol´, warn)
+    return band_precompilable(solvers, basemesh, showprogress, defects´, patches, degtol´, split, warn)
 end
 
 function band_precompilable(solvers::Vector{A}, basemesh::Mesh{SVector{L,T}},
-    showprogress, defects, patches, degtol, warn) where {T,L,E,O,A<:AppliedEigensolver{T,L,E,O}}
+    showprogress, defects, patches, degtol, split, warn) where {T,L,E,O,A<:AppliedEigensolver{T,L,E,O}}
 
     basemesh = copy(basemesh) # will become part of Band, possibly refined
     spectra = Vector{Spectrum{E,O}}(undef, length(vertices(basemesh)))
@@ -26,7 +27,7 @@ function band_precompilable(solvers::Vector{A}, basemesh::Mesh{SVector{L,T}},
     frustrated = similar(crossed)
     subbands = Subband{T,L,O}[]
     data = (; basemesh, spectra, bandverts, bandneighs, bandneideg, coloffsets, solvers, L,
-              crossed, frustrated, subbands, defects, patches, showprogress, degtol, warn)
+              crossed, frustrated, subbands, defects, patches, showprogress, degtol, split, warn)
 
     # Step 1 - Diagonalize:
     # Uses multiple AppliedEigensolvers (one per Julia thread) to diagonalize bloch at each
@@ -340,27 +341,35 @@ end
 #region
 
 function band_split!(data)
-    # vsinds are the subband index of each vertex index
-    # svinds is lists of band vertex indices that belong to the same subband
-    vsinds, svinds = subsets(data.bandneighs)
-    meter = Progress(length(svinds), "Step 4 - Splitting: ")
-    new2old = sortperm(vsinds)
-    old2new = invperm(new2old)
-    offset = 0
-    for subset in svinds
-        # avoid subbands with no simplices
-        if length(subset) > data.L
-            sverts  = data.bandverts[subset]
-            sneighs = [ [old2new[dstold] - offset for dstold in data.bandneighs[srcold]]
-                    for srcold in subset]
-            ssimps  = build_cliques(sneighs, data.L + 1)
-            if !isempty(ssimps)
-                orient_simplices!(ssimps, sverts)
-                push!(data.subbands, Subband(sverts, sneighs, ssimps))
+    if data.split
+        # vsinds are the subband index of each vertex index
+        # svinds is lists of band vertex indices that belong to the same subband
+        vsinds, svinds = subsets(data.bandneighs)
+        meter = Progress(length(svinds), "Step 4 - Splitting: ")
+        new2old = sortperm(vsinds)
+        old2new = invperm(new2old)
+        offset = 0
+        for subset in svinds
+            # avoid subbands with no simplices
+            if length(subset) > data.L
+                sverts  = data.bandverts[subset]
+                sneighs = [ [old2new[dstold] - offset for dstold in data.bandneighs[srcold]]
+                        for srcold in subset]
+                ssimps  = build_cliques(sneighs, data.L + 1)
+                if !isempty(ssimps)
+                    orient_simplices!(ssimps, sverts)
+                    push!(data.subbands, Subband(sverts, sneighs, ssimps))
+                end
             end
+            offset += length(subset)
+            data.showprogress && ProgressMeter.next!(meter)
         end
-        offset += length(subset)
-        data.showprogress && ProgressMeter.next!(meter)
+    else
+        sverts = data.bandverts
+        sneighs = data.bandneighs
+        ssimps  = build_cliques(data.bandneighs, data.L + 1)
+        orient_simplices!(ssimps, sverts)
+        push!(data.subbands, Subband(sverts, sneighs, ssimps))
     end
     return data
 end
