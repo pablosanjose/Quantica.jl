@@ -20,12 +20,12 @@ function band_precompilable(solvers::Vector{A}, basemesh::Mesh{SVector{L,T}},
     spectra = Vector{Spectrum{E,O}}(undef, length(vertices(basemesh)))
     bandverts = BandVertex{T,L,O}[]
     bandneighs = Vector{Int}[]
-    bandnedegs = similar(bandneighs)
+    bandneideg = similar(bandneighs)
     coloffsets = Int[]
     crossed = NTuple{6,Int}[]
     frustrated = similar(crossed)
     subbands = Subband{T,L,O}[]
-    data = (; basemesh, spectra, bandverts, bandneighs, bandnedegs, coloffsets, solvers, L,
+    data = (; basemesh, spectra, bandverts, bandneighs, bandneideg, coloffsets, solvers, L,
               crossed, frustrated, subbands, defects, patches, showprogress, degtol, warn)
 
     # Step 1 - Diagonalize:
@@ -89,7 +89,7 @@ function append_band_column!(data, basevert, spectrum)
         push!(data.bandverts, BandVertex(basevert, energy, state))
     end
     push!(data.coloffsets, length(data.bandverts))
-    foreach(_ -> push!(data.bandnedegs, Int[]), length(data.bandnedegs)+1:length(data.bandverts))
+    foreach(_ -> push!(data.bandneideg, Int[]), length(data.bandneideg)+1:length(data.bandverts))
     foreach(_ -> push!(data.bandneighs, Int[]), length(data.bandneighs)+1:length(data.bandverts))
     return data
 end
@@ -149,8 +149,8 @@ function knit_seam!(data, ib, jb)
             if connections > 0
                 push!(data.bandneighs[i], j)
                 push!(data.bandneighs[j], i)
-                push!(data.bandnedegs[i], connections)
-                push!(data.bandnedegs[j], connections)
+                push!(data.bandneideg[i], connections)
+                push!(data.bandneideg[j], connections)
                 # populate crossed with all crossed links if lattice dimension > 1
                 if data.L > 1
                     for i´ in first(srcrange):i-1, j´ in data.bandneighs[i´]
@@ -307,7 +307,7 @@ function is_frustrated_link(data, (ib, jb, i, j))
 end
 
 function degeneracy_link(data, i, j)
-    for (k, d) in zip(data.bandneighs[i], data.bandnedegs[i])
+    for (k, d) in zip(data.bandneighs[i], data.bandneideg[i])
         k == j && return d
     end
     return 0
@@ -325,10 +325,10 @@ function delete_seam!(data, isrcbase, idstbase)
     srcrange = column_range(data, isrcbase)
     dstrange = column_range(data, idstbase)
     for isrc in srcrange
-        fast_setdiff!((data.bandneighs[isrc], data.bandnedegs[isrc]), dstrange)
+        fast_setdiff!((data.bandneighs[isrc], data.bandneideg[isrc]), dstrange)
     end
     for idst in dstrange
-        fast_setdiff!((data.bandneighs[idst], data.bandnedegs[idst]), srcrange)
+        fast_setdiff!((data.bandneighs[idst], data.bandneideg[idst]), srcrange)
     end
     return data
 end
