@@ -348,13 +348,18 @@ function band_split!(data)
     old2new = invperm(new2old)
     offset = 0
     for subset in svinds
-        sverts  = data.bandverts[subset]
-        sneighs = [ [old2new[dstold] - offset for dstold in data.bandneighs[srcold]]
-                  for srcold in subset]
-        offset += length(sverts)
-        ssimps  = build_cliques(sneighs, data.L + 1)
-        orient_simplices!(ssimps, sverts)
-        push!(data.subbands, Subband(sverts, sneighs, ssimps))
+        # avoid subbands with no simplices
+        if length(subset) > data.L
+            sverts  = data.bandverts[subset]
+            sneighs = [ [old2new[dstold] - offset for dstold in data.bandneighs[srcold]]
+                    for srcold in subset]
+            ssimps  = build_cliques(sneighs, data.L + 1)
+            if !isempty(ssimps)
+                orient_simplices!(ssimps, sverts)
+                push!(data.subbands, Subband(sverts, sneighs, ssimps))
+            end
+        end
+        offset += length(subset)
         data.showprogress && ProgressMeter.next!(meter)
     end
     return data
