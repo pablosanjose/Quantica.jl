@@ -27,7 +27,7 @@ export sublat, lattice, dims, supercell, bravais_matrix, siteindices, sitepositi
        momentaKPM, dosKPM, averageKPM, densityKPM, bandrangeKPM,
        greens, greensolver, Schur1D
 
-export LatticePresets, LP, RegionPresets, RP, Eigensolvers, ES #, HamiltonianPresets, HP
+export LatticePresets, LP, RegionPresets, RP, EigensolverPresets, EP #, HamiltonianPresets, HP
 export @SMatrix, @SVector, SMatrix, SVector, SA
 export ishermitian, I
 
@@ -40,13 +40,8 @@ include("builders.jl")
 include("hamiltonian.jl")
 include("supercell.jl")
 include("transform.jl")
-include("eigensolver.jl")
 include("apply.jl")
 # include("ket.jl")
-# include("parametric.jl")
-# include("slice.jl")
-# include("mesh.jl")
-# include("diagonalizer.jl")
 include("mesh.jl")
 include("band.jl")
 # include("KPM.jl")
@@ -57,8 +52,11 @@ include("show.jl")
 include("tools.jl")
 include("convert.jl")
 
-include("presets.jl")
+include("presets/lattices.jl")
+include("presets/regions.jl")
+include("presets/eigensolvers.jl")
+# include("presets/hamiltonians.jl")
 
-include("precompile.jl")
+# include("precompile.jl")
 
 end

@@ -7,6 +7,22 @@ rdr((r1, r2)::Pair) = (0.5 * (r1 + r2), r2 - r1)
 #endregion
 
 ############################################################################################
+# Dynamic package loader
+#   This is in global Quantica scope to avoid name collisions
+#   We also `import` instead of `using` to avoid collisions between several backends
+#region
+
+function ensureloaded(package::Symbol)
+    if !isdefined(Quantica, package)
+        @warn("Required package $package not loaded. Loading...")
+        eval(:(import $package))
+    end
+    return nothing
+end
+
+#endregion
+
+############################################################################################
 # Matrix transformations [involves OrbitalStructure's]
 # all merged_* functions assume matching structure of sparse matrices
 #region

@@ -561,15 +561,16 @@ Base.copy(m::Mesh) = Mesh(copy(m.verts), deepcopy(m.neighs), deepcopy(m.simps))
 #endregion
 
 ############################################################################################
-# Eigensolvers  -  see eigensolver.jl for methods and solver backends <: AbstractEigensolver
+# Eigensolvers  -  see band.jl for AppliedEigensolver call API and Spectrum constructors
+#                  /presets/eigensolvers.jl for solver backends <: AbstractEigensolver
 #region
 
 abstract type AbstractEigensolver end
 
-const Spectrum{E<:Complex,O} = Eigen{O,E,Matrix{O},Vector{E}}
+const Spectrum{C<:Complex,O} = Eigen{O,C,Matrix{O},Vector{C}}
 
-struct AppliedEigensolver{T,L,E,O}
-    solver::FunctionWrapper{Spectrum{E,O},Tuple{SVector{L,T}}}
+struct AppliedEigensolver{T,L,C,O}
+    solver::FunctionWrapper{Spectrum{C,O},Tuple{SVector{L,T}}}
 end
 
 energies(s::Spectrum) = s.values

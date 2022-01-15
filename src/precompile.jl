@@ -26,3 +26,10 @@ for E in 0:2, L in 0:E
         precompile(applyterm!, (IJVBuilder{T,E,L,B}, AppliedHoppingTerm{T,E,L,B}))
     end
 end
+
+for L in 1:2
+    T = Float64
+    C = ComplexF64
+    O = ComplexF64
+    precompile(band_precompilable, (Vector{AppliedEigensolver{T,L,C,O}}, Mesh{SVector{L,T}}, Bool, Vector{SVector{L,T}}, Int, T, Bool, Bool))
+end

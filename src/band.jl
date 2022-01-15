@@ -1,12 +1,38 @@
 ############################################################################################
+# AppliedEigensolver call API and Spectrum constructors
+#region
+
+(s::AppliedEigensolver{<:Any,L})(φs::Vararg{<:Any,L}) where {L} = s.solver(SVector(φs))
+(s::AppliedEigensolver{<:Any,L})(φs::SVector{L}) where {L} = s.solver(φs)
+(s::AppliedEigensolver{<:Any,L})(φs...) where {L} =
+    throw(ArgumentError("AppliedEigensolver call requires $L parameters/Bloch phases"))
+
+Spectrum(evals, evecs) = Eigen(sorteigs!(evals, evecs)...)
+Spectrum(evals::AbstractVector, evecs::AbstractVector{<:AbstractVector}) =
+    Spectrum(evals, hcat(evecs...))
+Spectrum(evals::AbstractVector{<:Real}, evecs::AbstractMatrix) =
+    Spectrum(complex.(evals), evecs)
+
+function sorteigs!(ϵ::AbstractVector, ψ::AbstractMatrix)
+    p = Vector{Int}(undef, length(ϵ))
+    p´ = similar(p)
+    sortperm!(p, ϵ, by = real, alg = Base.DEFAULT_UNSTABLE)
+    Base.permute!!(ϵ, copy!(p´, p))
+    Base.permutecols!!(ψ, copy!(p´, p))
+    return ϵ, ψ
+end
+
+#endregion
+
+############################################################################################
 # band
 #region
 
-band(h::AbstractHamiltonian, mesh::Mesh; solver = ES.LinearAlgebra(), kw...) =
+band(h::AbstractHamiltonian, mesh::Mesh; solver = EP.LinearAlgebra(), kw...) =
     band(bloch(h, solver), mesh; solver, kw...)
 
 function band(bloch::Bloch, basemesh::Mesh{SVector{L,T}}; mapping = missing,
-    solver = ES.LinearAlgebra(), showprogress = true, defects = (), patches = 0,
+    solver = EP.LinearAlgebra(), showprogress = true, defects = (), patches = 0,
     degtol = missing, split = true, warn = true) where {T,L}
     solvers = [apply(solver, bloch, SVector{L,T}, mapping) for _ in 1:Threads.nthreads()]
     defects´ = sanitize_Vector_of_SVectors(SVector{L,T}, defects)
@@ -15,10 +41,10 @@ function band(bloch::Bloch, basemesh::Mesh{SVector{L,T}}; mapping = missing,
 end
 
 function band_precompilable(solvers::Vector{A}, basemesh::Mesh{SVector{L,T}},
-    showprogress, defects, patches, degtol, split, warn) where {T,L,E,O,A<:AppliedEigensolver{T,L,E,O}}
+    showprogress, defects, patches, degtol, split, warn) where {T,L,C,O,A<:AppliedEigensolver{T,L,C,O}}
 
     basemesh = copy(basemesh) # will become part of Band, possibly refined
-    spectra = Vector{Spectrum{E,O}}(undef, length(vertices(basemesh)))
+    spectra = Vector{Spectrum{C,O}}(undef, length(vertices(basemesh)))
     bandverts = BandVertex{T,L,O}[]
     bandneighs = Vector{Int}[]
     bandneideg = similar(bandneighs)

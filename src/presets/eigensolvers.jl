@@ -1,47 +1,4 @@
 ############################################################################################
-# AppliedEigensolver and Spectrum
-#region
-
-(s::AppliedEigensolver{<:Any,L})(φs::Vararg{<:Any,L}) where {L} = s.solver(SVector(φs))
-(s::AppliedEigensolver{<:Any,L})(φs::SVector{L}) where {L} = s.solver(φs)
-(s::AppliedEigensolver{<:Any,L})(φs...) where {L} =
-    throw(ArgumentError("AppliedEigensolver call requires $L parameters/Bloch phases"))
-
-Spectrum(evals, evecs) = Eigen(sorteigs!(evals, evecs)...)
-Spectrum(evals::AbstractVector, evecs::AbstractVector{<:AbstractVector}) =
-    Spectrum(evals, hcat(evecs...))
-Spectrum(evals::AbstractVector{<:Real}, evecs::AbstractMatrix) =
-    Spectrum(complex.(evals), evecs)
-
-function sorteigs!(ϵ::AbstractVector, ψ::AbstractMatrix)
-    p = Vector{Int}(undef, length(ϵ))
-    p´ = similar(p)
-    sortperm!(p, ϵ, by = real, alg = Base.DEFAULT_UNSTABLE)
-    Base.permute!!(ϵ, copy!(p´, p))
-    Base.permutecols!!(ψ, copy!(p´, p))
-    return ϵ, ψ
-end
-
-#endregion
-
-############################################################################################
-# Dynamic package loader
-#   This is in global Quantica scope to avoid name collisions between package and
-#   Eigensolvers.AbstractEigensolver. We `import` instead of `using` to avoid collisions
-#   between several backends
-#region
-
-function ensureloaded(package::Symbol)
-    if !isdefined(Quantica, package)
-        @warn("Required package $package not loaded. Loading...")
-        eval(:(import $package))
-    end
-    return nothing
-end
-
-#endregion
-
-############################################################################################
 # Eigensolvers module
 #   Strategy: apply an AbstractEigensolver to a Hamiltonian (or Bloch) to produce an
 #   AppliedEigensolver, which is essentially a FunctionWrapper from an SVector to a
@@ -50,7 +7,7 @@ end
 #   AbstractEigensolver
 #region
 
-module Eigensolvers
+module EigensolverPresets
 
 using FunctionWrappers: FunctionWrapper
 using LinearAlgebra: Eigen, I, lu, ldiv!
@@ -175,6 +132,6 @@ Quantica.bloch(h::AbstractHamiltonian, ::ShiftInvertSparse) = bloch(flatten(h))
 
 end # module
 
-const ES = Eigensolvers
+const EP = EigensolverPresets
 
 #endregion
