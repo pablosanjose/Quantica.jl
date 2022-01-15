@@ -24,7 +24,7 @@ SuiteSparse = "4607b0f0-06f3-5cda-b6b1-a6196a1729e9"
 [compat]
 Compat = "3"
 ExprTools = "^0.1"
-GeometryBasics = "^0.3"
+GeometryBasics = "0.4"
 NearestNeighbors = "0.4"
 ProgressMeter = "1.2"
 StaticArrays = "0.12.3, 0.13, 1.0"

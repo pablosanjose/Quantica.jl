@@ -1,8 +1,7 @@
 module Quantica
 
-# Use README as the docstring of the module:
 using Base.Threads: Iterators
-@doc read(joinpath(dirname(@__DIR__), "README.md"), String) Quantica
+# @doc read(joinpath(dirname(@__DIR__), "README.md"), String) Quantica
 
 using StaticArrays
 using NearestNeighbors
