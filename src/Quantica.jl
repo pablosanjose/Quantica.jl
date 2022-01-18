@@ -12,6 +12,7 @@ using Random
 using SuiteSparse
 using FunctionWrappers: FunctionWrapper
 using ExprTools
+using IntervalTrees
 using SparseArrays: getcolptr, AbstractSparseMatrix, AbstractSparseMatrixCSC
 using Statistics: mean
 
@@ -20,7 +21,7 @@ export sublat, lattice, dims, supercell, bravais_matrix, siteindices, sitepositi
        ket, ketmodel, randomkets, basiskets,
        hamiltonian, parametric, bloch, bloch!, similarmatrix,
        flatten, unflatten, orbitalstructure, wrap, transform, translate, combine,
-       spectrum, band, mesh, isometric, splitbands,
+       spectrum, band, mesh, isometric, subbands,
        vertices, minima, maxima, gapedge, gap, isinband,
        energies, states, degeneracy,
        momentaKPM, dosKPM, averageKPM, densityKPM, bandrangeKPM,

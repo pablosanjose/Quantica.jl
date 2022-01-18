@@ -25,6 +25,26 @@ end
 #endregion
 
 ############################################################################################
+# Subband constructor
+#region
+
+function Subband(verts::Vector{<:BandVertex{T,L}}, neighs, simps) where {T,L}
+    mesh = Mesh(verts, neighs, simps)
+    trees = ntuple(Val(L+1)) do i
+        list = [IntervalValue(shrinkright(extrema(j->coordinates(verts[j])[i], s))..., n)
+                     for (n, s) in enumerate(simps)]
+        sort!(list)
+        return IntervalTree{T,IntervalValue{T,Int}}(list)
+    end
+    return Subband(mesh, trees)
+end
+
+# Interval is closed, we want semiclosed on the left -> exclude the upper limit
+shrinkright((x, y)) = (x, prevfloat(y))
+
+#endregion
+
+############################################################################################
 # band
 #region
 
@@ -399,5 +419,57 @@ function band_split!(data)
     end
     return data
 end
+
+#endregion
+
+############################################################################################
+# Subband slicing and indexing
+#region
+
+function Base.getindex(s::Subband, xs...)
+    V = sliced_vertex_type(eltype(vertices(s)), xs...)
+    verts  = V[]
+    simps  = Vector{Int}[]
+    neighs = Vector{Int}[]
+    
+end
+
+sliced_vertex_type(::Type{BandVertex{T,L,O}}, ::Colon, xs...) where {T,L,O} =
+    sliced_vertex_type(BandVertex{T,L,O}, xs...)
+sliced_vertex_type(::Type{BandVertex{T,L,O}}, ::Number, xs...) where {T,L,O} =
+    sliced_vertex_type(BandVertex{T,L-1,O}, xs...)
+sliced_vertex_type(t) = t
+
+
+# function Base.getindex(s::Subband, x, xs...)
+#     sinds = sectioned_simplices(s, 1, x, xs...)
+# end
+
+# sectioned_simplices(s, dim, ::Colon, is...) =
+#     sectioned_simplices(s, dim + 1, is...)
+# sectioned_simplices(s, dim, x::Number, is...) =
+#     sectioned_simplices!(value.(tree_intersect(trees(s, dim), x)), s, dim + 1, is...)
+# sectioned_simplices(s, dim) =
+#     collect(1:length(simplices(s)))
+
+# sectioned_simplices!(sinds, s, dim, ::Colon, is...) =
+#     sectioned_simplices!(sinds, s, dim + 1, is...)
+# sectioned_simplices!(sinds, s, dim) = sort!(sinds)
+
+# function sectioned_simplices!(sinds, s, dim, x::Number, is...)
+#     itr = tree_intersect(trees(s, dim), x)
+#     filter!(i -> in_function(value, i, itr), sinds)
+#     return sectioned_simplices!(sinds, s, dim+1, is...)
+# end
+
+# tree_intersect(tree::IntervalTree{T}, x::Number) where {T} = intersect(tree, (T(x), T(x)))
+# tree_intersect(tree::IntervalTree, ::Column) = ()
+
+# function in_function(f, i, itr)
+#     for j in itr
+#         i == f(j) && return true
+#     end
+#     return false
+# end
 
 #endregion

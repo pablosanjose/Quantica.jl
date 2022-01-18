@@ -156,7 +156,7 @@ Base.summary(::AppliedEigensolver{T,L}) where {T,L} =
 #endregion
 
 ############################################################################################
-# Band
+# Band and Subband
 #region
 
 function Base.show(io::IO, b::Band)
@@ -168,7 +168,19 @@ $i  Edges     : $(sum(s -> sum(length, neighbors(s)), subbands(b)) ÷ 2)
 $i  Simplices : $(sum(s->length(simplices(s)), subbands(b)))")
 end
 
+Base.summary(::Subband{T,L}) where {T,L} =
+    "Subband{$T,$L}: Subband over a $L-dimensional parameter space of type $T"
+
+    function Base.show(io::IO, s::Subband)
+    i = get(io, :indent, "")
+    print(io, i, summary(s), "\n",
+"$i  Vertices  : $(length(vertices(s)))
+$i  Edges     : $(sum(length, neighbors(s)) ÷ 2)
+$i  Simplices : $(length(simplices(s)))")
+end
+
 Base.summary(::Band{T,L}) where {T,L} =
     "Band{$T,$L}: Band structure over a $L-dimensional parameter space of type $T"
+
 
 #endregion

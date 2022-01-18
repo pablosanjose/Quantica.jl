@@ -582,7 +582,7 @@ Base.size(s::Spectrum, i...) = size(s.vectors, i...)
 #endregion
 
 ############################################################################################
-# Band  -  see band.jl for methods
+# Band and friends -  see band.jl for methods
 #region
 
 const MatrixView{O} = SubArray{O,2,Matrix{O},Tuple{Base.Slice{Base.OneTo{Int}}, UnitRange{Int}}, true}
@@ -593,15 +593,18 @@ struct BandVertex{T<:AbstractFloat,L,O}
     states::MatrixView{O}
 end
 
-const Subband{T,L,O} = Mesh{BandVertex{T,L,O}}
-
-Subband(verts::Vector{<:BandVertex}, neighs, simps) = Mesh(verts, neighs, simps)
+struct Subband{T,L,O} <: AbstractMesh{BandVertex{T,L,O}}
+    mesh::Mesh{BandVertex{T,L,O}}
+    trees::Tuple{IntervalTree{T,IntervalValue{T,Int}},Vararg{IntervalTree{T,IntervalValue{T,Int}},L}}
+end
 
 struct Band{T,L,E,O}
     subbands::Vector{Subband{T,L,O}}
     basemesh::Mesh{SVector{L,T}}
     solvers::Vector{AppliedEigensolver{T,L,E,O}}  # one per Julia thread
 end
+
+## BandVertex ##
 
 coordinates(v::BandVertex) = SA[v.momentum..., v.energy]
 
@@ -616,13 +619,28 @@ degeneracy(v::BandVertex) = size(v.states, 2)
 parentrows(v::BandVertex) = first(parentindices(v.states))
 parentcols(v::BandVertex) = last(parentindices(v.states))
 
-vertex_coordinates(m::Subband) = (coordinates(v) for v in vertices(m))
-vertex_coordinates(m::Subband, i) = coordinates(vertices(m)[i])
+## Subband ##
 
-edge_coordinates(m::Subband) =
-    ((vertex_coordinates(m, i), vertex_coordinates(m, j)) for i in eachindex(vertices(m)) for j in neighbors_forward(m, i))
-edge_indices(m::Subband) =
-    ((i, j) for i in eachindex(vertices(m)) for j in neighbors_forward(m, i))
+vertices(s::Subband, i...) = vertices(s.mesh)
+
+neighbors(s::Subband, i...) = neighbors(s.mesh)
+
+neighbors_forward(s::Subband, i) = neighbors_forward(s.mesh, i)
+
+simplices(s::Subband) = simplices(s.mesh)
+
+vertex_coordinates(s::Subband) = (coordinates(v) for v in vertices(s))
+vertex_coordinates(s::Subband, i) = coordinates(vertices(s)[i])
+
+edge_coordinates(s::Subband) =
+    ((vertex_coordinates(s, i), vertex_coordinates(s, j)) for i in eachindex(vertices(s)) for j in neighbors_forward(s, i))
+edge_indices(s::Subband) =
+    ((i, j) for i in eachindex(vertices(s)) for j in neighbors_forward(s, i))
+
+trees(s::Subband) = s.trees
+trees(s::Subband, i::Int) = s.trees[i]
+
+## Band ##
 
 basemesh(b::Band) = b.basemesh
 

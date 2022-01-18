@@ -4,6 +4,11 @@
 
 rdr((r1, r2)::Pair) = (0.5 * (r1 + r2), r2 - r1)
 
+@inline tuplejoin() = ()
+@inline tuplejoin(x) = x
+@inline tuplejoin(x, y) = (x..., y...)
+@inline tuplejoin(x, y, z...) = (x..., tuplejoin(y, z...)...)
+
 #endregion
 
 ############################################################################################
