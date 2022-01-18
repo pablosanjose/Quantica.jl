@@ -1,17 +1,11 @@
 ############################################################################################
-# Model terms constructors
+# onsite and hopping
 #region
-
-TightbindingModel(ts::TightbindingModelTerm...) = TightbindingModel(ts)
-
-OnsiteTerm(t::OnsiteTerm, os::SiteSelector) = OnsiteTerm(t.o, os, t.coefficient)
-
-HoppingTerm(t::HoppingTerm, os::HopSelector) = HoppingTerm(t.t, os, t.coefficient)
 
 onsite(o; kw...) = onsite(o, siteselector(; kw...))
 onsite(o, sel::SiteSelector) = TightbindingModel(OnsiteTerm(o, sel, 1))
 onsite(m::TightbindingModel; kw...) = TightbindingModel(
-    Tuple(Any[OnsiteTerm(o, siteselector(o.selector; kw...)) for o in terms(m) if o isa OnsiteTerm]))
+    Tuple(Any[OnsiteTerm(o, siteselector(selector(o); kw...)) for o in terms(m) if o isa OnsiteTerm]))
 
 function hopping(t; plusadjoint = false, kw...)
     hop = hopping(t, hopselector(; kw...))
@@ -20,12 +14,12 @@ end
 
 hopping(t, sel::HopSelector) = TightbindingModel(HoppingTerm(t, sel, 1))
 hopping(m::TightbindingModel; kw...) = TightbindingModel(
-    Tuple(Any[HoppingTerm(t, hopselector(t.selector; kw...)) for t in terms(m) if t isa HoppingTerm]))
+    Tuple(Any[HoppingTerm(t, hopselector(selector(t); kw...)) for t in terms(m) if t isa HoppingTerm]))
 
 #endregion
 
 ############################################################################################
-# Model modifiers constructors
+# @onsite! and @hopping!
 #region
 
 # Modifiers need macros to read out number of f arguments (N) and kwarg names (params).

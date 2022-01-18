@@ -235,6 +235,16 @@ end
 
 const TightbindingModelTerm = Union{OnsiteTerm,HoppingTerm,AppliedOnsiteTerm,AppliedHoppingTerm}
 
+#region ## Constructors ##
+
+TightbindingModel(ts::TightbindingModelTerm...) = TightbindingModel(ts)
+
+OnsiteTerm(t::OnsiteTerm, os::SiteSelector) = OnsiteTerm(t.o, os, t.coefficient)
+
+HoppingTerm(t::HoppingTerm, os::HopSelector) = HoppingTerm(t.t, os, t.coefficient)
+
+#endregion
+
 #region ## API ##
 
 terms(t::TightbindingModel) = t.terms
