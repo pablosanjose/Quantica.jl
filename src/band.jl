@@ -394,11 +394,11 @@ end
 Base.getindex(b::Band, n::Int...) = subbands(b, n...)
 Base.getindex(b::Band, ::Colon) = subbands(b)
 
-function Base.getindex(s::Subband{T,L}, xs...) where {T,L}
+function Base.getindex(s::Subband{T}, xs...) where {T}
     saxes = slice_axes(T, 1, xs...)
     isempty(saxes) && return s
     V = sliced_vertex_type(eltype(vertices(s)), saxes)
-    # temporary vectors to store sectioned simplex vertices (of decreasing dimensionality)
+    # vsect: temporaries to store sectioned simplex vertices (of decreasing dimensionality)
     vsect  = vertex_stacks(s, saxes)
     verts  = V[]
     neighs = Vector{Int}[]
@@ -411,10 +411,10 @@ slice_axes(T, dim, x::Colon, xs...) = slice_axes(T, dim + 1, xs...)
 slice_axes(T, dim, x::Number, xs...) = ((dim, T(x)), slice_axes(T, dim + 1, xs...)...)
 slice_axes(T, dim) = ()
 
-sliced_vertex_type(::Type{BandVertex{T,L,O}}, ::NTuple{N}) where {T,L,O,N} = BandVertex{T,L-N,O}
+sliced_vertex_type(::Type{BandVertex{T,E,O}}, ::NTuple{N}) where {T,E,O,N} = BandVertex{T,E-N,O}
 
-vertex_stacks(::Subband{T,L,O}, ::NTuple{N}) where {T,L,N,O} =
-    ntuple(i -> BandVertex{T,L+1-i,O}[], Val(N))
+vertex_stacks(::Subband{T,E,O}, ::NTuple{N}) where {T,E,N,O} =
+    ntuple(i -> BandVertex{T,E-i,O}[], Val(N))
 
 function slice_subband!(vecs, s, (dim, k), xs...)
     for sind in intersect(trees(s, dim), (k, k))
@@ -451,19 +451,18 @@ function push_slice_verts!(vs, v0, v1, (dim, x)) where {N}
     dr = r1 - r0
     λ = (x - r0[dim]) / dr[dim]
     if 0 <= λ < 1
-        k, ε = interpolate_coordinates(r0, dr, λ, dim)
+        kε = interpolate_coordinates(r0, dr, λ, dim)
         φ = interpolate_states(φ0, φ1, λ)
-        push!(vs, BandVertex(k, ε, φ))
+        push!(vs, BandVertex(kε, φ))
     else
-        @show "Unexpected λ = $λ"
+        @show "Unexpected λ = $λ, should be in [0,1)"
     end
     return vs
 end
 
 function interpolate_coordinates(r0::SVector{N}, dr, λ, dim) where {N}
-    kε = ntuple(i -> i < dim ? r0[i] + λ*dr[i] : r0[i+1] + λ*dr[i+1], Val(N-1))
-    k, ε = Base.front(kε), last(kε)
-    return k, ε
+    kε = SVector(ntuple(i -> i < dim ? r0[i] + λ*dr[i] : r0[i+1] + λ*dr[i+1], Val(N-1)))
+    return kε
 end
 
 function interpolate_coordinates(φ0, φ1, λ)
