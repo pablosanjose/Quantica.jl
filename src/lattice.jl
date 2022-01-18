@@ -1,5 +1,5 @@
 ############################################################################################
-# Sublat constructors
+# sublat
 #region
 
 sublat(sites...; name = :_) =
@@ -11,27 +11,7 @@ sublat(sites::Vector; name = :_) =
 #endregion
 
 ############################################################################################
-# Bravais constructors
-#region
-
-Bravais(::Type{T}, E, m) where {T} = Bravais(T, Val(E), m)
-Bravais(::Type{T}, ::Val{E}, m::Tuple{}) where {T,E} =
-    Bravais{T,E,0}(sanitize_Matrix(T, E, ()))
-Bravais(::Type{T}, ::Val{E}, m::NTuple{E´,Number}) where {T,E,E´} =
-    Bravais{T,E,1}(sanitize_Matrix(T, E, (m,)))
-Bravais(::Type{T}, ::Val{E}, m::NTuple{L,Any}) where {T,E,L} =
-    Bravais{T,E,L}(sanitize_Matrix(T, E, m))
-Bravais(::Type{T}, ::Val{E}, m::SMatrix{E,L}) where {T,E,L} =
-    Bravais{T,E,L}(sanitize_Matrix(T, E, m))
-Bravais(::Type{T}, ::Val{E}, m::AbstractMatrix) where {T,E} =
-    Bravais{T,E,size(m,2)}(sanitize_Matrix(T, E, m))
-Bravais(::Type{T}, ::Val{E}, m::AbstractVector) where {T,E} =
-    Bravais{T,E,1}(sanitize_Matrix(T, E, hcat(m)))
-
-#endregion
-
-############################################################################################
-# Unitcell constructors
+# unitcell
 #region
 
 function unitcell(sublats, names, ::Type{S}) where {S<:SVector}
@@ -71,7 +51,7 @@ end
 #endregion
 
 ############################################################################################
-# Lattice constructors
+# lattice
 #region
 
 lattice(s::Sublat, ss::Sublat...; kw...) = _lattice(promote(s, ss...)...; kw...)

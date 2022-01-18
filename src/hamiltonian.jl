@@ -1,38 +1,5 @@
 ############################################################################################
-# OrbitalStructure constructor
-#region
-
-# norbs is a collection of number of orbitals, one per sublattice (or a single one for all)
-# B type instability when calling from `hamiltonian` is removed by @inline (const prop)
-@inline function OrbitalStructure(lat::Lattice, norbs, T = numbertype(lat))
-    B = blocktype(T, norbs)
-    return OrbitalStructure{B}(lat, norbs)
-end
-
-function OrbitalStructure{B}(lat::Lattice, norbs) where {B}
-    norbs´ = sanitize_Vector_of_Type(Int, nsublats(lat), norbs)
-    offsets´ = offsets(lat)
-    return OrbitalStructure{B}(B, norbs´, offsets´)
-end
-
-blocktype(T::Type, norbs) = blocktype(T, val_maximum(norbs))
-blocktype(::Type{T}, m::Val{1}) where {T} = Complex{T}
-blocktype(::Type{T}, m::Val{N}) where {T,N} = SMatrix{N,N,Complex{T},N*N}
-
-val_maximum(n::Int) = Val(n)
-val_maximum(ns::Tuple) = Val(maximum(argval.(ns)))
-
-argval(::Val{N}) where {N} = N
-argval(n::Int) = n
-
-# Equality does not need equal T
-Base.:(==)(o1::OrbitalStructure, o2::OrbitalStructure) =
-    o1.norbs == o2.norbs && o1.offsets == o2.offsets
-
-#endregion
-
-############################################################################################
-# Hamiltonian constructors
+# hamiltonian
 #region
 
 hamiltonian(m::TightbindingModel = TightbindingModel(); kw...) = lat -> hamiltonian(lat, m; kw...)
@@ -83,7 +50,7 @@ end
 #endregion
 
 ############################################################################################
-# ParametricHamiltonian constructors
+# parametric
 #region
 
 parametric(modifiers::Modifier...) = h -> parametric(h, modifiers...)
@@ -182,7 +149,7 @@ end
 #endregion
 
 ############################################################################################
-# Flat constructors (flatten)
+# flatten
 #region
 
 flatten(h::FlatHamiltonian) = h
@@ -236,7 +203,7 @@ end
  #endregion
 
 ############################################################################################
-# Bloch constructors
+# bloch
 #region
 
 function bloch(h::Union{Hamiltonian,ParametricHamiltonian}, ::Type{M} = SparseMatrixCSC) where {M<:AbstractSparseMatrixCSC}

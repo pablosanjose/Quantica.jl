@@ -179,8 +179,8 @@ $i  Edges     : $(sum(length, neighbors(s)) ÷ 2)
 $i  Simplices : $(length(simplices(s)))")
 end
 
-Base.summary(::Band{T,L}) where {T,L} =
-    "Band{$T,$L}: Band structure over a $L-dimensional parameter space of type $T"
+Base.summary(::Band{T,E,L}) where {T,E,L} =
+    "Band{$T,$E,$L}: $(E)D Band structure over a $L-dimensional parameter space of type $T"
 
 
 #endregion

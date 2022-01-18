@@ -29,6 +29,26 @@ struct Lattice{T<:AbstractFloat,E,L}
     nranges::Vector{Tuple{Int,T}}  # [(nth_neighbor, min_nth_neighbor_distance)...]
 end
 
+#region ## Constructors ##
+
+Bravais(::Type{T}, E, m) where {T} = Bravais(T, Val(E), m)
+Bravais(::Type{T}, ::Val{E}, m::Tuple{}) where {T,E} =
+    Bravais{T,E,0}(sanitize_Matrix(T, E, ()))
+Bravais(::Type{T}, ::Val{E}, m::NTuple{E´,Number}) where {T,E,E´} =
+    Bravais{T,E,1}(sanitize_Matrix(T, E, (m,)))
+Bravais(::Type{T}, ::Val{E}, m::NTuple{L,Any}) where {T,E,L} =
+    Bravais{T,E,L}(sanitize_Matrix(T, E, m))
+Bravais(::Type{T}, ::Val{E}, m::SMatrix{E,L}) where {T,E,L} =
+    Bravais{T,E,L}(sanitize_Matrix(T, E, m))
+Bravais(::Type{T}, ::Val{E}, m::AbstractMatrix) where {T,E} =
+    Bravais{T,E,size(m,2)}(sanitize_Matrix(T, E, m))
+Bravais(::Type{T}, ::Val{E}, m::AbstractVector) where {T,E} =
+    Bravais{T,E,1}(sanitize_Matrix(T, E, hcat(m)))
+
+#endregion
+
+#region ## API ##
+
 bravais(l::Lattice) = l.bravais
 
 unitcell(l::Lattice) = l.unitcell
@@ -72,6 +92,7 @@ siterange(l::Lattice, sublat) = siterange(l.unitcell, sublat)
 siterange(u::Unitcell, sublat) = (1+u.offsets[sublat]):u.offsets[sublat+1]
 
 sitesublat(lat::Lattice, siteidx, ) = sitesublat(lat.unitcell.offsets, siteidx)
+
 function sitesublat(offsets, siteidx)
     l = length(offsets)
     for s in 2:l
@@ -104,6 +125,7 @@ zerocell(::Lattice{<:Any,<:Any,L}) where {L} = zero(SVector{L,Int})
 Base.copy(l::Lattice) = deepcopy(l)
 
 #endregion
+#endregion
 
 ############################################################################################
 # Selectors  -  see selector.jl for methods
@@ -128,8 +150,6 @@ struct HopSelector{F,S,D,R}
     adjoint::Bool  # make apply take the "adjoint" of the selector
 end
 
-HopSelector(re, su, dc, ra) = HopSelector(re, su, dc, ra, false)
-
 struct AppliedHopSelector{T,E,L}
     lat::Lattice{T,E,L}
     region::FunctionWrapper{Bool,Tuple{SVector{E,T},SVector{E,T}}}
@@ -141,6 +161,14 @@ end
 struct Neighbors
     n::Int
 end
+
+#region ## Constructors ##
+
+HopSelector(re, su, dc, ra) = HopSelector(re, su, dc, ra, false)
+
+#endregion
+
+#region ## API ##
 
 Base.Int(n::Neighbors) = n.n
 
@@ -170,6 +198,7 @@ Base.adjoint(s::SiteSelector) = s
 
 Base.adjoint(s::HopSelector) = HopSelector(s.region, s.sublats, s.dcells, s.range, !s.adjoint)
 
+#endregion
 #endregion
 
 ############################################################################################
@@ -206,6 +235,8 @@ end
 
 const TightbindingModelTerm = Union{OnsiteTerm,HoppingTerm,AppliedOnsiteTerm,AppliedHoppingTerm}
 
+#region ## API ##
+
 terms(t::TightbindingModel) = t.terms
 
 selector(t::TightbindingModelTerm) = t.selector
@@ -239,6 +270,7 @@ Base.adjoint(t::HoppingTerm{<:Function}) = HoppingTerm((r, dr) -> t.t(r, -dr)', 
 Base.adjoint(t::HoppingTerm) = HoppingTerm(t.t', t.selector', t.coefficient')
 
 #endregion
+#endregion
 
 ############################################################################################
 # Model Modifiers  -  see model.jl for methods
@@ -249,8 +281,6 @@ struct ParametricFunction{N,F}
     f::F
     params::Vector{Symbol}
 end
-
-ParametricFunction{N}(f::F, params) where {N,F} = ParametricFunction{N,F}(f, params)
 
 struct OnsiteModifier{N,S<:SiteSelector,F<:ParametricFunction{N}}
     f::F
@@ -279,6 +309,14 @@ end
 const Modifier = Union{OnsiteModifier,HoppingModifier}
 const AppliedModifier = Union{AppliedOnsiteModifier,AppliedHoppingModifier}
 
+#region ## Constructors ##
+
+ParametricFunction{N}(f::F, params) where {N,F} = ParametricFunction{N,F}(f, params)
+
+#endregion
+
+#region ## API ##
+
 selector(m::Modifier) = m.selector
 
 parameters(m::Union{Modifier,AppliedModifier}) = m.f.params
@@ -298,6 +336,7 @@ pointers(m::AppliedModifier) = m.ptrs
     sanitize_block(B, m.f.f(t, r, dr; kw...), orbs)
 
 #endregion
+#endregion
 
 ############################################################################################
 # OrbitalStructure  -  see hamiltonian.jl for methods
@@ -308,6 +347,35 @@ struct OrbitalStructure{B<:Union{Number,SMatrix}}
     norbitals::Vector{Int}
     offsets::Vector{Int}  # index offset for each sublattice (== offsets(::Lattice))
 end
+
+#region ## Constructors ##
+
+# norbs is a collection of number of orbitals, one per sublattice (or a single one for all)
+# B type instability when calling from `hamiltonian` is removed by @inline (const prop)
+@inline function OrbitalStructure(lat::Lattice, norbs, T = numbertype(lat))
+    B = blocktype(T, norbs)
+    return OrbitalStructure{B}(lat, norbs)
+end
+
+function OrbitalStructure{B}(lat::Lattice, norbs) where {B}
+    norbs´ = sanitize_Vector_of_Type(Int, nsublats(lat), norbs)
+    offsets´ = offsets(lat)
+    return OrbitalStructure{B}(B, norbs´, offsets´)
+end
+
+blocktype(T::Type, norbs) = blocktype(T, val_maximum(norbs))
+blocktype(::Type{T}, m::Val{1}) where {T} = Complex{T}
+blocktype(::Type{T}, m::Val{N}) where {T,N} = SMatrix{N,N,Complex{T},N*N}
+
+val_maximum(n::Int) = Val(n)
+val_maximum(ns::Tuple) = Val(maximum(argval.(ns)))
+
+argval(::Val{N}) where {N} = N
+argval(n::Int) = n
+
+#endregion
+
+#region ## API ##
 
 norbitals(o::OrbitalStructure) = o.norbitals
 
@@ -327,6 +395,11 @@ sublats(o::OrbitalStructure) = 1:nsublats(o)
 
 siterange(o::OrbitalStructure, sublat) = (1+o.offsets[sublat]):o.offsets[sublat+1]
 
+# Equality does not need equal T
+Base.:(==)(o1::OrbitalStructure, o2::OrbitalStructure) =
+    o1.norbs == o2.norbs && o1.offsets == o2.offsets
+
+#endregion
 #endregion
 
 ############################################################################################
@@ -338,6 +411,8 @@ struct Harmonic{L,M<:AbstractArray}
     h::M
 end
 
+#region ## API ##
+
 matrix(h::Harmonic) = h.h
 
 dcell(h::Harmonic) = h.dn
@@ -346,6 +421,7 @@ Base.size(h::Harmonic, i...) = size(matrix(h), i...)
 
 Base.isless(h::Harmonic, h´::Harmonic) = sum(abs2, dcell(h)) < sum(abs2, dcell(h´))
 
+#endregion
 #endregion
 
 ############################################################################################
@@ -369,6 +445,8 @@ struct Hamiltonian{T,E,L,B} <: AbstractHamiltonian{T,E,L,B}
         return new(lattice, orbstruct, harmonics)
     end
 end
+
+#region ## API ##
 
 Hamiltonian(l::Lattice{T,E,L}, o::OrbitalStructure{B}, h::Vector{Harmonic{L,SparseMatrixCSC{B,Int}}}) where {T,E,L,B} =
     Hamiltonian{T,E,L,B}(l, o, h)
@@ -400,6 +478,7 @@ function LinearAlgebra.ishermitian(h::Hamiltonian)
 end
 
 #endregion
+#endregion
 
 ############################################################################################
 # ParametricHamiltonian  -  see hamiltonian.jl for methods
@@ -412,6 +491,8 @@ struct ParametricHamiltonian{T,E,L,B,M<:NTuple{<:Any,AppliedModifier}} <: Abstra
     allptrs::Vector{Vector{Int}}   # allptrs are all modified ptrs in each harmonic (needed for reset!)
     allparams::Vector{Symbol}
 end
+
+#region ## API ##
 
 Base.parent(h::ParametricHamiltonian) = h.hparent
 
@@ -436,6 +517,7 @@ lattice(h::ParametricHamiltonian) = lattice(parent(h))
 Base.size(h::ParametricHamiltonian, i...) = size(parent(h), i...)
 
 #endregion
+#endregion
 
 ############################################################################################
 # FlatHamiltonian  -  see hamiltonian.jl for methods
@@ -445,6 +527,8 @@ struct FlatHamiltonian{T,E,L,B<:Number,H<:AbstractHamiltonian{T,E,L,<:SMatrix}} 
     h::H
     flatorbstruct::OrbitalStructure{B}
 end
+
+#region ## API ##
 
 orbitalstructure(h::FlatHamiltonian) = h.flatorbstruct
 
@@ -466,6 +550,7 @@ Base.size(h::FlatHamiltonian, i) = i <= 0 ? throw(BoundsError()) : ifelse(1 <= i
 Base.parent(h::FlatHamiltonian) = h.h
 
 #endregion
+#endregion
 
 ############################################################################################
 # Bloch  -  see hamiltonian.jl for methods
@@ -477,6 +562,8 @@ struct Bloch{L,B,M<:AbstractMatrix{B},H<:AbstractHamiltonian{<:Any,<:Any,L}} <: 
     h::H
     output::M       # output has same structure as merged harmonics(h)
 end                 # or its flattened version if eltype(M) != blocktype(H)
+
+#region ## API ##
 
 matrix(b::Bloch) = b.output
 
@@ -497,6 +584,7 @@ latdim(b::Bloch) = latdim(lattice(b.h))
 Base.size(b::Bloch, dims...) = size(b.output, dims...)
 
 #endregion
+#endregion
 
 ############################################################################################
 # Velocity  -  see hamiltonian.jl for call API
@@ -510,6 +598,8 @@ struct Velocity{L,B<:Bloch{L}} <: AbstractBloch{L}
         return new(b, axis)
     end
 end
+
+#region ## API ##
 
 Velocity(b::B, axis) where {L,B<:Bloch{L}} = Velocity{L,B}(b, axis)
 
@@ -532,6 +622,7 @@ Base.size(v::Velocity, dims...) = size(v.bloch, dims...)
 axis(v::Velocity) = v.axis
 
 #endregion
+#endregion
 
 ############################################################################################
 # Mesh  -  see mesh.jl for methods
@@ -545,6 +636,8 @@ struct Mesh{S} <: AbstractMesh{S}
     simps::Vector{Vector{Int}}           # list of simplices, each one a group of neighboring vertex indices
 end
 
+#region ## API ##
+
 vertices(m::Mesh) = m.verts
 vertices(m::Mesh, i) = m.verts[i]
 
@@ -555,9 +648,11 @@ neighbors_forward(m::Mesh, i::Int) = Iterators.filter(>(i), m.neighs[i])
 neighbors_forward(v::Vector, i::Int) = Iterators.filter(>(i), v[i])
 
 simplices(m::Mesh) = m.simps
+simplices(m::Mesh, i::Int) = m.simps[i]
 
 Base.copy(m::Mesh) = Mesh(copy(m.verts), deepcopy(m.neighs), deepcopy(m.simps))
 
+#endregion
 #endregion
 
 ############################################################################################
@@ -573,12 +668,36 @@ struct AppliedEigensolver{T,L,C,O}
     solver::FunctionWrapper{Spectrum{C,O},Tuple{SVector{L,T}}}
 end
 
+#region ## Constructors ##
+
+Spectrum(evals, evecs) = Eigen(sorteigs!(evals, evecs)...)
+Spectrum(evals::AbstractVector, evecs::AbstractVector{<:AbstractVector}) =
+    Spectrum(evals, hcat(evecs...))
+Spectrum(evals::AbstractVector{<:Real}, evecs::AbstractMatrix) =
+    Spectrum(complex.(evals), evecs)
+
+function sorteigs!(ϵ::AbstractVector, ψ::AbstractMatrix)
+    p = Vector{Int}(undef, length(ϵ))
+    p´ = similar(p)
+    sortperm!(p, ϵ, by = real, alg = Base.DEFAULT_UNSTABLE)
+    Base.permute!!(ϵ, copy!(p´, p))
+    Base.permutecols!!(ψ, copy!(p´, p))
+    return ϵ, ψ
+end
+
+#endregion
+
+#region ## API ##
+
+solver(s::AppliedEigensolver) = s.solver
+
 energies(s::Spectrum) = s.values
 
 states(s::Spectrum) = s.vectors
 
 Base.size(s::Spectrum, i...) = size(s.vectors, i...)
 
+#endregion
 #endregion
 
 ############################################################################################
@@ -587,30 +706,51 @@ Base.size(s::Spectrum, i...) = size(s.vectors, i...)
 
 const MatrixView{O} = SubArray{O,2,Matrix{O},Tuple{Base.Slice{Base.OneTo{Int}}, UnitRange{Int}}, true}
 
-struct BandVertex{T<:AbstractFloat,L,O}
-    momentum::SVector{L,T}
-    energy::T
+struct BandVertex{T<:AbstractFloat,E,O}
+    coordinates::SVector{E,T}
     states::MatrixView{O}
 end
 
-struct Subband{T,L,O} <: AbstractMesh{BandVertex{T,L,O}}
-    mesh::Mesh{BandVertex{T,L,O}}
-    trees::Tuple{IntervalTree{T,IntervalValue{T,Int}},Vararg{IntervalTree{T,IntervalValue{T,Int}},L}}
+struct Subband{T,E,O} <: AbstractMesh{BandVertex{T,E,O}}
+    mesh::Mesh{BandVertex{T,E,O}}
+    trees::NTuple{E,IntervalTree{T,IntervalValue{T,Int}}}
 end
 
-struct Band{T,L,E,O}
-    subbands::Vector{Subband{T,L,O}}
-    basemesh::Mesh{SVector{L,T}}
-    solvers::Vector{AppliedEigensolver{T,L,E,O}}  # one per Julia thread
+struct Band{T,E,L,C,O} # E = L+1
+    subbands::Vector{Subband{T,E,O}}
+    solvers::Vector{AppliedEigensolver{T,L,C,O}}  # one per Julia thread
 end
 
-## BandVertex ##
+## Constructors ##
+#region
 
-coordinates(v::BandVertex) = SA[v.momentum..., v.energy]
+BandVertex(m, e, s::Matrix) = BandVertex(m, e, view(s, :, 1:size(m, 2)))
+BandVertex(m, e, s::SubArray) = BandVertex(vcat(m, e), s)
 
-base_coordinates(v::BandVertex) = v.momentum
+function Subband(verts::Vector{<:BandVertex{T,E}}, neighs, simps) where {T,E}
+    mesh = Mesh(verts, neighs, simps)
+    trees = ntuple(Val(E)) do i
+        list = [IntervalValue(shrinkright(extrema(j->coordinates(verts[j])[i], s))..., n)
+                     for (n, s) in enumerate(simps)]
+        sort!(list)
+        return IntervalTree{T,IntervalValue{T,Int}}(list)
+    end
+    return Subband(mesh, trees)
+end
 
-energy(v::BandVertex) = v.energy
+# Interval is closed, we want semiclosed on the left -> exclude the upper limit
+shrinkright((x, y)) = (x, prevfloat(y))
+
+#endregion
+
+#region ## API ##
+# BandVertex #
+
+coordinates(v::BandVertex) = v.coordinates
+
+energy(v::BandVertex) = last(v.coordinates)
+
+base_coordinates(v::BandVertex) = SVector(Base.front(Tuple(v.coordinates)))
 
 states(v::BandVertex) = v.states
 
@@ -619,7 +759,7 @@ degeneracy(v::BandVertex) = size(v.states, 2)
 parentrows(v::BandVertex) = first(parentindices(v.states))
 parentcols(v::BandVertex) = last(parentindices(v.states))
 
-## Subband ##
+# Subband #
 
 vertices(s::Subband, i...) = vertices(s.mesh)
 
@@ -627,20 +767,27 @@ neighbors(s::Subband, i...) = neighbors(s.mesh)
 
 neighbors_forward(s::Subband, i) = neighbors_forward(s.mesh, i)
 
-simplices(s::Subband) = simplices(s.mesh)
+simplices(s::Subband, i...) = simplices(s.mesh, i...)
+
+simplex_edges(s::Subband, i::Int) = simplex_edges(s, simplices(s, i))
+simplex_edges(s::Subband, is) =
+    ((vertices(s, is[i]), vertices(s, is[j])) for i in 1:length(is) for j in i+1:length(is))
 
 vertex_coordinates(s::Subband) = (coordinates(v) for v in vertices(s))
-vertex_coordinates(s::Subband, i) = coordinates(vertices(s)[i])
+vertex_coordinates(s::Subband, i::Int) = coordinates(vertices(s)[i])
+vertex_coordinates(s::Subband, is) = (vertex_coordinates(s, i) for i in is)
 
+edge_coordinates(s::Subband, i::Int, j::Int) = (vertex_coordinates(s, i), vertex_coordinates(s, j))
 edge_coordinates(s::Subband) =
-    ((vertex_coordinates(s, i), vertex_coordinates(s, j)) for i in eachindex(vertices(s)) for j in neighbors_forward(s, i))
+    (edge_coordinates(s, i, j) for i in eachindex(vertices(s)) for j in neighbors_forward(s, i))
+
 edge_indices(s::Subband) =
     ((i, j) for i in eachindex(vertices(s)) for j in neighbors_forward(s, i))
 
 trees(s::Subband) = s.trees
 trees(s::Subband, i::Int) = s.trees[i]
 
-## Band ##
+# Band #
 
 basemesh(b::Band) = b.basemesh
 
@@ -648,4 +795,5 @@ subbands(b::Band) = b.subbands
 
 subbands(b::Band, i...) = getindex(b.subbands, i...)
 
+#endregion
 #endregion

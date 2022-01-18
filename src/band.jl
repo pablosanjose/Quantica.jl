@@ -1,46 +1,11 @@
 ############################################################################################
-# AppliedEigensolver call API and Spectrum constructors
+# AppliedEigensolver call API
 #region
 
-(s::AppliedEigensolver{<:Any,L})(φs::Vararg{<:Any,L}) where {L} = s.solver(SVector(φs))
-(s::AppliedEigensolver{<:Any,L})(φs::SVector{L}) where {L} = s.solver(φs)
+(s::AppliedEigensolver{<:Any,L})(φs::Vararg{<:Any,L}) where {L} = solver(s)(SVector(φs))
+(s::AppliedEigensolver{<:Any,L})(φs::SVector{L}) where {L} = solver(s)(φs)
 (s::AppliedEigensolver{<:Any,L})(φs...) where {L} =
     throw(ArgumentError("AppliedEigensolver call requires $L parameters/Bloch phases"))
-
-Spectrum(evals, evecs) = Eigen(sorteigs!(evals, evecs)...)
-Spectrum(evals::AbstractVector, evecs::AbstractVector{<:AbstractVector}) =
-    Spectrum(evals, hcat(evecs...))
-Spectrum(evals::AbstractVector{<:Real}, evecs::AbstractMatrix) =
-    Spectrum(complex.(evals), evecs)
-
-function sorteigs!(ϵ::AbstractVector, ψ::AbstractMatrix)
-    p = Vector{Int}(undef, length(ϵ))
-    p´ = similar(p)
-    sortperm!(p, ϵ, by = real, alg = Base.DEFAULT_UNSTABLE)
-    Base.permute!!(ϵ, copy!(p´, p))
-    Base.permutecols!!(ψ, copy!(p´, p))
-    return ϵ, ψ
-end
-
-#endregion
-
-############################################################################################
-# Subband constructor
-#region
-
-function Subband(verts::Vector{<:BandVertex{T,L}}, neighs, simps) where {T,L}
-    mesh = Mesh(verts, neighs, simps)
-    trees = ntuple(Val(L+1)) do i
-        list = [IntervalValue(shrinkright(extrema(j->coordinates(verts[j])[i], s))..., n)
-                     for (n, s) in enumerate(simps)]
-        sort!(list)
-        return IntervalTree{T,IntervalValue{T,Int}}(list)
-    end
-    return Subband(mesh, trees)
-end
-
-# Interval is closed, we want semiclosed on the left -> exclude the upper limit
-shrinkright((x, y)) = (x, prevfloat(y))
 
 #endregion
 
@@ -65,13 +30,13 @@ function band_precompilable(solvers::Vector{A}, basemesh::Mesh{SVector{L,T}},
 
     basemesh = copy(basemesh) # will become part of Band, possibly refined
     spectra = Vector{Spectrum{C,O}}(undef, length(vertices(basemesh)))
-    bandverts = BandVertex{T,L,O}[]
+    bandverts = BandVertex{T,L+1,O}[]
     bandneighs = Vector{Int}[]
     bandneideg = similar(bandneighs)
     coloffsets = Int[]
     crossed = NTuple{6,Int}[]
     frustrated = similar(crossed)
-    subbands = Subband{T,L,O}[]
+    subbands = Subband{T,L+1,O}[]
     data = (; basemesh, spectra, bandverts, bandneighs, bandneideg, coloffsets, solvers, L,
               crossed, frustrated, subbands, defects, patches, showprogress, degtol, split, warn)
 
@@ -97,7 +62,7 @@ function band_precompilable(solvers::Vector{A}, basemesh::Mesh{SVector{L,T}},
     # Step 4 - Split subbands
     band_split!(data)
 
-    return Band(subbands, basemesh, solvers)
+    return Band(subbands, solvers)
 end
 
 #endregion
@@ -423,22 +388,93 @@ end
 #endregion
 
 ############################################################################################
-# Subband slicing and indexing
+# Band slicing and indexing
 #region
 
-function Base.getindex(s::Subband, xs...)
-    V = sliced_vertex_type(eltype(vertices(s)), xs...)
+Base.getindex(b::Band, n::Int...) = subbands(b, n...)
+Base.getindex(b::Band, ::Colon) = subbands(b)
+
+function Base.getindex(s::Subband{T,L}, xs...) where {T,L}
+    saxes = slice_axes(T, 1, xs...)
+    isempty(saxes) && return s
+    V = sliced_vertex_type(eltype(vertices(s)), saxes)
+    # temporary vectors to store sectioned simplex vertices (of decreasing dimensionality)
+    vsect  = vertex_stacks(s, saxes)
     verts  = V[]
-    simps  = Vector{Int}[]
     neighs = Vector{Int}[]
-    
+    simps  = Vector{Int}[]
+    data = (; vsect, verts, neighs)
+    slice_subband!(data, s, saxes...)
 end
 
-sliced_vertex_type(::Type{BandVertex{T,L,O}}, ::Colon, xs...) where {T,L,O} =
-    sliced_vertex_type(BandVertex{T,L,O}, xs...)
-sliced_vertex_type(::Type{BandVertex{T,L,O}}, ::Number, xs...) where {T,L,O} =
-    sliced_vertex_type(BandVertex{T,L-1,O}, xs...)
-sliced_vertex_type(t) = t
+slice_axes(T, dim, x::Colon, xs...) = slice_axes(T, dim + 1, xs...)
+slice_axes(T, dim, x::Number, xs...) = ((dim, T(x)), slice_axes(T, dim + 1, xs...)...)
+slice_axes(T, dim) = ()
+
+sliced_vertex_type(::Type{BandVertex{T,L,O}}, ::NTuple{N}) where {T,L,O,N} = BandVertex{T,L-N,O}
+
+vertex_stacks(::Subband{T,L,O}, ::NTuple{N}) where {T,L,N,O} =
+    ntuple(i -> BandVertex{T,L+1-i,O}[], Val(N))
+
+function slice_subband!(vecs, s, (dim, k), xs...)
+    for sind in intersect(trees(s, dim), (k, k))
+        simplex_in_slice!(sind, s, xs...) || continue
+        append_sliced_simplices!(vecs, s, sind, ((dim, k), xs...))
+    end
+    return vecs
+end
+
+simplex_in_slice!(sind, s, (dim, k), xs...) =
+    sind in intersect(trees(s, dim), (k, k)) && simplex_in_slice!(sind, s, xs...)
+simplex_in_slice!(sind, s) = true
+
+function append_sliced_simplices!((vsect, verts, neighs), subband, sind, saxes)
+    vsect = push_slice_verts!(vsect, saxes, simplex_edges(subband, sind))
+    append!(verts, )
+end
+
+function push_slice_verts!((vs´, vss...), (saxis, saxes...), edges)
+    empty!(vs´)
+    for (v0, v1) in edges
+        push_slice_verts!(vs´, v0, v1, saxis)
+    end
+    isempty(xs) || push_slice_verts!(vss, saxes, allpairs(vs´))
+    return last(vss)
+end
+
+allpairs(rs) = ((rs[i], rs[j]) for i in 1:length(rs) for j in i+1:length(rs))
+
+function push_slice_verts!(vs, v0, v1, (dim, x)) where {N}
+    r0, r1 = vertex_coordinates(v0), vertex_coordinates(v1)
+    φ0, φ1 = states(v0), states(v1)
+    r1[dim] ≈ r0[dim] && return nothing
+    dr = r1 - r0
+    λ = (x - r0[dim]) / dr[dim]
+    if 0 <= λ < 1
+        k, ε = interpolate_coordinates(r0, dr, λ, dim)
+        φ = interpolate_states(φ0, φ1, λ)
+        push!(vs, BandVertex(k, ε, φ))
+    else
+        @show "Unexpected λ = $λ"
+    end
+    return vs
+end
+
+function interpolate_coordinates(r0::SVector{N}, dr, λ, dim) where {N}
+    kε = ntuple(i -> i < dim ? r0[i] + λ*dr[i] : r0[i+1] + λ*dr[i+1], Val(N-1))
+    k, ε = Base.front(kε), last(kε)
+    return k, ε
+end
+
+function interpolate_coordinates(φ0, φ1, λ)
+    proj = φ0'φ1
+    U, _, Vt = svd!(proj)
+    V = Vt'
+    V .*= λ
+    U .*= 1 - λ
+    φ = mul!(φ0 * U, φ1, V, 1, 1)
+    return φ
+end
 
 
 # function Base.getindex(s::Subband, x, xs...)
