@@ -225,7 +225,7 @@ function band_patch!(data)
         data.showprogress && ProgressMeter.next!(meter)
     end
     # If we added new columns, base edges will have split -> rebuild base simplices
-    newcols > 0 && build_cliques!(simplices(data.basemesh), neighbors(data.basemesh), data.L + 1)
+    newcols > 0 && build_cliques!(simplices(data.basemesh), neighbors(data.basemesh))
     data.showprogress && ProgressMeter.finish!(meter)
     ndefects = length(data.frustrated)
     data.warn && !iszero(ndefects) &&
@@ -387,27 +387,13 @@ end
 
 Base.getindex(b::Band, n::Int) = subbands(b, n)
 
-function Base.getindex(subband::Subband{T,E}, xs...) where {T,E}
+function Base.getindex(subband, xs...)
     length(xs) <= embdim(subband) ||
         throw(ArgumentError("Cannot slice subband along more than $(embdim(subband)) axes"))
     paxes = perp_axes(subband, xs...)
     isempty(paxes) && return subband
     saxes = slice_axes(subband, xs...)
-
-    V = slice_vertex_type(subband, paxes)
-    S = slice_skey_type(paxes)
-    verts = V[]
-    neighs = Vector{Int}[]
-    vinds = Dict{S,Int}()
-    vindstemp = Int[]
-    data = (; subband, paxes, saxes, verts, neighs, vinds, vindstemp)
-
-    foreach_simplex(subband, paxes) do sind
-        simp = simplices(subband, sind)
-        slice_simplex!(data, simp)
-    end
-    E´ = E - length(paxes)
-    return Subband(verts, neighs, E´)
+    return slice_subband(subband, paxes, saxes)
 end
 
 perp_axes(::Subband{T}, xs...) where {T} = perp_axes(T, 1, xs...)
@@ -420,6 +406,23 @@ slice_axes(T::Type, dim, ::Number, xs...) = slice_axes(T, dim + 1, xs...)
 slice_axes(T::Type, dim, ::Colon, xs...) = (dim, slice_axes(T, dim + 1, xs...)...)
 slice_axes(T::Type, dim) = ()
 
+function slice_subband(subband, paxes, saxes)
+    V = slice_vertex_type(subband, paxes)
+    S = slice_skey_type(paxes)
+    verts = V[]
+    neighs = Vector{Int}[]
+    vinds = Dict{S,Int}()
+    vindstemp = Int[]
+    subtemp = Int[]
+    data = (; subband, paxes, saxes, verts, neighs, vinds, vindstemp, subtemp)
+
+    foreach_simplex(subband, paxes) do sind
+        simp = simplices(subband, sind)
+        slice_simplex!(data, simp)
+    end
+    return Subband(verts, neighs)
+end
+
 slice_vertex_type(::Subband{T,E,O}, ::NTuple{N}) where {T,E,O,N} = BandVertex{T,E-N,O}
 
 slice_skey_type(::NTuple{N}) where {N} = SVector{N+1,Int}
@@ -429,7 +432,11 @@ function slice_simplex!(data, simp)
     perpaxes = SVector(first.(data.paxes))
     paraxes  = SVector(data.saxes)
     k = SVector(last.(data.paxes))
-    for sub in Combinations(length(simp), length(perpaxes) + 1)
+    sub = data.subtemp
+    for sub´ in Combinations(length(simp), length(perpaxes) + 1)
+        # subsimplex must have minimal degeneracy on first vertex
+        copy!(sub, sub´)  # cannot modify sub´ because it also acts as state in Combinations
+        sort!(sub, by = i -> degeneracy(vertices(data.subband, simp[i])))
         key = vindskey(data.paxes, simp, sub)
         if !haskey(data.vinds, key)
             kε0, edgemat = vertmat_simplex(data.paxes, vertices(data.subband), simp, sub)

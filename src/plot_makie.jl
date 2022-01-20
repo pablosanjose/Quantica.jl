@@ -1,6 +1,6 @@
 using GeometryBasics
-using GLMakie: to_value, RGBAf0, Vec3f0, FRect, @recipe, LineSegments, Theme,
-    lift, campixel, SceneSpace, Node, Axis, text!, on, mouse_selection, poly!, scale!,
+using GLMakie: to_value, Vec3f0, FRect, @recipe, LineSegments, Theme,
+    lift, campixel, SceneSpace, Axis, text!, on, mouse_selection, poly!, scale!,
     translate!, linesegments!, mesh!, scatter!, meshscatter!
 import GLMakie: plot!, plot
 using SparseArrays: AbstractSparseMatrixCSC

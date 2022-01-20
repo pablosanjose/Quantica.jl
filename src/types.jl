@@ -638,12 +638,12 @@ axis(v::Velocity) = v.axis
 # Mesh  -  see mesh.jl for methods
 #region
 
-abstract type AbstractMesh{S} end
+abstract type AbstractMesh{V,S} end
 
-struct Mesh{S} <: AbstractMesh{S}
-    verts::Vector{S}
+struct Mesh{V,S} <: AbstractMesh{V,S}
+    verts::Vector{V}
     neighs::Vector{Vector{Int}}          # all neighbors neighs[i][j] of vertex i
-    simps::Vector{Vector{Int}}           # list of simplices, each one a group of neighboring vertex indices
+    simps::Vector{NTuple{S,Int}}         # list of simplices, each one a group of neighboring vertex indices
 end
 
 #region ## API ##
@@ -660,7 +660,7 @@ neighbors_forward(v::Vector, i::Int) = Iterators.filter(>(i), v[i])
 simplices(m::Mesh) = m.simps
 simplices(m::Mesh, i::Int) = m.simps[i]
 
-Base.copy(m::Mesh) = Mesh(copy(m.verts), deepcopy(m.neighs), deepcopy(m.simps))
+Base.copy(m::Mesh) = Mesh(copy(m.verts), deepcopy(m.neighs), copy(m.simps))
 
 #endregion
 #endregion
@@ -721,8 +721,8 @@ struct BandVertex{T<:AbstractFloat,E,O}
     states::MatrixView{O}
 end
 
-struct Subband{T,E,O} <: AbstractMesh{BandVertex{T,E,O}}
-    mesh::Mesh{BandVertex{T,E,O}}
+struct Subband{T,E,O} <: AbstractMesh{BandVertex{T,E,O},E}  # we restrict S == E
+    mesh::Mesh{BandVertex{T,E,O},E}
     trees::NTuple{E,IntervalTree{T,IntervalValue{T,Int}}}
 end
 
@@ -737,7 +737,7 @@ BandVertex(x, s::Matrix) = BandVertex(x, view(s, :, 1:size(s, 2)))
 BandVertex(m, e, s::Matrix) = BandVertex(m, e, view(s, :, 1:size(s, 2)))
 BandVertex(m, e, s::SubArray) = BandVertex(vcat(m, e), s)
 
-function Subband(verts::Vector{<:BandVertex{<:Any,E}}, neighs, nsimpverts::Int = E) where {E}
+function Subband(verts::Vector{<:BandVertex{<:Any,E}}, neighs, nsimpverts::Val = Val(E)) where {E}
     simps  = build_cliques(neighs, nsimpverts)
     order_simplices!(simps, verts)
     return Subband(verts, neighs, simps)

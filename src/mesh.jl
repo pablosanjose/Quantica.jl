@@ -7,8 +7,8 @@ function mesh(rngs::Vararg{<:Any,L}) where {L}
     vmat   = [SVector(pt) for pt in Iterators.product(rngs...)]
     verts  = vec(vmat)
     cinds  = CartesianIndices(vmat)
-    neighs = marching_neighbors(cinds)  # sorted neighbors of i, with n[i][j] > i
-    simps  = build_cliques(neighs, L+1)    # a Vector of Vectors of L+1 point indices (Ints)
+    neighs = marching_neighbors(cinds)          # sorted neighbors of i, with n[i][j] > i
+    simps  = build_cliques(neighs, Val(L+1))    # a Vector of Vectors of L+1 point indices (Ints)
     return Mesh(verts, neighs, simps)
 end
 
@@ -86,15 +86,16 @@ function fast_setdiff!((c, d)::Tuple{Vector,Vector}, rng)
 end
 
 # groups of n all-to-all connected neighbors, sorted
-build_cliques(neighs, nverts) = build_cliques!(Vector{Int}[], neighs, nverts)
+build_cliques(neighs, ::Val{N}) where {N} = build_cliques!(NTuple{N,Int}[], neighs)
 
-function build_cliques!(cliques, neighs, nverts)
+function build_cliques!(cliques::Vector{NTuple{N,Int}}, neighs) where {N}
     empty!(cliques)
     for (src, dsts) in enumerate(neighs)
         dsts_f = filter(>(src), dsts)  # indexable forward neighbors
-        for ids in Combinations(length(dsts_f), nverts - 1)
+        for ids in Combinations(length(dsts_f), N - 1)
             if all_adjacent(ids, dsts_f, neighs)
-                clique = prepend!(dsts_f[ids], src)
+                # clique = (src, dsts_f[ids]...), but non-allocating
+                clique = ntuple(i -> i == 1 ? src : dsts_f[ids[i - 1]], Val(N))
                 push!(cliques, clique)
             end
         end
@@ -115,18 +116,20 @@ end
 
 # ensure simplex orientation has normals pointing towards positive z
 function order_simplices!(simplices, vertices::Vector{B}) where {E,B<:BandVertex{<:Any,E}}
-    for simplex in simplices
+    for (s, simplex) in enumerate(simplices)
         if E > 2
             k0 = base_coordinates(vertices[simplex[1]])
             edges = ntuple(i -> base_coordinates(vertices[simplex[i+1]])-k0, Val(E-1))
             volume = det(hcat(edges...))
-            if volume < 0 # switch last
-                simplex[end], simplex[end-1] = simplex[end-1], simplex[end]
+            if volume < 0
+                simplices[s] = switchlast(simplex)
             end
         end
     end
     return simplices
 end
+
+switchlast(s::NTuple{N}) where {N} = ntuple(i -> i < N-1 ? s[i] : s[2N-i-1], Val(N))
 
 # Computes connected subsets from a list of neighbors, in the form of a (vsinds, svinds)
 # vsinds::Vector{Int} is the subset index for each band vertex
