@@ -731,13 +731,19 @@ struct Band{T,E,L,C,O} # E = L+1
     solvers::Vector{AppliedEigensolver{T,L,C,O}}  # one per Julia thread
 end
 
-## Constructors ##
-#region
+#region ## Constructors ##
 
-BandVertex(m, e, s::Matrix) = BandVertex(m, e, view(s, :, 1:size(m, 2)))
+BandVertex(x, s::Matrix) = BandVertex(x, view(s, :, 1:size(s, 2)))
+BandVertex(m, e, s::Matrix) = BandVertex(m, e, view(s, :, 1:size(s, 2)))
 BandVertex(m, e, s::SubArray) = BandVertex(vcat(m, e), s)
 
-function Subband(verts::Vector{<:BandVertex{T,E}}, neighs, simps) where {T,E}
+function Subband(verts::Vector{<:BandVertex{<:Any,E}}, neighs, nsimpverts::Int = E) where {E}
+    simps  = build_cliques(neighs, nsimpverts)
+    order_simplices!(simps, verts)
+    return Subband(verts, neighs, simps)
+end
+
+function Subband(verts::Vector{<:BandVertex{T,E}}, neighs, simps::AbstractVector) where {T,E}
     mesh = Mesh(verts, neighs, simps)
     trees = ntuple(Val(E)) do i
         list = [IntervalValue(shrinkright(extrema(j->coordinates(verts[j])[i], s))..., n)
@@ -771,13 +777,15 @@ parentcols(v::BandVertex) = last(parentindices(v.states))
 
 # Subband #
 
-vertices(s::Subband, i...) = vertices(s.mesh)
+vertices(s::Subband, i...) = vertices(s.mesh, i...)
 
-neighbors(s::Subband, i...) = neighbors(s.mesh)
+neighbors(s::Subband, i...) = neighbors(s.mesh, i...)
 
 neighbors_forward(s::Subband, i) = neighbors_forward(s.mesh, i)
 
 simplices(s::Subband, i...) = simplices(s.mesh, i...)
+
+embdim(::Subband{<:Any,E}) where {E} = E
 
 simplex_edges(s::Subband, i::Int) = simplex_edges(s, simplices(s, i))
 simplex_edges(s::Subband, is) =
@@ -796,6 +804,22 @@ edge_indices(s::Subband) =
 
 trees(s::Subband) = s.trees
 trees(s::Subband, i::Int) = s.trees[i]
+
+# last argument: saxes = ((dim₁, x₁), (dim₂, x₂)...)
+function foreach_simplex(f, s::Subband, ((dim, k), xs...))
+    for interval in intersect(trees(s, dim), (k, k))
+        interval_in_slice!(interval, s, xs...) || continue
+        sind = value(interval)
+        f(sind)
+    end
+    return nothing
+end
+
+interval_in_slice!(interval, s, (dim, k), xs...) =
+    interval in intersect(trees(s, dim), (k, k)) && interval_in_slice!(interval, s, xs...)
+interval_in_slice!(interval, s) = true
+
+Base.isempty(s::Subband) = isempty(simplices(s))
 
 # Band #
 

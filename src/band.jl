@@ -366,21 +366,15 @@ function band_split!(data)
                 sverts  = data.bandverts[subset]
                 sneighs = [ [old2new[dstold] - offset for dstold in data.bandneighs[srcold]]
                         for srcold in subset]
-                ssimps  = build_cliques(sneighs, data.L + 1)
-                if !isempty(ssimps)
-                    orient_simplices!(ssimps, sverts)
-                    push!(data.subbands, Subband(sverts, sneighs, ssimps))
-                end
+                sband = Subband(sverts, sneighs)
+                isempty(sband) || push!(data.subbands, sband)
             end
             offset += length(subset)
             data.showprogress && ProgressMeter.next!(meter)
         end
     else
-        sverts = data.bandverts
-        sneighs = data.bandneighs
-        ssimps  = build_cliques(data.bandneighs, data.L + 1)
-        orient_simplices!(ssimps, sverts)
-        push!(data.subbands, Subband(sverts, sneighs, ssimps))
+        sband = Subband(data.bandverts, data.bandneighs)
+        isempty(sband) || push!(data.subbands, sband)
     end
     return data
 end
@@ -391,120 +385,110 @@ end
 # Band slicing and indexing
 #region
 
-Base.getindex(b::Band, n::Int...) = subbands(b, n...)
-Base.getindex(b::Band, ::Colon) = subbands(b)
+Base.getindex(b::Band, n::Int) = subbands(b, n)
 
-function Base.getindex(s::Subband{T}, xs...) where {T}
-    saxes = slice_axes(T, 1, xs...)
-    isempty(saxes) && return s
-    V = sliced_vertex_type(eltype(vertices(s)), saxes)
-    # vsect: temporaries to store sectioned simplex vertices (of decreasing dimensionality)
-    vsect  = vertex_stacks(s, saxes)
-    verts  = V[]
+function Base.getindex(subband::Subband{T,E}, xs...) where {T,E}
+    length(xs) <= embdim(subband) ||
+        throw(ArgumentError("Cannot slice subband along more than $(embdim(subband)) axes"))
+    paxes = perp_axes(subband, xs...)
+    isempty(paxes) && return subband
+    saxes = slice_axes(subband, xs...)
+
+    V = slice_vertex_type(subband, paxes)
+    S = slice_skey_type(paxes)
+    verts = V[]
     neighs = Vector{Int}[]
-    simps  = Vector{Int}[]
-    data = (; vsect, verts, neighs)
-    slice_subband!(data, s, saxes...)
-end
+    vinds = Dict{S,Int}()
+    vindstemp = Int[]
+    data = (; subband, paxes, saxes, verts, neighs, vinds, vindstemp)
 
-slice_axes(T, dim, x::Colon, xs...) = slice_axes(T, dim + 1, xs...)
-slice_axes(T, dim, x::Number, xs...) = ((dim, T(x)), slice_axes(T, dim + 1, xs...)...)
-slice_axes(T, dim) = ()
-
-sliced_vertex_type(::Type{BandVertex{T,E,O}}, ::NTuple{N}) where {T,E,O,N} = BandVertex{T,E-N,O}
-
-vertex_stacks(::Subband{T,E,O}, ::NTuple{N}) where {T,E,N,O} =
-    ntuple(i -> BandVertex{T,E-i,O}[], Val(N))
-
-function slice_subband!(vecs, s, (dim, k), xs...)
-    for sind in intersect(trees(s, dim), (k, k))
-        simplex_in_slice!(sind, s, xs...) || continue
-        append_sliced_simplices!(vecs, s, sind, ((dim, k), xs...))
+    foreach_simplex(subband, paxes) do sind
+        simp = simplices(subband, sind)
+        slice_simplex!(data, simp)
     end
-    return vecs
+    E´ = E - length(paxes)
+    return Subband(verts, neighs, E´)
 end
 
-simplex_in_slice!(sind, s, (dim, k), xs...) =
-    sind in intersect(trees(s, dim), (k, k)) && simplex_in_slice!(sind, s, xs...)
-simplex_in_slice!(sind, s) = true
+perp_axes(::Subband{T}, xs...) where {T} = perp_axes(T, 1, xs...)
+perp_axes(T::Type, dim, ::Colon, xs...) = perp_axes(T, dim + 1, xs...)
+perp_axes(T::Type, dim, x::Number, xs...) = ((dim, T(x)), perp_axes(T, dim + 1, xs...)...)
+perp_axes(T::Type, dim) = ()
 
-function append_sliced_simplices!((vsect, verts, neighs), subband, sind, saxes)
-    vsect = push_slice_verts!(vsect, saxes, simplex_edges(subband, sind))
-    append!(verts, )
-end
+slice_axes(::Subband{T,E}, xs...) where {T,E} = slice_axes(T, 1, padtuple(xs, :, Val(E))...)
+slice_axes(T::Type, dim, ::Number, xs...) = slice_axes(T, dim + 1, xs...)
+slice_axes(T::Type, dim, ::Colon, xs...) = (dim, slice_axes(T, dim + 1, xs...)...)
+slice_axes(T::Type, dim) = ()
 
-function push_slice_verts!((vs´, vss...), (saxis, saxes...), edges)
-    empty!(vs´)
-    for (v0, v1) in edges
-        push_slice_verts!(vs´, v0, v1, saxis)
+slice_vertex_type(::Subband{T,E,O}, ::NTuple{N}) where {T,E,O,N} = BandVertex{T,E-N,O}
+
+slice_skey_type(::NTuple{N}) where {N} = SVector{N+1,Int}
+
+function slice_simplex!(data, simp)
+    empty!(data.vindstemp)
+    perpaxes = SVector(first.(data.paxes))
+    paraxes  = SVector(data.saxes)
+    k = SVector(last.(data.paxes))
+    for sub in Combinations(length(simp), length(perpaxes) + 1)
+        key = vindskey(data.paxes, simp, sub)
+        if !haskey(data.vinds, key)
+            kε0, edgemat = vertmat_simplex(data.paxes, vertices(data.subband), simp, sub)
+            dvper = edgemat[perpaxes, :]
+            λs = dvper \ k
+            sum(λs) < 1 && all(>=(0), λs) || continue
+            dvpar = edgemat[paraxes, :]
+            kε = kε0[paraxes] + dvpar * λs
+            φ = interpolate_state(λs, vertices(data.subband), simp, sub)
+            push!(data.verts, BandVertex(kε, φ))
+            push!(data.neighs, Int[])
+            vind = length(data.verts)
+            data.vinds[key] = vind
+            push!(data.vindstemp, vind)
+        else
+            vind = data.vinds[key]
+            push!(data.vindstemp, vind)
+        end
     end
-    isempty(xs) || push_slice_verts!(vss, saxes, allpairs(vs´))
-    return last(vss)
-end
-
-allpairs(rs) = ((rs[i], rs[j]) for i in 1:length(rs) for j in i+1:length(rs))
-
-function push_slice_verts!(vs, v0, v1, (dim, x)) where {N}
-    r0, r1 = vertex_coordinates(v0), vertex_coordinates(v1)
-    φ0, φ1 = states(v0), states(v1)
-    r1[dim] ≈ r0[dim] && return nothing
-    dr = r1 - r0
-    λ = (x - r0[dim]) / dr[dim]
-    if 0 <= λ < 1
-        kε = interpolate_coordinates(r0, dr, λ, dim)
-        φ = interpolate_states(φ0, φ1, λ)
-        push!(vs, BandVertex(kε, φ))
-    else
-        @show "Unexpected λ = $λ, should be in [0,1)"
+    # all-to-all among new vertices
+    for i in data.vindstemp, j in data.vindstemp
+        i == j || push!(data.neighs[i], j)
     end
-    return vs
+    return data
 end
 
-function interpolate_coordinates(r0::SVector{N}, dr, λ, dim) where {N}
-    kε = SVector(ntuple(i -> i < dim ? r0[i] + λ*dr[i] : r0[i+1] + λ*dr[i+1], Val(N-1)))
-    return kε
+# a sorted SVector of the N+1 parent vertex indices is = simp[sub] (N = num perp slice axes)
+# identifying each distinct vertex in slice -> then, vinds[is] = new vertex index
+vindskey(::NTuple{N}, simp, sub) where {N} = sort(SVector(ntuple(i -> simp[sub[i]], Val(N+1))))
+
+function vertmat_simplex(::NTuple{N}, vs, simp, sub) where {N}
+    kε0 = coordinates(vs[simp[sub[1]]])
+    mat = hcat(ntuple(i -> coordinates(vs[simp[sub[i+1]]]) - kε0, Val(N))...)
+    return kε0, mat
 end
 
-function interpolate_coordinates(φ0, φ1, λ)
-    proj = φ0'φ1
-    U, _, Vt = svd!(proj)
-    V = Vt'
-    V .*= λ
-    U .*= 1 - λ
-    φ = mul!(φ0 * U, φ1, V, 1, 1)
+# we assume that sub is ordered and that simp is sorted so that the first vertex has minimal
+# degeneracy within the simplex (see order_simplices!)
+function interpolate_state(λs, vs, simp, sub)
+    v0 = vs[simp[sub[1]]]
+    φ0 = states(v0)
+    deg0 = degeneracy(v0)
+    φ = copy(φ0)
+    φ .*= 1 - sum(λs)
+    for (i, λi) in enumerate(λs)
+        vi = vs[simp[sub[i+1]]]
+        φi = states(vi)
+        degi = degeneracy(vi)
+        if  degi == deg0
+            φ .+= λi .* φi
+        elseif degi > deg0
+            proj = φi'φ0  # size(proj) == (degi, deg0)
+            Q = qr!(proj).Q * Matrix(I, degi, deg0)
+            mul!(φ, φi, Q, λi, 1)
+        else
+            throw(ErrorException("Unexpected simplex ordering: first should be minimal degeneracy"))
+        end
+    end
     return φ
 end
-
-
-# function Base.getindex(s::Subband, x, xs...)
-#     sinds = sectioned_simplices(s, 1, x, xs...)
-# end
-
-# sectioned_simplices(s, dim, ::Colon, is...) =
-#     sectioned_simplices(s, dim + 1, is...)
-# sectioned_simplices(s, dim, x::Number, is...) =
-#     sectioned_simplices!(value.(tree_intersect(trees(s, dim), x)), s, dim + 1, is...)
-# sectioned_simplices(s, dim) =
-#     collect(1:length(simplices(s)))
-
-# sectioned_simplices!(sinds, s, dim, ::Colon, is...) =
-#     sectioned_simplices!(sinds, s, dim + 1, is...)
-# sectioned_simplices!(sinds, s, dim) = sort!(sinds)
-
-# function sectioned_simplices!(sinds, s, dim, x::Number, is...)
-#     itr = tree_intersect(trees(s, dim), x)
-#     filter!(i -> in_function(value, i, itr), sinds)
-#     return sectioned_simplices!(sinds, s, dim+1, is...)
-# end
-
-# tree_intersect(tree::IntervalTree{T}, x::Number) where {T} = intersect(tree, (T(x), T(x)))
-# tree_intersect(tree::IntervalTree, ::Column) = ()
-
-# function in_function(f, i, itr)
-#     for j in itr
-#         i == f(j) && return true
-#     end
-#     return false
-# end
 
 #endregion

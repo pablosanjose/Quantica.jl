@@ -175,12 +175,11 @@ Base.summary(::Subband{T,L}) where {T,L} =
     i = get(io, :indent, "")
     print(io, i, summary(s), "\n",
 "$i  Vertices  : $(length(vertices(s)))
-$i  Edges     : $(sum(length, neighbors(s)) ÷ 2)
+$i  Edges     : $(isempty(neighbors(s)) ? 0 : sum(length, neighbors(s)) ÷ 2)
 $i  Simplices : $(length(simplices(s)))")
 end
 
 Base.summary(::Band{T,E,L}) where {T,E,L} =
     "Band{$T,$E,$L}: $(E)D Band structure over a $L-dimensional parameter space of type $T"
-
 
 #endregion
