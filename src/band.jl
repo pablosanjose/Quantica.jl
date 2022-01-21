@@ -441,7 +441,7 @@ function slice_simplex!(data, simp)
         if !haskey(data.vinds, key)
             kε0, edgemat = vertmat_simplex(data.paxes, vertices(data.subband), simp, sub)
             dvper = edgemat[perpaxes, :]
-            λs = dvper \ k
+            λs = dvper \ (k - kε0[perpaxes])
             sum(λs) < 1 && all(>=(0), λs) || continue
             dvpar = edgemat[paraxes, :]
             kε = kε0[paraxes] + dvpar * λs
