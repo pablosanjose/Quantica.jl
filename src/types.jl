@@ -659,6 +659,9 @@ end
 
 dim(::AbstractMesh{<:Any,S}) where {S} = S - 1
 
+coordinates(s::AbstractMesh) = (coordinates(v) for v in vertices(s))
+coordinates(s::AbstractMesh, i::Int) = coordinates(vertices(s, i))
+
 vertices(m::Mesh) = m.verts
 vertices(m::Mesh, i) = m.verts[i]
 
@@ -792,9 +795,6 @@ embdim(::AbstractMesh{<:SVector{E}}) where {E} = E
 embdim(::AbstractMesh{<:BandVertex{<:Any,E}}) where {E} = E
 
 # Subband #
-
-coordinates(s::Subband) = (coordinates(v) for v in vertices(s))
-coordinates(s::Subband, i::Int) = coordinates(vertices(s, i))
 
 vertices(s::Subband, i...) = vertices(s.mesh, i...)
 

@@ -291,30 +291,50 @@ end
 function plot!(plot::BandPlot3D{<:Tuple{Quantica.Band}})
     band = to_value(plot[1])
     sbands = Quantica.subbands(band)
+    # bandplot3d!(plot, sbands)
     colors = Iterators.cycle(to_value(plot.colors))
     for (sidx, color) in zip(eachindex(sbands), colors)
         !haskey(plot, :bands) || sidx in to_value(plot[:bands]) || continue
         sband = sbands[sidx]
-        vertices = collect(Quantica.coordinates(sband))
-        simplices = Quantica.simplices(sband)
+        bandplot3d!(plot, sband; colors = (color,))
+    end
+    return plot
+end
+
+function plot!(plot::BandPlot3D{<:Tuple{Vector{<:Quantica.AbstractMesh}}})
+    meshes = to_value(plot[1])
+    colors = Iterators.cycle(to_value(plot.colors))
+    for (midx, color) in zip(eachindex(meshes), colors)
+        !haskey(plot, :bands) || midx in to_value(plot[:bands]) || continue
+        bandplot3d!(plot, meshes[midx]; colors = (color,))
+    end
+    return plot
+end
+
+function plot!(plot::BandPlot3D{<:Tuple{Quantica.AbstractMesh{<:Any,E}}}) where {E}
+    sband = to_value(plot[1])
+    vertices = collect(Quantica.coordinates(sband))
+    simplices = Quantica.simplices(sband)
+    color = first(to_value(plot.colors))
+    if E == 3
         connectivity = [s[j] for s in simplices, j in 1:3]
         if isempty(connectivity)
             scatter!(plot, vertices, color = color)
         else
             mesh!(plot, vertices, connectivity; color = color, transparency = false,
                 ssao = plot[:ssao][], ambient = plot[:ambient][], diffuse = plot[:diffuse][])
-            if plot[:wireframe][]
-                edgevertices = collect(edge_coordinates(sband))
-                wireframe_shift!(edgevertices, 1)
-                linesegments!(plot, edgevertices, color = darken(color, plot[:linedarken][]), linewidth = plot[:linethickness][])
-            end
         end
     end
-    return plot
- end
+    if plot[:wireframe][]
+        edgevertices = collect(edge_coordinates(sband))
+        wireframe_shift!(edgevertices, 1)
+        linesegments!(plot, edgevertices, color = darken(color, plot[:linedarken][]), linewidth = plot[:linethickness][])
+        # linesegments!(plot, edgevertices, color = color, linewidth = plot[:linethickness][])
+    end
+end
 
-edge_coordinates(s::Quantica.Subband, i::Int, j::Int) = (Quantica.coordinates(s, i), Quantica.coordinates(s, j))
-edge_coordinates(s::Quantica.Subband) =
+edge_coordinates(s::Quantica.AbstractMesh, i::Int, j::Int) = (Quantica.coordinates(s, i), Quantica.coordinates(s, j))
+edge_coordinates(s::Quantica.AbstractMesh) =
     (edge_coordinates(s, i, j) for i in eachindex(Quantica.vertices(s)) for j in Quantica.neighbors_forward(s, i))
 
  wireframe_shift(::Type{SVector{L,T}}) where {L,T} = SVector(ntuple(i->sqrt(sqrt(eps(T)))*(i==L), Val(L)))

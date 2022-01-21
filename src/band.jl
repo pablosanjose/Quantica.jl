@@ -385,16 +385,17 @@ end
 # Subband slicing and indexing
 #region
 
-Base.getindex(b::Band, n::Int) = subbands(b, n)
-
+Base.getindex(b::Band, xs...) = [s[xs...] for s in subbands(b)]
 Base.getindex(s::Subband, xs...) = Subband(slice(s, xs, Val(true)))
 
-slice(s, xs::Union{Colon,Number}...) = slice(s, xs)
+slice(b::Band, xs...) = [slice(s, xs...) for s in subbands(b)]
+
+slice(s::Subband, xs::Union{Colon,Number}...) = slice(s, xs)
 # default: slice -> mesh with same embedding dimension as subband and smaller simplex length
-slice(s, xs::Tuple) = slice(s, xs::Tuple, Val(false))
+slice(s::Subband, xs::Tuple) = slice(s, xs::Tuple, Val(false))
 # optional: slice -> mesh with reduced embedding dimension = simplex length + 1
-slice(s, xs::Tuple, ::Val{true}) = slice(s, perp_axes(s, xs...), slice_axes(s, xs...))
-slice(s, xs::Tuple, ::Val{false}) = slice(s, perp_axes(s, xs...), all_axes(s))
+slice(s::Subband, xs::Tuple, ::Val{true}) = slice(s, perp_axes(s, xs...), slice_axes(s, xs...))
+slice(s::Subband, xs::Tuple, ::Val{false}) = slice(s, perp_axes(s, xs...), all_axes(s))
 
 function slice(subband::Subband{<:Any,E}, paxes::NTuple{N}, saxes::Tuple) where {E,N}
     maximum(first, paxes) <= embdim(subband) && maximum(saxes) <= embdim(subband) ||
