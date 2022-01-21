@@ -1,5 +1,5 @@
 using GeometryBasics
-using GLMakie: to_value, Vec3f0, FRect, @recipe, LineSegments, Theme,
+using GLMakie: to_value, RGBAf, Vec3f0, FRect, @recipe, LineSegments, Theme,
     lift, campixel, SceneSpace, Axis, text!, on, mouse_selection, poly!, scale!,
     translate!, linesegments!, mesh!, scatter!, meshscatter!
 import GLMakie: plot!, plot
@@ -275,7 +275,7 @@ function plot!(plot::BandPlot2D)
     return plot
  end
 
-@recipe(BandPlot3D, band) do scene
+@recipe(BandPlot3D) do scene
     Theme(
     linethickness = 1.3,
     wireframe = true,
@@ -288,13 +288,14 @@ function plot!(plot::BandPlot2D)
     )
 end
 
-function plot!(plot::BandPlot3D)
-    sbands = Quantica.subbands(to_value(plot[1]))
-    colors = Iterators.cycle(plot[:colors][])
+function plot!(plot::BandPlot3D{<:Tuple{Quantica.Band}})
+    band = to_value(plot[1])
+    sbands = Quantica.subbands(band)
+    colors = Iterators.cycle(to_value(plot.colors))
     for (sidx, color) in zip(eachindex(sbands), colors)
         !haskey(plot, :bands) || sidx in to_value(plot[:bands]) || continue
         sband = sbands[sidx]
-        vertices = collect(Quantica.vertex_coordinates(sband))
+        vertices = collect(Quantica.coordinates(sband))
         simplices = Quantica.simplices(sband)
         connectivity = [s[j] for s in simplices, j in 1:3]
         if isempty(connectivity)
@@ -303,7 +304,7 @@ function plot!(plot::BandPlot3D)
             mesh!(plot, vertices, connectivity; color = color, transparency = false,
                 ssao = plot[:ssao][], ambient = plot[:ambient][], diffuse = plot[:diffuse][])
             if plot[:wireframe][]
-                edgevertices = collect(Quantica.edge_coordinates(sband))
+                edgevertices = collect(edge_coordinates(sband))
                 wireframe_shift!(edgevertices, 1)
                 linesegments!(plot, edgevertices, color = darken(color, plot[:linedarken][]), linewidth = plot[:linethickness][])
             end
@@ -311,6 +312,10 @@ function plot!(plot::BandPlot3D)
     end
     return plot
  end
+
+edge_coordinates(s::Quantica.Subband, i::Int, j::Int) = (Quantica.coordinates(s, i), Quantica.coordinates(s, j))
+edge_coordinates(s::Quantica.Subband) =
+    (edge_coordinates(s, i, j) for i in eachindex(Quantica.vertices(s)) for j in Quantica.neighbors_forward(s, i))
 
  wireframe_shift(::Type{SVector{L,T}}) where {L,T} = SVector(ntuple(i->sqrt(sqrt(eps(T)))*(i==L), Val(L)))
 

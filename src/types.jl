@@ -773,6 +773,7 @@ shrinkright((x, y)) = (x, prevfloat(y))
 #region ## API ##
 # BandVertex #
 
+coordinates(s::SVector) = s
 coordinates(v::BandVertex) = v.coordinates
 
 energy(v::BandVertex) = last(v.coordinates)
@@ -792,6 +793,9 @@ embdim(::AbstractMesh{<:BandVertex{<:Any,E}}) where {E} = E
 
 # Subband #
 
+coordinates(s::Subband) = (coordinates(v) for v in vertices(s))
+coordinates(s::Subband, i::Int) = coordinates(vertices(s, i))
+
 vertices(s::Subband, i...) = vertices(s.mesh, i...)
 
 neighbors(s::Subband, i...) = neighbors(s.mesh, i...)
@@ -799,21 +803,6 @@ neighbors(s::Subband, i...) = neighbors(s.mesh, i...)
 neighbors_forward(s::Subband, i) = neighbors_forward(s.mesh, i)
 
 simplices(s::Subband, i...) = simplices(s.mesh, i...)
-
-simplex_edges(s::Subband, i::Int) = simplex_edges(s, simplices(s, i))
-simplex_edges(s::Subband, is) =
-    ((vertices(s, is[i]), vertices(s, is[j])) for i in 1:length(is) for j in i+1:length(is))
-
-vertex_coordinates(s::Subband) = (coordinates(v) for v in vertices(s))
-vertex_coordinates(s::Subband, i::Int) = coordinates(vertices(s)[i])
-vertex_coordinates(s::Subband, is) = (vertex_coordinates(s, i) for i in is)
-
-edge_coordinates(s::Subband, i::Int, j::Int) = (vertex_coordinates(s, i), vertex_coordinates(s, j))
-edge_coordinates(s::Subband) =
-    (edge_coordinates(s, i, j) for i in eachindex(vertices(s)) for j in neighbors_forward(s, i))
-
-edge_indices(s::Subband) =
-    ((i, j) for i in eachindex(vertices(s)) for j in neighbors_forward(s, i))
 
 trees(s::Subband) = s.trees
 trees(s::Subband, i::Int) = s.trees[i]
