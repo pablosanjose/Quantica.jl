@@ -393,7 +393,7 @@ function Base.getindex(subband, xs...)
     paxes = perp_axes(subband, xs...)
     isempty(paxes) && return subband
     saxes = slice_axes(subband, xs...)
-    return slice_subband(subband, paxes, saxes)
+    return slice(subband, paxes, saxes)
 end
 
 perp_axes(::Subband{T}, xs...) where {T} = perp_axes(T, 1, xs...)
@@ -406,8 +406,8 @@ slice_axes(T::Type, dim, ::Number, xs...) = slice_axes(T, dim + 1, xs...)
 slice_axes(T::Type, dim, ::Colon, xs...) = (dim, slice_axes(T, dim + 1, xs...)...)
 slice_axes(T::Type, dim) = ()
 
-function slice_subband(subband, paxes, saxes)
-    V = slice_vertex_type(subband, paxes)
+function slice(subband, paxes, saxes)
+    V = slice_vertex_type(subband, saxes)
     S = slice_skey_type(paxes)
     verts = V[]
     neighs = Vector{Int}[]
@@ -423,7 +423,7 @@ function slice_subband(subband, paxes, saxes)
     return Subband(verts, neighs)
 end
 
-slice_vertex_type(::Subband{T,E,O}, ::NTuple{N}) where {T,E,O,N} = BandVertex{T,E-N,O}
+slice_vertex_type(::Subband{T,<:Any,O}, ::NTuple{N}) where {T,O,N} = BandVertex{T,N,O}
 
 slice_skey_type(::NTuple{N}) where {N} = SVector{N+1,Int}
 
