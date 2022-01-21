@@ -153,10 +153,32 @@ end
 Base.summary(::AppliedEigensolver{T,L}) where {T,L} =
     "AppliedEigensolver{$T,$L}: Eigensolver applied over an $L-dimensional parameter manifold of type $T"
 
+    #endregion
+
+############################################################################################
+# AbstractMesh
+#region
+
+Base.summary(::Mesh{V}) where {V} =
+    "Mesh{$(nameof(V))}: Mesh with vertices of type $(nameof(V))"
+
+Base.summary(::Subband{T,L}) where {T,L} =
+    "Subband{$T,$L}: Subband over a $L-dimensional parameter space of type $T"
+
+function Base.show(io::IO, m::AbstractMesh)
+    i = get(io, :indent, "")
+    print(io, i, summary(m), "\n",
+"$i  Mesh dim  : $(dim(m))
+$i  Space dim : $(embdim(m))
+$i  Vertices  : $(length(vertices(m)))
+$i  Edges     : $(isempty(neighbors(m)) ? 0 : sum(length, neighbors(m)) ÷ 2)
+$i  Simplices : $(length(simplices(m)))")
+end
+
 #endregion
 
 ############################################################################################
-# Band and Subband
+# Band
 #region
 
 function Base.show(io::IO, b::Band)
@@ -166,17 +188,6 @@ function Base.show(io::IO, b::Band)
 $i  Vertices  : $(sum(s->length(vertices(s)), subbands(b)))
 $i  Edges     : $(sum(s -> sum(length, neighbors(s)), subbands(b)) ÷ 2)
 $i  Simplices : $(sum(s->length(simplices(s)), subbands(b)))")
-end
-
-Base.summary(::Subband{T,L}) where {T,L} =
-    "Subband{$T,$L}: Subband over a $L-dimensional parameter space of type $T"
-
-    function Base.show(io::IO, s::Subband)
-    i = get(io, :indent, "")
-    print(io, i, summary(s), "\n",
-"$i  Vertices  : $(length(vertices(s)))
-$i  Edges     : $(isempty(neighbors(s)) ? 0 : sum(length, neighbors(s)) ÷ 2)
-$i  Simplices : $(length(simplices(s)))")
 end
 
 Base.summary(::Band{T,E,L}) where {T,E,L} =

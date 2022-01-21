@@ -225,7 +225,7 @@ function band_patch!(data)
         data.showprogress && ProgressMeter.next!(meter)
     end
     # If we added new columns, base edges will have split -> rebuild base simplices
-    newcols > 0 && build_cliques!(simplices(data.basemesh), neighbors(data.basemesh))
+    newcols > 0 && rebuild_cliques!(data.basemesh)
     data.showprogress && ProgressMeter.finish!(meter)
     ndefects = length(data.frustrated)
     data.warn && !iszero(ndefects) &&
@@ -382,31 +382,23 @@ end
 #endregion
 
 ############################################################################################
-# Band slicing and indexing
+# Subband slicing and indexing
 #region
 
 Base.getindex(b::Band, n::Int) = subbands(b, n)
 
-function Base.getindex(subband, xs...)
-    length(xs) <= embdim(subband) ||
+Base.getindex(s::Subband, xs...) = Subband(slice(s, xs, Val(true)))
+
+slice(s, xs::Union{Colon,Number}...) = slice(s, xs)
+# default: slice -> mesh with same embedding dimension as subband and smaller simplex length
+slice(s, xs::Tuple) = slice(s, xs::Tuple, Val(false))
+# optional: slice -> mesh with reduced embedding dimension = simplex length + 1
+slice(s, xs::Tuple, ::Val{true}) = slice(s, perp_axes(s, xs...), slice_axes(s, xs...))
+slice(s, xs::Tuple, ::Val{false}) = slice(s, perp_axes(s, xs...), all_axes(s))
+
+function slice(subband::Subband{<:Any,E}, paxes::NTuple{N}, saxes::Tuple) where {E,N}
+    maximum(first, paxes) <= embdim(subband) && maximum(saxes) <= embdim(subband) ||
         throw(ArgumentError("Cannot slice subband along more than $(embdim(subband)) axes"))
-    paxes = perp_axes(subband, xs...)
-    isempty(paxes) && return subband
-    saxes = slice_axes(subband, xs...)
-    return slice(subband, paxes, saxes)
-end
-
-perp_axes(::Subband{T}, xs...) where {T} = perp_axes(T, 1, xs...)
-perp_axes(T::Type, dim, ::Colon, xs...) = perp_axes(T, dim + 1, xs...)
-perp_axes(T::Type, dim, x::Number, xs...) = ((dim, T(x)), perp_axes(T, dim + 1, xs...)...)
-perp_axes(T::Type, dim) = ()
-
-slice_axes(::Subband{T,E}, xs...) where {T,E} = slice_axes(T, 1, padtuple(xs, :, Val(E))...)
-slice_axes(T::Type, dim, ::Number, xs...) = slice_axes(T, dim + 1, xs...)
-slice_axes(T::Type, dim, ::Colon, xs...) = (dim, slice_axes(T, dim + 1, xs...)...)
-slice_axes(T::Type, dim) = ()
-
-function slice(subband, paxes, saxes)
     V = slice_vertex_type(subband, saxes)
     S = slice_skey_type(paxes)
     verts = V[]
@@ -420,8 +412,20 @@ function slice(subband, paxes, saxes)
         simp = simplices(subband, sind)
         slice_simplex!(data, simp)
     end
-    return Subband(verts, neighs)
+    return Mesh{E-N}(verts, neighs)
 end
+
+perp_axes(::Subband{T}, xs...) where {T} = perp_axes(T, 1, xs...)
+perp_axes(T::Type, dim, ::Colon, xs...) = perp_axes(T, dim + 1, xs...)
+perp_axes(T::Type, dim, x::Number, xs...) = ((dim, T(x)), perp_axes(T, dim + 1, xs...)...)
+perp_axes(T::Type, dim) = ()
+
+slice_axes(::Subband{<:Any,E}, xs...) where {E} = slice_axes(1, padtuple(xs, :, Val(E))...)
+slice_axes(dim::Int, ::Number, xs...) = slice_axes(dim + 1, xs...)
+slice_axes(dim::Int, ::Colon, xs...) = (dim, slice_axes(dim + 1, xs...)...)
+slice_axes(dim::Int) = ()
+
+all_axes(::Subband{<:Any,E}) where {E} = ntuple(identity, Val(E))
 
 slice_vertex_type(::Subband{T,<:Any,O}, ::NTuple{N}) where {T,O,N} = BandVertex{T,N,O}
 

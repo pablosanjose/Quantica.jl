@@ -8,8 +8,7 @@ function mesh(rngs::Vararg{<:Any,L}) where {L}
     verts  = vec(vmat)
     cinds  = CartesianIndices(vmat)
     neighs = marching_neighbors(cinds)          # sorted neighbors of i, with n[i][j] > i
-    simps  = build_cliques(neighs, Val(L+1))    # a Vector of Vectors of L+1 point indices (Ints)
-    return Mesh(verts, neighs, simps)
+    return Mesh{L+1}(verts, neighs)
 end
 
 # forward neighbors, cind is a CartesianRange over vertices
@@ -86,9 +85,11 @@ function fast_setdiff!((c, d)::Tuple{Vector,Vector}, rng)
 end
 
 # groups of n all-to-all connected neighbors, sorted
-build_cliques(neighs, ::Val{N}) where {N} = build_cliques!(NTuple{N,Int}[], neighs)
+build_cliques(neighs, ::Val{N}) where {N} = rebuild_cliques!(NTuple{N,Int}[], neighs)
 
-function build_cliques!(cliques::Vector{NTuple{N,Int}}, neighs) where {N}
+rebuild_cliques!(mesh::Mesh) = rebuild_cliques!(simplices(mesh), neighbors(mesh))
+
+function rebuild_cliques!(cliques::Vector{NTuple{N,Int}}, neighs) where {N}
     empty!(cliques)
     for (src, dsts) in enumerate(neighs)
         dsts_f = filter(>(src), dsts)  # indexable forward neighbors

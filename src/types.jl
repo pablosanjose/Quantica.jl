@@ -646,7 +646,18 @@ struct Mesh{V,S} <: AbstractMesh{V,S}
     simps::Vector{NTuple{S,Int}}         # list of simplices, each one a group of neighboring vertex indices
 end
 
+#region ## Constructors ##
+
+function Mesh{S}(verts, neighs) where {S}
+    simps  = build_cliques(neighs, Val(S))
+    return Mesh(verts, neighs, simps)
+end
+
+#endregion
+
 #region ## API ##
+
+dim(::AbstractMesh{<:Any,S}) where {S} = S - 1
 
 vertices(m::Mesh) = m.verts
 vertices(m::Mesh, i) = m.verts[i]
@@ -737,14 +748,12 @@ BandVertex(x, s::Matrix) = BandVertex(x, view(s, :, 1:size(s, 2)))
 BandVertex(m, e, s::Matrix) = BandVertex(m, e, view(s, :, 1:size(s, 2)))
 BandVertex(m, e, s::SubArray) = BandVertex(vcat(m, e), s)
 
-function Subband(verts::Vector{<:BandVertex{<:Any,E}}, neighs, nsimpverts::Val = Val(E)) where {E}
-    simps  = build_cliques(neighs, nsimpverts)
-    order_simplices!(simps, verts)
-    return Subband(verts, neighs, simps)
-end
+Subband(verts::Vector{<:BandVertex{<:Any,E}}, neighs) where {E} =
+    Subband(Mesh{E}(verts, neighs))
 
-function Subband(verts::Vector{<:BandVertex{T,E}}, neighs, simps::AbstractVector) where {T,E}
-    mesh = Mesh(verts, neighs, simps)
+function Subband(mesh::Mesh{<:BandVertex{T,E}}) where {T,E}
+    verts, simps = vertices(mesh), simplices(mesh)
+    order_simplices!(simps, verts)
     trees = ntuple(Val(E)) do i
         list = [IntervalValue(shrinkright(extrema(j->coordinates(verts[j])[i], s))..., n)
                      for (n, s) in enumerate(simps)]
@@ -775,6 +784,10 @@ degeneracy(v::BandVertex) = size(v.states, 2)
 parentrows(v::BandVertex) = first(parentindices(v.states))
 parentcols(v::BandVertex) = last(parentindices(v.states))
 
+embdim(::AbstractMesh{<:SVector{E}}) where {E} = E
+
+embdim(::AbstractMesh{<:BandVertex{<:Any,E}}) where {E} = E
+
 # Subband #
 
 vertices(s::Subband, i...) = vertices(s.mesh, i...)
@@ -784,8 +797,6 @@ neighbors(s::Subband, i...) = neighbors(s.mesh, i...)
 neighbors_forward(s::Subband, i) = neighbors_forward(s.mesh, i)
 
 simplices(s::Subband, i...) = simplices(s.mesh, i...)
-
-embdim(::Subband{<:Any,E}) where {E} = E
 
 simplex_edges(s::Subband, i::Int) = simplex_edges(s, simplices(s, i))
 simplex_edges(s::Subband, is) =
