@@ -732,6 +732,8 @@ struct BandVertex{T<:AbstractFloat,E,O}
     states::MatrixView{O}
 end
 
+# Subband is a type of AbstractMesh with manifold dimension = embedding dimension - 1
+# and with interval search trees to allow slicing
 struct Subband{T,E,O} <: AbstractMesh{BandVertex{T,E,O},E}  # we restrict S == E
     mesh::Mesh{BandVertex{T,E,O},E}
     trees::NTuple{E,IntervalTree{T,IntervalValue{T,Int}}}

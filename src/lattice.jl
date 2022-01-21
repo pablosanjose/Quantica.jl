@@ -88,16 +88,16 @@ postype(::Val{E}, type) where {E} = SVector{E,type}
 # indexing Lattice
 #region
 
-function Base.getindex(l::Lattice; kw...)
-    isempty(kw) && return copy(sites(l))
-    as = apply(siteselector(; kw...), l)
-    selsites = ((i, r) for (i, r) in enumerate(sites(l)) if (i, r) in as)
-    return selsites
-end
+# function Base.getindex(l::Lattice; kw...)
+#     isempty(kw) && return collect(enumerate(sites(l)))
+#     as = apply(siteselector(; kw...), l)
+#     selsites = ((i, r) for (i, r) in enumerate(sites(l)) if (i, r) in as)
+#     return selsites
+# end
 
-siteindices(l::Lattice; kw...) = first.(getindex(l; kw...))
+# siteindices(l::Lattice; kw...) = first.(getindex(l; kw...))
 
-sitepositions(l::Lattice; kw...) = last.(getindex(l; kw...))
+# sitepositions(l::Lattice; kw...) = last.(getindex(l; kw...))
 
 #endregion
 
