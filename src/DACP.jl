@@ -1,21 +1,21 @@
 ############################################################################################
 # Implementation of the Dual applications of Chebyshev polynomials
 # method (DACP) of ref: scipost_202106_00048v3
-# to compute efficiently thousands of central eigenvalues. 
+# to compute efficiently central eigenvalues. 
 # Steps:
 #    1. Exponential (semi_circle) filtering of n-random vectors
 #   (2a) Estimation of subspace dimension using the KPM
 #    2(b). Chebyshev Evolution
 #    3. Subspace diagonalization
-# To do:  
-#    0. Use SVectors structs. Body and return type instability in the proj_h_s method ->
-#        store_base = true
-#    1. Subspace is smaller than expected although there is oversampling 
+# Problems:  
+#    1. Subspace may be smaller than expected
 #          - negligible amplitudes of the filtered vectors in (-a, -a+ϵ) and (a-ϵ, a)
 #            ϵ -> 0
-#    2. Prior knowledge of degeneracies is required -> Adaptive DACP
+#    2. Prior knowledge of degeneracies is required (see: maxdeg kw)
+#    3. Subspace dimension estimation using KPM is not ideal
+#
 ############################################################################################
-using NumericalIntegration
+using NumericalIntegration, QuadEig
 
 # Builders and structs
 
@@ -73,14 +73,15 @@ proj_DACP(h::Union{ParametricHamiltonian, Hamiltonian}, a;
 
 
 proj_DACP(h::Union{ParametricHamiltonian, Hamiltonian}, a, store_basis::Val{true}; 
-    d = missing::Union{Missing, Real}, maxdeg = 1) = _proj_DACP(h, a, d, store_basis; maxdeg = maxdeg)
+    d = missing::Union{Missing, Real}, maxdeg = 1) = _proj_DACP(h, a, d, store_basis; 
+    maxdeg = maxdeg)
 
 
 proj_DACP(h::Union{ParametricHamiltonian, Hamiltonian}, a, store_basis::Val{false};
-    d = missing::Union{Missing, Real}, maxdeg = 1) = _proj_DACP(h, a, d, store_basis; maxdeg = maxdeg)
+    d = missing::Union{Missing, Real}, maxdeg = 1) = _proj_DACP(h, a, d, store_basis; 
+    maxdeg = maxdeg)
 
 function _proj_DACP(h, a, d, store_basis; maxdeg = 1)
-    println(maxdeg)
     builder = semicircle_filter(h, a; numkets = maxdeg)
     return proj_h_s(builder, h, d, store_basis)
 end
@@ -120,11 +121,11 @@ eps != 0 adds performs the exponential filtering in a slighlty larger interval
 """
 function chebyshev_filter(b::DACPbuilder, eps = 0.)
     checkloaded(:ArnoldiMethod)
-    ψ0, ψ1, emax, emin, a, h =  
-        b.ψ0, b.ψ1, b.emax, b.emin, b.a, b.h
+    ψ0, ψ1, emax, emin, a, h =  b.ψ0, b.ψ1, b.emax, b.emin, b.a, b.h
     a += (a/emax * eps)
+    a *= 1 #caution i need a three factor
     bounds = (maximum([abs(emax), abs(emin)]), a)
-    K = Int(ceil(12*emax/a))
+    K = Int(ceil(10*emax/a))#Int(ceil(12*emax/a))
     return DACPsubspace(h, emax, emin, a/emax, 
         iterate_chebyshev(K, ψ0, ψ1, b.hsquared, bounds))
 end
@@ -164,9 +165,9 @@ iterate_chebyshev(K, ψ0::Vector{Matrix{ComplexF64}}, ψ1, hsquared, bounds) =
 #   (2a) Estimation of subspace dimension using the KPM
 ############################################################################################
 """"
-    `subspace_dimension(b)`
+    `subspace_dimension(h, b)`
 performs the numerical integration of the `dos` inside the interval `(-a,a)`. `dos` is 
-computed using the KPM, see `dosKPM` with a number of momenta `N` enought to resolve the 
+computed using the KPM, see `dosKPM` with a number of momenta `N` enough to resolve the 
 interval `(-a, a)`, i.e. `N = bandwidth/a` Arguments: `b::DACPbuilder`
  """
 function subspace_dimension(h, b)
@@ -174,7 +175,7 @@ function subspace_dimension(h, b)
     # @warning "If the subspace dimension, `d`, is known set `d = d` as a kw argument in
     #     `DACP()` or `DACPdiagonaliser()` for a speed boost"
     checkloaded(:NumericalIntegration)
-    order = Int(ceil(10*(emax - emin)/a))
+    order = Int(ceil(1*(emax - emin)/a))
     es, dos = dosKPM(flatten(h), order = order, resolution = 2, bandrange = (b.emin, b.emax))
     indices = findall(x -> x <= a, abs.(es))
     subspace_dim = Int(ceil(abs(integrate(es[indices], dos[indices])*size(h,1))))
@@ -206,33 +207,21 @@ function proj_h_s(h, ψe, bounds, d, store_basis::Val{true}; kw...)
     ar = bounds[3]/abs(bounds[1])
     indices = Int.(floor.(vcat([[m*π/ar-1, m*π/ar] for m in 1:Kp]...)))
     pushfirst!(indices, 1) # the 𝕀 in {𝕀, T_{k-1}, T_k...}
-
+    # ψn = deepcopy(ψe) optional
     basis = chebyshev_basis(indices, ψe, h, bounds)
     smat = zeros(ComplexF64, size(basis, 2), size(basis, 2))
     hmat = similar(smat)
-    
     mul!(smat, basis', basis)
     mul!(hmat, basis', h * basis)
-    return smat, hmat, basis
+    return smat, hmat#, basis
 end
 
 "returns the projected S and H matrices without the requirement to store the basis.
 Only ⟨ψE|Tₖ|ψE⟩ and ⟨ψE|ℍTₖ|ψE⟩ are stored at 4 different \"instants\" for each k_m"
 
-function proj_h_s(h, ψe, bounds, d, store_basis::Val{false}; kw...)
-    l = 1.5
-    n = Int(ceil((l * d - 1)/2))
-    Kp = 2n #the factor two is required
-    ar = bounds[3]/abs(bounds[1])
-    indices = Int.(floor.(vcat([[m*π/ar-2, m*π/ar-1, m*π/ar, m*π/ar+1] for m in 1:Kp]...)))
-    pushfirst!(indices, 1) # the 𝕀 in {𝕀, T_{k-1}, T_k...}
-    return chebyshev_proj(ar, indices, ψe, h, bounds)
-end
-
- 
 function chebyshev_basis(indices, ψ0::Vector{Matrix{T}}, h, bounds) where {T}
     pmeter = Progress(length(indices), 
-        "Computing $(length(indices)+1) order Chebyshev pol...")
+    "Computing $(length(indices)+1) order Chebyshev pol...")
     basis = zeros(T, length(ψ0[1]), Int(ceil(length(ψ0)*length(indices))))
     for it in 1:length(ψ0)
         ψi = copy(ψ0[it])
@@ -242,18 +231,30 @@ function chebyshev_basis(indices, ψ0::Vector{Matrix{T}}, h, bounds) where {T}
             ψ0[it], ψi = _chebyshev_loop!(ψ0[it], ψi, h, bounds, i) # Evolution loop
             if i in indices
                 count += 1
-                basis[:, Int(count+(it-1)*length(indices))] = ψ0[it]./norm(ψ0[it])
+                basis[:, count+(it-1)*length(indices)] = ψ0[it]#./norm(ψ0[it]) Not necessary
             else nothing end
         end
     end
     return basis
 end
 
-function chebyshev_proj(ar, indices, ψ0::Vector{Matrix{ComplexF64}}, h, bounds)
-    Kp = length(indices)
+function proj_h_s(h, ψe, bounds, d, store_basis::Val{false}; kw...)
+    l = 1.5
+    n = Int(ceil((l * d - 1)/2))
+    Kp = 2n+1 #the factor two is required
+    πoar = Int(round(π/(bounds[3]/abs(bounds[1]))))
+    indices = vcat([[m*πoar-3, m*πoar-2, m*πoar-1, m*πoar, m*πoar+1, m*πoar+2] for m in 1:Kp]...)
+    pushfirst!(indices, 2)
+    pushfirst!(indices, 1) # the 𝕀 in {𝕀, T_{k_1-1}, T_k_1, T_{k_2-2}, T_{k_2-1}...}
+    # ψn = deepcopy(ψe) (optional)
+    return chebyshev_proj(πoar, indices, ψe, h, bounds)
+end
+
+function chebyshev_proj(πoar, indices, ψ0::Vector{Matrix{ComplexF64}}, h, bounds)
     ψh = similar(ψ0[1])
-    aux_vec = zeros(ComplexF64, Kp, 2)
-    pmeter = Progress(Kp, "Computing $(Kp+1) order Chebyshev pol...")
+    aux_vec = zeros(ComplexF64, length(indices), 2)
+    pmeter = Progress(length(indices), 
+        "Computing $(length(indices)+1) order Chebyshev pol...")
     for it in 1:length(ψ0)
         count = 0
         ψi = copy(ψ0[it])
@@ -262,62 +263,57 @@ function chebyshev_proj(ar, indices, ψ0::Vector{Matrix{ComplexF64}}, h, bounds)
         for i in 1:indices[end]
             ProgressMeter.next!(pmeter; showvalues = ())
             ψ0[it], ψi = _chebyshev_loop!(ψ0[it], ψi, h, bounds, i) # Evolution loop
-            if i in indices #storing ⟨ψE|Tₖ|ψE⟩, ⟨ψE|ℍTₖ|ψE⟩ for those T_k with k ∈ indices
-                count +=1
-                aux_vec[count,1] = dot(ψe, ψ0[it])#/(norm(ψ0[it]))
-                aux_vec[count,2] = dot(ψh, ψ0[it])#/(norm(ψ0[it]))
+            if i in indices # storing ⟨ψE|Tₖ|ψE⟩, ⟨ψE|ℍTₖ|ψE⟩ for those T_k with k ∈ indices
+                count += 1
+                aux_vec[count,1] = dot(ψe, ψ0[it]) # NOT GENERALISED FOT it>1 yet
+                aux_vec[count,2] = dot(ψh, ψ0[it])
             else nothing end
         end
     end
-    return build_matrices(aux_vec, indices, ar)
+    return build_matrices(aux_vec, indices, πoar)
 end
 
-
-function build_matrices(v, indices, ar)
-    dim = Int64((length(v[:,1])-1)/4 +1)
+function build_matrices(v, indices, πoar)
+    dim = Int64((length(v[:,1])-2)/6)
     smat = zeros(ComplexF64, dim, dim)
     hmat = similar(smat) 
-    println(indices)
     for j in 1:dim
         for i in 1:dim
-            println("i: ", i, "j: ", j)
-            println(ijselector(ar, i, j))
-            indexp, indexm = [findall(x -> x == ijselector(ar, i, j)[ite], indices)[1] for ite in 1:2]
+            indexes = ijselector(i, j, dim, πoar)
+            indexp, indexm = [findall(x -> x == indexes[ite], indices)[1] 
+                for ite in 1:2]
             smat[i,j] = 1/2 * (v[indexp, 1] + v[indexm, 1])
             hmat[i,j] = 1/2 * (v[indexp, 2] + v[indexm, 2])
         end
     end
     return smat, hmat     
 end
+
 """
-aux_vec is organized s.t. {1, Tk_1-2, Tk_1-1, Tk_1, Tk_1+1, Tk_2-1}, given two indices 
+aux_vec is organized s.t. {1, Tk_1-2, Tk_1-1, Tk_1, Tk_1+1, Tk_2-1, ...}, given two indices 
 `(i,j)`, `ijselector(i, j)` returns  a couple of indices `x+y, abs(x-y)` for the calculation
 of s and h see eq (22) of scipost_202106_00048v3.
 """
-function ijselector(ar, i, j)
-    if i % 2 == 0 && j % 2 == 0
-        k_p = π/ar * (i+j)÷2 - 2
-        k_m = π/ar * abs((i-j)÷2)
-    elseif i % 2 == 1 && j % 2 == 0 
-        k_p = π/ar * (i+j-1)÷2 -1
-        k_m = abs(π/ar * (i-j-1)÷2 + 1)
-    elseif i % 2 == 0 && j % 2 == 1
-        k_p = π/ar *(i+j-1)÷2 -1
-        k_m = abs(π/ar * (i-j+1)÷2 -1)
-    else
-        k_p = π/ar *(i+j-2)÷2
-        k_m = π/ar * abs((i-j)÷2)
+ijselector(i, j, dim,  πoar) = [Ti_idtoindex(i,1, πoar)+Ti_idtoindex(j,1, πoar) - 1, 
+        abs(Ti_idtoindex(i,1, πoar)-Ti_idtoindex(j,1, πoar)) + 1]
+
+function Ti_idtoindex(i, j,  πoar)
+    if i == 1 && j == 1
+        return 1
+    elseif i % 2 == 1
+        return (i-2+j)/2* πoar
+    elseif i % 2 == 0
+        return (i+j-1)/2* πoar - 1
     end
-    k_p = ifelse(k_p <= 0.5, 1., k_p)
-    k_m = ifelse(k_m <= 0.5, 1., k_m)
-    return [Int(floor(k_p)), Int(floor(k_m))]
 end
 
-
-
+""" 
+Chebyshev evolution loop
+"""
 function _chebyshev_loop!(ψ0, ψi, h, bounds, i)
     if i == 1
-        copy!(ψ0, ψi)
+        nothing
+        #copy!(ψ0, ψi)# ψ0 and ψi are aliased to the same ref ψ0[it]
     elseif i == 2
         mul_g!(ψ0, h, ψi, bounds)
     else
@@ -372,16 +368,18 @@ end
 ############################################################################################
 
 """
-Diagonaliser, uses a Generalize Schur Decomposition (QZ) to solve the GEP
-so we are taking care of possible degeneracies
+Diagonaliser, uses the selected codepath method to solve the General Eigenvalue Problem so
+we are taking care of possible degeneracies.
+    method = :QZ, performs a Generalized Schur Decomposition (QZ)
+    method = :default performs ref method SVD
+    method = :deflatedQZ, performs a QZ with a previous deflation of the subspace (testing...)
+    method = :twoQR, method with two QR with complete pivoting factorizations (testing...)
 """
 function DACPdiagonaliser(h::Hamiltonian, a; store_basis = true, maxdeg = 1, 
-    d = missing::Union{Missing, Real})
+    d = missing::Union{Missing, Real}, method = :default)
     smat, hmat = proj_DACP(h, a, Val(store_basis), maxdeg = maxdeg, d = d)[1:2]
-    return DACPdiagonaliser(hmat, smat)
+    return DACPdiagonaliser(hmat, smat, method)
 end
-
-# DACPdiagonaliser(h, s) = eigen(h, s).values
 
 """
     `DACPdiagonaliser(h::AbstractMatrix{T}, s::AbstractMatrix{T}; threshold = 1e-12)`
@@ -389,11 +387,24 @@ end
 which are built using an overcomplete basis corresponding to a number `numkets` of Chebyshev
 evolutions. 
     It returns the eigendescomposition (eigenvalues and eigenvectors) of the target subspace
-of a hamiltonian, `h`. Note that we throw all linear dependencies by means of an SVD of the
-overlap matrix. We select the subspace corresponding to all singular values up to 
-`tolerance = 1e-12`
+of a hamiltonian, `h`. Note that we throw all linear dependencies by means of a rank revealing
+factorization of the overlap matrices. We select the subspace corresponding to all singular 
+values up to `tolerance = 1e-12`.
+
 """
-function DACPdiagonaliser(h::AbstractMatrix{T}, s::AbstractMatrix{T}; 
+function DACPdiagonaliser(h, s, method; kw...) 
+    if method == :default 
+        paper_diag(h, s; kw...)
+    elseif method == :QZ
+        qz_diag(h, s; kw...)
+    elseif method == :deflatedQZ
+        deflatedqz_diag(h, s; kw...)
+    elseif method == :twoQZ
+        twoqr_diag(h, s; kw...)
+    end
+end
+
+function paper_diag(h::AbstractMatrix{T}, s::AbstractMatrix{T}; 
     tolerance = 1e-12) where {T}
     F = eigen(s)
     lowe_filter = findall(x -> abs(x) > tolerance, F.values)
@@ -403,4 +414,66 @@ function DACPdiagonaliser(h::AbstractMatrix{T}, s::AbstractMatrix{T};
     h_red = U' * h * U
     println("size reduced subspace up to tol = $(1e-12): ", size(h_red, 1))
     return eigen(h_red).values
+end
+
+"""codepath with schur diagonalization and a brute force rank revealing factorization"""
+function qz_diag(h, s; tol = 1e-12)
+    r = schur(h, s)
+    λs = _chop(r.α ./ r.β, tol)
+    println("size reduced subspace up to tol = $(1e-12): ",length(λs))
+    return sort(real(λs))
+end
+
+function _chop(A::AbstractArray{T}, atol = sqrt(eps(real(T)))) where {T}
+    λr = ComplexF64[]
+    for (i,a) in enumerate(A)
+        if abs(a) < atol || abs(a) > 1/atol || isnan(a) || abs(imag(a))> 1e-4
+            nothing
+        else
+            push!(λr, a)
+        end
+    end
+    return λr
+end
+
+"""codepath with Quadeig (schur diagonalization + deflation strategy)"""
+function deflatedqz_diag(h, s; tol = 1e-12)
+    println(size(h))
+    l = linearize(h, -s, 0*h)
+    d = deflate(l, atol=tol)
+    println(d)
+    r = schur(d.A, d.B)
+    return eigvals(d.A,d.B)#r.values
+end
+
+"""codepath with QRfactorizations; P(A,B) ψ = (A + λ B) ψ = 0"""
+twoqr_diag(h::Matrix{ComplexF64}, s::Matrix{ComplexF64}; tol = 1e-12) = 
+    twoqr_diag(deflate(h, -s, tol))
+
+twoqr_diag(mat::Tuple{Matrix{ComplexF64}, Matrix{ComplexF64}}) = 
+    schur(mat[1], mat[2]).values
+
+""" deflation procedure using two (Householder) QR factorisations with complete pivoting
+"""
+function deflate(A, B, tol)
+    QR_A = qr(A,  ColumnNorm())
+    rank_A = rank(QR_A.R, tol)
+    QR_R = qr(transpose(QR_A.R[1:rank_A,:]),  ColumnNorm())
+    A_red = QR_R.R
+    return A_red, mul!(A_red, QR_A.Q[1:rank_A,:], B * QR_R.Q[1:rank_A,:]')
+end
+
+""" computes the rank of matrix of a given matrix A, using R_A, an upper triangular matrix
+which comes from the A = Q_A R_A. A QR factorisation with complete pivoting"""
+function rank(R, tol = 1e-12) 
+    rank = 1
+    while abs(R[rank, rank]) > tol 
+        if rank == minimum(size(R))
+            break
+        else 
+            rank += 1
+        end
+    end
+    return rank-1
+    # maximum(findall(x -> abs(x) > 1e-12, diag(QR.R))) this does the same but is slower
 end
