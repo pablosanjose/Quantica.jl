@@ -1,4 +1,4 @@
-using Quantica, ArnoldiMethod, LinearAlgebra, NumericalIntegration, FFTW
+using ArnoldiMethod, LinearAlgebra, NumericalIntegration, FFTW
 
 
 h = LP.honeycomb() |>
