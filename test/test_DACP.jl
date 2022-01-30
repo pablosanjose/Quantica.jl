@@ -1,31 +1,12 @@
-using Quantica, ArnoldiMethod, LinearAlgebra, QuadGK, NumericalIntegration, FFTW
-
-h = hamiltonian(unitcell(LatticePresets.linear(a0 = .001), 
-    region = r -> abs(r[1])<= 1), onsite(r -> r[1]))
-#testing KPM
-l = dosKPM(h, order = 20000)
-
-plotKPMdos(l) = plotKPMdos(l[1], l[2])
-function plotKPMdos(x, y)
-    f = Figure(resolution = (300,300))
-    ax = Axis(f[1,1])
-    lines!(ax, x, y)
-    xlims!(ax, (-0.02,0.02))
-    ylims!(ax,(0,6))
-    f
-end
-
-h = hamiltonian(unitcell(LatticePresets.linear(a0 = .001), 
-    region = r -> abs(r[1])<= 1), onsite(r -> @SMatrix[r[1] 0; 0 r[1]]), orbitals = Val(2))
-
-sp = spectrum(h);
-# hist(sp.energies[abs.(sp.energies) .< 0.02], bins = 1000 ) #exact
+using Quantica, ArnoldiMethod, LinearAlgebra, NumericalIntegration, FFTW
 
 
-##########
-# Degenerate eigenvalues
-# 
+h = LP.honeycomb() |>
+    hamiltonian(hopping(1) + onsite(0., sublats = :A) - onsite(0., sublats = :B)) |>
+    unitcell(region = RegionPresets.circle(20))
 
-#
-#
-##########
+a = 0.1
+eigs_dacp = DACPdiagonaliser(h, a,  maxdeg = 2, store_basis = false, d = 20)
+eigs_dacp = DACPdiagonaliser(h, a,  maxdeg = 2, store_basis = true, d = 20)
+eigs_dacp = DACPdiagonaliser(h, a,  maxdeg = 1, store_basis = true)
+eigs_dacp = DACPdiagonaliser(h, a,  maxdeg = 1, store_basis = false)

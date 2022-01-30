@@ -15,7 +15,7 @@
 #    3. Subspace dimension estimation using KPM is not ideal
 #
 ############################################################################################
-using NumericalIntegration, QuadEig
+using NumericalIntegration
 
 # Builders and structs
 
@@ -436,15 +436,15 @@ function _chop(A::AbstractArray{T}, atol = sqrt(eps(real(T)))) where {T}
     return λr
 end
 
-"""codepath with Quadeig (schur diagonalization + deflation strategy)"""
-function deflatedqz_diag(h, s; tol = 1e-12)
-    println(size(h))
-    l = linearize(h, -s, 0*h)
-    d = deflate(l, atol=tol)
-    println(d)
-    r = schur(d.A, d.B)
-    return eigvals(d.A,d.B)#r.values
-end
+# """codepath with Quadeig (schur diagonalization + deflation strategy)"""
+# function deflatedqz_diag(h, s; tol = 1e-12)
+#     println(size(h))
+#     l = linearize(h, -s, 0*h)
+#     d = deflate(l, atol=tol)
+#     println(d)
+#     r = schur(d.A, d.B)
+#     return eigvals(d.A,d.B)#r.values
+# end
 
 """codepath with QRfactorizations; P(A,B) ψ = (A + λ B) ψ = 0"""
 twoqr_diag(h::Matrix{ComplexF64}, s::Matrix{ComplexF64}; tol = 1e-12) = 
