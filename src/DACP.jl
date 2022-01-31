@@ -61,7 +61,7 @@ REMARKS:
     - in order to accurately span 𝕃, we form a basis by Chebyshev evolution of 
         `ψe` using `n = (l*d-1)/2` states with l>=1 (set by default to l = 1.5).
     - for a given `d`, `a` must be appropriately chosen to ensure that the number of
-        eigenstates in `[−a, a]` is a little less than the dimension of constructed basis, 
+        eigenstates in `[-a, a]` is a little less than the dimension of constructed basis, 
         i.e. < 2n + 1 (overestimation). This requires prior knowledge about the spectrum
         edges. However, the subspace dimension, `d`, can be efficiently determined using 
         the KPM method. 
@@ -324,7 +324,7 @@ function _chebyshev_loop!(ψ0, ψi, h, bounds, i)
 end
 
 """
-returns the action of the operator `𝔽` on a state `x`
+returns the action of the operator `F` on a state `x`
 """
 function mul_f!(y, mat, x, (emax, a))
     ec = (emax^2 + a^2)/2
@@ -334,7 +334,7 @@ function mul_f!(y, mat, x, (emax, a))
 end
 
 """
-returns the action of the operator `𝔾` on a state `x`
+returns the action of the operator `G` on a state `x`
 """
 function mul_g!(y, mat, x, (emax, emin, a))
     ec = (emin + emax)/2
@@ -344,7 +344,7 @@ function mul_g!(y, mat, x, (emax, emin, a))
 end
 
 """
-action of the chebyshev iteration of the operator `𝔽` on a state `x`
+action of the chebyshev iteration of the operator `F` on a state `x`
 """
 function iterateDACP_f!(y, mat, x, (emax, a))
     ec = (emax^2 + a^2)/2
@@ -354,7 +354,7 @@ function iterateDACP_f!(y, mat, x, (emax, a))
 end
 
 """
-action of the chebyshev iteration of the operator `𝔾` on a state `x`
+action of the chebyshev iteration of the operator `G` on a state `x`
 """
 function iterateDACP_g!(y, mat, x, (emax, emin, a))
     ec = (emin + emax)/2
