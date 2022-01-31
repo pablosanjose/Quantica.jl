@@ -328,7 +328,7 @@ returns the action of the operator `F` on a state `x`
 """
 function mul_f!(y, mat, x, (emax, a))
     ec = (emax^2 + a^2)/2
-    e0 = (emax^2 − a^2)/2
+    e0 = (emax^2 - a^2)/2
     mul!(y, mat, x)
     @. y = (y - ec * x)/e0
 end
@@ -348,7 +348,7 @@ action of the chebyshev iteration of the operator `F` on a state `x`
 """
 function iterateDACP_f!(y, mat, x, (emax, a))
     ec = (emax^2 + a^2)/2
-    e0 = (emax^2 − a^2)/2
+    e0 = (emax^2 - a^2)/2
     mul!(y, mat, x, 2/e0, -1) 
     @. y = y - x * 2ec/e0
 end
