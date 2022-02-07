@@ -251,7 +251,7 @@ end
 
 @recipe(BandPlot2D, band) do scene
     Theme(
-    linethickness = 3.0,
+    linethickness = 6.0,
     wireframe = true,
     colors = map(t -> RGBAf((0.8 .* t)...),
         ((0.973, 0.565, 0.576), (0.682, 0.838, 0.922), (0.742, 0.91, 0.734),
@@ -281,6 +281,7 @@ function plot!(plot::BandPlot2D)
     wireframe = true,
     linedarken = 0.5,
     ssao = true, ambient = Vec3f(0.55), diffuse = Vec3f(0.4),
+    backlight = 1f0,
     colors = map(t -> RGBAf(t...),
         ((0.973, 0.565, 0.576), (0.682, 0.838, 0.922), (0.742, 0.91, 0.734),
          (0.879, 0.744, 0.894), (1.0, 0.84, 0.0), (1.0, 1.0, 0.669),
@@ -322,14 +323,15 @@ function plot!(plot::BandPlot3D{<:Tuple{Quantica.AbstractMesh{<:Any,E}}}) where 
             scatter!(plot, vertices, color = color)
         else
             mesh!(plot, vertices, connectivity; color = color, transparency = false,
-                ssao = plot[:ssao][], ambient = plot[:ambient][], diffuse = plot[:diffuse][])
+                ssao = plot[:ssao][], ambient = plot[:ambient][], diffuse = plot[:diffuse][], backlight = plot[:backlight][])
         end
     end
     if plot[:wireframe][]
         edgevertices = collect(edge_coordinates(sband))
         wireframe_shift!(edgevertices, 1)
         linesegments!(plot, edgevertices, color = darken(color, plot[:linedarken][]), linewidth = plot[:linethickness][])
-        # linesegments!(plot, edgevertices, color = color, linewidth = plot[:linethickness][])
+        wireframe_shift!(edgevertices, -2)
+        linesegments!(plot, edgevertices, color = darken(color, plot[:linedarken][]), linewidth = plot[:linethickness][])
     end
 end
 
