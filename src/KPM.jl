@@ -268,17 +268,21 @@ end
 
 bandbracketKPM(h, (ϵmin, ϵmax)::Tuple{T,T}, pad = float(T)(0.01)) where {T} = ((ϵmax + ϵmin) / 2, (ϵmax - ϵmin) / (2 - pad))
 
-bandrangeKPM(h::Hamiltonian) = bandrangeKPM(matrix_KPM(Val(true), h))
+bandrangeKPM(h::Hamiltonian; kw...) = bandrangeKPM(matrix_KPM(Val(true), h); kw...)
 
-function bandrangeKPM(h::AbstractMatrix{T}) where {T}
-    @warn "Computing spectrum bounds... Consider using the `bandrange` option for faster performance."
+function bandrangeKPM(h::AbstractMatrix{T}; quiet = false) where {T}
+    if quiet == true 
+        nothing
+    else @warn "Computing spectrum bounds... Consider using the `bandrange` option for faster performance."
+    end
     checkloaded(:ArnoldiMethod)
     R = real(T)
     decompl, _ = Main.ArnoldiMethod.partialschur(h, nev=1, tol=1e-4, which = Main.ArnoldiMethod.LR());
     decomps, _ = Main.ArnoldiMethod.partialschur(h, nev=1, tol=1e-4, which = Main.ArnoldiMethod.SR());
     ϵmax = R(real(decompl.eigenvalues[1]))
     ϵmin = R(real(decomps.eigenvalues[1]))
-    @warn  "Computed bandrange = ($ϵmin, $ϵmax)"
+    if quiet == true nothing
+    else @warn("Computed bandrange = ($ϵmin, $ϵmax)") end
     return (ϵmin, ϵmax)
 end
 
