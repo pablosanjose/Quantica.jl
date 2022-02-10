@@ -170,7 +170,6 @@ computed using the KPM, see `dosKPM` with a number of momenta `N` enough to reso
 interval `(-a, a)`, i.e. `N = bandwidth/a` Arguments: `b::DACPbuilder`
  """
 function subspace_dimension(h, b)
-    println("hey")
     a, emax, emin = b.a, b.emax, b.emin
     order = Int(ceil(1*(emax - emin)/a))
     # @warning "If the subspace dimension, `d`, is known set `d = d` as a kw argument in
