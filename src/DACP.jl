@@ -15,7 +15,6 @@
 #    3. Subspace dimension estimation using KPM is not ideal
 #
 ############################################################################################
-using NumericalIntegration
 
 # Builders and structs
 
