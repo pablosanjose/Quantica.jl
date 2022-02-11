@@ -15,7 +15,6 @@
 #    3. Subspace dimension estimation using KPM is not ideal
 #
 ############################################################################################
-using NumericalIntegration
 
 # Builders and structs
 
@@ -172,13 +171,13 @@ interval `(-a, a)`, i.e. `N = bandwidth/a` Arguments: `b::DACPbuilder`
  """
 function subspace_dimension(h, b)
     a, emax, emin = b.a, b.emax, b.emin
+    order = Int(ceil(1*(emax - emin)/a))
     # @warning "If the subspace dimension, `d`, is known set `d = d` as a kw argument in
     #     `DACP()` or `DACPdiagonaliser()` for a speed boost"
-    checkloaded(:NumericalIntegration)
-    order = Int(ceil(1*(emax - emin)/a))
-    es, dos = dosKPM(flatten(h), order = order, resolution = 2, bandrange = (b.emin, b.emax))
-    indices = findall(x -> x <= a, abs.(es))
-    subspace_dim = Int(ceil(abs(integrate(es[indices], dos[indices])*size(h,1))))
+    momenta = momentaKPM(flatten(h), order = order,  bandrange = (b.emin, b.emax))
+    analytic_integral(n, a) = n == 0 ? 2.0*asin(a)/π : (n%2 == 1 ? 0 : -4.0*sin(n*acos(a))/(n*π))
+    subspace_dim = ceil(real(sum(n -> momenta.mulist[n + 1] * 
+        analytic_integral(n, 2a/(b.emax - b.emin)), 0:length(momenta.mulist)-1)*4*size(h,1)))
     println("subspace dimension: ", subspace_dim)
     return subspace_dim
 end
