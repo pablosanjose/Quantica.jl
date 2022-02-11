@@ -148,6 +148,8 @@ Schur1DWorkspace(R::AbstractMatrix{T}) where {T} = Schur1DWorkspace{T}(size(R)..
 Schur1DWorkspace{T}(n, r) where {T} = Schur1DWorkspace(Matrix{T}.(undef,
     ((n, n), (n, n), (n, r), (n, r), (r, r), (r, r), (r, r), (r, r), (2r, 2r), (2r, 2r), (n+2r, n+2r), (n+2r, n+2r)))...)
 
+# This uses the deflation scheme in Sec. IV.B of https://antonakhmerov.org/misc/computationalqtransport.pdf
+# where L, R here denote A, B there, and G⁻¹ is G_{AB}⁻¹. deflate_pencil! returns Eq. (78)
 struct Deflator{T,S}
     L::Matrix{T}        # h₊ = L*R'
     R::Matrix{T}        # h₋ = R*L'

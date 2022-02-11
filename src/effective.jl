@@ -5,7 +5,20 @@
     EffectiveMatrix
 
 A dense matrix of the form `matrix = [ZaL(ω) L' 0; L*ZaR(ω) I*ω-H R*ZrL(ω); 0 R' ZrR(ω)]`,
-where H, L and R are given at construction, while ω, φL, φR are given at runtime.
+where H, L and R are given at construction, while ω, and the Z's are given at runtime.
+
+This is equivalent, integrating out the Z blocks, to dressing I*ω-H with self energies
+    Σ₊ = h₋g₀h₊ = h₋ Φr Λr Φr⁻¹ = R ZrL ZrR⁻¹ R'
+    Σ₋ = h₊g₀h₋ = h₋ Φa Λa Φa⁻¹ = L ZaR ZaL⁻¹ L'
+where
+    h₊ = L'R
+    h₋ = R'L
+    ΦrL = L' Φr Λr = ZrL * R11r
+    ΦrR = R' Φr = ZrR * R11r
+    ΦaL = L' Φa Λa = ZaL * R11a
+    ΦaR = R' Φa = ZaR * R11a
+and Z = [ZrL ZaL; ZrR ZaR] is obtained from the QZ decomposition A - λB= Q(SA-λSB)Z' of the
+deflated_pencil!(A, B), with eigenvalues ordered according to their modulus.
 """
 struct EffectiveMatrix{T}
     matrix::Matrix{T}
