@@ -63,6 +63,6 @@ include("presets/regions.jl")
 include("presets/eigensolvers.jl")
 # include("presets/hamiltonians.jl")
 
-# include("precompile.jl")
+include("precompile.jl")
 
 end
