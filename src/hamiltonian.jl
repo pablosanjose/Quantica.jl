@@ -250,8 +250,8 @@ merge_flatten_sparse(hars::Vector{<:Harmonic}, os::OrbitalStructure{<:SMatrix}, 
 (b::AbstractBloch)(φs...; kw...) = copy(call!(b, φs...; kw...))
 
 call!(b::AbstractBloch{L}, φs::Vararg{Number,L}; kw...) where {L} = call!(b, φs; kw...)
-call!(b::AbstractBloch{L}, φs::NTuple{L,Number}; kw...) where {L} = call!(b, SVector(φs); kw...)
-call!(b::AbstractBloch, φskw::Tuple{<:Any,NamedTuple}) = call!(b, first(φskw); last(φskw)...) # support for (φs, (; kw...)) 
+call!(b::AbstractBloch{L}, φs::NTuple{L,Number}; kw...) where {L} = call!(b, sanitize_SVector(φs); kw...)
+call!(b::AbstractBloch, φskw::Tuple{<:Any,NamedTuple}) = call!(b, first(φskw); last(φskw)...) # support for (φs, (; kw...))
 call!(b::AbstractBloch, φskw::Tuple) = call!(b, Base.front(φskw); last(φskw)...) # support for (φs..., (; kw...))
 call!(b::AbstractBloch, φs...; kw...) =
     throw(ArgumentError("Wrong call! argument syntax. Possible mismatch between input Bloch phases $(length(φs)) and lattice dimention $(latdim(b))."))
