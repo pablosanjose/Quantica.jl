@@ -283,72 +283,6 @@ Base.adjoint(t::HoppingTerm) = HoppingTerm(t.t', t.selector', t.coefficient')
 #endregion
 
 ############################################################################################
-# Model Modifiers  -  see model.jl for methods
-#region
-
-# wrapper of a function f(x1, ... xN; kw...) with N arguments and the kwargs in params
-struct ParametricFunction{N,F}
-    f::F
-    params::Vector{Symbol}
-end
-
-struct OnsiteModifier{N,S<:SiteSelector,F<:ParametricFunction{N}}
-    f::F
-    selector::S
-end
-
-struct AppliedOnsiteModifier{N,B,R<:SVector,F<:ParametricFunction{N}}
-    blocktype::Type{B}
-    f::F
-    ptrs::Vector{Tuple{Int,R,Int}}
-    # [(ptr, r, norbs)...] for each selected site, dn = 0 harmonic
-end
-
-struct HoppingModifier{N,S<:HopSelector,F<:ParametricFunction{N}}
-    f::F
-    selector::S
-end
-
-struct AppliedHoppingModifier{N,B,R<:SVector,F<:ParametricFunction{N}}
-    blocktype::Type{B}
-    f::F
-    ptrs::Vector{Vector{Tuple{Int,R,R,Tuple{Int,Int}}}}
-    # [[(ptr, r, dr, (norbs, norbs´)), ...], ...] for each selected hop on each harmonic
-end
-
-const Modifier = Union{OnsiteModifier,HoppingModifier}
-const AppliedModifier = Union{AppliedOnsiteModifier,AppliedHoppingModifier}
-
-#region ## Constructors ##
-
-ParametricFunction{N}(f::F, params) where {N,F} = ParametricFunction{N,F}(f, params)
-
-#endregion
-
-#region ## API ##
-
-selector(m::Modifier) = m.selector
-
-parameters(m::Union{Modifier,AppliedModifier}) = m.f.params
-
-parametric_function(m::Union{Modifier,AppliedModifier}) = m.f
-
-pointers(m::AppliedModifier) = m.ptrs
-
-(m::AppliedOnsiteModifier{1,B})(o, r, orbs; kw...) where {B} =
-    sanitize_block(B, m.f.f(o; kw...), (orbs, orbs))
-(m::AppliedOnsiteModifier{2,B})(o, r, orbs; kw...) where {B} =
-    sanitize_block(B, m.f.f(o, r; kw...), (orbs, orbs))
-
-(m::AppliedHoppingModifier{1,B})(t, r, dr, orbs; kw...) where {B} =
-    sanitize_block(B, m.f.f(t; kw...), orbs)
-(m::AppliedHoppingModifier{3,B})(t, r, dr, orbs; kw...) where {B} =
-    sanitize_block(B, m.f.f(t, r, dr; kw...), orbs)
-
-#endregion
-#endregion
-
-############################################################################################
 # OrbitalStructure  -  see hamiltonian.jl for methods
 #region
 
@@ -477,7 +411,13 @@ norbitals(h::Hamiltonian) = norbitals(orbitalstructure(h))
 
 Base.size(h::Hamiltonian, i...) = size(first(harmonics(h)), i...)
 
-copy_harmonics(h::Hamiltonian) = Hamiltonian(lattice(h), orbitalstructure(h), deepcopy(harmonics(h)))
+copy_harmonics(h::Hamiltonian) = Hamiltonian(
+    lattice(h), orbitalstructure(h), deepcopy(harmonics(h))
+)
+
+Base.copy(h::Hamiltonian) = Hamiltonian(
+    copy(lattice(h)), orbitalstructure(h), deepcopy(harmonics(h))
+)
 
 function LinearAlgebra.ishermitian(h::Hamiltonian)
     for hh in h.harmonics
@@ -491,13 +431,80 @@ end
 #endregion
 
 ############################################################################################
+# Model Modifiers  -  see model.jl for methods
+#region
+
+# wrapper of a function f(x1, ... xN; kw...) with N arguments and the kwargs in params
+struct ParametricFunction{N,F}
+    f::F
+    params::Vector{Symbol}
+end
+
+struct OnsiteModifier{N,S<:SiteSelector,F<:ParametricFunction{N}}
+    f::F
+    selector::S
+end
+
+struct AppliedOnsiteModifier{N,B,R<:SVector,F<:ParametricFunction{N}}
+    blocktype::Type{B}
+    f::F
+    ptrs::Vector{Tuple{Int,R,Int}}
+    # [(ptr, r, norbs)...] for each selected site, dn = 0 harmonic
+end
+
+struct HoppingModifier{N,S<:HopSelector,F<:ParametricFunction{N}}
+    f::F
+    selector::S
+end
+
+struct AppliedHoppingModifier{N,B,R<:SVector,F<:ParametricFunction{N}}
+    blocktype::Type{B}
+    f::F
+    ptrs::Vector{Vector{Tuple{Int,R,R,Tuple{Int,Int}}}}
+    # [[(ptr, r, dr, (norbs, norbs´)), ...], ...] for each selected hop on each harmonic
+end
+
+const Modifier = Union{OnsiteModifier,HoppingModifier}
+const AppliedModifier = Union{AppliedOnsiteModifier,AppliedHoppingModifier}
+
+#region ## Constructors ##
+
+ParametricFunction{N}(f::F, params) where {N,F} = ParametricFunction{N,F}(f, params)
+
+#endregion
+
+#region ## API ##
+
+selector(m::Modifier) = m.selector
+
+parameters(m::Union{Modifier,AppliedModifier}) = m.f.params
+
+parametric_function(m::Union{Modifier,AppliedModifier}) = m.f
+
+pointers(m::AppliedModifier) = m.ptrs
+
+(m::AppliedOnsiteModifier{1,B})(o, r, orbs; kw...) where {B} =
+    sanitize_block(B, m.f.f(o; kw...), (orbs, orbs))
+(m::AppliedOnsiteModifier{2,B})(o, r, orbs; kw...) where {B} =
+    sanitize_block(B, m.f.f(o, r; kw...), (orbs, orbs))
+
+(m::AppliedHoppingModifier{1,B})(t, r, dr, orbs; kw...) where {B} =
+    sanitize_block(B, m.f.f(t; kw...), orbs)
+(m::AppliedHoppingModifier{3,B})(t, r, dr, orbs; kw...) where {B} =
+    sanitize_block(B, m.f.f(t, r, dr; kw...), orbs)
+
+#endregion
+#endregion
+
+############################################################################################
 # ParametricHamiltonian  -  see hamiltonian.jl for methods
 #region
 
 struct ParametricHamiltonian{T,E,L,B,M<:NTuple{<:Any,AppliedModifier}} <: AbstractHamiltonian{T,E,L,B}
     hparent::Hamiltonian{T,E,L,B}
-    h::Hamiltonian{T,E,L,B}
-    modifiers::M                   # Tuple of AppliedModifier's
+    h::Hamiltonian{T,E,L,B}        # To be modified upon application of parameters
+    modifiers::M                   # Tuple of AppliedModifier's. Cannot FunctionWrapper them
+                                   # because they involve kwargs
     allptrs::Vector{Vector{Int}}   # allptrs are all modified ptrs in each harmonic (needed for reset!)
     allparams::Vector{Symbol}
 end
@@ -525,6 +532,10 @@ blocktype(h::ParametricHamiltonian) = blocktype(parent(h))
 lattice(h::ParametricHamiltonian) = lattice(parent(h))
 
 Base.size(h::ParametricHamiltonian, i...) = size(parent(h), i...)
+
+Base.copy(p::ParametricHamiltonian) = ParametricHamiltonian(
+    copy(p.hparent), copy(p.h), p.modifiers, deepcopy(p.allptrs), copy(p.allparams)
+)
 
 #endregion
 #endregion

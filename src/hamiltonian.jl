@@ -55,18 +55,30 @@ end
 
 parametric(modifiers::Modifier...) = h -> parametric(h, modifiers...)
 
-parametric(hparent::FlatHamiltonian, modifiers::Modifier...) =
-    parametric(hamiltonian(hparent), modifiers...)
-
-function parametric(hparent::Hamiltonian, modifiers::Modifier...)
-    modifiers´ = apply.(modifiers, Ref(hparent))
-    allptrs = merge_pointers(hparent, modifiers´...)
-    allparams = merge_parameters(modifiers´...)
+function parametric(hparent::Hamiltonian)
+    modifiers = ()
+    allptrs = [Int[] for _ in harmonics(hparent)]
+    allparams = Symbol[]
     h = copy_harmonics(hparent)
-    return ParametricHamiltonian(hparent, h, modifiers´, allptrs, allparams)
+    return ParametricHamiltonian(hparent, h, modifiers, allptrs, allparams)
 end
 
-merge_pointers(h, m...) = merge_pointers!([Int[] for _ in harmonics(h)], m...)
+parametric(f::FlatHamiltonian, ms::Modifier...) = flatten(parametric(parent(f), ms...))
+parametric(h::Hamiltonian, m::Modifier, ms::Modifier...) = _parametric!(parametric(h), m, ms...)
+parametric(p::ParametricHamiltonian, ms::Modifier...) = _parametric!(copy(p), ms...)
+
+# This should not be exported, because it doesn't modify p in place (because of modifiers)
+function _parametric!(p::ParametricHamiltonian, ms::Modifier...)
+    hparent = parent(p)
+    h = hamiltonian(p)
+    modifiers´ = apply.(ms, Ref(hparent))
+    allmodifiers = (modifiers(p)..., modifiers´...)
+    allptrs = pointers(p)
+    allparams = parameters(p)
+    merge_pointers!(allptrs, modifiers´...)
+    merge_parameters!(allparams, modifiers´...)
+    return ParametricHamiltonian(hparent, h, allmodifiers, allptrs, allparams)
+end
 
 merge_pointers!(p, m, ms...) = merge_pointers!(_merge_pointers!(p, m), ms...)
 
@@ -77,7 +89,7 @@ function merge_pointers!(p)
     return p
 end
 
-function merge_pointers!(p, m::AppliedOnsiteModifier)
+function _merge_pointers!(p, m::AppliedOnsiteModifier)
     p0 = first(p)
     for (ptr, _) in pointers(m)
         push!(p0, ptr)
@@ -86,15 +98,14 @@ function merge_pointers!(p, m::AppliedOnsiteModifier)
 end
 
 function _merge_pointers!(p, m::AppliedHoppingModifier)
-    for (pn, pm) in zip(p, pointers(m)), (ptr, _, _) in pm
+    for (pn, pm) in zip(p, pointers(m)), (ptr, _) in pm
         push!(pn, ptr)
     end
     return p
 end
 
-merge_parameters(m...) = _merge_parameters(Symbol[], m...)
-_merge_parameters(p, m, ms...) = _merge_parameters(append!(p, parameters(m)), ms...)
-_merge_parameters(p) = unique!(sort!(p))
+merge_parameters!(p, m, ms...) = merge_parameters!(append!(p, parameters(m)), ms...)
+merge_parameters!(p) = unique!(sort!(p))
 
 #endregion
 
@@ -103,6 +114,7 @@ _merge_parameters(p) = unique!(sort!(p))
 #region
 
 (ph::ParametricHamiltonian)(; kw...) = copy_harmonics(call!(ph; kw...))
+(f::FlatHamiltonian)(; kw...) = flatten(parent(f)(; kw...))
 
 function call!(ph::ParametricHamiltonian; kw...)
     h = hamiltonian(ph)
