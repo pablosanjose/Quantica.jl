@@ -66,7 +66,7 @@ end
 coupler_unflat(hs::Tuple) = coupler_unflat(promote_type(typeof.(hs)...), hs)
 
 function coupler_unflat(::Type{<:AbstractHamiltonian{T,E,L,B}}, hs::NTuple{N,AbstractHamiltonian}) where {T,E,L,B,N}
-    lat = merge(lattice.(hs)...)
+    lat = combine(lattice.(hs)...)
     norbs = Int[]
     for h in hs
         append!(norbs, norbitals(h))

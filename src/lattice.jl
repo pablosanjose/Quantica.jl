@@ -83,17 +83,15 @@ end
 # merge lattices - combine sublats if equal name
 #region
 
-function Base.merge(l::Lattice{T,E,L}, ls::Lattice{T,E,L}...) where {T,E,L}
-    lats = (l, ls...)
+function combine(lats::Lattice{T,E,L}...) where {T,E,L}
     isapprox_modulo_shuffle(bravais_matrix.(lats)...) ||
         throw(ArgumentError("To merge lattices they must all share the same Bravais matrix"))
     bravais´ = bravais(first(lats))
-    unitcell´ = merge(unitcell.(lats)...)
+    unitcell´ = combine(unitcell.(lats)...)
     return Lattice(bravais´, unitcell´)
 end
 
-function Base.merge(u::Unitcell, us::Unitcell...)
-    ucells = (u, us...)
+function combine(ucells::Unitcell...)
     names´ = vcat(sublatnames.(ucells)...)
     sites´ = vcat(sites.(ucells)...)
     offsets´ = combined_offsets(offsets.(ucells)...)
