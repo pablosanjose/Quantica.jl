@@ -1,7 +1,8 @@
 module Quantica
 
+const REPOISSUES = "https://github.com/pablosanjose/Quantica.jl/issues"
+
 using Base.Threads: Iterators
-# @doc read(joinpath(dirname(@__DIR__), "README.md"), String) Quantica
 
 using StaticArrays
 using NearestNeighbors
@@ -20,7 +21,8 @@ export sublat, lattice, supercell, bravais_matrix,
        hopping, onsite, @onsite!, @hopping!, neighbors,
        hamiltonian, parametric, bloch,
        flatten, unflatten, wrap, transform, transform!, translate, translate!,
-       band, mesh, subbands, slice
+       band, mesh, subbands, slice,
+       coupler
 
 # export sublat, lattice, dims, supercell, bravais_matrix, siteindices, sitepositions,
 #        hopping, onsite, @onsite!, @hopping!, @block!, parameters, neighbors,
@@ -50,6 +52,7 @@ include("apply.jl")
 # include("ket.jl")
 include("mesh.jl")
 include("band.jl")
+include("coupler.jl")
 # include("KPM.jl")
 # include("effective.jl")
 # include("greens.jl")

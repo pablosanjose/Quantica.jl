@@ -11,46 +11,6 @@ sublat(sites::Vector; name = :_) =
 #endregion
 
 ############################################################################################
-# unitcell
-#region
-
-function unitcell(sublats, names, ::Type{S}) where {S<:SVector}
-    sites´ = S[]
-    offsets´ = [0]  # length(offsets) == length(sublats) + 1
-    for s in eachindex(sublats)
-        for site in sites(sublats[s])
-            push!(sites´, sanitize_SVector(S, site))
-        end
-        push!(offsets´, length(sites´))
-    end
-    names´ = uniquenames!(sanitize_Vector_of_Symbols(names))
-    return Unitcell(sites´, names´, offsets´)
-end
-
-function unitcell(u::Unitcell, names, ::Type{S}) where {S<:SVector}
-    sites´ = sanitize_SVector.(S, sites(u))
-    names´ = uniquenames!(sanitize_Vector_of_Symbols(names))
-    offsets´ = offsets(u)
-    Unitcell(sites´, names´, offsets´)
-end
-
-function uniquenames!(names::Vector{Symbol})
-    allnames = Symbol[:_]
-    for (i, name) in enumerate(names)
-        name in allnames && (names[i] = uniquename(allnames, name, i))
-        push!(allnames, name)
-    end
-    return names
-end
-
-function uniquename(allnames, name, i)
-    newname = Symbol(Char(64+i)) # Lexicographic, starting from Char(65) = 'A'
-    return newname in allnames ? uniquename(allnames, name, i + 1) : newname
-end
-
-#endregion
-
-############################################################################################
 # lattice
 #region
 
@@ -82,6 +42,24 @@ end
 postype(dim, type) = SVector{dim,type}
 postype(::Val{E}, type) where {E} = SVector{E,type}
 
+function unitcell(sublats, names, postype::Type{S}) where {S<:SVector}
+    sites´ = S[]
+    offsets´ = [0]  # length(offsets) == length(sublats) + 1
+    for s in eachindex(sublats)
+        for site in sites(sublats[s])
+            push!(sites´, sanitize_SVector(S, site))
+        end
+        push!(offsets´, length(sites´))
+    end
+    return Unitcell(sites´, names, offsets´)
+end
+
+function unitcell(u::Unitcell, names, postype::Type{S}) where {S<:SVector}
+    sites´ = sanitize_SVector.(S, sites(u))
+    offsets´ = offsets(u)
+    Unitcell(sites´, names, offsets´)
+end
+
 #endregion
 
 ############################################################################################
@@ -98,6 +76,44 @@ postype(::Val{E}, type) where {E} = SVector{E,type}
 # siteindices(l::Lattice; kw...) = first.(getindex(l; kw...))
 
 # sitepositions(l::Lattice; kw...) = last.(getindex(l; kw...))
+
+#endregion
+
+############################################################################################
+# merge lattices - combine sublats if equal name
+#region
+
+function Base.merge(l::Lattice{T,E,L}, ls::Lattice{T,E,L}...) where {T,E,L}
+    lats = (l, ls...)
+    isapprox_modulo_shuffle(bravais_matrix.(lats)...) ||
+        throw(ArgumentError("To merge lattices they must all share the same Bravais matrix"))
+    bravais´ = bravais(first(lats))
+    unitcell´ = merge(unitcell.(lats)...)
+    return Lattice(bravais´, unitcell´)
+end
+
+function Base.merge(u::Unitcell, us::Unitcell...)
+    ucells = (u, us...)
+    names´ = vcat(sublatnames.(ucells)...)
+    sites´ = vcat(sites.(ucells)...)
+    offsets´ = combined_offsets(offsets.(ucells)...)
+    return Unitcell(sites´, names´, offsets´)
+end
+
+isapprox_modulo_shuffle() = true
+
+function isapprox_modulo_shuffle(s::AbstractMatrix, ss::AbstractMatrix...)
+    for s´ in ss, c´ in eachcol(s´)
+        any(c -> c ≈ c´ || c ≈ -c´, eachcol(s)) || return false
+    end
+    return true
+end
+
+function combined_offsets(offsets...)
+    offsets´ = cumsum(Iterators.flatten(diff.(offsets)))
+    prepend!(offsets´, 0)
+    return offsets´
+end
 
 #endregion
 

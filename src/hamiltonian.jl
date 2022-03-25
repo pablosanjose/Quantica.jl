@@ -30,7 +30,7 @@ function applyterm!(builder, term::AppliedOnsiteTerm)
     return nothing
 end
 
-function applyterm!(builder, term::AppliedHoppingTerm)
+function applyterm!(builder, term::AppliedHoppingTerm, (irng, jrng) = (:, :))
     trees = kdtrees(builder)
     sel = selector(term)
     os = orbitalstructure(builder)
@@ -38,6 +38,7 @@ function applyterm!(builder, term::AppliedHoppingTerm)
     foreach_cell(sel) do dn, cell_iter
         ijv = builder[dn]
         foreach_hop!(sel, cell_iter, trees, dn) do (si, sj), (i, j), (r, dr)
+            isinblock(i, irng) && isinblock(j, jrng) || return
             ni = norbs[si]
             nj = norbs[sj]
             v = term(r, dr, (ni, nj))
@@ -46,6 +47,9 @@ function applyterm!(builder, term::AppliedHoppingTerm)
     end
     return nothing
 end
+
+isinblock(i, ::Colon) = true
+isinblock(i, irng) = i in irng
 
 #endregion
 
@@ -63,20 +67,27 @@ function parametric(hparent::Hamiltonian)
     return ParametricHamiltonian(hparent, h, modifiers, allptrs, allparams)
 end
 
-parametric(f::FlatHamiltonian, ms::Modifier...) = flatten(parametric(parent(f), ms...))
-parametric(h::Hamiltonian, m::Modifier, ms::Modifier...) = _parametric!(parametric(h), m, ms...)
-parametric(p::ParametricHamiltonian, ms::Modifier...) = _parametric!(copy(p), ms...)
+parametric(f::FlatHamiltonian, ms::AbstractModifier...) =
+    flatten(parametric(parent(f), ms...))
+parametric(h::Hamiltonian, m::AbstractModifier, ms::AbstractModifier...) =
+    _parametric!(parametric(h), m, ms...)
+parametric(p::ParametricHamiltonian, ms::AbstractModifier...) =
+    _parametric!(copy(p), ms...)
 
 # This should not be exported, because it doesn't modify p in place (because of modifiers)
 function _parametric!(p::ParametricHamiltonian, ms::Modifier...)
+    ams = apply.(ms, Ref(parent(p)))
+    return _parametric!(p, ams...)
+end
+
+function _parametric!(p::ParametricHamiltonian, ms::AppliedModifier...)
     hparent = parent(p)
     h = hamiltonian(p)
-    modifiers´ = apply.(ms, Ref(hparent))
-    allmodifiers = (modifiers(p)..., modifiers´...)
+    allmodifiers = (modifiers(p)..., ms...)
     allptrs = pointers(p)
     allparams = parameters(p)
-    merge_pointers!(allptrs, modifiers´...)
-    merge_parameters!(allparams, modifiers´...)
+    merge_pointers!(allptrs, ms...)
+    merge_parameters!(allparams, ms...)
     return ParametricHamiltonian(hparent, h, allmodifiers, allptrs, allparams)
 end
 
@@ -161,7 +172,7 @@ end
 #endregion
 
 ############################################################################################
-# flatten
+# flatten and unflatten
 #region
 
 flatten(h::FlatHamiltonian) = h
@@ -211,6 +222,9 @@ function hamiltonian(f::FlatHamiltonian{<:Any,<:Any,L,B}) where {L,B}
     hars = HT[HT(dcell(har), flatten(matrix(har), os, flatos)) for har in harmonics(f)]  # see tools.jl
     return Hamiltonian(lat, flatos, hars)
 end
+
+unflatten(h::FlatHamiltonian) = parent(h)
+unflatten(h::AbstractHamiltonian) = h
 
  #endregion
 

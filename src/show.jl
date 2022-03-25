@@ -194,3 +194,22 @@ Base.summary(::Band{T,E,L}) where {T,E,L} =
     "Band{$T,$E,$L}: $(E)D Band structure over a $L-dimensional parameter space of type $T"
 
 #endregion
+
+############################################################################################
+# Coupler
+#region
+
+function Base.show(io::IO, ::MIME"text/plain", c::Coupler)
+    i = get(io, :indent, "")
+    ioindent = IOContext(io, :indent => "  ")
+    print(io, summary(c), "\n",
+"$i  Number of blocks  : $(size(c, 2))
+$i  Assigned blocks   : $(showassignedblocks(c))", "\n")
+    print(ioindent, lattice(c))
+end
+
+showassignedblocks(c) = ifelse.(assignedblocks(c), :assigned, :unassigned)
+
+Base.summary(io::IO, ::Coupler{T,E,L,B}) where {T,E,L,B} = print(io, "Coupler{$T,$E,$L,$B}: AbstractHamiltonian coupler")
+
+#endregion
