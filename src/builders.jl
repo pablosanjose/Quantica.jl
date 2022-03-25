@@ -61,7 +61,8 @@ function IJV{B}(nnzguess = missing) where {B}
     return IJV(i, j, v)
 end
 
-empty_harmonic(::IJVBuilder{<:Any,<:Any,L,B}, dn) where {L,B} = IJVHarmonic{L,B}(dn, IJV{B}())
+empty_harmonic(::IJVBuilder{<:Any,<:Any,L,B}, dn) where {L,B} =
+    IJVHarmonic{L,B}(dn, IJV{B}())
 
 function IJVBuilder(lat::Lattice{T,E,L}, orbstruct::OrbitalStructure{B}) where {E,L,T,B}
     harmonics = IJVHarmonic{L,B}[]
@@ -69,7 +70,30 @@ function IJVBuilder(lat::Lattice{T,E,L}, orbstruct::OrbitalStructure{B}) where {
     return IJVBuilder(lat, orbstruct, harmonics, kdtrees)
 end
 
-Base.push!(ijv::IJV, (i, j, v)::Tuple) = (push!(ijv.i, i); push!(ijv.j, j); push!(ijv.v, v))
+Base.push!(ijv::IJV, (i, j, v)) =
+    (push!(ijv.i, i); push!(ijv.j, j); push!(ijv.v, v))
+
+Base.append!(ijv::IJV, (is, js, vs)) =
+    (append!(ijv.i, is); append!(ijv.j, js); append!(ijv.v, vs))
+
+function Base.filter!(f::Function, ijv::IJV)
+    ind = 0
+    for (i, j, v) in zip(ijv.i, ijv.j, ijv.v)
+        if f(i, j, v)
+            ind += 1
+            ijv.i[ind] = i
+            ijv.j[ind] = j
+            ijv.v[ind] = v
+        end
+    end
+    resize!(ijv.i, ind)
+    resize!(ijv.j, ind)
+    resize!(ijv.v, ind)
+    return ijv
+end
+
+Base.filter!(f::Function, b::IJVBuilder) =
+    foreach(bh -> filter!(f, bh.collector), b.harmonics)
 
 Base.isempty(h::IJVHarmonic) = isempty(collector(h))
 Base.isempty(h::IJV) = length(h.i) == 0
@@ -77,6 +101,8 @@ Base.isempty(h::IJV) = length(h.i) == 0
 SparseArrays.sparse(c::IJV, n) = sparse(c.i, c.j, c.v, n, n)
 
 kdtrees(b::IJVBuilder) = b.kdtrees
+
+ijvs(b::IJVBuilder) = b.harmonics
 
 #endregion
 

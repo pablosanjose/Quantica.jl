@@ -11,6 +11,10 @@ struct Unitcell{T<:AbstractFloat,E}
     sites::Vector{SVector{E,T}}
     names::Vector{Symbol}
     offsets::Vector{Int}        # Linear site number offsets for each sublat
+    function Unitcell{T,E}(sites, names, offsets) where {T<:AbstractFloat,E}
+        names´ = uniquenames!(sanitize_Vector_of_Symbols(names))
+        return new(sites, names´, offsets)
+    end
 end
 
 struct Bravais{T,E,L}
@@ -45,6 +49,28 @@ Bravais(::Type{T}, ::Val{E}, m::AbstractMatrix) where {T,E} =
 Bravais(::Type{T}, ::Val{E}, m::AbstractVector) where {T,E} =
     Bravais{T,E,1}(sanitize_Matrix(T, E, hcat(m)))
 
+Unitcell(sites::Vector{SVector{E,T}}, names, offsets) where {E,T} =
+    Unitcell{T,E}(sites, names, offsets)
+
+function uniquenames!(names::Vector{Symbol})
+    allnames = Symbol[:_]
+    for (i, name) in enumerate(names)
+        if name in allnames
+            names[i] = uniquename(allnames, name, i)
+            @warn "Renamed repeated sublattice :$name to :$(names[i])"
+        end
+        push!(allnames, name)
+    end
+    return names
+end
+
+function uniquename(allnames, name, i)
+    newname = Symbol(Char(64+i)) # Lexicographic, starting from Char(65) = 'A'
+    newname = newname in allnames ? uniquename(allnames, name, i + 1) : newname
+    return newname
+end
+
+
 #endregion
 
 #region ## API ##
@@ -64,10 +90,13 @@ bravais_matrix(b::Bravais{T,E,L}) where {T,E,L} =
 
 matrix(b::Bravais) = b.matrix
 
-sublatnames(l::Lattice) = l.unitcell.names
+sublatnames(l::Lattice) = sublatnames(l.unitcell)
+sublatnames(u::Unitcell) = u.names
 sublatname(l::Lattice, s) = sublatname(l.unitcell, s)
 sublatname(u::Unitcell, s) = u.names[s]
 sublatname(s::Sublat) = s.name
+
+sublatindex(u::Unitcell, name::Symbol) = findfirst(==(name), sublatnames(u))
 
 nsublats(l::Lattice) = nsublats(l.unitcell)
 nsublats(u::Unitcell) = length(u.names)
@@ -83,7 +112,10 @@ nsites(u::Unitcell, sublat) = sublatlengths(u)[sublat]
 sites(s::Sublat) = s.sites
 sites(l::Lattice, sublat...) = sites(l.unitcell, sublat...)
 sites(u::Unitcell) = u.sites
-sites(u::Unitcell, sublat) = view(u.sites, u.offsets[sublat]+1:u.offsets[sublat+1])
+sites(u::Unitcell, sublat) = view(u.sites, siterange(u, sublat))
+sites(u::Unitcell, ::Nothing) = view(u.sites, 1:0)  # to work with sublatindex
+sites(l::Lattice, name::Symbol) = sites(unitcell(l), name)
+sites(u::Unitcell, name::Symbol) = sites(u, sublatindex(u, name))
 
 site(l::Lattice, i) = sites(l)[i]
 site(l::Lattice, i, dn) = site(l, i) + bravais_matrix(l) * dn
@@ -189,7 +221,7 @@ insublats(npair::Pair, s::AppliedHopSelector) = isempty(s.sublats) || npair in s
 indcells(dcell, s::AppliedHopSelector) = isempty(s.dcells) || dcell in s.dcells
 
 iswithinrange(dr, s::AppliedHopSelector) = iswithinrange(dr, s.range)
-iswithinrange(dr, (rmin, rmax)::Tuple{Real,Real}) =  ifelse(rmin^2 <= dr'dr <= rmax^2, true, false)
+iswithinrange(dr, (rmin, rmax)::Tuple{Real,Real}) =  ifelse(sign(rmin)*rmin^2 <= dr'dr <= rmax^2, true, false)
 
 isbelowrange(dr, s::AppliedHopSelector) = isbelowrange(dr, s.range)
 isbelowrange(dr, (rmin, rmax)::Tuple{Real,Real}) =  ifelse(dr'dr < rmin^2, true, false)
@@ -392,6 +424,12 @@ end
 
 #region ## API ##
 
+## AbstractHamiltonian
+
+norbitals(h::AbstractHamiltonian) = norbitals(orbitalstructure(h))
+
+## Hamiltonian
+
 Hamiltonian(l::Lattice{T,E,L}, o::OrbitalStructure{B}, h::Vector{Harmonic{L,SparseMatrixCSC{B,Int}}}) where {T,E,L,B} =
     Hamiltonian{T,E,L,B}(l, o, h)
 
@@ -406,8 +444,6 @@ harmonics(h::Hamiltonian) = h.harmonics
 orbtype(h::Hamiltonian) = orbtype(orbitalstructure(h))
 
 blocktype(h::Hamiltonian) = blocktype(orbitalstructure(h))
-
-norbitals(h::Hamiltonian) = norbitals(orbitalstructure(h))
 
 Base.size(h::Hamiltonian, i...) = size(first(harmonics(h)), i...)
 
@@ -440,24 +476,26 @@ struct ParametricFunction{N,F}
     params::Vector{Symbol}
 end
 
-struct OnsiteModifier{N,S<:SiteSelector,F<:ParametricFunction{N}}
+abstract type AbstractModifier end
+
+struct OnsiteModifier{N,S<:SiteSelector,F<:ParametricFunction{N}} <: AbstractModifier
     f::F
     selector::S
 end
 
-struct AppliedOnsiteModifier{N,B,R<:SVector,F<:ParametricFunction{N}}
+struct AppliedOnsiteModifier{N,B,R<:SVector,F<:ParametricFunction{N}} <: AbstractModifier
     blocktype::Type{B}
     f::F
     ptrs::Vector{Tuple{Int,R,Int}}
     # [(ptr, r, norbs)...] for each selected site, dn = 0 harmonic
 end
 
-struct HoppingModifier{N,S<:HopSelector,F<:ParametricFunction{N}}
+struct HoppingModifier{N,S<:HopSelector,F<:ParametricFunction{N}} <: AbstractModifier
     f::F
     selector::S
 end
 
-struct AppliedHoppingModifier{N,B,R<:SVector,F<:ParametricFunction{N}}
+struct AppliedHoppingModifier{N,B,R<:SVector,F<:ParametricFunction{N}} <: AbstractModifier
     blocktype::Type{B}
     f::F
     ptrs::Vector{Vector{Tuple{Int,R,R,Tuple{Int,Int}}}}
@@ -492,6 +530,14 @@ pointers(m::AppliedModifier) = m.ptrs
     sanitize_block(B, m.f.f(t; kw...), orbs)
 (m::AppliedHoppingModifier{3,B})(t, r, dr, orbs; kw...) where {B} =
     sanitize_block(B, m.f.f(t, r, dr; kw...), orbs)
+
+Base.similar(m::A) where {A <: AppliedModifier} = A(m.blocktype, m.f, similar(m.ptrs, 0))
+
+function emptyptrs!(m::AppliedHoppingModifier{<:Any,<:Any,R}, n) where {R}
+    resize!(m.ptrs, 0)
+    foreach(_ -> push!(m.ptrs, Tuple{Int,R,R,Tuple{Int,Int}}[]), 1:n)
+    return m
+end
 
 #endregion
 #endregion
@@ -553,8 +599,6 @@ end
 
 orbitalstructure(h::FlatHamiltonian) = h.flatorbstruct
 
-unflatten(h::FlatHamiltonian) = parent(h)
-
 lattice(h::FlatHamiltonian) = lattice(parent(h))
 
 harmonics(h::FlatHamiltonian) = harmonics(parent(h))
@@ -562,8 +606,6 @@ harmonics(h::FlatHamiltonian) = harmonics(parent(h))
 orbtype(h::FlatHamiltonian) = orbtype(orbitalstructure(h))
 
 blocktype(h::FlatHamiltonian) = blocktype(orbitalstructure(h))
-
-norbitals(h::FlatHamiltonian) = norbitals(orbitalstructure(h))
 
 Base.size(h::FlatHamiltonian) = nsites(orbitalstructure(h)), nsites(orbitalstructure(h))
 Base.size(h::FlatHamiltonian, i) = i <= 0 ? throw(BoundsError()) : ifelse(1 <= i <= 2, nsites(orbitalstructure(h)), 1)
