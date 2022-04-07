@@ -13,8 +13,13 @@ sanitize_Vector_of_Symbols(names) = Symbol[convert(Symbol, name) for name in nam
 sanitize_Vector_of_Type(::Type{T}, len, x::T´) where {T,T´<:Union{T,Val}} = fill(val_convert(T, x), len)
 
 function sanitize_Vector_of_Type(::Type{T}, len, xs) where {T}
-    xs´ = T[val_convert(T, x) for x in xs]
+    xs´ = sanitize_Vector_of_Type(T, xs)
     length(xs´) == len || throw(ArgumentError("Received a collection with $(length(xs´)) elements, should have $len."))
+    return xs´
+end
+
+function sanitize_Vector_of_Type(::Type{T}, xs) where {T}
+    xs´ = T[val_convert(T, x) for x in xs]
     return xs´
 end
 
