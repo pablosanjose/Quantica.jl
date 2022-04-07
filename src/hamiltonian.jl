@@ -64,7 +64,7 @@ function parametric(hparent::Hamiltonian)
     allptrs = [Int[] for _ in harmonics(hparent)]
     allparams = Symbol[]
     h = copy_harmonics(hparent)
-    return ParametricHamiltonian(hparent, h, modifiers, allptrs, allparams)
+    return ParametricHamiltonian(hparent, h, modifiers, allparams)
 end
 
 parametric(f::FlatHamiltonian, ms::AbstractModifier...) =
@@ -84,35 +84,9 @@ function _parametric!(p::ParametricHamiltonian, ms::AppliedModifier...)
     hparent = parent(p)
     h = hamiltonian(p)
     allmodifiers = (modifiers(p)..., ms...)
-    allptrs = pointers(p)
     allparams = parameters(p)
-    merge_pointers!(allptrs, ms...)
     merge_parameters!(allparams, ms...)
-    return ParametricHamiltonian(hparent, h, allmodifiers, allptrs, allparams)
-end
-
-merge_pointers!(p, m, ms...) = merge_pointers!(_merge_pointers!(p, m), ms...)
-
-function merge_pointers!(p)
-    for pn in p
-        unique!(sort!(pn))
-    end
-    return p
-end
-
-function _merge_pointers!(p, m::AppliedOnsiteModifier)
-    p0 = first(p)
-    for (ptr, _) in pointers(m)
-        push!(p0, ptr)
-    end
-    return p
-end
-
-function _merge_pointers!(p, m::AppliedHoppingModifier)
-    for (pn, pm) in zip(p, pointers(m)), (ptr, _) in pm
-        push!(pn, ptr)
-    end
-    return p
+    return ParametricHamiltonian(hparent, h, allmodifiers, allparams)
 end
 
 merge_parameters!(p, m, ms...) = merge_parameters!(append!(p, parameters(m)), ms...)
@@ -129,20 +103,19 @@ merge_parameters!(p) = unique!(sort!(p))
 
 function call!(ph::ParametricHamiltonian; kw...)
     h = hamiltonian(ph)
-    reset_pointers!(ph)
+    # reset_pointers!(ph)
+    reset_to_parent!(ph)
     applymodifiers!(h, modifiers(ph)...; kw...)
     return h
 end
 
-function reset_pointers!(ph::ParametricHamiltonian)
+function reset_to_parent!(ph::ParametricHamiltonian)
     h = hamiltonian(ph)
     hparent = parent(ph)
-    for (har, har´, ptrs) in zip(harmonics(h), harmonics(hparent), pointers(ph))
+    for (har, har´) in zip(harmonics(h), harmonics(hparent))
         nz = nonzeros(matrix(har))
         nz´ = nonzeros(matrix(har´))
-        for ptr in ptrs
-            nz[ptr] = nz´[ptr]
-        end
+        nz .= nz´
     end
     return ph
 end
