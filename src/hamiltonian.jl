@@ -11,7 +11,7 @@ Base.@constprop :aggressive function hamiltonian(lat::Lattice{T}, m = Tightbindi
     apmod = apply(m, (lat, blockstruct))
     # using foreach here foils precompilation of applyterm! for some reason
     applyterm!.(Ref(builder), terms(apmod))
-    hars = harmonics(builder)
+    hars = sparse(builder)
     return Hamiltonian(lat, blockstruct, hars)
 end
 
@@ -100,27 +100,28 @@ merge_parameters!(p) = unique!(sort!(p))
 call!(h::Hamiltonian, phi) = call!(h, sanitize_SVector(phi))
 call!(h::Hamiltonian, phi...) = call!(h, sanitize_SVector(phi))
 
-function call!(h::Hamiltonian, φs::SVector, axis = missing)
+# returns a HybridSparseMatrixCSC
+function call!(h::Hamiltonian{T}, φs::SVector, axis = missing) where {T}
     checkbloch(h, φs)
-    bloch´ = bloch(h)
+    hbloch = bloch(h)
     hars = harmonics(h)
-    needs_initialization!(bloch´) || initialize_bloch!(bloch´, hars)
-    output = unflat(bloch´)
-    fill!(output, zero(eltype(output)))  # This preserves sparsity structure
+    needs_initialization!(hbloch) || initialize_bloch!(bloch´, hars)
+    fbloch = flat(hbloch)
+    fill!(fbloch, zero(Complex{T}))  # This preserves sparsity structure
     isvelocity = axis !== missing
     for har in hars
         iszero(dcell(har)) && isvelocity && continue
         e⁻ⁱᵠᵈⁿ = cis(-dot(φs, dcell(har)))
         isvelocity && (e⁻ⁱᵠᵈⁿ *= - im * dcell(har)[axis])
-        merged_mul!(output, unflat(matrix(har)), e⁻ⁱᵠᵈⁿ, 1, 1)  # see tools.jl
+        merged_mul!(fbloch, flat(matrix(har)), e⁻ⁱᵠᵈⁿ, 1, 1)  # see tools.jl
     end
-    return bloch´
+    return hbloch
 end
 
 is_bloch_initialized(h) = !needs_full_update(bloch(h))
 
 function initialize_bloch!(bloch, hars)
-    bloch´ = merge_sparse(unflat.(matrix.(hars)))
+    bloch´ = merge_sparse(flat.(matrix.(hars)))
     copy!(bloch, bloch´)
     return bloch
 end
@@ -135,7 +136,6 @@ end
 #region
 
 (ph::ParametricHamiltonian)(; kw...) = copy_only_harmonics(call!(ph; kw...))
-# (f::FlatHamiltonian)(; kw...) = flatten(parent(f)(; kw...))
 
 function call!(ph::ParametricHamiltonian; kw...)
     h = hamiltonian(ph)
@@ -170,8 +170,8 @@ end
 function applymodifiers!(h, m::AppliedHoppingModifier; kw...)
     for (har, p) in zip(harmonics(h), pointers(m))
         nz = nonzeros(matrix(har))
-        for (ptr, r, dr, norbs) in p
-            nz[ptr] = m(nz[ptr], r, dr, norbs; kw...)
+        for (ptr, r, dr, orborb) in p
+            nz[ptr] = m(nz[ptr], r, dr, orborb; kw...)
         end
     end
     return h
@@ -179,156 +179,12 @@ end
 
 #endregion
 
-# ############################################################################################
-# # flatten and unflatten
-# #region
-
-# flatten(h::FlatHamiltonian) = h
-# flatten(h::AbstractHamiltonian{<:Any,<:Any,<:Any,<:Number}) = h
-# flatten(h::AbstractHamiltonian{<:Any,<:Any,<:Any,<:SMatrix}) =
-#     FlatHamiltonian(h, flatten(orbitalstructure(h)))
-
-# flatten(os::OrbitalStructure{<:Number}) = os
-
-# function flatten(os::OrbitalStructure{<:SMatrix})
-#     blocktype´ = eltype(blocktype(os))
-#     norbitals´ = [1 for _ in norbitals(os)]
-#     flatoffsets´ = flatoffsets(offsets(os), norbitals(os))
-#     return OrbitalStructure(blocktype´, norbitals´, flatoffsets´)
-# end
-
-# # sublat offsets after flattening (without padding zeros)
-# function flatoffsets(offsets0, norbs)
-#     nsites = diff(offsets0)
-#     nsites´ = norbs .* nsites
-#     offsets´ = cumsum!(nsites´, nsites´)
-#     prepend!(offsets´, 0)
-#     return offsets´
-# end
-
-# function flatten(lat::Lattice, os)
-#     norbs = norbitals(os)
-#     sites´ = similar(sites(lat), 0)
-#     names´ = sublatnames(lat)
-#     offsets´ = [0]
-#     for s in sublats(lat)
-#         norb = norbs[s]
-#         for r in sites(lat, s), _ in 1:norb
-#             push!(sites´, r)
-#         end
-#         push!(offsets´, length(sites´))
-#     end
-#     lat = Lattice(bravais(lat), Unitcell(sites´, names´, offsets´))
-#     return lat
-# end
-
-# function hamiltonian(f::FlatHamiltonian{<:Any,<:Any,L,B}) where {L,B}
-#     os = orbitalstructure(parent(f))
-#     flatos = orbitalstructure(f)
-#     lat = flatten(lattice(f), os)
-#     HT = Harmonic{L,SparseMatrixCSC{B,Int}}
-#     hars = HT[HT(dcell(har), flatten(matrix(har), os, flatos)) for har in harmonics(f)]  # see tools.jl
-#     return Hamiltonian(lat, flatos, hars)
-# end
-
-# unflatten(h::FlatHamiltonian) = parent(h)
-# unflatten(h::AbstractHamiltonian) = h
-
-#  #endregion
-
-# ############################################################################################
-# # bloch
-# #region
-
-# function bloch(h::Union{Hamiltonian,ParametricHamiltonian}, ::Type{M} = SparseMatrixCSC) where {M<:AbstractSparseMatrixCSC}
-#     output = convert(M, merge_sparse(harmonics(h)))
-#     return Bloch(h, output)
-# end
-
-# function bloch(h::Union{Hamiltonian,ParametricHamiltonian}, ::Type{M}) where {M<:AbstractMatrix}
-#     output = convert(M, matrix(first(harmonics(h))))
-#     return Bloch(h, output)
-# end
-
-# function bloch(f::FlatHamiltonian, ::Type{M} = SparseMatrixCSC) where {M<:AbstractSparseMatrixCSC}
-#     os = orbitalstructure(parent(f))
-#     flatos = orbitalstructure(f)
-#     output = convert(M, merge_flatten_sparse(harmonics(f), os, flatos))
-#     return Bloch(f, output)
-# end
-
-# function bloch(f::FlatHamiltonian, ::Type{M}) where {M<:AbstractMatrix}
-#     flatos = orbitalstructure(f)
-#     B = blocktype(flatos)
-#     n = nsites(flatos)
-#     output = convert(M, zeros(B, n, n))
-#     return Bloch(f, output)
-# end
-
-# bloch(φs::Number...; kw...) = h -> bloch(h, φs; kw...)
-# bloch(φs::Tuple; kw...) = h -> bloch(h, φs; kw...)
-# bloch(h::AbstractHamiltonian, φs::Tuple; kw...) = bloch(h)(φs...; kw...)
-
-# # see tools.jl
-# merge_sparse(hars::Vector{<:Harmonic}) = merge_sparse(matrix(har) for har in hars)
-
-# merge_flatten_sparse(hars::Vector{<:Harmonic}, os::OrbitalStructure{<:SMatrix}, flatos::OrbitalStructure{<:Number}) =
-#     merge_flatten_sparse((matrix(har) for har in hars), os, flatos)
-
-# #endregion
-
-# ############################################################################################
-# # AbstractBloch call API
-# #region
-
-# (b::AbstractBloch)(φs...; kw...) = copy(call!(b, φs...; kw...))
-
-# call!(b::AbstractBloch{L}, φs::Vararg{Number,L}; kw...) where {L} = call!(b, sanitize_SVector(φs); kw...)
-# call!(b::AbstractBloch{L}, φs::NTuple{L,Number}; kw...) where {L} = call!(b, sanitize_SVector(φs); kw...)
-# # support for (φs, (; kw...))
-# call!(b::AbstractBloch, φskw::Tuple{<:Any,NamedTuple}) = call!(b, first(φskw); last(φskw)...)
-# # support for (φs..., (; kw...))
-# call!(b::AbstractBloch, φskw::Tuple) = call!(b, Base.front(φskw); last(φskw)...)
-# call!(b::AbstractBloch, φs...; kw...) =
-#     throw(ArgumentError("Wrong call! argument syntax. Possible mismatch between input Bloch phases $(length(φs)) and lattice dimention $(latdim(b))."))
-
-# call!(b::Bloch, φs::SVector; kw...) =
-#     maybe_flatten_bloch!(matrix(b), hamiltonian(b), φs; kw...)
-# call!(b::Velocity, φs::SVector; kw...) =
-#     maybe_flatten_bloch!(matrix(b), hamiltonian(b), φs, axis(b); kw...)
-
-# maybe_flatten_bloch!(output, h::FlatHamiltonian, φs, axis...; kw...) =
-#     maybe_flatten_bloch!(output, parent(h), φs, axis...; kw...)
-# maybe_flatten_bloch!(output, h::ParametricHamiltonian, φs, axis...; kw...) =
-#     maybe_flatten_bloch!(output, call!(h; kw...), φs, axis...)
-
-# # Adds harmonics, assuming sparse output with the same structure of merged harmonics.
-# # If axis !== missing, compute velocity[axis]
-# function maybe_flatten_bloch!(output, h::Hamiltonian{<:Any,<:Any,L}, φs::SVector{L}, axis = missing) where {L}
-#     hars = harmonics(h)
-#     os = orbitalstructure(h)
-#     flatos = flatten(os)
-#     fill!(output, zero(eltype(output)))
-#     isvelocity = axis !== missing
-#     for har in hars
-#         iszero(dcell(har)) && isvelocity && continue
-#         e⁻ⁱᵠᵈⁿ = cis(-dot(φs, dcell(har)))
-#         isvelocity && (e⁻ⁱᵠᵈⁿ *= - im * dcell(har)[axis])
-#         maybe_flatten_mul!(output, (os, flatos), matrix(har), e⁻ⁱᵠᵈⁿ, 1, 1)  # see tools.jl
-#     end
-#     return output
-# end
-
-# #endregion
-
 ############################################################################################
 # indexing into AbstractHamiltonian
 #region
 
 Base.getindex(h::AbstractHamiltonian{<:Any,<:Any,L}) where {L} = h[zero(SVector{L,Int})]
-Base.getindex(h::AbstractHamiltonian, is::Int...) = h[][is...]
-Base.getindex(h::AbstractHamiltonian, dn::SVector, i, is...) = h[dn][i, is...]
-Base.getindex(h::AbstractHamiltonian, dn::Tuple, is...) = getindex(h, SVector(dn), is...)
+Base.getindex(h::AbstractHamiltonian, dn::Tuple) = getindex(h, SVector(dn))
 
 function Base.getindex(h::AbstractHamiltonian{<:Any,<:Any,L}, dn::SVector{L,Int}) where {L}
     for har in harmonics(h)
@@ -348,33 +204,6 @@ end
 
 #endregion
 
-# ############################################################################################
-# # push! and deleteat! of a Harmonic into AbstractHamiltonian
-# #region
-
-# Base.deleteat!(h::AbstractHamiltonian, dn::Tuple) = deleteat!(h, SVector(dn))
-
-# function Base.deleteat!(h::AbstractHamiltonian{<:Any,<:Any,L}, dn::SVector{L,Int}) where {L}
-#     iszero(dn) && throw(ArgumentError("Cannot delete base harmonic"))
-#     hars = harmonics(h)
-#     for (i, har) in enumerate(hars)
-#         dn == dcell(har) && return deleteat!(hars, i)
-#     end
-#     return hars
-# end
-
-# Base.push!(h::AbstractHamiltonian, dn::Tuple) = push!(h, SVector(dn))
-
-# function Base.push!(h::AbstractHamiltonian{<:Any,<:Any,L,B}, dn::SVector{L,Int}) where {L,B}
-#     if !isassigned(h, dn)
-#         har = Harmonic(dn, spzeros(B, size(h)))
-#         push!(harmonics(h), har)
-#     end
-#     return h
-# end
-
-# #endregion
-
 ############################################################################################
 # coordination
 #region
@@ -382,7 +211,7 @@ end
 function nhoppings(h::AbstractHamiltonian)
     count = 0
     for har in harmonics(h)
-        count += iszero(dcell(har)) ? (nnz(blockmatrix(har)) - nnzdiag(blockmatrix(har))) : nnz(blockmatrix(har))
+        count += iszero(dcell(har)) ? (nnz(matrix(har)) - nnzdiag(matrix(har))) : nnz(matrix(har))
     end
     return count
 end

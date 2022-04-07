@@ -107,10 +107,10 @@ function pointers(h::Hamiltonian{T,E}, s::AppliedSiteSelector{T,E}) where {T,E}
     ptr_r = Tuple{Int,SVector{E,T},Int}[]
     lat = lattice(h)
     har0 = first(harmonics(h))
-    mh = matrix(har0)
-    rows = rowvals(mh)
+    umat = unflat(matrix(har0))
+    rows = rowvals(umat)
     norbs = norbitals(h)
-    for scol in sublats(lat), col in siterange(lat, scol), p in nzrange(mh, col)
+    for scol in sublats(lat), col in siterange(lat, scol), p in nzrange(umat, col)
         row = rows[p]
         col == row || continue
         r = site(lat, row)
@@ -126,11 +126,11 @@ function pointers(h::Hamiltonian{T,E}, s::AppliedHopSelector{T,E}) where {T,E}
     hars = harmonics(h)
     ptr_r_dr = [Tuple{Int,SVector{E,T},SVector{E,T},Tuple{Int,Int}}[] for _ in hars]
     lat = lattice(h)
-    os = orbitalstructure(h)
+    bs = blockstructure(h)
     dn0 = zerocell(lat)
     norbs = norbitals(h)
     for (har, ptr_r_dr) in zip(hars, ptr_r_dr)
-        mh = matrix(har)
+        mh = unflat(matrix(har))
         rows = rowvals(mh)
         for scol in sublats(lat), col in siterange(lat, scol), p in nzrange(mh, col)
             row = rows[p]
@@ -138,8 +138,7 @@ function pointers(h::Hamiltonian{T,E}, s::AppliedHopSelector{T,E}) where {T,E}
             r, dr = rdr(site(lat, col, dn0) => site(lat, row, dn))
             if (col => row, (r, dr), dn) in s
                 ncol = norbs[scol]
-                srow = site_to_sublat(row, os)
-                nrow = norbs[srow]
+                nrow = blocksize_unflat(bs, row)
                 push!(ptr_r_dr, (p, r, dr, (nrow, ncol)))
             end
         end

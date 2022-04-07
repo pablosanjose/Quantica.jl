@@ -2,18 +2,22 @@
 # MatrixElementType
 #region
 
-struct SMatrixView{N,M,T}
-    s::SMatrix{N,M,T}
-    SMatrixView{N,M,T}(s) where {N,M,T} = new(s)
+struct SMatrixView{N,M,T,NM}
+    s::SMatrix{N,M,T,NM}
+    SMatrixView{N,M,T,NM}(s) where {N,M,T,NM} = new(convert(SMatrix{N,M,T,NM}, s))
 end
 
-SMatrixView(s::SMatrix{N,M,T}) where {N,M,T} = SMatrixView{N,M,T}(s)
+SMatrixView(s::SMatrix{N,M,T,NM}) where {N,M,T,NM} = SMatrixView{N,M,T,NM}(s)
+
+SMatrixView(::Type{<:SMatrix{N,M,T,NM}}) where {N,M,T,NM} = SMatrixView{N,M,T,NM}
 
 SMatrixView{N,M}(s) where {N,M} = SMatrixView(SMatrix{N,M}(s))
 
 Base.parent(s::SMatrixView) = s.s
 
 Base.view(s::SMatrixView, i::Integer...) = view(s.s, i...)
+
+Base.zero(::Type{SMatrixView{N,M,T,NM}}) where {N,M,T,NM} = zero(SMatrix{N,M,T,NM})
 
 const MatrixElementType{T} = Union{
     Complex{T},
@@ -53,7 +57,7 @@ end
     return BlockStructure{B}(blocksizes, subsizes)
 end
 
-blocktype(T::Type, norbs) = blocktype(T, val_maximum(norbs))
+blocktype(T::Type, norbs) = SMatrixView(blocktype(T, val_maximum(norbs)))
 blocktype(::Type{T}, m::Val{1}) where {T} = Complex{T}
 blocktype(::Type{T}, m::Val{N}) where {T,N} = SMatrix{N,N,Complex{T},N*N}
 
@@ -71,15 +75,23 @@ blocksizes(b::BlockStructure) = b.blocksizes
 
 subsizes(b::BlockStructure) = b.subsizes
 
-blocksize(b::BlockStructure, i, j) = (blocksize(b, i), blocksize(b, j))
-
-blocksize(b::BlockStructure, i) = length(flatrange(b, i))
-
 flatsize(b::BlockStructure) = blocksizes(b)' * subsizes(b)
 
 unflatsize(b::BlockStructure) = sum(subsizes(b))
 
-flatindex(b::BlockStructure, i) = first(flatrange(b, i))
+blocksize(b::BlockStructure, iflat, jflat) = (blocksize(b, iflat), blocksize(b, jflat))
+
+blocksize(b::BlockStructure, iflat) = length(flatrange(b, iflat))
+
+function blocksize_unflat(b::BlockStructure, iunflat)
+    soffset  = 0
+    @boundscheck(iunflat < 0 && blockbounds_error())
+    @inbounds for (s, b) in zip(b.subsizes, b.blocksizes)
+        soffset + s >= iunflat && return b
+        soffset += s
+    end
+    @boundscheck(blockbounds_error())
+end
 
 # Basic relation: iflat - 1 == (iunflat - soffset - 1) * b + soffset´
 function flatrange(b::BlockStructure, iflat::Integer)
@@ -88,7 +100,7 @@ function flatrange(b::BlockStructure, iflat::Integer)
     @boundscheck(iflat < 0 && blockbounds_error())
     @inbounds for (s, b) in zip(b.subsizes, b.blocksizes)
         if soffset + s >= iflat
-            offset = muladd(i - soffset - 1, b, soffset´)
+            offset = muladd(iflat - soffset - 1, b, soffset´)
             return offset+1:offset+b
         end
         soffset  += s
@@ -111,6 +123,8 @@ function unflatindex(b::BlockStructure, iflat::Integer)
     end
     @boundscheck(blockbounds_error())
 end
+
+flatindex(b::BlockStructure, i) = first(flatrange(b, i))
 
 @noinline blockbounds_error() = throw(BoundsError())
 
@@ -199,6 +213,8 @@ function nnzdiag(m::HybridSparseMatrixCSC)
     return count
 end
 
+Base.size(h::HybridSparseMatrixCSC, i::Integer...) = size(h.unflat, i...)
+
 #endregion
 
 ############################################################################################
@@ -226,24 +242,29 @@ function Base.setindex!(b::HybridSparseMatrixCSC, val::AbstractVecOrMat, i::Inte
     return val
 end
 
-mask_block(::Type{B}, val, (nrows, ncols) = size(val)) where {N,T,B<:SMatrixView{N,N,T}} =
-    SMatrixView(mask_block(SMatrix{N,N,T,N*N}, val, (nrows, ncols)))
+function mask_block(::Type{B}, val, (nrows, ncols) = size(val)) where {N,T,B<:SMatrix{N,N,T}}
+    # This check includes the case where val is a scalar
+    val isa UniformScaling || (size(val, 1), size(val, 2)) == (nrows, ncols) == (N, N) ||
+        blocksize_error(size(val), (N, N))
+    return B(val)
+end
 
 mask_block(::Type{B}, val::Number, (nrows, ncols) = (1, 1)) where {B<:Complex} =
     convert(B, val)
 
-function mask_block(::Type{B}, val::SMatrix{R,C}, (nrows, ncols) = size(val)) where {R,C,N,T,B<:SMatrix{N,N,T}}
+function mask_block(::Type{B}, val::SMatrix{R,C}, (nrows, ncols) = size(val)) where {R,C,N,T,B<:SMatrixView{N,N,T}}
     (R, C) == (nrows, ncols) || blocksize_error((R, C), (nrows, ncols))
-    return SMatrix{N,R}(I) * val * SMatrix{C,N}(I)
+    return SMatrixView(SMatrix{N,R}(I) * val * SMatrix{C,N}(I))
 end
 
-function mask_block(::Type{B}, val, (nrows, ncols) = size(val)) where {N,T,B<:SMatrix{N,N,T}}
-    size(val) == (nrows, ncols) || blocksize_error(size(val), (nrows, ncols))
+function mask_block(::Type{B}, val, (nrows, ncols) = size(val)) where {N,T,B<:SMatrixView{N,N,T}}
+    val isa UniformScaling || (size(val, 1), size(val, 2)) == (nrows, ncols) ||
+        blocksize_error(size(val), (nrows, ncols))
     t = ntuple(Val(N*N)) do i
         n, m = mod1(i, N), fld1(i, N)
-        @inbounds n > nrows || m > ncols ? zero(T) : T(a[n,m])
+        @inbounds n > nrows || m > ncols ? zero(T) : T(val[n,m])
     end
-    return SMatrix{N,N,T}(t)
+    return SMatrixView(SMatrix{N,N,T}(t))
 end
 
 mask_block(t, val, s = size(val)) = blocksize_error(size(val), s)
@@ -389,7 +410,7 @@ function merge_sparse(mats, ::Type{B} = eltype(first(mats))) where {B}
             vals = nonzeros(mat)
             rows = rowvals(mat)
             for p in nzrange(mat, col)
-                val = n == 1 ? vals[p] : zero(B)
+                val = zero(B)
                 row = rows[p]
                 pushtocolumn!(collector, row, val, false) # skips repeated rows
             end

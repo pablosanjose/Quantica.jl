@@ -462,7 +462,7 @@ function Base.getindex(b::AbstractHamiltonianBuilder{<:Any,<:Any,L}, dn::SVector
 end
 
 function SparseArrays.sparse(builder::AbstractHamiltonianBuilder{T,<:Any,L,B}) where {T,L,B}
-    HT = Harmonic{L,HybridSparseMatrixCSC{T,B}}
+    HT = Harmonic{T,L,B}
     b = blockstructure(builder)
     n = nsites(lattice(builder))
     hars = HT[sparse(b, har, n, n) for har in harmonics(builder) if !isempty(har)]
@@ -517,11 +517,11 @@ struct Hamiltonian{T,E,L,B} <: AbstractHamiltonian{T,E,L,B}
         all(har -> size(matrix(har)) == (n, n), harmonics) ||
             throw(DimensionMismatch("Harmonic $(size.(matrix.(harmonics), 1)) sizes don't match number of sites $n"))
         sort!(harmonics)
-        length(harmonics) > 0 && iszero(dcell(first(harmonics))) || pushfirst!(harmonics,
-            Harmonic(zero(SVector{L,Int}), spzeros(B, n, n)))
+        (isempty(harmonics) || !iszero(dcell(first(harmonics)))) && pushfirst!(harmonics,
+            Harmonic(zero(SVector{L,Int}), HybridSparseMatrixCSC(blockstruct, spzeros(B, n, n))))
         bloch = HybridSparseMatrixCSC(blockstruct, spzeros(B, n, n))
         needs_initialization!(bloch)
-        return new(lattice, blockstruct, harmonics)
+        return new(lattice, blockstruct, harmonics, bloch)
     end
 end
 
@@ -529,11 +529,11 @@ end
 
 ## AbstractHamiltonian
 
-norbitals(h::AbstractHamiltonian) = norbitals(blockstructure(h))
+norbitals(h::AbstractHamiltonian) = blocksizes(blockstructure(h))
 
 ## Hamiltonian
 
-Hamiltonian(l::Lattice{T,E,L}, b::BlockStructure{B}, h::Vector{Harmonic{L,B}}) where {T,E,L,B} =
+Hamiltonian(l::Lattice{T,E,L}, b::BlockStructure{B}, h::Vector{Harmonic{T,L,B}}) where {T,E,L,B} =
     Hamiltonian{T,E,L,B}(l, b, h)
 
 hamiltonian(h::Hamiltonian) = h

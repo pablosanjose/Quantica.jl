@@ -3,6 +3,9 @@
 # to instantiate types and convert between instances. (For parametric types, unless overridden,
 # you get an implicit internal constructor without parameters, so no need to define that externally)
 
+Base.convert(::Type{T}, l::T) where T<:SMatrixView = l
+Base.convert(::Type{T}, l::SMatrixView) where T<:SMatrixView = T(parent(l))
+
 Base.convert(::Type{T}, l::T) where T<:Sublat = l
 Base.convert(::Type{T}, l::Sublat) where T<:Sublat = T(l)
 

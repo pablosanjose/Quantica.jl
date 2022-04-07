@@ -84,19 +84,12 @@ function Base.show(io::IO, h::Union{Hamiltonian,ParametricHamiltonian})
     print(io, i, summary(h), "\n",
 "$i  Bloch harmonics  : $(length(harmonics(h)))
 $i  Harmonic size    : $((n -> "$n × $n")(size(h, 1)))
-$i  Orbitals         : $(norbitals(orbitalstructure(h)))
+$i  Orbitals         : $(norbitals(h)))
 $i  Element type     : $(displaytype(blocktype(h)))
 $i  Onsites          : $(nonsites(h))
 $i  Hoppings         : $(nhoppings(h))
 $i  Coordination     : $(round(coordination(h), digits = 5))")
     showextrainfo(io, i, h)
-end
-
-function Base.show(io::IO, h::FlatHamiltonian)
-    i = get(io, :indent, "")
-    print(io, i, "FlatHamiltonian: orbital-flattening wrapper for\n")
-    ioindent = IOContext(io, :indent => "  ")
-    show(ioindent, parent(h))
 end
 
 Base.summary(h::Hamiltonian{T,E,L}) where {T,E,L} =
@@ -106,6 +99,7 @@ Base.summary(h::ParametricHamiltonian{T,E,L}) where {T,E,L} =
     "ParametricHamiltonian{$T,$E,$L}: Parametric Hamiltonian on a $(L)D Lattice in $(E)D space"
 
 displaytype(::Type{S}) where {N,T,S<:SMatrix{N,N,T}} = "$N × $N blocks ($T)"
+displaytype(::Type{S}) where {N,T,S<:SMatrixView{N,N,T}} = "At most $N × $N blocks ($T)"
 displaytype(::Type{T}) where {T} = "scalar ($T)"
 
 # fallback

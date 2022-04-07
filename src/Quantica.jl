@@ -64,7 +64,7 @@ include("convert.jl")
 
 include("presets/lattices.jl")
 include("presets/regions.jl")
-include("presets/eigensolvers.jl")
+# include("presets/eigensolvers.jl")
 # include("presets/hamiltonians.jl")
 
 include("precompile.jl")

@@ -13,7 +13,7 @@ using FunctionWrappers: FunctionWrapper
 using LinearAlgebra: Eigen, I, lu, ldiv!
 using SparseArrays: SparseMatrixCSC, AbstractSparseMatrix
 using Quantica: Quantica, Bloch, Spectrum, AbstractEigensolver, AbstractHamiltonian, call!,
-      ensureloaded, flatten, spectrumtype, SVector, SMatrix
+      ensureloaded, spectrumtype, SVector, SMatrix
 import Quantica: bloch
 
 #endregion
