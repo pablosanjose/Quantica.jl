@@ -39,12 +39,13 @@ export LatticePresets, LP, RegionPresets, RP, EigensolverPresets, EP #, Hamilton
 export @SMatrix, @SVector, SMatrix, SVector, SA
 export ishermitian, I
 
-include("types.jl")
 include("iterators.jl")
+include("builders.jl")
+include("sparsetools.jl")
+include("types.jl")
 include("selector.jl")
 include("lattice.jl")
 include("model.jl")
-include("builders.jl")
 include("hamiltonian.jl")
 include("supercell.jl")
 include("transform.jl")

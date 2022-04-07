@@ -1,54 +1,11 @@
 ############################################################################################
-# Abstract Hamiltonian builders
-#region
-
-abstract type AbstractSparseBuilder{T,E,L,B} end
-
-lattice(b::AbstractSparseBuilder) = b.lat
-
-orbitalstructure(b::AbstractSparseBuilder) = b.orbstruct
-
-function Base.getindex(b::AbstractSparseBuilder{<:Any,<:Any,L}, dn::SVector{L,Int}) where {L}
-    hars = b.harmonics
-    for har in hars
-        har.dn == dn && return collector(har)
-    end
-    har = empty_harmonic(b, dn)
-    push!(hars, har)
-    return collector(har)
-end
-
-function harmonics(builder::AbstractSparseBuilder{<:Any,<:Any,L,B}) where {L,B}
-    HT = Harmonic{L,SparseMatrixCSC{B,Int}}
-    n = nsites(lattice(builder))
-    hars = HT[HT(har.dn, sparse(collector(har), n)) for har in builder.harmonics if !isempty(har)]
-    return hars
-end
-
-collector(har) = har.collector  # for IJVHarmonic and CSCHarmonic
-
-#endregion
-
-############################################################################################
-# IJV Hamiltonian builders
+# IJV sparse matrix builders
 #region
 
 struct IJV{B}
     i::Vector{Int}
     j::Vector{Int}
     v::Vector{B}
-end
-
-struct IJVHarmonic{L,B}
-    dn::SVector{L,Int}
-    collector::IJV{B}
-end
-
-struct IJVBuilder{T,E,L,B} <: AbstractSparseBuilder{T,E,L,B}
-    lat::Lattice{T,E,L}
-    orbstruct::OrbitalStructure{B}
-    harmonics::Vector{IJVHarmonic{L,B}}
-    kdtrees::Vector{KDTree{SVector{E,T},Euclidean,T}}
 end
 
 function IJV{B}(nnzguess = missing) where {B}
@@ -59,15 +16,6 @@ function IJV{B}(nnzguess = missing) where {B}
         sizehint!(v, nnzguess)
     end
     return IJV(i, j, v)
-end
-
-empty_harmonic(::IJVBuilder{<:Any,<:Any,L,B}, dn) where {L,B} =
-    IJVHarmonic{L,B}(dn, IJV{B}())
-
-function IJVBuilder(lat::Lattice{T,E,L}, orbstruct::OrbitalStructure{B}) where {E,L,T,B}
-    harmonics = IJVHarmonic{L,B}[]
-    kdtrees = Vector{KDTree{SVector{E,T},Euclidean,T}}(undef, nsublats(lat))
-    return IJVBuilder(lat, orbstruct, harmonics, kdtrees)
 end
 
 Base.push!(ijv::IJV, (i, j, v)) =
@@ -92,17 +40,9 @@ function Base.filter!(f::Function, ijv::IJV)
     return ijv
 end
 
-Base.filter!(f::Function, b::IJVBuilder) =
-    foreach(bh -> filter!(f, bh.collector), b.harmonics)
-
-Base.isempty(h::IJVHarmonic) = isempty(collector(h))
 Base.isempty(h::IJV) = length(h.i) == 0
 
-SparseArrays.sparse(c::IJV, n) = sparse(c.i, c.j, c.v, n, n)
-
-kdtrees(b::IJVBuilder) = b.kdtrees
-
-ijvs(b::IJVBuilder) = b.harmonics
+SparseArrays.sparse(c::IJV, m::Integer, n::Integer) = sparse(c.i, c.j, c.v, m, n)
 
 #endregion
 
@@ -117,17 +57,6 @@ mutable struct CSC{B}
     colcounter::Int
     rowvalcounter::Int
     cosorter::CoSort{Int,B}
-end
-
-mutable struct CSCHarmonic{L,B}
-    dn::SVector{L,Int}
-    collector::CSC{B}
-end
-
-struct CSCBuilder{T,E,L,B} <: AbstractSparseBuilder{T,E,L,B}
-    lat::Lattice{T,E,L}
-    orbstruct::OrbitalStructure{B}
-    harmonics::Vector{CSCHarmonic{L,B}}
 end
 
 function CSC{B}(cols = missing, nnzguess = missing) where {B}
@@ -147,17 +76,21 @@ function CSC{B}(cols = missing, nnzguess = missing) where {B}
     return CSC(colptr, rowval, nzval, colcounter, rowvalcounter, cosorter)
 end
 
-empty_harmonic(b::CSCBuilder{<:Any,<:Any,L,B}, dn) where {L,B} =
-    CSCHarmonic{L,B}(dn, CSC{B}(nsites(b.lat)))
-
-CSCBuilder(lat, orbstruct) =
-    CSCBuilder(lat, orbstruct, CSCHarmonic{latdim(lat),blocktype(orbstruct)}[])
-
 function pushtocolumn!(s::CSC, row::Int, x, skipdupcheck::Bool = true)
     if skipdupcheck || !isintail(row, s.rowval, s.colptr[s.colcounter])
         push!(s.rowval, row)
         push!(s.nzval, x)
         s.rowvalcounter += 1
+    end
+    return s
+end
+
+function appendtocolumn!(s::CSC, firstrow::Int, vals, skipdupcheck::Bool = true)
+    len = length(vals)
+    if skipdupcheck || !any(i->isintail(firstrow + i - 1, s.rowval, s.colptr[s.colcounter]), 1:len)
+        append!(s.rowval, firstrow:firstrow+len-1)
+        append!(s.nzval, vals)
+        s.rowvalcounter += len
     end
     return s
 end
@@ -188,9 +121,6 @@ function finalizecolumn!(s::CSC, sortcol::Bool = true)
     return nothing
 end
 
-finalizecolumn!(b::CSCBuilder, x...) =
-    foreach(har -> finalizecolumn!(collector(har), x...), b.harmonics)
-
 function completecolptr!(colptr, cols, lastrowptr)
     colcounter = length(colptr)
     if colcounter < cols + 1
@@ -202,14 +132,13 @@ function completecolptr!(colptr, cols, lastrowptr)
     return colptr
 end
 
-function SparseArrays.sparse(s::CSC, dim)
-    completecolptr!(s.colptr, dim, s.rowvalcounter)
+function SparseArrays.sparse(s::CSC, m::Integer, n::Integer)
+    completecolptr!(s.colptr, n, s.rowvalcounter)
     rows, cols = isempty(s.rowval) ? 0 : maximum(s.rowval), length(s.colptr) - 1
-    rows <= dim && cols == dim || throw(error("Internal error: matrix size $((rows, cols)) is inconsistent with lattice size $dim"))
-    return SparseMatrixCSC(dim, dim, s.colptr, s.rowval, s.nzval)
+    rows <= m && cols == n || throw(error("Internal error: matrix size $((rows, cols)) is inconsistent with lattice size $dim"))
+    return SparseMatrixCSC(m, n, s.colptr, s.rowval, s.nzval)
 end
 
-Base.isempty(s::CSCHarmonic) = isempty(collector(s))
 Base.isempty(s::CSC) = length(s.nzval) == 0
 
 #endregion

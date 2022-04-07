@@ -339,15 +339,15 @@ function OrbitalStructure{B}(lat::Lattice, norbs) where {B}
     return OrbitalStructure{B}(B, norbs´, offsets´)
 end
 
-blocktype(T::Type, norbs) = blocktype(T, val_maximum(norbs))
-blocktype(::Type{T}, m::Val{1}) where {T} = Complex{T}
-blocktype(::Type{T}, m::Val{N}) where {T,N} = SMatrix{N,N,Complex{T},N*N}
+# blocktype(T::Type, norbs) = blocktype(T, val_maximum(norbs))
+# blocktype(::Type{T}, m::Val{1}) where {T} = Complex{T}
+# blocktype(::Type{T}, m::Val{N}) where {T,N} = SMatrix{N,N,Complex{T},N*N}
 
-val_maximum(n::Int) = Val(n)
-val_maximum(ns::Tuple) = Val(maximum(argval.(ns)))
+# val_maximum(n::Int) = Val(n)
+# val_maximum(ns::Tuple) = Val(maximum(argval.(ns)))
 
-argval(::Val{N}) where {N} = N
-argval(n::Int) = n
+# argval(::Val{N}) where {N} = N
+# argval(n::Int) = n
 
 #endregion
 
@@ -376,6 +376,90 @@ Base.:(==)(o1::OrbitalStructure, o2::OrbitalStructure) =
     o1.norbs == o2.norbs && o1.offsets == o2.offsets
 
 #endregion
+#endregion
+
+############################################################################################
+# Hamiltonian builders
+#region
+
+abstract type AbstractHamiltonianBuilder{T,E,L,B} end
+
+struct IJVHarmonic{L,B}
+    dn::SVector{L,Int}
+    collector::IJV{B}
+end
+
+struct IJVBuilder{T,E,L,B} <: AbstractHamiltonianBuilder{T,E,L,B}
+    lat::Lattice{T,E,L}
+    orbstruct::OrbitalStructure{B}
+    harmonics::Vector{IJVHarmonic{L,B}}
+    kdtrees::Vector{KDTree{SVector{E,T},Euclidean,T}}
+end
+
+mutable struct CSCHarmonic{L,B}
+    dn::SVector{L,Int}
+    collector::CSC{B}
+end
+
+struct CSCBuilder{T,E,L,B} <: AbstractHamiltonianBuilder{T,E,L,B}
+    lat::Lattice{T,E,L}
+    orbstruct::OrbitalStructure{B}
+    harmonics::Vector{CSCHarmonic{L,B}}
+end
+
+## Constructors ##
+
+empty_harmonic(::IJVBuilder{<:Any,<:Any,L,B}, dn) where {L,B} =
+    IJVHarmonic{L,B}(dn, IJV{B}())
+
+function IJVBuilder(lat::Lattice{T,E,L}, orbstruct::OrbitalStructure{B}) where {E,L,T,B}
+    harmonics = IJVHarmonic{L,B}[]
+    kdtrees = Vector{KDTree{SVector{E,T},Euclidean,T}}(undef, nsublats(lat))
+    return IJVBuilder(lat, orbstruct, harmonics, kdtrees)
+end
+
+empty_harmonic(b::CSCBuilder{<:Any,<:Any,L,B}, dn) where {L,B} =
+    CSCHarmonic{L,B}(dn, CSC{B}(nsites(b.lat)))
+
+CSCBuilder(lat, orbstruct) =
+    CSCBuilder(lat, orbstruct, CSCHarmonic{latdim(lat),blocktype(orbstruct)}[])
+
+## API ##
+
+lattice(b::AbstractHamiltonianBuilder) = b.lat
+
+orbitalstructure(b::AbstractHamiltonianBuilder) = b.orbstruct
+
+function Base.getindex(b::AbstractHamiltonianBuilder{<:Any,<:Any,L}, dn::SVector{L,Int}) where {L}
+    hars = b.harmonics
+    for har in hars
+        har.dn == dn && return collector(har)
+    end
+    har = empty_harmonic(b, dn)
+    push!(hars, har)
+    return collector(har)
+end
+
+function harmonics(builder::AbstractHamiltonianBuilder{<:Any,<:Any,L,B}) where {L,B}
+    HT = Harmonic{L,SparseMatrixCSC{B,Int}}
+    n = nsites(lattice(builder))
+    hars = HT[HT(har.dn, sparse(collector(har), n)) for har in builder.harmonics if !isempty(har)]
+    return hars
+end
+
+collector(har) = har.collector  # for IJVHarmonic and CSCHarmonic
+
+Base.filter!(f::Function, b::IJVBuilder) =
+    foreach(bh -> filter!(f, bh.collector), b.harmonics)
+
+finalizecolumn!(b::CSCBuilder, x...) =
+    foreach(har -> finalizecolumn!(collector(har), x...), b.harmonics)
+
+Base.isempty(h::IJVHarmonic) = isempty(collector(h))
+Base.isempty(s::CSCHarmonic) = isempty(collector(s))
+
+kdtrees(b::IJVBuilder) = b.kdtrees
+
 #endregion
 
 ############################################################################################

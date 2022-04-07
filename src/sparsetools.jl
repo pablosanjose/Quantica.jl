@@ -58,7 +58,7 @@ blocktype(::Type{T}, m::Val{1}) where {T} = Complex{T}
 blocktype(::Type{T}, m::Val{N}) where {T,N} = SMatrix{N,N,Complex{T},N*N}
 
 val_maximum(n::Int) = Val(n)
-val_maximum(ns::Tuple) = Val(maximum(argval.(ns)))
+val_maximum(ns) = Val(maximum(argval.(ns)))
 
 argval(::Val{N}) where {N} = N
 argval(n::Int) = n
@@ -79,13 +79,14 @@ unflatsize(b::BlockStructure) = sum(subsizes(b))
 
 flatindex(b::BlockStructure, i) = first(flatrange(b, i))
 
-function flatrange(b::BlockStructure, iunflat::Integer)
+# Basic relation: iflat - 1 == (iunflat - soffset - 1) * b + soffset´
+function flatrange(b::BlockStructure, iflat::Integer)
     soffset  = 0
     soffset´ = 0
-    @boundscheck(iunflat < 0 && blockbounds_error())
+    @boundscheck(iflat < 0 && blockbounds_error())
     @inbounds for (s, b) in zip(b.subsizes, b.blocksizes)
-        if soffset + s >= iunflat
-            offset = muladd(iunflat - soffset - 1, b, soffset´)
+        if soffset + s >= iflat
+            offset = muladd(i - soffset - 1, b, soffset´)
             return offset+1:offset+b
         end
         soffset  += s
@@ -99,9 +100,9 @@ function unflatindex(b::BlockStructure, iflat::Integer)
     soffset´ = 0
     @boundscheck(i < 0 && blockbounds_error())
     @inbounds for (s, b) in zip(b.subsizes, b.blocksizes)
-        if soffset´ + b * s >= iflat
-            offset = (iflat - soffset´ - 1) ÷ b + soffset
-            return offset+1
+        if soffset + s >= iflat
+            iunflat = (iflat - soffset´ - 1) ÷ b + soffset + 1
+            return iunflat, b
         end
         soffset  += s
         soffset´ += b * s
@@ -168,6 +169,11 @@ needs_no_sync(s::HybridSparseMatrixCSC{T,Complex{T}}) where {T}     = true
 needs_flat_sync(s::HybridSparseMatrixCSC{T,Complex{T}}) where {T}   = false
 needs_unflat_sync(s::HybridSparseMatrixCSC{T,Complex{T}}) where {T} = false
 
+# Base.show
+
+Base.show(io::IO, m::MIME"text/plain", s::HybridSparseMatrixCSC) = 
+    show(io, m, unflat(s))
+
 #endregion
 
 ############################################################################################
@@ -180,7 +186,7 @@ Base.getindex(b::HybridSparseMatrixCSC{<:Any,<:SMatrixView}, i::Integer, j::Inte
 Base.getindex(b::HybridSparseMatrixCSC, i::Integer, j::Integer) = unflat(b)[i, j]
 
 # only allowed for elements that are already stored
-function Base.setindex!(b::HybridSparseMatrixCSC{<:Any,S}, val, i::Integer, j::Integer) where {S<:SMatrixView}
+function Base.setindex!(b::HybridSparseMatrixCSC{<:Any,S}, val::AbstractVecOrMat, i::Integer, j::Integer) where {S<:SMatrixView}
     @boundscheck(checkstored(unflat(b), i, j))
     val´ = mask_block(val, S, blocksize(blockstructure(b), i, j))
     unflat(b)[i, j] = val´
@@ -188,19 +194,19 @@ function Base.setindex!(b::HybridSparseMatrixCSC{<:Any,S}, val, i::Integer, j::I
     return val´
 end
 
-function Base.setindex!(b::HybridSparseMatrixCSC, val, i::Integer, j::Integer)
+function Base.setindex!(b::HybridSparseMatrixCSC, val::AbstractVecOrMat, i::Integer, j::Integer)
     @boundscheck(checkstored(unflat(b), i, j))
     unflat(b)[i, j] = val
     needs_flat_sync!(b)
     return val
 end
 
-function mask_block(val::SMatrix{R,C}, ::Type{S}, (nrows, ncols)) where {R,C,N,T,S<:SMatrixView{N,N,T}}
+function mask_block(val::SMatrix{R,C}, ::Type{S}, (nrows, ncols) = size(val)) where {R,C,N,T,S<:SMatrixView{N,N,T}}
     (R, C) == (nrows, ncols) || blocksize_error((R, C), (nrows, ncols))
     return SMatrixView(SMatrix{N,N,T}(SMatrix{N,R}(I) * val * SMatrix{C,N}(I)))
 end
 
-function mask_block(val, ::Type{S}, (nrows, ncols)) where {N,T,S<:SMatrixView{N,N,T}}
+function mask_block(val, ::Type{S}, (nrows, ncols) = size(val)) where {N,T,S<:SMatrixView{N,N,T}}
     size(val) == (nrows, ncols) || blocksize_error(size(val), (nrows, ncols))
     t = ntuple(Val(N*N)) do i
         n, m = mod1(i, N), fld1(i, N)
@@ -209,153 +215,11 @@ function mask_block(val, ::Type{S}, (nrows, ncols)) where {N,T,S<:SMatrixView{N,
     return SMatrixView(SMatrix{N,N,T}(t))
 end
 
-checkstored(mat, i, j) = i in view(rowvals, nzrange(mat, j)) ||
-    throw(ArgumentError("Adding a new structural element not allowed"))
+checkstored(mat, i, j) = i in view(rowvals(mat), nzrange(mat, j)) ||
+    throw(ArgumentError("Adding new structural elements is not allowed"))
 
 @noinline blocksize_error(s1, s2) =
     throw(ArgumentError("Expected an element of size $s2, got size $s1"))
-
-#endregion
-
-############################################################################################
-# HybridSparseMatrixCSC syncing
-#region
-
-function flat_sync!(s::HybridSparseMatrixCSC{<:Any,S}) where {N,S<:SMatrixView{N}}
-    unflat = s.unflat
-
-end
-
-# function merge_sparse(mats::Vector{<:SparseMatrixCSC{B}}) where {B}
-#     mat0 = first(mats)
-#     nrows, ncols = size(mat0)
-#     nrows == ncols || internalerror("merge_sparse: matrix not square")
-#     nnzguess = sum(mat -> nnz(mat), mats)
-#     collector = CSC{B}(ncols, nnzguess)
-#     for col in 1:ncols
-#         for (n, mat) in enumerate(mats)
-#             vals = nonzeros(mat)
-#             rows = rowvals(mat)
-#             for p in nzrange(mat, col)
-#                 val = n == 1 ? vals[p] : zero(B)
-#                 row = rows[p]
-#                 pushtocolumn!(collector, row, val, false) # skips repeated rows
-#             end
-#         end
-#         finalizecolumn!(collector)
-#     end
-#     matrix = sparse(collector, ncols)
-#     return matrix
-# end
-
-#endregion
-
-############################################################################################
-# CSC Builder
-#region
-
-mutable struct CSC{B}
-    colptr::Vector{Int}
-    rowval::Vector{Int}
-    nzval::Vector{B}
-    colcounter::Int
-    rowvalcounter::Int
-    cosorter::CoSort{Int,B}
-end
-
-## Constructors ##
-
-function CSC{B}(cols = missing, nnzguess = missing) where {B}
-    colptr = [1]
-    rowval = Int[]
-    nzval = B[]
-    if cols isa Integer
-        sizehint!(colptr, cols + 1)
-    end
-    if nnzguess isa Integer
-        sizehint!(nzval, nnzguess)
-        sizehint!(rowval, nnzguess)
-    end
-    colcounter = 1
-    rowvalcounter = 0
-    cosorter = CoSort(rowval, nzval)
-    return CSC(colptr, rowval, nzval, colcounter, rowvalcounter, cosorter)
-end
-
-## API ##
-
-function pushtocolumn!(s::CSC, row::Int, val, skipdupcheck::Bool = true)
-    if skipdupcheck || !isintail(row, s.rowval, s.colptr[s.colcounter])
-        push!(s.rowval, row)
-        push!(s.nzval, val)
-        s.rowvalcounter += 1
-    end
-    return s
-end
-
-function appendtocolumn!(s::CSC, firstrow::Int, vals, skipdupcheck::Bool = true)
-    len = length(vals)
-    if skipdupcheck || !any(i->isintail(firstrow + i - 1, s.rowval, s.colptr[s.colcounter]), 1:len)
-        append!(s.rowval, firstrow:firstrow+len-1)
-        append!(s.nzval, val)
-        s.rowvalcounter += len
-    end
-    return s
-end
-
-function isintail(element, container, start::Int)
-    for i in start:length(container)
-        container[i] == element && return true
-    end
-    return false
-end
-
-function sync_columns!(s::CSC, col)
-    missing_cols = col - s.colcounter
-    for _ in 1:missing_cols
-        finalizecolumn!(s)
-    end
-    return nothing
-end
-
-function finalizecolumn!(s::CSC, sortcol::Bool = true)
-    if sortcol
-        s.cosorter.offset = s.colptr[s.colcounter] - 1
-        sort!(s.cosorter)
-        isgrowing(s.cosorter) || internalerror("finalizecolumn!: repeated rows")
-    end
-    s.colcounter += 1
-    push!(s.colptr, s.rowvalcounter + 1)
-    return nothing
-end
-
-function row_col_ptr(s::CSC, row, col = s.colcounter - 1)
-    for ptr in s.colptr[col]:min(s.colptr[col+1]-1, length(s.rowval))
-        s.rowval[ptr] == row && return ptr
-    end
-    return nothing
-end
-
-function completecolptr!(colptr, cols, lastrowptr)
-    colcounter = length(colptr)
-    if colcounter < cols + 1
-        resize!(colptr, cols + 1)
-        for col in (colcounter + 1):(cols + 1)
-            colptr[col] = lastrowptr + 1
-        end
-    end
-    return colptr
-end
-
-function SparseArrays.sparse(s::CSC, dim)
-    completecolptr!(s.colptr, dim, s.rowvalcounter)
-    rows, cols = isempty(s.rowval) ? 0 : maximum(s.rowval), length(s.colptr) - 1
-    rows <= dim && cols == dim ||
-        internalerror("sparse(::CSC, dim): matrix size $((rows, cols)) is inconsistent with lattice size $dim")
-    return SparseMatrixCSC(dim, dim, s.colptr, s.rowval, s.nzval)
-end
-
-Base.isempty(s::CSC) = length(s.nzval) == 0
 
 #endregion
 
@@ -364,7 +228,7 @@ Base.isempty(s::CSC) = length(s.nzval) == 0
 #region
 
 # Uniform case
-function flat(b::BlockStructure{B}, unflat::SparseMatrixCSC{B}) where {N,B<:SMatrix{N,N}}
+function flat(b::BlockStructure{B}, unflat::SparseMatrixCSC{B´}) where {N,C,B<:SMatrix{N,N,C},B´<:SMatrix{N,N}}
     nnzguess = nnz(unflat) * N * N
     builder = CSC{C}(flatsize(b), nnzguess)
     nzs = nonzeros(unflat)
@@ -383,7 +247,7 @@ function flat(b::BlockStructure{B}, unflat::SparseMatrixCSC{B}) where {N,B<:SMat
 end
 
 # Non-uniform case
-function flat(b::BlockStructure{B}, unflat::SparseMatrixCSC{B}) where {N,B<:SMatrixView{N,N}}
+function flat(b::BlockStructure{B}, unflat::SparseMatrixCSC{B´}) where {N,C,B<:SMatrixView{N,N,C},B´<:SMatrixView{N,N}}
     nnzguess = nnz(unflat) * N * N
     builder = CSC{C}(flatsize(b), nnzguess)
     nzs = nonzeros(unflat)
@@ -424,28 +288,26 @@ function unflat(b::BlockStructure{B}, flat::SparseMatrixCSC{<:Number}) where {N,
     return sparse(builder, n, n)
 end
 
-# Uniform case
+# Non-uniform case
 function unflat(b::BlockStructure{B}, flat::SparseMatrixCSC{<:Number}) where {N,B<:SMatrixView{N,N}}
     @boundscheck(checkblocks(b, flat))
     nnzguess = nnz(flat) ÷ (N * N)
     unflatcols = unflatsize(b)
-    builder = CSC{C}(unflatcols, nnzguess)
-    rows = rowvals(flat)
+    builder = CSC{B}(unflatcols, nnzguess)
+    rowsflat = rowvals(flat)
     col = 1
-    while col <= unflatcols
-        rngcol = flatrange(b, col)
-        firstcol = first(rngcol)
-        ptrs = nzrange(flat, firstcol)
+    for ucol in 1:unflatcols
+        colrng = flatrange(b, col)
+        firstcol = first(colrng)
+        bcol = length(colrng)
+        ptrs = rnzrange(flat, firstcol)
         ptr = first(ptrs)
         while ptr in ptrs
-            firstrow = rows[ptr]
-            rng
-            vals = 
-        for ptr in ptrs´
-            firstrow = rows[ptr]
-            row´ = (firstrow - 1) ÷ N + 1
-            vals = B(view(flat, firstrow:firstrow+N-1, firstcol:firstcol+N-1))
-            pushtocolumn!(builder, row´, vals)
+            firstrow = rowsflat[ptr]
+            urow, brow = unflatindex(b, firstrow)
+            val = mask_block(B, view(flat, firstrow:firstrow+brow-1, firstcol:firstcol+bcol-1))
+            pushtocolumn!(builder, urow, val)
+            ptr += N
         end
         finalizecolumn!(builder, false)  # no need to sort column
     end
@@ -454,6 +316,50 @@ function unflat(b::BlockStructure{B}, flat::SparseMatrixCSC{<:Number}) where {N,
 end
 
 checkblocks(b, flat) = nothing ## TODO: must check that all structural elements come in blocks
+
+#endregion
+
+############################################################################################
+# HybridSparseMatrixCSC syncing
+#region
+
+# Uniform case
+function flat_sync!(s::HybridSparseMatrixCSC{<:Any,S}) where {N,S<:SMatrix{N,N}}
+    flat, unflat = s.flat, s.unflat
+    cols = axes(unflat, 2)
+    nzflat, nzunflat = nonzeros(flat), nonzeros(unflat)
+    ptr´ = 1
+    for col in cols, bcol in 1:N, ptr in nzrange(unflat, col)
+        nz = nzunflat[ptr]
+        for brow in 1:N
+            nzflat[ptr´] = nz[brow, bcol]
+            ptr´ += 1
+        end
+    end
+    return s
+end
+
+# function merge_sparse(mats::Vector{<:SparseMatrixCSC{B}}) where {B}
+#     mat0 = first(mats)
+#     nrows, ncols = size(mat0)
+#     nrows == ncols || internalerror("merge_sparse: matrix not square")
+#     nnzguess = sum(mat -> nnz(mat), mats)
+#     collector = CSC{B}(ncols, nnzguess)
+#     for col in 1:ncols
+#         for (n, mat) in enumerate(mats)
+#             vals = nonzeros(mat)
+#             rows = rowvals(mat)
+#             for p in nzrange(mat, col)
+#                 val = n == 1 ? vals[p] : zero(B)
+#                 row = rows[p]
+#                 pushtocolumn!(collector, row, val, false) # skips repeated rows
+#             end
+#         end
+#         finalizecolumn!(collector)
+#     end
+#     matrix = sparse(collector, ncols)
+#     return matrix
+# end
 
 #endregion
 
