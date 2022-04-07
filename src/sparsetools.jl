@@ -185,6 +185,20 @@ function Base.copy!(h::HybridSparseMatrixCSC{T,B}, h´::HybridSparseMatrixCSC{T,
     return h
 end
 
+SparseArrays.nnz(b::HybridSparseMatrixCSC) = nnz(unflat(b))
+
+function nnzdiag(m::HybridSparseMatrixCSC)
+    b = unflat(m)
+    count = 0
+    rowptrs = rowvals(b)
+    for col in 1:size(b, 2)
+        for ptr in nzrange(b, col)
+            rowptrs[ptr] == col && (count += 1; break)
+        end
+    end
+    return count
+end
+
 #endregion
 
 ############################################################################################
