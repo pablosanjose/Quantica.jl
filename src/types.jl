@@ -314,69 +314,69 @@ Base.adjoint(t::HoppingTerm) = HoppingTerm(t.t', t.selector', t.coefficient')
 #endregion
 #endregion
 
-############################################################################################
-# OrbitalStructure  -  see hamiltonian.jl for methods
-#region
+# ############################################################################################
+# # OrbitalStructure  -  see hamiltonian.jl for methods
+# #region
 
-struct OrbitalStructure{B<:Union{Number,SMatrix}}
-    blocktype::Type{B}    # Hamiltonian's blocktype
-    norbitals::Vector{Int}
-    offsets::Vector{Int}  # index offset for each sublattice (== offsets(::Lattice))
-end
+# struct OrbitalStructure{B<:Union{Number,SMatrix}}
+#     blocktype::Type{B}    # Hamiltonian's blocktype
+#     norbitals::Vector{Int}
+#     offsets::Vector{Int}  # index offset for each sublattice (== offsets(::Lattice))
+# end
 
-#region ## Constructors ##
+# #region ## Constructors ##
 
-# norbs is a collection of number of orbitals, one per sublattice (or a single one for all)
-# B type instability when calling from `hamiltonian` is removed by @inline (const prop)
-@inline function OrbitalStructure(lat::Lattice, norbs, T = numbertype(lat))
-    B = blocktype(T, norbs)
-    return OrbitalStructure{B}(lat, norbs)
-end
+# # norbs is a collection of number of orbitals, one per sublattice (or a single one for all)
+# # B type instability when calling from `hamiltonian` is removed by @inline (const prop)
+# @inline function OrbitalStructure(lat::Lattice, norbs, T = numbertype(lat))
+#     B = blocktype(T, norbs)
+#     return OrbitalStructure{B}(lat, norbs)
+# end
 
-function OrbitalStructure{B}(lat::Lattice, norbs) where {B}
-    norbs´ = sanitize_Vector_of_Type(Int, nsublats(lat), norbs)
-    offsets´ = offsets(lat)
-    return OrbitalStructure{B}(B, norbs´, offsets´)
-end
+# function OrbitalStructure{B}(lat::Lattice, norbs) where {B}
+#     norbs´ = sanitize_Vector_of_Type(Int, nsublats(lat), norbs)
+#     offsets´ = offsets(lat)
+#     return OrbitalStructure{B}(B, norbs´, offsets´)
+# end
 
-# blocktype(T::Type, norbs) = blocktype(T, val_maximum(norbs))
-# blocktype(::Type{T}, m::Val{1}) where {T} = Complex{T}
-# blocktype(::Type{T}, m::Val{N}) where {T,N} = SMatrix{N,N,Complex{T},N*N}
+# # blocktype(T::Type, norbs) = blocktype(T, val_maximum(norbs))
+# # blocktype(::Type{T}, m::Val{1}) where {T} = Complex{T}
+# # blocktype(::Type{T}, m::Val{N}) where {T,N} = SMatrix{N,N,Complex{T},N*N}
 
-# val_maximum(n::Int) = Val(n)
-# val_maximum(ns::Tuple) = Val(maximum(argval.(ns)))
+# # val_maximum(n::Int) = Val(n)
+# # val_maximum(ns::Tuple) = Val(maximum(argval.(ns)))
 
-# argval(::Val{N}) where {N} = N
-# argval(n::Int) = n
+# # argval(::Val{N}) where {N} = N
+# # argval(n::Int) = n
 
-#endregion
+# #endregion
 
-#region ## API ##
+# #region ## API ##
 
-norbitals(o::OrbitalStructure) = o.norbitals
+# norbitals(o::OrbitalStructure) = o.norbitals
 
-orbtype(::OrbitalStructure{B}) where {B} = orbtype(B)
-orbtype(::Type{B}) where {B<:Number} = B
-orbtype(::Type{B}) where {N,T,B<:SMatrix{N,N,T}} = SVector{N,T}
+# orbtype(::OrbitalStructure{B}) where {B} = orbtype(B)
+# orbtype(::Type{B}) where {B<:Number} = B
+# orbtype(::Type{B}) where {N,T,B<:SMatrix{N,N,T}} = SVector{N,T}
 
-blocktype(o::OrbitalStructure) = o.blocktype
+# blocktype(o::OrbitalStructure) = o.blocktype
 
-offsets(o::OrbitalStructure) = o.offsets
+# offsets(o::OrbitalStructure) = o.offsets
 
-nsites(o::OrbitalStructure) = last(offsets(o))
+# nsites(o::OrbitalStructure) = last(offsets(o))
 
-nsublats(o::OrbitalStructure) = length(norbitals(o))
+# nsublats(o::OrbitalStructure) = length(norbitals(o))
 
-sublats(o::OrbitalStructure) = 1:nsublats(o)
+# sublats(o::OrbitalStructure) = 1:nsublats(o)
 
-siterange(o::OrbitalStructure, sublat) = (1+o.offsets[sublat]):o.offsets[sublat+1]
+# siterange(o::OrbitalStructure, sublat) = (1+o.offsets[sublat]):o.offsets[sublat+1]
 
-# Equality does not need equal T
-Base.:(==)(o1::OrbitalStructure, o2::OrbitalStructure) =
-    o1.norbs == o2.norbs && o1.offsets == o2.offsets
+# # Equality does not need equal T
+# Base.:(==)(o1::OrbitalStructure, o2::OrbitalStructure) =
+#     o1.norbs == o2.norbs && o1.offsets == o2.offsets
 
-#endregion
-#endregion
+# #endregion
+# #endregion
 
 ############################################################################################
 # Hamiltonian builders
@@ -384,70 +384,57 @@ Base.:(==)(o1::OrbitalStructure, o2::OrbitalStructure) =
 
 abstract type AbstractHamiltonianBuilder{T,E,L,B} end
 
-struct IJVHarmonic{L,B}
+abstract type AbstractBuilderHarmonic{L,B} end
+
+struct IJVHarmonic{L,B} <: AbstractBuilderHarmonic{L,B}
     dn::SVector{L,Int}
     collector::IJV{B}
 end
 
-struct IJVBuilder{T,E,L,B} <: AbstractHamiltonianBuilder{T,E,L,B}
-    lat::Lattice{T,E,L}
-    orbstruct::OrbitalStructure{B}
-    harmonics::Vector{IJVHarmonic{L,B}}
-    kdtrees::Vector{KDTree{SVector{E,T},Euclidean,T}}
-end
-
-mutable struct CSCHarmonic{L,B}
+mutable struct CSCHarmonic{L,B} <: AbstractBuilderHarmonic{L,B}
     dn::SVector{L,Int}
     collector::CSC{B}
 end
 
+struct IJVBuilder{T,E,L,B} <: AbstractHamiltonianBuilder{T,E,L,B}
+    lat::Lattice{T,E,L}
+    blockstruct::BlockStructure{B}
+    harmonics::Vector{IJVHarmonic{L,B}}
+    kdtrees::Vector{KDTree{SVector{E,T},Euclidean,T}}
+end
+
 struct CSCBuilder{T,E,L,B} <: AbstractHamiltonianBuilder{T,E,L,B}
     lat::Lattice{T,E,L}
-    orbstruct::OrbitalStructure{B}
+    blockstruct::BlockStructure{B}
     harmonics::Vector{CSCHarmonic{L,B}}
 end
 
 ## Constructors ##
 
-empty_harmonic(::IJVBuilder{<:Any,<:Any,L,B}, dn) where {L,B} =
-    IJVHarmonic{L,B}(dn, IJV{B}())
-
-function IJVBuilder(lat::Lattice{T,E,L}, orbstruct::OrbitalStructure{B}) where {E,L,T,B}
+function IJVBuilder(lat::Lattice{T,E,L}, blockstruct::BlockStructure{B}) where {E,L,T,B}
     harmonics = IJVHarmonic{L,B}[]
     kdtrees = Vector{KDTree{SVector{E,T},Euclidean,T}}(undef, nsublats(lat))
-    return IJVBuilder(lat, orbstruct, harmonics, kdtrees)
+    return IJVBuilder(lat, blockstruct, harmonics, kdtrees)
+end
+
+function CSCBuilder(lat::Lattice{<:Any,<:Any,L}, blockstruct::BlockStructure{B}) where {L,B}
+    harmonics = CSCHarmonic{L,B}[]
+    return CSCBuilder(lat, blockstruct, harmonics)
 end
 
 empty_harmonic(b::CSCBuilder{<:Any,<:Any,L,B}, dn) where {L,B} =
     CSCHarmonic{L,B}(dn, CSC{B}(nsites(b.lat)))
 
-CSCBuilder(lat, orbstruct) =
-    CSCBuilder(lat, orbstruct, CSCHarmonic{latdim(lat),blocktype(orbstruct)}[])
+empty_harmonic(::IJVBuilder{<:Any,<:Any,L,B}, dn) where {L,B} =
+    IJVHarmonic{L,B}(dn, IJV{B}())
 
 ## API ##
 
-lattice(b::AbstractHamiltonianBuilder) = b.lat
+collector(har::AbstractBuilderHarmonic) = har.collector  # for IJVHarmonic and CSCHarmonic
 
-orbitalstructure(b::AbstractHamiltonianBuilder) = b.orbstruct
+dcell(har::AbstractBuilderHarmonic) = har.dn
 
-function Base.getindex(b::AbstractHamiltonianBuilder{<:Any,<:Any,L}, dn::SVector{L,Int}) where {L}
-    hars = b.harmonics
-    for har in hars
-        har.dn == dn && return collector(har)
-    end
-    har = empty_harmonic(b, dn)
-    push!(hars, har)
-    return collector(har)
-end
-
-function harmonics(builder::AbstractHamiltonianBuilder{<:Any,<:Any,L,B}) where {L,B}
-    HT = Harmonic{L,SparseMatrixCSC{B,Int}}
-    n = nsites(lattice(builder))
-    hars = HT[HT(har.dn, sparse(collector(har), n)) for har in builder.harmonics if !isempty(har)]
-    return hars
-end
-
-collector(har) = har.collector  # for IJVHarmonic and CSCHarmonic
+kdtrees(b::IJVBuilder) = b.kdtrees
 
 Base.filter!(f::Function, b::IJVBuilder) =
     foreach(bh -> filter!(f, bh.collector), b.harmonics)
@@ -458,7 +445,34 @@ finalizecolumn!(b::CSCBuilder, x...) =
 Base.isempty(h::IJVHarmonic) = isempty(collector(h))
 Base.isempty(s::CSCHarmonic) = isempty(collector(s))
 
-kdtrees(b::IJVBuilder) = b.kdtrees
+lattice(b::AbstractHamiltonianBuilder) = b.lat
+
+blockstructure(b::AbstractHamiltonianBuilder) = b.blockstruct
+
+harmonics(b::AbstractHamiltonianBuilder) = b.harmonics
+
+function Base.getindex(b::AbstractHamiltonianBuilder{<:Any,<:Any,L}, dn::SVector{L,Int}) where {L}
+    hars = b.harmonics
+    for har in hars
+        dcell(har) == dn && return collector(har)
+    end
+    har = empty_harmonic(b, dn)
+    push!(hars, har)
+    return collector(har)
+end
+
+function SparseArrays.sparse(builder::AbstractHamiltonianBuilder{T,<:Any,L,B}) where {T,L,B}
+    HT = Harmonic{L,HybridSparseMatrixCSC{T,B}}
+    b = blockstructure(builder)
+    n = nsites(lattice(builder))
+    hars = HT[sparse(b, har, n, n) for har in harmonics(builder) if !isempty(har)]
+    return hars
+end
+
+function SparseArrays.sparse(b::BlockStructure{B}, har::AbstractBuilderHarmonic{L,B}, m::Integer, n::Integer) where {L,B}
+    s = sparse(collector(har), m, n)
+    return Harmonic(dcell(har), HybridSparseMatrixCSC(b, s))
+end
 
 #endregion
 
@@ -466,9 +480,9 @@ kdtrees(b::IJVBuilder) = b.kdtrees
 # Harmonic  -  see hamiltonian.jl for methods
 #region
 
-struct Harmonic{L,M<:AbstractArray}
+struct Harmonic{T,L,B}
     dn::SVector{L,Int}
-    h::M
+    h::HybridSparseMatrixCSC{T,B}
 end
 
 #region ## API ##
@@ -481,6 +495,8 @@ Base.size(h::Harmonic, i...) = size(matrix(h), i...)
 
 Base.isless(h::Harmonic, h´::Harmonic) = sum(abs2, dcell(h)) < sum(abs2, dcell(h´))
 
+Base.zero(h::Harmonic{<:Any,<:Any,B}) where B = Harmonic(zero(dcell(h)), zero(matrix(h)))
+
 #endregion
 #endregion
 
@@ -492,17 +508,19 @@ abstract type AbstractHamiltonian{T,E,L,B} end
 
 struct Hamiltonian{T,E,L,B} <: AbstractHamiltonian{T,E,L,B}
     lattice::Lattice{T,E,L}
-    orbstruct::OrbitalStructure{B}
-    harmonics::Vector{Harmonic{L,SparseMatrixCSC{B,Int}}}
+    blockstruct::BlockStructure{B}
+    harmonics::Vector{Harmonic{T,L,B}}}
+    bloch::HybridSparseMatrixCSC{T,B}
     # Enforce sorted-dns-starting-from-zero invariant onto harmonics
-    function Hamiltonian{T,E,L,B}(lattice, orbstruct, harmonics) where {T,E,L,B}
+    function Hamiltonian{T,E,L,B}(lattice, blockstruct, harmonics) where {T,E,L,B}
         n = nsites(lattice)
         all(har -> size(matrix(har)) == (n, n), harmonics) ||
             throw(DimensionMismatch("Harmonic $(size.(matrix.(harmonics), 1)) sizes don't match number of sites $n"))
         sort!(harmonics)
         length(harmonics) > 0 && iszero(dcell(first(harmonics))) || pushfirst!(harmonics,
             Harmonic(zero(SVector{L,Int}), spzeros(B, n, n)))
-        return new(lattice, orbstruct, harmonics)
+        bloch = HybridSparseMatrixCSC(blockstruct, spzeros(B, n, n))
+        return new(lattice, blockstruct, harmonics)
     end
 end
 
@@ -510,7 +528,7 @@ end
 
 ## AbstractHamiltonian
 
-norbitals(h::AbstractHamiltonian) = norbitals(orbitalstructure(h))
+norbitals(h::AbstractHamiltonian) = norbitals(blockstructure(h))
 
 ## Hamiltonian
 
@@ -519,24 +537,24 @@ Hamiltonian(l::Lattice{T,E,L}, o::OrbitalStructure{B}, h::Vector{Harmonic{L,Spar
 
 hamiltonian(h::Hamiltonian) = h
 
-orbitalstructure(h::Hamiltonian) = h.orbstruct
+blockstructure(h::Hamiltonian) = h.blockstruct
 
 lattice(h::Hamiltonian) = h.lattice
 
 harmonics(h::Hamiltonian) = h.harmonics
 
-orbtype(h::Hamiltonian) = orbtype(orbitalstructure(h))
+orbtype(h::Hamiltonian) = orbtype(blockstructure(h))
 
-blocktype(h::Hamiltonian) = blocktype(orbitalstructure(h))
+blocktype(h::Hamiltonian) = blocktype(blockstructure(h))
 
 Base.size(h::Hamiltonian, i...) = size(first(harmonics(h)), i...)
 
-copy_harmonics(h::Hamiltonian) = Hamiltonian(
-    lattice(h), orbitalstructure(h), deepcopy(harmonics(h))
+copy_only_harmonics(h::Hamiltonian) = Hamiltonian(
+    lattice(h), blockstructure(h), deepcopy(harmonics(h))
 )
 
 Base.copy(h::Hamiltonian) = Hamiltonian(
-    copy(lattice(h)), orbitalstructure(h), deepcopy(harmonics(h))
+    copy(lattice(h)), blockstructure(h), deepcopy(harmonics(h))
 )
 
 function LinearAlgebra.ishermitian(h::Hamiltonian)
@@ -606,14 +624,14 @@ parametric_function(m::Union{Modifier,AppliedModifier}) = m.f
 pointers(m::AppliedModifier) = m.ptrs
 
 (m::AppliedOnsiteModifier{1,B})(o, r, orbs; kw...) where {B} =
-    sanitize_block(B, m.f.f(o; kw...), (orbs, orbs))
+    mask_block(B, m.f.f(o; kw...), (orbs, orbs))
 (m::AppliedOnsiteModifier{2,B})(o, r, orbs; kw...) where {B} =
-    sanitize_block(B, m.f.f(o, r; kw...), (orbs, orbs))
+    mask_block(B, m.f.f(o, r; kw...), (orbs, orbs))
 
-(m::AppliedHoppingModifier{1,B})(t, r, dr, orbs; kw...) where {B} =
-    sanitize_block(B, m.f.f(t; kw...), orbs)
-(m::AppliedHoppingModifier{3,B})(t, r, dr, orbs; kw...) where {B} =
-    sanitize_block(B, m.f.f(t, r, dr; kw...), orbs)
+(m::AppliedHoppingModifier{1,B})(t, r, dr, orborb; kw...) where {B} =
+    mask_block(B, m.f.f(t; kw...), orborb)
+(m::AppliedHoppingModifier{3,B})(t, r, dr, orborb; kw...) where {B} =
+    mask_block(B, m.f.f(t, r, dr; kw...), orborb)
 
 Base.similar(m::A) where {A <: AppliedModifier} = A(m.blocktype, m.f, similar(m.ptrs, 0))
 
@@ -650,7 +668,7 @@ modifiers(h::ParametricHamiltonian) = h.modifiers
 
 harmonics(h::ParametricHamiltonian) = harmonics(parent(h))
 
-orbitalstructure(h::ParametricHamiltonian) = orbitalstructure(parent(h))
+blockstructure(h::ParametricHamiltonian) = blockstructure(parent(h))
 
 orbtype(h::ParametricHamiltonian) = orbtype(parent(h))
 
@@ -667,34 +685,34 @@ Base.copy(p::ParametricHamiltonian) = ParametricHamiltonian(
 #endregion
 #endregion
 
-############################################################################################
-# FlatHamiltonian  -  see hamiltonian.jl for methods
-#region
+# ############################################################################################
+# # FlatHamiltonian  -  see hamiltonian.jl for methods
+# #region
 
-struct FlatHamiltonian{T,E,L,B<:Number,H<:AbstractHamiltonian{T,E,L,<:SMatrix}} <: AbstractHamiltonian{T,E,L,B}
-    h::H
-    flatorbstruct::OrbitalStructure{B}
-end
+# struct FlatHamiltonian{T,E,L,B<:Number,H<:AbstractHamiltonian{T,E,L,<:SMatrix}} <: AbstractHamiltonian{T,E,L,B}
+#     h::H
+#     flatorbstruct::OrbitalStructure{B}
+# end
 
-#region ## API ##
+# #region ## API ##
 
-orbitalstructure(h::FlatHamiltonian) = h.flatorbstruct
+# orbitalstructure(h::FlatHamiltonian) = h.flatorbstruct
 
-lattice(h::FlatHamiltonian) = lattice(parent(h))
+# lattice(h::FlatHamiltonian) = lattice(parent(h))
 
-harmonics(h::FlatHamiltonian) = harmonics(parent(h))
+# harmonics(h::FlatHamiltonian) = harmonics(parent(h))
 
-orbtype(h::FlatHamiltonian) = orbtype(orbitalstructure(h))
+# orbtype(h::FlatHamiltonian) = orbtype(orbitalstructure(h))
 
-blocktype(h::FlatHamiltonian) = blocktype(orbitalstructure(h))
+# blocktype(h::FlatHamiltonian) = blocktype(orbitalstructure(h))
 
-Base.size(h::FlatHamiltonian) = nsites(orbitalstructure(h)), nsites(orbitalstructure(h))
-Base.size(h::FlatHamiltonian, i) = i <= 0 ? throw(BoundsError()) : ifelse(1 <= i <= 2, nsites(orbitalstructure(h)), 1)
+# Base.size(h::FlatHamiltonian) = nsites(orbitalstructure(h)), nsites(orbitalstructure(h))
+# Base.size(h::FlatHamiltonian, i) = i <= 0 ? throw(BoundsError()) : ifelse(1 <= i <= 2, nsites(orbitalstructure(h)), 1)
 
-Base.parent(h::FlatHamiltonian) = h.h
+# Base.parent(h::FlatHamiltonian) = h.h
 
-#endregion
-#endregion
+# #endregion
+# #endregion
 
 ############################################################################################
 # Bloch  -  see hamiltonian.jl for methods

@@ -75,17 +75,17 @@ end
 
 #endregion
 
-############################################################################################
-# Block sanitizers
-#region
+# ############################################################################################
+# # Block sanitizers
+# #region
 
-sanitize_block(S::Type{<:Number}, s, _) = convert(S, first(s))
-sanitize_block(S::Type{<:SMatrix}, s::SMatrix, size) = sanitize_SMatrix(S, s, size)
-sanitize_block(::Type{S}, s::Number, size) where {S<:SMatrix} = sanitize_SMatrix(S, S(s*I), size)
-sanitize_block(::Type{S}, s::UniformScaling, size) where {S<:SMatrix} =
-    sanitize_SMatrix(S, S(s), size)
+# sanitize_block(S::Type{<:Number}, s, _) = convert(S, first(s))
+# sanitize_block(S::Type{<:SMatrix}, s::SMatrix, size) = sanitize_SMatrix(S, s, size)
+# sanitize_block(::Type{S}, s::Number, size) where {S<:SMatrix} = sanitize_SMatrix(S, S(s*I), size)
+# sanitize_block(::Type{S}, s::UniformScaling, size) where {S<:SMatrix} =
+#     sanitize_SMatrix(S, S(s), size)
 
-#endregion
+# #endregion
 
 ############################################################################################
 # Supercell sanitizers

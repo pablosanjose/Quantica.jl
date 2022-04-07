@@ -185,9 +185,9 @@ Base.getindex(b::HybridSparseMatrixCSC{<:Any,<:SMatrixView}, i::Integer, j::Inte
 Base.getindex(b::HybridSparseMatrixCSC, i::Integer, j::Integer) = unflat(b)[i, j]
 
 # only allowed for elements that are already stored
-function Base.setindex!(b::HybridSparseMatrixCSC{<:Any,S}, val::AbstractVecOrMat, i::Integer, j::Integer) where {S<:SMatrixView}
+function Base.setindex!(b::HybridSparseMatrixCSC{<:Any,B}, val::AbstractVecOrMat, i::Integer, j::Integer) where {B<:SMatrixView}
     @boundscheck(checkstored(unflat(b), i, j))
-    val´ = mask_block(val, S, blocksize(blockstructure(b), i, j))
+    val´ = mask_block(B, val, blocksize(blockstructure(b), i, j))
     unflat(b)[i, j] = val´
     needs_flat_sync!(b)
     return val´
@@ -200,19 +200,27 @@ function Base.setindex!(b::HybridSparseMatrixCSC, val::AbstractVecOrMat, i::Inte
     return val
 end
 
-function mask_block(val::SMatrix{R,C}, ::Type{S}, (nrows, ncols) = size(val)) where {R,C,N,T,S<:SMatrixView{N,N,T}}
+mask_block(::Type{B}, val, (nrows, ncols) = size(val)) where {N,T,B<:SMatrixView{N,N,T}} =
+    SMatrixView(mask_block(SMatrix{N,N,T,N*N}, val, (nrows, ncols))
+
+mask_block(::Type{B}, val::Number, (nrows, ncols) = (1, 1)) where {B<:Complex{T}} =
+    convert(B, val)
+
+function mask_block(::Type{B}, val::SMatrix{R,C}, (nrows, ncols) = size(val)) where {R,C,N,T,B<:SMatrix{N,N,T}}
     (R, C) == (nrows, ncols) || blocksize_error((R, C), (nrows, ncols))
-    return SMatrixView(SMatrix{N,N,T}(SMatrix{N,R}(I) * val * SMatrix{C,N}(I)))
+    return SMatrix{N,R}(I) * val * SMatrix{C,N}(I)
 end
 
-function mask_block(val, ::Type{S}, (nrows, ncols) = size(val)) where {N,T,S<:SMatrixView{N,N,T}}
+function mask_block(::Type{B}, val, (nrows, ncols) = size(val)) where {N,T,B<:SMatrix{N,N,T}}
     size(val) == (nrows, ncols) || blocksize_error(size(val), (nrows, ncols))
     t = ntuple(Val(N*N)) do i
         n, m = mod1(i, N), fld1(i, N)
         @inbounds n > nrows || m > ncols ? zero(T) : T(a[n,m])
     end
-    return SMatrixView(SMatrix{N,N,T}(t))
+    return SMatrix{N,N,T}(t)
 end
+
+mask_block(t, val, s = size(val)) = blocksize_error(size(val), s)
 
 checkstored(mat, i, j) = i in view(rowvals(mat), nzrange(mat, j)) ||
     throw(ArgumentError("Adding new structural elements is not allowed"))

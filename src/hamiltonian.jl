@@ -5,14 +5,14 @@
 hamiltonian(m::TightbindingModel = TightbindingModel(); kw...) = lat -> hamiltonian(lat, m; kw...)
 
 # Base.@constprop :aggressive needed for type-stable non-Val orbitals
-Base.@constprop :aggressive function hamiltonian(lat::Lattice, m = TightbindingModel(); orbitals = Val(1), type = numbertype(lat))
-    orbstruct = OrbitalStructure(lat, orbitals, type)
-    builder = IJVBuilder(lat, orbstruct)
-    apmod = apply(m, (lat, orbstruct))
+Base.@constprop :aggressive function hamiltonian(lat::Lattice{T}, m = TightbindingModel(); orbitals = Val(1)) where {T}
+    blockstruct = BlockStructure(T, orbitals, sublatlengths(lat))
+    builder = IJVBuilder(lat, blockstruct)
+    apmod = apply(m, (lat, blockstruct))
     # using foreach here foils precompilation of applyterm! for some reason
     applyterm!.(Ref(builder), terms(apmod))
     hars = harmonics(builder)
-    return Hamiltonian(lat, orbstruct, hars)
+    return Hamiltonian(lat, blockstruct, hars)
 end
 
 function applyterm!(builder, term::AppliedOnsiteTerm)
@@ -20,10 +20,10 @@ function applyterm!(builder, term::AppliedOnsiteTerm)
     dn0 = zerocell(lat)
     ijv = builder[dn0]
     sel = selector(term)
-    os = orbitalstructure(builder)
-    norbs = norbitals(os)
+    bs = blockstructure(builder)
+    bsizes = blocksizes(bs)
     foreach_site(sel, dn0) do s, i, r
-        n = norbs[s]
+        n = bsizes[s]
         v = term(r, n)
         push!(ijv, (i, i, v))
     end
@@ -33,14 +33,14 @@ end
 function applyterm!(builder, term::AppliedHoppingTerm, (irng, jrng) = (:, :))
     trees = kdtrees(builder)
     sel = selector(term)
-    os = orbitalstructure(builder)
-    norbs = norbitals(os)
+    bs = blockstructure(builder)
+    bsizes = blocksizes(bs)
     foreach_cell(sel) do dn, cell_iter
         ijv = builder[dn]
         foreach_hop!(sel, cell_iter, trees, dn) do (si, sj), (i, j), (r, dr)
             isinblock(i, irng) && isinblock(j, jrng) || return
-            ni = norbs[si]
-            nj = norbs[sj]
+            ni = bsizes[si]
+            nj = bsizes[sj]
             v = term(r, dr, (ni, nj))
             push!(ijv, (i, j, v))
         end
@@ -61,14 +61,11 @@ parametric(modifiers::Modifier...) = h -> parametric(h, modifiers...)
 
 function parametric(hparent::Hamiltonian)
     modifiers = ()
-    allptrs = [Int[] for _ in harmonics(hparent)]
     allparams = Symbol[]
-    h = copy_harmonics(hparent)
+    h = copy_only_harmonics(hparent)
     return ParametricHamiltonian(hparent, h, modifiers, allparams)
 end
 
-parametric(f::FlatHamiltonian, ms::AbstractModifier...) =
-    flatten(parametric(parent(f), ms...))
 parametric(h::Hamiltonian, m::AbstractModifier, ms::AbstractModifier...) =
     _parametric!(parametric(h), m, ms...)
 parametric(p::ParametricHamiltonian, ms::AbstractModifier...) =
@@ -98,8 +95,8 @@ merge_parameters!(p) = unique!(sort!(p))
 # ParametricHamiltonian call API
 #region
 
-(ph::ParametricHamiltonian)(; kw...) = copy_harmonics(call!(ph; kw...))
-(f::FlatHamiltonian)(; kw...) = flatten(parent(f)(; kw...))
+(ph::ParametricHamiltonian)(; kw...) = copy_only_harmonics(call!(ph; kw...))
+# (f::FlatHamiltonian)(; kw...) = flatten(parent(f)(; kw...))
 
 function call!(ph::ParametricHamiltonian; kw...)
     h = hamiltonian(ph)
@@ -144,103 +141,103 @@ end
 
 #endregion
 
-############################################################################################
-# flatten and unflatten
-#region
+# ############################################################################################
+# # flatten and unflatten
+# #region
 
-flatten(h::FlatHamiltonian) = h
-flatten(h::AbstractHamiltonian{<:Any,<:Any,<:Any,<:Number}) = h
-flatten(h::AbstractHamiltonian{<:Any,<:Any,<:Any,<:SMatrix}) =
-    FlatHamiltonian(h, flatten(orbitalstructure(h)))
+# flatten(h::FlatHamiltonian) = h
+# flatten(h::AbstractHamiltonian{<:Any,<:Any,<:Any,<:Number}) = h
+# flatten(h::AbstractHamiltonian{<:Any,<:Any,<:Any,<:SMatrix}) =
+#     FlatHamiltonian(h, flatten(orbitalstructure(h)))
 
-flatten(os::OrbitalStructure{<:Number}) = os
+# flatten(os::OrbitalStructure{<:Number}) = os
 
-function flatten(os::OrbitalStructure{<:SMatrix})
-    blocktype´ = eltype(blocktype(os))
-    norbitals´ = [1 for _ in norbitals(os)]
-    flatoffsets´ = flatoffsets(offsets(os), norbitals(os))
-    return OrbitalStructure(blocktype´, norbitals´, flatoffsets´)
-end
+# function flatten(os::OrbitalStructure{<:SMatrix})
+#     blocktype´ = eltype(blocktype(os))
+#     norbitals´ = [1 for _ in norbitals(os)]
+#     flatoffsets´ = flatoffsets(offsets(os), norbitals(os))
+#     return OrbitalStructure(blocktype´, norbitals´, flatoffsets´)
+# end
 
-# sublat offsets after flattening (without padding zeros)
-function flatoffsets(offsets0, norbs)
-    nsites = diff(offsets0)
-    nsites´ = norbs .* nsites
-    offsets´ = cumsum!(nsites´, nsites´)
-    prepend!(offsets´, 0)
-    return offsets´
-end
+# # sublat offsets after flattening (without padding zeros)
+# function flatoffsets(offsets0, norbs)
+#     nsites = diff(offsets0)
+#     nsites´ = norbs .* nsites
+#     offsets´ = cumsum!(nsites´, nsites´)
+#     prepend!(offsets´, 0)
+#     return offsets´
+# end
 
-function flatten(lat::Lattice, os)
-    norbs = norbitals(os)
-    sites´ = similar(sites(lat), 0)
-    names´ = sublatnames(lat)
-    offsets´ = [0]
-    for s in sublats(lat)
-        norb = norbs[s]
-        for r in sites(lat, s), _ in 1:norb
-            push!(sites´, r)
-        end
-        push!(offsets´, length(sites´))
-    end
-    lat = Lattice(bravais(lat), Unitcell(sites´, names´, offsets´))
-    return lat
-end
+# function flatten(lat::Lattice, os)
+#     norbs = norbitals(os)
+#     sites´ = similar(sites(lat), 0)
+#     names´ = sublatnames(lat)
+#     offsets´ = [0]
+#     for s in sublats(lat)
+#         norb = norbs[s]
+#         for r in sites(lat, s), _ in 1:norb
+#             push!(sites´, r)
+#         end
+#         push!(offsets´, length(sites´))
+#     end
+#     lat = Lattice(bravais(lat), Unitcell(sites´, names´, offsets´))
+#     return lat
+# end
 
-function hamiltonian(f::FlatHamiltonian{<:Any,<:Any,L,B}) where {L,B}
-    os = orbitalstructure(parent(f))
-    flatos = orbitalstructure(f)
-    lat = flatten(lattice(f), os)
-    HT = Harmonic{L,SparseMatrixCSC{B,Int}}
-    hars = HT[HT(dcell(har), flatten(matrix(har), os, flatos)) for har in harmonics(f)]  # see tools.jl
-    return Hamiltonian(lat, flatos, hars)
-end
+# function hamiltonian(f::FlatHamiltonian{<:Any,<:Any,L,B}) where {L,B}
+#     os = orbitalstructure(parent(f))
+#     flatos = orbitalstructure(f)
+#     lat = flatten(lattice(f), os)
+#     HT = Harmonic{L,SparseMatrixCSC{B,Int}}
+#     hars = HT[HT(dcell(har), flatten(matrix(har), os, flatos)) for har in harmonics(f)]  # see tools.jl
+#     return Hamiltonian(lat, flatos, hars)
+# end
 
-unflatten(h::FlatHamiltonian) = parent(h)
-unflatten(h::AbstractHamiltonian) = h
+# unflatten(h::FlatHamiltonian) = parent(h)
+# unflatten(h::AbstractHamiltonian) = h
 
- #endregion
+#  #endregion
 
-############################################################################################
-# bloch
-#region
+# ############################################################################################
+# # bloch
+# #region
 
-function bloch(h::Union{Hamiltonian,ParametricHamiltonian}, ::Type{M} = SparseMatrixCSC) where {M<:AbstractSparseMatrixCSC}
-    output = convert(M, merge_sparse(harmonics(h)))
-    return Bloch(h, output)
-end
+# function bloch(h::Union{Hamiltonian,ParametricHamiltonian}, ::Type{M} = SparseMatrixCSC) where {M<:AbstractSparseMatrixCSC}
+#     output = convert(M, merge_sparse(harmonics(h)))
+#     return Bloch(h, output)
+# end
 
-function bloch(h::Union{Hamiltonian,ParametricHamiltonian}, ::Type{M}) where {M<:AbstractMatrix}
-    output = convert(M, matrix(first(harmonics(h))))
-    return Bloch(h, output)
-end
+# function bloch(h::Union{Hamiltonian,ParametricHamiltonian}, ::Type{M}) where {M<:AbstractMatrix}
+#     output = convert(M, matrix(first(harmonics(h))))
+#     return Bloch(h, output)
+# end
 
-function bloch(f::FlatHamiltonian, ::Type{M} = SparseMatrixCSC) where {M<:AbstractSparseMatrixCSC}
-    os = orbitalstructure(parent(f))
-    flatos = orbitalstructure(f)
-    output = convert(M, merge_flatten_sparse(harmonics(f), os, flatos))
-    return Bloch(f, output)
-end
+# function bloch(f::FlatHamiltonian, ::Type{M} = SparseMatrixCSC) where {M<:AbstractSparseMatrixCSC}
+#     os = orbitalstructure(parent(f))
+#     flatos = orbitalstructure(f)
+#     output = convert(M, merge_flatten_sparse(harmonics(f), os, flatos))
+#     return Bloch(f, output)
+# end
 
-function bloch(f::FlatHamiltonian, ::Type{M}) where {M<:AbstractMatrix}
-    flatos = orbitalstructure(f)
-    B = blocktype(flatos)
-    n = nsites(flatos)
-    output = convert(M, zeros(B, n, n))
-    return Bloch(f, output)
-end
+# function bloch(f::FlatHamiltonian, ::Type{M}) where {M<:AbstractMatrix}
+#     flatos = orbitalstructure(f)
+#     B = blocktype(flatos)
+#     n = nsites(flatos)
+#     output = convert(M, zeros(B, n, n))
+#     return Bloch(f, output)
+# end
 
-bloch(φs::Number...; kw...) = h -> bloch(h, φs; kw...)
-bloch(φs::Tuple; kw...) = h -> bloch(h, φs; kw...)
-bloch(h::AbstractHamiltonian, φs::Tuple; kw...) = bloch(h)(φs...; kw...)
+# bloch(φs::Number...; kw...) = h -> bloch(h, φs; kw...)
+# bloch(φs::Tuple; kw...) = h -> bloch(h, φs; kw...)
+# bloch(h::AbstractHamiltonian, φs::Tuple; kw...) = bloch(h)(φs...; kw...)
 
-# see tools.jl
-merge_sparse(hars::Vector{<:Harmonic}) = merge_sparse(matrix(har) for har in hars)
+# # see tools.jl
+# merge_sparse(hars::Vector{<:Harmonic}) = merge_sparse(matrix(har) for har in hars)
 
-merge_flatten_sparse(hars::Vector{<:Harmonic}, os::OrbitalStructure{<:SMatrix}, flatos::OrbitalStructure{<:Number}) =
-    merge_flatten_sparse((matrix(har) for har in hars), os, flatos)
+# merge_flatten_sparse(hars::Vector{<:Harmonic}, os::OrbitalStructure{<:SMatrix}, flatos::OrbitalStructure{<:Number}) =
+#     merge_flatten_sparse((matrix(har) for har in hars), os, flatos)
 
-#endregion
+# #endregion
 
 ############################################################################################
 # AbstractBloch call API
