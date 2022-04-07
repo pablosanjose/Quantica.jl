@@ -382,47 +382,13 @@ end
 function nhoppings(h::AbstractHamiltonian)
     count = 0
     for har in harmonics(h)
-        count += iszero(dcell(har)) ? (_nnz(matrix(har)) - _nnzdiag(matrix(har))) : _nnz(matrix(har))
+        count += iszero(dcell(har)) ? (nnz(blockmatrix(har)) - nnzdiag(blockmatrix(har))) : nnz(blockmatrix(har))
     end
     return count
 end
 
-function nhoppings(h::AbstractHamiltonian, col)
-    n = 0
-    for har in harmonics(h)
-        mat = matrix(har)
-        dn = dcell(har)
-        rows = view(rowvals(mat), nzrange(mat, col))
-        n += length(rows)
-        if iszero(dn) && col in rows
-            n -= 1
-        end
-    end
-    return n
-end
-
-function nonsites(h::AbstractHamiltonian)
-    count = 0
-    for har in harmonics(h)
-        iszero(dcell(har)) && (count += _nnzdiag(matrix(har)))
-    end
-    return count
-end
+nonsites(h::AbstractHamiltonian) = nnzdiag(h[])
 
 coordination(h::AbstractHamiltonian) = round(nhoppings(h) / nsites(lattice(h)), digits = 5)
-
-_nnz(s) = count(!iszero, nonzeros(s)) # Exclude stored zeros
-
-function _nnzdiag(s)
-    count = 0
-    rowptrs = rowvals(s)
-    nz = nonzeros(s)
-    for col in 1:size(s,2)
-        for ptr in nzrange(s, col)
-            rowptrs[ptr] == col && (count += !iszero(nz[ptr]); break)
-        end
-    end
-    return count
-end
 
 #endregion
