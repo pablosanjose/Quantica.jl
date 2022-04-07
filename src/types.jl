@@ -509,7 +509,7 @@ abstract type AbstractHamiltonian{T,E,L,B} end
 struct Hamiltonian{T,E,L,B} <: AbstractHamiltonian{T,E,L,B}
     lattice::Lattice{T,E,L}
     blockstruct::BlockStructure{B}
-    harmonics::Vector{Harmonic{T,L,B}}}
+    harmonics::Vector{Harmonic{T,L,B}}
     bloch::HybridSparseMatrixCSC{T,B}
     # Enforce sorted-dns-starting-from-zero invariant onto harmonics
     function Hamiltonian{T,E,L,B}(lattice, blockstruct, harmonics) where {T,E,L,B}
@@ -520,6 +520,7 @@ struct Hamiltonian{T,E,L,B} <: AbstractHamiltonian{T,E,L,B}
         length(harmonics) > 0 && iszero(dcell(first(harmonics))) || pushfirst!(harmonics,
             Harmonic(zero(SVector{L,Int}), spzeros(B, n, n)))
         bloch = HybridSparseMatrixCSC(blockstruct, spzeros(B, n, n))
+        needs_initialization!(bloch)
         return new(lattice, blockstruct, harmonics)
     end
 end
@@ -532,8 +533,8 @@ norbitals(h::AbstractHamiltonian) = norbitals(blockstructure(h))
 
 ## Hamiltonian
 
-Hamiltonian(l::Lattice{T,E,L}, o::OrbitalStructure{B}, h::Vector{Harmonic{L,SparseMatrixCSC{B,Int}}}) where {T,E,L,B} =
-    Hamiltonian{T,E,L,B}(l, o, h)
+Hamiltonian(l::Lattice{T,E,L}, b::BlockStructure{B}, h::Vector{Harmonic{L,B}}) where {T,E,L,B} =
+    Hamiltonian{T,E,L,B}(l, b, h)
 
 hamiltonian(h::Hamiltonian) = h
 

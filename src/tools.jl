@@ -34,28 +34,28 @@ end
 # all merged_* functions assume matching structure of sparse matrices
 #region
 
-# merge several sparse matrices onto the first using only structural zeros
-function merge_sparse(mats, ::Type{B} = eltype(first(mats))) where {B}
-    mat0 = first(mats)
-    nrows, ncols = size(mat0)
-    nrows == ncols || throw(ArgumentError("Internal error: matrix not square"))
-    nnzguess = sum(mat -> nnz(mat), mats)
-    collector = CSC{B}(ncols, nnzguess)
-    for col in 1:ncols
-        for (n, mat) in enumerate(mats)
-            vals = nonzeros(mat)
-            rows = rowvals(mat)
-            for p in nzrange(mat, col)
-                val = n == 1 ? vals[p] : zero(B)
-                row = rows[p]
-                pushtocolumn!(collector, row, val, false) # skips repeated rows
-            end
-        end
-        finalizecolumn!(collector)
-    end
-    matrix = sparse(collector, ncols)
-    return matrix
-end
+# # merge several sparse matrices onto the first using only structural zeros
+# function merge_sparse(mats, ::Type{B} = eltype(first(mats))) where {B}
+#     mat0 = first(mats)
+#     nrows, ncols = size(mat0)
+#     nrows == ncols || throw(ArgumentError("Internal error: matrix not square"))
+#     nnzguess = sum(mat -> nnz(mat), mats)
+#     collector = CSC{B}(ncols, nnzguess)
+#     for col in 1:ncols
+#         for (n, mat) in enumerate(mats)
+#             vals = nonzeros(mat)
+#             rows = rowvals(mat)
+#             for p in nzrange(mat, col)
+#                 val = n == 1 ? vals[p] : zero(B)
+#                 row = rows[p]
+#                 pushtocolumn!(collector, row, val, false) # skips repeated rows
+#             end
+#         end
+#         finalizecolumn!(collector)
+#     end
+#     matrix = sparse(collector, ncols)
+#     return matrix
+# end
 
 # flatten and merge several sparse matrices onto first according to OrbitalStructures
 function merge_flatten_sparse(mats,

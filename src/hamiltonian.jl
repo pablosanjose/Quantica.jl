@@ -92,6 +92,45 @@ merge_parameters!(p) = unique!(sort!(p))
 #endregion
 
 ############################################################################################
+# Hamiltonian call API
+#region
+
+(h::Hamiltonian)(phi...) = copy(call!(h, phi...))
+
+call!(h::Hamiltonian, phi) = call!(h, sanitize_SVector(phi))
+call!(h::Hamiltonian, phi...) = call!(h, sanitize_SVector(phi))
+
+function call!(h::Hamiltonian, φs::SVector, axis = missing)
+    checkbloch(h, φs)
+    bloch´ = bloch(h)
+    hars = harmonics(h)
+    needs_initialization!(bloch´) || initialize_bloch!(bloch´, hars)
+    output = unflat(bloch´)
+    fill!(output, zero(eltype(output)))  # This preserves sparsity structure
+    isvelocity = axis !== missing
+    for har in hars
+        iszero(dcell(har)) && isvelocity && continue
+        e⁻ⁱᵠᵈⁿ = cis(-dot(φs, dcell(har)))
+        isvelocity && (e⁻ⁱᵠᵈⁿ *= - im * dcell(har)[axis])
+        merged_mul!(output, unflat(matrix(har)), e⁻ⁱᵠᵈⁿ, 1, 1)  # see tools.jl
+    end
+    return bloch´
+end
+
+is_bloch_initialized(h) = !needs_full_update(bloch(h))
+
+function initialize_bloch!(bloch, hars)
+    bloch´ = merge_sparse(unflat.(matrix.(hars)))
+    copy!(bloch, bloch´)
+    return bloch
+end
+
+@noinline checkbloch(::AbstractHamiltonian{<:Any,<:Any,L}, ::SVector{L´}) where {L,L´} =
+    L == L´ || throw(ArgumentError("Need $L Bloch phases, got $(L´)"))
+
+#endregion
+
+############################################################################################
 # ParametricHamiltonian call API
 #region
 
@@ -100,7 +139,6 @@ merge_parameters!(p) = unique!(sort!(p))
 
 function call!(ph::ParametricHamiltonian; kw...)
     h = hamiltonian(ph)
-    # reset_pointers!(ph)
     reset_to_parent!(ph)
     applymodifiers!(h, modifiers(ph)...; kw...)
     return h
@@ -112,7 +150,7 @@ function reset_to_parent!(ph::ParametricHamiltonian)
     for (har, har´) in zip(harmonics(h), harmonics(hparent))
         nz = nonzeros(matrix(har))
         nz´ = nonzeros(matrix(har´))
-        nz .= nz´
+        copyto!(nz, nz´)
     end
     return ph
 end
@@ -239,49 +277,49 @@ end
 
 # #endregion
 
-############################################################################################
-# AbstractBloch call API
-#region
+# ############################################################################################
+# # AbstractBloch call API
+# #region
 
-(b::AbstractBloch)(φs...; kw...) = copy(call!(b, φs...; kw...))
+# (b::AbstractBloch)(φs...; kw...) = copy(call!(b, φs...; kw...))
 
-call!(b::AbstractBloch{L}, φs::Vararg{Number,L}; kw...) where {L} = call!(b, sanitize_SVector(φs); kw...)
-call!(b::AbstractBloch{L}, φs::NTuple{L,Number}; kw...) where {L} = call!(b, sanitize_SVector(φs); kw...)
-# support for (φs, (; kw...))
-call!(b::AbstractBloch, φskw::Tuple{<:Any,NamedTuple}) = call!(b, first(φskw); last(φskw)...)
-# support for (φs..., (; kw...))
-call!(b::AbstractBloch, φskw::Tuple) = call!(b, Base.front(φskw); last(φskw)...)
-call!(b::AbstractBloch, φs...; kw...) =
-    throw(ArgumentError("Wrong call! argument syntax. Possible mismatch between input Bloch phases $(length(φs)) and lattice dimention $(latdim(b))."))
+# call!(b::AbstractBloch{L}, φs::Vararg{Number,L}; kw...) where {L} = call!(b, sanitize_SVector(φs); kw...)
+# call!(b::AbstractBloch{L}, φs::NTuple{L,Number}; kw...) where {L} = call!(b, sanitize_SVector(φs); kw...)
+# # support for (φs, (; kw...))
+# call!(b::AbstractBloch, φskw::Tuple{<:Any,NamedTuple}) = call!(b, first(φskw); last(φskw)...)
+# # support for (φs..., (; kw...))
+# call!(b::AbstractBloch, φskw::Tuple) = call!(b, Base.front(φskw); last(φskw)...)
+# call!(b::AbstractBloch, φs...; kw...) =
+#     throw(ArgumentError("Wrong call! argument syntax. Possible mismatch between input Bloch phases $(length(φs)) and lattice dimention $(latdim(b))."))
 
-call!(b::Bloch, φs::SVector; kw...) =
-    maybe_flatten_bloch!(matrix(b), hamiltonian(b), φs; kw...)
-call!(b::Velocity, φs::SVector; kw...) =
-    maybe_flatten_bloch!(matrix(b), hamiltonian(b), φs, axis(b); kw...)
+# call!(b::Bloch, φs::SVector; kw...) =
+#     maybe_flatten_bloch!(matrix(b), hamiltonian(b), φs; kw...)
+# call!(b::Velocity, φs::SVector; kw...) =
+#     maybe_flatten_bloch!(matrix(b), hamiltonian(b), φs, axis(b); kw...)
 
-maybe_flatten_bloch!(output, h::FlatHamiltonian, φs, axis...; kw...) =
-    maybe_flatten_bloch!(output, parent(h), φs, axis...; kw...)
-maybe_flatten_bloch!(output, h::ParametricHamiltonian, φs, axis...; kw...) =
-    maybe_flatten_bloch!(output, call!(h; kw...), φs, axis...)
+# maybe_flatten_bloch!(output, h::FlatHamiltonian, φs, axis...; kw...) =
+#     maybe_flatten_bloch!(output, parent(h), φs, axis...; kw...)
+# maybe_flatten_bloch!(output, h::ParametricHamiltonian, φs, axis...; kw...) =
+#     maybe_flatten_bloch!(output, call!(h; kw...), φs, axis...)
 
-# Adds harmonics, assuming sparse output with the same structure of merged harmonics.
-# If axis !== missing, compute velocity[axis]
-function maybe_flatten_bloch!(output, h::Hamiltonian{<:Any,<:Any,L}, φs::SVector{L}, axis = missing) where {L}
-    hars = harmonics(h)
-    os = orbitalstructure(h)
-    flatos = flatten(os)
-    fill!(output, zero(eltype(output)))
-    isvelocity = axis !== missing
-    for har in hars
-        iszero(dcell(har)) && isvelocity && continue
-        e⁻ⁱᵠᵈⁿ = cis(-dot(φs, dcell(har)))
-        isvelocity && (e⁻ⁱᵠᵈⁿ *= - im * dcell(har)[axis])
-        maybe_flatten_mul!(output, (os, flatos), matrix(har), e⁻ⁱᵠᵈⁿ, 1, 1)  # see tools.jl
-    end
-    return output
-end
+# # Adds harmonics, assuming sparse output with the same structure of merged harmonics.
+# # If axis !== missing, compute velocity[axis]
+# function maybe_flatten_bloch!(output, h::Hamiltonian{<:Any,<:Any,L}, φs::SVector{L}, axis = missing) where {L}
+#     hars = harmonics(h)
+#     os = orbitalstructure(h)
+#     flatos = flatten(os)
+#     fill!(output, zero(eltype(output)))
+#     isvelocity = axis !== missing
+#     for har in hars
+#         iszero(dcell(har)) && isvelocity && continue
+#         e⁻ⁱᵠᵈⁿ = cis(-dot(φs, dcell(har)))
+#         isvelocity && (e⁻ⁱᵠᵈⁿ *= - im * dcell(har)[axis])
+#         maybe_flatten_mul!(output, (os, flatos), matrix(har), e⁻ⁱᵠᵈⁿ, 1, 1)  # see tools.jl
+#     end
+#     return output
+# end
 
-#endregion
+# #endregion
 
 ############################################################################################
 # indexing into AbstractHamiltonian
@@ -310,32 +348,32 @@ end
 
 #endregion
 
-############################################################################################
-# push! and deleteat! of a Harmonic into AbstractHamiltonian
-#region
+# ############################################################################################
+# # push! and deleteat! of a Harmonic into AbstractHamiltonian
+# #region
 
-Base.deleteat!(h::AbstractHamiltonian, dn::Tuple) = deleteat!(h, SVector(dn))
+# Base.deleteat!(h::AbstractHamiltonian, dn::Tuple) = deleteat!(h, SVector(dn))
 
-function Base.deleteat!(h::AbstractHamiltonian{<:Any,<:Any,L}, dn::SVector{L,Int}) where {L}
-    iszero(dn) && throw(ArgumentError("Cannot delete base harmonic"))
-    hars = harmonics(h)
-    for (i, har) in enumerate(hars)
-        dn == dcell(har) && return deleteat!(hars, i)
-    end
-    return hars
-end
+# function Base.deleteat!(h::AbstractHamiltonian{<:Any,<:Any,L}, dn::SVector{L,Int}) where {L}
+#     iszero(dn) && throw(ArgumentError("Cannot delete base harmonic"))
+#     hars = harmonics(h)
+#     for (i, har) in enumerate(hars)
+#         dn == dcell(har) && return deleteat!(hars, i)
+#     end
+#     return hars
+# end
 
-Base.push!(h::AbstractHamiltonian, dn::Tuple) = push!(h, SVector(dn))
+# Base.push!(h::AbstractHamiltonian, dn::Tuple) = push!(h, SVector(dn))
 
-function Base.push!(h::AbstractHamiltonian{<:Any,<:Any,L,B}, dn::SVector{L,Int}) where {L,B}
-    if !isassigned(h, dn)
-        har = Harmonic(dn, spzeros(B, size(h)))
-        push!(harmonics(h), har)
-    end
-    return h
-end
+# function Base.push!(h::AbstractHamiltonian{<:Any,<:Any,L,B}, dn::SVector{L,Int}) where {L,B}
+#     if !isassigned(h, dn)
+#         har = Harmonic(dn, spzeros(B, size(h)))
+#         push!(harmonics(h), har)
+#     end
+#     return h
+# end
 
-#endregion
+# #endregion
 
 ############################################################################################
 # coordination

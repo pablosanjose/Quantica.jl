@@ -65,6 +65,8 @@ argval(n::Int) = n
 
 ## API ##
 
+blocktype(::BlockStructure{B}) where {B} = B
+
 blocksizes(b::BlockStructure) = b.blocksizes
 
 subsizes(b::BlockStructure) = b.subsizes
@@ -122,7 +124,7 @@ struct HybridSparseMatrixCSC{T,B<:MatrixElementType{T}} <: SparseArrays.Abstract
     blockstruct::BlockStructure{B}
     unflat::SparseMatrixCSC{B,Int}
     flat::SparseMatrixCSC{Complex{T},Int}
-    needs_sync::Ref{Int}  # 0 = in sync, 1 = flat needs sync, -1 = unflat need sync
+    sync_state::Ref{Int}  # 0 = in sync, 1 = flat needs sync, -1 = unflat needs sync, 2 = none initialized
 end
 
 ## Constructors ##
@@ -142,6 +144,11 @@ function HybridSparseMatrixCSC(b::BlockStructure{B}, flat::SparseMatrixCSC{Compl
     return m
 end
 
+## Show ##
+
+Base.show(io::IO, m::MIME"text/plain", s::HybridSparseMatrixCSC) = 
+    show(io, m, unflat(s))
+
 ## API ##
 
 blockstructure(s::HybridSparseMatrixCSC) = s.blockstruct
@@ -157,21 +164,26 @@ function flat(s::HybridSparseMatrixCSC)
 end
 
 # Sync states
-needs_no_sync!(s::HybridSparseMatrixCSC)     = (s.needs_sync[] = 0)
-needs_no_sync(s::HybridSparseMatrixCSC)      = (s.needs_sync[] == 0)
-needs_flat_sync!(s::HybridSparseMatrixCSC)   = (s.needs_sync[] = 1)
-needs_flat_sync(s::HybridSparseMatrixCSC)    = (s.needs_sync[] == 1)
-needs_unflat_sync!(s::HybridSparseMatrixCSC) = (s.needs_sync[] = -1)
-needs_unflat_sync(s::HybridSparseMatrixCSC)  = (s.needs_sync[] == -1)
+needs_no_sync!(s::HybridSparseMatrixCSC)     = (s.sync_state[] = 0)
+needs_no_sync(s::HybridSparseMatrixCSC)      = (s.sync_state[] == 0)
+needs_flat_sync!(s::HybridSparseMatrixCSC)   = (s.sync_state[] = 1)
+needs_flat_sync(s::HybridSparseMatrixCSC)    = (s.sync_state[] == 1)
+needs_unflat_sync!(s::HybridSparseMatrixCSC) = (s.sync_state[] = -1)
+needs_unflat_sync(s::HybridSparseMatrixCSC)  = (s.sync_state[] == -1)
+needs_initialization!(s::HybridSparseMatrixCSC) = (s.sync_state[] = 2)
+needs_initialization(s::HybridSparseMatrixCSC) = (s.sync_state[] == 2)
 
 needs_no_sync(s::HybridSparseMatrixCSC{T,Complex{T}}) where {T}     = true
 needs_flat_sync(s::HybridSparseMatrixCSC{T,Complex{T}}) where {T}   = false
 needs_unflat_sync(s::HybridSparseMatrixCSC{T,Complex{T}}) where {T} = false
 
-# Base.show
-
-Base.show(io::IO, m::MIME"text/plain", s::HybridSparseMatrixCSC) = 
-    show(io, m, unflat(s))
+function Base.copy!(h::HybridSparseMatrixCSC{T,B}, h´::HybridSparseMatrixCSC{T,B}) where {T,B}
+    copy!(blockstructure(h), blockstructure(h´))
+    copy!(h.unflat, h´.unflat)
+    copy!(h.flat, h´.flat)
+    h.sync_state[] = h´.sync_state[]
+    return h
+end
 
 #endregion
 
@@ -201,9 +213,9 @@ function Base.setindex!(b::HybridSparseMatrixCSC, val::AbstractVecOrMat, i::Inte
 end
 
 mask_block(::Type{B}, val, (nrows, ncols) = size(val)) where {N,T,B<:SMatrixView{N,N,T}} =
-    SMatrixView(mask_block(SMatrix{N,N,T,N*N}, val, (nrows, ncols))
+    SMatrixView(mask_block(SMatrix{N,N,T,N*N}, val, (nrows, ncols)))
 
-mask_block(::Type{B}, val::Number, (nrows, ncols) = (1, 1)) where {B<:Complex{T}} =
+mask_block(::Type{B}, val::Number, (nrows, ncols) = (1, 1)) where {B<:Complex} =
     convert(B, val)
 
 function mask_block(::Type{B}, val::SMatrix{R,C}, (nrows, ncols) = size(val)) where {R,C,N,T,B<:SMatrix{N,N,T}}
@@ -344,4 +356,32 @@ function flat_sync!(s::HybridSparseMatrixCSC{<:Any,S}) where {N,S<:SMatrix{N,N}}
         end
     end
     return s
+end
+
+############################################################################################
+# SparseMatrix transformations
+# all merged_* functions assume matching structure of sparse matrices
+#region
+
+# merge several sparse matrices onto the first using only structural zeros
+function merge_sparse(mats, ::Type{B} = eltype(first(mats))) where {B}
+    mat0 = first(mats)
+    nrows, ncols = size(mat0)
+    nrows == ncols || throw(ArgumentError("Internal error: matrix not square"))
+    nnzguess = sum(mat -> nnz(mat), mats)
+    collector = CSC{B}(ncols, nnzguess)
+    for col in 1:ncols
+        for (n, mat) in enumerate(mats)
+            vals = nonzeros(mat)
+            rows = rowvals(mat)
+            for p in nzrange(mat, col)
+                val = n == 1 ? vals[p] : zero(B)
+                row = rows[p]
+                pushtocolumn!(collector, row, val, false) # skips repeated rows
+            end
+        end
+        finalizecolumn!(collector)
+    end
+    matrix = sparse(collector, ncols, ncols)
+    return matrix
 end

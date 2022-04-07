@@ -20,7 +20,7 @@ using Statistics: mean
 export sublat, lattice, supercell, bravais_matrix,
        hopping, onsite, @onsite!, @hopping!, neighbors,
        hamiltonian, parametric, bloch,
-       flatten, unflatten, wrap, transform, transform!, translate, translate!,
+       flat, unflat, wrap, transform, transform!, translate, translate!,
        band, mesh, subbands, slice,
        coupler
 
