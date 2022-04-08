@@ -497,6 +497,8 @@ Base.isless(h::Harmonic, h´::Harmonic) = sum(abs2, dcell(h)) < sum(abs2, dcell(
 
 Base.zero(h::Harmonic{<:Any,<:Any,B}) where B = Harmonic(zero(dcell(h)), zero(matrix(h)))
 
+Base.copy(h::Harmonic) = Harmonic(dcell(h), copy(matrix(h)))
+
 #endregion
 #endregion
 
@@ -512,15 +514,13 @@ struct Hamiltonian{T,E,L,B} <: AbstractHamiltonian{T,E,L,B}
     harmonics::Vector{Harmonic{T,L,B}}
     bloch::HybridSparseMatrixCSC{T,B}
     # Enforce sorted-dns-starting-from-zero invariant onto harmonics
-    function Hamiltonian{T,E,L,B}(lattice, blockstruct, harmonics) where {T,E,L,B}
-        n = nsites(lattice)
-        all(har -> size(matrix(har)) == (n, n), harmonics) ||
-            throw(DimensionMismatch("Harmonic $(size.(matrix.(harmonics), 1)) sizes don't match number of sites $n"))
-        sort!(harmonics)
-        (isempty(harmonics) || !iszero(dcell(first(harmonics)))) && pushfirst!(harmonics,
-            Harmonic(zero(SVector{L,Int}), HybridSparseMatrixCSC(blockstruct, spzeros(B, n, n))))
-        bloch = HybridSparseMatrixCSC(blockstruct, spzeros(B, n, n))
-        needs_initialization!(bloch)
+    function Hamiltonian{T,E,L,B}(lattice, blockstruct, harmonics, bloch) where {T,E,L,B}
+        # n = nsites(lattice)
+        # all(har -> size(matrix(har)) == (n, n), harmonics) ||
+        #     throw(DimensionMismatch("Harmonic $(size.(matrix.(harmonics), 1)) sizes don't match number of sites $n"))
+        # sort!(harmonics)
+        # (isempty(harmonics) || !iszero(dcell(first(harmonics)))) && pushfirst!(harmonics,
+        #     Harmonic(zero(SVector{L,Int}), HybridSparseMatrixCSC(blockstruct, spzeros(B, n, n))))
         return new(lattice, blockstruct, harmonics, bloch)
     end
 end
@@ -533,8 +533,15 @@ norbitals(h::AbstractHamiltonian) = blocksizes(blockstructure(h))
 
 ## Hamiltonian
 
-Hamiltonian(l::Lattice{T,E,L}, b::BlockStructure{B}, h::Vector{Harmonic{T,L,B}}) where {T,E,L,B} =
-    Hamiltonian{T,E,L,B}(l, b, h)
+Hamiltonian(l::Lattice{T,E,L}, b::BlockStructure{B}, h::Vector{Harmonic{T,L,B}}, bl) where {T,E,L,B} =
+    Hamiltonian{T,E,L,B}(l, b, h, bl)
+
+function Hamiltonian(l, b::BlockStructure{B}, h) where {B}
+    n = nsites(l)
+    bloch = HybridSparseMatrixCSC(b, spzeros(B, n, n))
+    needs_initialization!(bloch)
+    return Hamiltonian(l, b, h, bloch)
+end
 
 hamiltonian(h::Hamiltonian) = h
 
@@ -544,6 +551,8 @@ lattice(h::Hamiltonian) = h.lattice
 
 harmonics(h::Hamiltonian) = h.harmonics
 
+bloch(h::Hamiltonian) = h.bloch
+
 orbtype(h::Hamiltonian) = orbtype(blockstructure(h))
 
 blocktype(h::Hamiltonian) = blocktype(blockstructure(h))
@@ -551,11 +560,11 @@ blocktype(h::Hamiltonian) = blocktype(blockstructure(h))
 Base.size(h::Hamiltonian, i...) = size(first(harmonics(h)), i...)
 
 copy_only_harmonics(h::Hamiltonian) = Hamiltonian(
-    lattice(h), blockstructure(h), deepcopy(harmonics(h))
+    lattice(h), blockstructure(h), copy.(harmonics(h)), copy(bloch(h))
 )
 
 Base.copy(h::Hamiltonian) = Hamiltonian(
-    copy(lattice(h)), blockstructure(h), deepcopy(harmonics(h))
+    copy(lattice(h)), copy(blockstructure(h)), copy.(harmonics(h)), copy(bloch(h))
 )
 
 function LinearAlgebra.ishermitian(h::Hamiltonian)
@@ -656,7 +665,7 @@ struct ParametricHamiltonian{T,E,L,B,M<:NTuple{<:Any,AppliedModifier}} <: Abstra
     h::Hamiltonian{T,E,L,B}        # To be modified upon application of parameters
     modifiers::M                   # Tuple of AppliedModifier's. Cannot FunctionWrapper them
                                    # because they involve kwargs
-    # allptrs::Vector{Vector{Int}}   # allptrs are all modified ptrs in each harmonic (needed for reset!)
+    allptrs::Vector{Vector{Int}}   # allptrs are all modified ptrs in each harmonic (needed for reset!)
     allparams::Vector{Symbol}
 end
 
@@ -670,7 +679,7 @@ parameters(h::ParametricHamiltonian) = h.allparams
 
 modifiers(h::ParametricHamiltonian) = h.modifiers
 
-# pointers(h::ParametricPointers) = h.allptrs
+pointers(h::ParametricHamiltonian) = h.allptrs
 
 harmonics(h::ParametricHamiltonian) = harmonics(parent(h))
 

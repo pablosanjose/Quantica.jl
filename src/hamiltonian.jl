@@ -62,10 +62,9 @@ parametric(modifiers::Modifier...) = h -> parametric(h, modifiers...)
 function parametric(hparent::Hamiltonian)
     modifiers = ()
     allparams = Symbol[]
-    # allptrs = [Int[] for _ in harmonics(hparent)]
+    allptrs = [Int[] for _ in harmonics(hparent)]
     h = copy_only_harmonics(hparent)
-    # return ParametricHamiltonian(hparent, h, modifiers, allptrs, allparams)
-    return ParametricHamiltonian(hparent, h, modifiers, allparams)
+    return ParametricHamiltonian(hparent, h, modifiers, allptrs, allparams)
 end
 
 parametric(h::Hamiltonian, m::AbstractModifier, ms::AbstractModifier...) =
@@ -85,35 +84,34 @@ function _parametric!(p::ParametricHamiltonian, ms::AppliedModifier...)
     allmodifiers = (modifiers(p)..., ms...)
     allparams = parameters(p)
     merge_parameters!(allparams, ms...)
-    # allptrs = pointers(p)
-    # merge_pointers!(allptrs, ms...)
-    # return ParametricHamiltonian(hparent, h, allmodifiers, allptrs, allparams)
-    return ParametricHamiltonian(hparent, h, allmodifiers, allparams)
+    allptrs = pointers(p)
+    merge_pointers!(allptrs, ms...)
+    return ParametricHamiltonian(hparent, h, allmodifiers, allptrs, allparams)
 end
 
-# merge_pointers!(p, m, ms...) = merge_pointers!(_merge_pointers!(p, m), ms...)
+merge_pointers!(p, m, ms...) = merge_pointers!(_merge_pointers!(p, m), ms...)
 
-# function merge_pointers!(p)
-#     for pn in p
-#         unique!(sort!(pn))
-#     end
-#     return p
-# end
+function merge_pointers!(p)
+    for pn in p
+        unique!(sort!(pn))
+    end
+    return p
+end
 
-# function _merge_pointers!(p, m::AppliedOnsiteModifier)
-#     p0 = first(p)
-#     for (ptr, _) in pointers(m)
-#         push!(p0, ptr)
-#     end
-#     return p
-# end
+function _merge_pointers!(p, m::AppliedOnsiteModifier)
+    p0 = first(p)
+    for (ptr, _) in pointers(m)
+        push!(p0, ptr)
+    end
+    return p
+end
 
-# function _merge_pointers!(p, m::AppliedHoppingModifier)
-#     for (pn, pm) in zip(p, pointers(m)), (ptr, _) in pm
-#         push!(pn, ptr)
-#     end
-#     return p
-# end
+function _merge_pointers!(p, m::AppliedHoppingModifier)
+    for (pn, pm) in zip(p, pointers(m)), (ptr, _) in pm
+        push!(pn, ptr)
+    end
+    return p
+end
 
 merge_parameters!(p, m, ms...) = merge_parameters!(append!(p, parameters(m)), ms...)
 merge_parameters!(p) = unique!(sort!(p))
@@ -165,39 +163,34 @@ end
 #region
 
 (ph::ParametricHamiltonian)(; kw...) = copy_only_harmonics(call!(ph; kw...))
+# (ph::ParametricHamiltonian)(; kw...) = call!(ph; kw...)
 
 function call!(ph::ParametricHamiltonian; kw...)
-    h = hamiltonian(ph)
     reset_to_parent!(ph)
+    h = hamiltonian(ph)
     applymodifiers!(h, modifiers(ph)...; kw...)
     return h
 end
 
-function reset_to_parent!(ph::ParametricHamiltonian)
+function reset_to_parent!(ph)
     h = hamiltonian(ph)
     hparent = parent(ph)
-    for (har, har´) in zip(harmonics(h), harmonics(hparent))
+    nnzfraction = 0.3  # threshold to revert to full copyto!
+    for (har, har´, ptrs) in zip(harmonics(h), harmonics(hparent), pointers(ph))
         m, m´ = matrix(har), matrix(har´)
-        nz = nonzeros(unflat(m))
+        nz = nonzeros(needs_initialization(m) ? unflat(m) : unflat_unsafe(m))
         nz´ = nonzeros(unflat(m´))
-        copyto!(nz, nz´)
+        if length(ptrs) < nnz(m) * nnzfraction
+            @simd for ptr in ptrs
+                nz[ptr] = nz´[ptr]
+            end
+        else
+            copyto!(nz, nz´)
+        end
         needs_flat_sync!(m)
     end
     return ph
 end
-
-# function reset_pointers!(ph::ParametricHamiltonian)
-#     h = hamiltonian(ph)
-#     hparent = parent(ph)
-#     for (har, har´, ptrs) in zip(harmonics(h), harmonics(hparent), pointers(ph))
-#         nz = nonzeros(matrix(har))
-#         nz´ = nonzeros(matrix(har´))
-#         for ptr in ptrs
-#             nz[ptr] = nz´[ptr]
-#         end
-#     end
-#     return ph
-# end
 
 applymodifiers!(h, m, m´, ms...; kw...) = applymodifiers!(applymodifiers!(h, m; kw...), m´, ms...; kw...)
 

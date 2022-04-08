@@ -126,6 +126,9 @@ end
 
 flatindex(b::BlockStructure, i) = first(flatrange(b, i))
 
+Base.copy(b::BlockStructure{B}) where {B} =
+    BlockStructure{B}(copy(blocksizes(b)), copy(subsizes(b)))
+
 @noinline blockbounds_error() = throw(BoundsError())
 
 #endregion
@@ -167,6 +170,10 @@ Base.show(io::IO, m::MIME"text/plain", s::HybridSparseMatrixCSC) =
 
 blockstructure(s::HybridSparseMatrixCSC) = s.blockstruct
 
+unflat_unsafe(s::HybridSparseMatrixCSC) = s.unflat
+
+flat_unsafe(s::HybridSparseMatrixCSC) = s.flat
+
 function unflat(s::HybridSparseMatrixCSC)
     needs_unflat_sync(s) && unflat_sync!(s)
     return s.unflat
@@ -197,6 +204,14 @@ function Base.copy!(h::HybridSparseMatrixCSC{T,B}, h´::HybridSparseMatrixCSC{T,
     copy!(h.flat, h´.flat)
     h.sync_state[] = h´.sync_state[]
     return h
+end
+
+function Base.copy(h::HybridSparseMatrixCSC)
+    b = copy(blockstructure(h))
+    u = copy(h.unflat)
+    f = copy(h.flat)
+    s = Ref(h.sync_state[])
+    return HybridSparseMatrixCSC(b, u, f, s)
 end
 
 SparseArrays.nnz(b::HybridSparseMatrixCSC) = nnz(unflat(b))
