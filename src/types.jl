@@ -586,7 +586,7 @@ struct OnsiteModifier{N,S<:SiteSelector,F<:ParametricFunction{N}} <: AbstractMod
     selector::S
 end
 
-struct AppliedOnsiteModifier{N,B,R<:SVector,F<:ParametricFunction{N}} <: AbstractModifier
+struct AppliedOnsiteModifier{B,N,R<:SVector,F<:ParametricFunction{N}} <: AbstractModifier
     blocktype::Type{B}
     f::F
     ptrs::Vector{Tuple{Int,R,Int}}
@@ -598,7 +598,7 @@ struct HoppingModifier{N,S<:HopSelector,F<:ParametricFunction{N}} <: AbstractMod
     selector::S
 end
 
-struct AppliedHoppingModifier{N,B,R<:SVector,F<:ParametricFunction{N}} <: AbstractModifier
+struct AppliedHoppingModifier{B,N,R<:SVector,F<:ParametricFunction{N}} <: AbstractModifier
     blocktype::Type{B}
     f::F
     ptrs::Vector{Vector{Tuple{Int,R,R,Tuple{Int,Int}}}}
@@ -624,14 +624,16 @@ parametric_function(m::Union{Modifier,AppliedModifier}) = m.f
 
 pointers(m::AppliedModifier) = m.ptrs
 
-(m::AppliedOnsiteModifier{1,B})(o, r, orbs; kw...) where {B} =
+blocktype(m::AppliedModifier) = m.blocktype
+
+(m::AppliedOnsiteModifier{B,1})(o, r, orbs; kw...) where {B} =
     mask_block(B, m.f.f(o; kw...), (orbs, orbs))
-(m::AppliedOnsiteModifier{2,B})(o, r, orbs; kw...) where {B} =
+(m::AppliedOnsiteModifier{B,2})(o, r, orbs; kw...) where {B} =
     mask_block(B, m.f.f(o, r; kw...), (orbs, orbs))
 
-(m::AppliedHoppingModifier{1,B})(t, r, dr, orborb; kw...) where {B} =
+(m::AppliedHoppingModifier{B,1})(t, r, dr, orborb; kw...) where {B} =
     mask_block(B, m.f.f(t; kw...), orborb)
-(m::AppliedHoppingModifier{3,B})(t, r, dr, orborb; kw...) where {B} =
+(m::AppliedHoppingModifier{B,3})(t, r, dr, orborb; kw...) where {B} =
     mask_block(B, m.f.f(t, r, dr; kw...), orborb)
 
 Base.similar(m::A) where {A <: AppliedModifier} = A(m.blocktype, m.f, similar(m.ptrs, 0))

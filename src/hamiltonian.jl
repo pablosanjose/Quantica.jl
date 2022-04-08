@@ -148,9 +148,11 @@ function reset_to_parent!(ph::ParametricHamiltonian)
     h = hamiltonian(ph)
     hparent = parent(ph)
     for (har, har´) in zip(harmonics(h), harmonics(hparent))
-        nz = nonzeros(matrix(har))
-        nz´ = nonzeros(matrix(har´))
+        m, m´ = matrix(har), matrix(har´)
+        nz = nonzeros(unflat(m))
+        nz´ = nonzeros(unflat(m´))
         copyto!(nz, nz´)
+        needs_flat_sync!(m)
     end
     return ph
 end
@@ -160,18 +162,38 @@ applymodifiers!(h, m, m´, ms...; kw...) = applymodifiers!(applymodifiers!(h, m;
 applymodifiers!(h, m::Modifier; kw...) = applymodifiers!(h, apply(m, h); kw...)
 
 function applymodifiers!(h, m::AppliedOnsiteModifier; kw...)
-    nz = nonzeros(matrix(first(harmonics(h))))
+    nz = nonzeros(unflat(matrix(first(harmonics(h)))))
     for (ptr, r, norbs) in pointers(m)
         nz[ptr] = m(nz[ptr], r, norbs; kw...)
     end
     return h
 end
 
+function applymodifiers!(h, m::AppliedOnsiteModifier{B}; kw...) where {B<:SMatrixView}
+    nz = nonzeros(unflat(matrix(first(harmonics(h)))))
+    for (ptr, r, norbs) in pointers(m)
+        val = view(parent(nz[ptr]), 1:norbs, 1:norbs)
+        nz[ptr] = m(val, r, norbs; kw...)
+    end
+    return h
+end
+
 function applymodifiers!(h, m::AppliedHoppingModifier; kw...)
     for (har, p) in zip(harmonics(h), pointers(m))
-        nz = nonzeros(matrix(har))
+        nz = nonzeros(unflat(matrix(har)))
         for (ptr, r, dr, orborb) in p
             nz[ptr] = m(nz[ptr], r, dr, orborb; kw...)
+        end
+    end
+    return h
+end
+
+function applymodifiers!(h, m::AppliedHoppingModifier{B}; kw...) where {B<:SMatrixView}
+    for (har, p) in zip(harmonics(h), pointers(m))
+        nz = nonzeros(unflat(matrix(har)))
+        for (ptr, r, dr, (norbs, norbs´)) in p
+            val = view(parent(nz[ptr]), 1:norbs, 1:norbs´)
+            nz[ptr] = m(val, r, dr, (norbs, norbs´); kw...)
         end
     end
     return h
