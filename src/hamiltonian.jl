@@ -124,25 +124,30 @@ merge_parameters!(p) = unique!(sort!(p))
 
 (h::Hamiltonian)(phi...) = copy(call!(h, phi...))
 
-call!(h::Hamiltonian, phi) = call!(h, sanitize_SVector(phi))
-call!(h::Hamiltonian, phi...) = call!(h, sanitize_SVector(phi))
+call!(h::Hamiltonian, phi) = bloch_flat!(h, sanitize_SVector(phi))
+call!(h::Hamiltonian, phi...) = bloch_flat!(h, sanitize_SVector(phi))
 
-# returns a HybridSparseMatrixCSC
-function call!(h::Hamiltonian{T}, φs::SVector, axis = missing) where {T}
-    checkbloch(h, φs)
+# returns a flat sparse matrix
+function bloch_flat!(h::Hamiltonian{T}, φs::SVector, axis = missing) where {T}
     hbloch = bloch(h)
-    hars = harmonics(h)
-    needs_initialization(hbloch) && initialize_bloch!(hbloch, hars)
+    needs_initialization(hbloch) && initialize_bloch!(hbloch, harmonics(h))
     fbloch = flat(hbloch)
     fill!(fbloch, zero(Complex{T}))  # This preserves sparsity structure
-    isvelocity = axis !== missing
+    addblochs!(fbloch, h, φs, axis)
+    return fbloch
+end
+
+function addblochs!(dst::SparseMatrixCSC, h::Hamiltonian, φs, axis)
+    checkbloch(h, φs)
+    hars = harmonics(h)
+    isvelocity = axis isa Integer
     for har in hars
         iszero(dcell(har)) && isvelocity && continue
         e⁻ⁱᵠᵈⁿ = cis(-dot(φs, dcell(har)))
         isvelocity && (e⁻ⁱᵠᵈⁿ *= - im * dcell(har)[axis])
-        merged_mul!(fbloch, flat(matrix(har)), e⁻ⁱᵠᵈⁿ, 1, 1)  # see tools.jl
+        merged_mul!(dst, matrix(har), e⁻ⁱᵠᵈⁿ, 1, 1)  # see tools.jl
     end
-    return fbloch
+    return dst
 end
 
 is_bloch_initialized(h) = !needs_full_update(bloch(h))

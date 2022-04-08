@@ -186,17 +186,22 @@ end
 
 # Sync states
 needs_no_sync!(s::HybridSparseMatrixCSC)     = (s.sync_state[] = 0)
-needs_no_sync(s::HybridSparseMatrixCSC)      = (s.sync_state[] == 0)
 needs_flat_sync!(s::HybridSparseMatrixCSC)   = (s.sync_state[] = 1)
-needs_flat_sync(s::HybridSparseMatrixCSC)    = (s.sync_state[] == 1)
 needs_unflat_sync!(s::HybridSparseMatrixCSC) = (s.sync_state[] = -1)
-needs_unflat_sync(s::HybridSparseMatrixCSC)  = (s.sync_state[] == -1)
 needs_initialization!(s::HybridSparseMatrixCSC) = (s.sync_state[] = 2)
+
+needs_no_sync(s::HybridSparseMatrixCSC)      = (s.sync_state[] == 0)
+needs_flat_sync(s::HybridSparseMatrixCSC)    = (s.sync_state[] == 1)
+needs_unflat_sync(s::HybridSparseMatrixCSC)  = (s.sync_state[] == -1)
 needs_initialization(s::HybridSparseMatrixCSC) = (s.sync_state[] == 2)
 
-needs_no_sync(s::HybridSparseMatrixCSC{T,Complex{T}}) where {T}     = true
-needs_flat_sync(s::HybridSparseMatrixCSC{T,Complex{T}}) where {T}   = false
-needs_unflat_sync(s::HybridSparseMatrixCSC{T,Complex{T}}) where {T} = false
+needs_no_sync!(s::HybridSparseMatrixCSC{<:Any,<:Complex})     = (s.sync_state[] = 0)
+needs_flat_sync!(s::HybridSparseMatrixCSC{<:Any,<:Complex})   = (s.sync_state[] = 0)
+needs_unflat_sync!(s::HybridSparseMatrixCSC{<:Any,<:Complex}) = (s.sync_state[] = 0)
+
+needs_no_sync(s::HybridSparseMatrixCSC{<:Any,<:Complex})      = true
+needs_flat_sync(s::HybridSparseMatrixCSC{<:Any,<:Complex})    = false
+needs_unflat_sync(s::HybridSparseMatrixCSC{<:Any,<:Complex})  = false
 
 function Base.copy!(h::HybridSparseMatrixCSC{T,B}, h´::HybridSparseMatrixCSC{T,B}) where {T,B}
     copy!(blockstructure(h), blockstructure(h´))
@@ -441,18 +446,31 @@ function merge_sparse(mats, ::Type{B} = eltype(first(mats))) where {B}
     return matrix
 end
 
+function merged_mul!(C::SparseMatrixCSC{<:Number}, A::HybridSparseMatrixCSC, b::Number, α = 1, β = 0)
+    if !needs_flat_sync(A)
+        A´ = flat(A)
+        merged_mul!(C, A´, b, α, β)
+    else
+        A´ = unflat(A)
+        merged_flatten_mul!(C, blockstructure(A), A´, b, α, β)
+    end
+    return C
+end
+
 function merged_mul!(C::SparseMatrixCSC, A::SparseMatrixCSC, b::Number, α = 1, β = 0)
     nzA = nonzeros(A)
     nzC = nonzeros(C)
+    αb = α * b
     if length(nzA) == length(nzC)  # assume idential structure (C has merged structure)
-        @. nzC = β * nzC + α * b * nzA
+        @. nzC = muladd(αb, nzA, β * nzC)
     else
+        # A has less elements than C
         for col in axes(A, 2), p in nzrange(A, col)
             row = rowvals(A)[p]
             for p´ in nzrange(C, col)
                 row´ = rowvals(C)[p´]
                 if row == row´
-                    nzC[p´] = β * nzC[p´] + α * b * nzA[p]
+                    nzC[p´] = muladd(αb, nzA[p], β * nzC[p´])
                     break
                 end
             end
@@ -460,3 +478,63 @@ function merged_mul!(C::SparseMatrixCSC, A::SparseMatrixCSC, b::Number, α = 1, 
     end
     return C
 end
+
+function merged_flatten_mul!(C::SparseMatrixCSC{<:Number}, bs::BlockStructure{B}, A::SparseMatrixCSC{B}, b::Number, α = 1, β = 0) where {N,B<:SMatrix{N}}
+    colsA = axes(A, 2)
+    rowsA = rowvals(A)
+    valsA = nonzeros(A)
+    rowsC = rowvals(C)
+    valsC = nonzeros(C)
+    αb = α * b
+    for colA in colsA, colN in 1:N
+        colC = N * (colA - 1) + colN
+        ptrsA, ptrsC = nzrange(A, colA), nzrange(C, colC)
+        ptrA, ptrC = first(ptrsA), first(ptrsC)
+        while ptrA in ptrsA && ptrC in ptrsC
+            rowA, rowC = rowsA[ptrA], rowsC[ptrC]
+            rowAflat = (rowA - 1) * N + 1
+            if rowAflat == rowC
+                valA = valsA[ptrA]
+                for rowN in 1:N
+                    valsC[ptrC] = muladd(αb, valA[rowN, colN], β * valsC[ptrC])
+                    ptrC += 1
+                end
+            elseif rowAflat > rowC
+                ptrC += N
+            else
+                ptrA += 1
+            end
+        end
+    end
+    return C
+end
+
+# function merged_flatten_mul!(C::SparseMatrixCSC, (os, flatos), A::SparseMatrixCSC, b::Number, α , β = 0)
+#     colsA = axes(A, 2)
+#     rowsA = rowvals(A)
+#     valsA = nonzeros(A)
+#     rowsC = rowvals(C)
+#     valsC = nonzeros(C)
+#     for col in colsA
+#         coloffset´, ncol = site_to_flatoffset_norbs(col, os, flatos)
+#         for p in nzrange(A, col)
+#             valA = valsA[p]
+#             rowA = rowsA[p]
+#             rowoffset´, nrow = site_to_flatoffset_norbs(rowA, os, flatos)
+#             rowfirst´ = rowoffset´ + 1
+#             for ocol in 1:ncol
+#                 col´ = coloffset´ + ocol
+#                 for p´ in nzrange(C, col´)
+#                     if rowsC[p´] == rowfirst´
+#                         for orow in 1:nrow
+#                             p´´ = p´ + orow - 1
+#                             valsC[p´´] = β * valsC[p´´] + α * b * valA[orow, ocol]
+#                         end
+#                         break
+#                     end
+#                 end
+#             end
+#         end
+#     end
+#     return C
+# end
