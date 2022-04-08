@@ -142,7 +142,7 @@ function call!(h::Hamiltonian{T}, φs::SVector, axis = missing) where {T}
         isvelocity && (e⁻ⁱᵠᵈⁿ *= - im * dcell(har)[axis])
         merged_mul!(fbloch, flat(matrix(har)), e⁻ⁱᵠᵈⁿ, 1, 1)  # see tools.jl
     end
-    return hbloch
+    return fbloch
 end
 
 is_bloch_initialized(h) = !needs_full_update(bloch(h))
@@ -163,7 +163,6 @@ end
 #region
 
 (ph::ParametricHamiltonian)(; kw...) = copy_only_harmonics(call!(ph; kw...))
-# (ph::ParametricHamiltonian)(; kw...) = call!(ph; kw...)
 
 function call!(ph::ParametricHamiltonian; kw...)
     reset_to_parent!(ph)
