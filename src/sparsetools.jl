@@ -392,6 +392,12 @@ checkblocks(b, flat) = nothing ## TODO: must check that all structural elements 
 # HybridSparseMatrixCSC syncing
 #region
 
+function sync!(s::HybridSparseMatrixCSC)
+    needs_no_sync(s) && return s
+    needs_initialization(s) && internalerror("sync!: Tried to sync uninitialized matrix")
+    
+end
+
 # Uniform case
 function flat_sync!(s::HybridSparseMatrixCSC{<:Any,S}) where {N,S<:SMatrix{N,N}}
     flat, unflat = s.flat, s.unflat
@@ -405,6 +411,7 @@ function flat_sync!(s::HybridSparseMatrixCSC{<:Any,S}) where {N,S<:SMatrix{N,N}}
             ptr´ += 1
         end
     end
+    needs_no_sync!(s)
     return s
 end
 
@@ -434,4 +441,24 @@ function merge_sparse(mats, ::Type{B} = eltype(first(mats))) where {B}
     end
     matrix = sparse(collector, ncols, ncols)
     return matrix
+end
+
+function merged_mul!(C::SparseMatrixCSC, A::SparseMatrixCSC, b::Number, α = 1, β = 0)
+    nzA = nonzeros(A)
+    nzC = nonzeros(C)
+    if length(nzA) == length(nzC)  # assume idential structure (C has merged structure)
+        @. nzC = β * nzC + α * b * nzA
+    else
+        for col in axes(A, 2), p in nzrange(A, col)
+            row = rowvals(A)[p]
+            for p´ in nzrange(C, col)
+                row´ = rowvals(C)[p´]
+                if row == row´
+                    nzC[p´] = β * nzC[p´] + α * b * nzA[p]
+                    break
+                end
+            end
+        end
+    end
+    return C
 end

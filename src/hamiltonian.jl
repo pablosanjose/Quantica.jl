@@ -132,7 +132,7 @@ function call!(h::Hamiltonian{T}, φs::SVector, axis = missing) where {T}
     checkbloch(h, φs)
     hbloch = bloch(h)
     hars = harmonics(h)
-    needs_initialization!(hbloch) || initialize_bloch!(bloch´, hars)
+    needs_initialization(hbloch) && initialize_bloch!(hbloch, hars)
     fbloch = flat(hbloch)
     fill!(fbloch, zero(Complex{T}))  # This preserves sparsity structure
     isvelocity = axis !== missing
@@ -148,8 +148,10 @@ end
 is_bloch_initialized(h) = !needs_full_update(bloch(h))
 
 function initialize_bloch!(bloch, hars)
-    bloch´ = merge_sparse(flat.(matrix.(hars)))
-    copy!(bloch, bloch´)
+    fbloch = flat_unsafe(bloch)
+    fbloch´ = merge_sparse(flat.(matrix.(hars)))
+    copy!(fbloch, fbloch´)
+    needs_no_sync!(bloch)
     return bloch
 end
 
@@ -163,6 +165,9 @@ end
 #region
 
 (ph::ParametricHamiltonian)(; kw...) = copy_only_harmonics(call!(ph; kw...))
+(p::ParametricHamiltonian)(x, xs...; kw...) = call!(p; kw...)(x, xs...)
+
+call!(p::ParametricHamiltonian, x, xs...; kw...) = call!(call!(p; kw...), x, xs...)
 
 function call!(ph::ParametricHamiltonian; kw...)
     reset_to_parent!(ph)
