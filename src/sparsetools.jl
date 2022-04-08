@@ -392,14 +392,9 @@ checkblocks(b, flat) = nothing ## TODO: must check that all structural elements 
 # HybridSparseMatrixCSC syncing
 #region
 
-function sync!(s::HybridSparseMatrixCSC)
-    needs_no_sync(s) && return s
-    needs_initialization(s) && internalerror("sync!: Tried to sync uninitialized matrix")
-    
-end
-
 # Uniform case
 function flat_sync!(s::HybridSparseMatrixCSC{<:Any,S}) where {N,S<:SMatrix{N,N}}
+    checkinitialized(s)
     flat, unflat = s.flat, s.unflat
     cols = axes(unflat, 2)
     nzflat, nzunflat = nonzeros(flat), nonzeros(unflat)
@@ -414,6 +409,9 @@ function flat_sync!(s::HybridSparseMatrixCSC{<:Any,S}) where {N,S<:SMatrix{N,N}}
     needs_no_sync!(s)
     return s
 end
+
+checkinitialized(s) =
+    needs_initialization(s) && internalerror("sync!: Tried to sync uninitialized matrix")
 
 ############################################################################################
 # SparseMatrix transformations

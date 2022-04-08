@@ -487,9 +487,17 @@ end
 
 #region ## API ##
 
+dcell(h::Harmonic) = h.dn
+
 matrix(h::Harmonic) = h.h
 
-dcell(h::Harmonic) = h.dn
+flat(h::Harmonic) = flat(h.h)
+
+unflat(h::Harmonic) = unflat(h.h)
+
+flat_unsafe(h::Harmonic) = flat_unsafe(h.h)
+
+unflat_unsafe(h::Harmonic) = unflat_unsafe(h.h)
 
 Base.size(h::Harmonic, i...) = size(matrix(h), i...)
 

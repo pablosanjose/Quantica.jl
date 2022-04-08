@@ -184,7 +184,7 @@ function reset_to_parent!(ph)
         m, m´ = matrix(har), matrix(har´)
         nz = nonzeros(needs_initialization(m) ? unflat(m) : unflat_unsafe(m))
         nz´ = nonzeros(unflat(m´))
-        if length(ptrs) < nnz(m) * nnzfraction
+        if length(ptrs) < length(nz) * nnzfraction
             @simd for ptr in ptrs
                 nz[ptr] = nz´[ptr]
             end
@@ -201,7 +201,7 @@ applymodifiers!(h, m, m´, ms...; kw...) = applymodifiers!(applymodifiers!(h, m;
 applymodifiers!(h, m::Modifier; kw...) = applymodifiers!(h, apply(m, h); kw...)
 
 function applymodifiers!(h, m::AppliedOnsiteModifier; kw...)
-    nz = nonzeros(unflat(matrix(first(harmonics(h)))))
+    nz = nonzeros(unflat(first(harmonics(h))))
     for (ptr, r, norbs) in pointers(m)
         nz[ptr] = m(nz[ptr], r, norbs; kw...)
     end
@@ -209,7 +209,7 @@ function applymodifiers!(h, m::AppliedOnsiteModifier; kw...)
 end
 
 function applymodifiers!(h, m::AppliedOnsiteModifier{B}; kw...) where {B<:SMatrixView}
-    nz = nonzeros(unflat(matrix(first(harmonics(h)))))
+    nz = nonzeros(unflat(first(harmonics(h))))
     for (ptr, r, norbs) in pointers(m)
         val = view(parent(nz[ptr]), 1:norbs, 1:norbs)
         nz[ptr] = m(val, r, norbs; kw...)
@@ -219,7 +219,7 @@ end
 
 function applymodifiers!(h, m::AppliedHoppingModifier; kw...)
     for (har, p) in zip(harmonics(h), pointers(m))
-        nz = nonzeros(unflat(matrix(har)))
+        nz = nonzeros(unflat(har))
         for (ptr, r, dr, orborb) in p
             nz[ptr] = m(nz[ptr], r, dr, orborb; kw...)
         end
@@ -229,7 +229,7 @@ end
 
 function applymodifiers!(h, m::AppliedHoppingModifier{B}; kw...) where {B<:SMatrixView}
     for (har, p) in zip(harmonics(h), pointers(m))
-        nz = nonzeros(unflat(matrix(har)))
+        nz = nonzeros(unflat(har))
         for (ptr, r, dr, (norbs, norbs´)) in p
             val = view(parent(nz[ptr]), 1:norbs, 1:norbs´)
             nz[ptr] = m(val, r, dr, (norbs, norbs´); kw...)

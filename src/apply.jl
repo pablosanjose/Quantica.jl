@@ -107,7 +107,7 @@ function pointers(h::Hamiltonian{T,E}, s::AppliedSiteSelector{T,E}) where {T,E}
     ptr_r = Tuple{Int,SVector{E,T},Int}[]
     lat = lattice(h)
     har0 = first(harmonics(h))
-    umat = unflat(matrix(har0))
+    umat = unflat(har0)
     rows = rowvals(umat)
     norbs = norbitals(h)
     for scol in sublats(lat), col in siterange(lat, scol), p in nzrange(umat, col)
@@ -130,7 +130,7 @@ function pointers(h::Hamiltonian{T,E}, s::AppliedHopSelector{T,E}) where {T,E}
     dn0 = zerocell(lat)
     norbs = norbitals(h)
     for (har, ptr_r_dr) in zip(hars, ptr_r_dr)
-        mh = unflat(matrix(har))
+        mh = unflat(har)
         rows = rowvals(mh)
         for scol in sublats(lat), col in siterange(lat, scol), p in nzrange(mh, col)
             row = rows[p]

@@ -157,7 +157,7 @@ function supercell_harmonics(h, data, builder, mincoordination)
             celldst = cellsrc + dcell(har)
             # cell is the position of celldst within its supercell scell
             cell, scell = wrap_cell_onto_supercell(celldst, data)
-            m = unflat(matrix(har))
+            m = unflat(har)
             rows = rowvals(m)
             vals = nonzeros(m)
             for p in nzrange(m, col)
