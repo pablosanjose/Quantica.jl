@@ -138,7 +138,7 @@ function pointers(h::Hamiltonian{T,E}, s::AppliedHopSelector{T,E}) where {T,E}
             r, dr = rdr(site(lat, col, dn0) => site(lat, row, dn))
             if (col => row, (r, dr), dn) in s
                 ncol = norbs[scol]
-                nrow = blocksize_unflat(bs, row)
+                nrow = blocksize(bs, row)
                 push!(ptr_r_dr, (p, r, dr, (nrow, ncol)))
             end
         end

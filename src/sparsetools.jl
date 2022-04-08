@@ -19,6 +19,9 @@ Base.view(s::SMatrixView, i::Integer...) = view(s.s, i...)
 
 Base.zero(::Type{SMatrixView{N,M,T,NM}}) where {N,M,T,NM} = zero(SMatrix{N,M,T,NM})
 
+# for generic code as e.g. merged_flatten_mul!
+Base.getindex(s::SMatrixView, i::Integer...) = s.s[i...]
+
 const MatrixElementType{T} = Union{
     Complex{T},
     SMatrix{N,N,Complex{T}} where {N},
@@ -79,28 +82,22 @@ flatsize(b::BlockStructure) = blocksizes(b)' * subsizes(b)
 
 unflatsize(b::BlockStructure) = sum(subsizes(b))
 
-blocksize(b::BlockStructure, iflat, jflat) = (blocksize(b, iflat), blocksize(b, jflat))
+blocksize(b::BlockStructure, iunflat, junflat) = (blocksize(b, iunflat), blocksize(b, junflat))
 
-blocksize(b::BlockStructure, iflat) = length(flatrange(b, iflat))
+blocksize(b::BlockStructure{<:SMatrixView}, iunflat) = length(flatrange(b, iunflat))
 
-function blocksize_unflat(b::BlockStructure, iunflat)
-    soffset  = 0
-    @boundscheck(iunflat < 0 && blockbounds_error())
-    @inbounds for (s, b) in zip(b.subsizes, b.blocksizes)
-        soffset + s >= iunflat && return b
-        soffset += s
-    end
-    @boundscheck(blockbounds_error())
-end
+blocksize(b::BlockStructure{B}, iunflat) where {N,B<:SMatrix{N}} = N
+
+blocksize(b::BlockStructure{B}, iunflat) where {B<:Number} = 1
 
 # Basic relation: iflat - 1 == (iunflat - soffset - 1) * b + soffset´
-function flatrange(b::BlockStructure, iflat::Integer)
+function flatrange(b::BlockStructure{<:SMatrixView}, iunflat::Integer)
     soffset  = 0
     soffset´ = 0
-    @boundscheck(iflat < 0 && blockbounds_error())
+    @boundscheck(iunflat < 0 && blockbounds_error())
     @inbounds for (s, b) in zip(b.subsizes, b.blocksizes)
-        if soffset + s >= iflat
-            offset = muladd(iflat - soffset - 1, b, soffset´)
+        if soffset + s >= iunflat
+            offset = muladd(iunflat - soffset - 1, b, soffset´)
             return offset+1:offset+b
         end
         soffset  += s
@@ -109,12 +106,18 @@ function flatrange(b::BlockStructure, iflat::Integer)
     @boundscheck(blockbounds_error())
 end
 
-function unflatindex(b::BlockStructure, iflat::Integer)
+flatrange(b::BlockStructure{B}, iunflat::Integer) where {N,B<:SMatrix{N}} =
+    (iunflat - 1) * N + 1 : iunflat * N
+flatrange(b::BlockStructure{<:Number}, iunflat::Integer) where {N,B<:SMatrix{N}} = iunflat:inflat
+
+flatindex(b::BlockStructure, i) = first(flatrange(b, i))
+
+function unflatindex(b::BlockStructure{<:SMatrixView}, iflat::Integer)
     soffset  = 0
     soffset´ = 0
     @boundscheck(i < 0 && blockbounds_error())
     @inbounds for (s, b) in zip(b.subsizes, b.blocksizes)
-        if soffset + s >= iflat
+        if soffset´ + b * s >= iflat
             iunflat = (iflat - soffset´ - 1) ÷ b + soffset + 1
             return iunflat, b
         end
@@ -124,7 +127,9 @@ function unflatindex(b::BlockStructure, iflat::Integer)
     @boundscheck(blockbounds_error())
 end
 
-flatindex(b::BlockStructure, i) = first(flatrange(b, i))
+unflatindex(b::BlockStructure{B}, iflat::Integer) where {N,B<:SMatrix{N}} =
+    (iflat - 1)÷N + 1, N
+unflatindex(b::BlockStructure{<:Number}, iflat::Integer) = iflat, 1
 
 Base.copy(b::BlockStructure{B}) where {B} =
     BlockStructure{B}(copy(blocksizes(b)), copy(subsizes(b)))
@@ -301,6 +306,8 @@ checkstored(mat, i, j) = i in view(rowvals(mat), nzrange(mat, j)) ||
 # HybridSparseMatrixCSC flat/unflat conversion
 #region
 
+## TODO: merge uniform + non-uniform code through flat/unflat indexing API
+
 # Uniform case
 function flat(b::BlockStructure{B}, unflat::SparseMatrixCSC{B´}) where {N,C,B<:SMatrix{N,N,C},B´<:SMatrix{N,N}}
     nnzguess = nnz(unflat) * N * N
@@ -310,7 +317,7 @@ function flat(b::BlockStructure{B}, unflat::SparseMatrixCSC{B´}) where {N,C,B<:
     cols = 1:unflatsize(b)
     for col in cols, bcol in 1:N
         for ptr in nzrange(unflat, col)
-            firstrow´ = (rows[ptr] - 1) * N + 1
+            firstrow´ = flatindex(b, rows[ptr])
             vals = nzs[ptr][:,bcol]
             appendtocolumn!(builder, firstrow´, vals)
         end
@@ -352,7 +359,7 @@ function unflat(b::BlockStructure{B}, flat::SparseMatrixCSC{<:Number}) where {N,
         ptrs´ = first(ptrs):N:last(ptrs)
         for ptr in ptrs´
             firstrow = rows[ptr]
-            row´ = (firstrow - 1) ÷ N + 1
+            row´, _ = unflatindex(b, firstrow)
             vals = B(view(flat, firstrow:firstrow+N-1, firstcol:firstcol+N-1))
             pushtocolumn!(builder, row´, vals)
         end
@@ -447,17 +454,16 @@ function merge_sparse(mats, ::Type{B} = eltype(first(mats))) where {B}
 end
 
 function merged_mul!(C::SparseMatrixCSC{<:Number}, A::HybridSparseMatrixCSC, b::Number, α = 1, β = 0)
-    if !needs_flat_sync(A)
-        A´ = flat(A)
-        merged_mul!(C, A´, b, α, β)
+    bs = blockstructure(A)
+    if needs_flat_sync(A)
+        merged_mul!(C, bs, unflat(A), b, α, β)
     else
-        A´ = unflat(A)
-        merged_flatten_mul!(C, blockstructure(A), A´, b, α, β)
+        merged_mul!(C, bs, flat(A), b, α, β)
     end
     return C
 end
 
-function merged_mul!(C::SparseMatrixCSC, A::SparseMatrixCSC, b::Number, α = 1, β = 0)
+function merged_mul!(C::SparseMatrixCSC{<:Number}, bs::BlockStructure{B}, A::SparseMatrixCSC{B}, b::Number, α = 1, β = 0) where {B<:Complex}
     nzA = nonzeros(A)
     nzC = nonzeros(C)
     αb = α * b
@@ -479,62 +485,39 @@ function merged_mul!(C::SparseMatrixCSC, A::SparseMatrixCSC, b::Number, α = 1, 
     return C
 end
 
-function merged_flatten_mul!(C::SparseMatrixCSC{<:Number}, bs::BlockStructure{B}, A::SparseMatrixCSC{B}, b::Number, α = 1, β = 0) where {N,B<:SMatrix{N}}
+function merged_mul!(C::SparseMatrixCSC{<:Number}, bs::BlockStructure{B}, A::SparseMatrixCSC{B}, b::Number, α = 1, β = 0) where {B<:MatrixElementNonscalarType}
     colsA = axes(A, 2)
     rowsA = rowvals(A)
     valsA = nonzeros(A)
     rowsC = rowvals(C)
     valsC = nonzeros(C)
     αb = α * b
-    for colA in colsA, colN in 1:N
-        colC = N * (colA - 1) + colN
-        ptrsA, ptrsC = nzrange(A, colA), nzrange(C, colC)
-        ptrA, ptrC = first(ptrsA), first(ptrsC)
-        while ptrA in ptrsA && ptrC in ptrsC
-            rowA, rowC = rowsA[ptrA], rowsC[ptrC]
-            rowAflat = (rowA - 1) * N + 1
-            if rowAflat == rowC
-                valA = valsA[ptrA]
-                for rowN in 1:N
-                    valsC[ptrC] = muladd(αb, valA[rowN, colN], β * valsC[ptrC])
-                    ptrC += 1
+    colC = 1
+    for colA in colsA
+        N = blocksize(bs, colA)
+        for colN in 1:N
+            ptrsA, ptrsC = nzrange(A, colA), nzrange(C, colC)
+            ptrA, ptrC = first(ptrsA), first(ptrsC)
+            while ptrA in ptrsA && ptrC in ptrsC
+                rowA, rowC = rowsA[ptrA], rowsC[ptrC]
+                rngflat = flatrange(bs, rowA)
+                rowAflat, N´ = first(rngflat), length(rngflat)
+                if rowAflat == rowC
+                    valA = valsA[ptrA]
+                    for rowN in 1:N´
+                        valsC[ptrC] = muladd(αb, valA[rowN, colN], β * valsC[ptrC])
+                        ptrC += 1
+                    end
+                elseif rowAflat > rowC
+                    ptrC += N´
+                else
+                    ptrA += 1
                 end
-            elseif rowAflat > rowC
-                ptrC += N
-            else
-                ptrA += 1
             end
+            colC += 1
         end
     end
     return C
 end
 
-# function merged_flatten_mul!(C::SparseMatrixCSC, (os, flatos), A::SparseMatrixCSC, b::Number, α , β = 0)
-#     colsA = axes(A, 2)
-#     rowsA = rowvals(A)
-#     valsA = nonzeros(A)
-#     rowsC = rowvals(C)
-#     valsC = nonzeros(C)
-#     for col in colsA
-#         coloffset´, ncol = site_to_flatoffset_norbs(col, os, flatos)
-#         for p in nzrange(A, col)
-#             valA = valsA[p]
-#             rowA = rowsA[p]
-#             rowoffset´, nrow = site_to_flatoffset_norbs(rowA, os, flatos)
-#             rowfirst´ = rowoffset´ + 1
-#             for ocol in 1:ncol
-#                 col´ = coloffset´ + ocol
-#                 for p´ in nzrange(C, col´)
-#                     if rowsC[p´] == rowfirst´
-#                         for orow in 1:nrow
-#                             p´´ = p´ + orow - 1
-#                             valsC[p´´] = β * valsC[p´´] + α * b * valA[orow, ocol]
-#                         end
-#                         break
-#                     end
-#                 end
-#             end
-#         end
-#     end
-#     return C
-# end
+#endregion
