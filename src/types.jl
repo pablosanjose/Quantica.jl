@@ -20,7 +20,7 @@ end
 struct Bravais{T,E,L}
     matrix::Matrix{T}
     function Bravais{T,E,L}(matrix) where {T,E,L}
-        (E, L) == size(matrix) || throw(ErrorException("Internal error: unexpected matrix size $((E,L)) != $(size(matrix))"))
+        (E, L) == size(matrix) || internalerror("Bravais: unexpected matrix size $((E,L)) != $(size(matrix))")
         L > E &&
             throw(DimensionMismatch("Number $L of Bravais vectors cannot be greater than embedding dimension $E"))
         return new(matrix)

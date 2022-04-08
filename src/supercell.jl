@@ -76,8 +76,8 @@ function supercell_masklist_full(smat´⁻¹N::SMatrix{L,L,Int}, N, cellseed::SV
         acceptcell!(iter, cell)
         counter == supercell_nsites && break
     end
-    counter == supercell_nsites || throw(ErrorException(
-        "Internal error: failed to find all sites in supercell, only $counter of $supercell_nsites"))
+    counter == supercell_nsites ||
+        internalerror("supercell_masklist_full: failed to find all sites in supercell, only $counter of $supercell_nsites")
     return masklist
 end
 

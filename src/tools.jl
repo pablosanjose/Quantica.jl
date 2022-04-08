@@ -11,6 +11,11 @@ rdr((r1, r2)::Pair) = (0.5 * (r1 + r2), r2 - r1)
 
 padtuple(t, x, N) = ntuple(i -> i <= length(t) ? t[i] : x, N)
 
+@noinline internalerror(func::String) =
+    throw(ErrorException("Internal error in $func. Please file a bug report at https://github.com/pablosanjose/Quantica.jl/issues"))
+
+@noinline argerror(msg) = throw(ArgumentError(msg))
+
 #endregion
 
 ############################################################################################

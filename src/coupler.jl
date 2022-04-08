@@ -169,7 +169,7 @@ function update_ptrs!(ps´, ps, h´, h, offset)
                 break
             end
         end
-        found || error("Internal error in reapply_modifier. Please file a bug report at $REPOISSUES")
+        found || internalerror("reapply_modifier")
     end
     return ps´
 end
