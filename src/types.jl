@@ -656,6 +656,7 @@ struct ParametricHamiltonian{T,E,L,B,M<:NTuple{<:Any,AppliedModifier}} <: Abstra
     h::Hamiltonian{T,E,L,B}        # To be modified upon application of parameters
     modifiers::M                   # Tuple of AppliedModifier's. Cannot FunctionWrapper them
                                    # because they involve kwargs
+    # allptrs::Vector{Vector{Int}}   # allptrs are all modified ptrs in each harmonic (needed for reset!)
     allparams::Vector{Symbol}
 end
 
@@ -668,6 +669,8 @@ hamiltonian(h::ParametricHamiltonian) = h.h
 parameters(h::ParametricHamiltonian) = h.allparams
 
 modifiers(h::ParametricHamiltonian) = h.modifiers
+
+# pointers(h::ParametricPointers) = h.allptrs
 
 harmonics(h::ParametricHamiltonian) = harmonics(parent(h))
 
