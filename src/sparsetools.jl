@@ -301,7 +301,7 @@ checkstored(mat, i, j) = i in view(rowvals(mat), nzrange(mat, j)) ||
     throw(ArgumentError("Adding new structural elements is not allowed"))
 
 @noinline checkblocksize(val, s) = (size(val, 1), size(val, 2)) == s ||
-    throw(ArgumentError("Expected an element of size $s2, got size $((size(val, 1), size(val, 2)))"))
+    throw(ArgumentError("Expected an element of size $s, got size $((size(val, 1), size(val, 2)))"))
 
 #endregion
 
