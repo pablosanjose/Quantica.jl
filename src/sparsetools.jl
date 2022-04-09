@@ -19,8 +19,9 @@ Base.view(s::SMatrixView, i::Integer...) = view(s.s, i...)
 
 Base.zero(::Type{SMatrixView{N,M,T,NM}}) where {N,M,T,NM} = zero(SMatrix{N,M,T,NM})
 
-# for generic code as e.g. merged_flatten_mul!
+# for generic code as e.g. flat/unflat or merged_flatten_mul!
 Base.getindex(s::SMatrixView, i::Integer...) = s.s[i...]
+Base.getindex(s::SMatrixView, i...) = view(s.s, i...)
 
 const MatrixElementType{T} = Union{
     Complex{T},
@@ -31,9 +32,9 @@ const MatrixElementUniformType{T} = Union{
     Complex{T},
     SMatrix{N,N,Complex{T}} where {N}}
 
-const MatrixElementNonscalarType{T} = Union{
-    SMatrix{N,N,Complex{T}} where {N},
-    SMatrixView{N,N,Complex{T}} where {N}}
+const MatrixElementNonscalarType{T,N} = Union{
+    SMatrix{N,N,Complex{T}},
+    SMatrixView{N,N,Complex{T}}}
 
 #endregion
 
@@ -115,7 +116,7 @@ flatindex(b::BlockStructure, i) = first(flatrange(b, i))
 function unflatindex(b::BlockStructure{<:SMatrixView}, iflat::Integer)
     soffset  = 0
     soffset´ = 0
-    @boundscheck(i < 0 && blockbounds_error())
+    @boundscheck(iflat < 0 && blockbounds_error())
     @inbounds for (s, b) in zip(b.subsizes, b.blocksizes)
         if soffset´ + b * s >= iflat
             iunflat = (iflat - soffset´ - 1) ÷ b + soffset + 1
@@ -267,38 +268,40 @@ function Base.setindex!(b::HybridSparseMatrixCSC, val::AbstractVecOrMat, i::Inte
     return val
 end
 
-function mask_block(::Type{B}, val, (nrows, ncols) = size(val)) where {N,T,B<:SMatrix{N,N,T}}
-    # This check includes the case where val is a scalar
-    val isa UniformScaling || (size(val, 1), size(val, 2)) == (nrows, ncols) == (N, N) ||
-        blocksize_error(size(val), (N, N))
-    return B(val)
+mask_block(::Type{<:MatrixElementNonscalarType}, val::UniformScaling, args...) =
+    mask_block(B, B(val))
+
+mask_block(::Type{C}, val::UniformScaling, args...) where {C<:Number} =
+    mask_block(B, convert(C, val.λ))
+
+function mask_block(B, val, size)
+    @boundscheck(checkblocksize(val, s))
+    return mask_block(B, val)
 end
 
-mask_block(::Type{B}, val::Number, (nrows, ncols) = (1, 1)) where {B<:Complex} =
-    convert(B, val)
+@inline mask_block(::Type{B}, val) where {N,B<:SMatrix{N,N}} = B(val)
 
-function mask_block(::Type{B}, val::SMatrix{R,C}, (nrows, ncols) = size(val)) where {R,C,N,T,B<:SMatrixView{N,N,T}}
-    (R, C) == (nrows, ncols) || blocksize_error((R, C), (nrows, ncols))
-    return SMatrixView(SMatrix{N,R}(I) * val * SMatrix{C,N}(I))
-end
+@inline mask_block(::Type{B}, val::Number) where {B<:Complex} = convert(B, val)
 
-function mask_block(::Type{B}, val, (nrows, ncols) = size(val)) where {N,T,B<:SMatrixView{N,N,T}}
-    val isa UniformScaling || (size(val, 1), size(val, 2)) == (nrows, ncols) ||
-        blocksize_error(size(val), (nrows, ncols))
-    t = ntuple(Val(N*N)) do i
+@inline mask_block(::Type{B}, val::SMatrix{R,C}) where {R,C,N,T,B<:SMatrixView{N,N,T}} =
+    SMatrixView(SMatrix{N,R}(I) * val * SMatrix{C,N}(I))
+
+function mask_block(::Type{B}, val) where {N,T,B<:SMatrixView{N,N,T}}
+    (nrows, ncols) = size(val)
+    s = ntuple(Val(N*N)) do i
         n, m = mod1(i, N), fld1(i, N)
         @inbounds n > nrows || m > ncols ? zero(T) : T(val[n,m])
     end
-    return SMatrixView(SMatrix{N,N,T}(t))
+    return SMatrixView(SMatrix{N,N,T}(s))
 end
 
-mask_block(t, val, s = size(val)) = blocksize_error(size(val), s)
+mask_block(t, val) = throw(ArgumentError("Unexpected block size"))
 
 checkstored(mat, i, j) = i in view(rowvals(mat), nzrange(mat, j)) ||
     throw(ArgumentError("Adding new structural elements is not allowed"))
 
-@noinline blocksize_error(s1, s2) =
-    throw(ArgumentError("Expected an element of size $s2, got size $s1"))
+@noinline checkblocksize(val, s) = (size(val, 1), size(val, 2)) == s ||
+    throw(ArgumentError("Expected an element of size $s2, got size $((size(val, 1), size(val, 2)))"))
 
 #endregion
 
@@ -306,31 +309,9 @@ checkstored(mat, i, j) = i in view(rowvals(mat), nzrange(mat, j)) ||
 # HybridSparseMatrixCSC flat/unflat conversion
 #region
 
-## TODO: merge uniform + non-uniform code through flat/unflat indexing API
-
-# Uniform case
-function flat(b::BlockStructure{B}, unflat::SparseMatrixCSC{B´}) where {N,C,B<:SMatrix{N,N,C},B´<:SMatrix{N,N}}
+function flat(b::BlockStructure{B}, unflat::SparseMatrixCSC{B´}) where {N,T,B<:MatrixElementNonscalarType{T,N},B´<:MatrixElementNonscalarType{T,N}}
     nnzguess = nnz(unflat) * N * N
-    builder = CSC{C}(flatsize(b), nnzguess)
-    nzs = nonzeros(unflat)
-    rows = rowvals(unflat)
-    cols = 1:unflatsize(b)
-    for col in cols, bcol in 1:N
-        for ptr in nzrange(unflat, col)
-            firstrow´ = flatindex(b, rows[ptr])
-            vals = nzs[ptr][:,bcol]
-            appendtocolumn!(builder, firstrow´, vals)
-        end
-        finalizecolumn!(builder, false)  # no need to sort column
-    end
-    n = flatsize(b)
-    return sparse(builder, n, n)
-end
-
-# Non-uniform case
-function flat(b::BlockStructure{B}, unflat::SparseMatrixCSC{B´}) where {N,C,B<:SMatrixView{N,N,C},B´<:SMatrixView{N,N}}
-    nnzguess = nnz(unflat) * N * N
-    builder = CSC{C}(flatsize(b), nnzguess)
+    builder = CSC{Complex{T}}(flatsize(b), nnzguess)
     nzs = nonzeros(unflat)
     rows = rowvals(unflat)
     cols = 1:unflatsize(b)
@@ -338,7 +319,7 @@ function flat(b::BlockStructure{B}, unflat::SparseMatrixCSC{B´}) where {N,C,B<:
         for ptr in nzrange(unflat, col)
             row = rows[ptr]
             firstrow´ = flatindex(b, row)
-            vals = view(parent(nzs[ptr]), 1:blocksize(b, row), bcol)
+            vals = nzs[ptr][1:blocksize(b, row), bcol]
             appendtocolumn!(builder, firstrow´, vals)
         end
         finalizecolumn!(builder, false)  # no need to sort column
@@ -347,48 +328,25 @@ function flat(b::BlockStructure{B}, unflat::SparseMatrixCSC{B´}) where {N,C,B<:
     return sparse(builder, n, n)
 end
 
-# Uniform case
-function unflat(b::BlockStructure{B}, flat::SparseMatrixCSC{<:Number}) where {N,B<:SMatrix{N,N}}
+function unflat(b::BlockStructure{B}, flat::SparseMatrixCSC{<:Number}) where {N,B<:MatrixElementNonscalarType{<:Any,N}}
     @boundscheck(checkblocks(b, flat))
     nnzguess = nnz(flat) ÷ (N * N)
-    builder = CSC{B}(unflatsize(b), nnzguess)
-    rows = rowvals(flat)
-    cols = 1:N:flatsize(b)
-    for firstcol in cols
-        ptrs = nzrange(flat, firstcol)
-        ptrs´ = first(ptrs):N:last(ptrs)
-        for ptr in ptrs´
-            firstrow = rows[ptr]
-            row´, _ = unflatindex(b, firstrow)
-            vals = B(view(flat, firstrow:firstrow+N-1, firstcol:firstcol+N-1))
-            pushtocolumn!(builder, row´, vals)
-        end
-        finalizecolumn!(builder, false)  # no need to sort column
-    end
-    n = unflatsize(b)
-    return sparse(builder, n, n)
-end
-
-# Non-uniform case
-function unflat(b::BlockStructure{B}, flat::SparseMatrixCSC{<:Number}) where {N,B<:SMatrixView{N,N}}
-    @boundscheck(checkblocks(b, flat))
-    nnzguess = nnz(flat) ÷ (N * N)
-    unflatcols = unflatsize(b)
-    builder = CSC{B}(unflatcols, nnzguess)
+    ncols = unflatsize(b)
+    builder = CSC{B}(ncols, nnzguess)
     rowsflat = rowvals(flat)
-    col = 1
-    for ucol in 1:unflatcols
-        colrng = flatrange(b, col)
-        firstcol = first(colrng)
-        bcol = length(colrng)
-        ptrs = rnzrange(flat, firstcol)
+    for ucol in 1:ncols
+        colrng = flatrange(b, ucol)
+        fcol = first(colrng)
+        Ncol = length(colrng)
+        ptrs = nzrange(flat, fcol)
         ptr = first(ptrs)
         while ptr in ptrs
-            firstrow = rowsflat[ptr]
-            urow, brow = unflatindex(b, firstrow)
-            val = mask_block(B, view(flat, firstrow:firstrow+brow-1, firstcol:firstcol+bcol-1))
+            frow = rowsflat[ptr]
+            urow, Nrow = unflatindex(b, frow)
+            valview = view(flat, frow:frow+Nrow-1, fcol:fcol+Ncol-1)
+            val = mask_block(B, valview)
             pushtocolumn!(builder, urow, val)
-            ptr += N
+            ptr += Nrow
         end
         finalizecolumn!(builder, false)  # no need to sort column
     end
