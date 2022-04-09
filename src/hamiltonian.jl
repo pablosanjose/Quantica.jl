@@ -216,7 +216,7 @@ end
 function applymodifiers!(h, m::AppliedOnsiteModifier{B}; kw...) where {B<:SMatrixView}
     nz = nonzeros(unflat(first(harmonics(h))))
     for (ptr, r, norbs) in pointers(m)
-        val = nz[ptr][1:norbs, 1:norbs]   # this is a view
+        val = view(nz[ptr], 1:norbs, 1:norbs)
         nz[ptr] = m(val, r, norbs; kw...) # this allocates, unavoidable
     end
     return h
@@ -236,7 +236,7 @@ function applymodifiers!(h, m::AppliedHoppingModifier{B}; kw...) where {B<:SMatr
     for (har, p) in zip(harmonics(h), pointers(m))
         nz = nonzeros(unflat(har))
         for (ptr, r, dr, (norbs, norbs´)) in p
-            val = nz[ptr][1:norbs, 1:norbs´]                 # this is a view
+            val = view(nz[ptr], 1:norbs, 1:norbs´)
             nz[ptr] = m(val, r, dr, (norbs, norbs´); kw...)  # this allocates, unavoidable
         end
     end

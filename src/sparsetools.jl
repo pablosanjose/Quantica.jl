@@ -21,7 +21,6 @@ Base.zero(::Type{SMatrixView{N,M,T,NM}}) where {N,M,T,NM} = zero(SMatrix{N,M,T,N
 
 # for generic code as e.g. flat/unflat or merged_flatten_mul!
 Base.getindex(s::SMatrixView, i::Integer...) = s.s[i...]
-Base.getindex(s::SMatrixView, i...) = view(s.s, i...)
 
 const MatrixElementType{T} = Union{
     Complex{T},
@@ -319,7 +318,7 @@ function flat(b::BlockStructure{B}, unflat::SparseMatrixCSC{B´}) where {N,T,B<:
         for ptr in nzrange(unflat, col)
             row = rows[ptr]
             firstrow´ = flatindex(b, row)
-            vals = nzs[ptr][1:blocksize(b, row), bcol]
+            vals = view(nzs[ptr], 1:blocksize(b, row), bcol)
             appendtocolumn!(builder, firstrow´, vals)
         end
         finalizecolumn!(builder, false)  # no need to sort column
