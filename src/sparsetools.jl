@@ -268,14 +268,14 @@ function Base.setindex!(b::HybridSparseMatrixCSC, val::AbstractVecOrMat, i::Inte
     return val
 end
 
-mask_block(::Type{<:MatrixElementNonscalarType}, val::UniformScaling, args...) =
-    mask_block(B, B(val))
+mask_block(::Type{B}, val::UniformScaling, args...) where {N,B<:MatrixElementNonscalarType{<:Any,N}} =
+    mask_block(B, SMatrix{N,N}(val))
 
 mask_block(::Type{C}, val::UniformScaling, args...) where {C<:Number} =
     mask_block(B, convert(C, val.λ))
 
 function mask_block(B, val, size)
-    @boundscheck(checkblocksize(val, s))
+    @boundscheck(checkblocksize(val, size))
     return mask_block(B, val)
 end
 
