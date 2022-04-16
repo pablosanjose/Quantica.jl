@@ -539,6 +539,10 @@ end
 
 norbitals(h::AbstractHamiltonian) = blocksizes(blockstructure(h))
 
+blockeltype(::AbstractHamiltonian) = blockeltype(blockstructure(h))
+
+blocktype(h::AbstractHamiltonian) = blocktype(blockstructure(h))
+
 ## Hamiltonian
 
 Hamiltonian(l::Lattice{T,E,L}, b::BlockStructure{B}, h::Vector{Harmonic{T,L,B}}, bl) where {T,E,L,B} =
@@ -560,10 +564,6 @@ lattice(h::Hamiltonian) = h.lattice
 harmonics(h::Hamiltonian) = h.harmonics
 
 bloch(h::Hamiltonian) = h.bloch
-
-orbtype(h::Hamiltonian) = orbtype(blockstructure(h))
-
-blocktype(h::Hamiltonian) = blocktype(blockstructure(h))
 
 Base.size(h::Hamiltonian, i...) = size(first(harmonics(h)), i...)
 
@@ -693,8 +693,6 @@ harmonics(h::ParametricHamiltonian) = harmonics(parent(h))
 
 blockstructure(h::ParametricHamiltonian) = blockstructure(parent(h))
 
-orbtype(h::ParametricHamiltonian) = orbtype(parent(h))
-
 blocktype(h::ParametricHamiltonian) = blocktype(parent(h))
 
 lattice(h::ParametricHamiltonian) = lattice(parent(h))
@@ -737,77 +735,77 @@ Base.copy(p::ParametricHamiltonian) = ParametricHamiltonian(
 # #endregion
 # #endregion
 
-############################################################################################
-# Bloch  -  see hamiltonian.jl for methods
-#region
+# ############################################################################################
+# # Bloch  -  see hamiltonian.jl for methods
+# #region
 
-abstract type AbstractBloch{L} end
+# abstract type AbstractBloch{L} end
 
-struct Bloch{L,B,M<:AbstractMatrix{B},H<:AbstractHamiltonian{<:Any,<:Any,L}} <: AbstractBloch{L}
-    h::H
-    output::M       # output has same structure as merged harmonics(h)
-end                 # or its flattened version if eltype(M) != blocktype(H)
+# struct Bloch{L,B,M<:AbstractMatrix{B},H<:AbstractHamiltonian{<:Any,<:Any,L}} <: AbstractBloch{L}
+#     h::H
+#     output::M       # output has same structure as merged harmonics(h)
+# end                 # or its flattened version if eltype(M) != blocktype(H)
 
-#region ## API ##
+# #region ## API ##
 
-matrix(b::Bloch) = b.output
+# matrix(b::Bloch) = b.output
 
-hamiltonian(b::Bloch) = b.h
+# hamiltonian(b::Bloch) = b.h
 
-blocktype(::Bloch{<:Any,B}) where {B} = B
+# blocktype(::Bloch{<:Any,B}) where {B} = B
 
-orbtype(::Bloch{<:Any,B}) where {B} = orbtype(B)
+# orbtype(::Bloch{<:Any,B}) where {B} = orbtype(B)
 
-function spectrumtype(b::Bloch)
-    E = complex(eltype(blocktype(b)))
-    O = orbtype(b)
-    return Spectrum{E,O}
-end
+# function spectrumtype(b::Bloch)
+#     E = complex(eltype(blocktype(b)))
+#     O = orbtype(b)
+#     return Spectrum{E,O}
+# end
 
-latdim(b::Bloch) = latdim(lattice(b.h))
+# latdim(b::Bloch) = latdim(lattice(b.h))
 
-Base.size(b::Bloch, dims...) = size(b.output, dims...)
+# Base.size(b::Bloch, dims...) = size(b.output, dims...)
 
-#endregion
-#endregion
+# #endregion
+# #endregion
 
-############################################################################################
-# Velocity  -  see hamiltonian.jl for call API
-#region
+# ############################################################################################
+# # Velocity  -  see hamiltonian.jl for call API
+# #region
 
-struct Velocity{L,B<:Bloch{L}} <: AbstractBloch{L}
-    bloch::B
-    axis::Int
-    function Velocity{L,B}(b, axis) where {L,B<:Bloch{L}}
-        1 <= axis <= L || throw(ArgumentError("Velocity axis for this system should be between 1 and $L"))
-        return new(b, axis)
-    end
-end
+# struct Velocity{L,B<:Bloch{L}} <: AbstractBloch{L}
+#     bloch::B
+#     axis::Int
+#     function Velocity{L,B}(b, axis) where {L,B<:Bloch{L}}
+#         1 <= axis <= L || throw(ArgumentError("Velocity axis for this system should be between 1 and $L"))
+#         return new(b, axis)
+#     end
+# end
 
-#region ## API ##
+# #region ## API ##
 
-Velocity(b::B, axis) where {L,B<:Bloch{L}} = Velocity{L,B}(b, axis)
+# Velocity(b::B, axis) where {L,B<:Bloch{L}} = Velocity{L,B}(b, axis)
 
-velocity(b, axis) = Velocity(b, axis)
+# velocity(b, axis) = Velocity(b, axis)
 
-matrix(v::Velocity) = matrix(v.bloch)
+# matrix(v::Velocity) = matrix(v.bloch)
 
-hamiltonian(v::Velocity) = hamiltonian(v.bloch)
+# hamiltonian(v::Velocity) = hamiltonian(v.bloch)
 
-blocktype(v::Velocity) = blocktype(v.bloch)
+# blocktype(v::Velocity) = blocktype(v.bloch)
 
-orbtype(v::Velocity) = orbtype(v.bloch)
+# orbtype(v::Velocity) = orbtype(v.bloch)
 
-spectrumtype(v::Velocity) = spectrumtype(v.bloch)
+# spectrumtype(v::Velocity) = spectrumtype(v.bloch)
 
-latdim(v::Velocity) = latdim(v.bloch)
+# latdim(v::Velocity) = latdim(v.bloch)
 
-Base.size(v::Velocity, dims...) = size(v.bloch, dims...)
+# Base.size(v::Velocity, dims...) = size(v.bloch, dims...)
 
-axis(v::Velocity) = v.axis
+# axis(v::Velocity) = v.axis
 
-#endregion
-#endregion
+# #endregion
+# #endregion
 
 ############################################################################################
 # Mesh  -  see mesh.jl for methods
@@ -861,10 +859,13 @@ Base.copy(m::Mesh) = Mesh(copy(m.verts), deepcopy(m.neighs), copy(m.simps))
 
 abstract type AbstractEigensolver end
 
-const Spectrum{C<:Complex,O} = Eigen{O,C,Matrix{O},Vector{C}}
+struct Spectrum{T,B}
+    eigen::Eigen{Complex{T},Complex{T},Matrix{Complex{T}},Vector{Complex{T}}}
+    blockstruct::BlockStructure{B}
+end
 
-struct AppliedEigensolver{T,L,C,O}
-    solver::FunctionWrapper{Spectrum{C,O},Tuple{SVector{L,T}}}
+struct AppliedEigensolver{T,L,B}
+    solver::FunctionWrapper{Spectrum{T,B},Tuple{SVector{L,T}}}
 end
 
 #region ## Constructors ##

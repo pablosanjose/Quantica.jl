@@ -74,6 +74,8 @@ argval(n::Int) = n
 
 blocktype(::BlockStructure{B}) where {B} = B
 
+blockeltype(::BlockStructure{<:MatrixElementType{T}}) where {T} = Complex{T}
+
 blocksizes(b::BlockStructure) = b.blocksizes
 
 subsizes(b::BlockStructure) = b.subsizes
