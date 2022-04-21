@@ -261,8 +261,8 @@ Lattice{3,2,Float64} : 2D lattice in 3D space
 # See also
     `LatticePresets`, `bravais`, `sublat`, `supercell`, `intracell`
 """
-function lattice(ss::Sublat...; bravais = (), kw...)
-    u = Unitcell(ss...; kw...)
+function lattice(s::Sublat, ss::Sublat...; bravais = (), kw...)
+    u = Unitcell(s, ss...; kw...)
     b = Bravais(bravais, u)
     return lattice(u, b)
 end
@@ -278,6 +278,7 @@ function lattice(lat::Lattice; bravais = bravais(lat), kw...)
     b = Bravais(bravais, u)
     return lattice(u, b)
 end
+lattice(; kw...) = lat -> lattice(lat; kw...)
 
 #######################################################################
 # Supercell
