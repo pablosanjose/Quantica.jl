@@ -280,6 +280,8 @@ function lattice(lat::Lattice; bravais = bravais(lat), kw...)
 end
 lattice(; kw...) = lat -> lattice(lat; kw...)
 
+zerocell(::Lattice{<:Any,L}) where {L} = zero(SVector{L,Int})
+
 #######################################################################
 # Supercell
 #######################################################################
