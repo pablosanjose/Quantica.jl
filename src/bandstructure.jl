@@ -92,10 +92,10 @@ $i  Subspaces    : $(length(s.subs))")
 end
 
 """
-    spectrum(h; method = LinearAlgebraPackage(), transform = missing)
+    spectrum(h, φs; method = LinearAlgebraPackage(), transform = missing)
 
-Compute the spectrum of a 0D Hamiltonian `h` (or alternatively of the bounded unit cell of a
-finite dimensional `h`) using one of the following `method`s
+Compute the spectrum of a Hamiltonian `h` at Bloch phases φs (or at zero if φs is not given)
+using one of the following `method`s
 
     method                    diagonalization function
     --------------------------------------------------------------
@@ -127,9 +127,10 @@ independent copy.
 # See also
     `bandstructure`, `diagonalizer`
 """
-function spectrum(h; method = LinearAlgebraPackage(), transform = missing)
+
+function spectrum(h, φs = zerocell(h); method = LinearAlgebraPackage(), transform = missing)
     diag = diagonalizer(h; method = method)
-    (ϵk, ψk) = diag((), NoUnflatten())
+    (ϵk, ψk) = diag(φs, NoUnflatten())
     s = Spectrum(ϵk, ψk, diag)
     transform === missing || transform!(transform, s)
     return s
