@@ -10,7 +10,7 @@ using FunctionWrappers: FunctionWrapper
 using LinearAlgebra: Eigen, I, lu, ldiv!
 using SparseArrays: SparseMatrixCSC, AbstractSparseMatrix
 using Quantica: Quantica, AbstractEigensolver, ensureloaded, SVector, SMatrix,
-                bloch, flat, call!, sanitize_eigen, AbstractHamiltonian
+                sanitize_eigen, call!_output
 
 #endregion
 
@@ -20,13 +20,11 @@ using Quantica: Quantica, AbstractEigensolver, ensureloaded, SVector, SMatrix,
 
 ## Fallbacks
 
-eigensolver_preferred_matrix(h, ::AbstractEigensolver) = flat(bloch(h))
-
 (s::AbstractEigensolver)(mat) =
     throw(ArgumentError("The eigensolver backend $(typeof(s)) is not defined to work on $(typeof(mat))"))
 
-# fallback: no need to convert to mat´
-(solver!::AbstractEigensolver)(mat´, mat) = solver!(mat)
+# an alias of h's call! output makes apply call! conversion a no-op, see apply.jl
+input_matrix(::AbstractEigensolver, h) = call!_output(h)
 
 #### LinearAlgebra #####
 
@@ -43,10 +41,8 @@ function (solver::LinearAlgebra)(mat::AbstractMatrix{<:Number})
     return sanitize_eigen(ε, Ψ)
 end
 
-# LinearAlgebra.eigen doesn't like sparse matrices
-(solver::LinearAlgebra)(mat´::Matrix, mat::AbstractSparseMatrix) = solver(copy!(mat´, mat))
-
-eigensolver_preferred_matrix(h, ::LinearAlgebra) = Matrix(flat(bloch(h)))
+# LinearAlgebra.eigen doesn't like sparse Matrices as input, must convert
+input_matrix(::LinearAlgebra, h) = Matrix(call!_output(h))
 
 #### Arpack #####
 

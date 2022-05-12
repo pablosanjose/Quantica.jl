@@ -181,6 +181,8 @@ end
 @noinline checkbloch(::AbstractHamiltonian{<:Any,<:Any,L}, ::SVector{L´}) where {L,L´} =
     L == L´ || throw(ArgumentError("Need $L Bloch phases, got $(L´)"))
 
+call!_output(h::Hamiltonian) = flat(bloch(h))
+
 #endregion
 
 ############################################################################################
@@ -261,6 +263,8 @@ function applymodifiers!(h, m::AppliedHoppingModifier{B}; kw...) where {B<:SMatr
     end
     return h
 end
+
+call!_output(p::ParametricHamiltonian) = flat(bloch(p))
 
 #endregion
 

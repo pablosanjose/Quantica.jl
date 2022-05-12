@@ -7,17 +7,9 @@ spectrum(h::AbstractHamiltonian, xs...; kw...) = Spectrum(solver(h(xs...; kw...)
 
 function SpectrumSolver(h::AbstractHamiltonian{T,<:Any,L}, S = SVector{L,T};
                         solver = EP.LinearAlgebra(), mapping = missing, transform = missing) where {L,T}
-    B = blocktype(h)
-    h´ = copy_callsafe(h)
-    matrix = EP.eigensolver_preferred_matrix(h´, solver)
-    solver = spectrumsolver(solver, h´, matrix, mapping, transform)
-    return SpectrumSolver(matrix, FunctionWrapper{Spectrum{T,B},Tuple{S}}(solver))
+    solver´ = apply(solver, h, S, mapping, transform)
+    return SpectrumSolver(solver´)
 end
-
-spectrumsolver(solver!::AbstractEigensolver, h, matrix, ::Missing, transform) =
-    φs -> Spectrum(solver!(matrix, call!(h, φs)), h, transform)
-spectrumsolver(solver!::AbstractEigensolver, h, matrix, mapping, transform) =
-    φs -> Spectrum(solver!(matrix, call!(h, mapping(Tuple(φs)...))), h, transform)
 
 spectrum(h::AbstractHamiltonian, φ, φs...; kw...) = SpectrumSolver(h; kw...)((φ, φs...))
 spectrum(h::AbstractHamiltonian; kw...) = SpectrumSolver(h; kw...)

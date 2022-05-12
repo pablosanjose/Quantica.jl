@@ -147,3 +147,27 @@ function pointers(h::Hamiltonian{T,E}, s::AppliedHopSelector{T,E}) where {T,E}
 end
 
 #endregion
+
+############################################################################################
+# apply AbstractEigensolver
+#region
+
+function apply(solver::AbstractEigensolver, h::AbstractHamiltonian, S::Type{SVector{L,T}}, mapping, transform) where {L,T}
+    B = blocktype(h)
+    h´ = copy_callsafe(h)
+    # Some solvers only accept certain matrix types
+    mat´ = EP.input_matrix(solver, h´)
+    function sfunc(φs)
+        φs´ = applymap(mapping, φs)
+        mat = call!(h´, φs´)
+        mat´ === mat || copy!(mat´, mat)
+        eigen = solver(mat´)
+        return Spectrum(eigen, h, transform)
+    end
+    return FunctionWrapper{Spectrum{T,B},Tuple{S}}(sfunc)
+end
+
+applymap(::Missing, φs) = φs
+applymap(mapping, φs) = mapping(Tuple(φs)...)
+
+#endregion

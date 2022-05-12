@@ -787,8 +787,7 @@ Base.size(s::Spectrum, i...) = size(s.eigen.vectors, i...)
 # SpectrumSolver - reuses bloch matrix when applying to many Bloch phases, see spectrum.jl
 #region
 
-struct SpectrumSolver{T,L,B,M<:AbstractMatrix}
-    matrix::M
+struct SpectrumSolver{T,L,B}
     solver::FunctionWrapper{Spectrum{T,B},Tuple{SVector{L,T}}}
 end
 
