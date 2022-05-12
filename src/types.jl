@@ -523,12 +523,12 @@ struct Hamiltonian{T,E,L,B} <: AbstractHamiltonian{T,E,L,B}
     bloch::HybridSparseMatrixCSC{T,B}
     # Enforce sorted-dns-starting-from-zero invariant onto harmonics
     function Hamiltonian{T,E,L,B}(lattice, blockstruct, harmonics, bloch) where {T,E,L,B}
-        # n = nsites(lattice)
-        # all(har -> size(matrix(har)) == (n, n), harmonics) ||
-        #     throw(DimensionMismatch("Harmonic $(size.(matrix.(harmonics), 1)) sizes don't match number of sites $n"))
-        # sort!(harmonics)
-        # (isempty(harmonics) || !iszero(dcell(first(harmonics)))) && pushfirst!(harmonics,
-        #     Harmonic(zero(SVector{L,Int}), HybridSparseMatrixCSC(blockstruct, spzeros(B, n, n))))
+        n = nsites(lattice)
+        all(har -> size(matrix(har)) == (n, n), harmonics) ||
+            throw(DimensionMismatch("Harmonic $(size.(matrix.(harmonics), 1)) sizes don't match number of sites $n"))
+        sort!(harmonics)
+        (isempty(harmonics) || !iszero(dcell(first(harmonics)))) && pushfirst!(harmonics,
+            Harmonic(zero(SVector{L,Int}), HybridSparseMatrixCSC(blockstruct, spzeros(B, n, n))))
         return new(lattice, blockstruct, harmonics, bloch)
     end
 end
@@ -567,13 +567,8 @@ bloch(h::Hamiltonian) = h.bloch
 
 Base.size(h::Hamiltonian, i...) = size(first(harmonics(h)), i...)
 
-copy_only_harmonics(h::Hamiltonian) = Hamiltonian(
-    lattice(h), blockstructure(h), copy.(harmonics(h)), copy(bloch(h))
-)
-
 Base.copy(h::Hamiltonian) = Hamiltonian(
-    copy(lattice(h)), copy(blockstructure(h)), copy.(harmonics(h)), copy(bloch(h))
-)
+    copy(lattice(h)), copy(blockstructure(h)), copy.(harmonics(h)), copy(bloch(h)))
 
 function LinearAlgebra.ishermitian(h::Hamiltonian)
     for hh in h.harmonics
@@ -683,6 +678,8 @@ Base.parent(h::ParametricHamiltonian) = h.hparent
 
 hamiltonian(h::ParametricHamiltonian) = h.h
 
+bloch(h::ParametricHamiltonian) = h.h.bloch
+
 parameters(h::ParametricHamiltonian) = h.allparams
 
 modifiers(h::ParametricHamiltonian) = h.modifiers
@@ -700,112 +697,10 @@ lattice(h::ParametricHamiltonian) = lattice(parent(h))
 Base.size(h::ParametricHamiltonian, i...) = size(parent(h), i...)
 
 Base.copy(p::ParametricHamiltonian) = ParametricHamiltonian(
-    copy(p.hparent), copy(p.h), p.modifiers, deepcopy(p.allptrs), copy(p.allparams)
-)
+    copy(p.hparent), copy(p.h), p.modifiers, deepcopy(p.allptrs), copy(p.allparams))
 
 #endregion
 #endregion
-
-# ############################################################################################
-# # FlatHamiltonian  -  see hamiltonian.jl for methods
-# #region
-
-# struct FlatHamiltonian{T,E,L,B<:Number,H<:AbstractHamiltonian{T,E,L,<:SMatrix}} <: AbstractHamiltonian{T,E,L,B}
-#     h::H
-#     flatorbstruct::OrbitalStructure{B}
-# end
-
-# #region ## API ##
-
-# orbitalstructure(h::FlatHamiltonian) = h.flatorbstruct
-
-# lattice(h::FlatHamiltonian) = lattice(parent(h))
-
-# harmonics(h::FlatHamiltonian) = harmonics(parent(h))
-
-# orbtype(h::FlatHamiltonian) = orbtype(orbitalstructure(h))
-
-# blocktype(h::FlatHamiltonian) = blocktype(orbitalstructure(h))
-
-# Base.size(h::FlatHamiltonian) = nsites(orbitalstructure(h)), nsites(orbitalstructure(h))
-# Base.size(h::FlatHamiltonian, i) = i <= 0 ? throw(BoundsError()) : ifelse(1 <= i <= 2, nsites(orbitalstructure(h)), 1)
-
-# Base.parent(h::FlatHamiltonian) = h.h
-
-# #endregion
-# #endregion
-
-# ############################################################################################
-# # Bloch  -  see hamiltonian.jl for methods
-# #region
-
-# abstract type AbstractBloch{L} end
-
-# struct Bloch{L,B,M<:AbstractMatrix{B},H<:AbstractHamiltonian{<:Any,<:Any,L}} <: AbstractBloch{L}
-#     h::H
-#     output::M       # output has same structure as merged harmonics(h)
-# end                 # or its flattened version if eltype(M) != blocktype(H)
-
-# #region ## API ##
-
-# matrix(b::Bloch) = b.output
-
-# hamiltonian(b::Bloch) = b.h
-
-# blocktype(::Bloch{<:Any,B}) where {B} = B
-
-# orbtype(::Bloch{<:Any,B}) where {B} = orbtype(B)
-
-# function spectrumtype(b::Bloch)
-#     E = complex(eltype(blocktype(b)))
-#     O = orbtype(b)
-#     return Spectrum{E,O}
-# end
-
-# latdim(b::Bloch) = latdim(lattice(b.h))
-
-# Base.size(b::Bloch, dims...) = size(b.output, dims...)
-
-# #endregion
-# #endregion
-
-# ############################################################################################
-# # Velocity  -  see hamiltonian.jl for call API
-# #region
-
-# struct Velocity{L,B<:Bloch{L}} <: AbstractBloch{L}
-#     bloch::B
-#     axis::Int
-#     function Velocity{L,B}(b, axis) where {L,B<:Bloch{L}}
-#         1 <= axis <= L || throw(ArgumentError("Velocity axis for this system should be between 1 and $L"))
-#         return new(b, axis)
-#     end
-# end
-
-# #region ## API ##
-
-# Velocity(b::B, axis) where {L,B<:Bloch{L}} = Velocity{L,B}(b, axis)
-
-# velocity(b, axis) = Velocity(b, axis)
-
-# matrix(v::Velocity) = matrix(v.bloch)
-
-# hamiltonian(v::Velocity) = hamiltonian(v.bloch)
-
-# blocktype(v::Velocity) = blocktype(v.bloch)
-
-# orbtype(v::Velocity) = orbtype(v.bloch)
-
-# spectrumtype(v::Velocity) = spectrumtype(v.bloch)
-
-# latdim(v::Velocity) = latdim(v.bloch)
-
-# Base.size(v::Velocity, dims...) = size(v.bloch, dims...)
-
-# axis(v::Velocity) = v.axis
-
-# #endregion
-# #endregion
 
 ############################################################################################
 # Mesh  -  see mesh.jl for methods
@@ -853,8 +748,8 @@ Base.copy(m::Mesh) = Mesh(copy(m.verts), deepcopy(m.neighs), copy(m.simps))
 #endregion
 
 ############################################################################################
-# Eigensolvers  -  see band.jl for AppliedEigensolver call API and Spectrum constructors
-#                  /presets/eigensolvers.jl for solver backends <: AbstractEigensolver
+# Spectrum  -  see /presets/eigensolvers.jl for solver backends <: AbstractEigensolver
+#           -  see spectrum.jl for public API
 #region
 
 abstract type AbstractEigensolver end
@@ -864,63 +759,71 @@ struct Spectrum{T,B}
     blockstruct::BlockStructure{B}
 end
 
-struct AppliedEigensolver{T,L,B}
-    solver::FunctionWrapper{Spectrum{T,B},Tuple{SVector{L,T}}}
-end
-
 #region ## Constructors ##
 
-Spectrum(evals, evecs) = Eigen(sorteigs!(evals, evecs)...)
-Spectrum(evals::AbstractVector, evecs::AbstractVector{<:AbstractVector}) =
-    Spectrum(evals, hcat(evecs...))
-Spectrum(evals::AbstractVector{<:Real}, evecs::AbstractMatrix) =
-    Spectrum(complex.(evals), evecs)
+Spectrum(eigen::Eigen, h::AbstractHamiltonian) = Spectrum(eigen, blockstructure(h))
+Spectrum(eigen::Eigen, h, ::Missing) = Spectrum(eigen, h)
 
-function sorteigs!(ϵ::AbstractVector, ψ::AbstractMatrix)
-    p = Vector{Int}(undef, length(ϵ))
-    p´ = similar(p)
-    sortperm!(p, ϵ, by = real, alg = Base.DEFAULT_UNSTABLE)
-    Base.permute!!(ϵ, copy!(p´, p))
-    Base.permutecols!!(ψ, copy!(p´, p))
-    return ϵ, ψ
+function Spectrum(eigen::Eigen, h, transform)
+    s = Spectrum(eigen, h)
+    map!(transform, energies(s))
+    return s
 end
 
 #endregion
 
 #region ## API ##
 
-solver(s::AppliedEigensolver) = s.solver
+energies(s::Spectrum) = s.eigen.values
 
-energies(s::Spectrum) = s.values
+states(s::Spectrum) = s.eigen.vectors
 
-states(s::Spectrum) = s.vectors
-
-Base.size(s::Spectrum, i...) = size(s.vectors, i...)
+Base.size(s::Spectrum, i...) = size(s.eigen.vectors, i...)
 
 #endregion
 #endregion
 
 ############################################################################################
-# Band and friends -  see band.jl for methods
+# SpectrumSolver - reuses bloch matrix when applying to many Bloch phases, see spectrum.jl
 #region
 
-const MatrixView{O} = SubArray{O,2,Matrix{O},Tuple{Base.Slice{Base.OneTo{Int}}, UnitRange{Int}}, true}
+struct SpectrumSolver{T,L,B,M<:AbstractMatrix}
+    matrix::M
+    solver::FunctionWrapper{Spectrum{T,B},Tuple{SVector{L,T}}}
+end
 
-struct BandVertex{T<:AbstractFloat,E,O}
+#region ## API ##
+
+(s::SpectrumSolver{T,L})(φs::Vararg{<:Any,L}) where {T,L} = s.solver(sanitize_SVector(SVector{L,T}, φs))
+(s::SpectrumSolver{T,L})(φs::SVector{L}) where {T,L} = s.solver(sanitize_SVector(SVector{L,T}, φs))
+(s::SpectrumSolver{T,L})(φs::NTuple{L,Any}) where {T,L} = s.solver(sanitize_SVector(SVector{L,T}, φs))
+(s::SpectrumSolver{T,L})(φs...) where {T,L} =
+    throw(ArgumentError("SpectrumSolver call requires $L parameters/Bloch phases, received $φs"))
+
+#endregion
+#endregion
+
+############################################################################################
+# Band and friends -  see spectrum.jl for methods
+#region
+
+const MatrixView{C} = SubArray{C,2,Matrix{C},Tuple{Base.Slice{Base.OneTo{Int}}, UnitRange{Int}}, true}
+
+struct BandVertex{T<:AbstractFloat,E}
     coordinates::SVector{E,T}
-    states::MatrixView{O}
+    states::MatrixView{Complex{T}}
 end
 
 # Subband is a type of AbstractMesh with manifold dimension = embedding dimension - 1
 # and with interval search trees to allow slicing
-struct Subband{T,E,O} <: AbstractMesh{BandVertex{T,E,O},E}  # we restrict S == E
-    mesh::Mesh{BandVertex{T,E,O},E}
+struct Subband{T,E} <: AbstractMesh{BandVertex{T,E},E}  # we restrict S == E
+    mesh::Mesh{BandVertex{T,E},E}
     trees::NTuple{E,IntervalTree{T,IntervalValue{T,Int}}}
 end
 
-struct Band{T,E,L,C,O} # E = L+1
-    subbands::Vector{Subband{T,E,O}}
-    solvers::Vector{AppliedEigensolver{T,L,C,O}}  # one per Julia thread
+struct Band{T,E,L,B} # E = L+1
+    subbands::Vector{Subband{T,E}}
+    solvers::Vector{SpectrumSolver{T,L,B}}  # one per Julia thread
 end
 
 #region ## Constructors ##

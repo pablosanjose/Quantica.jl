@@ -14,14 +14,15 @@ using SuiteSparse
 using FunctionWrappers: FunctionWrapper
 using ExprTools
 using IntervalTrees
+using FrankenTuples
 using SparseArrays: getcolptr, AbstractSparseMatrix, AbstractSparseMatrixCSC
 using Statistics: mean
 
 export sublat, lattice, supercell, bravais_matrix,
        hopping, onsite, @onsite!, @hopping!, neighbors,
-       hamiltonian, parametric, bloch,
+       hamiltonian, parametric, call!,
        flat, unflat, wrap, transform, transform!, translate, translate!,
-       band, mesh, subbands, slice,
+       spectrum, band, mesh, subbands, slice,
        coupler
 
 # export sublat, lattice, dims, supercell, bravais_matrix, siteindices, sitepositions,
@@ -38,6 +39,7 @@ export sublat, lattice, supercell, bravais_matrix,
 export LatticePresets, LP, RegionPresets, RP, EigensolverPresets, EP #, HamiltonianPresets, HP
 export @SMatrix, @SVector, SMatrix, SVector, SA
 export ishermitian, I
+export ftuple
 
 include("iterators.jl")
 include("builders.jl")
@@ -52,7 +54,7 @@ include("transform.jl")
 include("apply.jl")
 # include("ket.jl")
 include("mesh.jl")
-include("band.jl")
+include("spectrum.jl")
 include("coupler.jl")
 # include("KPM.jl")
 # include("effective.jl")
@@ -64,7 +66,7 @@ include("convert.jl")
 
 include("presets/lattices.jl")
 include("presets/regions.jl")
-# include("presets/eigensolvers.jl")
+include("presets/eigensolvers.jl")
 # include("presets/hamiltonians.jl")
 
 include("precompile.jl")

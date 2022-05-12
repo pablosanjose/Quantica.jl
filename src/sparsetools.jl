@@ -1,5 +1,6 @@
 ############################################################################################
-# MatrixElementType
+# SMatrixView
+# eltype that signals to HybridSparseMatrixCSC that a view must be returned of its elements
 #region
 
 struct SMatrixView{N,M,T,NM}
@@ -22,6 +23,12 @@ Base.zero(::Type{SMatrixView{N,M,T,NM}}) where {N,M,T,NM} = zero(SMatrix{N,M,T,N
 # for generic code as e.g. flat/unflat or merged_flatten_mul!
 Base.getindex(s::SMatrixView, i::Integer...) = s.s[i...]
 
+#endregion
+
+############################################################################################
+# MatrixElementType & friends
+#region
+
 const MatrixElementType{T} = Union{
     Complex{T},
     SMatrix{N,N,Complex{T}} where {N},
@@ -41,7 +48,6 @@ const MatrixElementNonscalarType{T,N} = Union{
 # BlockStructure
 #region
 
-# struct BlockStructure{B<:MatrixElementType}
 struct BlockStructure{B}
     blocksizes::Vector{Int}       # block sizes for each sublattice
     subsizes::Vector{Int}         # number of blocks (sites) in each sublattice
@@ -170,7 +176,7 @@ end
 
 ## Show ##
 
-Base.show(io::IO, m::MIME"text/plain", s::HybridSparseMatrixCSC) = 
+Base.show(io::IO, m::MIME"text/plain", s::HybridSparseMatrixCSC) =
     show(io, m, unflat(s))
 
 ## API ##
@@ -422,7 +428,7 @@ function merged_mul!(C::SparseMatrixCSC{<:Number}, A::HybridSparseMatrixCSC, b::
     return C
 end
 
-function merged_mul!(C::SparseMatrixCSC{<:Number}, bs::BlockStructure{B}, A::SparseMatrixCSC{B}, b::Number, α = 1, β = 0) where {B<:Complex}
+function merged_mul!(C::SparseMatrixCSC{<:Number}, ::BlockStructure, A::SparseMatrixCSC{B}, b::Number, α = 1, β = 0) where {B<:Complex}
     nzA = nonzeros(A)
     nzC = nonzeros(C)
     αb = α * b

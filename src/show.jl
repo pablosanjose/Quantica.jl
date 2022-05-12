@@ -111,22 +111,6 @@ showextrainfo(io, i, h::ParametricHamiltonian) = print(io, i, "\n",
 #endregion
 
 ############################################################################################
-# Bloch
-#region
-
-function Base.show(io::IO, b::Bloch)
-    i = get(io, :indent, "")
-    ioindent = IOContext(io, :indent => "  ")
-    print(io, i, summary(b), " for \n")
-    show(ioindent, hamiltonian(b))
-end
-
-Base.summary(h::Bloch{L,B}) where {L,B} =
-    "Bloch{$L,$B}: Bloch matrix constructor with target eltype $B"
-
-#endregion
-
-############################################################################################
 # AbstractEigensolver
 #region
 
@@ -138,16 +122,22 @@ end
 Base.summary(s::AbstractEigensolver) =
     "AbstractEigensolver ($(Base.nameof(typeof(s))))"
 
-function Base.show(io::IO, s::AppliedEigensolver)
+#endregion
+
+############################################################################################
+# SpectrumSolver
+#region
+
+function Base.show(io::IO, s::SpectrumSolver)
     i = get(io, :indent, "")
     ioindent = IOContext(io, :indent => "  ")
     print(io, i, summary(s), "\n")
 end
 
-Base.summary(::AppliedEigensolver{T,L}) where {T,L} =
-    "AppliedEigensolver{$T,$L}: Eigensolver applied over an $L-dimensional parameter manifold of type $T"
+Base.summary(::SpectrumSolver{T,L}) where {T,L} =
+    "SpectrumSolver{$T,$L}: Spectrum solver over an $L-dimensional parameter manifold of type $T"
 
-    #endregion
+#endregion
 
 ############################################################################################
 # AbstractMesh

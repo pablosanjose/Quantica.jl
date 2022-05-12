@@ -1,35 +1,50 @@
 ############################################################################################
-# AppliedEigensolver call API
+# Spectrum and SpectrumSolver
 #region
 
-(s::AppliedEigensolver{<:Any,L})(φs::Vararg{<:Any,L}) where {L} = solver(s)(SVector(φs))
-(s::AppliedEigensolver{<:Any,L})(φs::SVector{L}) where {L} = solver(s)(φs)
-(s::AppliedEigensolver{<:Any,L})(φs...) where {L} =
-    throw(ArgumentError("AppliedEigensolver call requires $L parameters/Bloch phases"))
+# We avoid call! so that spectrum produces no side effects or race conditions
+spectrum(h::AbstractHamiltonian, xs...; kw...) = Spectrum(solver(h(xs...; kw...)), h)
+
+function SpectrumSolver(h::AbstractHamiltonian{T,<:Any,L}, S = SVector{L,T};
+                        solver = EP.LinearAlgebra(), mapping = missing, transform = missing) where {L,T}
+    B = blocktype(h)
+    h´ = copy_callsafe(h)
+    matrix = EP.eigensolver_preferred_matrix(h´, solver)
+    solver = spectrumsolver(solver, h´, matrix, mapping, transform)
+    return SpectrumSolver(matrix, FunctionWrapper{Spectrum{T,B},Tuple{S}}(solver))
+end
+
+spectrumsolver(solver!::AbstractEigensolver, h, matrix, ::Missing, transform) =
+    φs -> Spectrum(solver!(matrix, call!(h, φs)), h, transform)
+spectrumsolver(solver!::AbstractEigensolver, h, matrix, mapping, transform) =
+    φs -> Spectrum(solver!(matrix, call!(h, mapping(Tuple(φs)...))), h, transform)
+
+spectrum(h::AbstractHamiltonian, φ, φs...; kw...) = SpectrumSolver(h; kw...)((φ, φs...))
+spectrum(h::AbstractHamiltonian; kw...) = SpectrumSolver(h; kw...)
+
+spectrum(h::Hamiltonian{<:Any,<:Any,0}; kw...) = SpectrumSolver(h; kw...)()
 
 #endregion
+
 
 ############################################################################################
 # band
 #region
 
-band(h::AbstractHamiltonian, mesh::Mesh; solver = EP.LinearAlgebra(), kw...) =
-    band(bloch(h, solver), mesh; solver, kw...)
-
-function band(bloch::Bloch, basemesh::Mesh{SVector{L,T}}; mapping = missing,
-    solver = EP.LinearAlgebra(), showprogress = true, defects = (), patches = 0,
-    degtol = missing, split = true, warn = true) where {T,L}
-    solvers = [apply(solver, bloch, SVector{L,T}, mapping) for _ in 1:Threads.nthreads()]
+function band(h::AbstractHamiltonian, basemesh::Mesh{SVector{L,T}}; solver = EP.LinearAlgebra(),
+              transform = missing, mapping = missing, showprogress = true, defects = (), patches = 0,
+              degtol = missing, split = true, warn = true) where {T,L}
+    solvers = [SpectrumSolver(h, SVector{L,T}; solver, mapping, transform) for _ in 1:Threads.nthreads()]
     defects´ = sanitize_Vector_of_SVectors(SVector{L,T}, defects)
     degtol´ = degtol isa Number ? degtol : sqrt(eps(real(T)))
     return band_precompilable(solvers, basemesh, showprogress, defects´, patches, degtol´, split, warn)
 end
 
 function band_precompilable(solvers::Vector{A}, basemesh::Mesh{SVector{L,T}},
-    showprogress, defects, patches, degtol, split, warn) where {T,L,C,O,A<:AppliedEigensolver{T,L,C,O}}
+    showprogress, defects, patches, degtol, split, warn) where {T,L,B,A<:SpectrumSolver{T,L,B}}
 
     basemesh = copy(basemesh) # will become part of Band, possibly refined
-    spectra = Vector{Spectrum{C,O}}(undef, length(vertices(basemesh)))
+    spectra = Vector{Spectrum{T,B}}(undef, length(vertices(basemesh)))
     bandverts = BandVertex{T,L+1,O}[]
     bandneighs = Vector{Int}[]
     bandneideg = similar(bandneighs)
@@ -41,7 +56,7 @@ function band_precompilable(solvers::Vector{A}, basemesh::Mesh{SVector{L,T}},
               crossed, frustrated, subbands, defects, patches, showprogress, degtol, split, warn)
 
     # Step 1 - Diagonalize:
-    # Uses multiple AppliedEigensolvers (one per Julia thread) to diagonalize bloch at each
+    # Uses multiple SpectrumSolvers (one per Julia thread) to diagonalize h at each
     # vertex of basemesh. Then, it collects each of the produced Spectrum (aka "columns")
     # into a bandverts::Vector{BandVertex}, recording the coloffsets for each column
     band_diagonalize!(data)
@@ -428,7 +443,7 @@ slice_axes(dim::Int) = ()
 
 all_axes(::Subband{<:Any,E}) where {E} = ntuple(identity, Val(E))
 
-slice_vertex_type(::Subband{T,<:Any,O}, ::NTuple{N}) where {T,O,N} = BandVertex{T,N,O}
+slice_vertex_type(::Subband{T,<:Any}, ::NTuple{N}) where {T,N} = BandVertex{T,N}
 
 slice_skey_type(::NTuple{N}) where {N} = SVector{N+1,Int}
 

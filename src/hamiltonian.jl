@@ -63,7 +63,8 @@ function parametric(hparent::Hamiltonian)
     modifiers = ()
     allparams = Symbol[]
     allptrs = [Int[] for _ in harmonics(hparent)]
-    h = copy_only_harmonics(hparent)
+    # We must decouple hparent from the result, which will modify h in various ways
+    h = copy_callsafe(hparent)
     return ParametricHamiltonian(hparent, h, modifiers, allptrs, allparams)
 end
 
@@ -119,10 +120,27 @@ merge_parameters!(p) = unique!(sort!(p))
 #endregion
 
 ############################################################################################
+# copy_callsafe - minimal copy without side effects and race conditions between call!'s
+#region
+
+copy_bloch(h::Hamiltonian) = Hamiltonian(
+    lattice(h), blockstructure(h), harmonics(h), copy(bloch(h)))
+
+copy_harmonics(h::Hamiltonian) = Hamiltonian(
+    lattice(h), blockstructure(h), copy.(harmonics(h)), bloch(h))
+
+copy_callsafe(h::Hamiltonian) = copy_bloch(h)
+
+copy_callsafe(p::ParametricHamiltonian) = ParametricHamiltonian(
+    p.hparent, copy_harmonics(copy_bloch(p.h)), p.modifiers, p.allptrs, p.allparams)
+
+#endregion
+
+############################################################################################
 # Hamiltonian call API
 #region
 
-(h::Hamiltonian)(phi...) = copy(call!(h, phi...))
+(h::Hamiltonian)(phi...) = call!(copy_callsafe(h), phi...)
 
 call!(h::Hamiltonian, phi) = bloch_flat!(h, sanitize_SVector(phi))
 call!(h::Hamiltonian, phi...) = bloch_flat!(h, sanitize_SVector(phi))
@@ -169,10 +187,11 @@ end
 # ParametricHamiltonian call API
 #region
 
-(ph::ParametricHamiltonian)(; kw...) = copy_only_harmonics(call!(ph; kw...))
-(p::ParametricHamiltonian)(x, xs...; kw...) = call!(p; kw...)(x, xs...)
+(p::ParametricHamiltonian)(; kw...) = call!(copy_callsafe(p); kw...)
+(p::ParametricHamiltonian)(x, xs...; kw...) = call!(call!(copy_callsafe(p); kw...), x, xs...)
 
 call!(p::ParametricHamiltonian, x, xs...; kw...) = call!(call!(p; kw...), x, xs...)
+call!(p::ParametricHamiltonian, ft::FrankenTuple) = call!(p, Tuple(ft); NamedTuple(ft)...)
 
 function call!(ph::ParametricHamiltonian; kw...)
     reset_to_parent!(ph)
