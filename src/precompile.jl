@@ -30,5 +30,5 @@ end
 for L in 1:2
     T = Float64
     B = ComplexF64
-    precompile(band_precompilable, (Vector{SpectrumSolver{T,L,B}}, Mesh{SVector{L,T}}, Bool, Vector{SVector{L,T}}, Int, T, Bool, Bool))
+    precompile(bands_precompilable, (Vector{SpectrumSolver{T,L,B}}, Mesh{SVector{L,T}}, Bool, Vector{SVector{L,T}}, Int, T, Bool, Bool))
 end

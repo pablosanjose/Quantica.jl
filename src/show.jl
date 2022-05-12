@@ -162,7 +162,7 @@ end
 #endregion
 
 ############################################################################################
-# Band
+# Bands
 #region
 
 function Base.show(io::IO, b::Bands)
@@ -174,8 +174,8 @@ $i  Edges     : $(sum(s -> sum(length, neighbors(s)), subbands(b)) ÷ 2)
 $i  Simplices : $(sum(s->length(simplices(s)), subbands(b)))")
 end
 
-Base.summary(::Band{T,E,L}) where {T,E,L} =
-    "Band{$T,$E,$L}: $(E)D Band structure over a $L-dimensional parameter space of type $T"
+Base.summary(::Bands{T,E,L}) where {T,E,L} =
+    "Bands{$T,$E,$L}: $(E)D Bandstructure over a $L-dimensional parameter space of type $T"
 
 #endregion
 
