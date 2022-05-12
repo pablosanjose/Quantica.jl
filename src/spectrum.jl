@@ -392,10 +392,10 @@ end
 # Subband slicing and indexing
 #region
 
-Base.getindex(b::Band, xs...) = [s[xs...] for s in subbands(b)]
+Base.getindex(b::Bands, xs...) = [s[xs...] for s in subbands(b)]
 Base.getindex(s::Subband, xs...) = Subband(slice(s, xs, Val(true)))
 
-slice(b::Band, xs...) = [slice(s, xs...) for s in subbands(b)]
+slice(b::Bands, xs...) = [slice(s, xs...) for s in subbands(b)]
 
 slice(s::Subband, xs::Union{Colon,Number}...) = slice(s, xs)
 # default: slice -> mesh with same embedding dimension as subband and smaller simplex length
