@@ -22,7 +22,7 @@ export sublat, lattice, supercell, bravais_matrix,
        hopping, onsite, @onsite!, @hopping!, neighbors,
        hamiltonian, parametric, call!,
        flat, unflat, wrap, transform, transform!, translate, translate!,
-       spectrum, band, mesh, subbands, slice,
+       spectrum, bands, mesh, subbands, slice,
        coupler
 
 # export sublat, lattice, dims, supercell, bravais_matrix, siteindices, sitepositions,

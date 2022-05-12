@@ -1,6 +1,7 @@
 ############################################################################################
 # SMatrixView
-# eltype that signals to HybridSparseMatrixCSC that a view must be returned of its elements
+#   eltype that signals to HybridSparseMatrixCSC that a variable-size view must be returned
+#   of its elements, because the number of orbitals is not uniform
 #region
 
 struct SMatrixView{N,M,T,NM}

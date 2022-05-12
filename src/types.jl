@@ -803,7 +803,7 @@ end
 #endregion
 
 ############################################################################################
-# Band and friends -  see spectrum.jl for methods
+# Bands and friends -  see spectrum.jl for methods
 #region
 
 const MatrixView{C} = SubArray{C,2,Matrix{C},Tuple{Base.Slice{Base.OneTo{Int}}, UnitRange{Int}}, true}
@@ -820,7 +820,7 @@ struct Subband{T,E} <: AbstractMesh{BandVertex{T,E},E}  # we restrict S == E
     trees::NTuple{E,IntervalTree{T,IntervalValue{T,Int}}}
 end
 
-struct Band{T,E,L,B} # E = L+1
+struct Bands{T,E,L,B} # E = L+1
     subbands::Vector{Subband{T,E}}
     solvers::Vector{SpectrumSolver{T,L,B}}  # one per Julia thread
 end
@@ -903,11 +903,11 @@ Base.isempty(s::Subband) = isempty(simplices(s))
 
 # Band #
 
-basemesh(b::Band) = b.basemesh
+basemesh(b::Bands) = b.basemesh
 
-subbands(b::Band) = b.subbands
+subbands(b::Bands) = b.subbands
 
-subbands(b::Band, i...) = getindex(b.subbands, i...)
+subbands(b::Bands, i...) = getindex(b.subbands, i...)
 
 #endregion
 #endregion
