@@ -1,5 +1,5 @@
 ############################################################################################
-# Spectrum and SpectrumSolver
+# spectrum
 #region
 
 # We avoid call! so that spectrum produces no side effects or race conditions
@@ -17,6 +17,33 @@ spectrum(h::AbstractHamiltonian; kw...) = SpectrumSolver(h; kw...)
 spectrum(h::Hamiltonian{<:Any,<:Any,0}; kw...) = SpectrumSolver(h; kw...)()
 
 #endregion
+
+
+############################################################################################
+# Spectrum indexing
+#region
+
+Base.first(s::Spectrum) = energies(s)
+Base.last(s::Spectrum) = states(s)
+Base.iterate(s::Spectrum) = first(s), Val(:states)
+Base.iterate(s::Spectrum, ::Val{:states}) = last(s), Val(:done)
+Base.iterate(::Spectrum, ::Val{:done}) = nothing
+Base.Tuple(s::Spectrum) = (first(s), last(s))
+
+Base.getindex(s::Spectrum, i...; around = missing) = get_around(Tuple(s), around, i...)
+
+get_around((es, ss), ε0::Missing, i) = (es[i], ss[:,i])
+get_around(s, ε0::Number) = get_around(s, ε0, 1)
+get_around(s, ε0::Number, i::Integer) = get_around(s, ε0, i:i)
+
+function get_around((es, ss), ε0::Number, which)
+    # Get indices of eachindex(es) such that if sorted by `by` will occupy `which` positions
+    rngs = partialsort(eachindex(es), which, by = rng -> abs(es[rng] - ε0))
+    return (es[rngs], ss[:, rngs])
+end
+
+#endregion
+
 
 
 ############################################################################################
