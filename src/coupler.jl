@@ -44,7 +44,7 @@ blockranges(c::Coupler, i, j) =
 
 assignedblocks(c::Coupler) = c.assigned
 
-orbitalstructure(c::Coupler) = orbitalstructure(builder(c))
+blockstructure(c::Coupler) = blockstructure(builder(c))
 
 #endregion
 
@@ -53,7 +53,7 @@ orbitalstructure(c::Coupler) = orbitalstructure(builder(c))
 #region
 
 function coupler(hs::AbstractHamiltonian...; all = missing)
-    c = coupler_unflat(unflatten.(hs))
+    c = coupler_unflat(hs)
     if all !== missing
         for j in axes(c, 2), i in axes(c, 1)
             i == j && continue
@@ -67,11 +67,12 @@ coupler_unflat(hs::Tuple) = coupler_unflat(promote_type(typeof.(hs)...), hs)
 
 function coupler_unflat(::Type{<:AbstractHamiltonian{T,E,L,B}}, hs::NTuple{N,AbstractHamiltonian}) where {T,E,L,B,N}
     lat = combine(lattice.(hs)...)
-    norbs = Int[]
+    subsizes = sublatlengths(lat)
+    blocksizes = Int[]
     for h in hs
-        append!(norbs, norbitals(h))
+        append!(blocksizes, norbitals(h))
     end
-    bs = BlockStructure{B}(lat, norbs)
+    bs = BlockStructure{B}(blocksizes, subsizes)
     builder = IJVBuilder(lat, bs)
     blockoffsets = (0, cumsum(size.(hs, 1))...)
     for (i, h) in enumerate(hs)
@@ -85,7 +86,7 @@ function pushblock!(builder, h, offset)
     for hh in harmonics(h)
         dn = dcell(hh)
         ijv = builder[dn]
-        is, js, vs = findnz(matrix(hh))
+        is, js, vs = findnz(unflat(matrix(hh)))
         if !iszero(offset)
             is .+= offset
             js .+= offset
@@ -97,7 +98,7 @@ end
 
 function coupleblock!(c::Coupler, model::TightbindingModel, ib, jb)
     lat = lattice(c)
-    orbstruct = orbitalstructure(c)
+    orbstruct = blockstructure(c)
     amodel = apply(model, (lat, orbstruct))
     b = builder(c)
     irng, jrng = blockranges(c, ib, jb)
@@ -110,10 +111,9 @@ end
 deleteblock!(builder, irng, jrng) = filter!((i, j, v) -> !(i in irng && j in jrng), builder)
 
 function hamiltonian(c::Coupler)
-    b = builder(c)
-    hars = harmonics(b)
+    hars = sparse(builder(c))
     lat = lattice(c)
-    orbstruct = orbitalstructure(c)
+    orbstruct = blockstructure(c)
     return Hamiltonian(lat, orbstruct, hars)
 end
 
@@ -126,8 +126,6 @@ end
 ### Recompute pointers of modifiers for new block Hamiltonian
 
 reapply_modifiers(hnew, h::Hamiltonian, offset) = ()
-# reapply_modifiers(hnew, h::FlatHamiltonian, offset) =
-#     reapply_modifiers(hnew, parent(h), offset)
 reapply_modifiers(hnew, h::ParametricHamiltonian, offset) =
     _reapply_modifiers(hnew, h, offset, modifiers(h)...)
 
@@ -138,7 +136,8 @@ _reapply_modifiers(hnew, h, offset, m, ms...) =
 function reapply_modifier(hnew, hold, offset, m::AppliedOnsiteModifier)
     m´ = similar(m)
     ps, ps´ = pointers(m), pointers(m´)
-    h, h´ = hold[], hnew[]
+    har0, har0´ = first(harmonics(hold)), first(harmonics(hnew))
+    h, h´ = unflat(matrix(har0)), unflat(matrix(har0´))
     update_ptrs!(ps´, ps, h´, h, offset)
     return m´
 end
@@ -149,7 +148,10 @@ function reapply_modifier(hnew, hold, offset, m::AppliedHoppingModifier)
     emptyptrs!(m´, length(hars´))
     pss, pss´ = pointers(m), pointers(m´)
     for (ps´, har´) in zip(pss´, hars´), (ps, har) in zip(pss, hars)
-        dcell(har´) == dcell(har) && update_ptrs!(ps´, ps, h´, h, offset)
+        if dcell(har´) == dcell(har)
+            h, h´ = unflat(matrix(har)), unflat(matrix(har´))
+            update_ptrs!(ps´, ps, h´, h, offset)
+        end
     end
     return m´
 end

@@ -17,7 +17,7 @@ SMatrixView{N,M}(s) where {N,M} = SMatrixView(SMatrix{N,M}(s))
 
 Base.parent(s::SMatrixView) = s.s
 
-Base.view(s::SMatrixView, i::Integer...) = view(s.s, i...)
+Base.view(s::SMatrixView, i...) = view(s.s, i...)
 
 Base.zero(::Type{SMatrixView{N,M,T,NM}}) where {N,M,T,NM} = zero(SMatrix{N,M,T,NM})
 
@@ -70,6 +70,7 @@ end
 blocktype(T::Type, norbs) = SMatrixView(blocktype(T, val_maximum(norbs)))
 blocktype(::Type{T}, m::Val{1}) where {T} = Complex{T}
 blocktype(::Type{T}, m::Val{N}) where {T,N} = SMatrix{N,N,Complex{T},N*N}
+blocktype(::Type{T}, N::Int) where {T} = blocktype(T, Val(N))
 
 val_maximum(n::Int) = Val(n)
 val_maximum(ns) = Val(maximum(argval.(ns)))
@@ -390,6 +391,13 @@ end
 
 checkinitialized(s) =
     needs_initialization(s) && internalerror("sync!: Tried to sync uninitialized matrix")
+
+## TODO
+flat_sync!(s::HybridSparseMatrixCSC{<:Any,S}) where {S<:SMatrixView} =
+    internalerror("flat_sync!: not yet implemented method for non-uniform orbitals")
+
+## TODO
+unflat_sync!(s) = internalerror("unflat_sync!: method not yet implemented")
 
 ############################################################################################
 # SparseMatrix transformations
