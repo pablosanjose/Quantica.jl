@@ -31,12 +31,15 @@ Base.eltype(::Type{BoxIterator{N}}) where {N} = SVector{N,Int}
 Base.CartesianIndices(b::BoxIterator) =
     CartesianIndices(UnitRange.(Tuple(b.npos), Tuple(b.ppos)))
 
+eldim(::BoxIterator{N}) where {N} = N
+
 function BoxIterator(seed::SVector{N}; maxiterations = TOOMANYITERS) where {N}
     BoxIterator(seed, maxiterations, MVector(1, 2),
         ones(MVector{N,Bool}), ones(MVector{N,Bool}), MVector{N,Int}(seed), MVector{N,Int}(seed))
 end
 
-function iteratorreset!(b::BoxIterator{N}) where {N}
+function iteratorreset!(b::BoxIterator)
+    N = eldim(b)
     b.dimdir[1] = 1
     b.dimdir[2] = 2
     b.nmoves .= ones(MVector{N,Bool})
@@ -55,7 +58,8 @@ end
 Base.iterate(b::BoxIterator{0}) = (SVector{0,Int}(), nothing)
 Base.iterate(b::BoxIterator{0}, state) = nothing
 
-function Base.iterate(b::BoxIterator{N}) where {N}
+function Base.iterate(b::BoxIterator)
+    N = eldim(b)
     range = CartesianIndices(ntuple(i -> b.seed[i]:b.seed[i], Val(N)))
     itrange = iterate(range)
     if itrange === nothing
@@ -96,7 +100,8 @@ end
 end
 
 
-function nextface!(b::BoxIterator{N}) where {N}
+function nextface!(b::BoxIterator)
+    N = eldim(b)
     @inbounds for i in 1:2N
         nextdimdir!(b)
         newdim, newdir = Tuple(b.dimdir)
@@ -117,7 +122,8 @@ function nextface!(b::BoxIterator{N}) where {N}
     return nothing
 end
 
-function nextdimdir!(b::BoxIterator{N}) where {N}
+function nextdimdir!(b::BoxIterator)
+    N = eldim(b)
     dim, dir = Tuple(b.dimdir)
     if dim < N
         dim += 1
@@ -130,19 +136,22 @@ function nextdimdir!(b::BoxIterator{N}) where {N}
     return nothing
 end
 
-@inline function newrangeneg(b::BoxIterator{N}, dim) where {N}
+@inline function newrangeneg(b::BoxIterator, dim)
+    N = eldim(b)
     return CartesianIndices(ntuple(
         i -> b.npos[i]:(i == dim ? b.npos[i] : b.ppos[i]),
         Val(N)))
 end
 
-@inline function newrangepos(b::BoxIterator{N}, dim) where {N}
+@inline function newrangepos(b::BoxIterator, dim)
+    N = eldim(b)
     return CartesianIndices(ntuple(
         i -> (i == dim ? b.ppos[i] : b.npos[i]):b.ppos[i],
         Val(N)))
 end
 
-function acceptcell!(b::BoxIterator{N}, cell) where {N}
+function acceptcell!(b::BoxIterator, cell)
+    N = eldim(b)
     dim, dir = Tuple(b.dimdir)
     if dir == 1
         @inbounds for i in 1:N
