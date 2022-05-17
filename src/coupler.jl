@@ -71,8 +71,8 @@ function coupler_unflat(::Type{<:AbstractHamiltonian{T,E,L,B}}, hs::NTuple{N,Abs
     for h in hs
         append!(norbs, norbitals(h))
     end
-    orbstruct = OrbitalStructure{B}(lat, norbs)
-    builder = IJVBuilder(lat, orbstruct)
+    bs = BlockStructure{B}(lat, norbs)
+    builder = IJVBuilder(lat, bs)
     blockoffsets = (0, cumsum(size.(hs, 1))...)
     for (i, h) in enumerate(hs)
         pushblock!(builder, h, blockoffsets[i])
@@ -126,8 +126,8 @@ end
 ### Recompute pointers of modifiers for new block Hamiltonian
 
 reapply_modifiers(hnew, h::Hamiltonian, offset) = ()
-reapply_modifiers(hnew, h::FlatHamiltonian, offset) =
-    reapply_modifiers(hnew, parent(h), offset)
+# reapply_modifiers(hnew, h::FlatHamiltonian, offset) =
+#     reapply_modifiers(hnew, parent(h), offset)
 reapply_modifiers(hnew, h::ParametricHamiltonian, offset) =
     _reapply_modifiers(hnew, h, offset, modifiers(h)...)
 
@@ -169,7 +169,7 @@ function update_ptrs!(ps´, ps, h´, h, offset)
                 break
             end
         end
-        found || error("Internal error in reapply_modifier. Please file a bug report at $REPOISSUES")
+        found || internalerror("reapply_modifier")
     end
     return ps´
 end

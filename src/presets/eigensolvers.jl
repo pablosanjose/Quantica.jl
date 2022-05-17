@@ -1,10 +1,7 @@
 ############################################################################################
 # Eigensolvers module
-#   Strategy: apply an AbstractEigensolver to a Hamiltonian (or Bloch) to produce an
-#   AppliedEigensolver, which is essentially a FunctionWrapper from an SVector to a
-#   Spectrum === Eigen. An AbstractEigensolver is defined by a set of kwargs for the
-#   eigensolver and a set of methods AbstractMatrix -> Eigen associated to that
-#   AbstractEigensolver
+#   An AbstractEigensolver is defined by a set of kwargs for the eigensolver and a set of
+#   methods AbstractMatrix -> Eigen associated to that AbstractEigensolver
 #region
 
 module EigensolverPresets
@@ -12,9 +9,8 @@ module EigensolverPresets
 using FunctionWrappers: FunctionWrapper
 using LinearAlgebra: Eigen, I, lu, ldiv!
 using SparseArrays: SparseMatrixCSC, AbstractSparseMatrix
-using Quantica: Quantica, Bloch, Spectrum, AbstractEigensolver, AbstractHamiltonian, call!,
-      ensureloaded, flatten, spectrumtype, SVector, SMatrix
-import Quantica: bloch
+using Quantica: Quantica, AbstractEigensolver, ensureloaded, SVector, SMatrix,
+                sanitize_eigen, call!_output
 
 #endregion
 
@@ -24,10 +20,11 @@ import Quantica: bloch
 
 ## Fallbacks
 
-Quantica.bloch(h::AbstractHamiltonian, ::AbstractEigensolver) = bloch(h)
+(s::AbstractEigensolver)(mat) =
+    throw(ArgumentError("The eigensolver backend $(typeof(s)) is not defined to work on $(typeof(mat))"))
 
-(b::AbstractEigensolver)(m) =
-    throw(ArgumentError("The eigensolver backend $(typeof(b)) is not defined to work on $(typeof(m))"))
+# an alias of h's call! output makes apply call! conversion a no-op, see apply.jl
+input_matrix(::AbstractEigensolver, h) = call!_output(h)
 
 #### LinearAlgebra #####
 
@@ -41,10 +38,11 @@ end
 
 function (solver::LinearAlgebra)(mat::AbstractMatrix{<:Number})
     ε, Ψ = Quantica.LinearAlgebra.eigen(mat; solver.kwargs...)
-    return Spectrum(ε, Ψ)
+    return sanitize_eigen(ε, Ψ)
 end
 
-Quantica.bloch(h::AbstractHamiltonian, ::LinearAlgebra) = bloch(flatten(h), Matrix)
+# LinearAlgebra.eigen doesn't like sparse Matrices as input, must convert
+input_matrix(::LinearAlgebra, h) = Matrix(call!_output(h))
 
 #### Arpack #####
 
@@ -59,10 +57,8 @@ end
 
 function (solver::Arpack)(mat::AbstractMatrix{<:Number})
     ε, Ψ, _ = Quantica.Arpack.eigs(mat; solver.kwargs...)
-    return Spectrum(ε, Ψ)
+    return sanitize_eigen(ε, Ψ)
 end
-
-Quantica.bloch(h::AbstractHamiltonian, ::Arpack) = bloch(flatten(h))
 
 #### KrylovKit #####
 
@@ -78,11 +74,8 @@ end
 
 function (solver::KrylovKit)(mat)
     ε, Ψ, _ = Quantica.KrylovKit.eigsolve(mat, solver.params...; solver.kwargs...)
-    return Spectrum(ε, Ψ)
+    return sanitize_eigen(ε, Ψ)
 end
-
-# KrylovKit gives strange error with SMatrix eltypes
-Quantica.bloch(h::AbstractHamiltonian, ::KrylovKit) = bloch(flatten(h))
 
 #### ArnoldiMethod #####
 
@@ -98,11 +91,8 @@ end
 function (solver::ArnoldiMethod)(mat)
     pschur, _ = Quantica.ArnoldiMethod.partialschur(mat; solver.kwargs...)
     ε, Ψ = Quantica.ArnoldiMethod.partialeigen(pschur)
-    return Spectrum(ε, Ψ)
+    return sanitize_eigen(ε, Ψ)
 end
-
-# ArnoldiMethod complains of missing eps method with SMatrix eltypes
-Quantica.bloch(h::AbstractHamiltonian, ::ArnoldiMethod) = bloch(flatten(h))
 
 #### ShiftInvertSparse ####
 
@@ -121,12 +111,10 @@ function (solver::ShiftInvertSparse)(mat::AbstractSparseMatrix{T}) where {T<:Num
     F = lu(mat´)
     lmap = Quantica.LinearMaps.LinearMap{T}((x, y) -> ldiv!(x, F, y), size(mat)...;
         ismutating = true, ishermitian = false)
-    spectrum = solver.eigensolver(lmap)
-    @. spectrum.values = 1 / (spectrum.values) + solver.origin
-    return spectrum
+    eigen = solver.eigensolver(lmap)
+    @. eigen.values = 1 / (eigen.values) + solver.origin
+    return eigen
 end
-
-Quantica.bloch(h::AbstractHamiltonian, ::ShiftInvertSparse) = bloch(flatten(h))
 
 #endregion
 

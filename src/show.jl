@@ -84,19 +84,12 @@ function Base.show(io::IO, h::Union{Hamiltonian,ParametricHamiltonian})
     print(io, i, summary(h), "\n",
 "$i  Bloch harmonics  : $(length(harmonics(h)))
 $i  Harmonic size    : $((n -> "$n × $n")(size(h, 1)))
-$i  Orbitals         : $(norbitals(orbitalstructure(h)))
+$i  Orbitals         : $(norbitals(h)))
 $i  Element type     : $(displaytype(blocktype(h)))
 $i  Onsites          : $(nonsites(h))
 $i  Hoppings         : $(nhoppings(h))
 $i  Coordination     : $(round(coordination(h), digits = 5))")
     showextrainfo(io, i, h)
-end
-
-function Base.show(io::IO, h::FlatHamiltonian)
-    i = get(io, :indent, "")
-    print(io, i, "FlatHamiltonian: orbital-flattening wrapper for\n")
-    ioindent = IOContext(io, :indent => "  ")
-    show(ioindent, parent(h))
 end
 
 Base.summary(h::Hamiltonian{T,E,L}) where {T,E,L} =
@@ -106,6 +99,7 @@ Base.summary(h::ParametricHamiltonian{T,E,L}) where {T,E,L} =
     "ParametricHamiltonian{$T,$E,$L}: Parametric Hamiltonian on a $(L)D Lattice in $(E)D space"
 
 displaytype(::Type{S}) where {N,T,S<:SMatrix{N,N,T}} = "$N × $N blocks ($T)"
+displaytype(::Type{S}) where {N,T,S<:SMatrixView{N,N,T}} = "At most $N × $N blocks ($T)"
 displaytype(::Type{T}) where {T} = "scalar ($T)"
 
 # fallback
@@ -113,22 +107,6 @@ showextrainfo(io, i, h) = nothing
 
 showextrainfo(io, i, h::ParametricHamiltonian) = print(io, i, "\n",
 "$i  Parameters       : $(parameters(h))")
-
-#endregion
-
-############################################################################################
-# Bloch
-#region
-
-function Base.show(io::IO, b::Bloch)
-    i = get(io, :indent, "")
-    ioindent = IOContext(io, :indent => "  ")
-    print(io, i, summary(b), " for \n")
-    show(ioindent, hamiltonian(b))
-end
-
-Base.summary(h::Bloch{L,B}) where {L,B} =
-    "Bloch{$L,$B}: Bloch matrix constructor with target eltype $B"
 
 #endregion
 
@@ -144,16 +122,22 @@ end
 Base.summary(s::AbstractEigensolver) =
     "AbstractEigensolver ($(Base.nameof(typeof(s))))"
 
-function Base.show(io::IO, s::AppliedEigensolver)
+#endregion
+
+############################################################################################
+# SpectrumSolver
+#region
+
+function Base.show(io::IO, s::SpectrumSolver)
     i = get(io, :indent, "")
     ioindent = IOContext(io, :indent => "  ")
     print(io, i, summary(s), "\n")
 end
 
-Base.summary(::AppliedEigensolver{T,L}) where {T,L} =
-    "AppliedEigensolver{$T,$L}: Eigensolver applied over an $L-dimensional parameter manifold of type $T"
+Base.summary(::SpectrumSolver{T,L}) where {T,L} =
+    "SpectrumSolver{$T,$L}: Spectrum solver over an $L-dimensional parameter manifold of type $T"
 
-    #endregion
+#endregion
 
 ############################################################################################
 # AbstractMesh
@@ -163,7 +147,7 @@ Base.summary(::Mesh{V}) where {V} =
     "Mesh{$(nameof(V))}: Mesh with vertices of type $(nameof(V))"
 
 Base.summary(::Subband{T,L}) where {T,L} =
-    "Subband{$T,$L}: Subband over a $L-dimensional parameter space of type $T"
+    "Subband{$T,$L}: Subband over a $L-dimensional parameter (energy-momentum) space of type $T"
 
 function Base.show(io::IO, m::AbstractMesh)
     i = get(io, :indent, "")
@@ -178,10 +162,10 @@ end
 #endregion
 
 ############################################################################################
-# Band
+# Bands
 #region
 
-function Base.show(io::IO, b::Band)
+function Base.show(io::IO, b::Bands)
     i = get(io, :indent, "")
     print(io, i, summary(b), "\n",
 "$i  Subbands  : $(length(subbands(b)))
@@ -190,8 +174,8 @@ $i  Edges     : $(sum(s -> sum(length, neighbors(s)), subbands(b)) ÷ 2)
 $i  Simplices : $(sum(s->length(simplices(s)), subbands(b)))")
 end
 
-Base.summary(::Band{T,E,L}) where {T,E,L} =
-    "Band{$T,$E,$L}: $(E)D Band structure over a $L-dimensional parameter space of type $T"
+Base.summary(::Bands{T,E,L}) where {T,E,L} =
+    "Bands{$T,$E,$L}: $(E)D Bandstructure over a $L-dimensional parameter space of type $T"
 
 #endregion
 

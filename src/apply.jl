@@ -67,14 +67,14 @@ end
 # apply model terms
 #region
 
-function apply(t::OnsiteTerm, (lat, os)::Tuple{Lattice{T,E,L},OrbitalStructure{B}}) where {T,E,L,B}
-    f = (r, orbs) -> sanitize_block(B, t(r), (orbs, orbs))
-    asel = apply(selector(t), lat)
+function apply(o::OnsiteTerm, (lat, os)::Tuple{Lattice{T,E,L},BlockStructure{B}}) where {T,E,L,B}
+    f = (r, orbs) -> mask_block(B, o(r), (orbs, orbs))
+    asel = apply(selector(o), lat)
     return AppliedOnsiteTerm{T,E,L,B}(f, asel)   # f gets wrapped in a FunctionWrapper
 end
 
-function apply(t::HoppingTerm, (lat, os)::Tuple{Lattice{T,E,L},OrbitalStructure{B}}) where {T,E,L,B}
-    f = (r, dr, orbs) -> sanitize_block(B, t(r, dr), orbs)
+function apply(t::HoppingTerm, (lat, os)::Tuple{Lattice{T,E,L},BlockStructure{B}}) where {T,E,L,B}
+    f = (r, dr, orbs) -> mask_block(B, t(r, dr), orbs)
     asel = apply(selector(t), lat)
     return AppliedHoppingTerm{T,E,L,B}(f, asel)  # f gets wrapped in a FunctionWrapper
 end
@@ -107,10 +107,10 @@ function pointers(h::Hamiltonian{T,E}, s::AppliedSiteSelector{T,E}) where {T,E}
     ptr_r = Tuple{Int,SVector{E,T},Int}[]
     lat = lattice(h)
     har0 = first(harmonics(h))
-    mh = matrix(har0)
-    rows = rowvals(mh)
+    umat = unflat(har0)
+    rows = rowvals(umat)
     norbs = norbitals(h)
-    for scol in sublats(lat), col in siterange(lat, scol), p in nzrange(mh, col)
+    for scol in sublats(lat), col in siterange(lat, scol), p in nzrange(umat, col)
         row = rows[p]
         col == row || continue
         r = site(lat, row)
@@ -126,11 +126,11 @@ function pointers(h::Hamiltonian{T,E}, s::AppliedHopSelector{T,E}) where {T,E}
     hars = harmonics(h)
     ptr_r_dr = [Tuple{Int,SVector{E,T},SVector{E,T},Tuple{Int,Int}}[] for _ in hars]
     lat = lattice(h)
-    os = orbitalstructure(h)
+    bs = blockstructure(h)
     dn0 = zerocell(lat)
     norbs = norbitals(h)
     for (har, ptr_r_dr) in zip(hars, ptr_r_dr)
-        mh = matrix(har)
+        mh = unflat(har)
         rows = rowvals(mh)
         for scol in sublats(lat), col in siterange(lat, scol), p in nzrange(mh, col)
             row = rows[p]
@@ -138,8 +138,7 @@ function pointers(h::Hamiltonian{T,E}, s::AppliedHopSelector{T,E}) where {T,E}
             r, dr = rdr(site(lat, col, dn0) => site(lat, row, dn))
             if (col => row, (r, dr), dn) in s
                 ncol = norbs[scol]
-                srow = site_to_sublat(row, os)
-                nrow = norbs[srow]
+                nrow = blocksize(bs, row)
                 push!(ptr_r_dr, (p, r, dr, (nrow, ncol)))
             end
         end
@@ -153,15 +152,22 @@ end
 # apply AbstractEigensolver
 #region
 
-function apply(solver::AbstractEigensolver, bloch::Bloch, ::Type{SVector{L,T}}, mapping = missing) where {L,T}
-    S = spectrumtype(bloch)
-    solver = _apply(solver, bloch, mapping)
-    return AppliedEigensolver(FunctionWrapper{S,Tuple{SVector{L,T}}}(solver))
+function apply(solver::AbstractEigensolver, h::AbstractHamiltonian, S::Type{SVector{L,T}}, mapping, transform) where {L,T}
+    B = blocktype(h)
+    h´ = copy_callsafe(h)
+    # Some solvers only accept certain matrix types
+    mat´ = EP.input_matrix(solver, h´)
+    function sfunc(φs)
+        φs´ = applymap(mapping, φs)
+        mat = call!(h´, φs´)
+        mat´ === mat || copy!(mat´, mat)
+        eigen = solver(mat´)
+        return Spectrum(eigen, h, transform)
+    end
+    return FunctionWrapper{Spectrum{T,B},Tuple{S}}(sfunc)
 end
 
-apply(solver::AbstractEigensolver, h::AbstractHamiltonian, t::Type, mapping = missing)=
-   apply(solver, bloch(h, solver), t, mapping)
-_apply(solver::AbstractEigensolver, bloch, ::Missing) = φs -> solver(call!(bloch, φs))
-_apply(solver::AbstractEigensolver, bloch, mapping) = φs -> solver(call!(bloch, mapping(Tuple(φs)...)))
+applymap(::Missing, φs) = φs
+applymap(mapping, φs) = mapping(Tuple(φs)...)
 
 #endregion

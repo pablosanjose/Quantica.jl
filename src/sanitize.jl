@@ -39,7 +39,7 @@ sanitize_SVector(v) = convert(SVector, v)
 sanitize_SVector(::Type{T}, v) where {T<:Number} = convert.(T, sanitize_SVector(v))
 sanitize_SVector(::Type{SVector{N,T}}, v::SVector{N}) where {N,T} = convert(SVector{N,T}, v)
 sanitize_SVector(::Type{SVector{N,T}}, v) where {N,T} =
-    SVector(ntuple(i -> i > length(v) ? zero(T) : convert(T, v[i]), Val(N)))
+    SVector{N,T}(ntuple(i -> i > length(v) ? zero(T) : convert(T, v[i]), Val(N)))
 
 function sanitize_SMatrix(::Type{S}, x, (rows, cols) = (E, L)) where {T<:Number,E,L,S<:SMatrix{E,L,T}}
     t = ntuple(Val(E*L)) do l
@@ -75,17 +75,17 @@ end
 
 #endregion
 
-############################################################################################
-# Block sanitizers
-#region
+# ############################################################################################
+# # Block sanitizers
+# #region
 
-sanitize_block(S::Type{<:Number}, s, _) = convert(S, first(s))
-sanitize_block(S::Type{<:SMatrix}, s::SMatrix, size) = sanitize_SMatrix(S, s, size)
-sanitize_block(::Type{S}, s::Number, size) where {S<:SMatrix} = sanitize_SMatrix(S, S(s*I), size)
-sanitize_block(::Type{S}, s::UniformScaling, size) where {S<:SMatrix} =
-    sanitize_SMatrix(S, S(s), size)
+# sanitize_block(S::Type{<:Number}, s, _) = convert(S, first(s))
+# sanitize_block(S::Type{<:SMatrix}, s::SMatrix, size) = sanitize_SMatrix(S, s, size)
+# sanitize_block(::Type{S}, s::Number, size) where {S<:SMatrix} = sanitize_SMatrix(S, S(s*I), size)
+# sanitize_block(::Type{S}, s::UniformScaling, size) where {S<:SMatrix} =
+#     sanitize_SMatrix(S, S(s), size)
 
-#endregion
+# #endregion
 
 ############################################################################################
 # Supercell sanitizers
@@ -99,5 +99,26 @@ sanitize_supercell(::Val{L}, ns::NTuple{L,Int}) where {L} =
     SMatrix{L,L,Int}(Diagonal(SVector(ns)))
 sanitize_supercell(::Val{L}, v) where {L} =
     throw(ArgumentError("Improper supercell specification $v for an $L lattice dimensions, see `supercell`"))
+
+#endregion
+
+############################################################################################
+# Eigen sanitizers
+#region
+
+sanitize_eigen(ε, Ψ) = Eigen(sorteigs!(ε, Ψ)...)
+sanitize_eigen(ε::AbstractVector, Ψs::AbstractVector{<:AbstractVector}) =
+    sanitize_eigen(ε, hcat(Ψs...))
+sanitize_eigen(ε::AbstractVector{<:Real}, Ψ::AbstractMatrix) =
+    sanitize_eigen(complex.(ε), Ψ)
+
+function sorteigs!(ϵ::AbstractVector, ψ::AbstractMatrix)
+    p = Vector{Int}(undef, length(ϵ))
+    p´ = similar(p)
+    sortperm!(p, ϵ, by = real, alg = Base.DEFAULT_UNSTABLE)
+    Base.permute!!(ϵ, copy!(p´, p))
+    Base.permutecols!!(ψ, copy!(p´, p))
+    return ϵ, ψ
+end
 
 #endregion
