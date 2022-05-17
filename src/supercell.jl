@@ -88,11 +88,10 @@ function supercell_sitelist!!(sitelist, masklist, smatperp, seedperp, lat, appli
     masklist0 = copy(masklist)
     empty!(masklist)
     empty!(sitelist)
+    cs = cells(applied_selector)
+    csbool = zeros(Bool, length(cs))
     iter = BoxIterator(seedperp)
-    numfound = 0
-    numcells = length(cells(applied_selector))
     for n in iter
-        found = false
         for (s, cell, i) in masklist0
             cell´ = cell + smatperp * n
             r = site(lat, i, cell´)
@@ -100,15 +99,27 @@ function supercell_sitelist!!(sitelist, masklist, smatperp, seedperp, lat, appli
                 push!(masklist, (s, cell´, i))
                 push!(sitelist, r)
                 acceptcell!(iter, n)
-                found = true
+                foundcell!(csbool, cs, cell´)
             end
         end
         only_one_perp && break
-        # If we haven't found enough original cells, accept supercell n so we keep searching
-        numfound += found
-        numfound < numcells && acceptcell!(iter, n)
+        # If we haven't found all selector cells, accept supercell n so we keep searching
+        # note that if isempty(csbool) then all(csbool) is true
+        foundall = all(csbool)
+        foundall || acceptcell!(iter, n)
     end
     return nothing
+end
+
+function foundcell!(csbool, cs, cell)
+    isempty(cs) && return true
+    for (i, c) in enumerate(cs)
+        if cell == c
+            csbool[i] = true
+            return true
+        end
+    end
+    return false
 end
 
 #endregion

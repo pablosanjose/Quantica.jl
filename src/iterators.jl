@@ -66,11 +66,11 @@ function Base.iterate(b::BoxIterator{N}) where {N}
     end
 end
 
-function Base.iterate(b::BoxIterator{N}, s::BoxIteratorState{N}) where {N}
+function Base.iterate(b::BoxIterator, s::BoxIteratorState)
     itrange = iterate(s.range, s.rangestate)
     facedone = itrange === nothing
     if facedone
-        alldone = !any(b.pmoves) && !any(b.nmoves) || isless(b.maxiter, s.iteration)
+        alldone = !any(b.pmoves) && !any(b.nmoves) || checkmaxiter(b, s)
         if alldone  # Last shells in all directions were empty, trim from boundingboxcorners
             b.npos .+= 1
             b.ppos .-= 1
@@ -88,6 +88,13 @@ function Base.iterate(b::BoxIterator{N}, s::BoxIteratorState{N}) where {N}
         return (SVector(Tuple(cell)), BoxIteratorState(s.range, rangestate, s.iteration + 1))
     end
 end
+
+@noinline function checkmaxiter(b::BoxIterator, s::BoxIteratorState)
+    exceeded = isless(b.maxiter, s.iteration)
+    exceeded && @warn("Region seems unbounded after $(b.maxiter) iterations")
+    return exceeded
+end
+
 
 function nextface!(b::BoxIterator{N}) where {N}
     @inbounds for i in 1:2N
