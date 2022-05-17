@@ -307,6 +307,6 @@ end
 
 nonsites(h::AbstractHamiltonian) = nnzdiag(h[])
 
-coordination(h::AbstractHamiltonian) = round(nhoppings(h) / nsites(lattice(h)), digits = 5)
+coordination(h::AbstractHamiltonian) = iszero(nhoppings(h)) ? 0.0 : round(nhoppings(h) / nsites(lattice(h)), digits = 5)
 
 #endregion
