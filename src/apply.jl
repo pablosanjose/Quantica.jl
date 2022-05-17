@@ -11,9 +11,9 @@
 
 function apply(s::SiteSelector, lat::Lattice{T,E,L}) where {T,E,L}
     region = r -> region_apply(r, s.region)
-    sublats = Symbol[]
-    recursive_push!(sublats, s.sublats)
-    return AppliedSiteSelector{T,E,L}(lat, region, sublats)
+    sublats = recursive_push!(Symbol[], s.sublats)
+    cells = recursive_push!(SVector{L,Int}[], s.cells)
+    return AppliedSiteSelector{T,E,L}(lat, region, sublats, cells)
 end
 
 function apply(s::HopSelector, lat::Lattice{T,E,L}) where {T,E,L}
@@ -22,10 +22,8 @@ function apply(s::HopSelector, lat::Lattice{T,E,L}) where {T,E,L}
         throw(ErrorException("Tried to apply an infinite-range HopSelector on an unbounded lattice"))
     sign = ifelse(s.adjoint, -1, 1)
     region = (r, dr) -> region_apply((r, sign*dr), s.region)
-    sublats = Pair{Symbol,Symbol}[]
-    recursive_push!(sublats, s.sublats)
-    dcells = SVector{L,Int}[]
-    recursive_push!(dcells, s.dcells)
+    sublats = recursive_push!(Pair{Symbol,Symbol}[], s.sublats)
+    dcells = recursive_push!(SVector{L,Int}[], s.dcells)
     if s.adjoint
         sublats .= reverse.(sublats)
         dcells .*= -1
@@ -52,7 +50,11 @@ recursive_push!(v::Vector{S}, x::NTuple{<:Any,Int}) where {S<:SVector,T} = push!
 recursive_push!(v::Vector{Pair{T,T}}, x::T) where {T} = push!(v, x => x)
 recursive_push!(v::Vector{Pair{T,T}}, (x, y)::Tuple{T,T}) where {T} = push!(v, x => y)
 recursive_push!(v::Vector{Pair{T,T}}, x::Pair{T,T}) where {T} = push!(v, x)
-recursive_push!(v::Vector, xs)= foreach(x -> recursive_push!(v, x), xs)
+
+function recursive_push!(v::Vector, xs)
+    foreach(x -> recursive_push!(v, x), xs)
+    return v
+end
 
 function recursive_push!(v::Vector{Pair{T,T}}, (xs, ys)::Pair) where {T}
     for (x, y) in Iterators.product(xs, ys)
@@ -103,6 +105,7 @@ function apply(m::HoppingModifier, h::Hamiltonian)
     return AppliedHoppingModifier(B, f, ptrs)
 end
 
+# s.cells is ignored: we are filtering onsite terms in unit cell
 function pointers(h::Hamiltonian{T,E}, s::AppliedSiteSelector{T,E}) where {T,E}
     ptr_r = Tuple{Int,SVector{E,T},Int}[]
     lat = lattice(h)

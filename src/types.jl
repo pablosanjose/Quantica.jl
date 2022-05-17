@@ -163,15 +163,17 @@ Base.copy(l::Lattice) = deepcopy(l)
 # Selectors  -  see selector.jl for methods
 #region
 
-struct SiteSelector{F,S}
+struct SiteSelector{F,S,C}
     region::F
     sublats::S
+    cells::C
 end
 
 struct AppliedSiteSelector{T,E,L}
     lat::Lattice{T,E,L}
     region::FunctionWrapper{Bool,Tuple{SVector{E,T}}}
     sublats::Vector{Symbol}
+    cells::Vector{SVector{L,Int}}
 end
 
 struct HopSelector{F,S,D,R}
@@ -206,9 +208,12 @@ Base.Int(n::Neighbors) = n.n
 
 region(s::Union{SiteSelector,HopSelector}) = s.region
 
+cells(s::SiteSelector) = s.cells
+
 lattice(ap::AppliedSiteSelector) = ap.lat
 lattice(ap::AppliedHopSelector) = ap.lat
 
+cells(ap::AppliedSiteSelector) = ap.cells
 dcells(ap::AppliedHopSelector) = ap.dcells
 
 # if isempty(s.dcells) or isempty(s.sublats), none were specified, so we must accept any
@@ -218,6 +223,7 @@ inregion((r, dr), s::AppliedHopSelector) = s.region(r, dr)
 insublats(n, s::AppliedSiteSelector) = isempty(s.sublats) || n in s.sublats
 insublats(npair::Pair, s::AppliedHopSelector) = isempty(s.sublats) || npair in s.sublats
 
+incells(cell, s::AppliedSiteSelector) = isempty(s.cells) || cell in s.cells
 indcells(dcell, s::AppliedHopSelector) = isempty(s.dcells) || dcell in s.dcells
 
 iswithinrange(dr, s::AppliedHopSelector) = iswithinrange(dr, s.range)

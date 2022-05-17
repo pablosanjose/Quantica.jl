@@ -2,10 +2,10 @@
 # selector constructors
 #region
 
-siteselector(; region = missing, sublats = missing) =
-    SiteSelector(region, sublats)
-siteselector(s::SiteSelector; region = s.region, sublats = s.sublats) =
-    SiteSelector(region, sublats)
+siteselector(; region = missing, sublats = missing, cells = missing) =
+    SiteSelector(region, sublats, cells)
+siteselector(s::SiteSelector; region = s.region, sublats = s.sublats, cells = s.cells) =
+    SiteSelector(region, sublats, cells)
 
 hopselector(; region = missing, sublats = missing, dcells = missing, range = neighbors(1)) =
     HopSelector(region, sublats, dcells, range)
@@ -20,6 +20,10 @@ neighbors(n::Int, lat::Lattice) = nrange(n, lat)
 ############################################################################################
 # Base.in constructors
 #region
+
+function Base.in((i, r, n)::Tuple{Int,SVector{E,T},SVector{L,Int}}, sel::AppliedSiteSelector{T,E,L}) where {T,E,L}
+    return incells(n, sel) && (i, r) in sel
+end
 
 function Base.in((i, r)::Tuple{Int,SVector{E,T}}, sel::AppliedSiteSelector{T,E}) where {T,E}
     lat = lattice(sel)

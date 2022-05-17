@@ -18,8 +18,9 @@ function supercell_data(lat::Lattice{<:Any,<:Any,L}, vs...; kw...) where {L}
     smat = sanitize_supercell(Val(L), vs)
     selector = siteselector(; kw...)
     applied_selector = apply(selector, lat)
-    # if lattice dimensions are reduced and there is no bounding region, stop at a single perp unit cell
-    only_one_perp = size(smat, 2) < size(smat, 1) && region(selector) === missing
+    # IMPORTANT BEHAVIOR: if lattice dimensions are reduced and there is no bounding region
+    # and no cell list, supercell is infinite. In this case: stop at a single perp unit cell
+    only_one_perp = size(smat, 2) < size(smat, 1) && region(selector) === missing && cells(selector) === missing
     cellseed = zero(SVector{L,Int})
     return supercell_data(lat, smat, cellseed, applied_selector, only_one_perp)
 end
@@ -88,14 +89,14 @@ function supercell_sitelist!!(sitelist, masklist, smatperp, seedperp, lat, appli
     empty!(masklist)
     empty!(sitelist)
     iter = BoxIterator(seedperp)
-    for c in iter
+    for n in iter
         for (s, cell, i) in masklist0
-            cell´ = cell + smatperp * c
+            cell´ = cell + smatperp * n
             r = site(lat, i, cell´)
-            if (i, r) in applied_selector
+            if (i, r, cell´) in applied_selector
                 push!(masklist, (s, cell´, i))
                 push!(sitelist, r)
-                acceptcell!(iter, c)
+                acceptcell!(iter, n)
             end
         end
         only_one_perp && break
