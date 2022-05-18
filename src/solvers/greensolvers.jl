@@ -125,8 +125,7 @@ function apply(s::Schur, h::AbstractHamiltonian1D{T}) where {T}
     fhm, fh0, fhp = flat(hm), flat(h0), flat(hp)
     PL, PR, L, R, Σauxinds, l_leq_r = left_right_projectors(fhm, fhp)
     R´L´ = [R'; -L']
-    g0inv = I - fh0
-    ptrs = g0inv_pointers(g0inv, h0, Σauxinds)
+    g0inv, ptrs = g0inv_pointers(fh0, Σauxinds)
     workspace = SchurWorkspace{Complex{T}}(size(L))
     return AppliedSchur(options, h, hm, h0, hp, l_leq_r, g0inv, ptrs, PL, PR, L, R, R´L´, workspace)
 end
@@ -165,8 +164,11 @@ function left_right_projectors(hm::SparseMatrixCSC, hp::SparseMatrixCSC)
     return PL, PR, L, R, Σauxinds, l_leq_r
 end
 
-function g0inv_pointers(g0inv, h0, Σauxinds)
+function g0inv_pointers(fh0, Σauxinds)
+    g0inv = I - fh0
     
+    for col in axes(g0inv, 2), p in nzrange(g0inv, col)
+
 end
 
 # # Compute G*R and G*L where G = inv(ω - h0 - im*Ω(LL' + RR'))
