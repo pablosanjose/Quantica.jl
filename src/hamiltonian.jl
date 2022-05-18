@@ -313,54 +313,130 @@ coordination(h::AbstractHamiltonian) = iszero(nhoppings(h)) ? 0.0 : round(nhoppi
 
 #endregion
 
-############################################################################################
-# store_onsites - AbstractHamiltonian with onsites as structural SparseMatrix elements
-#    Note: if hasdiagonal, then no-op
-#region
+# ############################################################################################
+# # store_onsites - AbstractHamiltonian with onsites as structural SparseMatrix elements
+# #    Note: if hasdiagonal, then no-op
+# #region
 
-# if newptrs::Vector{Int} it will be filled with the list of inserted pointers
-function store_onsites(h::Hamiltonian, newptrs = nothing)
-    hasdiagonal(h[]) && return h
-    hh´ = harmonics(h)[2:end]
-    h0 = first(harmonics(h))
-    h0´ = Harmonic(dcell(h0), store_diagonal(matrix(h0), newptrs))  # see tools.jl
-    pushfirst!(hh´, h0´)
-    return Hamiltonian(lattice(h), orbitalstructure(h), hh´)
-end
+# # if newptrs::Vector{Int} it will be filled with the list of inserted pointers
+# function store_onsites(h::Hamiltonian, newptrs = nothing)
+#     hasdiagonal(h[]) && return h
+#     hh´ = harmonics(h)[2:end]
+#     h0 = first(harmonics(h))
+#     h0´ = Harmonic(dcell(h0), store_diagonal(matrix(h0), newptrs)) 
+#     pushfirst!(hh´, h0´)
+#     return Hamiltonian(lattice(h), orbitalstructure(h), hh´)
+# end
 
-function store_onsites(p::ParametricHamiltonian)
-    newptrs = Int[]
-    hasdiagonal(parent(p)[]) && return p
-    h´ = store_onsites(parent(p), newptrs)
-    mods = modifiers(p)
-    mods´ = sync_ptrs.(mods, Ref(newptrs))
-    return parametric(h´, mods´...)
-end
+# function store_onsites(p::ParametricHamiltonian)
+#     newptrs = Int[]
+#     hasdiagonal(parent(p)[]) && return p
+#     h´ = store_onsites(parent(p), newptrs)
+#     mods = modifiers(p)
+#     mods´ = sync_ptrs.(mods, Ref(newptrs))
+#     return parametric(h´, mods´...)
+# end
 
-sync_ptrs(m::AppliedOnsiteModifier, newptrs) =
-    AppliedOnsiteModifier(blocktype(m), parametric_function(m), sync_ptrs(pointers(m), newptrs))
+# sync_ptrs(m::AppliedOnsiteModifier, newptrs) =
+#     AppliedOnsiteModifier(blocktype(m), parametric_function(m), sync_ptrs(pointers(m), newptrs))
 
-function sync_ptrs(m::AppliedHoppingModifier, newptrs)
-    ptrs´ = pointers(m)[2:end]
-    ptrs0´ = sync_ptrs(first(pointers(m)), newptrs)
-    pushfirst!(ptrs´, ptrs0´)
-    return AppliedHoppingModifier(blocktype(m), parametric_function(m), ptrs´)
-end
+# function sync_ptrs(m::AppliedHoppingModifier, newptrs)
+#     ptrs´ = pointers(m)[2:end]
+#     ptrs0´ = sync_ptrs(first(pointers(m)), newptrs)
+#     pushfirst!(ptrs´, ptrs0´)
+#     return AppliedHoppingModifier(blocktype(m), parametric_function(m), ptrs´)
+# end
 
-# race across ptrs and newptrs, injecting shifts
-function sync_ptrs(ptrs::Vector{<:Tuple}, newptrs)
-    ptrs´ = copy(ptrs)
-    i = i´ = 1
-    while i <= length(ptrs)
-        (ptr, rest...) = ptrs[i]
-        if i´ > length(newptrs) || ptr + i´ - 1 < newptrs[i´]
-            ptrs´[i] = (ptr + i´ - 1, rest...)
-            i += 1
-        else
-            i´ += 1
-        end
-    end
-    return ptrs´
-end
+# # race across ptrs and newptrs, injecting shifts
+# function sync_ptrs(ptrs::Vector{<:Tuple}, newptrs)
+#     ptrs´ = copy(ptrs)
+#     i = i´ = 1
+#     while i <= length(ptrs)
+#         (ptr, rest...) = ptrs[i]
+#         if i´ > length(newptrs) || ptr + i´ - 1 < newptrs[i´]
+#             ptrs´[i] = (ptr + i´ - 1, rest...)
+#             i += 1
+#         else
+#             i´ += 1
+#         end
+#     end
+#     return ptrs´
+# end
 
-#endregion
+# ## Tools
+
+# # insert structural zeros in sparse square matrix diagonal if not present
+# function store_diagonal(m::SparseMatrixCSC{B}, newptrs = nothing) where {B}
+#     size(m, 1) == size(m, 2) || throw(ArgumentError("Expect square matrix"))
+#     rows = rowvals(m)
+#     vals = nonzeros(m)
+#     builder = CSC{B}(size(m, 2), nnz(m))
+#     for col in axes(m, 2)
+#         hasdiagonal = false
+#         for ptr in nzrange(m, col)
+#             row, val = rows[ptr], vals[ptr]
+#             row == col && (hasdiagonal = true)
+#             pushtocolumn!(builder, row, val)
+#         end
+#         hasdiagonal || pushtocolumn!(builder, col, zero(B))
+#         finalizecolumn!(builder)
+#         hasdiagonal || record!(newptrs, row_col_ptr(builder, col, col))
+#     end
+#     return sparse(builder, size(m, 1))
+# end
+
+# record!(ptrs::Vector{Int}, ptr) = push!(ptrs, ptr)
+# record!(_, ptr) = nothing
+
+# function hasdiagonal(m::SparseMatrixCSC)
+#     rows = rowvals(m)
+#     for col in axes(m, 2)
+#         found = false
+#         for ptr in nzrange(m, col)
+#             rows[ptr] == col && (found = true; break)
+#         end
+#         found || return false
+#     end
+#     return true
+# end
+
+# # appends pointers to diagonal elements of m in cols range
+# function diagonal_pointers!(ptrs, m::SparseMatrixCSC, cols = 1:min(size(m)...))
+#     rows = rowvals(m)
+#     for col in cols
+#         for ptr in nzrange(m, col)
+#             if rows[ptr] == col
+#                 push!(ptrs, ptr)
+#                 break
+#             end
+#         end
+#     end
+#     return ptrs
+# end
+
+# function add_diagonal!(A::Matrix, x, cols = 1:size(A,2))
+#     checkbounds(A, cols, cols)
+#     @inbounds for col in cols
+#         A[col, col] += x
+#     end
+#     return A
+# end
+
+# function add_diagonal!(A::SparseMatrixCSC, x, cols = 1:size(A,2))
+#     rows = rowvals(m)
+#     vals = nonzeros(m)
+#     for col in cols
+#         found = false
+#         for ptr in nzrange(m, col)
+#             if rows[ptr] == col
+#                 found = true
+#                 vals[ptr] += x
+#                 break
+#             end
+#         end
+#         found || internalerror("add_diagonal!: not enough structural elements")
+#     end
+# end
+
+
+# #endregion

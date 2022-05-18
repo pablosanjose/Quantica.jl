@@ -116,7 +116,7 @@ end
 
 ## apply ##
 
-apply(s::Schur, h::AbstractHamiltonian) =
+apply(::Schur, ::AbstractHamiltonian) =
     argerror("The Schur method requires 1D AbstractHamiltonians with 0, ±1 as only Bloch Harmonics.")
 
 function apply(s::Schur, h::AbstractHamiltonian1D{T}) where {T}
@@ -164,12 +164,6 @@ function left_right_projectors(hm::SparseMatrixCSC, hp::SparseMatrixCSC)
     return PL, PR, L, R, Σauxinds, l_leq_r
 end
 
-function g0inv_pointers(fh0, Σauxinds)
-    g0inv = I - fh0
-    
-    for col in axes(g0inv, 2), p in nzrange(g0inv, col)
-
-end
 
 # # Compute G*R and G*L where G = inv(ω - h0 - im*Ω(LL' + RR'))
 # # Pencil A - λB :
@@ -237,8 +231,9 @@ end
 # #     end
 # #     return ZrL, ZrR, ZaL, ZaR
 # # end
+#endregion
+
 end # module
 
 const GS = GreenSolvers
 
-#endregion
