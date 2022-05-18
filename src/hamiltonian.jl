@@ -275,7 +275,7 @@ call!_output(p::ParametricHamiltonian) = flat(bloch(p))
 #region
 
 Base.getindex(h::AbstractHamiltonian{<:Any,<:Any,L}) where {L} = h[zero(SVector{L,Int})]
-Base.getindex(h::AbstractHamiltonian, dn::Tuple) = getindex(h, SVector(dn))
+Base.getindex(h::AbstractHamiltonian, dn::Union{Integer,Tuple}) = getindex(h, SVector(dn))
 
 function Base.getindex(h::AbstractHamiltonian{<:Any,<:Any,L}, dn::SVector{L,Int}) where {L}
     for har in harmonics(h)

@@ -8,7 +8,7 @@ using LinearAlgebra: I, lu, ldiv!, mul!
 using SparseArrays
 using SparseArrays: SparseMatrixCSC, AbstractSparseMatrix
 using Quantica: Quantica, AbstractGreenSolver, AbstractAppliedGreenSolver, Hamiltonian,
-      ParametricHamiltonian, AbstractHamiltonian, BlockStructure,
+      ParametricHamiltonian, AbstractHamiltonian, BlockStructure, HybridSparseMatrixCSC,
       lattice, zerocell, SVector, sanitize_SVector, siteselector, foreach_cell, foreach_site
 import Quantica: call!, apply
 
@@ -57,10 +57,10 @@ end
 #endregion
 
 ############################################################################################
-# Schur
+# Schur  - see scattering.pdf notes for derivations
 #region
 
-const AbstractHamiltonian1D = AbstractHamiltonian{<:Any,<:Any,1}
+const AbstractHamiltonian1D{T,E,B} = AbstractHamiltonian{T,E,1,B}
 
 struct Schur{N<:NamedTuple} <: AbstractGreenSolver
     options::N
@@ -70,138 +70,104 @@ Schur(; inversefree = true, shift = 1.0, kw...) = Schur((; inversefree, shift, l
 
 Schur(h::AbstractHamiltonian; kw...) = apply(Schur(; kw...), h)
 
-# #### FlatHarmonics #########################################################################
+#### AppliedSchur ##########################################################################
 
-# struct FlatHarmonics{C<:Number,H<:AbstractHamiltonian1D}
-#     h::H
-#     flatorbstruct::OrbitalStructure{C}
-#     h0::SparseMatrixCSC{C,Int}  # These will be an alias for the internal harmonics of h
-#     hp::SparseMatrixCSC{C,Int}  # if h is already flat
-#     hm::SparseMatrixCSC{C,Int}  # if h is already flat
-#     function FlatHarmonics{C,H}(h, flatorbstruct, h0, hp) where {C<:Number, H<:AbstractHamiltonian1D}
-#         for hh in harmonics(h)
-#             dn = dcell(hh)
-#             dn == SA[0] || dn == SA[1] || dn == SA[-1] ||
-#                 throw(ArgumentError("Too many harmonics, try `supercell`."))
-#         end
-#         return new(h, flatorbstruct, h0, hp, hm)
-#     end
-# end
+struct SchurWorkspace{C}
+    GL::Matrix{C}
+    GR::Matrix{C}
+    A::Matrix{C}
+    B::Matrix{C}
+    Z11::Matrix{C}
+    Z21::Matrix{C}
+    Z11bar::Matrix{C}
+    Z21bar::Matrix{C}
+end
 
-# ## Constructors ##
+struct AppliedSchur{T,B,H<:AbstractHamiltonian1D{T,<:Any,B},N<:NamedTuple} <: AbstractAppliedGreenSolver
+    options::N
+    h::H
+    hm::HybridSparseMatrixCSC{T,B}
+    h0::HybridSparseMatrixCSC{T,B}
+    hp::HybridSparseMatrixCSC{T,B}
+    l_leq_r::Bool                                     # whether l <= r (left and right surface dims)
+    g0inv::SparseMatrixCSC{Complex{T},Int}            # to store ω - h0 - Σₐᵤₓ
+    ptrs::Tuple{Vector{Int},Vector{Int},Vector{Int}}  # g0inv ptrs for h0 nzvals, diagonal and Σₐᵤₓ surface
+    PL::Matrix{Complex{T}}                            # projector on left surface
+    PR::Matrix{Complex{T}}                            # projector on right surface
+    L::Matrix{Complex{T}}                             # l<=r ? PL : PL*H' === hp PR
+    R::Matrix{Complex{T}}                             # l<=r ? PR*H === hm PL : PR
+    R´L´::Matrix{Complex{T}}  # [R'; -L']
+    tmp::SchurWorkspace{Complex{T}}
+end
 
-# FlatHarmonics(h::H, flatos::OrbitalStructure{C}, h0, hp, hm) where {H,C} =
-#     FlatHarmonics{C,H}(h, flatos, h0, hp, hm)
+## Constructors ##
 
-# function flatharmonics(h::AbstractHamiltonian1D)
-#     h´ = store_onsites(h)  # ensure structural diagonal to shift by ω later
-#     os = orbitalstructure(h´)
-#     flatos = flatten(os)
-#     h0 = flatten(h´[(0,)], os, flatos)
-#     hp = flatten(h´[(1,)], os, flatos)
-#     hm = flatten(h´[(-1,)], os, flatos)
-#     return FlatHarmonics(h´, flatos, h0, hp, hm)
-# end
+function SchurWorkspace{C}((n, d)) where {C}
+    GL = Matrix{C}(undef, n, d)
+    GR = Matrix{C}(undef, n, r)
+    A = Matrix{C}(undef, 2d, 2d)
+    B = Matrix{C}(undef, 2d, 2d)
+    Z11 = Matrix{C}(undef, d, d)
+    Z21 = Matrix{C}(undef, d, d)
+    Z11bar = Matrix{C}(undef, d, d)
+    Z21bar = Matrix{C}(undef, d, d)
+    return SchurWorkspace(GL, GR, A, B, Z11, Z21, Z11bar, Z21bar)
+end
 
-# flatharmonics(h::Flat) = flatharmonics(parent(h))
+## apply ##
 
-# ## API ##
+apply(s::Schur, h::AbstractHamiltonian) =
+    argerror("The Schur method requires 1D AbstractHamiltonians with 0, ±1 as only Bloch Harmonics.")
 
-# function call!(f::FlatHarmonics; kw...)
-#     call!(f.h; kw...)  # updates internal harmonics if h::ParametricHamiltonian, or no-op
-#     copy_flat!(f)
-#     return f.h0, f.hp, f.hm
-# end
+function apply(s::Schur, h::AbstractHamiltonian1D{T}) where {T}
+    options = s.options
+    hm, h0, hp = hybridharmonics(h)
+    fhm, fh0, fhp = flat(hm), flat(h0), flat(hp)
+    PL, PR, L, R, Σauxinds, l_leq_r = left_right_projectors(fhm, fhp)
+    R´L´ = [R'; -L']
+    g0inv = I - fh0
+    ptrs = g0inv_pointers(g0inv, h0, Σauxinds)
+    workspace = SchurWorkspace{Complex{T}}(size(L))
+    return AppliedSchur(options, h, hm, h0, hp, l_leq_r, g0inv, ptrs, PL, PR, L, R, R´L´, workspace)
+end
 
-# function copy_flat!(f::FlatHarmonics)
-#     os = orbitalstructure(f.h)
-#     flatos = f.flatorbstruct
-#     merged_flatten_mul!(f.h0, (os, flatos), f.h[SA[0]], 1, 1, 0)
-#     merged_flatten_mul!(f.hp, (os, flatos), f.h[SA[1]], 1, 1, 0)
-#     merged_flatten_mul!(f.hm, (os, flatos), f.h[SA[-1]], 1, 1, 0)
-#     return f
-# end
+function hybridharmonics(h)
+    for hh in harmonics(h)
+        dn = dcell(hh)
+        dn == SA[0] || dn == SA[1] || dn == SA[-1] ||
+            throw(ArgumentError("Too many harmonics, try `supercell` to reduce to strictly nearest-neighbors."))
+    end
+    return h[-1], h[0], h[1]
+end
 
-# #### AppliedSchur ##########################################################################
+# hp = L*R' = PL H' PR'. We assume hm = hp'
+function left_right_projectors(hm::SparseMatrixCSC, hp::SparseMatrixCSC)
+    linds = unique!(sort!(copy(rowvals(hp))))
+    rinds = Int[]
+    for col in axes(hp, 2)
+        isempty(nzrange(hp, col)) || push!(rinds, col)
+    end
+    # dense projectors
+    o = one(eltype(hp))*I
+    allrows = 1:size(hp,1)
+    l_leq_r = length(linds) <= length(rinds)
+    PR = o[allrows, rinds]
+    PL = o[allrows, linds]
+    if l_leq_r
+        Σauxinds = linds
+        R = Matrix(hm[:, linds])  # R = PR H = hm PL
+        L = PL
+    else
+        Σauxinds = rinds
+        R = PR
+        L = Matrix(hp[:, rinds])  # L = PL H' = hp PR
+    end
+    return PL, PR, L, R, Σauxinds, l_leq_r
+end
 
-# struct SchurWorkspace{C}
-#     GL::Matrix{C}
-#     GR::Matrix{C}
-#     A::Matrix{C}
-#     B::Matrix{C}
-#     Z11::Matrix{C}
-#     Z21::Matrix{C}
-#     Z11bar::Matrix{C}
-#     Z21bar::Matrix{C}
-# end
-
-# struct AppliedSchur{C<:Number,F<:FlatHarmonics{C},N<:NamedTuple} <: AbstractAppliedGreenSolver
-#     options::N
-#     flathars::F
-#     l_leq_r::Bool                           # whether l <= r
-#     ptrsDS::Tuple{Vector{Int},Vector{Int}}  # ptrs of h0 on diagonal and Σₐᵤₓ surface
-#     L::Matrix{C}
-#     R::Matrix{C}
-#     LmR´::Matrix{C}  # [L'; -R']
-#     tmp::SchurWorkspace{C}
-# end
-
-# ## Constructors ##
-
-# function SchurWorkspace{C}((n, d)) where {C}
-#     GL = Matrix{C}(undef, n, d)
-#     GR = Matrix{C}(undef, n, r)
-#     A = Matrix{C}(undef, 2d, 2d)
-#     B = Matrix{C}(undef, 2d, 2d)
-#     Z11 = Matrix{C}(undef, d, d)
-#     Z21 = Matrix{C}(undef, d, d)
-#     Z11bar = Matrix{C}(undef, d, d)
-#     Z21bar = Matrix{C}(undef, d, d)
-#     return SchurWorkspace(GL, GR, A, B, Z11, Z21, Z11bar, Z21bar)
-# end
-
-# apply(s::Schur, h::AbstractHamiltonian) =
-#     argerror("The Schur method requires 1D AbstractHamiltonians with 0, ±1 as only Bloch Harmonics.")
-
-# function apply(s::Schur, h::AbstractHamiltonian1D)
-#     options = s.options
-#     flathars = flatharmonics(h)
-#     # we only need their sparse structure; it does not change upon call!(flathars, ω; kw...)
-#     h0, hp, hm = flathars.h0, flathars.hp, flathars.hm
-#     L, R, Σinds, l_leq_r = left_right_projectors(hp, hm)
-#     LmR´ = [L'; -R']
-#     Sptrs = sizehint!(Int[], length(Σinds))
-#     diagonal_pointers!(Sptrs, h0, Σinds)
-#     Dptrs = sizehint!(Int[], size(h0, 1))
-#     diagonal_pointers!(Dptrs, h0)
-#     C = eltype(h0)
-#     workspace = SchurWorkspace{C}(size(L))
-#     return AppliedSchur(options, flathars, l_leq_r, (Dptrs, Sptrs), L, R, LmR´, workspace)
-# end
-
-# # hp = L*R' = PL H' PR'. We assume hm = hp'
-# function left_right_projectors(hp::SparseMatrixCSC, hm::SparseMatrixCSC)
-#     linds = unique!(sort!(copy(rowvals(hp))))
-#     rinds = Int[]
-#     for col in axes(hp, 2)
-#         isempty(nzrange(hp, col)) || push!(rinds, col)
-#     end
-#     # dense projectors
-#     o = one(eltype(hp))*I
-#     allrows = 1:size(hp,1)
-#     l_leq_r = length(linds) <= length(rinds)
-#     ## THIS IS WRONG: hm is only updated when calling the Green function.
-#     if l_leq_r
-#         Σinds = linds
-#         R = Matrix(hm[:, linds])  # R = PR H = hm PL
-#         L = o[allrows, linds]     # L = PL
-#     else
-#         Σinds = rinds
-#         R = o[allrows, rinds]     # R = PR
-#         L = Matrix(hp[:, rinds])  # L = PL H' = hp PR
-#     end
-#     return L, R, Σinds, l_leq_r
-# end
+function g0inv_pointers(g0inv, h0, Σauxinds)
+    
+end
 
 # # Compute G*R and G*L where G = inv(ω - h0 - im*Ω(LL' + RR'))
 # # Pencil A - λB :
