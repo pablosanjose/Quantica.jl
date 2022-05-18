@@ -6,7 +6,7 @@
 spectrum(h::AbstractHamiltonian, xs...; kw...) = Spectrum(solver(h(xs...; kw...)), h)
 
 function SpectrumSolver(h::AbstractHamiltonian{T,<:Any,L}, S = SVector{L,T};
-                        solver = EP.LinearAlgebra(), mapping = missing, transform = missing) where {L,T}
+                        solver = ES.LinearAlgebra(), mapping = missing, transform = missing) where {L,T}
     solver´ = apply(solver, h, S, mapping, transform)
     return SpectrumSolver(solver´)
 end
@@ -50,7 +50,7 @@ end
 # bands
 #region
 
-function bands(h::AbstractHamiltonian, basemesh::Mesh{SVector{L,T}}; solver = EP.LinearAlgebra(),
+function bands(h::AbstractHamiltonian, basemesh::Mesh{SVector{L,T}}; solver = ES.LinearAlgebra(),
               transform = missing, mapping = missing, showprogress = true, defects = (), patches = 0,
               degtol = missing, split = true, warn = true) where {T,L}
     solvers = [SpectrumSolver(h, SVector{L,T}; solver, mapping, transform) for _ in 1:Threads.nthreads()]

@@ -36,14 +36,20 @@ export sublat, lattice, supercell, bravais_matrix,
 #        momentaKPM, dosKPM, averageKPM, densityKPM, bandrangeKPM,
 #        greens, greensolver, Schur1D
 
-export LatticePresets, LP, RegionPresets, RP, EigensolverPresets, EP #, HamiltonianPresets, HP
+export LatticePresets, LP, RegionPresets, RP  #, HamiltonianPresets, HP
+export EigenSolvers, ES, GreenSolvers, GS
 export @SMatrix, @SVector, SMatrix, SVector, SA
 export ishermitian, I
 export ftuple
 
+# Preamble
 include("iterators.jl")
 include("builders.jl")
+include("tools.jl")
 include("sparsetools.jl")
+include("sanitize.jl")
+
+# Core
 include("types.jl")
 include("selector.jl")
 include("lattice.jl")
@@ -51,23 +57,26 @@ include("model.jl")
 include("hamiltonian.jl")
 include("supercell.jl")
 include("transform.jl")
-include("apply.jl")
-# include("ket.jl")
 include("mesh.jl")
 include("spectrum.jl")
 include("coupler.jl")
+include("apply.jl")
+include("show.jl")
+include("convert.jl")
+# include("ket.jl")
 # include("KPM.jl")
 # include("effective.jl")
 # include("greens.jl")
-include("sanitize.jl")
-include("show.jl")
-include("tools.jl")
-include("convert.jl")
 
+# Solvers
+include("solvers/eigensolvers.jl")
+include("solvers/greensolvers.jl")
+
+# Presets
 include("presets/lattices.jl")
 include("presets/regions.jl")
-include("presets/eigensolvers.jl")
 # include("presets/hamiltonians.jl")
+
 
 include("precompile.jl")
 

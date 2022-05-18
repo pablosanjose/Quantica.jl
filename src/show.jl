@@ -111,16 +111,16 @@ showextrainfo(io, i, h::ParametricHamiltonian) = print(io, i, "\n",
 #endregion
 
 ############################################################################################
-# AbstractEigensolver
+# AbstractEigenSolver
 #region
 
-function Base.show(io::IO, s::AbstractEigensolver)
+function Base.show(io::IO, s::AbstractEigenSolver)
     i = get(io, :indent, "")
     print(io, i, summary(s))
 end
 
-Base.summary(s::AbstractEigensolver) =
-    "AbstractEigensolver ($(Base.nameof(typeof(s))))"
+Base.summary(s::AbstractEigenSolver) =
+    "AbstractEigenSolver ($(Base.nameof(typeof(s))))"
 
 #endregion
 

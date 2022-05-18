@@ -57,7 +57,42 @@ isonsite((j, i), dn) = ifelse(i == j && iszero(dn), true, false)
 # foreach_site, foreach_cell, foreach_hop
 #region
 
-function foreach_site(f, sel::AppliedSiteSelector, cell = zerocell(lattice(sel)))
+# foreach_cell(f,...) should be called with a boolean function f that returns whether the
+# cell should be mark as accepted when BoxIterated
+function foreach_cell(f, sel::AppliedSiteSelector)
+    lat = lattice(sel)
+    cells_list = cells(sel)
+    if isempty(cells_list) # no cells specified
+        iter = BoxIterator(zerocell(lat))
+        for cell in iter
+            f(cell) && accepcell!(iter, cell)
+        end
+    else
+        for cell in cells_list
+            f(cell)
+        end
+    end
+    return nothing
+end
+
+
+function foreach_cell(f, sel::AppliedHopSelector)
+    lat = lattice(sel)
+    dcells_list = dcells(sel)
+    if isempty(dcells_list) # no dcells specified
+        iter = BoxIterator(zerocell(lat))
+        for dn in iter
+            f(dn) && acceptcell!(iter, dn)
+        end
+    else
+        for dn in dcells_list
+            f(dn)
+        end
+    end
+    return nothing
+end
+
+function foreach_site(f, sel::AppliedSiteSelector, cell)
     lat = lattice(sel)
     for s in sublats(lat)
         insublats(sublatname(lat, s), sel) || continue
@@ -70,24 +105,7 @@ function foreach_site(f, sel::AppliedSiteSelector, cell = zerocell(lattice(sel))
     return nothing
 end
 
-function foreach_cell(f, sel::AppliedHopSelector)
-    lat = lattice(sel)
-    dcells_list = dcells(sel)
-    if isempty(dcells_list) # no dcells specified
-        dcells_iter = BoxIterator(zerocell(lat))
-        for dn in dcells_iter
-            !indcells(dn, sel) && continue
-            f(dn, dcells_iter)
-        end
-    else
-        for dn in dcells_list
-            f(dn, missing)
-        end
-    end
-    return nothing
-end
-
-function foreach_hop!(f, sel::AppliedHopSelector, iter_ni, kdtrees, ni = zerocell(lattice(sel)))
+function foreach_hop(f, sel::AppliedHopSelector, kdtrees, ni = zerocell(lattice(sel)))
     lat = lattice(sel)
     _, rmax = sel.range
     # source cell at origin
@@ -110,8 +128,7 @@ function foreach_hop!(f, sel::AppliedHopSelector, iter_ni, kdtrees, ni = zerocel
             end
         end
     end
-    found && acceptcell!(iter_ni, ni)
-    return nothing
+    return found
 end
 
 # Although range can be (rmin, rmax) we return all targets within rmax.

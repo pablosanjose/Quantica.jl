@@ -1,15 +1,15 @@
 ############################################################################################
-# Eigensolvers module
-#   An AbstractEigensolver is defined by a set of kwargs for the eigensolver and a set of
-#   methods AbstractMatrix -> Eigen associated to that AbstractEigensolver
+# EigenSolvers module
+#   An AbstractEigenSolver is defined by a set of kwargs for the eigensolver and a set of
+#   methods AbstractMatrix -> Eigen associated to that AbstractEigenSolver
 #region
 
-module EigensolverPresets
+module EigenSolvers
 
 using FunctionWrappers: FunctionWrapper
 using LinearAlgebra: Eigen, I, lu, ldiv!
 using SparseArrays: SparseMatrixCSC, AbstractSparseMatrix
-using Quantica: Quantica, AbstractEigensolver, ensureloaded, SVector, SMatrix,
+using Quantica: Quantica, AbstractEigenSolver, ensureloaded, SVector, SMatrix,
                 sanitize_eigen, call!_output
 
 #endregion
@@ -20,15 +20,15 @@ using Quantica: Quantica, AbstractEigensolver, ensureloaded, SVector, SMatrix,
 
 ## Fallbacks
 
-(s::AbstractEigensolver)(mat) =
+(s::AbstractEigenSolver)(mat) =
     throw(ArgumentError("The eigensolver backend $(typeof(s)) is not defined to work on $(typeof(mat))"))
 
 # an alias of h's call! output makes apply call! conversion a no-op, see apply.jl
-input_matrix(::AbstractEigensolver, h) = call!_output(h)
+input_matrix(::AbstractEigenSolver, h) = call!_output(h)
 
 #### LinearAlgebra #####
 
-struct LinearAlgebra{K} <: AbstractEigensolver
+struct LinearAlgebra{K} <: AbstractEigenSolver
     kwargs::K
 end
 
@@ -46,7 +46,7 @@ input_matrix(::LinearAlgebra, h) = Matrix(call!_output(h))
 
 #### Arpack #####
 
-struct Arpack{K} <: AbstractEigensolver
+struct Arpack{K} <: AbstractEigenSolver
     kwargs::K
 end
 
@@ -62,7 +62,7 @@ end
 
 #### KrylovKit #####
 
-struct KrylovKit{P,K} <: AbstractEigensolver
+struct KrylovKit{P,K} <: AbstractEigenSolver
     params::P
     kwargs::K
 end
@@ -79,7 +79,7 @@ end
 
 #### ArnoldiMethod #####
 
-struct ArnoldiMethod{K} <: AbstractEigensolver
+struct ArnoldiMethod{K} <: AbstractEigenSolver
     kwargs::K
 end
 
@@ -96,12 +96,12 @@ end
 
 #### ShiftInvertSparse ####
 
-struct ShiftInvertSparse{T,E<:AbstractEigensolver} <: AbstractEigensolver
+struct ShiftInvertSparse{T,E<:AbstractEigenSolver} <: AbstractEigenSolver
     origin::T
     eigensolver::E
 end
 
-function ShiftInvertSparse(e::AbstractEigensolver, origin)
+function ShiftInvertSparse(e::AbstractEigenSolver, origin)
     ensureloaded(:LinearMaps)
     return ShiftInvertSparse(origin, e)
 end
@@ -120,6 +120,6 @@ end
 
 end # module
 
-const EP = EigensolverPresets
+const ES = EigenSolvers
 
 #endregion

@@ -21,6 +21,7 @@ function supercell_data(lat::Lattice{<:Any,<:Any,L}, vs...; kw...) where {L}
     # IMPORTANT BEHAVIOR: if lattice dimensions are reduced and there is no bounding region
     # and no cell list, supercell is infinite. In this case: stop at a single perp unit cell
     only_one_perp = size(smat, 2) < size(smat, 1) && region(selector) === missing && cells(selector) === missing
+    # cellseed currently not exposed to the user
     cellseed = zero(SVector{L,Int})
     return supercell_data(lat, smat, cellseed, applied_selector, only_one_perp)
 end

@@ -47,6 +47,7 @@ region_apply(r::SVector, region::Function) = ifelse(region(r), true, false)
 recursive_push!(v::Vector, ::Missing) = v
 recursive_push!(v::Vector{T}, x::T) where {T} = push!(v, x)
 recursive_push!(v::Vector{S}, x::NTuple{<:Any,Int}) where {S<:SVector,T} = push!(v, S(x))
+recursive_push!(v::Vector{S}, x::Number) where {S<:SVector{1}}= push!(v, S(x))
 recursive_push!(v::Vector{Pair{T,T}}, x::T) where {T} = push!(v, x => x)
 recursive_push!(v::Vector{Pair{T,T}}, (x, y)::Tuple{T,T}) where {T} = push!(v, x => y)
 recursive_push!(v::Vector{Pair{T,T}}, x::Pair{T,T}) where {T} = push!(v, x)
@@ -105,8 +106,8 @@ function apply(m::HoppingModifier, h::Hamiltonian)
     return AppliedHoppingModifier(B, f, ptrs)
 end
 
-# s.cells is ignored: we are filtering onsite terms in unit cell
 function pointers(h::Hamiltonian{T,E}, s::AppliedSiteSelector{T,E}) where {T,E}
+    isempty(cells(s)) || argerror("Cannot constrain cells in an onsite modifier, cell periodicity is assumed.")
     ptr_r = Tuple{Int,SVector{E,T},Int}[]
     lat = lattice(h)
     har0 = first(harmonics(h))
@@ -152,14 +153,14 @@ end
 #endregion
 
 ############################################################################################
-# apply AbstractEigensolver
+# apply AbstractEigenSolver
 #region
 
-function apply(solver::AbstractEigensolver, h::AbstractHamiltonian, S::Type{SVector{L,T}}, mapping, transform) where {L,T}
+function apply(solver::AbstractEigenSolver, h::AbstractHamiltonian, S::Type{SVector{L,T}}, mapping, transform) where {L,T}
     B = blocktype(h)
     h´ = copy_callsafe(h)
-    # Some solvers only accept certain matrix types
-    mat´ = EP.input_matrix(solver, h´)
+    # Some solvers (e.g. ES.LinearAlgebra) only accept certain matrix types
+    mat´ = ES.input_matrix(solver, h´)
     function sfunc(φs)
         φs´ = applymap(mapping, φs)
         mat = call!(h´, φs´)
@@ -172,5 +173,13 @@ end
 
 applymap(::Missing, φs) = φs
 applymap(mapping, φs) = mapping(Tuple(φs)...)
+
+#endregion
+
+############################################################################################
+# apply AbstractGreenSolver
+#region
+
+# apply(solver::AbstractGreenSolver, h::AbstractHamiltonian) = GS.apply(solver, h)
 
 #endregion

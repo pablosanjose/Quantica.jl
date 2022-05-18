@@ -754,11 +754,11 @@ Base.copy(m::Mesh) = Mesh(copy(m.verts), deepcopy(m.neighs), copy(m.simps))
 #endregion
 
 ############################################################################################
-# Spectrum  -  see /presets/eigensolvers.jl for solver backends <: AbstractEigensolver
+# Spectrum  -  see solvers/eigensolvers.jl for solver backends <: AbstractEigenSolver
 #           -  see spectrum.jl for public API
 #region
 
-abstract type AbstractEigensolver end
+abstract type AbstractEigenSolver end
 
 struct Spectrum{T,B}
     eigen::Eigen{Complex{T},Complex{T},Matrix{Complex{T}},Vector{Complex{T}}}
@@ -916,4 +916,13 @@ subbands(b::Bands) = b.subbands
 subbands(b::Bands, i...) = getindex(b.subbands, i...)
 
 #endregion
+#endregion
+
+############################################################################################
+# Green functions  - see solvers/greensolvers.jl
+#region
+
+abstract type AbstractGreenSolver end
+abstract type AbstractAppliedGreenSolver end
+
 #endregion

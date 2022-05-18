@@ -16,10 +16,11 @@ Base.@constprop :aggressive function hamiltonian(lat::Lattice{T}, m = Tightbindi
 end
 
 function applyterm!(builder, term::AppliedOnsiteTerm)
+    sel = selector(term)
+    isempty(cells(sel)) || argerror("Cannot constrain cells in an onsite term, cell periodicity is assumed.")
     lat = lattice(builder)
     dn0 = zerocell(lat)
     ijv = builder[dn0]
-    sel = selector(term)
     bs = blockstructure(builder)
     bsizes = blocksizes(bs)
     foreach_site(sel, dn0) do s, i, r
@@ -35,15 +36,16 @@ function applyterm!(builder, term::AppliedHoppingTerm, (irng, jrng) = (:, :))
     sel = selector(term)
     bs = blockstructure(builder)
     bsizes = blocksizes(bs)
-    foreach_cell(sel) do dn, cell_iter
+    foreach_cell(sel) do dn
         ijv = builder[dn]
-        foreach_hop!(sel, cell_iter, trees, dn) do (si, sj), (i, j), (r, dr)
-            isinblock(i, irng) && isinblock(j, jrng) || return
+        found = foreach_hop(sel, trees, dn) do (si, sj), (i, j), (r, dr)
+            isinblock(i, irng) && isinblock(j, jrng) || return nothing
             ni = bsizes[si]
             nj = bsizes[sj]
             v = term(r, dr, (ni, nj))
             push!(ijv, (i, j, v))
         end
+        return found
     end
     return nothing
 end
@@ -238,7 +240,7 @@ function applymodifiers!(h, m::AppliedOnsiteModifier{B}; kw...) where {B<:SMatri
     nz = nonzeros(unflat(first(harmonics(h))))
     for (ptr, r, norbs) in pointers(m)
         val = view(nz[ptr], 1:norbs, 1:norbs)
-        nz[ptr] = m(val, r, norbs; kw...) # this allocates, unavoidable
+        nz[ptr] = m(val, r, norbs; kw...) # this allocates, currently unavoidable
     end
     return h
 end
