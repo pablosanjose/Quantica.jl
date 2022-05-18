@@ -312,3 +312,55 @@ nonsites(h::AbstractHamiltonian) = nnzdiag(h[])
 coordination(h::AbstractHamiltonian) = iszero(nhoppings(h)) ? 0.0 : round(nhoppings(h) / nsites(lattice(h)), digits = 5)
 
 #endregion
+
+############################################################################################
+# store_onsites - AbstractHamiltonian with onsites as structural SparseMatrix elements
+#    Note: if hasdiagonal, then no-op
+#region
+
+# if newptrs::Vector{Int} it will be filled with the list of inserted pointers
+function store_onsites(h::Hamiltonian, newptrs = nothing)
+    hasdiagonal(h[]) && return h
+    hh´ = harmonics(h)[2:end]
+    h0 = first(harmonics(h))
+    h0´ = Harmonic(dcell(h0), store_diagonal(matrix(h0), newptrs))  # see tools.jl
+    pushfirst!(hh´, h0´)
+    return Hamiltonian(lattice(h), orbitalstructure(h), hh´)
+end
+
+function store_onsites(p::ParametricHamiltonian)
+    newptrs = Int[]
+    hasdiagonal(parent(p)[]) && return p
+    h´ = store_onsites(parent(p), newptrs)
+    mods = modifiers(p)
+    mods´ = sync_ptrs.(mods, Ref(newptrs))
+    return parametric(h´, mods´...)
+end
+
+sync_ptrs(m::AppliedOnsiteModifier, newptrs) =
+    AppliedOnsiteModifier(blocktype(m), parametric_function(m), sync_ptrs(pointers(m), newptrs))
+
+function sync_ptrs(m::AppliedHoppingModifier, newptrs)
+    ptrs´ = pointers(m)[2:end]
+    ptrs0´ = sync_ptrs(first(pointers(m)), newptrs)
+    pushfirst!(ptrs´, ptrs0´)
+    return AppliedHoppingModifier(blocktype(m), parametric_function(m), ptrs´)
+end
+
+# race across ptrs and newptrs, injecting shifts
+function sync_ptrs(ptrs::Vector{<:Tuple}, newptrs)
+    ptrs´ = copy(ptrs)
+    i = i´ = 1
+    while i <= length(ptrs)
+        (ptr, rest...) = ptrs[i]
+        if i´ > length(newptrs) || ptr + i´ - 1 < newptrs[i´]
+            ptrs´[i] = (ptr + i´ - 1, rest...)
+            i += 1
+        else
+            i´ += 1
+        end
+    end
+    return ptrs´
+end
+
+#endregion
