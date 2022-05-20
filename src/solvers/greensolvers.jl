@@ -9,7 +9,8 @@ using SparseArrays
 using SparseArrays: SparseMatrixCSC, AbstractSparseMatrix
 using Quantica: Quantica, AbstractGreenSolver, AbstractAppliedGreenSolver, Hamiltonian,
       ParametricHamiltonian, AbstractHamiltonian, BlockStructure, HybridSparseMatrixCSC,
-      lattice, zerocell, SVector, sanitize_SVector, siteselector, foreach_cell, foreach_site
+      lattice, zerocell, SVector, sanitize_SVector, siteselector, foreach_cell, foreach_site,
+      store_diagonal_ptrs
 import Quantica: call!, apply
 
 ############################################################################################
@@ -90,10 +91,9 @@ struct AppliedSchur{T,B,H<:AbstractHamiltonian1D{T,<:Any,B},N<:NamedTuple} <: Ab
     h0::HybridSparseMatrixCSC{T,B}
     hp::HybridSparseMatrixCSC{T,B}
     l_leq_r::Bool                                     # whether l <= r (left and right surface dims)
-    g0inv::SparseMatrixCSC{Complex{T},Int}            # to store ω - h0 - Σₐᵤₓ
-    ptrs::Tuple{Vector{Int},Vector{Int},Vector{Int}}  # g0inv ptrs for h0 nzvals, diagonal and Σₐᵤₓ surface
-    PL::Matrix{Complex{T}}                            # projector on left surface
-    PR::Matrix{Complex{T}}                            # projector on right surface
+    iG::SparseMatrixCSC{Complex{T},Int}               # to store iG = ω - h0 - Σₐᵤₓ
+    ptrs::Tuple{Vector{Int},Vector{Int},Vector{Int}}  # iG ptrs for h0 nzvals, diagonal and Σₐᵤₓ surface
+    sinds::Vector{Int}                                # site indices on the smalles surface (left for l<=r, right for l>r)
     L::Matrix{Complex{T}}                             # l<=r ? PL : PL*H' === hp PR
     R::Matrix{Complex{T}}                             # l<=r ? PR*H === hm PL : PR
     R´L´::Matrix{Complex{T}}  # [R'; -L']
@@ -114,7 +114,7 @@ function SchurWorkspace{C}((n, d)) where {C}
     return SchurWorkspace(GL, GR, A, B, Z11, Z21, Z11bar, Z21bar)
 end
 
-## apply ##
+## Apply ##
 
 apply(::Schur, ::AbstractHamiltonian) =
     argerror("The Schur method requires 1D AbstractHamiltonians with 0, ±1 as only Bloch Harmonics.")
@@ -123,11 +123,12 @@ function apply(s::Schur, h::AbstractHamiltonian1D{T}) where {T}
     options = s.options
     hm, h0, hp = hybridharmonics(h)
     fhm, fh0, fhp = flat(hm), flat(h0), flat(hp)
-    PL, PR, L, R, Σauxinds, l_leq_r = left_right_projectors(fhm, fhp)
+    L, R, sinds, l_leq_r = left_right_projectors(fhm, fhp)
     R´L´ = [R'; -L']
-    g0inv, ptrs = g0inv_pointers(fh0, Σauxinds)
+    iG, (p, pd) = store_diagonal_ptrs(fh0)
+    ptrs = (p, pd, pd[sinds])
     workspace = SchurWorkspace{Complex{T}}(size(L))
-    return AppliedSchur(options, h, hm, h0, hp, l_leq_r, g0inv, ptrs, PL, PR, L, R, R´L´, workspace)
+    return AppliedSchur(options, h, hm, h0, hp, l_leq_r, iG, ptrs, sinds, L, R, R´L´, workspace)
 end
 
 function hybridharmonics(h)
@@ -153,84 +154,106 @@ function left_right_projectors(hm::SparseMatrixCSC, hp::SparseMatrixCSC)
     PR = o[allrows, rinds]
     PL = o[allrows, linds]
     if l_leq_r
-        Σauxinds = linds
+        sinds = linds
         R = Matrix(hm[:, linds])  # R = PR H = hm PL
         L = PL
     else
-        Σauxinds = rinds
+        sinds = rinds
         R = PR
         L = Matrix(hp[:, rinds])  # L = PL H' = hp PR
     end
-    return PL, PR, L, R, Σauxinds, l_leq_r
+    return L, R, sinds, l_leq_r
 end
 
+## Pencil ##
 
-# # Compute G*R and G*L where G = inv(ω - h0 - im*Ω(LL' + RR'))
-# # Pencil A - λB :
-# #    A = [1-im*L'GL  -L'GLhp; im*R'GL  R'GLhp] and B = [L'GRhp' im*L'GR; -R'GRhp' 1-im*R'GR]
-# #    A = [-im*Γₗ -Γₗhp] + [1 0; 0 0] and B = [Γᵣhp' im*Γᵣ] + [0 0; 0 1]
-# #    Γₗ = [L'; -R']*G*L  and  Γᵣ = [L'; -R']*G*R
-# function pencilAB(s::AppliedSchur, ω; kw...)
-#     h0, hp, hm = call!(s.flathars; kw...)
-#     Hp = s.tmp.Hp
-#     copyto!(Hp, nonzeros(hp))
-#     Ω = s.options.shift
-#     iG = inverse_G!(h0, ω, Ω, s.ptrsDS)
-#     iGlu = lu(iG)
-#     GL = ldiv!(s.tmp.GL, iGlu, s.L)
-#     GR = ldiv!(s.tmp.GR, iGlu, s.R)
-#     l, r = size(GL, 2), size(GR, 2)
-#     A, B = s.tmp.A, s.tmp.B
-#     mul!(view(A, :, 1:l), s.LmR´, GL, -1, 0)
-#     mul!(view(B, :, l+1:l+r), s.LmR´, GR, 1, 0)
-#     mul!(view(A, :, l+1:l+r), view(A, :, 1:l), Hp, 1, 0)
-#     mul!(view(B, :, 1:l), view(A, :, 1:l), Hp', 1, 0)
-#     view(A, :, 1:l) .*= im * Ω
-#     view(B, :, l+1:l+r) .*= im * Ω
-#     add_diagonal!(A, 1, 1:l)
-#     add_diagonal!(B, 1, l+1:l+r)
-#     return A, B
-# end
+# Compute G*R and G*L where G = inv(ω - h0 - Σₐᵤₓ)
+# Pencil A - λB :
+#    A = [R'GL  (1-δ)iΩR'GL; -L'GL  1-(1-δ)iΩL´GL] and B = [1-δiΩR'GR  -R'GR; δiΩL'GR  L'GR]
+#    where δ = l <= r ? 1 : 0
+#    A = [Γₗ (1-δ)iΩΓₗ] + [0 0; 0 1] and B = [-Γᵣ -δiΩΓᵣ] + [1 0; 0 0]
+#    Γₗ = [R'; -L']GL  and  Γᵣ = [R'; -L']GR
+function pencilAB(s::AppliedSchur{T}, ω) where {T}
+    o, z = one(Complex{T}), zero(Complex{T})
+    update_iG!(s, ω)
+    iGlu = lu(s.iG)
+    Ω = s.options.shift
+    update_LR!(s)
+    GL = ldiv!(s.tmp.GL, iGlu, s.L)
+    GR = ldiv!(s.tmp.GR, iGlu, s.R)
+    A, B, R´L´ = s.tmp.A, s.tmp.B, s.R´L´
+    fill!(A, z)
+    fill!(B, z)
+    mul!(view(A, :, 1:d), R´L´, GL)
+    mul!(view(B, :, d+1:2d), R´L´, GR, -1, 0)
+    if s.l_leq_r
+        view(A, :, d+1:2d) .= view(A, :, 1:d) .* (im*Ω)
+    else
+        view(B, :, 1:d) .= view(B, :, d+1:2d) .* (im*Ω)
+    end
+    for i in 1:d
+        A[d+i, d+i] += o
+        B[i, i] += o
+    end
+    return A, B
+end
 
-# # Builds ω - h0 - iΩ(LL' + RR')
-# function inverse_G!(h0, ω, Ω, (ptrsD, ptrsS))
-#     nz = nonzeros(h0)
-#     @. nz = -nz
-#     for ptr in ptrsD
-#         nz[ptr] += ω
+function update_iG!(s::AppliedSchur{T}, ω) where {T}
+    Ω = s.options.shift
+    nzs, nzsh0 = nonzeros(s.iG), nonzeros(flat(s.h0))
+    ps, pds, pss = s.ptrs
+    fill!(nzs, zero(Complex{T}))
+    for (p, p´) in enumerate(ps)
+        nzs[p´] = -nzsh0[p]
+    end
+    for pd in pds
+        nzs[pd] += ω
+    end
+    for ps in pss
+        nzs[ps] += im*Ω
+    end
+    return s
+end
+
+function update_LR!(s)
+    d = size(s.L, 2)
+    if s.l_leq_r
+        copy!(s.R, flat(s.hm)[:, s.sinds])
+        view(s.R´L´, 1:d, :) .= s.R'
+    else
+        copy!(s.L, flat(s.hp)[:, s.sinds])
+        view(s.R´L´, d+1:2d, :) .= .- s.L'
+    end
+    return s
+end
+
+# ## Self-energy of unit cell ##
+
+# function selfenergy(s::AppliedSchur, ω; kw...)
+#     # Update harmonics (aliased in s.h0, s.hm, s.hp)
+#     update_h!(s.h, ω; kw...)
+#     Z11, Z21, Z11bar, Z21bar = s.tmp.Z11, s.tmp.Z21, s.tmp.Z11bar, s.tmp.Z21bar
+#     d = size(s.L, 2)
+#     if !iszero(r)
+#         sch = schur!(A, B)
+#         # Retarded modes
+#         whichmodes = Vector{Bool}(undef, length(sch.α))
+#         retarded_modes!(whichmodes, sch, imω)
+#         ordschur!(sch, whichmodes)
+#         copy!(ZrL, view(sch.Z, 1:r, 1:sum(whichmodes)))
+#         copy!(ZrR, view(sch.Z, r+1:2r, 1:sum(whichmodes)))
+#         # Advanced modes
+#         advanced_modes!(whichmodes, sch, imω)
+#         ordschur!(sch, whichmodes)
+#         copy!(ZaL, view(sch.Z, 1:r, 1:sum(whichmodes)))
+#         copy!(ZaR, view(sch.Z, r+1:2r, 1:sum(whichmodes)))
 #     end
-#     for ptr in ptrsS
-#         nz[ptr] += Ω*im
-#     end
-#     return h0
+#     return ZrL, ZrR, ZaL, ZaR
 # end
 
-# # returns invariant subspaces of retarded and advanced eigenmodes
-# function mode_subspaces(A, B)
+# update_h!(h::Hamiltonian, ω; kw...) = h
+# update_h!(h::ParametricHamiltonian, ω; kw...) = call!(h; kw...)
 
-
-# end
-
-# # # returns invariant subspaces of retarded and advanced eigenmodes
-# # function mode_subspaces(s::Schur1DGreensSolver, A::AbstractArray{T}, B::AbstractArray{T}, imω) where {T}
-# #     ZrL, ZrR, ZaL, ZaR = s.tmp.rr1, s.tmp.rr2, s.tmp.rr3, s.tmp.rr4
-# #     r = size(A, 1) ÷ 2
-# #     if !iszero(r)
-# #         sch = schur!(A, B)
-# #         # Retarded modes
-# #         whichmodes = Vector{Bool}(undef, length(sch.α))
-# #         retarded_modes!(whichmodes, sch, imω)
-# #         ordschur!(sch, whichmodes)
-# #         copy!(ZrL, view(sch.Z, 1:r, 1:sum(whichmodes)))
-# #         copy!(ZrR, view(sch.Z, r+1:2r, 1:sum(whichmodes)))
-# #         # Advanced modes
-# #         advanced_modes!(whichmodes, sch, imω)
-# #         ordschur!(sch, whichmodes)
-# #         copy!(ZaL, view(sch.Z, 1:r, 1:sum(whichmodes)))
-# #         copy!(ZaR, view(sch.Z, r+1:2r, 1:sum(whichmodes)))
-# #     end
-# #     return ZrL, ZrR, ZaL, ZaR
-# # end
 #endregion
 
 end # module

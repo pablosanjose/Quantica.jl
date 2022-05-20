@@ -495,3 +495,33 @@ function merged_mul!(C::SparseMatrixCSC{<:Number}, bs::BlockStructure{B}, A::Spa
 end
 
 #endregion
+
+############################################################################################
+# SparseMatrix injection and pointers
+#region
+
+# Build a new sparse matrix mat´ with same structure as mat plus the diagonal
+# return also: (1) ptrs to mat´ for each nonzero in mat, (2) diagonal ptrs in mat´
+function store_diagonal_ptrs(mat::SparseMatrixCSC{T}) where {T}
+    # like mat + I, but avoiding accidental cancellations
+    mat´ = mat + Diagonal(iszero.(diag(s)))
+    pmat, pdiag = Int[], Int[]
+    rows, rows´ = rowvals(mat), rowvals(mat´)
+    for col in axes(mat´, 2)
+        ptrs = nzrange(mat, col)
+        ptrs´ = nzrange(mat´, col)
+        p, p´ = first(ptrs), first(ptrs´)
+        while p´ in ptrs´
+            row´ = rows´[p´]
+            row´ == col && push!(pdiag, p´)
+            if p in ptrs && row´ == rows[p]
+                push!(pmat, p´)
+                p += 1
+            end
+            p´ += 1
+        end
+    end
+    return mat´, (pmat, pdiag)
+end
+
+#endregion
