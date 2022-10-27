@@ -2,10 +2,10 @@
 # sublat
 #region
 
-sublat(sites...; name = :_) =
+sublat(sites...; name = :A) =
     Sublat(sanitize_Vector_of_float_SVectors(sites), Symbol(name))
 
-sublat(sites::Vector; name = :_) =
+sublat(sites::Vector; name = :A) =
     Sublat(sanitize_Vector_of_float_SVectors(sites), Symbol(name))
 
 #endregion
