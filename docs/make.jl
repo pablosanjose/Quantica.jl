@@ -6,11 +6,11 @@ DocMeta.setdocmeta!(Quantica, :DocTestSetup, :(using Quantica); recursive=true)
 makedocs(;
     modules=[Quantica],
     authors="Pablo San-Jose",
-    repo="https://github.com/pablosanjose/Quantica.jl/blob/{commit}{path}#L{line}",
+    repo="https://github.com/BacAmorim/Quantica.jl/blob/{commit}{path}#L{line}",
     sitename="Quantica.jl",
     format=Documenter.HTML(;
         prettyurls=get(ENV, "CI", "false") == "true",
-        canonical="https://pablosanjose.github.io/Quantica.jl",
+        canonical="https://github.com/BacAmorim/Quantica.jl",
         assets=String[],
     ),
     pages=[
@@ -22,5 +22,5 @@ makedocs(;
 )
 
 deploydocs(;
-    repo="github.com/pablosanjose/Quantica.jl",
+    repo="https://github.com/BacAmorim/Quantica.jl",
 )
