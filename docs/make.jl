@@ -19,6 +19,7 @@ makedocs(;
         "Examples" => "examples.md",
         "Reference" => "reference.md",
     ],
+    doctest = false,
 )
 
 deploydocs(;
