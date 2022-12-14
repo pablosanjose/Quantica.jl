@@ -23,5 +23,5 @@ makedocs(;
 )
 
 deploydocs(;
-    repo="https://github.com/BacAmorim/Quantica.jl",
+    repo="https://github.com/BacAmorim/Quantica.jl.git",
 )
