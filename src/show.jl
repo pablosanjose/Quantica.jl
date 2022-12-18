@@ -47,8 +47,8 @@ function Base.show(io::IO, lb::LatticeBlock)
     i = get(io, :indent, "")
     print(io, i, summary(lb), "\n",
 "$i  Cells       : $(length(subcells(lb)))
-$i  Cell range  : $(boundingbox([cell(c) for c in subcells(lb)]))
-$i  Total sites : $(sum(c->length(siteindices(c)), subcells(lb)))")
+$i  Cell range  : $(isempty(lb) ? "empty" : boundingbox(lb))
+$i  Total sites : $(nsites(lb))")
 end
 
 #endregion

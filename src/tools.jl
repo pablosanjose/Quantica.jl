@@ -16,14 +16,17 @@ padtuple(t, x, N) = ntuple(i -> i <= length(t) ? t[i] : x, N)
 
 @noinline argerror(msg) = throw(ArgumentError(msg))
 
-function boundingbox(positions::AbstractVector{<:SVector{L}}) where {L}
-    posmin = posmax = zero(eltype(positions))
+function boundingbox(positions)
+    isempty(positions) && argerror("Cannot find bounding box of an empty collection")
+    posmin = posmax = first(positions)
     for pos in positions
         posmin = min.(posmin, pos)
         posmax = max.(posmax, pos)
     end
     return (posmin, posmax)
 end
+
+deleteif!(test, v::AbstractVector) = deleteat!(v, (i for (i, x) in enumerate(v) if test(x)))
 
 #endregion
 

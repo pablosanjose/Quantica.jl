@@ -254,9 +254,15 @@ struct LatticeBlock{T,E,L}
     subcells::Vector{Subcell{L}}
 end
 
+#region ## Constructors ##
+
 Subcell(cell) = Subcell(Int[], cell)
 
 LatticeBlock(lat::Lattice{<:Any,<:Any,L}) where {L} = LatticeBlock(lat, Subcell{L}[])
+
+#endregion
+
+#region ## API ##
 
 siteindices(s::Subcell) = s.inds
 
@@ -264,11 +270,40 @@ cell(s::Subcell) = s.cell
 
 subcells(l::LatticeBlock) = l.subcells
 
+cells(l::LatticeBlock) = (s.cell for s in l.subcells)
+
+nsites(l::LatticeBlock) = isempty(l) ? 0 : sum(nsites, subcells(l))
+nsites(s::Subcell) = length(s.inds)
+
+boundingbox(l::LatticeBlock) = boundingbox(cell(c) for c in subcells(l))
+
+Base.parent(lb::LatticeBlock) = lb.lat
+
+Base.isempty(s::LatticeBlock) = isempty(s.subcells)
 Base.isempty(s::Subcell) = isempty(s.inds)
+
+Base.empty!(s::Subcell) = empty!(s.inds)
 
 Base.push!(s::Subcell, i::Int) = push!(s.inds, i)
 Base.push!(lb::LatticeBlock, s::Subcell) = push!(lb.subcells, s)
 
+function Base.intersect!(lb::L, lb´::L) where {L<:LatticeBlock}
+    for subcell in subcells(lb)
+        found = false
+        for subcell´ in subcells(lb´)
+            if cell(subcell) == cell(subcell´)
+                intersect!(siteindices(subcell), siteindices(subcell´))
+                found = true
+                break
+            end
+        end
+        found || empty!(subcell)
+    end
+    deleteif!(isempty, subcells(lb))
+    return lb
+end
+
+#endregion
 #endregion
 
 ############################################################################################
@@ -951,10 +986,47 @@ subbands(b::Bands, i...) = getindex(b.subbands, i...)
 #endregion
 
 ############################################################################################
-# Green functions  - see solvers/greensolvers.jl
+# Green functions  - see green.jl and solvers/greensolvers.jl
 #region
 
-abstract type AbstractGreenSolver end
-abstract type AbstractAppliedGreenSolver end
+abstract type GreenSolver end
+abstract type AppliedGreenSolver end
+abstract type AppliedInverseGreenSolver end
 
+struct GreenFunction{L,H<:AbstractHamiltonian{<:Any,<:Any,L},S<:GreenSolver}
+    h::H
+    boundaries::NTuple{L,Int}
+    solver::S
+end
+
+struct GreenBlock{P,L<:NTuple{<:Any,<:LatticeBlock},S<:AppliedGreenSolver}
+    solver::S
+    latblocks::L
+    parent::P
+end
+
+struct GreenBlockInverse{P,L<:NTuple{<:Any,<:LatticeBlock},S<:AppliedInverseGreenSolver}
+    solver::S
+    latblocks::L
+    parent::P
+end
+
+#region ## API ##
+
+hamiltonian(g::GreenFunction) = g.h
+
+lattice(g::GreenFunction) = lattice(g.h)
+
+boundaries(g::GreenFunction) = g.boundaries
+
+solver(g::GreenFunction) = g.solver
+
+latblocks(g::GreenBlock) = g.latblocks
+latblocks(g::GreenBlockInverse) = g.latblocks
+
+Base.parent(g::GreenFunction) = g.h
+Base.parent(g::GreenBlock) = g.parent
+Base.parent(g::GreenBlockInverse) = g.parent
+
+#endregion
 #endregion

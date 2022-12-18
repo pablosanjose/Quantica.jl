@@ -7,10 +7,10 @@ module GreenSolvers
 using LinearAlgebra: I, lu, ldiv!, mul!
 using SparseArrays
 using SparseArrays: SparseMatrixCSC, AbstractSparseMatrix
-using Quantica: Quantica, AbstractGreenSolver, AbstractAppliedGreenSolver, Hamiltonian,
-      ParametricHamiltonian, AbstractHamiltonian, BlockStructure, HybridSparseMatrixCSC,
-      lattice, zerocell, SVector, sanitize_SVector, siteselector, foreach_cell, foreach_site,
-      store_diagonal_ptrs
+using Quantica: Quantica, GreenSolver, AppliedGreenSolver, AppliedInverseGreenSolver,
+      Hamiltonian, ParametricHamiltonian, AbstractHamiltonian, BlockStructure,
+      HybridSparseMatrixCSC, lattice, zerocell, SVector, sanitize_SVector, siteselector,
+      foreach_cell, foreach_site, store_diagonal_ptrs
 import Quantica: call!, apply
 
 ############################################################################################
@@ -19,7 +19,7 @@ import Quantica: call!, apply
 
 const AbstractHamiltonian1D{T,E,B} = AbstractHamiltonian{T,E,1,B}
 
-struct Schur{N<:NamedTuple} <: AbstractGreenSolver
+struct Schur{N<:NamedTuple} <: GreenSolver
     options::N
 end
 
@@ -40,7 +40,7 @@ struct SchurWorkspace{C}
     Z21bar::Matrix{C}
 end
 
-struct AppliedSchur{T,B,H<:AbstractHamiltonian1D{T,<:Any,B},N<:NamedTuple} <: AbstractAppliedGreenSolver
+struct AppliedSchur{T,B,H<:AbstractHamiltonian1D{T,<:Any,B},N<:NamedTuple} <: AppliedGreenSolver
     options::N
     h::H
     hm::HybridSparseMatrixCSC{T,B}

@@ -63,7 +63,7 @@ end
 #endregion
 
 ############################################################################################
-# indexing Lattice - returns a LatticeBlock
+# indexing Lattice and LatticeBlock - returns a LatticeBlock
 #region
 
 Base.getindex(lat::Lattice; kw...) = lat[siteselector(; kw...)]
@@ -86,6 +86,14 @@ function Base.getindex(lat::Lattice, ss::SiteSelector)
         end
     end
     return latblock
+end
+
+Base.getindex(lb::LatticeBlock; kw...) = lb[siteselector(; kw...)]
+
+function Base.getindex(lb::LatticeBlock, ss::SiteSelector)
+    lb´ = parent(lb)[ss]
+    intersect!(lb´, lb)
+    return lb´
 end
 
 #endregion
