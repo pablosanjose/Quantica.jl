@@ -32,6 +32,14 @@ function Base.in((i, r)::Tuple{Int,SVector{E,T}}, sel::AppliedSiteSelector{T,E})
            insublats(name, sel)
 end
 
+function Base.in((i, r, cell)::Tuple{Int,SVector{E,T},SVector{L,Int}}, sel::AppliedSiteSelector{T,E}) where {T,E,L}
+    lat = lattice(sel)
+    name = sitesublatname(lat, i)
+    return incells(cell, sel) &&
+           inregion(r, sel) &&
+           insublats(name, sel)
+end
+
 function Base.in(((j, i), (nj, ni))::Tuple{Pair,Pair}, sel::AppliedHopSelector)
     dcell = nj - ni
     ri, rj = site(lat, i, dni), site(lat, j, dnj)

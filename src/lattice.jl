@@ -88,12 +88,33 @@ function Base.getindex(lat::Lattice, ss::SiteSelector)
     return latblock
 end
 
-Base.getindex(lb::LatticeBlock; kw...) = lb[siteselector(; kw...)]
+Base.getindex(lb::LatticeBlock; indexlist = missing, kw...) =
+    getindex(lb, siteselector(; kw...), indexlist)
 
-function Base.getindex(lb::LatticeBlock, ss::SiteSelector)
-    lb´ = parent(lb)[ss]
-    intersect!(lb´, lb)
-    return lb´
+# indexlist is populated with latblock indices of selected sites
+function Base.getindex(latblock::LatticeBlock, ss::SiteSelector, indexlist = missing)
+    lat = parent(latblock)
+    as = apply(ss, lat)
+    latblock´ = LatticeBlock(lat)
+    sinds = Int[]
+    j = indexlist === missing || isempty(indexlist) ? 0 : last(indexlist)
+    for subcell in subcells(latblock)
+        dn = cell(subcell)
+        scell = Subcell(sinds, dn)
+        for i in siteindices(subcell)
+            j += 1
+            r = site(lat, i, dn)
+            if (i, r, dn) in as
+                push!(scell, i)
+                indexlist === missing || push!(indexlist, j)
+            end
+        end
+        if !isempty(scell)
+            push!(latblock´, scell)
+            sinds = Int[]  #start new site list
+        end
+    end
+    return latblock´
 end
 
 #endregion

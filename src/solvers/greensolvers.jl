@@ -8,10 +8,27 @@ using LinearAlgebra: I, lu, ldiv!, mul!
 using SparseArrays
 using SparseArrays: SparseMatrixCSC, AbstractSparseMatrix
 using Quantica: Quantica, GreenSolver, AppliedGreenSolver, AppliedInverseGreenSolver,
+      GreenBlock, GreenBlockInverse,
       Hamiltonian, ParametricHamiltonian, AbstractHamiltonian, BlockStructure,
       HybridSparseMatrixCSC, lattice, zerocell, SVector, sanitize_SVector, siteselector,
       foreach_cell, foreach_site, store_diagonal_ptrs
 import Quantica: call!, apply
+
+############################################################################################
+# BlockView  - see scattering.pdf notes for derivations
+#region
+
+struct BlockView{S<:AppliedGreenSolver} <: AppliedGreenSolver
+    inds::Vector{Int}
+    parent::S
+end
+
+function (s::BlockView)(ω; kw...)
+    m = s.parent(ω; kw...)
+    return view(m, s.inds)
+end
+
+#endregion
 
 ############################################################################################
 # Schur  - see scattering.pdf notes for derivations

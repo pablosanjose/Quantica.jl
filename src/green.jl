@@ -16,7 +16,11 @@ Base.getindex(g::GreenBlock{<:GreenFunction}, s::SiteSelector) = parent(g)[s]
 
 function Base.getindex(g::GreenBlock, s::SiteSelector)
     s.cells === missing || argerror("Cannot select cells when indexing this GreenBlock")
-    latblocks´ = getindex.(latblocks(g), Ref(s))
+    indexlist = Int[]
+    latblocks´ = getindex.(latblocks(g), Ref(s), Ref(indexlist))
+    solver = GS.BlockView(indexlist, g)
+    g´ = GreenBlock(solver, latblocks´, g)
+    return g´
 end
 
 #region
