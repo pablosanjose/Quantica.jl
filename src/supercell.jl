@@ -225,6 +225,7 @@ function supercell_indexlist(data)
     return indexlist, offset
 end
 
+# more general version of boundingbox(cells)
 function mask_bounding_box(masklist::Vector{Tuple{Int,SVector{L,Int},Int}}) where {L}
     cellmin = cellmax = ntuple(Returns(0), Val(L))
     imin = imax = 0

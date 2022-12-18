@@ -14,50 +14,6 @@ using Quantica: Quantica, AbstractGreenSolver, AbstractAppliedGreenSolver, Hamil
 import Quantica: call!, apply
 
 ############################################################################################
-# Locations where GreenSolvers should be applied
-#region
-
-struct Locations{N<:NamedTuple}
-    options::N
-end
-
-Locations(; kw...) = Locations((; kw...))
-
-struct CellSites{L}
-    cell::SVector{L,Int}
-    sites::Vector{Int}
-end
-
-# Encode boundaries as floats to allow Inf and distant boundaries
-struct AppliedLocations{T<:AbstractFloat,L}
-    boundaries::SVector{L,T}
-    scells::Vector{CellSites{L}}
-end
-
-apply(l::Locations, h::AbstractHamiltonian{T,<:Any,L}) where {T,L} =
-    AppliedLocations{T,L}(h; l.options...)
-
-function AppliedLocations{T,L}(h; boundaries = missing, kw...) where {T,L}
-    boundaries´ = boundaries === missing ? sanitize_SVector(T, ntuple(Returns(Inf), Val(L))) :
-                                           sanitize_SVector(T, boundaries)
-
-    asel = apply(siteselector(; kw...), lattice(h))
-    scells = CellSites{L}[]
-    foreach_cell(asel) do cell
-        sites = Int[]
-        foreach_site(asel, cell) do s, i, r
-            push!(sites, i)
-        end
-        found = !isempty(sites)
-        found && push!(scells, CellSites(cell, sites))
-        return found
-    end
-    return AppliedLocations(boundaries´, scells)
-end
-
-#endregion
-
-############################################################################################
 # Schur  - see scattering.pdf notes for derivations
 #region
 
@@ -67,7 +23,7 @@ struct Schur{N<:NamedTuple} <: AbstractGreenSolver
     options::N
 end
 
-Schur(; inversefree = true, shift = 1.0, kw...) = Schur((; inversefree, shift, locations = Locations(; kw)))
+Schur(; shift = 1.0) = Schur((; shift))
 
 Schur(h::AbstractHamiltonian; kw...) = apply(Schur(; kw...), h)
 

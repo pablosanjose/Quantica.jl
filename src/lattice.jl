@@ -63,21 +63,77 @@ end
 #endregion
 
 ############################################################################################
-# indexing Lattice
+# indexing Lattice - returns a LatticeBlock
 #region
 
-# function Base.getindex(l::Lattice; kw...)
-#     isempty(kw) && return collect(enumerate(sites(l)))
-#     as = apply(siteselector(; kw...), l)
-#     selsites = ((i, r) for (i, r) in enumerate(sites(l)) if (i, r) in as)
-#     return selsites
-# end
+Base.getindex(lat::Lattice; kw...) = lat[siteselector(; kw...)]
 
-# siteindices(l::Lattice; kw...) = first.(getindex(l; kw...))
-
-# sitepositions(l::Lattice; kw...) = last.(getindex(l; kw...))
+function Base.getindex(lat::Lattice, ss::SiteSelector)
+    as = apply(ss, lat)
+    latblock = LatticeBlock(lat)
+    sinds = Int[]
+    foreach_cell(as) do cell
+        scell = Subcell(sinds, cell)
+        foreach_site(as, cell) do s, i, r
+            push!(scell, i)
+        end
+        if isempty(scell)
+            return false
+        else
+            push!(latblock, scell)
+            sinds = Int[]   #start new site list
+            return true
+        end
+    end
+    return latblock
+end
 
 #endregion
+
+
+# ############################################################################################
+# # Locations where GreenSolvers should be applied
+# #region
+
+# struct Locations{N<:NamedTuple}
+#     options::N
+# end
+
+# Locations(; kw...) = Locations((; kw...))
+
+# struct CellSites{L}
+#     cell::SVector{L,Int}
+#     sites::Vector{Int}
+# end
+
+# # Encode boundaries as floats to allow Inf and distant boundaries
+# struct AppliedLocations{T<:AbstractFloat,L}
+#     boundaries::SVector{L,T}
+#     scells::Vector{CellSites{L}}
+# end
+
+# apply(l::Locations, h::AbstractHamiltonian{T,<:Any,L}) where {T,L} =
+#     AppliedLocations{T,L}(h; l.options...)
+
+# function AppliedLocations{T,L}(h; boundaries = missing, kw...) where {T,L}
+#     boundaries´ = boundaries === missing ? sanitize_SVector(T, ntuple(Returns(Inf), Val(L))) :
+#                                            sanitize_SVector(T, boundaries)
+
+#     asel = apply(siteselector(; kw...), lattice(h))
+#     scells = CellSites{L}[]
+#     foreach_cell(asel) do cell
+#         sites = Int[]
+#         foreach_site(asel, cell) do s, i, r
+#             push!(sites, i)
+#         end
+#         found = !isempty(sites)
+#         found && push!(scells, CellSites(cell, sites))
+#         return found
+#     end
+#     return AppliedLocations(boundaries´, scells)
+# end
+
+# #endregion
 
 ############################################################################################
 # merge lattices - combine sublats if equal name

@@ -37,6 +37,23 @@ display_rounded_vector(v) = round.(v, digits = 6)
 #endregion
 
 ############################################################################################
+# LatticeBlock
+#region
+
+Base.summary(::LatticeBlock{T,E,L}) where {T,E,L} =
+    "LatticeBlock{$T,$E,$L} : collection of subcells for a $(L)D lattice in $(E)D space"
+
+function Base.show(io::IO, lb::LatticeBlock)
+    i = get(io, :indent, "")
+    print(io, i, summary(lb), "\n",
+"$i  Cells       : $(length(subcells(lb)))
+$i  Cell range  : $(boundingbox([cell(c) for c in subcells(lb)]))
+$i  Total sites : $(sum(c->length(siteindices(c)), subcells(lb)))")
+end
+
+#endregion
+
+############################################################################################
 # Model
 #region
 

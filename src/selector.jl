@@ -65,7 +65,7 @@ function foreach_cell(f, sel::AppliedSiteSelector)
     if isempty(cells_list) # no cells specified
         iter = BoxIterator(zerocell(lat))
         for cell in iter
-            f(cell) && accepcell!(iter, cell)
+            f(cell) && acceptcell!(iter, cell)
         end
     else
         for cell in cells_list

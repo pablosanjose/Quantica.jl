@@ -240,6 +240,38 @@ Base.adjoint(s::HopSelector) = HopSelector(s.region, s.sublats, s.dcells, s.rang
 #endregion
 
 ############################################################################################
+# LatticeBlock - see lattice.jl for methods
+#   Encodes subsets of sites of a lattice in different cells. Produced by lat[siteselector]
+#region
+
+struct Subcell{L}
+    inds::Vector{Int}
+    cell::SVector{L,Int}
+end
+
+struct LatticeBlock{T,E,L}
+    lat::Lattice{T,E,L}
+    subcells::Vector{Subcell{L}}
+end
+
+Subcell(cell) = Subcell(Int[], cell)
+
+LatticeBlock(lat::Lattice{<:Any,<:Any,L}) where {L} = LatticeBlock(lat, Subcell{L}[])
+
+siteindices(s::Subcell) = s.inds
+
+cell(s::Subcell) = s.cell
+
+subcells(l::LatticeBlock) = l.subcells
+
+Base.isempty(s::Subcell) = isempty(s.inds)
+
+Base.push!(s::Subcell, i::Int) = push!(s.inds, i)
+Base.push!(lb::LatticeBlock, s::Subcell) = push!(lb.subcells, s)
+
+#endregion
+
+############################################################################################
 # Model Terms  -  see model.jl for methods
 #region
 

@@ -116,9 +116,9 @@ function flatrange(b::BlockStructure{<:SMatrixView}, iunflat::Integer)
     @boundscheck(blockbounds_error())
 end
 
-flatrange(b::BlockStructure{B}, iunflat::Integer) where {N,B<:SMatrix{N}} =
+flatrange(b::BlockStructure{<:SMatrix{N}}, iunflat::Integer) where {N} =
     (iunflat - 1) * N + 1 : iunflat * N
-flatrange(b::BlockStructure{<:Number}, iunflat::Integer) where {N,B<:SMatrix{N}} = iunflat:inflat
+flatrange(b::BlockStructure{<:Number}, iunflat::Integer) = iunflat:inflat
 
 flatindex(b::BlockStructure, i) = first(flatrange(b, i))
 

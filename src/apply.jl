@@ -46,7 +46,7 @@ region_apply(r::SVector, region::Function) = ifelse(region(r), true, false)
 
 recursive_push!(v::Vector, ::Missing) = v
 recursive_push!(v::Vector{T}, x::T) where {T} = push!(v, x)
-recursive_push!(v::Vector{S}, x::NTuple{<:Any,Int}) where {S<:SVector,T} = push!(v, S(x))
+recursive_push!(v::Vector{S}, x::NTuple{<:Any,Int}) where {S<:SVector} = push!(v, S(x))
 recursive_push!(v::Vector{S}, x::Number) where {S<:SVector{1}}= push!(v, S(x))
 recursive_push!(v::Vector{Pair{T,T}}, x::T) where {T} = push!(v, x => x)
 recursive_push!(v::Vector{Pair{T,T}}, (x, y)::Tuple{T,T}) where {T} = push!(v, x => y)

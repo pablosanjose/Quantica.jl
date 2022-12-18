@@ -16,6 +16,15 @@ padtuple(t, x, N) = ntuple(i -> i <= length(t) ? t[i] : x, N)
 
 @noinline argerror(msg) = throw(ArgumentError(msg))
 
+function boundingbox(positions::AbstractVector{<:SVector{L}}) where {L}
+    posmin = posmax = zero(eltype(positions))
+    for pos in positions
+        posmin = min.(posmin, pos)
+        posmax = max.(posmax, pos)
+    end
+    return (posmin, posmax)
+end
+
 #endregion
 
 ############################################################################################
