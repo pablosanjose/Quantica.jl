@@ -9,10 +9,10 @@ using SparseArrays
 using SparseArrays: SparseMatrixCSC, AbstractSparseMatrix
 using Quantica: Quantica,
       AbstractGreenSolver, AppliedGreenSolver, AppliedInverseGreenSolver, AppliedLeadSolver,
-      GreenBlock, GreenBlockInverse, Lead,
+      GreenBlock, GreenBlockInverse, Lead, LatticeBlock,
       Hamiltonian, ParametricHamiltonian, AbstractHamiltonian, BlockStructure,
       HybridSparseMatrixCSC, lattice, zerocell, SVector, sanitize_SVector, siteselector,
-      foreach_cell, foreach_site, store_diagonal_ptrs
+      foreach_cell, foreach_site, store_diagonal_ptrs, cell
 import Quantica: call!, apply
 
 ############################################################################################
@@ -32,29 +32,104 @@ end
 #endregion
 
 ############################################################################################
-# Schur  - see scattering.pdf notes for derivations
-#   This can be used to produce a GreenBlock or a Lead
+# Schur and AppliedSchur
+#   This solver can be used to produce a GreenBlock or a Lead
 #region
 
 #region Schur <: AbstractGreenSolver
 
-const AbstractHamiltonian1D{T,E,B} = AbstractHamiltonian{T,E,1,B}
-
 struct Schur{T<:AbstractFloat} <: AbstractGreenSolver
     shift::T
+    onlyintracell::Bool
 end
 
-Schur(; shift = 1.0) = Schur(shift)
+struct AppliedSchurSolver{T<:AbstractFloat,E,B,H<:AbstractHamiltonian{T,E,1,B}} <: AppliedGreenSolver
+    factors::SchurFactorsSolver{T,B}
+    h::H
+    latblock::LatticeBlock{T,E,1}
+    boundary::T
+    onlyintracell::Bool
+end
+
+#region ## Constructors ##
+
+Schur(; shift = 1.0, onlyintracell = false) = Schur(shift, onlyintracell)
+
+#endregion
+
+#region ## apply ##
+
+function apply(s::Schur, h::AbstractHamiltonian, latblock::LatticeBlock, boundaries)
+    boundary = only(boundaries)
+    h´ = hamiltonian(h)  # to extract h from a ParametricHamiltonian
+    factors = SchurFactorsSolver(h´, s.shift)
+    return AppliedSchurSolver(factors, h, latblock, boundary, onlyintracell)
+end
+
+#region
+
+#region ## API ##
+
+# returns a GreenBlock over latblock
+function (s::AppliedSchurSolver{T})(ω; params...) where {T}
+    call!(s.h; params...)
+    latblock = s.latblock
+    factors = s.factors(ω)
+    boundary = s.boundary
+
+    # allocate GreenBlock matrix
+    bis = blockinds(s.h, s.latblock)
+    dim = sum(length, bis)
+    g = fill(complex(T(NaN)), dim, dim) # NaN = sentinel for not computed (if onlyintracell)
+
+    offseti = offsetj = 0
+    itr = zip(subcells(latblock), bis, 1:length(bis))
+    for (scelli, indsi, blocki) in itr, (scellj, indsj, blockj) in itr
+        s.onlyintracell && blocki != blockj && continue
+        grangei = offseti + 1 : offseti + length(indsi)
+        grangej = offsetj + 1 : offsetj + length(indsj)
+        offseti += last(grangei)
+        offsetj += last(grangej)
+        xi = only(cell(scelli)) - boundary
+        xj = only(cell(scellj)) - boundary
+        gblock = view(g, grangei, grangej)
+        isfinite(boundary) ?
+            green_schur_semi!(gblock, factors, (xi, indsi), (xj, indsj)) :
+            green_schur_inf!(gblock, factors, xi - xj, indsi, indsj)
+    end
+    return g
+end
+
+# flat indices of unitcell sites in each subcell
+function blockinds(h, latblock)
+    flatinds = Vector{Int}[]
+    for scell in subcells(latblock)
+        sinds = Int[]
+        push!(flatinds, sinds)
+        for iunflat in siteindices(scell)
+            append!(sinds, flatrange(h, iunflat))
+        end
+    end
+    return flatinds
+end
+
+
+function green_schur_semi!(gblock, ((R, Z11, Z21), (L, Z11´, Z21´)), (xi, indsi), (xj, indsj))
+
+end
+
+#endregion
 
 # Schur(h::AbstractHamiltonian; kw...) = apply(Schur(; kw...), h)
 
 #endregion
 
-#regions
-## SchurFactorSolver #######################################################################
-# Computes the factors R, Z21 and Z11. The retarded self-energy on the open unitcell surface
-# of a semi-infinite lead extending towards the right reads Σᵣ = R Z21 Z11⁻¹ R'.
-# Computes also the L, Z21´ and Z11´ for the lead towards the left Σₗ = L Z21´ Z11´⁻¹ L'.
+############################################################################################
+# SchurFactorsSolver - see scattering.pdf notes for derivations
+#   Computes the factors R, Z21 and Z11. The retarded self-energy on the open unitcell
+#   surface of a semi-infinite lead extending towards the right reads Σᵣ = R Z21 Z11⁻¹ R'.
+#   Computes also the L, Z21´ and Z11´ for the lead towards the left  Σₗ = L Z21´ Z11´⁻¹ L'.
+#region
 
 struct SchurWorkspace{C}
     GL::Matrix{C}
@@ -82,7 +157,7 @@ struct SchurFactorsSolver{T,B}
     tmp::SchurWorkspace{Complex{T}}
 end
 
-## Constructors ##
+#region ## Constructors ##
 
 SchurFactorsSolver(::AbstractHamiltonian, _) =
     argerror("The Schur solver requires 1D Hamiltonians with 0 and ±1 as only Bloch Harmonics.")
@@ -147,6 +222,8 @@ function left_right_projectors(hm::SparseMatrixCSC, hp::SparseMatrixCSC)
     return L, R, sinds, l_leq_r
 end
 
+#endregion
+
 #region ## API ##
 
 ## SchurFactorsSolver(ω) ##
@@ -155,24 +232,41 @@ function (s::SchurFactorsSolver)(ω)
     R, Z11, Z21, L, Z11´, Z21´ = s.R, s.tmp.Z11, s.tmp.Z21, s.L, s.tmp.Z11´, s.tmp.Z21´
     update_LR!(s)
     update_iG!(s, ω)
-    A, B = pencilAB!(s)
 
+    A, B = pencilAB!(s)
     sch = schur!(A, B)
     whichmodes = Vector{Bool}(undef, length(sch.α))
 
     # Retarded modes
-    retarded_modes!(whichmodes, sch, imω)
+    retarded_modes!(whichmodes, sch)
+    checkmodes(whichmodes)
     ordschur!(sch, whichmodes)
     copy!(Z11, view(sch.Z, 1:r, 1:sum(whichmodes)))
     copy!(Z21, view(sch.Z, r+1:2r, 1:sum(whichmodes)))
 
     # Advanced modes
-    advanced_modes!(whichmodes, sch, imω)
+    advanced_modes!(whichmodes, sch)
+    checkmodes(whichmodes)
     ordschur!(sch, whichmodes)
     copy!(Z11´, view(sch.Z, 1:r, 1:sum(whichmodes)))
     copy!(Z21´, view(sch.Z, r+1:2r, 1:sum(whichmodes)))
+
     return (R, Z11, Z21), (L, Z11´, Z21´)
 end
+
+# need this barrier for type-stability (sch.α and sch.β are finicky)
+function retarded_modes!(whichmodes, sch)
+    whichmodes .= abs.(sch.α) .< abs.(sch.β)
+    return whichmodes
+end
+
+function advanced_modes!(whichmodes, sch)
+    whichmodes .= abs.(sch.β) .< abs.(sch.α)
+    return whichmodes
+end
+
+checkmodes(whichmodes) = sum(whichmodes) == length(whichmodes) ÷ 2 ||
+    argerror("Cannot differentiate retarded from advanced modes. Consider increasing imag(ω) or check that your Hamiltonian is Hermitian")
 
 ## Pencil A - λB ##
 
@@ -237,11 +331,7 @@ function update_iG!(s::SchurFactorsSolver{T}, ω) where {T}
     return s
 end
 
-
 #endregion
-
-# update_h!(h::Hamiltonian, ω; kw...) = h
-# update_h!(h::ParametricHamiltonian, ω; kw...) = call!(h; kw...)
 
 #endregion
 

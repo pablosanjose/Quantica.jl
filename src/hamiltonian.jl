@@ -140,12 +140,15 @@ copy_callsafe(p::ParametricHamiltonian) = ParametricHamiltonian(
 
 ############################################################################################
 # Hamiltonian call API
+# call!(::AbstractHamiltonian; params...) returns a Hamiltonian with params applied
+# call!(::AbstractHamiltonian, ϕs; params...) returns a HybridSparseMatrix with Bloch phases
+#    ϕs and params applied
 #region
 
-(h::Hamiltonian)(phi...) = call!(copy_callsafe(h), phi...)
+(h::Hamiltonian)(phi...) = call!(copy_callsafe(h), phi)
 
+call!(h::Hamiltonian) = h  # mimic partial call!(p::ParametricHamiltonian; kw...)
 call!(h::Hamiltonian, phi) = bloch_flat!(h, sanitize_SVector(phi))
-call!(h::Hamiltonian, phi...) = bloch_flat!(h, sanitize_SVector(phi))
 
 # returns a flat sparse matrix
 function bloch_flat!(h::Hamiltonian{T}, φs::SVector, axis = missing) where {T}
@@ -193,9 +196,9 @@ call!_output(h::Hamiltonian) = flat(bloch(h))
 #region
 
 (p::ParametricHamiltonian)(; kw...) = call!(copy_callsafe(p); kw...)
-(p::ParametricHamiltonian)(x, xs...; kw...) = call!(call!(copy_callsafe(p); kw...), x, xs...)
+(p::ParametricHamiltonian)(phi, phis...; kw...) = call!(call!(copy_callsafe(p); kw...), (phi, phis...))
 
-call!(p::ParametricHamiltonian, x, xs...; kw...) = call!(call!(p; kw...), x, xs...)
+call!(p::ParametricHamiltonian, phi; kw...) = call!(call!(p; kw...), phi)
 call!(p::ParametricHamiltonian, ft::FrankenTuple) = call!(p, Tuple(ft); NamedTuple(ft)...)
 
 function call!(ph::ParametricHamiltonian; kw...)

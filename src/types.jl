@@ -123,7 +123,7 @@ site(l::Lattice, i, dn) = site(l, i) + bravais_matrix(l) * dn
 siterange(l::Lattice, sublat) = siterange(l.unitcell, sublat)
 siterange(u::Unitcell, sublat) = (1+u.offsets[sublat]):u.offsets[sublat+1]
 
-sitesublat(lat::Lattice, siteidx, ) = sitesublat(lat.unitcell.offsets, siteidx)
+sitesublat(lat::Lattice, siteidx) = sitesublat(lat.unitcell.offsets, siteidx)
 
 function sitesublat(offsets, siteidx)
     l = length(offsets)
@@ -615,6 +615,9 @@ norbitals(h::AbstractHamiltonian) = blocksizes(blockstructure(h))
 blockeltype(::AbstractHamiltonian) = blockeltype(blockstructure(h))
 
 blocktype(h::AbstractHamiltonian) = blocktype(blockstructure(h))
+
+# see sparsetools.jl
+flatrange(h::AbstractHamiltonian, iunflat) = flatrange(blockstructure(h), iunflat)
 
 ## Hamiltonian
 
