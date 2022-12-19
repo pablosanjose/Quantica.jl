@@ -7,8 +7,9 @@ module GreenSolvers
 using LinearAlgebra: I, lu, ldiv!, mul!
 using SparseArrays
 using SparseArrays: SparseMatrixCSC, AbstractSparseMatrix
-using Quantica: Quantica, GreenSolver, AppliedGreenSolver, AppliedInverseGreenSolver,
-      GreenBlock, GreenBlockInverse,
+using Quantica: Quantica,
+      AbstractGreenSolver, AppliedGreenSolver, AppliedInverseGreenSolver, AppliedLeadSolver,
+      GreenBlock, GreenBlockInverse, Lead,
       Hamiltonian, ParametricHamiltonian, AbstractHamiltonian, BlockStructure,
       HybridSparseMatrixCSC, lattice, zerocell, SVector, sanitize_SVector, siteselector,
       foreach_cell, foreach_site, store_diagonal_ptrs
@@ -32,19 +33,28 @@ end
 
 ############################################################################################
 # Schur  - see scattering.pdf notes for derivations
+#   This can be used to produce a GreenBlock or a Lead
 #region
+
+#region Schur <: AbstractGreenSolver
 
 const AbstractHamiltonian1D{T,E,B} = AbstractHamiltonian{T,E,1,B}
 
-struct Schur{N<:NamedTuple} <: GreenSolver
-    options::N
+struct Schur{T<:AbstractFloat} <: AbstractGreenSolver
+    shift::T
 end
 
-Schur(; shift = 1.0) = Schur((; shift))
+Schur(; shift = 1.0) = Schur(shift)
 
-Schur(h::AbstractHamiltonian; kw...) = apply(Schur(; kw...), h)
+# Schur(h::AbstractHamiltonian; kw...) = apply(Schur(; kw...), h)
 
-#### AppliedSchur ##########################################################################
+#endregion
+
+#regions
+## SchurFactorSolver #######################################################################
+# Computes the factors R, Z21 and Z11. The retarded self-energy on the open unitcell surface
+# of a semi-infinite lead extending towards the right reads Σᵣ = R Z21 Z11⁻¹ R'.
+# Computes also the L, Z21´ and Z11´ for the lead towards the left Σₗ = L Z21´ Z11´⁻¹ L'.
 
 struct SchurWorkspace{C}
     GL::Matrix{C}
@@ -53,13 +63,12 @@ struct SchurWorkspace{C}
     B::Matrix{C}
     Z11::Matrix{C}
     Z21::Matrix{C}
-    Z11bar::Matrix{C}
-    Z21bar::Matrix{C}
+    Z11´::Matrix{C}
+    Z21´::Matrix{C}
 end
 
-struct AppliedSchur{T,B,H<:AbstractHamiltonian1D{T,<:Any,B},N<:NamedTuple} <: AppliedGreenSolver
-    options::N
-    h::H
+struct SchurFactorsSolver{T,B}
+    shift::T                                          # called Ω in the scattering.pdf notes
     hm::HybridSparseMatrixCSC{T,B}
     h0::HybridSparseMatrixCSC{T,B}
     hp::HybridSparseMatrixCSC{T,B}
@@ -75,25 +84,10 @@ end
 
 ## Constructors ##
 
-function SchurWorkspace{C}((n, d)) where {C}
-    GL = Matrix{C}(undef, n, d)
-    GR = Matrix{C}(undef, n, r)
-    A = Matrix{C}(undef, 2d, 2d)
-    B = Matrix{C}(undef, 2d, 2d)
-    Z11 = Matrix{C}(undef, d, d)
-    Z21 = Matrix{C}(undef, d, d)
-    Z11bar = Matrix{C}(undef, d, d)
-    Z21bar = Matrix{C}(undef, d, d)
-    return SchurWorkspace(GL, GR, A, B, Z11, Z21, Z11bar, Z21bar)
-end
+SchurFactorsSolver(::AbstractHamiltonian, _) =
+    argerror("The Schur solver requires 1D Hamiltonians with 0 and ±1 as only Bloch Harmonics.")
 
-## Apply ##
-
-apply(::Schur, ::AbstractHamiltonian) =
-    argerror("The Schur method requires 1D AbstractHamiltonians with 0, ±1 as only Bloch Harmonics.")
-
-function apply(s::Schur, h::AbstractHamiltonian1D{T}) where {T}
-    options = s.options
+function SchurFactorsSolver(h::Hamiltonian{T,<:Any,1}, shift) where {T}
     hm, h0, hp = hybridharmonics(h)
     fhm, fh0, fhp = flat(hm), flat(h0), flat(hp)
     L, R, sinds, l_leq_r = left_right_projectors(fhm, fhp)
@@ -101,16 +95,31 @@ function apply(s::Schur, h::AbstractHamiltonian1D{T}) where {T}
     iG, (p, pd) = store_diagonal_ptrs(fh0)
     ptrs = (p, pd, pd[sinds])
     workspace = SchurWorkspace{Complex{T}}(size(L))
-    return AppliedSchur(options, h, hm, h0, hp, l_leq_r, iG, ptrs, sinds, L, R, R´L´, workspace)
+    return SchurFactorsSolver(shift, hm, h0, hp, l_leq_r, iG, ptrs, sinds, L, R, R´L´, workspace)
+end
+
+function SchurWorkspace{C}((n, d)) where {C}
+    GL = Matrix{C}(undef, n, d)
+    GR = Matrix{C}(undef, n, d)
+    A = Matrix{C}(undef, 2d, 2d)
+    B = Matrix{C}(undef, 2d, 2d)
+    Z11 = Matrix{C}(undef, d, d)
+    Z21 = Matrix{C}(undef, d, d)
+    Z11´ = Matrix{C}(undef, d, d)
+    Z21´ = Matrix{C}(undef, d, d)
+    return SchurWorkspace(GL, GR, A, B, Z11, Z21, Z11´, Z21´)
 end
 
 function hybridharmonics(h)
     for hh in harmonics(h)
         dn = dcell(hh)
         dn == SA[0] || dn == SA[1] || dn == SA[-1] ||
-            throw(ArgumentError("Too many harmonics, try `supercell` to reduce to strictly nearest-neighbors."))
+            argerror("Too many harmonics, try `supercell` to reduce to strictly nearest-neighbors.")
     end
-    return h[-1], h[0], h[1]
+    hm, h0, hp = h[-1], h[0], h[1]
+    flat(hm) == flat(hp)' ||
+        argerror("The Hamiltonian should have h[1] = h[-1]' to use the Schur solver")
+    return hm, h0, hp
 end
 
 # hp = L*R' = PL H' PR'. We assume hm = hp'
@@ -138,20 +147,46 @@ function left_right_projectors(hm::SparseMatrixCSC, hp::SparseMatrixCSC)
     return L, R, sinds, l_leq_r
 end
 
-## Pencil ##
+#region ## API ##
 
-# Compute G*R and G*L where G = inv(ω - h0 - Σₐᵤₓ)
+## SchurFactorsSolver(ω) ##
+
+function (s::SchurFactorsSolver)(ω)
+    R, Z11, Z21, L, Z11´, Z21´ = s.R, s.tmp.Z11, s.tmp.Z21, s.L, s.tmp.Z11´, s.tmp.Z21´
+    update_LR!(s)
+    update_iG!(s, ω)
+    A, B = pencilAB!(s)
+
+    sch = schur!(A, B)
+    whichmodes = Vector{Bool}(undef, length(sch.α))
+
+    # Retarded modes
+    retarded_modes!(whichmodes, sch, imω)
+    ordschur!(sch, whichmodes)
+    copy!(Z11, view(sch.Z, 1:r, 1:sum(whichmodes)))
+    copy!(Z21, view(sch.Z, r+1:2r, 1:sum(whichmodes)))
+
+    # Advanced modes
+    advanced_modes!(whichmodes, sch, imω)
+    ordschur!(sch, whichmodes)
+    copy!(Z11´, view(sch.Z, 1:r, 1:sum(whichmodes)))
+    copy!(Z21´, view(sch.Z, r+1:2r, 1:sum(whichmodes)))
+    return (R, Z11, Z21), (L, Z11´, Z21´)
+end
+
+## Pencil A - λB ##
+
+# Compute G*R and G*L where G = inv(ω - h0 - Σₐᵤₓ) for Σₐᵤₓ = -iΩL'L or -iΩR'R
+# From this compute the deflated A - λB, whose eigenstates are the deflated eigenmodes
 # Pencil A - λB :
 #    A = [R'GL  (1-δ)iΩR'GL; -L'GL  1-(1-δ)iΩL´GL] and B = [1-δiΩR'GR  -R'GR; δiΩL'GR  L'GR]
 #    where δ = l <= r ? 1 : 0
 #    A = [Γₗ (1-δ)iΩΓₗ] + [0 0; 0 1] and B = [-Γᵣ -δiΩΓᵣ] + [1 0; 0 0]
 #    Γₗ = [R'; -L']GL  and  Γᵣ = [R'; -L']GR
-function pencilAB(s::AppliedSchur{T}, ω) where {T}
+function pencilAB!(s::SchurFactorsSolver{T}) where {T}
     o, z = one(Complex{T}), zero(Complex{T})
-    update_iG!(s, ω)
     iGlu = lu(s.iG)
-    Ω = s.options.shift
-    update_LR!(s)
+    Ω = s.shift
     GL = ldiv!(s.tmp.GL, iGlu, s.L)
     GR = ldiv!(s.tmp.GR, iGlu, s.R)
     A, B, R´L´ = s.tmp.A, s.tmp.B, s.R´L´
@@ -171,8 +206,22 @@ function pencilAB(s::AppliedSchur{T}, ω) where {T}
     return A, B
 end
 
-function update_iG!(s::AppliedSchur{T}, ω) where {T}
-    Ω = s.options.shift
+# updates L and R from the present hm and hp
+function update_LR!(s)
+    d = size(s.L, 2)
+    if s.l_leq_r
+        copy!(s.R, flat(s.hm)[:, s.sinds])
+        view(s.R´L´, 1:d, :) .= s.R'
+    else
+        copy!(s.L, flat(s.hp)[:, s.sinds])
+        view(s.R´L´, d+1:2d, :) .= .- s.L'
+    end
+    return s
+end
+
+# updates iG = ω - h0 - Σₐᵤₓ from the present h0
+function update_iG!(s::SchurFactorsSolver{T}, ω) where {T}
+    Ω = s.shift
     nzs, nzsh0 = nonzeros(s.iG), nonzeros(flat(s.h0))
     ps, pds, pss = s.ptrs
     fill!(nzs, zero(Complex{T}))
@@ -188,41 +237,8 @@ function update_iG!(s::AppliedSchur{T}, ω) where {T}
     return s
 end
 
-function update_LR!(s)
-    d = size(s.L, 2)
-    if s.l_leq_r
-        copy!(s.R, flat(s.hm)[:, s.sinds])
-        view(s.R´L´, 1:d, :) .= s.R'
-    else
-        copy!(s.L, flat(s.hp)[:, s.sinds])
-        view(s.R´L´, d+1:2d, :) .= .- s.L'
-    end
-    return s
-end
 
-# ## Self-energy of unit cell ##
-
-# function selfenergy(s::AppliedSchur, ω; kw...)
-#     # Update harmonics (aliased in s.h0, s.hm, s.hp)
-#     update_h!(s.h, ω; kw...)
-#     Z11, Z21, Z11bar, Z21bar = s.tmp.Z11, s.tmp.Z21, s.tmp.Z11bar, s.tmp.Z21bar
-#     d = size(s.L, 2)
-#     if !iszero(r)
-#         sch = schur!(A, B)
-#         # Retarded modes
-#         whichmodes = Vector{Bool}(undef, length(sch.α))
-#         retarded_modes!(whichmodes, sch, imω)
-#         ordschur!(sch, whichmodes)
-#         copy!(ZrL, view(sch.Z, 1:r, 1:sum(whichmodes)))
-#         copy!(ZrR, view(sch.Z, r+1:2r, 1:sum(whichmodes)))
-#         # Advanced modes
-#         advanced_modes!(whichmodes, sch, imω)
-#         ordschur!(sch, whichmodes)
-#         copy!(ZaL, view(sch.Z, 1:r, 1:sum(whichmodes)))
-#         copy!(ZaR, view(sch.Z, r+1:2r, 1:sum(whichmodes)))
-#     end
-#     return ZrL, ZrR, ZaL, ZaR
-# end
+#endregion
 
 # update_h!(h::Hamiltonian, ω; kw...) = h
 # update_h!(h::ParametricHamiltonian, ω; kw...) = call!(h; kw...)
