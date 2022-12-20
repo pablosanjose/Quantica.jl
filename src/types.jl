@@ -999,14 +999,16 @@ abstract type AppliedInverseGreenSolver <: AppliedGreenSolver end
 
 const AppliedLeadSolver = Union{AppliedDirectGreenSolver,AppliedInverseGreenSolver}
 
-# API for s::Union{AppliedDirectGreenSolver,AppliedInverseGreenSolver,AppliedLeadSolver}
-#   - copy_callsafe(s)
-#   - call!(s; params...)
-#   - call!(s, ω; params...)
+# API for s::AppliedGreenSolver
+#   - call!(s; params...) -> AppliedGreenSolver
+#   - call!(s, ω; params...) -> AbstractMatrix
 # From these, we define the out-of-place call syntax:
 
-(s::AppliedGreenSolver)(; params...) = call!(copy_callsafe(s); params...)
-(s::AppliedGreenSolver)(ω; params...) = call!(copy_callsafe(s), ω; params...)
+(s::AppliedGreenSolver)(; params...) = copy_callsafe(call!(s; params...))
+(s::AppliedGreenSolver)(ω; params...) = copy(call!(s, ω; params...))
+
+# Note: copy_callsafe is required to avoid aliased and/or wrong m1 and m2 when doing e.g.
+# gb = green(h)[...]; g1 = gb(; params1...); g2 = gb(; params2...); m1, m2 = g1(ω), g2(ω)
 
 #endregion
 
@@ -1079,6 +1081,8 @@ Base.parent(g::Green) = g.h
 Base.parent(g::GreenBlock) = g.parent
 Base.parent(g::GreenBlockInverse) = g.parent
 Base.parent(l::lead) = l.parent
+
+Base.copy(g::AbstractGreen) = deepcopy(g)
 
 #endregion
 #endregion

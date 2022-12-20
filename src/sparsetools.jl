@@ -234,7 +234,7 @@ function Base.copy(h::HybridSparseMatrixCSC)
     return HybridSparseMatrixCSC(b, u, f, s)
 end
 
-function copy_callsafe(h::HybridSparseMatrixCSC)
+function copy_matrices(h::HybridSparseMatrixCSC)
     b = blockstructure(h)
     u = copy(h.unflat)
     f = copy(h.flat)

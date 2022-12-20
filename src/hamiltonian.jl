@@ -122,31 +122,32 @@ merge_parameters!(p) = unique!(sort!(p))
 #endregion
 
 ############################################################################################
-# copy_callsafe - minimal copy without side effects and race conditions between call!'s
-#   Returns a minimally decoupled copy that will not be modified when call!-ing the original
+# copy_callsafe - minimally decoupled copy such that the call! output will not be modified
+#      by later call!'s
 #region
-
-copy_bloch(h::Hamiltonian) = Hamiltonian(
-    lattice(h), blockstructure(h), harmonics(h), copy(bloch(h)))
-
-copy_harmonics(h::Hamiltonian) = Hamiltonian(
-    lattice(h), blockstructure(h), copy.(harmonics(h)), bloch(h))
 
 copy_callsafe(h::Hamiltonian) = copy_bloch(h)
 
 copy_callsafe(p::ParametricHamiltonian) = ParametricHamiltonian(
     p.hparent, copy_harmonics(copy_bloch(p.h)), p.modifiers, p.allptrs, p.allparams)
 
+copy_bloch(h::Hamiltonian) = Hamiltonian(
+    lattice(h), blockstructure(h), harmonics(h), copy_matrices(bloch(h)))
+
+copy_harmonics(h::Hamiltonian) = Hamiltonian(
+    lattice(h), blockstructure(h), copy.(harmonics(h)), bloch(h))
+
 #endregion
 
 ############################################################################################
 # Hamiltonian call API
-# call!(::AbstractHamiltonian; params...) returns a Hamiltonian with params applied
-# call!(::AbstractHamiltonian, ϕs; params...) returns a HybridSparseMatrix with Bloch phases
-#    ϕs and params applied
+#   call!(::AbstractHamiltonian; params...) returns a Hamiltonian with params applied
+#   call!(::AbstractHamiltonian, ϕs; params...) returns a HybridSparseMatrix with Bloch phases
+#     ϕs and params applied
+#   h(ϕs...; params...) is a copy decoupled from future call!'s
 #region
 
-(h::Hamiltonian)(phi...; params...) = call!(copy_callsafe(h), phi; params...)
+(h::Hamiltonian)(phi...; params...) = copy(call!(h, phi; params...))
 
 call!(h::Hamiltonian; params...) = h  # mimic partial call!(p::ParametricHamiltonian; params...)
 call!(h::Hamiltonian, phi; params...) = bloch_flat!(h, sanitize_SVector(phi))
@@ -196,8 +197,8 @@ call!_output_matrix(h::Hamiltonian) = flat(bloch(h))
 # ParametricHamiltonian call API
 #region
 
-(p::ParametricHamiltonian)(; kw...) = call!(copy_callsafe(p); kw...)
-(p::ParametricHamiltonian)(phi, phis...; kw...) = call!(call!(copy_callsafe(p); kw...), (phi, phis...))
+(p::ParametricHamiltonian)(; kw...) = copy(call!(p; kw...))
+(p::ParametricHamiltonian)(phi, phis...; kw...) = copy(call!(call!(p; kw...), (phi, phis...)))
 
 call!(p::ParametricHamiltonian, phi; kw...) = call!(call!(p; kw...), phi)
 call!(p::ParametricHamiltonian, ft::FrankenTuple) = call!(p, Tuple(ft); NamedTuple(ft)...)

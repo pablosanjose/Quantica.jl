@@ -88,25 +88,30 @@ function call!(s::AppliedSchurSolver{T}, ω; params...) where {T}
     latblock = s.latblock
     boundary = s.boundary
 
+    # compute selected orbital indices for each subcell of latblock
+    bis = blockinds(s.h, latblock)
+
     # allocate GreenBlock matrix
-    bis = blockinds(s.h, s.latblock)
     dim = sum(length, bis)
     g = fill(complex(T(NaN)), dim, dim) # NaN = sentinel for not computed (if onlyintracell)
 
-    offseti = offsetj = 0
     itr = zip(subcells(latblock), bis, 1:length(bis))
-    for (scelli, indsi, blocki) in itr, (scellj, indsj, blockj) in itr
-        s.onlyintracell && blocki != blockj && continue
-        grangei = offseti + 1 : offseti + length(indsi)
+    offsetj = 0
+    for (scellj, indsj, blockj) in itr
         grangej = offsetj + 1 : offsetj + length(indsj)
-        offseti += last(grangei)
         offsetj += last(grangej)
-        xi = only(cell(scelli)) - boundary
         xj = only(cell(scellj)) - boundary
-        gblock = view(g, grangei, grangej)
-        isfinite(boundary) ?
-            green_schur_semi!(gblock, factors, (xi, indsi), (xj, indsj)) :
-            green_schur_inf!(gblock, factors, xi - xj, indsi, indsj)
+        offseti = 0
+        for (scelli, indsi, blocki) in itr
+            s.onlyintracell && blocki != blockj && continue
+            grangei = offseti + 1 : offseti + length(indsi)
+            offseti += last(grangei)
+            xi = only(cell(scelli)) - boundary
+            gblock = view(g, grangei, grangej)
+            isfinite(boundary) ?
+                green_schur_semi!(gblock, factors, (xi, indsi), (xj, indsj)) :
+                green_schur_inf!(gblock, factors, xi - xj, indsi, indsj)
+        end
     end
     return g
 end
