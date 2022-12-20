@@ -989,69 +989,96 @@ subbands(b::Bands, i...) = getindex(b.subbands, i...)
 #endregion
 
 ############################################################################################
-# Green functions  - see green.jl and solvers/greensolvers.jl
+# Green solvers - see solvers/greensolvers.jl
 #region
 
 abstract type AbstractGreenSolver end
 abstract type AppliedGreenSolver end
-abstract type AppliedInverseGreenSolver end
+abstract type AppliedDirectGreenSolver <: AppliedGreenSolver end
+abstract type AppliedInverseGreenSolver <: AppliedGreenSolver end
 
-const AppliedLeadSolver = Union{AppliedGreenSolver,AppliedInverseGreenSolver}
+const AppliedLeadSolver = Union{AppliedDirectGreenSolver,AppliedInverseGreenSolver}
 
-# g::GreenFunction represents G in the whole lattice. It must be made concrete to be used,
+# API for s::Union{AppliedDirectGreenSolver,AppliedInverseGreenSolver,AppliedLeadSolver}
+#   - copy_callsafe(s)
+#   - call!(s; params...)
+#   - call!(s, ω; params...)
+# From these, we define the out-of-place call syntax:
+
+(s::AppliedGreenSolver)(; params...) = call!(copy_callsafe(s); params...)
+(s::AppliedGreenSolver)(ω; params...) = call!(copy_callsafe(s), ω; params...)
+
+#endregion
+
+############################################################################################
+# Green - see green.jl
+#region
+
+abstract type AbstractGreen end
+
+# g::Green represents G in the whole lattice. It must be made "concrete" to be used, i.e.
 # converting it to a GreenBlock with g[; site_selections...]
-struct GreenFunction{T,L,H<:AbstractHamiltonian{T,<:Any,L},S<:AbstractGreenSolver}
+struct Green{T,L,S<:AbstractGreenSolver,H<:AbstractHamiltonian{T,<:Any,L}} <: AbstractGreen
     h::H
     boundaries::NTuple{L,T}  # We use floats for boundaries to allow Inf or large values
     solver::S
 end
 
-# produces G on latblocks when calling sover(ω; params...)
-struct GreenBlock{P,L<:NTuple{<:Any,<:LatticeBlock},S<:AppliedGreenSolver}
-    # solver should produce an AbstractMatrix with entries matching latblocks sites
-    solver::S
-    latblocks::L
-    parent::P
-end
-
-# produces G⁻¹ on latblocks when calling sover(ω; params...)
-struct GreenBlockInverse{P,L<:NTuple{<:Any,<:LatticeBlock},S<:AppliedInverseGreenSolver}
-    # solver should produce an AbstractMatrix with entries matching latblocks sites
-    solver::S
-    latblocks::L
-    parent::P
-end
-
 # produces G or G⁻¹ on latblock when calling sover(ω; params...)
-struct Lead{T,L<:LatticeBlock{T,<:Any,L},H<:AbstractHamiltonian{T,<:Any,1},S<:AppliedLeadSolver}
+struct GreenLead{S<:AppliedLeadSolver,
+            L<:LatticeBlock{<:Any,<:Any,1},
+            H<:AbstractHamiltonian{<:Any,<:Any,1}} <: AbstractGreen
     # solver should produce an AbstractMatrix represent a green function or its inverse
     # its first entries correspond to latblock sites, and the rest are auxiliary
-    h::H
     solver::S
     latblock::L  # required to build a self-energy
+    parent::H
+end
+
+# produces G on latblocks when calling solver(ω; params...)
+# Each g::GreenBlock{S} may optionally support also g(; params) for partial application
+struct GreenBlock{S<:AppliedDirectGreenSolver,
+                  L<:NTuple{<:Any,<:LatticeBlock},
+                  P} <: AbstractGreen
+    # solver should produce an AbstractMatrix with entries matching latblocks sites
+    solver::S
+    latblocks::L
+    parent::P
+end
+
+# produces G⁻¹ on latblocks when calling solver(ω; params...)
+# Each g::GreenBlock{S} may optionally support also g(; params) for partial application
+struct GreenBlockInverse{S<:AppliedInverseGreenSolver,
+                         L<:NTuple{<:Any,<:LatticeBlock},
+                         P} <: AbstractGreen
+    # solver should produce an AbstractMatrix with entries matching latblocks sites
+    solver::S
+    latblocks::L
+    parent::P
 end
 
 #region ## API ##
 
-hamiltonian(g::GreenFunction) = g.h
-hamiltonian(l::Lead) = l.h
+hamiltonian(g::Green) = g.h
+hamiltonian(l::GreenLead) = g.parent
 
-lattice(g::GreenFunction) = lattice(g.h)
+lattice(g::Green) = lattice(g.h)
 
-boundaries(g::GreenFunction) = g.boundaries
+boundaries(g::Green) = g.boundaries
 
-solver(g::GreenFunction) = g.solver
+solver(g::Green) = g.solver
 solver(g::GreenBlockInverse) = g.solver
-solver(l::Lead) = l.solver
+solver(l::GreenLead) = l.solver
 
 latblocks(g::GreenBlock) = g.latblocks
 latblocks(g::GreenBlockInverse) = g.latblocks
 
-latblock(l::Lead) = l.latblock
+latblock(l::GreenLead) = l.latblock
 
-Base.parent(g::GreenFunction) = g.h
+Base.parent(g::Green) = g.h
 Base.parent(g::GreenBlock) = g.parent
 Base.parent(g::GreenBlockInverse) = g.parent
+Base.parent(l::lead) = l.parent
 
 #endregion
 #endregion

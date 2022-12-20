@@ -8,18 +8,18 @@ using LinearAlgebra: I, lu, ldiv!, mul!
 using SparseArrays
 using SparseArrays: SparseMatrixCSC, AbstractSparseMatrix
 using Quantica: Quantica,
-      AbstractGreenSolver, AppliedGreenSolver, AppliedInverseGreenSolver, AppliedLeadSolver,
-      GreenBlock, GreenBlockInverse, Lead, LatticeBlock,
+      AbstractGreenSolver, AppliedDirectGreenSolver, AppliedInverseGreenSolver, AppliedLeadSolver,
+      GreenBlock, GreenBlockInverse, LatticeBlock,
       Hamiltonian, ParametricHamiltonian, AbstractHamiltonian, BlockStructure,
       HybridSparseMatrixCSC, lattice, zerocell, SVector, sanitize_SVector, siteselector,
       foreach_cell, foreach_site, store_diagonal_ptrs, cell
-import Quantica: call!, apply
+import Quantica: call!, apply, GreenLead
 
 ############################################################################################
 # BlockView  - see scattering.pdf notes for derivations
 #region
 
-struct BlockView{S<:AppliedGreenSolver} <: AppliedGreenSolver
+struct BlockView{S<:AppliedDirectGreenSolver} <: AppliedDirectGreenSolver
     inds::Vector{Int}
     parent::S
 end
@@ -33,17 +33,17 @@ end
 
 ############################################################################################
 # Schur and AppliedSchur
-#   This solver can be used to produce a GreenBlock or a Lead
+#   This solver can be used to produce a GreenBlock or a GreenLead
 #region
 
-#region Schur <: AbstractGreenSolver
+const AbstractHamiltonian1D{T,E,B} = AbstractHamiltonian{T,E,1,B}
 
 struct Schur{T<:AbstractFloat} <: AbstractGreenSolver
     shift::T
     onlyintracell::Bool
 end
 
-struct AppliedSchurSolver{T<:AbstractFloat,E,B,H<:AbstractHamiltonian{T,E,1,B}} <: AppliedGreenSolver
+struct AppliedSchurSolver{T<:AbstractFloat,E,B,H<:AbstractHamiltonian1D{T,E,B}} <: AppliedDirectGreenSolver
     factors::SchurFactorsSolver{T,B}
     h::H
     latblock::LatticeBlock{T,E,1}
@@ -59,22 +59,33 @@ Schur(; shift = 1.0, onlyintracell = false) = Schur(shift, onlyintracell)
 
 #region ## apply ##
 
-function apply(s::Schur, h::AbstractHamiltonian, latblock::LatticeBlock, boundaries)
+function apply(s::Schur, h::AbstractHamiltonian1D, latblock::LatticeBlock, boundaries)
     boundary = only(boundaries)
-    h´ = hamiltonian(h)  # to extract h from a ParametricHamiltonian
+    h´ = hamiltonian(h)  # to extract the Hamiltonian if h isa ParametricHamiltonian
     factors = SchurFactorsSolver(h´, s.shift)
     return AppliedSchurSolver(factors, h, latblock, boundary, onlyintracell)
 end
 
 #region
 
-#region ## API ##
+#region ## call API ##
 
-# returns a GreenBlock over latblock
-function (s::AppliedSchurSolver{T})(ω; params...) where {T}
-    call!(s.h; params...)
+function copy_callsafe(s::AppliedSchurSolver)
+    factors = copy_callsafe(s.factors)
+    h = copy_callsafe(s.h)
+    return AppliedSchurSolver(factors, h, s.latblock, s.boundary, s.onlyintracell)
+end
+
+function call!(s::AppliedSchurSolver; params...)
+    h´ = call!(s.h; params...)  # this is a no-op if s.h is not a ParametricHamiltonian
+    # the h wrapped into s.factors should be === h´, see apply above
+    return AppliedSchurSolver(s.factors, h´, s.latblock, s.boundary, s.onlyintracell)
+end
+
+function call!(s::AppliedSchurSolver{T}, ω; params...) where {T}
+    call!(s; params...)       # this is a no-op if s.h is not a ParametricHamiltonian
+    factors = call!(s.factors, ω)
     latblock = s.latblock
-    factors = s.factors(ω)
     boundary = s.boundary
 
     # allocate GreenBlock matrix
@@ -113,15 +124,15 @@ function blockinds(h, latblock)
     return flatinds
 end
 
-
+# Semiinifinite:
+# Gₙₘ = (Ghⁿ⁻ᵐ - GhⁿGh⁻ᵐ)G∞₀₀ = G∞ₙₘ - GhⁿG∞₀ₘ
+# Gₙₘ = G∞ₙₘ - G₁₁L(R'G₁₁L)ⁿ⁻¹ R'G∞₀ₘ       for n > 1
+# Gₙₘ = G∞ₙₘ - G₋₁₋₁R(L'G₋₁₋₁R)⁻ⁿ⁻¹L'G∞₀ₘ   for n < -1
 function green_schur_semi!(gblock, ((R, Z11, Z21), (L, Z11´, Z21´)), (xi, indsi), (xj, indsj))
 
 end
 
 #endregion
-
-# Schur(h::AbstractHamiltonian; kw...) = apply(Schur(; kw...), h)
-
 #endregion
 
 ############################################################################################
@@ -226,9 +237,25 @@ end
 
 #region ## API ##
 
-## SchurFactorsSolver(ω) ##
+## Call API ##
 
-function (s::SchurFactorsSolver)(ω)
+# copy_callsafe should copy anything that may mutate with call!(...; params...) and any
+# object in the output of call!(::SchurFactorsSolver, ...; params...)
+function copy_callsafe(s::SchurFactorsSolver)
+    hm, h0, hp = copy_callsafe(s.hm), copy_callsafe(s.h0), copy_callsafe(s.hp)
+    L, R = copy(s.L), copy(s.R)
+    tmp = copy_callsafe(s.tmp)
+    return SchurFactorsSolver(s.shift, hm, h0, hp, s.l_leq_r, s.iG, s.ptrs, s.sinds,
+                              L, R, s.R´L´, tmp)
+end
+
+
+function copy_callsafe(w::SchurWorkspace)
+    Z11, Z21, Z11´, Z21´ = copy(w.Z11), copy(w.Z21), copy(w.Z11´), copy(w.Z21´)
+    return SchurWorkspace(w.GL, w.GR, w.A, w.B, Z11, Z21, Z11´, Z21´)
+end
+
+function call!(s::SchurFactorsSolver, ω)
     R, Z11, Z21, L, Z11´, Z21´ = s.R, s.tmp.Z11, s.tmp.Z21, s.L, s.tmp.Z11´, s.tmp.Z21´
     update_LR!(s)
     update_iG!(s, ω)

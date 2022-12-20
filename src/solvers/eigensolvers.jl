@@ -10,7 +10,7 @@ using FunctionWrappers: FunctionWrapper
 using LinearAlgebra: Eigen, I, lu, ldiv!
 using SparseArrays: SparseMatrixCSC, AbstractSparseMatrix
 using Quantica: Quantica, AbstractEigenSolver, ensureloaded, SVector, SMatrix,
-                sanitize_eigen, call!_output
+                sanitize_eigen, call!_output_matrix
 
 #endregion
 
@@ -24,7 +24,7 @@ using Quantica: Quantica, AbstractEigenSolver, ensureloaded, SVector, SMatrix,
     throw(ArgumentError("The eigensolver backend $(typeof(s)) is not defined to work on $(typeof(mat))"))
 
 # an alias of h's call! output makes apply call! conversion a no-op, see apply.jl
-input_matrix(::AbstractEigenSolver, h) = call!_output(h)
+input_matrix(::AbstractEigenSolver, h) = call!_output_matrix(h)
 
 #### LinearAlgebra #####
 
@@ -42,7 +42,7 @@ function (solver::LinearAlgebra)(mat::AbstractMatrix{<:Number})
 end
 
 # LinearAlgebra.eigen doesn't like sparse Matrices as input, must convert
-input_matrix(::LinearAlgebra, h) = Matrix(call!_output(h))
+input_matrix(::LinearAlgebra, h) = Matrix(call!_output_matrix(h))
 
 #### Arpack #####
 

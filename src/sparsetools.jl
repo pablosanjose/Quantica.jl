@@ -234,6 +234,14 @@ function Base.copy(h::HybridSparseMatrixCSC)
     return HybridSparseMatrixCSC(b, u, f, s)
 end
 
+function copy_callsafe(h::HybridSparseMatrixCSC)
+    b = blockstructure(h)
+    u = copy(h.unflat)
+    f = copy(h.flat)
+    s = Ref(h.sync_state[])
+    return HybridSparseMatrixCSC(b, u, f, s)
+end
+
 SparseArrays.nnz(b::HybridSparseMatrixCSC) = nnz(unflat(b))
 
 function nnzdiag(m::HybridSparseMatrixCSC)

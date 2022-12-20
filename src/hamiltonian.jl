@@ -123,6 +123,7 @@ merge_parameters!(p) = unique!(sort!(p))
 
 ############################################################################################
 # copy_callsafe - minimal copy without side effects and race conditions between call!'s
+#   Returns a minimally decoupled copy that will not be modified when call!-ing the original
 #region
 
 copy_bloch(h::Hamiltonian) = Hamiltonian(
@@ -145,10 +146,10 @@ copy_callsafe(p::ParametricHamiltonian) = ParametricHamiltonian(
 #    ϕs and params applied
 #region
 
-(h::Hamiltonian)(phi...) = call!(copy_callsafe(h), phi)
+(h::Hamiltonian)(phi...; params...) = call!(copy_callsafe(h), phi; params...)
 
-call!(h::Hamiltonian) = h  # mimic partial call!(p::ParametricHamiltonian; kw...)
-call!(h::Hamiltonian, phi) = bloch_flat!(h, sanitize_SVector(phi))
+call!(h::Hamiltonian; params...) = h  # mimic partial call!(p::ParametricHamiltonian; params...)
+call!(h::Hamiltonian, phi; params...) = bloch_flat!(h, sanitize_SVector(phi))
 
 # returns a flat sparse matrix
 function bloch_flat!(h::Hamiltonian{T}, φs::SVector, axis = missing) where {T}
@@ -187,7 +188,7 @@ end
     L == L´ || throw(ArgumentError("Need $L Bloch phases, got $(L´)"))
 
 # ouput of a call!(h, ϕs)
-call!_output(h::Hamiltonian) = flat(bloch(h))
+call!_output_matrix(h::Hamiltonian) = flat(bloch(h))
 
 #endregion
 
@@ -271,7 +272,7 @@ function applymodifiers!(h, m::AppliedHoppingModifier{B}; kw...) where {B<:SMatr
 end
 
 # ouput of a *full* call!(p, ϕs; kw...)
-call!_output(p::ParametricHamiltonian) = flat(bloch(p))
+call!_output_matrix(p::ParametricHamiltonian) = flat(bloch(p))
 
 #endregion
 
