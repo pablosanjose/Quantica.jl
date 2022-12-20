@@ -54,6 +54,16 @@ Base.length(s::Subspace) = 2
 
 Base.copy(s::Subspace) = deepcopy(s)
 
+# algebra
+Base.:*(x::Number, s::Subspace) = Subspace(s.energy, x * s.basis, s.orbstruct, s.basevert)
+Base.:*(s::Subspace, x::Number) = x * s
+Base.:/(s::Subspace, x::Number) = inv(x) * s
+
+Base.:+(s1::Subspace{D,C,T,S1,O}, s2::Subspace{D,C,T,S2,O}) where {D,C,T,S1,S2,O} =
+    Subspace(s1.energy, s1.basis + s2.basis, s1.orbstruct, s1.basevert)
+Base.:-(s1::Subspace{D,C,T,S1,O}, s2::Subspace{D,C,T,S2,O}) where {D,C,T,S1,S2,O} =
+    Subspace(s1.energy, s1.basis - s2.basis, s1.orbstruct, s1.basevert)
+
 #######################################################################
 # Spectrum
 #######################################################################

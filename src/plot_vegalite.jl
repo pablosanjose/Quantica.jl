@@ -54,7 +54,8 @@ site_shader(shader, h, psi) = i -> applyshader(shader, h, psi, i)
 link_shader(shader, h, psi) = (i, j, dn) -> applyshader(shader, h, psi, i, j, dn)
 
 applyshader(shader, h, psi, i...) = applyshader_vector(shader, h, psi, i...)
-applyshader(shader, h, psi::AbstractMatrix, i...) = sum(col -> applyshader_vector(shader, h, view(psi, :, col), i...), axes(psi, 2))
+applyshader(shader, h, psi::AbstractMatrix, i...) =
+    sum(col -> applyshader_vector(shader, h, view(psi, :, col), i...), axes(psi, 2))
 
 applyshader_vector(shader::Number, h, x...) = shader
 applyshader_vector(shader::Missing, h, x...) = 0.0
@@ -80,7 +81,7 @@ function applyshader_vector(shader::CurrentShader, h, psi, i, j, dn)
     pos = allsitepositions(h.lattice)
     # Assuming that only links from base unit cell are plotted
     dr = pos[i] - pos[j] + bravais(h) * dn
-    dc = imag(psi[i]' * shader.kernel * h[dn, i, j] * psi[j])
+    dc = imag(psi[i]' * shader.kernel * h[dn][i, j] * psi[j])
     c = iszero(shader.axis) ? shader.transform(norm(dr * dc)) : shader.transform(dr[shader.axis] * dc)
     return real(c)
 end
