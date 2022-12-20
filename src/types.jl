@@ -997,8 +997,6 @@ abstract type AppliedGreenSolver end
 abstract type AppliedDirectGreenSolver <: AppliedGreenSolver end
 abstract type AppliedInverseGreenSolver <: AppliedGreenSolver end
 
-const AppliedLeadSolver = Union{AppliedDirectGreenSolver,AppliedInverseGreenSolver}
-
 # API for s::AppliedGreenSolver
 #   - call!(s; params...) -> AppliedGreenSolver
 #   - call!(s, ω; params...) -> AbstractMatrix
@@ -1026,43 +1024,33 @@ struct Green{T,L,S<:AbstractGreenSolver,H<:AbstractHamiltonian{T,<:Any,L}} <: Ab
     solver::S
 end
 
-# produces G or G⁻¹ on latblock when calling sover(ω; params...)
-struct GreenLead{S<:AppliedLeadSolver,
-            L<:LatticeBlock{<:Any,<:Any,1},
-            H<:AbstractHamiltonian{<:Any,<:Any,1}} <: AbstractGreen
-    # solver should produce an AbstractMatrix represent a green function or its inverse
-    # its first entries correspond to latblock sites, and the rest are auxiliary
-    solver::S
-    latblock::L  # required to build a self-energy
-    parent::H
-end
-
-# produces G on latblocks when calling solver(ω; params...)
-# Each g::GreenBlock{S} may optionally support also g(; params) for partial application
+# produces G on latblocks with call!(g, ω; params...) or g(ω; params...)
+# Partial application: call!(g; params...) or g(; params...) produces a GreenBlock
 struct GreenBlock{S<:AppliedDirectGreenSolver,
                   L<:NTuple{<:Any,<:LatticeBlock},
                   P} <: AbstractGreen
-    # solver should produce an AbstractMatrix with entries matching latblocks sites
+    # solver returns an AbstractMatrix with its elements matching latblocks sites
     solver::S
     latblocks::L
     parent::P
 end
 
-# produces G⁻¹ on latblocks when calling solver(ω; params...)
-# Each g::GreenBlock{S} may optionally support also g(; params) for partial application
+# produces G⁻¹ on latblocks with call!(g, ω; params...) or g(ω; params...)
+# Partial application: call!(g; params...) or g(; params...) produces a GreenBlock
 struct GreenBlockInverse{S<:AppliedInverseGreenSolver,
                          L<:NTuple{<:Any,<:LatticeBlock},
                          P} <: AbstractGreen
-    # solver should produce an AbstractMatrix with entries matching latblocks sites
+    # solver returns an AbstractMatrix with its first elements matching latblocks sites
+    # optionally it could have more trailing entries corresponding to auxiliary orbitals
     solver::S
     latblocks::L
     parent::P
+    auxiliaries::Int    # number of auxiliary orbitals
 end
 
 #region ## API ##
 
 hamiltonian(g::Green) = g.h
-hamiltonian(l::GreenLead) = g.parent
 
 lattice(g::Green) = lattice(g.h)
 
@@ -1070,17 +1058,13 @@ boundaries(g::Green) = g.boundaries
 
 solver(g::Green) = g.solver
 solver(g::GreenBlockInverse) = g.solver
-solver(l::GreenLead) = l.solver
 
 latblocks(g::GreenBlock) = g.latblocks
 latblocks(g::GreenBlockInverse) = g.latblocks
 
-latblock(l::GreenLead) = l.latblock
-
 Base.parent(g::Green) = g.h
 Base.parent(g::GreenBlock) = g.parent
 Base.parent(g::GreenBlockInverse) = g.parent
-Base.parent(l::lead) = l.parent
 
 Base.copy(g::AbstractGreen) = deepcopy(g)
 

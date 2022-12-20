@@ -13,7 +13,9 @@ using Quantica: Quantica,
       Hamiltonian, ParametricHamiltonian, AbstractHamiltonian, BlockStructure,
       HybridSparseMatrixCSC, lattice, zerocell, SVector, sanitize_SVector, siteselector,
       foreach_cell, foreach_site, store_diagonal_ptrs, cell
-import Quantica: call!, apply, GreenLead
+import Quantica: call!, apply
+
+export lead
 
 ############################################################################################
 # BlockView  - see scattering.pdf notes for derivations
@@ -32,8 +34,8 @@ end
 #endregion
 
 ############################################################################################
-# Schur and AppliedSchur
-#   This solver can be used to produce a GreenBlock or a GreenLead
+# Schur and AppliedSchurSolver
+#   This solver can be used to produce a GreenBlock using the Schur factorization method
 #region
 
 const AbstractHamiltonian1D{T,E,B} = AbstractHamiltonian{T,E,1,B}
@@ -66,7 +68,7 @@ function apply(s::Schur, h::AbstractHamiltonian1D, latblock::LatticeBlock, bound
     return AppliedSchurSolver(factors, h, latblock, boundary, onlyintracell)
 end
 
-#region
+#endregion
 
 #region ## call API ##
 
@@ -134,7 +136,7 @@ end
 # Gₙₘ = G∞ₙₘ - G₁₁L(R'G₁₁L)ⁿ⁻¹ R'G∞₀ₘ       for n > 1
 # Gₙₘ = G∞ₙₘ - G₋₁₋₁R(L'G₋₁₋₁R)⁻ⁿ⁻¹L'G∞₀ₘ   for n < -1
 function green_schur_semi!(gblock, ((R, Z11, Z21), (L, Z11´, Z21´)), (xi, indsi), (xj, indsj))
-
+    # WIP
 end
 
 #endregion
@@ -142,6 +144,7 @@ end
 
 ############################################################################################
 # SchurFactorsSolver - see scattering.pdf notes for derivations
+#   Auxiliary functions for AppliedSchurSolver
 #   Computes the factors R, Z21 and Z11. The retarded self-energy on the open unitcell
 #   surface of a semi-infinite lead extending towards the right reads Σᵣ = R Z21 Z11⁻¹ R'.
 #   Computes also the L, Z21´ and Z11´ for the lead towards the left  Σₗ = L Z21´ Z11´⁻¹ L'.

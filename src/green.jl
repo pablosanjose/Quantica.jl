@@ -42,7 +42,4 @@ call!(g::GreenBlock; params...) =
 call!(g::GreenBlockInverse; params...) =
     GreenBlockInverse(call!(solver(g); params...), latblock(g), parent(g))
 
-call!(l::GreenLead; params...) =
-    GreenLead(call!(solver(l); params...), latblock(l), parent(l))
-
 #region
