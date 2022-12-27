@@ -101,7 +101,7 @@ function Base.show(io::IO, h::Union{Hamiltonian,ParametricHamiltonian})
     print(io, i, summary(h), "\n",
 "$i  Bloch harmonics  : $(length(harmonics(h)))
 $i  Harmonic size    : $((n -> "$n × $n")(size(h, 1)))
-$i  Orbitals         : $(norbitals(h)))
+$i  Orbitals         : $(norbitals(h))
 $i  Element type     : $(displaytype(blocktype(h)))
 $i  Onsites          : $(nonsites(h))
 $i  Hoppings         : $(nhoppings(h))
