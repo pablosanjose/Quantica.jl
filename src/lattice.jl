@@ -63,14 +63,14 @@ end
 #endregion
 
 ############################################################################################
-# indexing Lattice and LatticeBlock - returns a LatticeBlock
+# indexing Lattice and LatticeSlice - returns a LatticeSlice
 #region
 
 Base.getindex(lat::Lattice; kw...) = lat[siteselector(; kw...)]
 
 function Base.getindex(lat::Lattice, ss::SiteSelector)
     as = apply(ss, lat)
-    latblock = LatticeBlock(lat)
+    latslice = LatticeSlice(lat)
     sinds = Int[]
     foreach_cell(as) do cell
         scell = Subcell(sinds, cell)
@@ -80,25 +80,25 @@ function Base.getindex(lat::Lattice, ss::SiteSelector)
         if isempty(scell)
             return false
         else
-            push!(latblock, scell)
+            push!(latslice, scell)
             sinds = Int[]   #start new site list
             return true
         end
     end
-    return latblock
+    return latslice
 end
 
-Base.getindex(lb::LatticeBlock; indexlist = missing, kw...) =
-    getindex(lb, siteselector(; kw...), indexlist)
+Base.getindex(ls::LatticeSlice; indexlist = missing, kw...) =
+    getindex(ls, siteselector(; kw...), indexlist)
 
-# indexlist is populated with latblock indices of selected sites
-function Base.getindex(latblock::LatticeBlock, ss::SiteSelector, indexlist = missing)
-    lat = parent(latblock)
+# indexlist is populated with latslice indices of selected sites
+function Base.getindex(latslice::LatticeSlice, ss::SiteSelector, indexlist = missing)
+    lat = parent(latslice)
     as = apply(ss, lat)
-    latblock´ = LatticeBlock(lat)
+    latslice´ = LatticeSlice(lat)
     sinds = Int[]
     j = indexlist === missing || isempty(indexlist) ? 0 : last(indexlist)
-    for subcell in subcells(latblock)
+    for subcell in subcells(latslice)
         dn = cell(subcell)
         scell = Subcell(sinds, dn)
         for i in siteindices(subcell)
@@ -110,12 +110,84 @@ function Base.getindex(latblock::LatticeBlock, ss::SiteSelector, indexlist = mis
             end
         end
         if !isempty(scell)
-            push!(latblock´, scell)
+            push!(latslice´, scell)
             sinds = Int[]  #start new site list
         end
     end
-    return latblock´
+    return latslice´
 end
+
+#endregion
+
+############################################################################################
+# merging LatticeBlocks - returns a LatticeSlice and an indexlist per input latslice
+#region
+
+function merge_latblocks(lss::NTuple{<:Any,LatticeSlice{T,E,L}}) where {T,E,L}
+    lat = parent(first(lss))
+    all(l -> l === lat, parent.(lss)) ||
+        argerror("Cannot merge LatticeBlocks of different lattices")
+
+    allcellinds = Tuple{SVector{L,Int},Int}[]
+    for ls in lss, scell in subcells(ls), ind in siteindices(scell)
+        push!(allcellinds, (cell(scell), ind))
+    end
+    sort!(allcellinds)
+    unique!(allcellinds)
+
+    currentcell = first(first(allcellinds))
+    scell = Subcell(currentcell)
+    scells = [scell]
+    for (c, i) in allcellinds
+        if c == currentcell
+            push!(siteindices(scell), i)
+        else
+            scell = Subcell(c)
+            push!(siteindices(scell), i)
+            push!(scells, scell)
+        end
+    end
+    latslice = LatticeSlice(lat, scells)
+    return latslice
+end
+
+# find indices in l´ of sites in l, if present. Otherwise zero.
+intersect_indices!(l::LatticeSlice, l´::LatticeSlice) =
+    unsafe_intersect_indices(sort!(l), sort!(l´))
+
+# assumes l and l´ are both sorted
+function unsafe_intersect_indices(l::LatticeSlice, l´::LatticeSlice)
+    inds = Int[]
+    for s in subcells(l)
+        offset = 0
+        for s´ in subcells(l´)
+            if cell(s´) == cell(s)
+                unsafe_intersect_indices(inds, siteindices(s), siteindices(s´), offset)
+                break
+            else
+                offset += length(siteindices(s´))
+            end
+        end
+    end
+    return inds
+end
+
+function unsafe_intersect_indices(inds, is, is´, offset = 0)
+    i = i´ = 1
+    while i <= length(is) && i´ <= length(is´)
+        if is[i] < is´[i´]
+            push!(inds, 0)
+            i += 1
+        elseif is[i] > is´[i´]
+            i´ += 1
+        else
+            push!(inds, offset + i´)
+            i += 1
+        end
+    end
+    return inds
+end
+
 
 #endregion
 

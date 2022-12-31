@@ -21,7 +21,7 @@ for E in 0:2, L in 0:E
         for L´ in 0:L
             precompile(supercell_harmonics, (Hamiltonian{T,E,L,B}, SupercellData{T,E,L,L´,L*L´}, CSCBuilder{T,E,L´,B}, Int))
         end
-        precompile(BlockStructure{B}, (Val{N}, Vector{Int}))
+        precompile(SublatBlockStructure{B}, (Val{N}, Vector{Int}))
         precompile(applyterm!, (IJVBuilder{T,E,L,B}, AppliedOnsiteTerm{T,E,L,B}))
         precompile(applyterm!, (IJVBuilder{T,E,L,B}, AppliedHoppingTerm{T,E,L,B}))
     end

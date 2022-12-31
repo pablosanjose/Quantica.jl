@@ -70,13 +70,13 @@ end
 # apply model terms
 #region
 
-function apply(o::OnsiteTerm, (lat, os)::Tuple{Lattice{T,E,L},BlockStructure{B}}) where {T,E,L,B}
+function apply(o::OnsiteTerm, (lat, os)::Tuple{Lattice{T,E,L},SublatBlockStructure{B}}) where {T,E,L,B}
     f = (r, orbs) -> mask_block(B, o(r), (orbs, orbs))
     asel = apply(selector(o), lat)
     return AppliedOnsiteTerm{T,E,L,B}(f, asel)   # f gets wrapped in a FunctionWrapper
 end
 
-function apply(t::HoppingTerm, (lat, os)::Tuple{Lattice{T,E,L},BlockStructure{B}}) where {T,E,L,B}
+function apply(t::HoppingTerm, (lat, os)::Tuple{Lattice{T,E,L},SublatBlockStructure{B}}) where {T,E,L,B}
     f = (r, dr, orbs) -> mask_block(B, t(r, dr), orbs)
     asel = apply(selector(t), lat)
     return AppliedHoppingTerm{T,E,L,B}(f, asel)  # f gets wrapped in a FunctionWrapper

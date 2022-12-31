@@ -1,45 +1,58 @@
 ############################################################################################
-# GreenFunction and GreenBlock indexing
+# HybridHybridMatrix
 #region
 
-Base.getindex(g::GreenFunction; kw...) = g[siteselector(; kw...)]
+#region ## Constructors ##
 
-function Base.getindex(g::GreenFunction, s::SiteSelector)
-    latblock = lattice(g)[s]
-    asolver = apply(solver(g), hamiltonian(g), latblock, boundaries(g))
-    return GreenBlock(asolver, (latblock,), g)
-end
+HybridHybridMatrix(m::Matrix, latslice::LatticeSlice, b::SubcellBlockStructure)
 
-Base.getindex(g::GreenBlock; kw...) = g[siteselector(; kw...)]
+#endregion
 
-Base.getindex(g::GreenBlock{<:GreenFunction}, s::SiteSelector) = parent(g)[s]
+#region ## API ##
 
-function Base.getindex(g::GreenBlock, s::SiteSelector)
-    s.cells === missing || argerror("Cannot select cells when indexing this GreenBlock")
-    indexlist = Int[]
-    # this call populates indexlist with the selected latblock indices
-    latblocks´ = getindex.(latblocks(g), Ref(s), Ref(indexlist))
-    solver = GS.BlockView(indexlist, g)
-    g´ = GreenBlock(solver, latblocks´, g)
-    return g´
-end
+#endregion
 
-#region
+# ############################################################################################
+# # GreenFunction and GreenBlock indexing
+# #region
 
-############################################################################################
-# call API
-#region
+# Base.getindex(g::GreenFunction; kw...) = g[siteselector(; kw...)]
 
-(g::AbstractGreen)(; params...) = copy(call!(g; params...))
-(g::AbstractGreen)(ω; params...) = copy(call!(g, ω; params...))
+# function Base.getindex(g::GreenFunction, s::SiteSelector)
+#     latslice = lattice(g)[s]
+#     asolver = apply(solver(g), hamiltonian(g), latslice, boundaries(g))
+#     return GreenBlock(asolver, (latslice,), g)
+# end
 
-call!(g::Green; params...) =
-    Green(call!(hamiltonian(g); params...), boundaries(g), solver(g))
+# Base.getindex(g::GreenBlock; kw...) = g[siteselector(; kw...)]
 
-call!(g::GreenBlock; params...) =
-    GreenBlock(call!(solver(g); params...), latblock(g), parent(g))
+# Base.getindex(g::GreenBlock{<:GreenFunction}, s::SiteSelector) = parent(g)[s]
 
-call!(g::GreenBlockInverse; params...) =
-    GreenBlockInverse(call!(solver(g); params...), latblock(g), parent(g))
+# function Base.getindex(g::GreenBlock, s::SiteSelector)
+#     s.cells === missing || argerror("Cannot select cells when indexing this GreenBlock")
+#     indexlist = Int[]
+#     # this call populates indexlist with the selected latslice indices
+#     latblocks´ = getindex.(latblocks(g), Ref(s), Ref(indexlist))
+#     solver = GS.BlockView(indexlist, g)
+#     g´ = GreenBlock(solver, latblocks´, g)
+#     return g´
+# end
 
-#region
+# #region
+
+# ############################################################################################
+# # call API
+# #region
+
+# (g::AbstractGreen)(; params...) = copy(call!(g; params...))
+# (g::AbstractGreen)(ω; params...) = copy(call!(g, ω; params...))
+
+# call!(g::Green; params...) =
+#     Green(call!(hamiltonian(g); params...), boundaries(g), solver(g))
+
+# call!(g::GreenBlock; params...) =
+#     GreenBlock(call!(solver(g); params...), latslice(g), parent(g))
+
+# call!(g::GreenBlockInverse; params...) =
+#     GreenBlockInverse(call!(solver(g); params...), latslice(g), parent(g))
+# #region

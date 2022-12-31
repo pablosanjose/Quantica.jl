@@ -6,7 +6,7 @@ hamiltonian(m::TightbindingModel = TightbindingModel(); kw...) = lat -> hamilton
 
 # Base.@constprop :aggressive needed for type-stable non-Val orbitals
 Base.@constprop :aggressive function hamiltonian(lat::Lattice{T}, m = TightbindingModel(); orbitals = Val(1)) where {T}
-    blockstruct = BlockStructure(T, orbitals, sublatlengths(lat))
+    blockstruct = SublatBlockStructure(T, orbitals, sublatlengths(lat))
     builder = IJVBuilder(lat, blockstruct)
     apmod = apply(m, (lat, blockstruct))
     # using foreach here foils precompilation of applyterm! for some reason

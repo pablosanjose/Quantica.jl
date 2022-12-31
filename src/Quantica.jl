@@ -46,7 +46,6 @@ export ftuple
 include("iterators.jl")
 include("builders.jl")
 include("tools.jl")
-include("sparsetools.jl")
 include("sanitize.jl")
 
 # Core

@@ -72,7 +72,7 @@ function coupler_unflat(::Type{<:AbstractHamiltonian{T,E,L,B}}, hs::NTuple{N,Abs
     for h in hs
         append!(blocksizes, norbitals(h))
     end
-    bs = BlockStructure{B}(blocksizes, subsizes)
+    bs = SublatBlockStructure{B}(blocksizes, subsizes)
     builder = IJVBuilder(lat, bs)
     blockoffsets = (0, cumsum(size.(hs, 1))...)
     for (i, h) in enumerate(hs)

@@ -240,8 +240,9 @@ Base.adjoint(s::HopSelector) = HopSelector(s.region, s.sublats, s.dcells, s.rang
 #endregion
 
 ############################################################################################
-# LatticeBlock - see lattice.jl for methods
+# LatticeSlice - see lattice.jl for methods
 #   Encodes subsets of sites of a lattice in different cells. Produced by lat[siteselector]
+#   Strict ordering is required to enable merged block indexing (see lattice.jl)
 #region
 
 struct Subcell{L}
@@ -249,7 +250,7 @@ struct Subcell{L}
     cell::SVector{L,Int}
 end
 
-struct LatticeBlock{T,E,L}
+struct LatticeSlice{T,E,L}
     lat::Lattice{T,E,L}
     subcells::Vector{Subcell{L}}
 end
@@ -258,7 +259,7 @@ end
 
 Subcell(cell) = Subcell(Int[], cell)
 
-LatticeBlock(lat::Lattice{<:Any,<:Any,L}) where {L} = LatticeBlock(lat, Subcell{L}[])
+LatticeSlice(lat::Lattice{<:Any,<:Any,L}) where {L} = LatticeSlice(lat, Subcell{L}[])
 
 #endregion
 
@@ -268,29 +269,30 @@ siteindices(s::Subcell) = s.inds
 
 cell(s::Subcell) = s.cell
 
-subcells(l::LatticeBlock) = l.subcells
+subcells(l::LatticeSlice) = l.subcells
 
-cells(l::LatticeBlock) = (s.cell for s in l.subcells)
+cells(l::LatticeSlice) = (s.cell for s in l.subcells)
 
-nsites(l::LatticeBlock) = isempty(l) ? 0 : sum(nsites, subcells(l))
+nsites(l::LatticeSlice) = isempty(l) ? 0 : sum(nsites, subcells(l))
 nsites(s::Subcell) = length(s.inds)
 
-boundingbox(l::LatticeBlock) = boundingbox(cell(c) for c in subcells(l))
+boundingbox(l::LatticeSlice) = boundingbox(cell(c) for c in subcells(l))
 
-Base.parent(lb::LatticeBlock) = lb.lat
+Base.parent(ls::LatticeSlice) = ls.lat
 
-Base.isempty(s::LatticeBlock) = isempty(s.subcells)
+Base.isempty(s::LatticeSlice) = isempty(s.subcells)
 Base.isempty(s::Subcell) = isempty(s.inds)
 
 Base.empty!(s::Subcell) = empty!(s.inds)
 
 Base.push!(s::Subcell, i::Int) = push!(s.inds, i)
-Base.push!(lb::LatticeBlock, s::Subcell) = push!(lb.subcells, s)
+Base.push!(ls::LatticeSlice, s::Subcell) = push!(ls.subcells, s)
 
-function Base.intersect!(lb::L, lb´::L) where {L<:LatticeBlock}
-    for subcell in subcells(lb)
+# Unused?
+function Base.intersect!(ls::L, ls´::L) where {L<:LatticeSlice}
+    for subcell in subcells(ls)
         found = false
-        for subcell´ in subcells(lb´)
+        for subcell´ in subcells(ls´)
             if cell(subcell) == cell(subcell´)
                 intersect!(siteindices(subcell), siteindices(subcell´))
                 found = true
@@ -299,9 +301,31 @@ function Base.intersect!(lb::L, lb´::L) where {L<:LatticeBlock}
         end
         found || empty!(subcell)
     end
-    deleteif!(isempty, subcells(lb))
-    return lb
+    deleteif!(isempty, subcells(ls))
+    return ls
 end
+
+function Base.sort!(l::LatticeSlice)
+    sort!(subcells(l), by = cell)
+    sort!.(siteindices.(subcells(l)))
+    return l
+end
+
+function getindex(l::LatticeSlice{<:Any,<:Any,L}, i::Integer) where {L}
+    offset = 0
+    for scell in subcells(l)
+        ninds = length(siteindices(scell))
+        if ninds + offset < i
+            offset += ninds
+        else
+            return cell(scell), siteindices(scell)[i-offset]
+        end
+    end
+    throw(BoundsError(l, i))
+end
+
+Base.length(l::LatticeSlice) = nsites(l)
+Base.length(s::Subcell) = nsites(s)
 
 #endregion
 #endregion
@@ -471,26 +495,26 @@ end
 
 struct IJVBuilder{T,E,L,B} <: AbstractHamiltonianBuilder{T,E,L,B}
     lat::Lattice{T,E,L}
-    blockstruct::BlockStructure{B}
+    blockstruct::SublatBlockStructure{B}
     harmonics::Vector{IJVHarmonic{L,B}}
     kdtrees::Vector{KDTree{SVector{E,T},Euclidean,T}}
 end
 
 struct CSCBuilder{T,E,L,B} <: AbstractHamiltonianBuilder{T,E,L,B}
     lat::Lattice{T,E,L}
-    blockstruct::BlockStructure{B}
+    blockstruct::SublatBlockStructure{B}
     harmonics::Vector{CSCHarmonic{L,B}}
 end
 
 ## Constructors ##
 
-function IJVBuilder(lat::Lattice{T,E,L}, blockstruct::BlockStructure{B}) where {E,L,T,B}
+function IJVBuilder(lat::Lattice{T,E,L}, blockstruct::SublatBlockStructure{B}) where {E,L,T,B}
     harmonics = IJVHarmonic{L,B}[]
     kdtrees = Vector{KDTree{SVector{E,T},Euclidean,T}}(undef, nsublats(lat))
     return IJVBuilder(lat, blockstruct, harmonics, kdtrees)
 end
 
-function CSCBuilder(lat::Lattice{<:Any,<:Any,L}, blockstruct::BlockStructure{B}) where {L,B}
+function CSCBuilder(lat::Lattice{<:Any,<:Any,L}, blockstruct::SublatBlockStructure{B}) where {L,B}
     harmonics = CSCHarmonic{L,B}[]
     return CSCBuilder(lat, blockstruct, harmonics)
 end
@@ -542,7 +566,7 @@ function SparseArrays.sparse(builder::AbstractHamiltonianBuilder{T,<:Any,L,B}) w
     return hars
 end
 
-function SparseArrays.sparse(b::BlockStructure{B}, har::AbstractBuilderHarmonic{L,B}, m::Integer, n::Integer) where {L,B}
+function SparseArrays.sparse(b::SublatBlockStructure{B}, har::AbstractBuilderHarmonic{L,B}, m::Integer, n::Integer) where {L,B}
     s = sparse(collector(har), m, n)
     return Harmonic(dcell(har), HybridSparseMatrixCSC(b, s))
 end
@@ -591,7 +615,7 @@ abstract type AbstractHamiltonian{T,E,L,B} end
 
 struct Hamiltonian{T,E,L,B} <: AbstractHamiltonian{T,E,L,B}
     lattice::Lattice{T,E,L}
-    blockstruct::BlockStructure{B}
+    blockstruct::SublatBlockStructure{B}
     harmonics::Vector{Harmonic{T,L,B}}
     bloch::HybridSparseMatrixCSC{T,B}
     # Enforce sorted-dns-starting-from-zero invariant onto harmonics
@@ -621,10 +645,10 @@ flatrange(h::AbstractHamiltonian, iunflat) = flatrange(blockstructure(h), iunfla
 
 ## Hamiltonian
 
-Hamiltonian(l::Lattice{T,E,L}, b::BlockStructure{B}, h::Vector{Harmonic{T,L,B}}, bl) where {T,E,L,B} =
+Hamiltonian(l::Lattice{T,E,L}, b::SublatBlockStructure{B}, h::Vector{Harmonic{T,L,B}}, bl) where {T,E,L,B} =
     Hamiltonian{T,E,L,B}(l, b, h, bl)
 
-function Hamiltonian(l, b::BlockStructure{B}, h) where {B}
+function Hamiltonian(l, b::SublatBlockStructure{B}, h) where {B}
     n = nsites(l)
     bloch = HybridSparseMatrixCSC(b, spzeros(B, n, n))
     needs_initialization!(bloch)
@@ -832,7 +856,7 @@ abstract type AbstractEigenSolver end
 
 struct Spectrum{T,B}
     eigen::Eigen{Complex{T},Complex{T},Matrix{Complex{T}},Vector{Complex{T}}}
-    blockstruct::BlockStructure{B}
+    blockstruct::SublatBlockStructure{B}
 end
 
 #region ## Constructors ##
@@ -992,63 +1016,106 @@ subbands(b::Bands, i...) = getindex(b.subbands, i...)
 # Green solvers - see solvers/greensolvers.jl
 #region
 
+# Generic system-independent directives for solvers, e.g. GS.Schur()
 abstract type AbstractGreenSolver end
+
+# Application to a given system, but still independent from ω, system params or Σs
 abstract type AppliedGreenSolver end
-abstract type AppliedDirectGreenSolver <: AppliedGreenSolver end
-abstract type AppliedInverseGreenSolver <: AppliedGreenSolver end
+
+# Solver with fixed ω and params that can compute G0[subcell, subcell´] or G0[cell, cell´]
+abstract type DecoupledGreenSolver end
 
 # API for s::AppliedGreenSolver
-#   - call!(s; params...) -> AppliedGreenSolver
-#   - call!(s, ω; params...) -> AbstractMatrix
-# From these, we define the out-of-place call syntax:
+#   - call!(s; params...) -> AppliedGreenSolver (specializes params)
+#   - call!(s, ω, Σs; params...) -> GreenMatrix
 
-(s::AppliedGreenSolver)(; params...) = copy_callsafe(call!(s; params...))
-(s::AppliedGreenSolver)(ω; params...) = copy(call!(s, ω; params...))
+# API for s::DecoupledGreenSolver  (this is part of GreenMatrix)
+#   - s(cell::NTuple{L,Int}, cell´::NTuple{L,Int}) -> Matrix (full unit cell)
+#   - s(cell::NTuple{L,Int}, cell´::NTuple{L,Int}, inds, inds´) -> Matrix
 
-# Note: copy_callsafe is required to avoid aliased and/or wrong m1 and m2 when doing e.g.
-# gb = green(h)[...]; g1 = gb(; params1...); g2 = gb(; params2...); m1, m2 = g1(ω), g2(ω)
+#endregion
 
+############################################################################################
+# SelfEnergy - see solvers/greensolvers.jl for self-energy solvers
+#region
+
+abstract type AbstractSelfEnergySolver end
+abstract type SelfEnergySolver <: AbstractSelfEnergySolver end
+abstract type ExtendedSelfEnergySolver <: AbstractSelfEnergySolver end
+
+struct SelfEnergy{T,E,L,S<:AbstractSelfEnergySolver}
+    solver::S
+    latslice::LatticeSlice{T,E,L}
+end
+
+# API for s::AbstractSelfEnergySolver
+#    - call!(s::SelfEnergySolver, ω; params...) -> AbstractArray over latslice
+#    - call!(s::ExtendedSelfEnergySolver, ω; params...) -> (blocks of [0 V´; V gₐ⁻¹])
+
+
+#region ## API ##
+
+latslice(c::SelfEnergy) = c.latslice
+
+solver(c::SelfEnergy) = c.solver
+
+#endregion
 #endregion
 
 ############################################################################################
 # Green - see green.jl
 #region
 
-# abstract type AbstractGreen end
+struct GreenFunction{T,E,L,S<:AppliedGreenSolver,H<:AbstractHamiltonian{T,E,L},N<:NTuple{<:Any,SelfEnergy}}
+    parent::H
+    solver::S
+    Σs::N
+    latsliceΣ::LatticeSlice{T,E,L}           # lattice blocks of total Σ sites (may overlap)
+    preallocs::Vector{HybridMatrix{Complex{T,L}}}      # for g,Σ,T - empty before first use
+end
 
-# # g::Green represents G in the whole lattice. It must be made "concrete" to be used, i.e.
-# # converting it to a GreenBlock with g[; site_selections...]
-# struct Green{T,L,S<:AbstractGreenSolver,H<:AbstractHamiltonian{T,<:Any,L}} <: AbstractGreen
-#     h::H
-#     boundaries::NTuple{L,T}  # We use floats for boundaries to allow Inf or large values
-#     solver::S
-# end
+# Obtained with gω = call!(g::GreenFunction, ω; params...) or g(ω; params...)
+# Allows gω[i, j] -> HybridMatrix for i,j integer Σs indices ("contacts")
+# Allows gω[cell, cell´] -> HybridMatrix using T-matrix, with cell::Union{SVector,Subcell}
+# Perhaps also view(gω, ...) ?
+struct GreenMatrix{T,E,L,D<:DecoupledGreenSolver}
+    g0solver::D                     # computes general G0(ω; p...)[cell,cell´] (no Σ)
+    g::HybridMatrix{Complex{T,L}}   # matrix G(ω; params...)[i, i´] over sites i
+    Σ::HybridMatrix{Complex{T,L}}   # same for self-energy Σ
+    T::HybridMatrix{Complex{T,L}}   # same for T-matrix T
+    latslice::LatticeSlice{T,E,L}   # same as latsliceΣ from parent GreenFunction
+end
 
-# # produces G on latblocks with call!(g, ω; params...) or g(ω; params...)
-# # Partial application: call!(g; params...) or g(; params...) produces a GreenBlock
-# struct GreenBlock{S<:AppliedDirectGreenSolver,
-#                   L<:NTuple{<:Any,<:LatticeBlock},
-#                   P} <: AbstractGreen
-#     # solver returns an AbstractMatrix with its elements matching latblocks sites
-#     solver::S
-#     latblocks::L
-#     parent::P
-# end
+# Obtained with gs = g[; siteselection...]
+# Alows call!(gs, ω; params...) -> View{HybridMatrix} or gs(ω; params...) -> HybridMatrix
+struct GreenFunctionSlice{T,E,L,G<:GreenFunction{T,E,L}}
+    g::G
+    latslice::LatticeSlice{T,E,L}
+end
 
-# # produces G⁻¹ on latblocks with call!(g, ω; params...) or g(ω; params...)
-# # Partial application: call!(g; params...) or g(; params...) produces a GreenBlock
-# struct GreenBlockInverse{S<:AppliedInverseGreenSolver,
-#                          L<:NTuple{<:Any,<:LatticeBlock},
-#                          P} <: AbstractGreen
-#     # solver returns an AbstractMatrix with its first elements matching latblocks sites
-#     # optionally it could have more trailing entries corresponding to auxiliary orbitals
-#     solver::S
-#     latblocks::L
-#     parent::P
-#     auxiliaries::Int    # number of auxiliary orbitals
-# end
+#region ## Constructors ##
+
+# GreenFunction without Σs
+function GreenFunction(h::AbstractHamiltonian{T,E,L}, s::AppliedGreenSolver) where {T,E,L}
+    Σs = ()
+    latslice = LatticeSlice(lattice(h)) # empty
+    preallocs = HybridMatrix{Complex{T,L}}[]
+    return GreenFunction(h, s, Σs, latslice, preallocs)
+end
+
+#endregion
 
 #region ## API ##
+
+green(h::AbstractHamiltonian, s::AbstractGreenSolver = default_green_solver(h)) =
+    GreenFunction(h, apply(s, h))
+green(s::AbstractGreenSolver = default_green_solver(h)) = h -> green(h, s)
+
+Base.getindex(g::GreenMatrix, c::Subcell, c´::Subcell) =
+    g.g0solver(cell(c), cell(c´), siteindices(c), siteindices(c´))
+
+Base.getindex(g::GreenMatrix{<:Any,<:Any,L}, c::NTuple{L,Int}, c´::NTuple{L,Int}) where {L} =
+    g.g0solver(SVector(c), SVector(c´))
 
 # hamiltonian(g::Green) = g.h
 
