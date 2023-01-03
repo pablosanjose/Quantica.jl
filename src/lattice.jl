@@ -120,10 +120,35 @@ end
 #endregion
 
 ############################################################################################
-# merging LatticeBlocks - returns a LatticeSlice and an indexlist per input latslice
+# findsubcell(c, ::LatticeSlice) and findsite(i, ::Subcell)
 #region
 
-function merge_latblocks(lss::NTuple{<:Any,LatticeSlice{T,E,L}}) where {T,E,L}
+findsubcell(c, l::LatticeSlice{<:Any,<:Any,L}) where {L} =
+    findsubcell(SVector{L,Int}(c), l)
+
+# returns (subcell, siteoffset), or nothing if not found
+function findsubcell(cell´::SVector, l::LatticeSlice)
+    offset = 0
+    for sc in subcells(l)
+        if cell´ == cell(sc)
+            return sc, offset
+            return nothing  # since cells are unique
+        else
+            offset += nsites(sc)
+        end
+    end
+    return nothing
+end
+
+findsite(i::Integer, s::Subcell) = findfirst(==(i), siteindices(s))
+
+#endregion
+
+############################################################################################
+# merge(lss::LatticeSlice...)
+#region
+
+function Base.merge(lss::S...) where {L,S<:LatticeSlice{<:Any,<:Any,L}}
     lat = parent(first(lss))
     all(l -> l === lat, parent.(lss)) ||
         argerror("Cannot merge LatticeBlocks of different lattices")
@@ -151,90 +176,7 @@ function merge_latblocks(lss::NTuple{<:Any,LatticeSlice{T,E,L}}) where {T,E,L}
     return latslice
 end
 
-# find indices in l´ of sites in l, if present. Otherwise zero.
-intersect_indices!(l::LatticeSlice, l´::LatticeSlice) =
-    unsafe_intersect_indices(sort!(l), sort!(l´))
-
-# assumes l and l´ are both sorted
-function unsafe_intersect_indices(l::LatticeSlice, l´::LatticeSlice)
-    inds = Int[]
-    for s in subcells(l)
-        offset = 0
-        for s´ in subcells(l´)
-            if cell(s´) == cell(s)
-                unsafe_intersect_indices(inds, siteindices(s), siteindices(s´), offset)
-                break
-            else
-                offset += length(siteindices(s´))
-            end
-        end
-    end
-    return inds
-end
-
-function unsafe_intersect_indices(inds, is, is´, offset = 0)
-    i = i´ = 1
-    while i <= length(is) && i´ <= length(is´)
-        if is[i] < is´[i´]
-            push!(inds, 0)
-            i += 1
-        elseif is[i] > is´[i´]
-            i´ += 1
-        else
-            push!(inds, offset + i´)
-            i += 1
-        end
-    end
-    return inds
-end
-
-
 #endregion
-
-
-# ############################################################################################
-# # Locations where GreenSolvers should be applied
-# #region
-
-# struct Locations{N<:NamedTuple}
-#     options::N
-# end
-
-# Locations(; kw...) = Locations((; kw...))
-
-# struct CellSites{L}
-#     cell::SVector{L,Int}
-#     sites::Vector{Int}
-# end
-
-# # Encode boundaries as floats to allow Inf and distant boundaries
-# struct AppliedLocations{T<:AbstractFloat,L}
-#     boundaries::SVector{L,T}
-#     scells::Vector{CellSites{L}}
-# end
-
-# apply(l::Locations, h::AbstractHamiltonian{T,<:Any,L}) where {T,L} =
-#     AppliedLocations{T,L}(h; l.options...)
-
-# function AppliedLocations{T,L}(h; boundaries = missing, kw...) where {T,L}
-#     boundaries´ = boundaries === missing ? sanitize_SVector(T, ntuple(Returns(Inf), Val(L))) :
-#                                            sanitize_SVector(T, boundaries)
-
-#     asel = apply(siteselector(; kw...), lattice(h))
-#     scells = CellSites{L}[]
-#     foreach_cell(asel) do cell
-#         sites = Int[]
-#         foreach_site(asel, cell) do s, i, r
-#             push!(sites, i)
-#         end
-#         found = !isempty(sites)
-#         found && push!(scells, CellSites(cell, sites))
-#         return found
-#     end
-#     return AppliedLocations(boundaries´, scells)
-# end
-
-# #endregion
 
 ############################################################################################
 # merge lattices - combine sublats if equal name

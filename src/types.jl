@@ -242,7 +242,7 @@ Base.adjoint(s::HopSelector) = HopSelector(s.region, s.sublats, s.dcells, s.rang
 ############################################################################################
 # LatticeSlice - see lattice.jl for methods
 #   Encodes subsets of sites of a lattice in different cells. Produced by lat[siteselector]
-#   Strict ordering is required to enable merged block indexing (see lattice.jl)
+#   No ordering of cells or sites indices is guaranteed, but both must be unique
 #region
 
 struct Subcell{L}
@@ -288,30 +288,26 @@ Base.empty!(s::Subcell) = empty!(s.inds)
 Base.push!(s::Subcell, i::Int) = push!(s.inds, i)
 Base.push!(ls::LatticeSlice, s::Subcell) = push!(ls.subcells, s)
 
+Base.copy(s::Subcell) = Subcell(copy(s.inds), s.cell)
+
 # Unused?
-function Base.intersect!(ls::L, ls´::L) where {L<:LatticeSlice}
-    for subcell in subcells(ls)
-        found = false
-        for subcell´ in subcells(ls´)
-            if cell(subcell) == cell(subcell´)
-                intersect!(siteindices(subcell), siteindices(subcell´))
-                found = true
-                break
-            end
-        end
-        found || empty!(subcell)
-    end
-    deleteif!(isempty, subcells(ls))
-    return ls
-end
+# function Base.intersect!(ls::L, ls´::L) where {L<:LatticeSlice}
+#     for subcell in subcells(ls)
+#         found = false
+#         for subcell´ in subcells(ls´)
+#             if cell(subcell) == cell(subcell´)
+#                 intersect!(siteindices(subcell), siteindices(subcell´))
+#                 found = true
+#                 break
+#             end
+#         end
+#         found || empty!(subcell)
+#     end
+#     deleteif!(isempty, subcells(ls))
+#     return ls
+# end
 
-function Base.sort!(l::LatticeSlice)
-    sort!(subcells(l), by = cell)
-    sort!.(siteindices.(subcells(l)))
-    return l
-end
-
-function getindex(l::LatticeSlice{<:Any,<:Any,L}, i::Integer) where {L}
+function Base.getindex(l::LatticeSlice{<:Any,<:Any,L}, i::Integer) where {L}
     offset = 0
     for scell in subcells(l)
         ninds = length(siteindices(scell))
@@ -321,7 +317,7 @@ function getindex(l::LatticeSlice{<:Any,<:Any,L}, i::Integer) where {L}
             return cell(scell), siteindices(scell)[i-offset]
         end
     end
-    throw(BoundsError(l, i))
+    @boundscheck(throw(BoundsError(l, i)))
 end
 
 Base.length(l::LatticeSlice) = nsites(l)
@@ -331,14 +327,18 @@ Base.length(s::Subcell) = nsites(s)
 #endregion
 
 ############################################################################################
-# Model Terms  -  see model.jl for methods
+# Models  -  see model.jl for methods
 #region
 
-# Terms #
+# abstract type AbstractModel end
 
-struct TightbindingModel{T}
-    terms::T  # Collection of `TightbindingModelTerm`s
+struct TightbindingModel{T} <: AbstractModel
+    terms::T  # Collection of `ModelTerm`s
 end
+
+# struct SelfEnergyModel{T} <: AbstractModel
+#     terms::T  # Collection of `ModelTerm`s
+# end
 
 struct OnsiteTerm{F,S<:SiteSelector,T<:Number}
     o::F
@@ -362,11 +362,11 @@ struct AppliedHoppingTerm{T,E,L,B}
     selector::AppliedHopSelector{T,E,L}
 end
 
-const TightbindingModelTerm = Union{OnsiteTerm,HoppingTerm,AppliedOnsiteTerm,AppliedHoppingTerm}
+const ModelTerm = Union{OnsiteTerm,HoppingTerm,AppliedOnsiteTerm,AppliedHoppingTerm}
 
 #region ## Constructors ##
 
-TightbindingModel(ts::TightbindingModelTerm...) = TightbindingModel(ts)
+TightbindingModel(ts::ModelTerm...) = TightbindingModel(ts)
 
 OnsiteTerm(t::OnsiteTerm, os::SiteSelector) = OnsiteTerm(t.o, os, t.coefficient)
 
@@ -378,7 +378,7 @@ HoppingTerm(t::HoppingTerm, os::HopSelector) = HoppingTerm(t.t, os, t.coefficien
 
 terms(t::TightbindingModel) = t.terms
 
-selector(t::TightbindingModelTerm) = t.selector
+selector(t::ModelTerm) = t.selector
 
 (term::OnsiteTerm{<:Function})(r) = term.coefficient * term.o(r)
 (term::OnsiteTerm)(r) = term.coefficient * term.o
@@ -410,70 +410,6 @@ Base.adjoint(t::HoppingTerm) = HoppingTerm(t.t', t.selector', t.coefficient')
 
 #endregion
 #endregion
-
-# ############################################################################################
-# # OrbitalStructure  -  see hamiltonian.jl for methods
-# #region
-
-# struct OrbitalStructure{B<:Union{Number,SMatrix}}
-#     blocktype::Type{B}    # Hamiltonian's blocktype
-#     norbitals::Vector{Int}
-#     offsets::Vector{Int}  # index offset for each sublattice (== offsets(::Lattice))
-# end
-
-# #region ## Constructors ##
-
-# # norbs is a collection of number of orbitals, one per sublattice (or a single one for all)
-# # B type instability when calling from `hamiltonian` is removed by @inline (const prop)
-# @inline function OrbitalStructure(lat::Lattice, norbs, T = numbertype(lat))
-#     B = blocktype(T, norbs)
-#     return OrbitalStructure{B}(lat, norbs)
-# end
-
-# function OrbitalStructure{B}(lat::Lattice, norbs) where {B}
-#     norbs´ = sanitize_Vector_of_Type(Int, nsublats(lat), norbs)
-#     offsets´ = offsets(lat)
-#     return OrbitalStructure{B}(B, norbs´, offsets´)
-# end
-
-# # blocktype(T::Type, norbs) = blocktype(T, val_maximum(norbs))
-# # blocktype(::Type{T}, m::Val{1}) where {T} = Complex{T}
-# # blocktype(::Type{T}, m::Val{N}) where {T,N} = SMatrix{N,N,Complex{T},N*N}
-
-# # val_maximum(n::Int) = Val(n)
-# # val_maximum(ns::Tuple) = Val(maximum(argval.(ns)))
-
-# # argval(::Val{N}) where {N} = N
-# # argval(n::Int) = n
-
-# #endregion
-
-# #region ## API ##
-
-# norbitals(o::OrbitalStructure) = o.norbitals
-
-# orbtype(::OrbitalStructure{B}) where {B} = orbtype(B)
-# orbtype(::Type{B}) where {B<:Number} = B
-# orbtype(::Type{B}) where {N,T,B<:SMatrix{N,N,T}} = SVector{N,T}
-
-# blocktype(o::OrbitalStructure) = o.blocktype
-
-# offsets(o::OrbitalStructure) = o.offsets
-
-# nsites(o::OrbitalStructure) = last(offsets(o))
-
-# nsublats(o::OrbitalStructure) = length(norbitals(o))
-
-# sublats(o::OrbitalStructure) = 1:nsublats(o)
-
-# siterange(o::OrbitalStructure, sublat) = (1+o.offsets[sublat]):o.offsets[sublat+1]
-
-# # Equality does not need equal T
-# Base.:(==)(o1::OrbitalStructure, o2::OrbitalStructure) =
-#     o1.norbs == o2.norbs && o1.offsets == o2.offsets
-
-# #endregion
-# #endregion
 
 ############################################################################################
 # Hamiltonian builders
@@ -903,7 +839,7 @@ end
 #endregion
 
 ############################################################################################
-# Bands and friends -  see spectrum.jl for methods
+# Bands -  see spectrum.jl for methods
 #region
 
 const MatrixView{C} = SubArray{C,2,Matrix{C},Tuple{Base.Slice{Base.OneTo{Int}}, UnitRange{Int}}, true}
@@ -1027,11 +963,11 @@ abstract type DecoupledGreenSolver end
 
 # API for s::AppliedGreenSolver
 #   - call!(s; params...) -> AppliedGreenSolver (specializes params)
-#   - call!(s, ω, Σs; params...) -> GreenMatrix
+#   - call!(s, ω, Σs, latslice; params...) -> GreenMatrix
 
 # API for s::DecoupledGreenSolver  (this is part of GreenMatrix)
-#   - s(cell::NTuple{L,Int}, cell´::NTuple{L,Int}) -> Matrix (full unit cell)
-#   - s(cell::NTuple{L,Int}, cell´::NTuple{L,Int}, inds, inds´) -> Matrix
+#   - call!(s, cell::NTuple{L,Int}, cell´::NTuple{L,Int}) -> HybridMatrix (full unit cell)
+#   - call!(s, cell::NTuple{L,Int}, cell´::NTuple{L,Int}, inds, inds´) -> HybridMatrix
 
 #endregion
 
@@ -1044,8 +980,13 @@ abstract type SelfEnergySolver <: AbstractSelfEnergySolver end
 abstract type ExtendedSelfEnergySolver <: AbstractSelfEnergySolver end
 
 struct SelfEnergy{T,E,L,S<:AbstractSelfEnergySolver}
-    solver::S
+    solver::S                # The output of solver is tied to latslice order, don't sort!
     latslice::LatticeSlice{T,E,L}
+end
+
+struct Contacts{T,E,L,N,S<:NTuple{N,SelfEnergy}}
+    selfenergies::S
+    mergedlatslice::LatticeSlice{T,E,L}   # merged latslice for all self-energies
 end
 
 # API for s::AbstractSelfEnergySolver
@@ -1053,11 +994,90 @@ end
 #    - call!(s::ExtendedSelfEnergySolver, ω; params...) -> (blocks of [0 V´; V gₐ⁻¹])
 
 
+#region ## Contructors ##
+
+Contacts(lat::Lattice) = Contacts((), LatticeSlice(lat))
+
+#endregion
+
 #region ## API ##
 
 latslice(c::SelfEnergy) = c.latslice
 
 solver(c::SelfEnergy) = c.solver
+
+latslice(c::Contacts) = c.mergedlatslice
+
+flatinds(c::Contacts) = c.flatinds
+
+selfenergies(c::Contacts) = c.selfenergies
+
+function attach(c::Contacts, Σ::SelfEnergy)
+    selfenergies = (c.selfenergies..., Σ)
+    mergedlatslice = merge(c.mergedlatslice, Σ.latslice)
+    return Contacts(selfenergies, mergedlatslice)
+end
+
+#endregion
+#endregion
+
+############################################################################################
+# HybridMatrix - see green.jl
+#   Flat dense matrix endowed with subcell, site (orbital) and contact block structures
+#region
+
+struct MultiBlockStructure{L}
+    cells::Vector{SVector{L,Int}}    # cells corresponding to for each subcell block
+    subcelloffsets::Vector{Int}      # block offsets for each subcell
+    siteoffsets::Vector{Int}         # block offsets for each site (for multiorbital sites)
+    contactinds::Vector{Vector{Int}} # parent indices for each Σ contact
+end
+
+struct HybridMatrix{C,L} <: AbstractMatrix{C}
+    parent::Matrix{C}
+    blockstruct::MultiBlockStructure{L}
+end
+
+#region ## API ##
+
+blockstructure(m::HybridMatrix) = m.blockstruct
+
+cells(m::HybridMatrix) = cells(m.blockstruct)
+cells(m::MultiBlockStructure) = m.cells
+
+siterange(m::HybridMatrix, iunflat) = siterange(m.blockstruct, iunflat)
+siterange(m::MultiBlockStructure, iunflat) = m.siteoffsets[iunflat]+1:m.siteoffsets[iunflat+1]
+
+subcellrange(m::HybridMatrix, si) = subcellrange(m.blockstruct, si)
+subcellrange(m::MultiBlockStructure, si::Integer) = m.subcelloffsets[si]+1:m.subcelloffsets[si+1]
+subcellrange(m::MultiBlockStructure, cell::SVector) = subcellrange(m, subcellindex(m, cell))
+
+function subcellindex(m::MultiBlockStructure, cell::SVector)
+    for (i, cell´) in enumerate(m.cells)
+        cell === cell´ && return i
+    end
+    @boundscheck(throw(BoundsError(m, cell)))
+end
+
+flatsize(m::HybridMatrix) = flatsize(m.blockstruct)
+flatsize(m::MultiBlockStructure) = last(m.subcelloffsets)
+
+unflatsize(m::HybridMatrix) = unflatsize(m.blockstruct)
+unflatsize(m::MultiBlockStructure) = lenth(m.siteoffsets) - 1
+
+contactinds(m::HybridMatrix) = m.contactinds
+contactinds(m::HybridMatrix, i) = m.contactinds[i]
+
+Base.view(m::HybridMatrix, i::Integer, j::Integer) =
+    view(m.parent, siterange(m, i), siterange(m, j))
+
+Base.view(m::HybridMatrix, cell::SVector{<:Any,Int}, cell´::SVector{<:Any,Int}) =
+    view(m.parent, subcellrange(m, cell), subcellrange(m, cell´))
+
+Base.view(m::HybridMatrix, cell::NTuple{<:Any,Int}, cell´::NTuple{<:Any,Int}) =
+    view(m, SVector(cell), SVector(cell´))
+
+Base.getindex(m::HybridMatrix, i...) = copy(view(m, i...))
 
 #endregion
 #endregion
@@ -1066,24 +1086,23 @@ solver(c::SelfEnergy) = c.solver
 # Green - see green.jl
 #region
 
-struct GreenFunction{T,E,L,S<:AppliedGreenSolver,H<:AbstractHamiltonian{T,E,L},N<:NTuple{<:Any,SelfEnergy}}
+struct GreenFunction{T,E,L,S<:AppliedGreenSolver,H<:AbstractHamiltonian{T,E,L},C<:Contacts{T,E,L}}
     parent::H
     solver::S
-    Σs::N
-    latsliceΣ::LatticeSlice{T,E,L}           # lattice blocks of total Σ sites (may overlap)
-    preallocs::Vector{HybridMatrix{Complex{T,L}}}      # for g,Σ,T - empty before first use
+    contacts::C
+    preallocs::Vector{HybridMatrix{Complex{T}}}  # for in-place g,Σ,T - empty before first call!
 end
 
 # Obtained with gω = call!(g::GreenFunction, ω; params...) or g(ω; params...)
 # Allows gω[i, j] -> HybridMatrix for i,j integer Σs indices ("contacts")
 # Allows gω[cell, cell´] -> HybridMatrix using T-matrix, with cell::Union{SVector,Subcell}
-# Perhaps also view(gω, ...) ?
+# Allows also view(gω, ...)
 struct GreenMatrix{T,E,L,D<:DecoupledGreenSolver}
-    g0solver::D                     # computes general G0(ω; p...)[cell,cell´] (no Σ)
-    g::HybridMatrix{Complex{T,L}}   # matrix G(ω; params...)[i, i´] over sites i
-    Σ::HybridMatrix{Complex{T,L}}   # same for self-energy Σ
-    T::HybridMatrix{Complex{T,L}}   # same for T-matrix T
-    latslice::LatticeSlice{T,E,L}   # same as latsliceΣ from parent GreenFunction
+    g0::D                           # computes general G0(ω; p...)[cell,cell´] (no Σ)
+    g::HybridMatrix{Complex{T},L}   # matrix G(ω; params...)[i, i´] over sites i
+    Σ::HybridMatrix{Complex{T},L}   # same for self-energy Σ
+    T::HybridMatrix{Complex{T},L}   # same for T-matrix T
+    latslice::LatticeSlice{T,E,L}   # same as contacts.mergedlatslice from parent GreenFunction
 end
 
 # Obtained with gs = g[; siteselection...]
@@ -1097,43 +1116,29 @@ end
 
 # GreenFunction without Σs
 function GreenFunction(h::AbstractHamiltonian{T,E,L}, s::AppliedGreenSolver) where {T,E,L}
-    Σs = ()
-    latslice = LatticeSlice(lattice(h)) # empty
-    preallocs = HybridMatrix{Complex{T,L}}[]
-    return GreenFunction(h, s, Σs, latslice, preallocs)
+    lat = lattice(h)
+    contacts = Contacts(lat)                # empty
+    preallocs = HybridMatrix{Complex{T}}[]  # empty
+    return GreenFunction(h, s, contacts, preallocs)
 end
 
 #endregion
 
 #region ## API ##
 
-green(h::AbstractHamiltonian, s::AbstractGreenSolver = default_green_solver(h)) =
-    GreenFunction(h, apply(s, h))
-green(s::AbstractGreenSolver = default_green_solver(h)) = h -> green(h, s)
+hamiltonian(g::GreenFunction) = g.H
+
+solver(g::GreenFunction) = g.solver
+
+contacts(g::GreenFunction) = g.contacts
+
+preallocs(g::GreenFunction) = g.preallocs
 
 Base.getindex(g::GreenMatrix, c::Subcell, c´::Subcell) =
     g.g0solver(cell(c), cell(c´), siteindices(c), siteindices(c´))
 
 Base.getindex(g::GreenMatrix{<:Any,<:Any,L}, c::NTuple{L,Int}, c´::NTuple{L,Int}) where {L} =
     g.g0solver(SVector(c), SVector(c´))
-
-# hamiltonian(g::Green) = g.h
-
-# lattice(g::Green) = lattice(g.h)
-
-# boundaries(g::Green) = g.boundaries
-
-# solver(g::Green) = g.solver
-# solver(g::GreenBlockInverse) = g.solver
-
-# latblocks(g::GreenBlock) = g.latblocks
-# latblocks(g::GreenBlockInverse) = g.latblocks
-
-# Base.parent(g::Green) = g.h
-# Base.parent(g::GreenBlock) = g.parent
-# Base.parent(g::GreenBlockInverse) = g.parent
-
-# Base.copy(g::AbstractGreen) = deepcopy(g)
 
 #endregion
 #endregion

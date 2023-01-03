@@ -24,9 +24,9 @@ const AbstractHamiltonian1D{T,E,B} = AbstractHamiltonian{T,E,1,B}
 include("greensolvers/schur.jl")
 # include("greensolvers/bands.jl")
 
-default_green_solver(h::AbstractHamiltonian0D) = SparseLU()
-default_green_solver(h::AbstractHamiltonian1D) = Schur()
-default_green_solver(h::AbstractHamiltonian) = Bands()
+default_green_solver(::AbstractHamiltonian0D) = SparseLU()
+default_green_solver(::AbstractHamiltonian1D) = Schur()
+default_green_solver(::AbstractHamiltonian) = Bands()
 
 end # module
 

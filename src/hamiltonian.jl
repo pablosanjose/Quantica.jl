@@ -6,7 +6,8 @@ hamiltonian(m::TightbindingModel = TightbindingModel(); kw...) = lat -> hamilton
 
 # Base.@constprop :aggressive needed for type-stable non-Val orbitals
 Base.@constprop :aggressive function hamiltonian(lat::Lattice{T}, m = TightbindingModel(); orbitals = Val(1)) where {T}
-    blockstruct = SublatBlockStructure(T, orbitals, sublatlengths(lat))
+    orbitals´ = sanitize_orbitals(orbitals)
+    blockstruct = SublatBlockStructure(T, orbitals´, sublatlengths(lat))
     builder = IJVBuilder(lat, blockstruct)
     apmod = apply(m, (lat, blockstruct))
     # using foreach here foils precompilation of applyterm! for some reason
@@ -288,7 +289,7 @@ function Base.getindex(h::AbstractHamiltonian{<:Any,<:Any,L}, dn::SVector{L,Int}
     for har in harmonics(h)
         dn == dcell(har) && return matrix(har)
     end
-    throw(BoundsError(harmonics(h), dn))
+    @boundscheck(throw(BoundsError(harmonics(h), dn)))
 end
 
 Base.isassigned(h::AbstractHamiltonian, dn::Tuple) = isassigned(h, SVector(dn))

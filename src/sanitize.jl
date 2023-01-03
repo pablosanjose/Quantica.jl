@@ -4,6 +4,12 @@
 
 sanitize_Vector_of_Symbols(names) = Symbol[convert(Symbol, name) for name in names]
 
+sanitize_orbitals(o::Val) = o
+
+sanitize_orbitals(o::Int) = Val(o)
+
+sanitize_orbitals(o) = all(==(1), o) ? Val(1) : o
+
 #endregion
 
 ############################################################################################

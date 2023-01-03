@@ -28,6 +28,14 @@ end
 
 deleteif!(test, v::AbstractVector) = deleteat!(v, (i for (i, x) in enumerate(v) if test(x)))
 
+# function get_or_push!(by, x, xs)
+#     for x´ in xs
+#         by(x) == by(x´) && return x´
+#     end
+#     push!(xs, x)
+#     return x
+# end
+
 #endregion
 
 ############################################################################################
@@ -45,7 +53,6 @@ function ensureloaded(package::Symbol)
 end
 
 #endregion
-
 
 ############################################################################################
 ################################### Hybrid matrix stuff ####################################
@@ -123,7 +130,7 @@ end
 blocktype(T::Type, norbs) = SMatrixView(blocktype(T, val_maximum(norbs)))
 blocktype(::Type{T}, m::Val{1}) where {T} = Complex{T}
 blocktype(::Type{T}, m::Val{N}) where {T,N} = SMatrix{N,N,Complex{T},N*N}
-blocktype(::Type{T}, N::Int) where {T} = blocktype(T, Val(N))
+# blocktype(::Type{T}, N::Int) where {T} = blocktype(T, Val(N))
 
 val_maximum(n::Int) = Val(n)
 val_maximum(ns) = Val(maximum(argval.(ns)))
@@ -341,8 +348,8 @@ end
 mask_block(::Type{B}, val::UniformScaling, args...) where {N,B<:MatrixElementNonscalarType{<:Any,N}} =
     mask_block(B, SMatrix{N,N}(val))
 
-mask_block(::Type{C}, val::UniformScaling, args...) where {C<:Number} =
-    mask_block(B, convert(C, val.λ))
+mask_block(::Type{B}, val::UniformScaling, args...) where {B<:Number} =
+    mask_block(B, convert(B, val.λ))
 
 function mask_block(B, val, size)
     @boundscheck(checkblocksize(val, size))
@@ -587,51 +594,6 @@ function store_diagonal_ptrs(mat::SparseMatrixCSC{T}) where {T}
     return mat´, (pmat, pdiag)
 end
 
-#endregion
-
-############################################################################################
-# HybridMatrix
-#   Flat dense matrix endowed with subcell, site (orbital) and contact block structures
-#region
-
-struct TripleBlockStructure{L}
-    cells::Vector{SVector{L,Int}}    # cells corresponding to for each subcell block
-    subcelloffsets::Vector{Int}      # block offsets for each subcell
-    siteoffsets::Vector{Int}         # block offsets for each site (for multiorbital sites)
-    contactinds::Vector{Vector{Int}} # parent indices for each Σ contact
-end
-
-struct HybridMatrix{T,L} <: AbstractMatrix{T}
-    parent::Matrix{T}
-    blockstruct::TripleBlockStructure{L}
-end
-
-#region ## API ##
-
-cells(m::HybridMatrix) = m.cells
-
-siterange(m::HybridMatrix, i) = m.siteoffsets[i]+1:m.siteoffsets[i+1]
-
-subcellrange(m::HybridMatrix, i::Integer) = m.subcelloffsets[i]+1:m.subcelloffsets[i+1]
-subcellrange(m::HybridMatrix, cell::SVector) = subcellrange(m, subcellindex(m, cell))
-
-function subcellindex(m::HybridMatrix, cell::SVector)
-    for (i, cell´) in enumerate(m.cells)
-        cell === cell´ && return i
-    end
-    throw(BoundsError(m, cell))
-end
-
-Base.getindex(m::HybridMatrix, i::Integer, j::Integer) =
-    view(m.parent, siterange(m, i), siterange(m, j))
-
-Base.getindex(m::HybridMatrix, cell::SVector, cell´::SVector) =
-    view(m.parent, subcellrange(m, cell), subcellrange(m, cell´))
-
-# Base.setindex!(m::HybridMatrix, cell::SVector, cell´::SVector) =
-#     view(m.parent, subcellrange(m, cell), subcellrange(m, cell´))
-
-#endregion
 #endregion
 
 #endregion
