@@ -1207,12 +1207,12 @@ end
 # Allows gω[i, j] -> HybridMatrix for i,j integer Σs indices ("contacts")
 # Allows gω[cell, cell´] -> HybridMatrix using T-matrix, with cell::Union{SVector,Subcell}
 # Allows also view(gω, ...)
-struct GreenMatrix{T,E,L,D<:DecoupledGreenSolver}
-    g0::D                           # computes general G0(ω; p...)[cell,cell´] (no Σ)
-    g::HybridMatrix{Complex{T},L}   # matrix G(ω; params...)[i, i´] over sites i
-    Σ::HybridMatrix{Complex{T},L}   # same for self-energy Σ
-    T::HybridMatrix{Complex{T},L}   # same for T-matrix T
-    latslice::LatticeSlice{T,E,L}   # same as contacts.mergedlatslice from parent GreenFunction
+struct GreenMatrix{T,E,L,D<:DecoupledGreenSolver,A<:AbstractMatrix{Complex{T}}}
+    g0::D                         # computes general G0(ω; p...)[cell,cell´] (no Σ)
+    g::A                          # hybrid matrix G(ω; params...)[i, i´] on latslice sites i
+    Σ::A                          # same for self-energy Σ
+    T::A                          # same for T-matrix T
+    latslice::LatticeSlice{T,E,L} # same as contacts.mergedlatslice from parent GreenFunction
 end
 
 # Obtained with gs = g[; siteselection...]
