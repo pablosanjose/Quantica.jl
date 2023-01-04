@@ -30,7 +30,6 @@ function SelfEnergy(h::AbstractHamiltonian, sel::SiteSelector, model::Parametric
 end
 
 function call!(s::SelfEnergyModel{T}, ω; params...) where {T}
-    fill!(s.mat, zero(Complex{T}))
     foreach(terms(s.model)) do term
         apply_term!(s, term, ω; params...)
     end

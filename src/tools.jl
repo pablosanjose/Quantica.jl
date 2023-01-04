@@ -63,7 +63,7 @@ end
 
 ############################################################################################
 # SMatrixView
-#   eltype that signals to HybridSparseMatrixCSC that a variable-size view must be returned
+#   eltype that signals to HybridSparseBlochMatrix that a variable-size view must be returned
 #   of its elements, because the number of orbitals is not uniform
 #region
 
@@ -212,10 +212,10 @@ Base.copy(b::SublatBlockStructure{B}) where {B} =
 #endregion
 
 ############################################################################################
-# HybridSparseMatrixCSC - wraps site-block + flat versions of the same SparseMatrixCSC
+# HybridSparseBlochMatrix - wraps site-block + flat versions of the same SparseMatrixCSC
 #region
 
-struct HybridSparseMatrixCSC{T,B<:MatrixElementType{T}} <: SparseArrays.AbstractSparseMatrixCSC{B,Int}
+struct HybridSparseBlochMatrix{T,B<:MatrixElementType{T}} <: SparseArrays.AbstractSparseMatrixCSC{B,Int}
     blockstruct::SublatBlockStructure{B}
     unflat::SparseMatrixCSC{B,Int}
     flat::SparseMatrixCSC{Complex{T},Int}
@@ -224,64 +224,64 @@ end
 
 ## Constructors ##
 
-HybridSparseMatrixCSC(b::SublatBlockStructure{Complex{T}}, flat::SparseMatrixCSC{Complex{T},Int}) where {T} =
-    HybridSparseMatrixCSC(b, flat, flat, Ref(0))  # aliasing
+HybridSparseBlochMatrix(b::SublatBlockStructure{Complex{T}}, flat::SparseMatrixCSC{Complex{T},Int}) where {T} =
+    HybridSparseBlochMatrix(b, flat, flat, Ref(0))  # aliasing
 
-function HybridSparseMatrixCSC(b::SublatBlockStructure{B}, unflat::SparseMatrixCSC{B,Int}) where {T,B<:MatrixElementNonscalarType{T}}
-    m = HybridSparseMatrixCSC(b, unflat, flat(b, unflat), Ref(0))
+function HybridSparseBlochMatrix(b::SublatBlockStructure{B}, unflat::SparseMatrixCSC{B,Int}) where {T,B<:MatrixElementNonscalarType{T}}
+    m = HybridSparseBlochMatrix(b, unflat, flat(b, unflat), Ref(0))
     needs_flat_sync!(m)
     return m
 end
 
-function HybridSparseMatrixCSC(b::SublatBlockStructure{B}, flat::SparseMatrixCSC{Complex{T},Int}) where {T,B<:MatrixElementNonscalarType{T}}
-    m = HybridSparseMatrixCSC(b, unflat(b, flat), flat, Ref(0))
+function HybridSparseBlochMatrix(b::SublatBlockStructure{B}, flat::SparseMatrixCSC{Complex{T},Int}) where {T,B<:MatrixElementNonscalarType{T}}
+    m = HybridSparseBlochMatrix(b, unflat(b, flat), flat, Ref(0))
     needs_unflat_sync!(m)
     return m
 end
 
 ## Show ##
 
-Base.show(io::IO, m::MIME"text/plain", s::HybridSparseMatrixCSC) =
+Base.show(io::IO, m::MIME"text/plain", s::HybridSparseBlochMatrix) =
     show(io, m, unflat(s))
 
 ## API ##
 
-blockstructure(s::HybridSparseMatrixCSC) = s.blockstruct
+blockstructure(s::HybridSparseBlochMatrix) = s.blockstruct
 
-unflat_unsafe(s::HybridSparseMatrixCSC) = s.unflat
+unflat_unsafe(s::HybridSparseBlochMatrix) = s.unflat
 
-flat_unsafe(s::HybridSparseMatrixCSC) = s.flat
+flat_unsafe(s::HybridSparseBlochMatrix) = s.flat
 
-function unflat(s::HybridSparseMatrixCSC)
+function unflat(s::HybridSparseBlochMatrix)
     needs_unflat_sync(s) && unflat_sync!(s)
     return s.unflat
 end
 
-function flat(s::HybridSparseMatrixCSC)
+function flat(s::HybridSparseBlochMatrix)
     needs_flat_sync(s) && flat_sync!(s)
     return s.flat
 end
 
 # Sync states
-needs_no_sync!(s::HybridSparseMatrixCSC)     = (s.sync_state[] = 0)
-needs_flat_sync!(s::HybridSparseMatrixCSC)   = (s.sync_state[] = 1)
-needs_unflat_sync!(s::HybridSparseMatrixCSC) = (s.sync_state[] = -1)
-needs_initialization!(s::HybridSparseMatrixCSC) = (s.sync_state[] = 2)
+needs_no_sync!(s::HybridSparseBlochMatrix)     = (s.sync_state[] = 0)
+needs_flat_sync!(s::HybridSparseBlochMatrix)   = (s.sync_state[] = 1)
+needs_unflat_sync!(s::HybridSparseBlochMatrix) = (s.sync_state[] = -1)
+needs_initialization!(s::HybridSparseBlochMatrix) = (s.sync_state[] = 2)
 
-needs_no_sync(s::HybridSparseMatrixCSC)      = (s.sync_state[] == 0)
-needs_flat_sync(s::HybridSparseMatrixCSC)    = (s.sync_state[] == 1)
-needs_unflat_sync(s::HybridSparseMatrixCSC)  = (s.sync_state[] == -1)
-needs_initialization(s::HybridSparseMatrixCSC) = (s.sync_state[] == 2)
+needs_no_sync(s::HybridSparseBlochMatrix)      = (s.sync_state[] == 0)
+needs_flat_sync(s::HybridSparseBlochMatrix)    = (s.sync_state[] == 1)
+needs_unflat_sync(s::HybridSparseBlochMatrix)  = (s.sync_state[] == -1)
+needs_initialization(s::HybridSparseBlochMatrix) = (s.sync_state[] == 2)
 
-needs_no_sync!(s::HybridSparseMatrixCSC{<:Any,<:Complex})     = (s.sync_state[] = 0)
-needs_flat_sync!(s::HybridSparseMatrixCSC{<:Any,<:Complex})   = (s.sync_state[] = 0)
-needs_unflat_sync!(s::HybridSparseMatrixCSC{<:Any,<:Complex}) = (s.sync_state[] = 0)
+needs_no_sync!(s::HybridSparseBlochMatrix{<:Any,<:Complex})     = (s.sync_state[] = 0)
+needs_flat_sync!(s::HybridSparseBlochMatrix{<:Any,<:Complex})   = (s.sync_state[] = 0)
+needs_unflat_sync!(s::HybridSparseBlochMatrix{<:Any,<:Complex}) = (s.sync_state[] = 0)
 
-needs_no_sync(s::HybridSparseMatrixCSC{<:Any,<:Complex})      = true
-needs_flat_sync(s::HybridSparseMatrixCSC{<:Any,<:Complex})    = false
-needs_unflat_sync(s::HybridSparseMatrixCSC{<:Any,<:Complex})  = false
+needs_no_sync(s::HybridSparseBlochMatrix{<:Any,<:Complex})      = true
+needs_flat_sync(s::HybridSparseBlochMatrix{<:Any,<:Complex})    = false
+needs_unflat_sync(s::HybridSparseBlochMatrix{<:Any,<:Complex})  = false
 
-function Base.copy!(h::HybridSparseMatrixCSC{T,B}, h´::HybridSparseMatrixCSC{T,B}) where {T,B}
+function Base.copy!(h::HybridSparseBlochMatrix{T,B}, h´::HybridSparseBlochMatrix{T,B}) where {T,B}
     copy!(blockstructure(h), blockstructure(h´))
     copy!(h.unflat, h´.unflat)
     copy!(h.flat, h´.flat)
@@ -289,25 +289,25 @@ function Base.copy!(h::HybridSparseMatrixCSC{T,B}, h´::HybridSparseMatrixCSC{T,
     return h
 end
 
-function Base.copy(h::HybridSparseMatrixCSC)
+function Base.copy(h::HybridSparseBlochMatrix)
     b = copy(blockstructure(h))
     u = copy(h.unflat)
     f = copy(h.flat)
     s = Ref(h.sync_state[])
-    return HybridSparseMatrixCSC(b, u, f, s)
+    return HybridSparseBlochMatrix(b, u, f, s)
 end
 
-function copy_matrices(h::HybridSparseMatrixCSC)
+function copy_matrices(h::HybridSparseBlochMatrix)
     b = blockstructure(h)
     u = copy(h.unflat)
     f = copy(h.flat)
     s = Ref(h.sync_state[])
-    return HybridSparseMatrixCSC(b, u, f, s)
+    return HybridSparseBlochMatrix(b, u, f, s)
 end
 
-SparseArrays.nnz(b::HybridSparseMatrixCSC) = nnz(unflat(b))
+SparseArrays.nnz(b::HybridSparseBlochMatrix) = nnz(unflat(b))
 
-function nnzdiag(m::HybridSparseMatrixCSC)
+function nnzdiag(m::HybridSparseBlochMatrix)
     b = unflat(m)
     count = 0
     rowptrs = rowvals(b)
@@ -319,21 +319,21 @@ function nnzdiag(m::HybridSparseMatrixCSC)
     return count
 end
 
-Base.size(h::HybridSparseMatrixCSC, i::Integer...) = size(h.unflat, i...)
+Base.size(h::HybridSparseBlochMatrix, i::Integer...) = size(h.unflat, i...)
 
 #endregion
 
 ############################################################################################
-# HybridSparseMatrixCSC indexing
+# HybridSparseBlochMatrix indexing
 #region
 
-Base.getindex(b::HybridSparseMatrixCSC{<:Any,<:SMatrixView}, i::Integer, j::Integer) =
+Base.getindex(b::HybridSparseBlochMatrix{<:Any,<:SMatrixView}, i::Integer, j::Integer) =
     view(parent(unflat(b)[i, j]), flatrange(b, i), flatrange(b, j))
 
-Base.getindex(b::HybridSparseMatrixCSC, i::Integer, j::Integer) = unflat(b)[i, j]
+Base.getindex(b::HybridSparseBlochMatrix, i::Integer, j::Integer) = unflat(b)[i, j]
 
 # only allowed for elements that are already stored
-function Base.setindex!(b::HybridSparseMatrixCSC{<:Any,B}, val::AbstractVecOrMat, i::Integer, j::Integer) where {B<:SMatrixView}
+function Base.setindex!(b::HybridSparseBlochMatrix{<:Any,B}, val::AbstractVecOrMat, i::Integer, j::Integer) where {B<:SMatrixView}
     @boundscheck(checkstored(unflat(b), i, j))
     val´ = mask_block(B, val, blocksize(blockstructure(b), i, j))
     unflat(b)[i, j] = val´
@@ -341,7 +341,7 @@ function Base.setindex!(b::HybridSparseMatrixCSC{<:Any,B}, val::AbstractVecOrMat
     return val´
 end
 
-function Base.setindex!(b::HybridSparseMatrixCSC, val::AbstractVecOrMat, i::Integer, j::Integer)
+function Base.setindex!(b::HybridSparseBlochMatrix, val::AbstractVecOrMat, i::Integer, j::Integer)
     @boundscheck(checkstored(unflat(b), i, j))
     unflat(b)[i, j] = val
     needs_flat_sync!(b)
@@ -386,7 +386,7 @@ checkstored(mat, i, j) = i in view(rowvals(mat), nzrange(mat, j)) ||
 #endregion
 
 ############################################################################################
-# HybridSparseMatrixCSC flat/unflat conversion
+# HybridSparseBlochMatrix flat/unflat conversion
 #region
 
 function flat(b::SublatBlockStructure{B}, unflat::SparseMatrixCSC{B´}) where {N,T,B<:MatrixElementNonscalarType{T,N},B´<:MatrixElementNonscalarType{T,N}}
@@ -439,11 +439,11 @@ checkblocks(b, flat) = nothing ## TODO: must check that all structural elements 
 #endregion
 
 ############################################################################################
-# HybridSparseMatrixCSC syncing
+# HybridSparseBlochMatrix syncing
 #region
 
 # Uniform case
-function flat_sync!(s::HybridSparseMatrixCSC{<:Any,S}) where {N,S<:SMatrix{N,N}}
+function flat_sync!(s::HybridSparseBlochMatrix{<:Any,S}) where {N,S<:SMatrix{N,N}}
     checkinitialized(s)
     flat, unflat = s.flat, s.unflat
     cols = axes(unflat, 2)
@@ -464,7 +464,7 @@ checkinitialized(s) =
     needs_initialization(s) && internalerror("sync!: Tried to sync uninitialized matrix")
 
 ## TODO
-flat_sync!(s::HybridSparseMatrixCSC{<:Any,S}) where {S<:SMatrixView} =
+flat_sync!(s::HybridSparseBlochMatrix{<:Any,S}) where {S<:SMatrixView} =
     internalerror("flat_sync!: not yet implemented method for non-uniform orbitals")
 
 ## TODO
@@ -500,7 +500,7 @@ function merge_sparse(mats, ::Type{B} = eltype(first(mats))) where {B}
     return matrix
 end
 
-function merged_mul!(C::SparseMatrixCSC{<:Number}, A::HybridSparseMatrixCSC, b::Number, α = 1, β = 0)
+function merged_mul!(C::SparseMatrixCSC{<:Number}, A::HybridSparseBlochMatrix, b::Number, α = 1, β = 0)
     bs = blockstructure(A)
     if needs_flat_sync(A)
         merged_mul!(C, bs, unflat(A), b, α, β)

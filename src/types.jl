@@ -667,7 +667,7 @@ end
 
 function SparseArrays.sparse(b::SublatBlockStructure{B}, har::AbstractBuilderHarmonic{L,B}, m::Integer, n::Integer) where {L,B}
     s = sparse(collector(har), m, n)
-    return Harmonic(dcell(har), HybridSparseMatrixCSC(b, s))
+    return Harmonic(dcell(har), HybridSparseBlochMatrix(b, s))
 end
 
 #endregion
@@ -678,7 +678,7 @@ end
 
 struct Harmonic{T,L,B}
     dn::SVector{L,Int}
-    h::HybridSparseMatrixCSC{T,B}
+    h::HybridSparseBlochMatrix{T,B}
 end
 
 #region ## API ##
@@ -716,7 +716,7 @@ struct Hamiltonian{T,E,L,B} <: AbstractHamiltonian{T,E,L,B}
     lattice::Lattice{T,E,L}
     blockstruct::SublatBlockStructure{B}
     harmonics::Vector{Harmonic{T,L,B}}
-    bloch::HybridSparseMatrixCSC{T,B}
+    bloch::HybridSparseBlochMatrix{T,B}
     # Enforce sorted-dns-starting-from-zero invariant onto harmonics
     function Hamiltonian{T,E,L,B}(lattice, blockstruct, harmonics, bloch) where {T,E,L,B}
         n = nsites(lattice)
@@ -724,7 +724,7 @@ struct Hamiltonian{T,E,L,B} <: AbstractHamiltonian{T,E,L,B}
             throw(DimensionMismatch("Harmonic $(size.(matrix.(harmonics), 1)) sizes don't match number of sites $n"))
         sort!(harmonics)
         (isempty(harmonics) || !iszero(dcell(first(harmonics)))) && pushfirst!(harmonics,
-            Harmonic(zero(SVector{L,Int}), HybridSparseMatrixCSC(blockstruct, spzeros(B, n, n))))
+            Harmonic(zero(SVector{L,Int}), HybridSparseBlochMatrix(blockstruct, spzeros(B, n, n))))
         return new(lattice, blockstruct, harmonics, bloch)
     end
 end
@@ -749,7 +749,7 @@ Hamiltonian(l::Lattice{T,E,L}, b::SublatBlockStructure{B}, h::Vector{Harmonic{T,
 
 function Hamiltonian(l, b::SublatBlockStructure{B}, h) where {B}
     n = nsites(l)
-    bloch = HybridSparseMatrixCSC(b, spzeros(B, n, n))
+    bloch = HybridSparseBlochMatrix(b, spzeros(B, n, n))
     needs_initialization!(bloch)
     return Hamiltonian(l, b, h, bloch)
 end
@@ -1207,11 +1207,11 @@ end
 # Allows gω[i, j] -> HybridMatrix for i,j integer Σs indices ("contacts")
 # Allows gω[cell, cell´] -> HybridMatrix using T-matrix, with cell::Union{SVector,Subcell}
 # Allows also view(gω, ...)
-struct GreenMatrix{T,E,L,D<:DecoupledGreenSolver,A<:AbstractMatrix{Complex{T}}}
+struct GreenMatrix{T,E,L,D<:DecoupledGreenSolver}
     g0::D                         # computes general G0(ω; p...)[cell,cell´] (no Σ)
-    g::A                          # hybrid matrix G(ω; params...)[i, i´] on latslice sites i
-    Σ::A                          # same for self-energy Σ
-    T::A                          # same for T-matrix T
+    g::HybridMatrix{Complex{T},L} # hybrid matrix G(ω; params...)[i, i´] on latslice sites i
+    Σ::HybridMatrix{Complex{T},L} # same for self-energy Σ
+    T::HybridMatrix{Complex{T},L} # same for T-matrix T
     latslice::LatticeSlice{T,E,L} # same as contacts.mergedlatslice from parent GreenFunction
 end
 

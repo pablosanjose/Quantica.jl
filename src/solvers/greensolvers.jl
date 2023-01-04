@@ -11,7 +11,7 @@ using Quantica: Quantica,
       AbstractGreenSolver, AppliedGreenSolver, DecoupledGreenSolver,
       AbstractSelfEnergySolver, SelfEnergySolver, ExtendedSelfEnergySolver,
       LatticeSlice, Hamiltonian, ParametricHamiltonian, AbstractHamiltonian, SublatBlockStructure,
-      HybridSparseMatrixCSC, lattice, zerocell, SVector, sanitize_SVector, siteselector,
+      HybridSparseBlochMatrix, lattice, zerocell, SVector, sanitize_SVector, siteselector,
       foreach_cell, foreach_site, store_diagonal_ptrs, cell
 import Quantica: call!, apply, SelfEnergy
 
