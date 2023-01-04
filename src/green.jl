@@ -69,16 +69,9 @@ green(h::AbstractHamiltonian, s::AbstractGreenSolver = default_green_solver(h)) 
 # new contacts should create new GreenFunction with empty preallocs
 attach(g::GreenFunction, Σ::SelfEnergy) =
     GreenFunction(hamiltonian(h), solver(g), attach(contacts(g), Σ), similar(preallocs(g), 0))
-
 attach(g::GreenFunction, args...; kw...) = attach(g, SelfEnergy(hamiltonian(g), args...; kw...))
-
 attach(Σ::SelfEnergy) = g -> attach(g, Σ)
-
 attach(args...; kw...) = g -> attach(g, SelfEnergy(hamiltonian(g), args...; kw...))
-
-# function attach(g::GreenFunction, Σ::SelfEnergy)
-
-# end
 
 #endregion
 
@@ -86,6 +79,7 @@ attach(args...; kw...) = g -> attach(g, SelfEnergy(hamiltonian(g), args...; kw..
 # call API
 #region
 
+## TODO: test copy(g) for aliasing problems
 (g::GreenFunction)(; params...) = copy(call!(g; params...))
 (g::GreenFunction)(ω; params...) = copy(call!(g, ω; params...))
 

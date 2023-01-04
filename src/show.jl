@@ -59,7 +59,13 @@ end
 
 function Base.show(io::IO, m::TightbindingModel)
     ioindent = IOContext(io, :indent => "  ")
-    print(io, "TightbindingModel: model with $(length(terms(m))) terms", "\n")
+    print(io, "TightbindingModel: model with $(termstext(m))", "\n")
+    foreach(t -> print(ioindent, t, "\n"), m.terms)
+end
+
+function Base.show(io::IO, m::ParametricModel)
+    ioindent = IOContext(io, :indent => "  ")
+    print(io, "ParametricModel: model with $(termstext(m))", "\n")
     foreach(t -> print(ioindent, t, "\n"), m.terms)
 end
 
@@ -82,8 +88,33 @@ $(i)  Coefficient      : $(h.coefficient)
 $(i)  Reverse hops     : $(h.selector.adjoint)")
 end
 
+function Base.show(io::IO, o::ParametricOnsiteTerm{N}) where {N}
+    i = get(io, :indent, "")
+    print(io,
+"$(i)ParametricOnsiteTerm{$N}}:
+$(i)  Functor arguments : $N
+$(i)  Sublattices       : $(o.selector.sublats === missing ? "any" : o.selector.sublats)
+$(i)  Coefficient       : $(o.coefficient)
+$(i)  Parameters        : $(parameters(o))")
+end
+
+function Base.show(io::IO, h::ParametricHoppingTerm{N}) where {N}
+    i = get(io, :indent, "")
+    print(io,
+"$(i)ParametricHoppingTerm{$N}:
+$(i)  Functor arguments : $N
+$(i)  Sublattice pairs  : $(h.selector.sublats === missing ? "any" : h.selector.sublats)
+$(i)  dn cell distance  : $(h.selector.dcells === missing ? "any" : h.selector.dcells)
+$(i)  Hopping range     : $(displayrange(h.selector.range))
+$(i)  Coefficient       : $(h.coefficient)
+$(i)  Reverse hops      : $(h.selector.adjoint)
+$(i)  Parameters        : $(parameters(h))")
+end
+
 displayparameter(::Type{<:Function}) = "Function"
 displayparameter(::Type{T}) where {T} = "$T"
+
+termstext(m) = ifelse(length(terms(m)) == 1, "1 term", "$(length(terms(m))) terms")
 
 displayrange(r::Real) = round(r, digits = 6)
 displayrange(::Missing) = "any"
@@ -196,21 +227,21 @@ Base.summary(::Bands{T,E,L}) where {T,E,L} =
 
 #endregion
 
-############################################################################################
-# Coupler
-#region
+# ############################################################################################
+# # Coupler
+# #region
 
-function Base.show(io::IO, ::MIME"text/plain", c::Coupler)
-    i = get(io, :indent, "")
-    ioindent = IOContext(io, :indent => "  ")
-    print(io, summary(c), "\n",
-"$i  Number of blocks  : $(size(c, 2))
-$i  Assigned blocks   : $(showassignedblocks(c))", "\n")
-    print(ioindent, lattice(c))
-end
+# function Base.show(io::IO, ::MIME"text/plain", c::Coupler)
+#     i = get(io, :indent, "")
+#     ioindent = IOContext(io, :indent => "  ")
+#     print(io, summary(c), "\n",
+# "$i  Number of blocks  : $(size(c, 2))
+# $i  Assigned blocks   : $(showassignedblocks(c))", "\n")
+#     print(ioindent, lattice(c))
+# end
 
-showassignedblocks(c) = ifelse.(assignedblocks(c), :assigned, :unassigned)
+# showassignedblocks(c) = ifelse.(assignedblocks(c), :assigned, :unassigned)
 
-Base.summary(io::IO, ::Coupler{T,E,L,B}) where {T,E,L,B} = print(io, "Coupler{$T,$E,$L,$B}: AbstractHamiltonian coupler")
+# Base.summary(io::IO, ::Coupler{T,E,L,B}) where {T,E,L,B} = print(io, "Coupler{$T,$E,$L,$B}: AbstractHamiltonian coupler")
 
-#endregion
+# #endregion

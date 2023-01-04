@@ -13,15 +13,16 @@ using Quantica: Quantica,
       LatticeSlice, Hamiltonian, ParametricHamiltonian, AbstractHamiltonian, SublatBlockStructure,
       HybridSparseMatrixCSC, lattice, zerocell, SVector, sanitize_SVector, siteselector,
       foreach_cell, foreach_site, store_diagonal_ptrs, cell
-import Quantica: call!, apply
+import Quantica: call!, apply, SelfEnergy
 
 export default_green_solver
 
 const AbstractHamiltonian0D{T,E,B} = AbstractHamiltonian{T,E,0,B}
 const AbstractHamiltonian1D{T,E,B} = AbstractHamiltonian{T,E,1,B}
 
+include("greensolvers/diagonal.jl")
 # include("greensolvers/sparselu.jl")
-include("greensolvers/schur.jl")
+# include("greensolvers/schur.jl")
 # include("greensolvers/bands.jl")
 
 default_green_solver(::AbstractHamiltonian0D) = SparseLU()

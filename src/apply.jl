@@ -84,6 +84,14 @@ end
 
 apply(m::TightbindingModel, latos) = TightbindingModel(apply.(terms(m), Ref(latos)))
 
+apply(t::ParametricOnsiteTerm, lat::Lattice) =
+    AppliedParametricOnsiteTerm(functor(t), apply(selector(t), lat), coefficient(t))
+
+apply(t::ParametricHoppingTerm, lat::Lattice) =
+    AppliedParametricHoppingTerm(functor(t), apply(selector(t), lat), coefficient(t))
+
+apply(m::ParametricModel, lat) = ParametricModel(apply.(terms(m), Ref(lat)))
+
 #endregion
 
 ############################################################################################

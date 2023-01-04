@@ -19,14 +19,47 @@ hopping(m::TightbindingModel; kw...) = TightbindingModel(
 #endregion
 
 ############################################################################################
-# @onsite! and @hopping!
+# @onsite, @hopping, @onsite! and @hopping! - Parametric models and model modifiers
 #region
 
-# Modifiers need macros to read out number of f arguments (N) and kwarg names (params).
+# Macros are needed to read out number of f arguments (N) and kwarg names (params).
 # A kw... is appended to kwargs in the actual function method definition to skip
 # non-applicable kwargs.
 # An alternative based on internals (m = first(methods(f)), Base.kwarg_decl(m) and m.nargs)
 # has been considered, but decided against due to its fragility and slow runtime
+
+## Parametric models ##
+
+# version with site selector kwargs
+macro onsite(kw, f)
+    f, N, params = get_f_N_params(f, "Only @onsite!(args -> body; kw...) syntax supported. Mind the `;`.")
+    return esc(:(Quantica.ParametricModel(Quantica.ParametricOnsiteTerm(
+        Quantica.ParametricFunction{$N}($f, $(params)), Quantica.siteselector($kw), 1))))
+end
+
+# version without site selector kwargs
+macro onsite(f)
+    f, N, params = get_f_N_params(f, "Only @onsite!(args -> body; kw...) syntax supported.  Mind the `;`.")
+    return esc(:(Quantica.ParametricModel(Quantica.ParametricOnsiteTerm(
+            Quantica.ParametricFunction{$N}($f, $(params)), Quantica.siteselector(), 1))))
+end
+
+# version with hop selector kwargs
+## TODO: this doesn't accept plusadjoint like hopping(...; ...) does
+macro hopping(kw, f)
+    f, N, params = get_f_N_params(f, "Only @hopping!(args -> body; kw...) syntax supported. Mind the `;`.")
+    return esc(:(Quantica.ParametricModel(Quantica.ParametricHoppingTerm(
+        Quantica.ParametricFunction{$N}($f, $(params)), Quantica.hopselector($kw), 1))))
+end
+
+# version without hop selector kwargs
+macro hopping(f)
+    f, N, params = get_f_N_params(f, "Only @hopping!(args -> body; kw...) syntax supported. Mind the `;`.")
+    return esc(:(Quantica.ParametricModel(Quantica.ParametricHoppingTerm(
+        Quantica.ParametricFunction{$N}($f, $(params)), Quantica.hopselector(), 1))))
+end
+
+## Model modifiers ##
 
 macro onsite!(kw, f)
     f, N, params = get_f_N_params(f, "Only @onsite!(args -> body; kw...) syntax supported. Mind the `;`.")

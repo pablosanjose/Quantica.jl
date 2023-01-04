@@ -19,7 +19,7 @@ using SparseArrays: getcolptr, AbstractSparseMatrix, AbstractSparseMatrixCSC
 using Statistics: mean
 
 export sublat, lattice, supercell, bravais_matrix,
-       hopping, onsite, @onsite!, @hopping!, neighbors,
+       hopping, onsite, @onsite, @hopping, @onsite!, @hopping!, neighbors,
        hamiltonian, parametric, call!,
        flat, unflat, wrap, transform, transform!, translate, translate!,
        spectrum, energies, states, bands, mesh, subbands, slice,
@@ -70,7 +70,7 @@ include("convert.jl")
 
 # Solvers
 include("solvers/eigensolvers.jl")
-# include("solvers/greensolvers.jl")
+include("solvers/greensolvers.jl")
 
 # Presets
 include("presets/lattices.jl")

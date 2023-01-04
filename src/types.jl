@@ -278,6 +278,9 @@ nsites(s::Subcell) = length(s.inds)
 
 boundingbox(l::LatticeSlice) = boundingbox(cell(c) for c in subcells(l))
 
+sites(l::LatticeSlice) =
+    (site(l.lat, i, cell(subcell)) for subcell in subcells(l) for i in siteindices(subcell))
+
 Base.parent(ls::LatticeSlice) = ls.lat
 
 Base.isempty(s::LatticeSlice) = isempty(s.subcells)
@@ -330,83 +333,230 @@ Base.length(s::Subcell) = nsites(s)
 # Models  -  see model.jl for methods
 #region
 
-# abstract type AbstractModel end
+abstract type AbstractModel end
+abstract type AbstractModelTerm end
 
-struct TightbindingModel{T} <: AbstractModel
-    terms::T  # Collection of `ModelTerm`s
+# wrapper of a function f(x1, ... xN; kw...) with N arguments and the kwargs in params
+struct ParametricFunction{N,F}
+    f::F
+    params::Vector{Symbol}
 end
 
-# struct SelfEnergyModel{T} <: AbstractModel
-#     terms::T  # Collection of `ModelTerm`s
-# end
+## Non-parametric ##
 
-struct OnsiteTerm{F,S<:SiteSelector,T<:Number}
-    o::F
+struct OnsiteTerm{F,S<:SiteSelector,T<:Number} <: AbstractModelTerm
+    f::F
     selector::S
     coefficient::T
 end
 
-struct AppliedOnsiteTerm{T,E,L,B}
-    o::FunctionWrapper{B,Tuple{SVector{E,T},Int}}  # o(r, sublat_orbitals)
+struct AppliedOnsiteTerm{T,E,L,B} <: AbstractModelTerm
+    f::FunctionWrapper{B,Tuple{SVector{E,T},Int}}  # o(r, sublat_orbitals)
     selector::AppliedSiteSelector{T,E,L}
 end
 
-struct HoppingTerm{F,S<:HopSelector,T<:Number}
-    t::F
+struct HoppingTerm{F,S<:HopSelector,T<:Number} <: AbstractModelTerm
+    f::F
     selector::S
     coefficient::T
 end
 
-struct AppliedHoppingTerm{T,E,L,B}
-    t::FunctionWrapper{B,Tuple{SVector{E,T},SVector{E,T},Tuple{Int,Int}}}  # t(r, dr, (orbs1, orbs2))
+struct AppliedHoppingTerm{T,E,L,B} <: AbstractModelTerm
+    f::FunctionWrapper{B,Tuple{SVector{E,T},SVector{E,T},Tuple{Int,Int}}}  # t(r, dr, (orbs1, orbs2))
     selector::AppliedHopSelector{T,E,L}
 end
 
-const ModelTerm = Union{OnsiteTerm,HoppingTerm,AppliedOnsiteTerm,AppliedHoppingTerm}
+const AbstractTightbindingTerm = Union{OnsiteTerm, AppliedOnsiteTerm,
+                                       HoppingTerm, AppliedHoppingTerm}
+
+struct TightbindingModel{T<:NTuple{<:Any,AbstractTightbindingTerm}} <: AbstractModel
+    terms::T  # Collection of `AbstractTightbindingTerm`s
+end
+
+## Parametric ##
+
+struct ParametricOnsiteTerm{N,S<:SiteSelector,F<:ParametricFunction{N},T<:Number} <: AbstractModelTerm
+    f::F
+    selector::S
+    coefficient::T
+end
+
+struct AppliedParametricOnsiteTerm{N,A<:AppliedSiteSelector,F<:ParametricFunction{N},T<:Number} <: AbstractModelTerm
+    f::F
+    selector::A
+    coefficient::T
+end
+
+struct ParametricHoppingTerm{N,S<:HopSelector,F<:ParametricFunction{N},T<:Number} <: AbstractModelTerm
+    f::F
+    selector::S
+    coefficient::T
+end
+
+struct AppliedParametricHoppingTerm{N,A<:AppliedHopSelector,F<:ParametricFunction{N},T<:Number} <: AbstractModelTerm
+    f::F
+    selector::A
+    coefficient::T
+end
+
+const AbstractParametricTerm{N} = Union{ParametricOnsiteTerm{N}, AppliedParametricOnsiteTerm{N},
+                                     ParametricHoppingTerm{N}, AppliedParametricHoppingTerm{N}}
+
+struct ParametricModel{T<:NTuple{<:Any,AbstractParametricTerm}} <: AbstractModel
+    terms::T  # Collection of `AbstractParametricTerm`s
+end
+
+const AppliedParametricTerm = Union{AppliedParametricOnsiteTerm,AppliedParametricHoppingTerm}
+const AppliedParametricModel = ParametricModel{<:NTuple{<:Any,AppliedParametricTerm}}
 
 #region ## Constructors ##
 
-TightbindingModel(ts::ModelTerm...) = TightbindingModel(ts)
+ParametricFunction{N}(f::F, params) where {N,F} = ParametricFunction{N,F}(f, params)
 
-OnsiteTerm(t::OnsiteTerm, os::SiteSelector) = OnsiteTerm(t.o, os, t.coefficient)
+TightbindingModel(ts::AbstractTightbindingTerm...) = TightbindingModel(ts)
+ParametricModel(ts::AbstractParametricTerm...) = ParametricModel(ts)
 
-HoppingTerm(t::HoppingTerm, os::HopSelector) = HoppingTerm(t.t, os, t.coefficient)
+OnsiteTerm(t::OnsiteTerm, os::SiteSelector) = OnsiteTerm(t.f, os, t.coefficient)
+ParametricOnsiteTerm(t::ParametricOnsiteTerm, os::SiteSelector) =
+    ParametricOnsiteTerm(t.f, os, t.coefficient)
+
+HoppingTerm(t::HoppingTerm, os::HopSelector) = HoppingTerm(t.f, os, t.coefficient)
+ParametricHoppingTerm(t::ParametricHoppingTerm, os::HopSelector) =
+    ParametricHoppingTerm(t.f, os, t.coefficient)
 
 #endregion
 
 #region ## API ##
 
-terms(t::TightbindingModel) = t.terms
+terms(t::AbstractModel) = t.terms
 
-selector(t::ModelTerm) = t.selector
+selector(t::AbstractModelTerm) = t.selector
 
-(term::OnsiteTerm{<:Function})(r) = term.coefficient * term.o(r)
-(term::OnsiteTerm)(r) = term.coefficient * term.o
+functor(t::AbstractModelTerm) = t.f
 
-(term::AppliedOnsiteTerm)(r, orbs) = term.o(r, orbs)
+parameters(t::AbstractParametricTerm) = t.f.params
 
-(term::HoppingTerm{<:Function})(r, dr) = term.coefficient * term.t(r, dr)
-(term::HoppingTerm)(r, dr) = term.coefficient * term.t
+coefficient(t::OnsiteTerm) = t.coefficient
+coefficient(t::HoppingTerm) = t.coefficient
+coefficient(t::AbstractParametricTerm) = t.coefficient
 
-(term::AppliedHoppingTerm)(r, dr, orbs) = term.t(r, dr, orbs)
+## call API##
+
+(term::OnsiteTerm{<:Function})(r) = term.coefficient * term.f(r)
+(term::OnsiteTerm)(r) = term.coefficient * term.f
+
+(term::AppliedOnsiteTerm)(r, orbs) = term.f(r, orbs)
+
+(term::HoppingTerm{<:Function})(r, dr) = term.coefficient * term.f(r, dr)
+(term::HoppingTerm)(r, dr) = term.coefficient * term.f
+
+(term::AppliedHoppingTerm)(r, dr, orbs) = term.f(r, dr, orbs)
+
+(term::AbstractParametricTerm{0})(args...; kw...) = term.coefficient * term.f.f(; kw...)
+(term::AbstractParametricTerm{1})(x, args...; kw...) = term.coefficient * term.f.f(x; kw...)
+(term::AbstractParametricTerm{2})(x, y, args...; kw...) = term.coefficient * term.f.f(x, y; kw...)
+(term::AbstractParametricTerm{3})(x, y, z, args...; kw...) = term.coefficient * term.f.f(x, y, z; kw...)
 
 # Model term algebra
 
 Base.:*(x::Number, m::TightbindingModel) = TightbindingModel(x .* terms(m))
-Base.:*(m::TightbindingModel, x::Number) = x * m
-Base.:-(m::TightbindingModel) = (-1) * m
+Base.:*(x::Number, m::ParametricModel) = ParametricModel(x .* terms(m))
+Base.:*(m::AbstractModel, x::Number) = x * m
+Base.:-(m::AbstractModel) = (-1) * m
 
 Base.:+(m::TightbindingModel, m´::TightbindingModel) = TightbindingModel((terms(m)..., terms(m´)...))
-Base.:-(m::TightbindingModel, m´::TightbindingModel) = m + (-m´)
+Base.:+(m::AbstractModel, m´::AbstractModel) = ParametricModel((terms(m)..., terms(m´)...))
+Base.:-(m::AbstractModel, m´::AbstractModel) = m + (-m´)
 
-Base.:*(x::Number, o::OnsiteTerm) = OnsiteTerm(o.o, o.selector, x * o.coefficient)
-Base.:*(x::Number, t::HoppingTerm) = HoppingTerm(t.t, t.selector, x * t.coefficient)
+Base.:*(x::Number, o::OnsiteTerm) = OnsiteTerm(o.f, o.selector, x * o.coefficient)
+Base.:*(x::Number, t::HoppingTerm) = HoppingTerm(t.f, t.selector, x * t.coefficient)
+Base.:*(x::Number, o::ParametricOnsiteTerm) =
+    ParametricOnsiteTerm(o.f, o.selector, x * o.coefficient)
+Base.:*(x::Number, t::ParametricHoppingTerm) =
+    ParametricHoppingTerm(t.f, t.selector, x * t.coefficient)
 
 Base.adjoint(m::TightbindingModel) = TightbindingModel(adjoint.(terms(m)))
-Base.adjoint(t::OnsiteTerm{<:Function}) = OnsiteTerm(r -> t.o(r)', t.selector, t.coefficient')
-Base.adjoint(t::OnsiteTerm) = OnsiteTerm(t.o', t.selector, t.coefficient')
-Base.adjoint(t::HoppingTerm{<:Function}) = HoppingTerm((r, dr) -> t.t(r, -dr)', t.selector', t.coefficient')
-Base.adjoint(t::HoppingTerm) = HoppingTerm(t.t', t.selector', t.coefficient')
+Base.adjoint(m::ParametricModel) = ParametricModel(adjoint.(terms(m)))
+Base.adjoint(t::OnsiteTerm{<:Function}) = OnsiteTerm(r -> t.f(r)', t.selector, t.coefficient')
+Base.adjoint(t::OnsiteTerm) = OnsiteTerm(t.f', t.selector, t.coefficient')
+Base.adjoint(t::HoppingTerm{<:Function}) = HoppingTerm((r, dr) -> t.f(r, -dr)', t.selector', t.coefficient')
+Base.adjoint(t::HoppingTerm) = HoppingTerm(t.f', t.selector', t.coefficient')
+
+function Base.adjoint(o::ParametricOnsiteTerm{N}) where {N}
+    f = ParametricFunction{N}((args...; kw...) -> o.f(args...; kw...)', o.f.params)
+    return ParametricOnsiteTerm(f, o.selector, o.coefficient')
+end
+
+function Base.adjoint(t::ParametricHoppingTerm{N}) where {N}
+    f = ParametricFunction{N}((args...; kw...) -> t.f(args...; kw...)', t.f.params)
+    return ParametricHoppingTerm(f, t.selector, t.coefficient')
+end
+
+#endregion
+#endregion
+
+############################################################################################
+# Model Modifiers  -  see model.jl for methods
+#region
+
+abstract type AbstractModifier end
+
+struct OnsiteModifier{N,S<:SiteSelector,F<:ParametricFunction{N}} <: AbstractModifier
+    f::F
+    selector::S
+end
+
+struct AppliedOnsiteModifier{B,N,R<:SVector,F<:ParametricFunction{N}} <: AbstractModifier
+    blocktype::Type{B}  # These are needed to cast the modification to the sublat block type
+    f::F
+    ptrs::Vector{Tuple{Int,R,Int}}
+    # [(ptr, r, norbs)...] for each selected site, dn = 0 harmonic
+end
+
+struct HoppingModifier{N,S<:HopSelector,F<:ParametricFunction{N}} <: AbstractModifier
+    f::F
+    selector::S
+end
+
+struct AppliedHoppingModifier{B,N,R<:SVector,F<:ParametricFunction{N}} <: AbstractModifier
+    blocktype::Type{B}  # These are needed to cast the modification to the sublat block type
+    f::F
+    ptrs::Vector{Vector{Tuple{Int,R,R,Tuple{Int,Int}}}}
+    # [[(ptr, r, dr, (norbs, norbs´)), ...], ...] for each selected hop on each harmonic
+end
+
+const Modifier = Union{OnsiteModifier,HoppingModifier}
+const AppliedModifier = Union{AppliedOnsiteModifier,AppliedHoppingModifier}
+
+#region ## API ##
+
+selector(m::Modifier) = m.selector
+
+parameters(m::Union{Modifier,AppliedModifier}) = m.f.params
+
+parametric_function(m::Union{Modifier,AppliedModifier}) = m.f
+
+pointers(m::AppliedModifier) = m.ptrs
+
+blocktype(m::AppliedModifier) = m.blocktype
+
+(m::AppliedOnsiteModifier{B,1})(o, r, orbs; kw...) where {B} =
+    mask_block(B, m.f.f(o; kw...), (orbs, orbs))
+(m::AppliedOnsiteModifier{B,2})(o, r, orbs; kw...) where {B} =
+    mask_block(B, m.f.f(o, r; kw...), (orbs, orbs))
+
+(m::AppliedHoppingModifier{B,1})(t, r, dr, orborb; kw...) where {B} =
+    mask_block(B, m.f.f(t; kw...), orborb)
+(m::AppliedHoppingModifier{B,3})(t, r, dr, orborb; kw...) where {B} =
+    mask_block(B, m.f.f(t, r, dr; kw...), orborb)
+
+Base.similar(m::A) where {A <: AppliedModifier} = A(m.blocktype, m.f, similar(m.ptrs, 0))
+
+function emptyptrs!(m::AppliedHoppingModifier{<:Any,<:Any,R}, n) where {R}
+    resize!(m.ptrs, 0)
+    foreach(_ -> push!(m.ptrs, Tuple{Int,R,R,Tuple{Int,Int}}[]), 1:n)
+    return m
+end
 
 #endregion
 #endregion
@@ -612,84 +762,6 @@ function LinearAlgebra.ishermitian(h::Hamiltonian)
         hh.h ≈ h[-hh.dn]' || return false
     end
     return true
-end
-
-#endregion
-#endregion
-
-############################################################################################
-# Model Modifiers  -  see model.jl for methods
-#region
-
-# wrapper of a function f(x1, ... xN; kw...) with N arguments and the kwargs in params
-struct ParametricFunction{N,F}
-    f::F
-    params::Vector{Symbol}
-end
-
-abstract type AbstractModifier end
-
-struct OnsiteModifier{N,S<:SiteSelector,F<:ParametricFunction{N}} <: AbstractModifier
-    f::F
-    selector::S
-end
-
-struct AppliedOnsiteModifier{B,N,R<:SVector,F<:ParametricFunction{N}} <: AbstractModifier
-    blocktype::Type{B}
-    f::F
-    ptrs::Vector{Tuple{Int,R,Int}}
-    # [(ptr, r, norbs)...] for each selected site, dn = 0 harmonic
-end
-
-struct HoppingModifier{N,S<:HopSelector,F<:ParametricFunction{N}} <: AbstractModifier
-    f::F
-    selector::S
-end
-
-struct AppliedHoppingModifier{B,N,R<:SVector,F<:ParametricFunction{N}} <: AbstractModifier
-    blocktype::Type{B}
-    f::F
-    ptrs::Vector{Vector{Tuple{Int,R,R,Tuple{Int,Int}}}}
-    # [[(ptr, r, dr, (norbs, norbs´)), ...], ...] for each selected hop on each harmonic
-end
-
-const Modifier = Union{OnsiteModifier,HoppingModifier}
-const AppliedModifier = Union{AppliedOnsiteModifier,AppliedHoppingModifier}
-
-#region ## Constructors ##
-
-ParametricFunction{N}(f::F, params) where {N,F} = ParametricFunction{N,F}(f, params)
-
-#endregion
-
-#region ## API ##
-
-selector(m::Modifier) = m.selector
-
-parameters(m::Union{Modifier,AppliedModifier}) = m.f.params
-
-parametric_function(m::Union{Modifier,AppliedModifier}) = m.f
-
-pointers(m::AppliedModifier) = m.ptrs
-
-blocktype(m::AppliedModifier) = m.blocktype
-
-(m::AppliedOnsiteModifier{B,1})(o, r, orbs; kw...) where {B} =
-    mask_block(B, m.f.f(o; kw...), (orbs, orbs))
-(m::AppliedOnsiteModifier{B,2})(o, r, orbs; kw...) where {B} =
-    mask_block(B, m.f.f(o, r; kw...), (orbs, orbs))
-
-(m::AppliedHoppingModifier{B,1})(t, r, dr, orborb; kw...) where {B} =
-    mask_block(B, m.f.f(t; kw...), orborb)
-(m::AppliedHoppingModifier{B,3})(t, r, dr, orborb; kw...) where {B} =
-    mask_block(B, m.f.f(t, r, dr; kw...), orborb)
-
-Base.similar(m::A) where {A <: AppliedModifier} = A(m.blocktype, m.f, similar(m.ptrs, 0))
-
-function emptyptrs!(m::AppliedHoppingModifier{<:Any,<:Any,R}, n) where {R}
-    resize!(m.ptrs, 0)
-    foreach(_ -> push!(m.ptrs, Tuple{Int,R,R,Tuple{Int,Int}}[]), 1:n)
-    return m
 end
 
 #endregion
@@ -973,6 +1045,11 @@ abstract type DecoupledGreenSolver end
 
 ############################################################################################
 # SelfEnergy - see solvers/greensolvers.jl for self-energy solvers
+#   Any new solver must implement
+#     - SelfEnergy(h::AbstractHamiltonian, args...; siteselect...) -> SelfEnergy
+#   The wrapped AbstractSelfEnergySolver should support the call! API
+#     - call!(s::SelfEnergySolver, ω; params...) -> AbstractArray over latslice
+#     - call!(s::ExtendedSelfEnergySolver, ω; params...) -> (blocks of [0 V´; V gₐ⁻¹])
 #region
 
 abstract type AbstractSelfEnergySolver end
@@ -988,11 +1065,6 @@ struct Contacts{T,E,L,N,S<:NTuple{N,SelfEnergy}}
     selfenergies::S
     mergedlatslice::LatticeSlice{T,E,L}   # merged latslice for all self-energies
 end
-
-# API for s::AbstractSelfEnergySolver
-#    - call!(s::SelfEnergySolver, ω; params...) -> AbstractArray over latslice
-#    - call!(s::ExtendedSelfEnergySolver, ω; params...) -> (blocks of [0 V´; V gₐ⁻¹])
-
 
 #region ## Contructors ##
 
@@ -1063,7 +1135,7 @@ flatsize(m::HybridMatrix) = flatsize(m.blockstruct)
 flatsize(m::MultiBlockStructure) = last(m.subcelloffsets)
 
 unflatsize(m::HybridMatrix) = unflatsize(m.blockstruct)
-unflatsize(m::MultiBlockStructure) = lenth(m.siteoffsets) - 1
+unflatsize(m::MultiBlockStructure) = length(m.siteoffsets) - 1
 
 contactinds(m::HybridMatrix) = m.contactinds
 contactinds(m::HybridMatrix, i) = m.contactinds[i]
@@ -1077,7 +1149,32 @@ Base.view(m::HybridMatrix, cell::SVector{<:Any,Int}, cell´::SVector{<:Any,Int})
 Base.view(m::HybridMatrix, cell::NTuple{<:Any,Int}, cell´::NTuple{<:Any,Int}) =
     view(m, SVector(cell), SVector(cell´))
 
+Base.size(m::HybridMatrix) = (unflatsize(m), unflatsize(m))
+
+function Base.size(m::HybridMatrix, i::Integer)
+    s = if i<1
+        @boundscheck(throw(BoundsError(m, i)))
+    elseif i<=2
+        unflatsize(m)
+    else
+        1
+    end
+    return s
+end
+
 Base.getindex(m::HybridMatrix, i...) = copy(view(m, i...))
+
+Base.setindex!(m::HybridMatrix, val, i...) = (view(m, i...) .= val)
+
+function Base.setindex!(m::HybridMatrix, val::UniformScaling, i...)
+    v = view(m, i...)
+    λ = val.λ
+    for c in CartesianIndices(v)
+        (i, j) = Tuple(c)
+        @inbounds v[c] = λ * (i == j)
+    end
+    return v
+end
 
 #endregion
 #endregion
@@ -1139,6 +1236,8 @@ Base.getindex(g::GreenMatrix, c::Subcell, c´::Subcell) =
 
 Base.getindex(g::GreenMatrix{<:Any,<:Any,L}, c::NTuple{L,Int}, c´::NTuple{L,Int}) where {L} =
     g.g0solver(SVector(c), SVector(c´))
+
+Base.copy(g::GreenFunction) = GreenFunction(copy(g.h), g.solver, g.contacts, copy.(g.preallocs))
 
 #endregion
 #endregion

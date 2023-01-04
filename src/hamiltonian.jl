@@ -117,9 +117,6 @@ function _merge_pointers!(p, m::AppliedHoppingModifier)
     return p
 end
 
-merge_parameters!(p, m, ms...) = merge_parameters!(append!(p, parameters(m)), ms...)
-merge_parameters!(p) = unique!(sort!(p))
-
 #endregion
 
 ############################################################################################

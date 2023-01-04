@@ -28,6 +28,9 @@ end
 
 deleteif!(test, v::AbstractVector) = deleteat!(v, (i for (i, x) in enumerate(v) if test(x)))
 
+merge_parameters!(p, m, ms...) = merge_parameters!(append!(p, parameters(m)), ms...)
+merge_parameters!(p) = unique!(sort!(p))
+
 # function get_or_push!(by, x, xs)
 #     for x´ in xs
 #         by(x) == by(x´) && return x´

@@ -21,10 +21,6 @@ neighbors(n::Int, lat::Lattice) = nrange(n, lat)
 # Base.in constructors
 #region
 
-function Base.in((i, r, n)::Tuple{Int,SVector{E,T},SVector{L,Int}}, sel::AppliedSiteSelector{T,E,L}) where {T,E,L}
-    return incells(n, sel) && (i, r) in sel
-end
-
 function Base.in((i, r)::Tuple{Int,SVector{E,T}}, sel::AppliedSiteSelector{T,E}) where {T,E}
     lat = lattice(sel)
     name = sitesublatname(lat, i)
@@ -32,7 +28,7 @@ function Base.in((i, r)::Tuple{Int,SVector{E,T}}, sel::AppliedSiteSelector{T,E})
            insublats(name, sel)
 end
 
-function Base.in((i, r, cell)::Tuple{Int,SVector{E,T},SVector{L,Int}}, sel::AppliedSiteSelector{T,E}) where {T,E,L}
+function Base.in((i, r, cell)::Tuple{Int,SVector{E,T},SVector{L,Int}}, sel::AppliedSiteSelector{T,E,L}) where {T,E,L}
     lat = lattice(sel)
     name = sitesublatname(lat, i)
     return incells(cell, sel) &&
@@ -40,12 +36,21 @@ function Base.in((i, r, cell)::Tuple{Int,SVector{E,T},SVector{L,Int}}, sel::Appl
            insublats(name, sel)
 end
 
-function Base.in(((j, i), (nj, ni))::Tuple{Pair,Pair}, sel::AppliedHopSelector)
-    dcell = nj - ni
-    ri, rj = site(lat, i, dni), site(lat, j, dnj)
-    r, dr = rdr(rj => ri)
-    return ((j, i), (r, dr), dcell) in sel
-end
+## Cannot add this, as it is ambiguous for L == E
+# function Base.in((i, cell)::Tuple{Int,SVector{L,Int}}, sel::AppliedSiteSelector{T,E,L}) where {T,E,L}
+#     lat = lattice(sel)
+#     r = site(lat, i, cell)
+#     return (i, r, cell) in sel
+# end
+
+## We therefore also skip this for consistency
+# function Base.in(((j, i), (nj, ni))::Tuple{Pair,Pair}, sel::AppliedHopSelector)
+#     lat = lattice(sel)
+#     ri, rj = site(lat, i, ni), site(lat, j, nj)
+#     r, dr = rdr(rj => ri)
+#     dcell = ni - nj
+#     return ((j, i), (r, dr), dcell) in sel
+# end
 
 function Base.in(((j, i), (r, dr), dcell)::Tuple{Pair,Tuple,SVector}, sel::AppliedHopSelector)
     lat = lattice(sel)
@@ -100,7 +105,7 @@ function foreach_cell(f, sel::AppliedHopSelector)
     return nothing
 end
 
-function foreach_site(f, sel::AppliedSiteSelector, cell)
+function foreach_site(f, sel::AppliedSiteSelector, cell::SVector)
     lat = lattice(sel)
     for s in sublats(lat)
         insublats(sublatname(lat, s), sel) || continue
@@ -113,7 +118,7 @@ function foreach_site(f, sel::AppliedSiteSelector, cell)
     return nothing
 end
 
-function foreach_hop(f, sel::AppliedHopSelector, kdtrees, ni = zerocell(lattice(sel)))
+function foreach_hop(f, sel::AppliedHopSelector, kdtrees::Vector{<:KDTree}, ni::SVector = zerocell(lattice(sel)))
     lat = lattice(sel)
     _, rmax = sel.range
     # source cell at origin
@@ -125,7 +130,7 @@ function foreach_hop(f, sel::AppliedHopSelector, kdtrees, ni = zerocell(lattice(
         for j in js
             is = inrange_targets(site(lat, j, nj - ni), lat, si, rmax, kdtrees)
             for i in is
-                !isonsite((j, i), nj - ni) || continue
+                isonsite((j, i), ni - nj) && continue
                 r, dr = rdr(site(lat, j, nj) => site(lat, i, ni))
                 # Make sure we don't stop searching cells until we reach minimum range
                 isbelowrange(dr, sel) && (found = true)
@@ -154,6 +159,49 @@ function inrange_targets(rsource, lat, si, rmax, kdtrees)
         targetlist = collect(siterange(lat, si))
     end
     return targetlist
+end
+
+function foreach_site(f, sel::AppliedSiteSelector, ls::LatticeSlice)
+    lat = parent(ls)
+    islice = 0
+    for scell in subcells(ls)
+        n = cell(scell)
+        for i in siteindices(scell)
+            r = site(lat, i, n)
+            islice += 1
+            if (i, r, n) in sel
+                f(i, r, n, islice)
+            end
+        end
+    end
+    return nothing
+end
+
+function foreach_hop(f, sel::AppliedHopSelector, ls::LatticeSlice)
+    lat = parent(ls)
+    jslice = 0
+    for scellj in subcells(ls)
+        islice = 0
+        nj = cell(scellj)
+        for j in siteindices(scellj)
+            jslice += 1
+            rj = site(lat, j, nj)
+            for scelli in subcells(ls)
+                ni = cell(scelli)
+                dcell = ni - nj
+                for i in siteindices(scelli)
+                    islice += 1
+                    isonsite((j, i), dcell) && continue
+                    ri = site(lat, i, ni)
+                    r, dr = rdr(rj => ri)
+                    if (j => i, (r, dr), dcell) in sel
+                        f((i, j), (r, dr), (ni, nj), (islice, jslice))
+                    end
+                end
+            end
+        end
+    end
+    return nothing
 end
 
 #endregion

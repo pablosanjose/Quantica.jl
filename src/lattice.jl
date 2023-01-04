@@ -68,8 +68,9 @@ end
 
 Base.getindex(lat::Lattice; kw...) = lat[siteselector(; kw...)]
 
-function Base.getindex(lat::Lattice, ss::SiteSelector)
-    as = apply(ss, lat)
+Base.getindex(lat::Lattice, ss::SiteSelector) = lat[apply(ss, lat)]
+
+function Base.getindex(lat::Lattice, as::AppliedSiteSelector)
     latslice = LatticeSlice(lat)
     sinds = Int[]
     foreach_cell(as) do cell
@@ -88,16 +89,16 @@ function Base.getindex(lat::Lattice, ss::SiteSelector)
     return latslice
 end
 
-Base.getindex(ls::LatticeSlice; indexlist = missing, kw...) =
-    getindex(ls, siteselector(; kw...), indexlist)
+Base.getindex(ls::LatticeSlice; kw...) = getindex(ls, siteselector(; kw...))
+
+Base.getindex(ls::LatticeSlice, ss::SiteSelector) = getindex(ls, apply(ss, parent(ls)))
 
 # indexlist is populated with latslice indices of selected sites
-function Base.getindex(latslice::LatticeSlice, ss::SiteSelector, indexlist = missing)
+function Base.getindex(latslice::LatticeSlice, as::AppliedSiteSelector)
     lat = parent(latslice)
-    as = apply(ss, lat)
     latslice´ = LatticeSlice(lat)
     sinds = Int[]
-    j = indexlist === missing || isempty(indexlist) ? 0 : last(indexlist)
+    j = 0
     for subcell in subcells(latslice)
         dn = cell(subcell)
         scell = Subcell(sinds, dn)
@@ -106,7 +107,6 @@ function Base.getindex(latslice::LatticeSlice, ss::SiteSelector, indexlist = mis
             r = site(lat, i, dn)
             if (i, r, dn) in as
                 push!(scell, i)
-                indexlist === missing || push!(indexlist, j)
             end
         end
         if !isempty(scell)
