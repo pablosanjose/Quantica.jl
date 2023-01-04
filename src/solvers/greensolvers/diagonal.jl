@@ -2,13 +2,14 @@
 # SelfEnergyModel
 #region
 
-using Quantica: HybridMatrix, ParametricModel, AppliedParametricModel,
+using Quantica: KDTree, Euclidean, HybridMatrix, ParametricModel, AppliedParametricModel,
       AppliedParametricOnsiteTerm, AppliedParametricHoppingTerm, SiteSelector, HopSelector,
-      terms, selector, foreach_site, foreach_hop
+      terms, selector, foreach_site, foreach_hop, sites
 
 struct SelfEnergyModel{T,E,L,A<:AppliedParametricModel} <: AbstractSelfEnergySolver
     model::A
     latslice::LatticeSlice{T,E,L}
+    kdtree::KDTree{SVector{E,T},Euclidean,T}  # needed to efficiently apply hopping terms
     mat::HybridMatrix{Complex{T},L}  # preallocation
 end
 
@@ -23,30 +24,31 @@ function SelfEnergy(h::AbstractHamiltonian, sel::SiteSelector, model::Parametric
     asel = apply(sel, lat)
     latslice = lat[asel]
     mat = HybridMatrix(latslice, h)
-    solver = SelfEnergyModel(amodel, latslice, mat)
+    kdtree = KDTree(collect(sites(latslice)))
+    solver = SelfEnergyModel(amodel, latslice, kdtree, mat)
     return SelfEnergy(solver, latslice)
 end
 
 function call!(s::SelfEnergyModel{T}, ω; params...) where {T}
     fill!(s.mat, zero(Complex{T}))
     foreach(terms(s.model)) do term
-        apply_term!(s.mat, s.latslice, term, ω; params...)
+        apply_term!(s, term, ω; params...)
     end
     return s.mat
 end
 
-function apply_term!(mat, latslice, o::AppliedParametricOnsiteTerm, ω; params...)
-    foreach_site(selector(o), latslice) do i, r, n, islice
-        mat[islice, islice] = o(ω, r; params...)
+function apply_term!(s::SelfEnergyModel, o::AppliedParametricOnsiteTerm, ω; params...)
+    foreach_site(selector(o), s.latslice) do i, r, n, islice
+        s.mat[islice, islice] = o(ω, r; params...)
     end
-    return mat
+    return s
 end
 
-function apply_term!(mat, latslice, t::AppliedParametricHoppingTerm, ω; params...)
-    foreach_hop(selector(t), latslice) do is, (r, dr), ns, (islice, jslice)
-        mat[islice, jslice] = t(ω, r, dr; params...)
+function apply_term!(s, t::AppliedParametricHoppingTerm, ω; params...)
+    foreach_hop(selector(t), s.latslice, s.kdtree) do is, (r, dr), ns, (islice, jslice)
+        s.mat[islice, jslice] = t(ω, r, dr; params...)
     end
-    return mat
+    return s
 end
 
 #endregion

@@ -310,6 +310,19 @@ Base.copy(s::Subcell) = Subcell(copy(s.inds), s.cell)
 #     return ls
 # end
 
+# function subcellind(l::LatticeSlice, iunflat)
+#     counter = 0
+#     for (nc, scell) in enumerate(subcells(l))
+#         ns = nsites(scell)
+#         if counter + ns < iunflat
+#             counter += ns
+#         else
+#             return (nc, iunflat - counter)
+#         end
+#     end
+#     @boundscheck(throw(BoundsError(l, iunflat)))
+# end
+
 function Base.getindex(l::LatticeSlice{<:Any,<:Any,L}, i::Integer) where {L}
     offset = 0
     for scell in subcells(l)

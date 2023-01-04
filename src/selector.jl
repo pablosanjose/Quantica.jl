@@ -177,31 +177,49 @@ function foreach_site(f, sel::AppliedSiteSelector, ls::LatticeSlice)
     return nothing
 end
 
-function foreach_hop(f, sel::AppliedHopSelector, ls::LatticeSlice)
-    lat = parent(ls)
+function foreach_hop(f, sel::AppliedHopSelector, ls::LatticeSlice, kdtree::KDTree)
+    lat = lattice(sel)
+    _, rmax = sel.range
+    found = false
+    isfiniterange = isfinite(rmax)
     jslice = 0
     for scellj in subcells(ls)
-        islice = 0
         nj = cell(scellj)
         for j in siteindices(scellj)
             jslice += 1
             rj = site(lat, j, nj)
-            for scelli in subcells(ls)
-                ni = cell(scelli)
-                dcell = ni - nj
-                for i in siteindices(scelli)
-                    islice += 1
-                    isonsite((j, i), dcell) && continue
+            if isfiniterange
+                targetlist = inrange(kdtree, rj, rmax)
+                for islice in targetlist
+                    ni, i = ls[islice]
                     ri = site(lat, i, ni)
                     r, dr = rdr(rj => ri)
+                    dcell = ni - nj
                     if (j => i, (r, dr), dcell) in sel
+                        found = true
                         f((i, j), (r, dr), (ni, nj), (islice, jslice))
+                    end
+                end
+            else
+                islice = 0
+                for scelli in subcells(ls)
+                    ni = cell(scelli)
+                    dcell = ni - nj
+                    for i in siteindices(scelli)
+                        islice += 1
+                        isonsite((j, i), dcell) && continue
+                        ri = site(lat, i, ni)
+                        r, dr = rdr(rj => ri)
+                        if (j => i, (r, dr), dcell) in sel
+                            found = true
+                            f((i, j), (r, dr), (ni, nj), (islice, jslice))
+                        end
                     end
                 end
             end
         end
     end
-    return nothing
+    return found
 end
 
 #endregion
