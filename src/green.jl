@@ -13,6 +13,9 @@ function HybridMatrix(ls::LatticeSlice{T}, b::SublatBlockStructure) where {T}
     return HybridMatrix(mat, mb)
 end
 
+MultiBlockStructure(ls::LatticeSlice, h::AbstractHamiltonian, lss = ()) =
+    MultiBlockStructure(ls, blockstructure(h), lss)
+
 function MultiBlockStructure(ls::LatticeSlice{<:Any,<:Any,L},
                              bs::SublatBlockStructure, lss = ()) where {L}
     cells = SVector{L,Int}[]
@@ -55,10 +58,17 @@ end
 # green
 #region
 
-green(s::AbstractGreenSolver = default_green_solver(h)) = h -> green(h, s)
+green(s::AbstractGreenSolver) = h -> green(h, s)
+
+green() = h -> green(h)
 
 green(h::AbstractHamiltonian, s::AbstractGreenSolver = default_green_solver(h)) =
     GreenFunction(h, apply(s, h))
+
+# default_green_solver(::AbstractHamiltonian0D) = GS.SparseLU()
+# default_green_solver(::AbstractHamiltonian1D) = GS.Schur()
+# default_green_solver(::AbstractHamiltonian) = GS.Bands()
+default_green_solver(::AbstractHamiltonian) = GS.NoSolver()
 
 #endregion
 
@@ -67,11 +77,11 @@ green(h::AbstractHamiltonian, s::AbstractGreenSolver = default_green_solver(h)) 
 #region
 
 # new contacts should create new GreenFunction with empty preallocs
-attach(g::GreenFunction, Σ::SelfEnergy) =
-    GreenFunction(hamiltonian(h), solver(g), attach(contacts(g), Σ), similar(preallocs(g), 0))
 attach(g::GreenFunction, args...; kw...) = attach(g, SelfEnergy(hamiltonian(g), args...; kw...))
 attach(Σ::SelfEnergy) = g -> attach(g, Σ)
 attach(args...; kw...) = g -> attach(g, SelfEnergy(hamiltonian(g), args...; kw...))
+attach(g::GreenFunction, Σ::SelfEnergy) =
+    GreenFunction(hamiltonian(g), solver(g), attach(contacts(g), Σ))
 
 #endregion
 
@@ -87,8 +97,7 @@ function call!(g::GreenFunction; params...)
     h´ = call!(hamiltonian(g); params...)
     solver´ = call!(solver(g); params...)
     contacts´ = call!(contacts(g); params...)
-    preallocs´ = preallocs(g)
-    return GreenFunction(h´, solver´, contacts´, preallocs´)
+    return GreenFunction(h´, solver´, contacts´)
 end
 
 # function call!(g::GreenFunction, ω; params...)

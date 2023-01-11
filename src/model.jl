@@ -107,3 +107,26 @@ get_kwname(x::Symbol) = x
 get_kwname(x::Expr) = x.head === :kw ? x.args[1] : x.head  # x.head == :...
 
 #endregion
+
+############################################################################################
+# @onsite, @hopping conversion to zero model + modifiers
+#region
+
+zero_model(term::ParametricOnsiteTerm) =
+    OnsiteTerm(r -> 0I, selector(term), coefficient(term))
+zero_model(term::ParametricHoppingTerm) =
+    HoppingTerm((r, dr) -> 0I, selector(term), coefficient(term))
+
+function modifier(term::ParametricOnsiteTerm{N}) where {N}
+    f = ParametricFunction{N+1}((o, args...; kw...) -> o + term(args...), parameters(term))
+    return OnsiteModifier(f, selector(term),)
+end
+
+function modifier(term::ParametricHoppingTerm{N}) where {N}
+    f = ParametricFunction{N+1}((t, args...; kw...) -> t + term(args...), parameters(term))
+    return HoppingModifier(f, selector(term))
+end
+
+zero_model(m::ParametricModel) = TightbindingModel(zero_model.(terms(m)))
+
+#endregion

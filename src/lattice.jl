@@ -74,6 +74,7 @@ function Base.getindex(lat::Lattice, as::AppliedSiteSelector)
     latslice = LatticeSlice(lat)
     sinds = Int[]
     foreach_cell(as) do cell
+        isempty(sinds) || (sinds = Int[])
         scell = Subcell(sinds, cell)
         foreach_site(as, cell) do s, i, r
             push!(scell, i)
@@ -82,7 +83,6 @@ function Base.getindex(lat::Lattice, as::AppliedSiteSelector)
             return false
         else
             push!(latslice, scell)
-            sinds = Int[]   #start new site list
             return true
         end
     end
@@ -145,11 +145,15 @@ findsite(i::Integer, s::Subcell) = findfirst(==(i), siteindices(s))
 #endregion
 
 ############################################################################################
-# merge(lss::LatticeSlice...)
+# merge and merge!
 #region
 
-function Base.merge(lss::S...) where {L,S<:LatticeSlice{<:Any,<:Any,L}}
-    lat = parent(first(lss))
+merge(ls::LatticeSlice) = ls
+merge(ls::LatticeSlice, lss::LatticeSlice...) =
+    merge!(LatticeSlice(lattice(first(lss))), ls, lss...)
+
+function Base.merge!(ls0::S, lss::S...) where {L,S<:LatticeSlice{<:Any,<:Any,L}}
+    lat = parent(ls0)
     all(l -> l === lat, parent.(lss)) ||
         argerror("Cannot merge LatticeBlocks of different lattices")
 
@@ -162,7 +166,9 @@ function Base.merge(lss::S...) where {L,S<:LatticeSlice{<:Any,<:Any,L}}
 
     currentcell = first(first(allcellinds))
     scell = Subcell(currentcell)
-    scells = [scell]
+    scells = subcells(lc0)
+    empty!(scells)
+    push!(scells, scell)
     for (c, i) in allcellinds
         if c == currentcell
             push!(siteindices(scell), i)
@@ -172,8 +178,7 @@ function Base.merge(lss::S...) where {L,S<:LatticeSlice{<:Any,<:Any,L}}
             push!(scells, scell)
         end
     end
-    latslice = LatticeSlice(lat, scells)
-    return latslice
+    return ls0
 end
 
 #endregion

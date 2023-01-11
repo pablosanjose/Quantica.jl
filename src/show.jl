@@ -1,3 +1,16 @@
+############################################################################################
+# show tools
+#region
+
+display_as_tuple(v, prefix = "") = isempty(v) ? "()" :
+    string("(", prefix, join(v, string(", ", prefix)), ifelse(length(v) == 1, ",)", ")"))
+
+display_rounded_vectors(vs) = isempty(vs) ? "[]" : display_rounded_vector.(vs)
+display_rounded_vector(v) = round.(v, digits = 6)
+
+pluraltext(m, sing) = ifelse(length(terms(m)) == 1, "1 $sing", "$(length(terms(m))) $(sing)s")
+
+#endregion
 
 ############################################################################################
 # Lattice
@@ -28,12 +41,6 @@ displaynames(l::Lattice) = display_as_tuple(sublatnames(l), ":")
 
 displayname(s::Sublat) = sublatname(s) == Symbol(:_) ? "pending" : string(":", sublatname(s))
 
-display_as_tuple(v, prefix = "") = isempty(v) ? "()" :
-    string("(", prefix, join(v, string(", ", prefix)), ")")
-
-display_rounded_vectors(vs) = isempty(vs) ? "[]" : display_rounded_vector.(vs)
-display_rounded_vector(v) = round.(v, digits = 6)
-
 #endregion
 
 ############################################################################################
@@ -59,13 +66,13 @@ end
 
 function Base.show(io::IO, m::TightbindingModel)
     ioindent = IOContext(io, :indent => "  ")
-    print(io, "TightbindingModel: model with $(termstext(m))", "\n")
+    print(io, "TightbindingModel: model with $(pluraltext(m, "term"))", "\n")
     foreach(t -> print(ioindent, t, "\n"), m.terms)
 end
 
 function Base.show(io::IO, m::ParametricModel)
     ioindent = IOContext(io, :indent => "  ")
-    print(io, "ParametricModel: model with $(termstext(m))", "\n")
+    print(io, "ParametricModel: model with $(pluraltext(m, "term"))", "\n")
     foreach(t -> print(ioindent, t, "\n"), m.terms)
 end
 
@@ -113,8 +120,6 @@ end
 
 displayparameter(::Type{<:Function}) = "Function"
 displayparameter(::Type{T}) where {T} = "$T"
-
-termstext(m) = ifelse(length(terms(m)) == 1, "1 term", "$(length(terms(m))) terms")
 
 displayrange(r::Real) = round(r, digits = 6)
 displayrange(::Missing) = "any"
@@ -224,6 +229,25 @@ end
 
 Base.summary(::Bands{T,E,L}) where {T,E,L} =
     "Bands{$T,$E,$L}: $(E)D Bandstructure over a $L-dimensional parameter space of type $T"
+
+#endregion
+
+############################################################################################
+# GreenFunction
+#region
+
+function Base.show(io::IO, g::GreenFunction)
+    i = get(io, :indent, "")
+    Σs = selfenergies(contacts(g))
+    print(io, i, summary(g), "\n",
+"$i  Solver          : $(typename(solver(g)))
+$i  Contacts        : $(length(Σs))
+$i  Contact solvers : $(display_as_tuple(typename.(solver.(Σs))))
+$i  Contact sizes   : $(display_as_tuple(nsites.(latslice.(Σs))))")
+end
+
+Base.summary(g::GreenFunction{T,E,L}) where {T,E,L} =
+    "GreenFunction{$T,$E,$L}: Green function of an $L-dimensional $(typename(hamiltonian(g))){$T} in $(E)D space"
 
 #endregion
 

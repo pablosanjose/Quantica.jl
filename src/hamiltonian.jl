@@ -1,11 +1,112 @@
 ############################################################################################
+# Hamiltonian builders
+#region
+
+abstract type AbstractHamiltonianBuilder{T,E,L,B} end
+
+abstract type AbstractBuilderHarmonic{L,B} end
+
+struct IJVHarmonic{L,B} <: AbstractBuilderHarmonic{L,B}
+    dn::SVector{L,Int}
+    collector::IJV{B}
+end
+
+mutable struct CSCHarmonic{L,B} <: AbstractBuilderHarmonic{L,B}
+    dn::SVector{L,Int}
+    collector::CSC{B}
+end
+
+struct IJVBuilder{T,E,L,B} <: AbstractHamiltonianBuilder{T,E,L,B}
+    lat::Lattice{T,E,L}
+    blockstruct::SublatBlockStructure{B}
+    harmonics::Vector{IJVHarmonic{L,B}}
+    kdtrees::Vector{KDTree{SVector{E,T},Euclidean,T}}
+end
+
+struct CSCBuilder{T,E,L,B} <: AbstractHamiltonianBuilder{T,E,L,B}
+    lat::Lattice{T,E,L}
+    blockstruct::SublatBlockStructure{B}
+    harmonics::Vector{CSCHarmonic{L,B}}
+end
+
+## Constructors ##
+
+function IJVBuilder(lat::Lattice{T,E,L}, blockstruct::SublatBlockStructure{B}) where {E,L,T,B}
+    harmonics = IJVHarmonic{L,B}[]
+    kdtrees = Vector{KDTree{SVector{E,T},Euclidean,T}}(undef, nsublats(lat))
+    return IJVBuilder(lat, blockstruct, harmonics, kdtrees)
+end
+
+function CSCBuilder(lat::Lattice{<:Any,<:Any,L}, blockstruct::SublatBlockStructure{B}) where {L,B}
+    harmonics = CSCHarmonic{L,B}[]
+    return CSCBuilder(lat, blockstruct, harmonics)
+end
+
+empty_harmonic(b::CSCBuilder{<:Any,<:Any,L,B}, dn) where {L,B} =
+    CSCHarmonic{L,B}(dn, CSC{B}(nsites(b.lat)))
+
+empty_harmonic(::IJVBuilder{<:Any,<:Any,L,B}, dn) where {L,B} =
+    IJVHarmonic{L,B}(dn, IJV{B}())
+
+## API ##
+
+collector(har::AbstractBuilderHarmonic) = har.collector  # for IJVHarmonic and CSCHarmonic
+
+dcell(har::AbstractBuilderHarmonic) = har.dn
+
+kdtrees(b::IJVBuilder) = b.kdtrees
+
+Base.filter!(f::Function, b::IJVBuilder) =
+    foreach(bh -> filter!(f, bh.collector), b.harmonics)
+
+finalizecolumn!(b::CSCBuilder, x...) =
+    foreach(har -> finalizecolumn!(collector(har), x...), b.harmonics)
+
+Base.isempty(h::IJVHarmonic) = isempty(collector(h))
+Base.isempty(s::CSCHarmonic) = isempty(collector(s))
+
+lattice(b::AbstractHamiltonianBuilder) = b.lat
+
+blockstructure(b::AbstractHamiltonianBuilder) = b.blockstruct
+
+harmonics(b::AbstractHamiltonianBuilder) = b.harmonics
+
+function Base.getindex(b::AbstractHamiltonianBuilder{<:Any,<:Any,L}, dn::SVector{L,Int}) where {L}
+    hars = b.harmonics
+    for har in hars
+        dcell(har) == dn && return collector(har)
+    end
+    har = empty_harmonic(b, dn)
+    push!(hars, har)
+    return collector(har)
+end
+
+function SparseArrays.sparse(builder::AbstractHamiltonianBuilder{T,<:Any,L,B}) where {T,L,B}
+    HT = Harmonic{T,L,B}
+    b = blockstructure(builder)
+    n = nsites(lattice(builder))
+    hars = HT[sparse(b, har, n, n) for har in harmonics(builder) if !isempty(har)]
+    return hars
+end
+
+function SparseArrays.sparse(b::SublatBlockStructure{B}, har::AbstractBuilderHarmonic{L,B}, m::Integer, n::Integer) where {L,B}
+    s = sparse(collector(har), m, n)
+    return Harmonic(dcell(har), HybridSparseBlochMatrix(b, s))
+end
+
+#endregion
+
+############################################################################################
 # hamiltonian
 #region
 
-hamiltonian(m::TightbindingModel = TightbindingModel(); kw...) = lat -> hamiltonian(lat, m; kw...)
+hamiltonian(m::AbstractModel = TightbindingModel(); kw...) = lat -> hamiltonian(lat, m; kw...)
 
-# Base.@constprop :aggressive needed for type-stable non-Val orbitals
-Base.@constprop :aggressive function hamiltonian(lat::Lattice{T}, m = TightbindingModel(); orbitals = Val(1)) where {T}
+hamiltonian(lat::Lattice, m::ParametricModel; kw...) =
+    parametric(hamiltonian(lat, zero_model(m); kw...), modifier.(terms(m))...)
+
+# Base.@constprop :aggressive may be needed for type-stable non-Val orbitals?
+function hamiltonian(lat::Lattice{T}, m::TightbindingModel = TightbindingModel(); orbitals = Val(1)) where {T}
     orbitals´ = sanitize_orbitals(orbitals)
     blockstruct = SublatBlockStructure(T, orbitals´, sublatlengths(lat))
     builder = IJVBuilder(lat, blockstruct)
