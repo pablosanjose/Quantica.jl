@@ -964,8 +964,8 @@ struct SelfEnergy{T,E,L,S<:AbstractSelfEnergySolver}
 end
 
 # produced by call!(s::SelfEnergy, ω; p...)
-struct SelfEnergyMatrix{T,E,L}
-    Σ::HybridMatrix{Complex{T}}
+struct SelfEnergyMatrix{T,E,L,H<:HybridMatrix{Complex{T}}}
+    mat::H
     latslice::LatticeSlice{T,E,L}  # === s.latslice of parent s
 end
 
@@ -987,8 +987,6 @@ latslice(c::SelfEnergy) = c.latslice
 solver(c::SelfEnergy) = c.solver
 
 latslice(c::Contacts) = c.mergedlatslice
-
-flatinds(c::Contacts) = c.flatinds
 
 selfenergies(c::Contacts) = c.selfenergies
 

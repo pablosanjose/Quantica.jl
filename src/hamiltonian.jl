@@ -225,16 +225,12 @@ end
 #      by later call!'s
 #region
 
-copy_callsafe(h::Hamiltonian) = copy_bloch(h)
-
 copy_callsafe(p::ParametricHamiltonian) = ParametricHamiltonian(
-    p.hparent, copy_harmonics(copy_bloch(p.h)), p.modifiers, p.allptrs, p.allparams)
+    p.hparent, copy_callsafe(p.h), p.modifiers, p.allptrs, p.allparams)
 
-copy_bloch(h::Hamiltonian) = Hamiltonian(
-    lattice(h), blockstructure(h), harmonics(h), copy_matrices(bloch(h)))
+copy_callsafe(h::Hamiltonian) = Hamiltonian(
+    lattice(h), blockstructure(h), copy.(harmonics(h)), copy_matrices(bloch(h)))
 
-copy_harmonics(h::Hamiltonian) = Hamiltonian(
-    lattice(h), blockstructure(h), copy.(harmonics(h)), bloch(h))
 
 #endregion
 
@@ -249,7 +245,7 @@ copy_harmonics(h::Hamiltonian) = Hamiltonian(
 (h::Hamiltonian)(phi...; params...) = copy(call!(h, phi; params...))
 
 call!(h::Hamiltonian; params...) = h  # mimic partial call!(p::ParametricHamiltonian; params...)
-call!(h::Hamiltonian, phi; params...) = bloch_flat!(h, sanitize_SVector(phi))
+call!(h::Hamiltonian, φs; params...) = bloch_flat!(h, sanitize_SVector(φs))
 
 # returns a flat sparse matrix
 function bloch_flat!(h::Hamiltonian{T}, φs::SVector, axis = missing) where {T}

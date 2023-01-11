@@ -109,7 +109,7 @@ get_kwname(x::Expr) = x.head === :kw ? x.args[1] : x.head  # x.head == :...
 #endregion
 
 ############################################################################################
-# @onsite, @hopping conversion to zero model + modifiers
+# @onsite, @hopping conversions
 #region
 
 zero_model(term::ParametricOnsiteTerm) =
@@ -118,15 +118,35 @@ zero_model(term::ParametricHoppingTerm) =
     HoppingTerm((r, dr) -> 0I, selector(term), coefficient(term))
 
 function modifier(term::ParametricOnsiteTerm{N}) where {N}
-    f = ParametricFunction{N+1}((o, args...; kw...) -> o + term(args...), parameters(term))
-    return OnsiteModifier(f, selector(term),)
+    f = (o, args...; kw...) -> o + term(args...; kw...)
+    pf = ParametricFunction{N+1}(f, parameters(term))
+    return OnsiteModifier(pf, selector(term))
 end
 
 function modifier(term::ParametricHoppingTerm{N}) where {N}
-    f = ParametricFunction{N+1}((t, args...; kw...) -> t + term(args...), parameters(term))
-    return HoppingModifier(f, selector(term))
+    f = (t, args...; kw...) -> t + term(args...; kw...)
+    pf = ParametricFunction{N+1}(f, parameters(term))
+    return HoppingModifier(pf, selector(term))
 end
 
 zero_model(m::ParametricModel) = TightbindingModel(zero_model.(terms(m)))
+
+# transforms the first argument in each model term to a parameter named pname
+model_ω_to_param(model::ParametricModel) =
+    ParametricModel(model_ω_to_param.(terms(model)))
+
+function model_ω_to_param(term::ParametricOnsiteTerm{N}, default = 0) where {N}
+    ps = push!(parameters(term), :ω_internal)
+    f = (args...; ω_internal = default, kw...) -> term(ω_internal, args...; kw...)
+    pf = ParametricFunction{N-1}(f, ps)
+    return ParametricOnsiteTerm(pf, selector(term), coefficient(term))
+end
+
+function model_ω_to_param(term::ParametricHoppingTerm{N}, default = 0) where {N}
+    ps = push!(parameters(term), :ω_internal)
+    f = (args...; ω_internal = default, kw...) -> term(ω_internal, args...; kw...)
+    pf = ParametricFunction{N-1}(f, ps)
+    return ParametricHoppingTerm(pf, selector(term), coefficient(term))
+end
 
 #endregion

@@ -4,13 +4,20 @@
 
 #region ## Constructors ##
 
-HybridMatrix(ls::LatticeSlice, h::AbstractHamiltonian) = HybridMatrix(ls, blockstructure(h))
+HybridMatrix(ls::LatticeSlice, h::Union{AbstractHamiltonian,SublatBlockStructure}) =
+    HybridMatrix(0I, ls, h)
 
-function HybridMatrix(ls::LatticeSlice{T}, b::SublatBlockStructure) where {T}
-    mb = MultiBlockStructure(ls, b)
+function HybridMatrix(mat, ls::LatticeSlice, h::AbstractHamiltonian)
+    mb = MultiBlockStructure(ls, h)
     s = flatsize(mb)
-    mat = zeros(Complex{T}, s, s)
+    checkblocksize(mat, (s, s))
     return HybridMatrix(mat, mb)
+end
+
+function HybridMatrix(mat::UniformScaling{T}, mb::MultiBlockStructure) where {T}
+    s = flatsize(mb)
+    mat´ = Matrix{T}(mat, s, s)
+    return HybridMatrix(mat´, mb)
 end
 
 MultiBlockStructure(ls::LatticeSlice, h::AbstractHamiltonian, lss = ()) =

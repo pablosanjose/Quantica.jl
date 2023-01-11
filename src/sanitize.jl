@@ -8,7 +8,7 @@ sanitize_orbitals(o::Val) = o
 
 sanitize_orbitals(o::Int) = Val(o)
 
-sanitize_orbitals(o) = all(==(1), o) ? Val(1) : o
+sanitize_orbitals(o) = allequal(o) ? Val(first(o)) : o
 
 #endregion
 
@@ -97,6 +97,7 @@ end
 # Supercell sanitizers
 #region
 
+sanitize_supercell(::Val{L}, ::Tuple{}) where {L} = SMatrix{L,0,Int}()
 sanitize_supercell(::Val{L}, ns::NTuple{L´,NTuple{L,Int}}) where {L,L´} =
     sanitize_SMatrix(SMatrix{L,L´,Int}, ns)
 sanitize_supercell(::Val{L}, n::Tuple{Int}) where {L} =

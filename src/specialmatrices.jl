@@ -194,6 +194,10 @@ unflat_unsafe(s::HybridSparseBlochMatrix) = s.unflat
 
 flat_unsafe(s::HybridSparseBlochMatrix) = s.flat
 
+# are flat === unflat? Only for scalar eltype
+isaliased(::HybridSparseBlochMatrix{<:Any,<:Complex}) = true
+isaliased(::HybridSparseBlochMatrix) = false
+
 function unflat(s::HybridSparseBlochMatrix)
     needs_unflat_sync(s) && unflat_sync!(s)
     return s.unflat
@@ -226,7 +230,7 @@ needs_unflat_sync(s::HybridSparseBlochMatrix{<:Any,<:Complex})  = false
 function Base.copy!(h::HybridSparseBlochMatrix{T,B}, h´::HybridSparseBlochMatrix{T,B}) where {T,B}
     copy!(blockstructure(h), blockstructure(h´))
     copy!(h.unflat, h´.unflat)
-    copy!(h.flat, h´.flat)
+    isaliased(h´) || copy!(h.flat, h´.flat)
     h.sync_state[] = h´.sync_state[]
     return h
 end
@@ -234,7 +238,7 @@ end
 function Base.copy(h::HybridSparseBlochMatrix)
     b = copy(blockstructure(h))
     u = copy(h.unflat)
-    f = copy(h.flat)
+    f = isaliased(h) ? u : copy(h.flat)
     s = Ref(h.sync_state[])
     return HybridSparseBlochMatrix(b, u, f, s)
 end
@@ -242,7 +246,7 @@ end
 function copy_matrices(h::HybridSparseBlochMatrix)
     b = blockstructure(h)
     u = copy(h.unflat)
-    f = copy(h.flat)
+    f = isaliased(h) ? u : copy(h.flat)
     s = Ref(h.sync_state[])
     return HybridSparseBlochMatrix(b, u, f, s)
 end
@@ -556,8 +560,8 @@ struct MultiBlockStructure{L}
     contactinds::Vector{Vector{Int}} # parent indices for each Σ contact
 end
 
-struct HybridMatrix{C,L} <: AbstractMatrix{C}
-    parent::Matrix{C}
+struct HybridMatrix{C,L,A<:AbstractMatrix{C}} <: AbstractMatrix{C}
+    parent::A
     blockstruct::MultiBlockStructure{L}
 end
 

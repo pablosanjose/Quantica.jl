@@ -16,18 +16,27 @@ sublat(sites::Vector; name = :A) =
 
 lattice(s::Sublat, ss::Sublat...; kw...) = _lattice(promote(s, ss...)...; kw...)
 
+lattice(ss::AbstractVector{<:Sublat}; kw...) = _lattice(ss; kw...)
+
 # Start with an empty list of nranges, to be filled as they are requested
 Lattice(b::Bravais{T}, u::Unitcell{T}) where {T} = Lattice(b, u, Tuple{Int,T}[])
 
-function _lattice(ss::Sublat{T,E}...;
-                  bravais = (),
-                  dim = Val(E),
-                  type::Type{T´} = T,
-                  names = sublatname.(ss)) where {T,E,T´}
-    u = unitcell(ss, names, postype(dim, type))
-    b = Bravais(type, dim, bravais)
-    return Lattice(b, u)
-end
+_lattice(ss::Sublat{T,E}...;
+    bravais = (),
+    dim = Val(E),
+    type::Type{T´} = T,
+    names = sublatname.(ss)) where {T,E,T´} =
+    _lattice(ss, bravais, dim, type, names)
+
+_lattice(ss::AbstractVector{S};
+    bravais = (),
+    dim = Val(E),
+    type::Type{T´} = T,
+    names = sublatname.(ss)) where {T,E,T´,S<:Sublat{T,E}} =
+    _lattice(ss, bravais, dim, type, names)
+
+_lattice(ss, bravais, dim, type, names) =
+    Lattice(Bravais(type, dim, bravais), unitcell(ss, names, postype(dim, type)))
 
 function lattice(lat::Lattice{T,E};
                  bravais = bravais_matrix(lat),
@@ -180,6 +189,36 @@ function Base.merge!(ls0::S, lss::S...) where {L,S<:LatticeSlice{<:Any,<:Any,L}}
     end
     return ls0
 end
+
+#endregion
+
+############################################################################################
+# convert LatticeSlice to Lattice
+#    build a 0D Lattice using the sites in LatticeSlice
+#region
+
+function lattice(ls::LatticeSlice{T,E}, store = missing) where {T,E}
+    lat = parent(ls)
+    _empty!(store)
+    sls = [sublat(collect(sublatsites(ls, s, store)); name = sublatname(lat, s))
+           for s in sublats(lat)]
+    return lattice(sls)
+end
+
+# positions of sites in a given sublattice. Pushes selected slice indices into store
+function sublatsites(l::LatticeSlice, s::Integer, store = missing)
+    n = 0
+    gen = ((_store!(store, n); site(l.lat, i, cell(subcell)))
+        for subcell in subcells(l) for i in siteindices(subcell)
+        if (n += 1; i in siterange(l.lat, s)))
+    return gen
+end
+
+_empty!(::Missing) = missing
+_empty!(v) = empty!(v)
+
+_store!(::Missing, _) = missing
+_store!(v, n) = push!(v, n)
 
 #endregion
 
