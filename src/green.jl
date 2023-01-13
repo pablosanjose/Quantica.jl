@@ -120,7 +120,7 @@ end
 
 function linewidth(Σ::MatrixBlock)
     Σmat = blockmat(Σ)
-    Γ = Σmat + Σmat'
+    Γ = Σmat - Σmat'
     Γ .*= im
     return Γ
 end
