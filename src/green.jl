@@ -42,7 +42,7 @@ function MultiBlockStructure(ls::LatticeSlice{<:Any,<:Any,L},
     return MultiBlockStructure(cells, subcelloffsets, siteoffsets, contactinds)
 end
 
-# find flatindices corresponding to mergedls of sites in ls´
+# find flatindices corresponding to merged_ls of sites in ls´
 function contact_indices(ls´, siteoffsets, merged_ls)
     contactinds = Int[]
     for scell´ in subcells(ls´)
@@ -83,12 +83,11 @@ default_green_solver(::AbstractHamiltonian) = GS.NoSolver()
 # attach
 #region
 
-# new contacts should create new GreenFunction with empty preallocs
 attach(g::GreenFunction, args...; kw...) = attach(g, SelfEnergy(hamiltonian(g), args...; kw...))
 attach(Σ::SelfEnergy) = g -> attach(g, Σ)
 attach(args...; kw...) = g -> attach(g, SelfEnergy(hamiltonian(g), args...; kw...))
 attach(g::GreenFunction, Σ::SelfEnergy) =
-    GreenFunction(hamiltonian(g), solver(g), attach(contacts(g), Σ))
+    GreenFunction(hamiltonian(g), reset(solver(g)), attach(contacts(g), Σ))
 
 #endregion
 
@@ -107,7 +106,23 @@ function call!(g::GreenFunction; params...)
     return GreenFunction(h´, solver´, contacts´)
 end
 
-# function call!(g::GreenFunction, ω; params...)
-# end
+function call!(g::GreenFunction, ω; params...)
+    h = hamiltonian(g)
+    cs = contacts(g)
+    call!(h, (); params...)
+    Σs = call!(cs, ω; params...)
+    so = call!(solver(g), h, cs, ω; params...)
+    ls = latslice(cs)
+    gc = so()
+    Γs = linewidth.(Σs)
+    return GreenMatrix(so, gc, Γs, ls)
+end
+
+function linewidth(Σ::MatrixBlock)
+    Σmat = blockmat(Σ)
+    Γ = Σmat + Σmat'
+    Γ .*= im
+    return Γ
+end
 
 #endregion

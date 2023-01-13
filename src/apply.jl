@@ -168,11 +168,13 @@ function apply(solver::AbstractEigenSolver, h::AbstractHamiltonian, S::Type{SVec
     B = blocktype(h)
     h´ = copy_callsafe(h)
     # Some solvers (e.g. ES.LinearAlgebra) only accept certain matrix types
+    # so this mat´ could be an alias of the call! output, or an unaliased conversion
     mat´ = ES.input_matrix(solver, h´)
     function sfunc(φs)
         φs´ = applymap(mapping, φs)
         mat = call!(h´, φs´)
         mat´ === mat || copy!(mat´, mat)
+        # the solver always receives the matrix type declared by ES.input_matrix
         eigen = solver(mat´)
         return Spectrum(eigen, h, transform)
     end

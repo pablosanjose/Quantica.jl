@@ -167,7 +167,7 @@ function Base.merge!(ls0::S, lss::S...) where {L,S<:LatticeSlice{<:Any,<:Any,L}}
         argerror("Cannot merge LatticeBlocks of different lattices")
 
     allcellinds = Tuple{SVector{L,Int},Int}[]
-    for ls in lss, scell in subcells(ls), ind in siteindices(scell)
+    for ls in (ls0, lss...), scell in subcells(ls), ind in siteindices(scell)
         push!(allcellinds, (cell(scell), ind))
     end
     sort!(allcellinds)
@@ -175,7 +175,7 @@ function Base.merge!(ls0::S, lss::S...) where {L,S<:LatticeSlice{<:Any,<:Any,L}}
 
     currentcell = first(first(allcellinds))
     scell = Subcell(currentcell)
-    scells = subcells(lc0)
+    scells = subcells(ls0)
     empty!(scells)
     push!(scells, scell)
     for (c, i) in allcellinds
@@ -185,6 +185,7 @@ function Base.merge!(ls0::S, lss::S...) where {L,S<:LatticeSlice{<:Any,<:Any,L}}
             scell = Subcell(c)
             push!(siteindices(scell), i)
             push!(scells, scell)
+            currentcell = c
         end
     end
     return ls0

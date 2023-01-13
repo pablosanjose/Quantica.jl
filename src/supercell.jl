@@ -289,3 +289,13 @@ function remove_low_coordination_sites!(data, indexlist, offset, h, mincoordinat
 end
 
 #endregion
+
+############################################################################################
+# supercell(::ParametricHamiltonian, ...)
+#region
+
+## TODO
+supercell(p::ParametricHamiltonian, args...; kw...) =
+    argerror("supercell(::ParametricHamiltonian, ...) is not yet implemented. In the meantime, call supercell on the parent Hamiltonian or Lattice")
+
+#endregion

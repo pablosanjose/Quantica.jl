@@ -7,6 +7,7 @@ using Base.Threads: Iterators
 using StaticArrays
 using NearestNeighbors
 using SparseArrays
+using SparseArrays: getcolptr, AbstractSparseMatrix, AbstractSparseMatrixCSC
 using LinearAlgebra
 using ProgressMeter
 using Random
@@ -15,7 +16,6 @@ using FunctionWrappers: FunctionWrapper
 using ExprTools
 using IntervalTrees
 using FrankenTuples
-using SparseArrays: getcolptr, AbstractSparseMatrix, AbstractSparseMatrixCSC
 using Statistics: mean
 
 export sublat, lattice, supercell, bravais_matrix,

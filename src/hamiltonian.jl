@@ -245,10 +245,11 @@ copy_callsafe(h::Hamiltonian) = Hamiltonian(
 (h::Hamiltonian)(phi...; params...) = copy(call!(h, phi; params...))
 
 call!(h::Hamiltonian; params...) = h  # mimic partial call!(p::ParametricHamiltonian; params...)
-call!(h::Hamiltonian, φs; params...) = bloch_flat!(h, sanitize_SVector(φs))
+call!(h::Hamiltonian, φs; params...) = flat_bloch!(h, sanitize_SVector(φs))
+call!(h::Hamiltonian{<:Any,<:Any,0}, ::Tuple{}; params...) = flat(h[])
 
 # returns a flat sparse matrix
-function bloch_flat!(h::Hamiltonian{T}, φs::SVector, axis = missing) where {T}
+function flat_bloch!(h::Hamiltonian{T}, φs::SVector, axis = missing) where {T}
     hbloch = bloch(h)
     needs_initialization(hbloch) && initialize_bloch!(hbloch, harmonics(h))
     fbloch = flat(hbloch)
@@ -284,7 +285,8 @@ end
     L == L´ || throw(ArgumentError("Need $L Bloch phases, got $(L´)"))
 
 # ouput of a call!(h, ϕs)
-call!_output_matrix(h::Hamiltonian) = flat(bloch(h))
+call!_output(h::Hamiltonian) = flat(bloch(h))
+call!_output(h::Hamiltonian{<:Any,<:Any,0}) = flat(h[])
 
 #endregion
 
@@ -368,7 +370,7 @@ function applymodifiers!(h, m::AppliedHoppingModifier{B}; kw...) where {B<:SMatr
 end
 
 # ouput of a *full* call!(p, ϕs; kw...)
-call!_output_matrix(p::ParametricHamiltonian) = flat(bloch(p))
+call!_output(p::ParametricHamiltonian) = call!_output(hamiltonian(p))
 
 #endregion
 

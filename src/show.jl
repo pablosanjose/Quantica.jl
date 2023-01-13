@@ -233,7 +233,7 @@ Base.summary(::Bands{T,E,L}) where {T,E,L} =
 #endregion
 
 ############################################################################################
-# GreenFunction
+# GreenFunction and GreenMatrix
 #region
 
 function Base.show(io::IO, g::GreenFunction)
@@ -243,11 +243,21 @@ function Base.show(io::IO, g::GreenFunction)
 "$i  Solver          : $(typename(solver(g)))
 $i  Contacts        : $(length(Σs))
 $i  Contact solvers : $(display_as_tuple(typename.(solver.(Σs))))
-$i  Contact sizes   : $(display_as_tuple(nsites.(latslice.(Σs))))")
+$i  Contact sizes   : $(display_as_tuple(nsites.(latslice.(Σs))))", "\n")
+    ioindent = IOContext(io, :indent => "  ")
+    show(ioindent, parent(g))
 end
 
 Base.summary(g::GreenFunction{T,E,L}) where {T,E,L} =
-    "GreenFunction{$T,$E,$L}: Green function of an $L-dimensional $(typename(hamiltonian(g))){$T} in $(E)D space"
+    "GreenFunction{$T,$E,$L}: Green function of a $(typename(hamiltonian(g))){$T,$E,$L}"
+
+function Base.show(io::IO, g::GreenMatrix)
+    i = get(io, :indent, "")
+    print(io, i, summary(g))
+end
+
+Base.summary(g::GreenMatrix{T,E,L}) where {T,E,L} =
+    "GreenMatrix{$T,$E,$L}: Green matrix evaluator"
 
 #endregion
 

@@ -649,7 +649,9 @@ blockeltype(::AbstractHamiltonian) = blockeltype(blockstructure(h))
 
 blocktype(h::AbstractHamiltonian) = blocktype(blockstructure(h))
 
-# see sparsetools.jl
+flatsize(h::AbstractHamiltonian) = flatsize(blockstructure(h))
+
+# see specialmatrices.jl
 flatrange(h::AbstractHamiltonian, iunflat) = flatrange(blockstructure(h), iunflat)
 
 ## Hamiltonian
@@ -944,14 +946,16 @@ subbands(b::Bands, i...) = getindex(b.subbands, i...)
 #endregion
 
 ############################################################################################
-# SelfEnergy - see solvers/greensolvers.jl for self-energy solvers
+# SelfEnergy - see selfenergy.jl for self-energy solvers
 #   Any new s::AbstractSelfEnergySolver is associated to some forms of attach(g, sargs...)
 #   For each such form we must add a SelfEnergy constructor that will be used by attach
 #     - SelfEnergy(h::AbstractHamiltonian, sargs...; siteselect...) -> SelfEnergy
 #   This wraps the s::AbstractSelfEnergySolver that should support the call! API
-#     - call!(s::RegularSelfEnergySolver, ω; params...) -> Σ::AbstractArray over its own latslice
-#     - call!(s::ExtendedSelfEnergySolver, ω; params...) -> (blocks of [Σreg V´; V gₐ⁻¹])
 #     - call!(s::AbstractSelfEnergySolver; params...) -> AbstractSelfEnergySolver
+#     - call!(s::RegularSelfEnergySolver, ω; params...) -> Σreg::MatrixBlock
+#     - call!(s::ExtendedSelfEnergySolver, ω; params...) -> (Σᵣᵣ, Vᵣₑ, gₑₑ⁻¹, Vₑᵣ) MatrixBlock's
+#         With the extended case, the equivalent Σreg reads Σreg = Σᵣᵣ + VᵣₑgₑₑVₑᵣ
+#     - call!_output(s::AbstractSelfEnergySolver) -> object returned by call!(s, ω; params...)
 #region
 
 abstract type AbstractSelfEnergySolver end
@@ -959,14 +963,9 @@ abstract type RegularSelfEnergySolver <: AbstractSelfEnergySolver end
 abstract type ExtendedSelfEnergySolver <: AbstractSelfEnergySolver end
 
 struct SelfEnergy{T,E,L,S<:AbstractSelfEnergySolver}
-    solver::S               # returns HybridMatrix over latslice
+    solver::S                           # returns flat AbstractMatrix over latslice
     latslice::LatticeSlice{T,E,L}
-end
-
-# produced by call!(s::SelfEnergy, ω; p...)
-struct SelfEnergyMatrix{T,E,L,H<:HybridMatrix{Complex{T}}}
-    mat::H
-    latslice::LatticeSlice{T,E,L}  # === s.latslice of parent s
+    blockstruct::MultiBlockStructure{L} # computed once, before call!(solver, ω; params...)
 end
 
 struct Contacts{T,E,L,N,S<:NTuple{N,SelfEnergy}}
@@ -997,7 +996,7 @@ function attach(c::Contacts, Σ::SelfEnergy)
     return Contacts(selfenergies, c.mergedlatslice)
 end
 
-# returns a collection of SelfEnergyMatrix
+# returns a collection of self-energy MatrixBlock's
 function call!(c::Contacts, ω; params...)
     if isempty(c.mergedlatslice)
         Σlatslices = (s->s.latslice).(c.selfenergies)
@@ -1010,11 +1009,11 @@ end
 call!(c::Contacts; params...) =
     Contacts(call!.(c.selfenergies; params...), c.mergedlatslice)
 
-call!(Σ::SelfEnergy, ω; params...) =
-    SelfEnergyMatrix(call!(Σ.solver, ω; params...), Σ.latslice)
-
 call!(Σ::SelfEnergy; params...) =
-    SelfEnergy(call!(Σ.solver; params...), Σ.latslice)
+    SelfEnergy(call!(Σ.solver; params...), Σ.latslice, Σ.blockstruct)
+
+# returns a MatrixBlock
+call!(Σ::SelfEnergy, ω; params...) = call!(Σ.solver, ω; params...)
 
 #endregion
 #endregion
@@ -1024,11 +1023,17 @@ call!(Σ::SelfEnergy; params...) =
 #   Any new S::AbstractGreenSolver must implement
 #     - apply(s, h::AbstractHamiltonian) -> AppliedGreenSolver
 #   Any new s::AppliedGreenSolver must implement
-#     - call!(s, contacts, ω; params...) -> GreenMatrix
+#     - reset(s) -> AppliedGreenSolver (reset copy after adding a new contact)
+#     - call!(s; params...) -> AppliedGreenSolver
+#     - call!(s, h, contacts, ω) -> GreenMatrix (assumes h and contacts have been call!-ed)
 #     This GreenMatrix provides in particular:
-#        - GreenMatrixSolver to compute G[cell,cell´]::HybridMatrix for any cells/subcells
+#        - GreenMatrixSolver to compute e.g. G[cell,cell´]::HybridMatrix for any cells
 #        - g::HybridMatrix = G(ω; params...) over merged contact latslice
 #        - linewidth operatod Γᵢ::Matrix for each contact
+#   Any new s::GreenMatrixSolver must implement
+#      - s[] -> G::HybridMatrix over contact sites
+#      - s[cell, cell´] G::HybridMatrix between unitcells cell <= cell´
+#      - s[subcell, subcell´] G::HybridMatrix between subcell <= subcell´
 #region
 
 # Generic system-independent directives for solvers, e.g. GS.Schur()
@@ -1038,6 +1043,7 @@ abstract type AbstractGreenSolver end
 abstract type AppliedGreenSolver end
 
 # Solver with fixed ω and params that can compute G[subcell, subcell´] or G[cell, cell´]
+# It should also be able to return contact G with G[]
 abstract type GreenMatrixSolver end
 
 #endregion
@@ -1056,11 +1062,11 @@ end
 # Allows gω[i, j] -> HybridMatrix for i,j integer Σs indices ("contacts")
 # Allows gω[cell, cell´] -> HybridMatrix using T-matrix, with cell::Union{SVector,Subcell}
 # Allows also view(gω, ...)
-struct GreenMatrix{T,E,L,D<:GreenMatrixSolver}
-    solver::D                      # computes G(ω; p...)[cell,cell´] for any cell/subcell
-    g::HybridMatrix{Complex{T},L}  # hybrid matrix G(ω; p...)[i,i´] on latslice sites i
-    Γ::Vector{Matrix{Complex{T}}}  # linewidth Γ=i(Σ-Σ⁺) for each contact
-    latslice::LatticeSlice{T,E,L}  # === contacts.mergedlatslice from parent GreenFunction
+struct GreenMatrix{T,E,L,D<:GreenMatrixSolver,M<:NTuple{<:Any,AbstractMatrix}}
+    solver::D                        # computes G(ω; p...)[cell,cell´] for any cell/subcell
+    g::HybridMatrix{Complex{T},L}    # hybrid matrix G(ω; p...)[i,i´] on latslice sites i
+    Γs::M                            # linewidths Γ=i(Σ-Σ⁺) for each contact
+    latslice::LatticeSlice{T,E,L}    # === contacts.mergedlatslice from parent GreenFunction
 end
 
 # Obtained with gs = g[; siteselection...]
@@ -1090,11 +1096,15 @@ solver(g::GreenFunction) = g.solver
 
 contacts(g::GreenFunction) = g.contacts
 
+Base.parent(g::GreenFunction) = g.parent
+
 Base.getindex(g::GreenMatrix, c::Subcell, c´::Subcell) =
     g.solver(cell(c), cell(c´), siteindices(c), siteindices(c´))
 
 Base.getindex(g::GreenMatrix{<:Any,<:Any,L}, c::NTuple{L,Int}, c´::NTuple{L,Int}) where {L} =
     g.solver(SVector(c), SVector(c´))
+
+Base.getindex(g::GreenMatrix) = g.solver()
 
 #endregion
 #endregion

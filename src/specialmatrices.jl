@@ -267,6 +267,8 @@ end
 
 Base.size(h::HybridSparseBlochMatrix, i::Integer...) = size(h.unflat, i...)
 
+flatsize(h::HybridSparseBlochMatrix) = flatsize(h.blockstruct)
+
 #endregion
 
 ############################################################################################
@@ -632,6 +634,174 @@ function Base.setindex!(m::HybridMatrix, val::UniformScaling, i...)
     end
     return v
 end
+
+#endregion
+#endregion
+#endregion top
+
+############################################################################################
+#################################### BlockSparseMatrix #####################################
+#region ####################################################################################
+
+############################################################################################
+# BlockSparseMatrix
+#   Flat sparse matrix that can be efficiently updated using block matrices `blocks`
+#region
+
+struct MatrixBlock{C<:Number, A<:AbstractMatrix{C},U}
+    block::A
+    rows::U             # row indices in parent matrix
+    cols::U             # col indices in parent matrix
+    coefficient::C      # coefficient to apply to block
+end
+
+struct BlockSparseMatrix{C,N,M<:NTuple{N,MatrixBlock}}
+    mat::SparseMatrixCSC{C,Int}
+    blocks::M
+    ptrs::NTuple{N,Vector{Int}}    # nzvals indices for blocks
+end
+
+#region ## Constructors ##
+
+MatrixBlock(block::AbstractMatrix{C}, rows, cols) where {C} =
+    MatrixBlock(block, rows, cols, one(C))
+
+function BlockSparseMatrix(mblocks::MatrixBlock...)
+    blocks = blockmat.(mblocks)
+    C = promote_type(eltype.(blocks)...)
+    # I = Iterators.flatten(blockrows.(mblocks)) |> collect
+    # J = Iterators.flatten(blockcols.(mblocks)) |> collect
+    I, J = Int[], Int[]
+    foreach(b -> appendIJ!(I, J, b), mblocks)
+    mat = sparse(I, J, zero(C))
+    ptrs = getblockptrs.(mblocks, Ref(mat))
+    return BlockSparseMatrix(mat, mblocks, ptrs)
+end
+
+function appendIJ!(I, J, b::MatrixBlock{<:Any,<:AbstractSparseMatrixCSC})
+    for col in axes(b.block, 2), ptr in nzrange(b.block, col)
+        push!(I, b.rows[rowvals(b.block)[ptr]])
+        push!(J, b.cols[col])
+    end
+    return I, J
+end
+
+function appendIJ!(I, J, b::MatrixBlock{<:Any,<:StridedMatrix})
+    for c in CartesianIndices(b.block)
+        row, col = Tuple(c)
+        push!(I, b.rows[row])
+        push!(J, b.cols[col])
+    end
+    return I, J
+end
+
+function appendIJ!(I, J, b::MatrixBlock{<:Any,<:Diagonal})
+    for col in axes(b.block, 2)
+        row = col
+        push!(I, b.rows[row])
+        push!(J, b.cols[col])
+    end
+    return I, J
+end
+
+getblockptrs(mblock, mat) = getblockptrs(mblock.block, mblock.rows, mblock.cols, mat)
+
+function getblockptrs(block::AbstractSparseMatrixCSC, is, js, mat)
+    checkblocksize(block, is, js)
+    ptrs = Int[]
+    for col in axes(block, 2)
+        colmat = js[col]
+        p = 0
+        for ptr in nzrange(block, col)
+            p+=1
+            row = rowvals(block)[ptr]
+            rowmat = is[row]
+            for ptrmat in nzrange(mat, colmat)
+                rowvals(mat)[ptrmat] == rowmat && (push!(ptrs, ptrmat); break)
+            end
+        end
+    end
+
+    nnz(block) == length(ptrs) ||
+        argerror("Sparse matrix does not contain structural block")
+    return ptrs
+end
+
+function getblockptrs(block::StridedMatrix, is, js, mat)
+    checkblocksize(block, is, js)
+    ptrs = Int[]
+    for c in CartesianIndices(block)
+        row, col = Tuple(c)
+        rowmat, colmat = is[row], js[col]
+        for ptrmat in nzrange(mat, colmat)
+            rowvals(mat)[ptrmat] == rowmat && (push!(ptrs, ptrmat); break)
+        end
+    end
+    length(block) == length(ptrs) ||
+        argerror("Sparse matrix does not contain structural block")
+    return ptrs
+end
+
+function getblockptrs(block::Diagonal, is, js, mat)
+    checkblocksize(block, is, js)
+    ptrs = Int[]
+    for (col, colmat) in enumerate(js)
+        col > size(block, 1) && break
+        rowmat = is[col]
+        for ptrmat in nzrange(mat, colmat)
+            rowvals(mat)[ptrmat] == rowmat && (push!(ptrs, ptrmat); break)
+        end
+    end
+    min(size(block)...) == length(ptrs) ||
+        argerror("Sparse matrix does not contain structural block")
+    return ptrs
+end
+
+checkblocksize(block, is, js) =
+    (length(is), length(js)) == size(block) || argerror("Block indices size mismatch")
+#endregion
+
+#region ## API ##
+
+SparseArrays.sparse(b::BlockSparseMatrix) = b.mat
+
+blockmat(m::MatrixBlock) = m.block
+
+blockrows(m::MatrixBlock) = m.rows
+
+blockcols(m::MatrixBlock) = m.cols
+
+coefficient(m::MatrixBlock) = m.coefficient
+
+Base.size(m::MatrixBlock, i...) = size(m.block, i...)
+
+blocks(m::BlockSparseMatrix) = m.blocks
+
+function update!(m::BlockSparseMatrix)
+    fill!(nonzeros(m.mat), 0)
+    addblocks!(m)
+    return m
+end
+
+function addblocks!(m::BlockSparseMatrix)
+    for (mblock, ptrs) in zip(m.blocks, m.ptrs)
+        mat = blockmat(mblock)
+        coef = coefficient(mblock)
+        for (x, ptr) in zip(stored(mat), ptrs)
+            nonzeros(m.mat)[ptr] += coef * x
+        end
+    end
+    return m
+end
+
+stored(block::AbstractSparseMatrixCSC) = nonzeros(block)
+stored(block::StridedMatrix) = block
+stored(block::Diagonal) = block.diag
+
+Base.eltype(m::BlockSparseMatrix) = eltype(m.mat)
+Base.eltype(m::MatrixBlock) = eltype(m.block)
+
+Base.:-(b::MatrixBlock) = MatrixBlock(b.block, b.rows, b.cols, -b.coefficient)
 
 #endregion
 #endregion

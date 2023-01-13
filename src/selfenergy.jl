@@ -1,4 +1,31 @@
 ############################################################################################
+# blockshift for ExtendedSelfEnergySolver output
+#    ExtendedSelfEnergySolver returns Σᵣᵣ, Vᵣₑ, gₑₑ⁻¹, Vₑᵣ, which are MatrixBlock's
+#    All but Σᵣᵣ are defined over extended orbitals, adjacent to those of Σᵣᵣ
+#    blockshift shifts the orbital indices by a fixed quantity
+#region
+
+function blockshift!((Σᵣᵣ, Vᵣₑ, gₑₑ⁻¹, Vₑᵣ)::Tuple{MatrixBlock}, shift)
+    Vᵣₑ´ = blockshift!(Vᵣₑ, (0, shift))
+    Vₑᵣ´ = blockshift!(Vₑᵣ, (0, shift))
+    gₑₑ⁻¹ = blockshift!(gₑₑ⁻¹, (shift, shift))
+    return Σᵣᵣ, Vᵣₑ´, gₑₑ⁻¹´, Vₑᵣ´
+end
+
+function blockshift!(b::MatrixBlock, (rowshift, colshift))
+    mat = blockmat(m)
+    coeff = coefficient(m)
+    rows = blockshift!(blockrows(b), rowshift)
+    cols = blockshift!(blockcols(b), colshift)
+    return MatrixBlock(mat, rows, cols, coeff)
+end
+
+blockshift!(r::AbstractUnitRange, shift) = r .+ shift
+blockshift!(r::AbstractVector, shift) = (r .+= shift)
+
+#endregion
+
+############################################################################################
 # SelfEnergyModel <: RegularSelfEnergySolver <: AbstractSelfEnergySolver
 #region
 
@@ -24,7 +51,7 @@ function SelfEnergy(h::AbstractHamiltonian{T}, model::ParametricModel, sel::Site
     # orbital index on latslice for each orbital in lat0
     flatorbinds = flatinds(sliceinds, bs)
     solver = SelfEnergyModel(latslice, flatorbinds, ph)
-    return SelfEnergy(solver, latslice)
+    return SelfEnergy(solver, latslice, bs)
 end
 
 function flatinds(sliceinds, bs::MultiBlockStructure)
@@ -36,12 +63,13 @@ function flatinds(sliceinds, bs::MultiBlockStructure)
 end
 
 function call!(s::SelfEnergyModel{T}, ω; params...) where {T}
-    h = s.ph(; ω_internal = ω, params...)
-    m = call!(h, ())
-    v = view(m, s.flatorbinds, s.flatorbinds)
-    m´ = HybridMatrix(v, s.latslice, s.ph)
-    return m´
+    m = call!(s.ph, (); ω_internal = ω, params...)
+    rows = cols = s.flatorbinds
+    return MatrixBlock(m, rows, cols)
 end
+
+call!_output(s::SelfEnergyModel) =
+    MatrixBlock(call!_output(s.ph), s.flatorbinds, s.flatorbinds)
 
 #endregion
 #endregion
