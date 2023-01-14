@@ -946,12 +946,11 @@ subbands(b::Bands, i...) = getindex(b.subbands, i...)
 #endregion
 
 ############################################################################################
-# SelfEnergy - see selfenergy.jl for self-energy solvers
+# SelfEnergy solvers - see selfenergy.jl for self-energy solvers
 #   Any new s::AbstractSelfEnergySolver is associated to some forms of attach(g, sargs...)
 #   For each such form we must add a SelfEnergy constructor that will be used by attach
 #     - SelfEnergy(h::AbstractHamiltonian, sargs...; siteselect...) -> SelfEnergy
 #   This wraps the s::AbstractSelfEnergySolver that should support the call! API
-#     - call!(s::AbstractSelfEnergySolver; params...) -> AbstractSelfEnergySolver
 #     - call!(s::RegularSelfEnergySolver, ω; params...) -> Σreg::MatrixBlock
 #     - call!(s::ExtendedSelfEnergySolver, ω; params...) -> (Σᵣᵣ, Vᵣₑ, gₑₑ⁻¹, Vₑᵣ) MatrixBlock's
 #         With the extended case, the equivalent Σreg reads Σreg = Σᵣᵣ + VᵣₑgₑₑVₑᵣ
@@ -962,22 +961,37 @@ abstract type AbstractSelfEnergySolver end
 abstract type RegularSelfEnergySolver <: AbstractSelfEnergySolver end
 abstract type ExtendedSelfEnergySolver <: AbstractSelfEnergySolver end
 
-struct SelfEnergy{T,E,L,S<:AbstractSelfEnergySolver}
-    solver::S                           # returns flat AbstractMatrix over latslice
-    latslice::LatticeSlice{T,E,L}
-    blockstruct::MultiBlockStructure{L} # computed once, before call!(solver, ω; params...)
+# Support for call!(s::AbstractSelfEnergySolver; params...) -> AbstractSelfEnergySolver
+
+struct WrappedRegularSelfEnergySolver{F} <: RegularSelfEnergySolver
+    f::F
 end
 
-struct Contacts{T,E,L,N,S<:NTuple{N,SelfEnergy}}
-    selfenergies::S
-    mergedlatslice::LatticeSlice{T,E,L}   # merged latslice for all self-energies
+struct WrappedExtendedSelfEnergySolver{F} <: ExtendedSelfEnergySolver
+    f::F
 end
 
-#region ## Contructors ##
+call!(s::WrappedRegularSelfEnergySolver, ω; params...) = s.f(ω)
+call!(s::WrappedExtendedSelfEnergySolver, ω; params...) = s.f(ω)
 
-Contacts(lat::Lattice) = Contacts((), LatticeSlice(lat))
+call!(s::RegularSelfEnergySolver; params...) =
+    WrappedRegularSelfEnergySolver(ω -> call!(s, ω; params...))
+call!(s::ExtendedSelfEnergySolver; params...) =
+    WrappedExtendedSelfEnergySolver(ω -> call!(s, ω; params...))
+call!(s::WrappedRegularSelfEnergySolver; params...) = s
+call!(s::WrappedExtendedSelfEnergySolver; params...) = s
 
 #endregion
+
+############################################################################################
+# SelfEnergy - see selfenergy.jl
+#   Contacts is a collection of SelfEnergy's finalized to be wrapped into a GreenFunction
+#region
+
+struct SelfEnergy{T,E,L,S<:AbstractSelfEnergySolver}
+    solver::S                                        # returns MatrixBlock over latslice
+    latslice::LatticeSlice{T,E,L}
+end
 
 #region ## API ##
 
@@ -985,47 +999,82 @@ latslice(c::SelfEnergy) = c.latslice
 
 solver(c::SelfEnergy) = c.solver
 
-latslice(c::Contacts) = c.mergedlatslice
-
-selfenergies(c::Contacts) = c.selfenergies
-
-function attach(c::Contacts, Σ::SelfEnergy)
-    selfenergies = (c.selfenergies..., Σ)
-    # We delay the latslice merge until the first call!(::contact,...): it should only be
-    # computed once for a given set of selfenergies, not once per call!
-    return Contacts(selfenergies, c.mergedlatslice)
-end
-
-# returns a collection of self-energy MatrixBlock's
-function call!(c::Contacts, ω; params...)
-    if isempty(c.mergedlatslice)
-        Σlatslices = (s->s.latslice).(c.selfenergies)
-        merge!(c.mergedlatslice, Σlatslices...)
-    end
-    Σs = call!.(c.selfenergies, Ref(ω); params...)
-    return Σs
-end
-
-call!(c::Contacts; params...) =
-    Contacts(call!.(c.selfenergies; params...), c.mergedlatslice)
-
-call!(Σ::SelfEnergy; params...) =
-    SelfEnergy(call!(Σ.solver; params...), Σ.latslice, Σ.blockstruct)
-
-# returns a MatrixBlock
-call!(Σ::SelfEnergy, ω; params...) = call!(Σ.solver, ω; params...)
+call!(Σ::SelfEnergy; params...) = SelfEnergy(call!(Σ.solver; params...), Σ.latslice)
+call!(Σ::SelfEnergy, ω; params...) = call!(Σ.solver, ω; params...) # returns a MatrixBlock
 
 #endregion
 #endregion
 
 ############################################################################################
+# OpenHamiltonian
+#region
+
+struct OpenHamiltonian{T,E,L,H<:AbstractHamiltonian{T,E,L},S<:NTuple{<:Any,SelfEnergy{T,E,L}}}
+    h::H
+    selfenergies::S
+end
+
+#region ## API ##
+
+hamiltonian(oh::OpenHamiltonian) = oh.h
+
+selfenergies(oh::OpenHamiltonian) = oh.selfenergies
+
+attach(Σ::SelfEnergy) = oh -> attach(oh, Σ)
+attach(args...; kw...) = oh -> attach(oh, args...; kw...)
+attach(oh::OpenHamiltonian, args...; kw...) = attach(oh, SelfEnergy(oh.h, args...; kw...))
+attach(oh::OpenHamiltonian, Σ::SelfEnergy) = OpenHamiltonian(oh.h, (oh.selfenergies..., Σ))
+attach(h::AbstractHamiltonian, args...; kw...) = attach(h, SelfEnergy(h, args...; kw...))
+attach(h::AbstractHamiltonian, Σ::SelfEnergy) = OpenHamiltonian(h, (Σ,))
+
+#endregion
+#endregion
+
+############################################################################################
+# Contacts
+#region
+
+struct Contacts{T,E,L,S<:NTuple{<:Any,SelfEnergy}}
+    selfenergies::S                       # used to produce MatrixBlock's
+    latsliceall::LatticeSlice{T,E,L}      # merged latslice for all self-energies
+    blockstruct::MultiBlockStructure{L}   # needed to build HybridMatrix'es over latsliceall
+end
+
+#region ## Constructors ##
+
+function Contacts(oh::OpenHamiltonian)
+    Σs = selfenergies(oh)
+    Σlatslices = latslice.(Σs)
+    latsliceall = merge(Σlatslices...)
+    bs = MultiBlockStructure(latsliceall, hamiltonian(oh))
+    return Contacts(Σs, latsliceall, bs)
+end
+
+#endregion
+
+#region ## API ##
+
+latslice(c::Contacts) = c.latsliceall
+
+selfenergies(c::Contacts) = c.selfenergies
+
+blockstruct(c::Contacts) = c.blockstruct
+
+call!(c::Contacts, ω; params...) = call!.(c.selfenergies, Ref(ω); params...)
+call!(c::Contacts; params...) =
+    Contacts(call!.(c.selfenergies; params...), c.mergedlatslice, c.blockstruct)
+
+#endregion
+
+#endregion
+
+############################################################################################
 # Green solvers - see solvers/greensolvers.jl
 #   Any new S::AbstractGreenSolver must implement
-#     - apply(s, h::AbstractHamiltonian) -> AppliedGreenSolver
+#     - apply(s, h::OpenHamiltonian) -> AppliedGreenSolver
 #   Any new s::AppliedGreenSolver must implement
-#     - reset(s) -> AppliedGreenSolver (reset copy after adding a new contact)
 #     - call!(s; params...) -> AppliedGreenSolver
-#     - call!(s, h, contacts, ω) -> GreenMatrix (assumes h and contacts have been call!-ed)
+#     - call!(s, h, contacts, ω; params...) -> GreenMatrix
 #     This GreenMatrix provides in particular:
 #        - GreenMatrixSolver to compute e.g. G[cell,cell´]::HybridMatrix for any cells
 #        - g::HybridMatrix = G(ω; params...) over merged contact latslice
@@ -1049,7 +1098,7 @@ abstract type GreenMatrixSolver end
 #endregion
 
 ############################################################################################
-# Green - see green.jl
+# Green - see greenfunction.jl
 #region
 
 struct GreenFunction{T,E,L,S<:AppliedGreenSolver,H<:AbstractHamiltonian{T,E,L},C<:Contacts}
@@ -1071,7 +1120,7 @@ end
 
 # Obtained with gs = g[; siteselection...]
 # Alows call!(gs, ω; params...) -> View{HybridMatrix} or gs(ω; params...) -> HybridMatrix
-#   required to do g |> attach(g´[sites´], couplingmodel; sites...)
+#   required to do h |> attach(g´[sites´], couplingmodel; sites...)
 struct GreenFunctionSlice{T,E,L,G<:GreenFunction{T,E,L}}
     g::G
     latslice::LatticeSlice{T,E,L}
@@ -1079,12 +1128,8 @@ end
 
 #region ## Constructors ##
 
-# GreenFunction without contacts
-function GreenFunction(h::AbstractHamiltonian{T,E,L}, s::AppliedGreenSolver) where {T,E,L}
-    lat = lattice(h)
-    contacts = Contacts(lat)                # empty
-    return GreenFunction(h, s, contacts)
-end
+GreenFunction(oh::OpenHamiltonian, as::AppliedGreenSolver) =
+    GreenFunction(hamiltonian(oh), as, Contacts(oh))
 
 #endregion
 

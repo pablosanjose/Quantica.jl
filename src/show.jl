@@ -98,7 +98,7 @@ end
 function Base.show(io::IO, o::ParametricOnsiteTerm{N}) where {N}
     i = get(io, :indent, "")
     print(io,
-"$(i)ParametricOnsiteTerm{$N}}:
+"$(i)ParametricOnsiteTerm{$N}:
 $(i)  Functor arguments : $N
 $(i)  Sublattices       : $(o.selector.sublats === missing ? "any" : o.selector.sublats)
 $(i)  Coefficient       : $(o.coefficient)
