@@ -62,32 +62,20 @@ end
 #endregion
 
 ############################################################################################
-# green
+# greenfunction
 #region
 
-green(s::AbstractGreenSolver) = h -> green(h, s)
+greenfunction(s::AbstractGreenSolver) = oh -> greenfunction(oh, s)
 
-green() = h -> green(h)
+greenfunction() = h -> greenfunction(h)
 
-green(h::AbstractHamiltonian, s::AbstractGreenSolver = default_green_solver(h)) =
-    GreenFunction(h, apply(s, h))
+greenfunction(oh::OpenHamiltonian, s::AbstractGreenSolver = default_green_solver(hamiltonian(oh))) =
+    GreenFunction(oh, apply(s, oh))
 
 # default_green_solver(::AbstractHamiltonian0D) = GS.SparseLU()
 # default_green_solver(::AbstractHamiltonian1D) = GS.Schur()
 # default_green_solver(::AbstractHamiltonian) = GS.Bands()
 default_green_solver(::AbstractHamiltonian) = GS.NoSolver()
-
-#endregion
-
-############################################################################################
-# attach
-#region
-
-attach(g::GreenFunction, args...; kw...) = attach(g, SelfEnergy(hamiltonian(g), args...; kw...))
-attach(Σ::SelfEnergy) = g -> attach(g, Σ)
-attach(args...; kw...) = g -> attach(g, SelfEnergy(hamiltonian(g), args...; kw...))
-attach(g::GreenFunction, Σ::SelfEnergy) =
-    GreenFunction(hamiltonian(g), reset(solver(g)), attach(contacts(g), Σ))
 
 #endregion
 
@@ -106,23 +94,7 @@ function call!(g::GreenFunction; params...)
     return GreenFunction(h´, solver´, contacts´)
 end
 
-function call!(g::GreenFunction, ω; params...)
-    h = hamiltonian(g)
-    cs = contacts(g)
-    call!(h, (); params...)
-    Σs = call!(cs, ω; params...)
-    so = call!(solver(g), h, cs, ω; params...)
-    ls = latslice(cs)
-    gc = so()
-    Γs = linewidth.(Σs)
-    return GreenMatrix(so, gc, Γs, ls)
-end
-
-function linewidth(Σ::MatrixBlock)
-    Σmat = blockmat(Σ)
-    Γ = Σmat - Σmat'
-    Γ .*= im
-    return Γ
-end
+call!(g::GreenFunction, ω; params...) =
+    call!(solver(g), hamiltonian(g), contacts(g), ω; params...)
 
 #endregion

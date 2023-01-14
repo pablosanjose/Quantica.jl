@@ -40,7 +40,7 @@ end
 SelfEnergy(h::AbstractHamiltonian, model::ParametricModel; kw...) =
     SelfEnergy(h, model, siteselector(; kw...))
 
-function SelfEnergy(h::AbstractHamiltonian{T}, model::ParametricModel, sel::SiteSelector) where {T}
+function SelfEnergy(h::AbstractHamiltonian, model::ParametricModel, sel::SiteSelector)
     modelω = model_ω_to_param(model)  # see model.jl - transforms ω into a ω_internal param
     latslice = lattice(h)[sel]
     sliceinds = Int[]
@@ -51,7 +51,7 @@ function SelfEnergy(h::AbstractHamiltonian{T}, model::ParametricModel, sel::Site
     # orbital index on latslice for each orbital in lat0
     flatorbinds = flatinds(sliceinds, bs)
     solver = SelfEnergyModel(latslice, flatorbinds, ph)
-    return SelfEnergy(solver, latslice, bs)
+    return SelfEnergy(solver, latslice)
 end
 
 function flatinds(sliceinds, bs::MultiBlockStructure)
@@ -62,7 +62,7 @@ function flatinds(sliceinds, bs::MultiBlockStructure)
     return finds
 end
 
-function call!(s::SelfEnergyModel{T}, ω; params...) where {T}
+function call!(s::SelfEnergyModel, ω; params...)
     m = call!(s.ph, (); ω_internal = ω, params...)
     rows = cols = s.flatorbinds
     return MatrixBlock(m, rows, cols)

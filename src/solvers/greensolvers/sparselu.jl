@@ -10,14 +10,14 @@ end
 
 #region ## Contructor ##
 
-function InverseGreenBlockSparse(h::AbstractHamiltonian{T}, c::Contacts) where {T}
+function InverseGreenBlockSparse(h::AbstractHamiltonian{T}, Σs) where {T}
     hdim = flatsize(h)
     haxis = 1:hdim
     ωblock = MatrixBlock((zero(Complex{T}) * I)(hdim), haxis, haxis)
     hblock = MatrixBlock(call!_output(h), haxis, haxis)
     extoffset = hdim
     contactinds = Int[]
-    solvers = solver.(selfenergies(c))
+    solvers = solver.(Σs)
     blocks = selfenergyblocks!(extoffset, contactinds, (ωblock, -hblock), solvers...)
     unique!(sort!(contactinds))
     checkcontactindices(contactinds, hdim)
@@ -70,68 +70,57 @@ end
 #region
 
 struct AppliedSparseLU{C} <:AppliedGreenSolver
-    ig::Ref{InverseGreenBlockSparse{C}}          # is only assigned upon first call!
-    blockstruct::Ref{MultiBlockStructure{0}}     # is only assigned upon first call!
+    invgreen::InverseGreenBlockSparse{C}
 end
 
 struct ExecutedSparseLU{C} <:GreenMatrixSolver
     fact::SparseArrays.UMFPACK.UmfpackLU{C,Int}  # of full system plus extended orbs
     blockstruct::MultiBlockStructure{0}          # of merged contact LatticeSlice
     contactinds::Vector{Int}                     # non-extended contact indices
+    source::Matrix{C}                            # preallocation for ldiv! solve
 end
 
 #region ## API ##
 
-AppliedSparseLU{C}() where {C} =
-    AppliedSparseLU{C}(Ref{InverseGreenBlockSparse{C}}(), Ref{MultiBlockStructure{0}}())
+function apply(::GS.SparseLU, oh::OpenHamiltonian{<:Any,<:Any,0})
+    invgreen = InverseGreenBlockSparse(hamiltonian(oh), selfenergies(oh))
+    return AppliedSparseLU(invgreen)
+end
 
-#endregion
-
-#region ## API ##
-
-apply(::GS.SparseLU, ::AbstractHamiltonian{T,<:Any,0}) where {T} =
-    AppliedSparseLU{Complex{T}}()
-apply(::GS.SparseLU, ::AbstractHamiltonian) =
+apply(::GS.SparseLU, ::OpenHamiltonian) =
     argerror("Can only use SparseLU with bounded Hamiltonians")
 
-reset(::AppliedSparseLU{C}) where {C} = AppliedSparseLU{C}()
+call!(s::AppliedSparseLU; params...) = s
 
-call!(s::AppliedSparseLU; params...) = s  # no need to reset
-
-function call!(s::AppliedSparseLU, h, contacts, ω)
-    if !isdefined(s.ig, 1)
-        s.ig[] = InverseGreenBlockSparse(h, contacts)
-    end
-    ig = s.ig[]
-
-    # must happen after call!(contacts, ω; params...) to ensure mergedlattice is initialized
-    if !isdefined(s.blockstruct, 1)
-        s.blockstruct[] = MultiBlockStructure(latslice(contacts), h)
-    end
-    blockstruct = s.blockstruct[]
-
-    contactinds = ig.contactinds
-
-    update!(ig, ω)
-    igmat = sparse(ig)
+function call!(s::AppliedSparseLU{C}, h, contacts, ω; params...) where {C}
+    call!(h, (); params...)       # call!_output is wrapped in invgreen's hblock - update it
+    Σs = call!(contacts, ω; params...)                        # same for invgreen's Σ blocks
+    invgreen = s.invgreen
+    cinds = invgreen.contactinds
+    bs = blockstruct(contacts)
+    update!(invgreen, ω)
+    igmat = sparse(invgreen)
     fact = try
         lu(igmat)
     catch
         argerror("Encountered a singular G⁻¹(ω) at ω = $ω, cannot factorize")
     end
-
-    return ExecutedSparseLU(fact, blockstruct, contactinds)
+    source = zeros(C, size(igmat, 2), length(cinds))
+    so = ExecutedSparseLU(fact, bs, cinds, source)
+    gc = so()
+    Γs = linewidth.(Σs)
+    ls = latslice(contacts)
+    return GreenMatrix(so, gc, Γs, ls)
 end
 
 function (s::ExecutedSparseLU{C})() where {C}
     bs = s.blockstruct
     fact = s.fact
     cinds = s.contactinds
-    g⁻¹dim = size(fact, 2)
-    source = zeros(C, g⁻¹dim, length(cinds))
-    o = one(C)
+    source = s.source
+    fill!(source, zero(C))
     for (col, row) in enumerate(cinds)
-        source[row, col] = o
+        source[row, col] = one(C)
     end
     gext = ldiv!(fact, source)
     g = HybridMatrix(gext[cinds, :], bs)

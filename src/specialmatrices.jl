@@ -551,7 +551,7 @@ end
 #region ####################################################################################
 
 ############################################################################################
-# HybridMatrix - see green.jl for constructors
+# HybridMatrix - see greenfunction.jl for constructors
 #   Flat dense matrix endowed with subcell, site (orbital) and contact block structures
 #region
 
@@ -640,12 +640,12 @@ end
 #endregion top
 
 ############################################################################################
-#################################### BlockSparseMatrix #####################################
+####################################### MatrixBlock ########################################
 #region ####################################################################################
 
 ############################################################################################
-# BlockSparseMatrix
-#   Flat sparse matrix that can be efficiently updated using block matrices `blocks`
+# MatrixBlock
+#   A Block within a parent matrix, at a given set of rows and cols
 #region
 
 struct MatrixBlock{C<:Number, A<:AbstractMatrix{C},U}
@@ -655,28 +655,24 @@ struct MatrixBlock{C<:Number, A<:AbstractMatrix{C},U}
     coefficient::C      # coefficient to apply to block
 end
 
-struct BlockSparseMatrix{C,N,M<:NTuple{N,MatrixBlock}}
-    mat::SparseMatrixCSC{C,Int}
-    blocks::M
-    ptrs::NTuple{N,Vector{Int}}    # nzvals indices for blocks
-end
-
 #region ## Constructors ##
 
 MatrixBlock(block::AbstractMatrix{C}, rows, cols) where {C} =
     MatrixBlock(block, rows, cols, one(C))
 
-function BlockSparseMatrix(mblocks::MatrixBlock...)
-    blocks = blockmat.(mblocks)
-    C = promote_type(eltype.(blocks)...)
-    # I = Iterators.flatten(blockrows.(mblocks)) |> collect
-    # J = Iterators.flatten(blockcols.(mblocks)) |> collect
-    I, J = Int[], Int[]
-    foreach(b -> appendIJ!(I, J, b), mblocks)
-    mat = sparse(I, J, zero(C))
-    ptrs = getblockptrs.(mblocks, Ref(mat))
-    return BlockSparseMatrix(mat, mblocks, ptrs)
-end
+#endregion
+
+#region ## API ##
+
+blockmat(m::MatrixBlock) = m.block
+
+blockrows(m::MatrixBlock) = m.rows
+
+blockcols(m::MatrixBlock) = m.cols
+
+coefficient(m::MatrixBlock) = m.coefficient
+
+Base.size(m::MatrixBlock, i...) = size(m.block, i...)
 
 function appendIJ!(I, J, b::MatrixBlock{<:Any,<:AbstractSparseMatrixCSC})
     for col in axes(b.block, 2), ptr in nzrange(b.block, col)
@@ -702,6 +698,51 @@ function appendIJ!(I, J, b::MatrixBlock{<:Any,<:Diagonal})
         push!(J, b.cols[col])
     end
     return I, J
+end
+
+function linewidth(Σ::MatrixBlock)
+    Σmat = blockmat(Σ)
+    Γ = Σmat - Σmat'
+    Γ .*= im
+    return Γ
+end
+
+Base.eltype(m::MatrixBlock) = eltype(m.block)
+
+Base.:-(b::MatrixBlock) = MatrixBlock(b.block, b.rows, b.cols, -b.coefficient)
+
+#endregion
+
+#endregion
+#endregion top
+
+############################################################################################
+#################################### BlockSparseMatrix #####################################
+#region ####################################################################################
+
+############################################################################################
+# BlockSparseMatrix
+#   Flat sparse matrix that can be efficiently updated using block matrices `blocks`
+#region
+
+struct BlockSparseMatrix{C,N,M<:NTuple{N,MatrixBlock}}
+    mat::SparseMatrixCSC{C,Int}
+    blocks::M
+    ptrs::NTuple{N,Vector{Int}}    # nzvals indices for blocks
+end
+
+#region ## Constructors ##
+
+function BlockSparseMatrix(mblocks::MatrixBlock...)
+    blocks = blockmat.(mblocks)
+    C = promote_type(eltype.(blocks)...)
+    # I = Iterators.flatten(blockrows.(mblocks)) |> collect
+    # J = Iterators.flatten(blockcols.(mblocks)) |> collect
+    I, J = Int[], Int[]
+    foreach(b -> appendIJ!(I, J, b), mblocks)
+    mat = sparse(I, J, zero(C))
+    ptrs = getblockptrs.(mblocks, Ref(mat))
+    return BlockSparseMatrix(mat, mblocks, ptrs)
 end
 
 getblockptrs(mblock, mat) = getblockptrs(mblock.block, mblock.rows, mblock.cols, mat)
@@ -765,16 +806,6 @@ checkblocksize(block, is, js) =
 
 SparseArrays.sparse(b::BlockSparseMatrix) = b.mat
 
-blockmat(m::MatrixBlock) = m.block
-
-blockrows(m::MatrixBlock) = m.rows
-
-blockcols(m::MatrixBlock) = m.cols
-
-coefficient(m::MatrixBlock) = m.coefficient
-
-Base.size(m::MatrixBlock, i...) = size(m.block, i...)
-
 blocks(m::BlockSparseMatrix) = m.blocks
 
 function update!(m::BlockSparseMatrix)
@@ -799,9 +830,6 @@ stored(block::StridedMatrix) = block
 stored(block::Diagonal) = block.diag
 
 Base.eltype(m::BlockSparseMatrix) = eltype(m.mat)
-Base.eltype(m::MatrixBlock) = eltype(m.block)
-
-Base.:-(b::MatrixBlock) = MatrixBlock(b.block, b.rows, b.cols, -b.coefficient)
 
 #endregion
 #endregion

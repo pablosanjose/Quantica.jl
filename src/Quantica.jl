@@ -23,7 +23,7 @@ export sublat, lattice, supercell, bravais_matrix,
        hamiltonian, parametric, call!,
        flat, unflat, wrap, transform, transform!, translate, translate!,
        spectrum, energies, states, bands, mesh, subbands, slice,
-       green, attach
+       greenfunction, attach
 
 # export sublat, lattice, dims, supercell, bravais_matrix, siteindices, sitepositions,
 #        hopping, onsite, @onsite!, @hopping!, @block!, parameters, neighbors,
@@ -55,7 +55,7 @@ include("selector.jl")
 include("lattice.jl")
 include("model.jl")
 include("hamiltonian.jl")
-include("green.jl")
+include("greenfunction.jl")
 include("selfenergy.jl")
 include("supercell.jl")
 include("transform.jl")
