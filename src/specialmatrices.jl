@@ -1,227 +1,40 @@
+############################################################################################
+# Functionality for various matrix structures in Quantica.jl - see spectialmatrixtypes.jl
+############################################################################################
 
 ############################################################################################
-################################# HybridSparseBlochMatrix ##################################
-#region ####################################################################################
-
-############################################################################################
-# SMatrixView
-#   eltype that signals to HybridSparseBlochMatrix that a variable-size view must be returned
-#   of its elements, because the number of orbitals is not uniform
+## HybridSparseBlochMatrix
+#    Internal Matrix type for Bloch harmonics in Hamiltonians
 #region
 
-struct SMatrixView{N,M,T,NM}
-    s::SMatrix{N,M,T,NM}
-    SMatrixView{N,M,T,NM}(s) where {N,M,T,NM} = new(convert(SMatrix{N,M,T,NM}, s))
-end
-
-SMatrixView(s::SMatrix{N,M,T,NM}) where {N,M,T,NM} = SMatrixView{N,M,T,NM}(s)
-
-SMatrixView(::Type{<:SMatrix{N,M,T,NM}}) where {N,M,T,NM} = SMatrixView{N,M,T,NM}
-
-SMatrixView{N,M}(s) where {N,M} = SMatrixView(SMatrix{N,M}(s))
-
-Base.parent(s::SMatrixView) = s.s
-
-Base.view(s::SMatrixView, i...) = view(s.s, i...)
-
-Base.zero(::Type{SMatrixView{N,M,T,NM}}) where {N,M,T,NM} = zero(SMatrix{N,M,T,NM})
-
-# for generic code as e.g. flat/unflat or merged_flatten_mul!
-Base.getindex(s::SMatrixView, i::Integer...) = s.s[i...]
-
-#endregion
-
 ############################################################################################
-# MatrixElementType & friends
+# HybridSparseBlochMatrix API
 #region
-
-const MatrixElementType{T} = Union{
-    Complex{T},
-    SMatrix{N,N,Complex{T}} where {N},
-    SMatrixView{N,N,Complex{T}} where {N}}
-
-const MatrixElementUniformType{T} = Union{
-    Complex{T},
-    SMatrix{N,N,Complex{T}} where {N}}
-
-const MatrixElementNonscalarType{T,N} = Union{
-    SMatrix{N,N,Complex{T}},
-    SMatrixView{N,N,Complex{T}}}
-
-#endregion
-
-############################################################################################
-# SublatBlockStructure
-#region
-
-struct SublatBlockStructure{B}
-    blocksizes::Vector{Int}       # block sizes (number of site orbitals) in each sublattice
-    subsizes::Vector{Int}         # number of blocks (sites) in each sublattice
-    function SublatBlockStructure{B}(blocksizes, subsizes) where {B}
-        subsizes´ = Quantica.sanitize_Vector_of_Type(Int, subsizes)
-        # This checks also that they are of equal length
-        blocksizes´ = Quantica.sanitize_Vector_of_Type(Int, length(subsizes´), blocksizes)
-        return new(blocksizes´, subsizes´)
-    end
-end
-
-## Constructors ##
-
-@inline function SublatBlockStructure(T, blocksizes, subsizes)
-    B = blocktype(T, blocksizes)
-    return SublatBlockStructure{B}(blocksizes, subsizes)
-end
-
-blocktype(T::Type, norbs) = SMatrixView(blocktype(T, val_maximum(norbs)))
-blocktype(::Type{T}, m::Val{1}) where {T} = Complex{T}
-blocktype(::Type{T}, m::Val{N}) where {T,N} = SMatrix{N,N,Complex{T},N*N}
-# blocktype(::Type{T}, N::Int) where {T} = blocktype(T, Val(N))
-
-val_maximum(n::Int) = Val(n)
-val_maximum(ns) = Val(maximum(argval.(ns)))
-
-argval(::Val{N}) where {N} = N
-argval(n::Int) = n
-
-## API ##
-
-blocktype(::SublatBlockStructure{B}) where {B} = B
-
-blockeltype(::SublatBlockStructure{<:MatrixElementType{T}}) where {T} = Complex{T}
-
-blocksizes(b::SublatBlockStructure) = b.blocksizes
-
-subsizes(b::SublatBlockStructure) = b.subsizes
-
-flatsize(b::SublatBlockStructure) = blocksizes(b)' * subsizes(b)
-
-unflatsize(b::SublatBlockStructure) = sum(subsizes(b))
-
-blocksize(b::SublatBlockStructure, iunflat, junflat) = (blocksize(b, iunflat), blocksize(b, junflat))
-
-blocksize(b::SublatBlockStructure{<:SMatrixView}, iunflat) = length(flatrange(b, iunflat))
-
-blocksize(b::SublatBlockStructure{B}, iunflat) where {N,B<:SMatrix{N}} = N
-
-blocksize(b::SublatBlockStructure{B}, iunflat) where {B<:Number} = 1
-
-# Basic relation: iflat - 1 == (iunflat - soffset - 1) * b + soffset´
-function flatrange(b::SublatBlockStructure{<:SMatrixView}, iunflat::Integer)
-    soffset  = 0
-    soffset´ = 0
-    @boundscheck(iunflat < 0 && blockbounds_error())
-    @inbounds for (s, b) in zip(b.subsizes, b.blocksizes)
-        if soffset + s >= iunflat
-            offset = muladd(iunflat - soffset - 1, b, soffset´)
-            return offset+1:offset+b
-        end
-        soffset  += s
-        soffset´ += b * s
-    end
-    @boundscheck(blockbounds_error())
-end
-
-flatrange(b::SublatBlockStructure{<:SMatrix{N}}, iunflat::Integer) where {N} =
-    (iunflat - 1) * N + 1 : iunflat * N
-flatrange(b::SublatBlockStructure{<:Number}, iunflat::Integer) = iunflat:inflat
-
-flatindex(b::SublatBlockStructure, i) = first(flatrange(b, i))
-
-function unflatindex(b::SublatBlockStructure{<:SMatrixView}, iflat::Integer)
-    soffset  = 0
-    soffset´ = 0
-    @boundscheck(iflat < 0 && blockbounds_error())
-    @inbounds for (s, b) in zip(b.subsizes, b.blocksizes)
-        if soffset´ + b * s >= iflat
-            iunflat = (iflat - soffset´ - 1) ÷ b + soffset + 1
-            return iunflat, b
-        end
-        soffset  += s
-        soffset´ += b * s
-    end
-    @boundscheck(blockbounds_error())
-end
-
-unflatindex(b::SublatBlockStructure{B}, iflat::Integer) where {N,B<:SMatrix{N}} =
-    (iflat - 1)÷N + 1, N
-unflatindex(b::SublatBlockStructure{<:Number}, iflat::Integer) = iflat, 1
-
-Base.copy(b::SublatBlockStructure{B}) where {B} =
-    SublatBlockStructure{B}(copy(blocksizes(b)), copy(subsizes(b)))
-
-@noinline blockbounds_error() = throw(BoundsError())
-
-#endregion
-
-############################################################################################
-# HybridSparseBlochMatrix - wraps site-block + flat versions of the same SparseMatrixCSC
-#region
-
-struct HybridSparseBlochMatrix{T,B<:MatrixElementType{T}} <: SparseArrays.AbstractSparseMatrixCSC{B,Int}
-    blockstruct::SublatBlockStructure{B}
-    unflat::SparseMatrixCSC{B,Int}
-    flat::SparseMatrixCSC{Complex{T},Int}
-    sync_state::Ref{Int}  # 0 = in sync, 1 = flat needs sync, -1 = unflat needs sync, 2 = none initialized
-end
-
-## Constructors ##
-
-HybridSparseBlochMatrix(b::SublatBlockStructure{Complex{T}}, flat::SparseMatrixCSC{Complex{T},Int}) where {T} =
-    HybridSparseBlochMatrix(b, flat, flat, Ref(0))  # aliasing
-
-function HybridSparseBlochMatrix(b::SublatBlockStructure{B}, unflat::SparseMatrixCSC{B,Int}) where {T,B<:MatrixElementNonscalarType{T}}
-    m = HybridSparseBlochMatrix(b, unflat, flat(b, unflat), Ref(0))
-    needs_flat_sync!(m)
-    return m
-end
-
-function HybridSparseBlochMatrix(b::SublatBlockStructure{B}, flat::SparseMatrixCSC{Complex{T},Int}) where {T,B<:MatrixElementNonscalarType{T}}
-    m = HybridSparseBlochMatrix(b, unflat(b, flat), flat, Ref(0))
-    needs_unflat_sync!(m)
-    return m
-end
-
-## Show ##
-
-Base.show(io::IO, m::MIME"text/plain", s::HybridSparseBlochMatrix) =
-    show(io, m, unflat(s))
-
-## API ##
-
-blockstructure(s::HybridSparseBlochMatrix) = s.blockstruct
-
-unflat_unsafe(s::HybridSparseBlochMatrix) = s.unflat
-
-flat_unsafe(s::HybridSparseBlochMatrix) = s.flat
-
-# are flat === unflat? Only for scalar eltype
-isaliased(::HybridSparseBlochMatrix{<:Any,<:Complex}) = true
-isaliased(::HybridSparseBlochMatrix) = false
 
 function unflat(s::HybridSparseBlochMatrix)
     needs_unflat_sync(s) && unflat_sync!(s)
-    return s.unflat
+    return unflat_unsafe(s)
 end
 
 function flat(s::HybridSparseBlochMatrix)
     needs_flat_sync(s) && flat_sync!(s)
-    return s.flat
+    return flat_unsafe(s)
 end
 
 # Sync states
-needs_no_sync!(s::HybridSparseBlochMatrix)     = (s.sync_state[] = 0)
-needs_flat_sync!(s::HybridSparseBlochMatrix)   = (s.sync_state[] = 1)
-needs_unflat_sync!(s::HybridSparseBlochMatrix) = (s.sync_state[] = -1)
-needs_initialization!(s::HybridSparseBlochMatrix) = (s.sync_state[] = 2)
+needs_no_sync!(s::HybridSparseBlochMatrix)     = (syncstate(s)[] = 0)
+needs_flat_sync!(s::HybridSparseBlochMatrix)   = (syncstate(s)[] = 1)
+needs_unflat_sync!(s::HybridSparseBlochMatrix) = (syncstate(s)[] = -1)
+needs_initialization!(s::HybridSparseBlochMatrix) = (syncstate(s)[] = 2)
 
-needs_no_sync(s::HybridSparseBlochMatrix)      = (s.sync_state[] == 0)
-needs_flat_sync(s::HybridSparseBlochMatrix)    = (s.sync_state[] == 1)
-needs_unflat_sync(s::HybridSparseBlochMatrix)  = (s.sync_state[] == -1)
-needs_initialization(s::HybridSparseBlochMatrix) = (s.sync_state[] == 2)
+needs_no_sync(s::HybridSparseBlochMatrix)      = (syncstate(s)[] == 0)
+needs_flat_sync(s::HybridSparseBlochMatrix)    = (syncstate(s)[] == 1)
+needs_unflat_sync(s::HybridSparseBlochMatrix)  = (syncstate(s)[] == -1)
+needs_initialization(s::HybridSparseBlochMatrix) = (syncstate(s)[] == 2)
 
-needs_no_sync!(s::HybridSparseBlochMatrix{<:Any,<:Complex})     = (s.sync_state[] = 0)
-needs_flat_sync!(s::HybridSparseBlochMatrix{<:Any,<:Complex})   = (s.sync_state[] = 0)
-needs_unflat_sync!(s::HybridSparseBlochMatrix{<:Any,<:Complex}) = (s.sync_state[] = 0)
+needs_no_sync!(s::HybridSparseBlochMatrix{<:Any,<:Complex})     = (syncstate(s)[] = 0)
+needs_flat_sync!(s::HybridSparseBlochMatrix{<:Any,<:Complex})   = (syncstate(s)[] = 0)
+needs_unflat_sync!(s::HybridSparseBlochMatrix{<:Any,<:Complex}) = (syncstate(s)[] = 0)
 
 needs_no_sync(s::HybridSparseBlochMatrix{<:Any,<:Complex})      = true
 needs_flat_sync(s::HybridSparseBlochMatrix{<:Any,<:Complex})    = false
@@ -229,25 +42,25 @@ needs_unflat_sync(s::HybridSparseBlochMatrix{<:Any,<:Complex})  = false
 
 function Base.copy!(h::HybridSparseBlochMatrix{T,B}, h´::HybridSparseBlochMatrix{T,B}) where {T,B}
     copy!(blockstructure(h), blockstructure(h´))
-    copy!(h.unflat, h´.unflat)
-    isaliased(h´) || copy!(h.flat, h´.flat)
-    h.sync_state[] = h´.sync_state[]
+    copy!(unflat_unsafe(h), unflat_unsafe(h´))
+    isaliased(h´) || copy!(flat_unsafe(h), flat_unsafe(h´))
+    syncstate(h)[] = syncstate(h´)[]
     return h
 end
 
 function Base.copy(h::HybridSparseBlochMatrix)
     b = copy(blockstructure(h))
-    u = copy(h.unflat)
-    f = isaliased(h) ? u : copy(h.flat)
-    s = Ref(h.sync_state[])
+    u = copy(unflat_unsafe(h))
+    f = isaliased(h) ? u : copy(flat_unsafe(h))
+    s = Ref(syncstate(h)[])
     return HybridSparseBlochMatrix(b, u, f, s)
 end
 
 function copy_matrices(h::HybridSparseBlochMatrix)
     b = blockstructure(h)
-    u = copy(h.unflat)
-    f = isaliased(h) ? u : copy(h.flat)
-    s = Ref(h.sync_state[])
+    u = copy(unflat_unsafe(h))
+    f = isaliased(h) ? u : copy(flat_unsafe(h))
+    s = Ref(syncstate(h)[])
     return HybridSparseBlochMatrix(b, u, f, s)
 end
 
@@ -265,9 +78,9 @@ function nnzdiag(m::HybridSparseBlochMatrix)
     return count
 end
 
-Base.size(h::HybridSparseBlochMatrix, i::Integer...) = size(h.unflat, i...)
+Base.size(h::HybridSparseBlochMatrix, i::Integer...) = size(unflat_unsafe(h), i...)
 
-flatsize(h::HybridSparseBlochMatrix) = flatsize(h.blockstruct)
+flatsize(h::HybridSparseBlochMatrix) = flatsize(blockstructure(h))
 
 #endregion
 
@@ -390,7 +203,7 @@ checkblocks(b, flat) = nothing ## TODO: must check that all structural elements 
 # Uniform case
 function flat_sync!(s::HybridSparseBlochMatrix{<:Any,S}) where {N,S<:SMatrix{N,N}}
     checkinitialized(s)
-    flat, unflat = s.flat, s.unflat
+    flat, unflat = flat_unsafe(s), unflat_unsafe(s)
     cols = axes(unflat, 2)
     nzflat, nzunflat = nonzeros(flat), nonzeros(unflat)
     ptr´ = 1
@@ -547,155 +360,32 @@ end
 #endregion top
 
 ############################################################################################
-###################################### HybridMatrix ########################################
-#region ####################################################################################
-
-############################################################################################
-# HybridMatrix - see greenfunction.jl for constructors
-#   Flat dense matrix endowed with subcell, site (orbital) and contact block structures
-#region
-
-struct MultiBlockStructure{L}
-    cells::Vector{SVector{L,Int}}    # cells corresponding to for each subcell block
-    subcelloffsets::Vector{Int}      # block offsets for each subcell
-    siteoffsets::Vector{Int}         # block offsets for each site (for multiorbital sites)
-    contactinds::Vector{Vector{Int}} # parent indices for each Σ contact
-end
-
-struct HybridMatrix{C,L,A<:AbstractMatrix{C}} <: AbstractMatrix{C}
-    parent::A
-    blockstruct::MultiBlockStructure{L}
-end
-
-#region ## API ##
-
-blockstructure(m::HybridMatrix) = m.blockstruct
-
-cells(m::HybridMatrix) = cells(m.blockstruct)
-cells(m::MultiBlockStructure) = m.cells
-
-siterange(m::HybridMatrix, iunflat) = siterange(m.blockstruct, iunflat)
-siterange(m::MultiBlockStructure, iunflat) = m.siteoffsets[iunflat]+1:m.siteoffsets[iunflat+1]
-
-subcellrange(m::HybridMatrix, si) = subcellrange(m.blockstruct, si)
-subcellrange(m::MultiBlockStructure, si::Integer) = m.subcelloffsets[si]+1:m.subcelloffsets[si+1]
-subcellrange(m::MultiBlockStructure, cell::SVector) = subcellrange(m, subcellindex(m, cell))
-
-function subcellindex(m::MultiBlockStructure, cell::SVector)
-    for (i, cell´) in enumerate(m.cells)
-        cell === cell´ && return i
-    end
-    @boundscheck(throw(BoundsError(m, cell)))
-end
-
-flat(m::HybridMatrix) = m.parent
-
-flatsize(m::HybridMatrix) = flatsize(m.blockstruct)
-flatsize(m::MultiBlockStructure) = last(m.subcelloffsets)
-
-unflatsize(m::HybridMatrix) = unflatsize(m.blockstruct)
-unflatsize(m::MultiBlockStructure) = length(m.siteoffsets) - 1
-
-contactinds(m::HybridMatrix) = m.contactinds
-contactinds(m::HybridMatrix, i) = m.contactinds[i]
-
-Base.view(m::HybridMatrix, i::Integer, j::Integer) =
-    view(m.parent, siterange(m, i), siterange(m, j))
-
-Base.view(m::HybridMatrix, cell::SVector{<:Any,Int}, cell´::SVector{<:Any,Int}) =
-    view(m.parent, subcellrange(m, cell), subcellrange(m, cell´))
-
-Base.view(m::HybridMatrix, cell::NTuple{<:Any,Int}, cell´::NTuple{<:Any,Int}) =
-    view(m, SVector(cell), SVector(cell´))
-
-Base.size(m::HybridMatrix) = (unflatsize(m), unflatsize(m))
-
-function Base.size(m::HybridMatrix, i::Integer)
-    s = if i<1
-        @boundscheck(throw(BoundsError(m, i)))
-    elseif i<=2
-        unflatsize(m)
-    else
-        1
-    end
-    return s
-end
-
-Base.getindex(m::HybridMatrix, i...) = copy(view(m, i...))
-
-Base.setindex!(m::HybridMatrix, val, i...) = (view(m, i...) .= val)
-
-function Base.setindex!(m::HybridMatrix, val::UniformScaling, i...)
-    v = view(m, i...)
-    λ = val.λ
-    for c in CartesianIndices(v)
-        (i, j) = Tuple(c)
-        @inbounds v[c] = λ * (i == j)
-    end
-    return v
-end
-
-#endregion
-#endregion
-#endregion top
-
-############################################################################################
-####################################### MatrixBlock ########################################
-#region ####################################################################################
-
-############################################################################################
-# MatrixBlock
+## MatrixBlock API
 #   A Block within a parent matrix, at a given set of rows and cols
 #region
 
-struct MatrixBlock{C<:Number, A<:AbstractMatrix{C},U}
-    block::A
-    rows::U             # row indices in parent matrix
-    cols::U             # col indices in parent matrix
-    coefficient::C      # coefficient to apply to block
-end
-
-#region ## Constructors ##
-
-MatrixBlock(block::AbstractMatrix{C}, rows, cols) where {C} =
-    MatrixBlock(block, rows, cols, one(C))
-
-#endregion
-
-#region ## API ##
-
-blockmat(m::MatrixBlock) = m.block
-
-blockrows(m::MatrixBlock) = m.rows
-
-blockcols(m::MatrixBlock) = m.cols
-
-coefficient(m::MatrixBlock) = m.coefficient
-
-Base.size(m::MatrixBlock, i...) = size(m.block, i...)
-
 function appendIJ!(I, J, b::MatrixBlock{<:Any,<:AbstractSparseMatrixCSC})
-    for col in axes(b.block, 2), ptr in nzrange(b.block, col)
-        push!(I, b.rows[rowvals(b.block)[ptr]])
-        push!(J, b.cols[col])
+    for col in axes(blockmat(b), 2), ptr in nzrange(blockmat(b), col)
+        push!(I, blockrows(b)[rowvals(blockmat(b))[ptr]])
+        push!(J, blockcols(b)[col])
     end
     return I, J
 end
 
 function appendIJ!(I, J, b::MatrixBlock{<:Any,<:StridedMatrix})
-    for c in CartesianIndices(b.block)
+    for c in CartesianIndices(blockmat(b))
         row, col = Tuple(c)
-        push!(I, b.rows[row])
-        push!(J, b.cols[col])
+        push!(I, blockrows(b)[row])
+        push!(J, blockcols(b)[col])
     end
     return I, J
 end
 
 function appendIJ!(I, J, b::MatrixBlock{<:Any,<:Diagonal})
-    for col in axes(b.block, 2)
+    for col in axes(blockmat(b), 2)
         row = col
-        push!(I, b.rows[row])
-        push!(J, b.cols[col])
+        push!(I, blockrows(b)[row])
+        push!(J, blockcols(b)[col])
     end
     return I, J
 end
@@ -707,43 +397,23 @@ function linewidth(Σ::MatrixBlock)
     return Γ
 end
 
-Base.eltype(m::MatrixBlock) = eltype(m.block)
+Base.size(b::MatrixBlock, i...) = size(blockmat(b), i...)
 
-Base.:-(b::MatrixBlock) = MatrixBlock(b.block, b.rows, b.cols, -b.coefficient)
+Base.eltype(b::MatrixBlock) = eltype(blockmat(b))
 
-#endregion
+Base.:-(b::MatrixBlock) =
+    MatrixBlock(blockmat(b), blockrows(b), blockcols(b), -coefficient(b))
 
-#endregion
 #endregion top
 
 ############################################################################################
-#################################### BlockSparseMatrix #####################################
-#region ####################################################################################
-
-############################################################################################
-# BlockSparseMatrix
+## BlockSparseMatrix
 #   Flat sparse matrix that can be efficiently updated using block matrices `blocks`
 #region
 
-struct BlockSparseMatrix{C,N,M<:NTuple{N,MatrixBlock}}
-    mat::SparseMatrixCSC{C,Int}
-    blocks::M
-    ptrs::NTuple{N,Vector{Int}}    # nzvals indices for blocks
-end
-
-#region ## Constructors ##
-
-function BlockSparseMatrix(mblocks::MatrixBlock...)
-    blocks = blockmat.(mblocks)
-    C = promote_type(eltype.(blocks)...)
-    # I = Iterators.flatten(blockrows.(mblocks)) |> collect
-    # J = Iterators.flatten(blockcols.(mblocks)) |> collect
-    I, J = Int[], Int[]
-    foreach(b -> appendIJ!(I, J, b), mblocks)
-    mat = sparse(I, J, zero(C))
-    ptrs = getblockptrs.(mblocks, Ref(mat))
-    return BlockSparseMatrix(mat, mblocks, ptrs)
-end
+############################################################################################
+# BlockSparseMatrix getblockptrs
+#region
 
 getblockptrs(mblock, mat) = getblockptrs(mblock.block, mblock.rows, mblock.cols, mat)
 
@@ -802,11 +472,9 @@ checkblocksize(block, is, js) =
     (length(is), length(js)) == size(block) || argerror("Block indices size mismatch")
 #endregion
 
-#region ## API ##
-
-SparseArrays.sparse(b::BlockSparseMatrix) = b.mat
-
-blocks(m::BlockSparseMatrix) = m.blocks
+############################################################################################
+# BlockSparseMatrix API
+#region
 
 function update!(m::BlockSparseMatrix)
     fill!(nonzeros(m.mat), 0)
@@ -829,7 +497,97 @@ stored(block::AbstractSparseMatrixCSC) = nonzeros(block)
 stored(block::StridedMatrix) = block
 stored(block::Diagonal) = block.diag
 
-Base.eltype(m::BlockSparseMatrix) = eltype(m.mat)
+Base.eltype(m::BlockSparseMatrix) = eltype(sparse(m))
+
+#endregion
+#endregion top
+
+############################################################################################
+## HybridMatrix
+#   Flat dense matrix endowed with a MultiBlockStructure (subcell, site (orbital) & contact)
+#   A HybridMatrix is the final output of a GreenFunction call
+#region
+
+############################################################################################
+# HybridMatrix API
+#region
+
+siterange(m::HybridMatrix, x) = siterange(blockstructure(m), x)
+siterange(m::MultiBlockStructure, iunflat::Integer) = siteoffsets(m, iunflat)+1:siteoffsets(m, iunflat+1)
+siterange(m::MultiBlockStructure, c::ContactIndex) = contactinds(m, contact(c))
+
+subcellrange(m::HybridMatrix, x) = subcellrange(blockstructure(m), x)
+subcellrange(m::MultiBlockStructure, si::Integer) = subcelloffsets(m, si)+1:subcelloffsets(m, si+1)
+subcellrange(m::MultiBlockStructure, cell::SVector) = subcellrange(m, subcellindex(m, cell))
+
+function subcellindex(m::MultiBlockStructure, cell::SVector)
+    for (i, cell´) in enumerate(m.cells)
+        cell === cell´ && return i
+    end
+    @boundscheck(boundserror(m, cell))
+end
+
+#endregion
+
+############################################################################################
+# HybridMatrix and MultiBlockStructure smart constructors
+#region
+
+#region ## Constructors ##
+
+HybridMatrix(ls::LatticeSlice, h::Union{AbstractHamiltonian,SublatBlockStructure}) =
+    HybridMatrix(0I, ls, h)
+
+function HybridMatrix(mat, ls::LatticeSlice, h::AbstractHamiltonian)
+    mb = MultiBlockStructure(ls, h)
+    s = flatsize(mb)
+    checkblocksize(mat, (s, s))
+    return HybridMatrix(mat, mb)
+end
+
+function HybridMatrix(mat::UniformScaling{T}, mb::MultiBlockStructure) where {T}
+    s = flatsize(mb)
+    mat´ = Matrix{T}(mat, s, s)
+    return HybridMatrix(mat´, mb)
+end
+
+MultiBlockStructure(ls::LatticeSlice, h::AbstractHamiltonian, lss = ()) =
+    MultiBlockStructure(ls, blockstructure(h), lss)
+
+function MultiBlockStructure(ls::LatticeSlice{<:Any,<:Any,L},
+                             bs::SublatBlockStructure, lss = ()) where {L}
+    cells = SVector{L,Int}[]
+    subcelloffsets = [0]
+    siteoffsets = [0]
+    offset = 0
+    for subcell in subcells(ls)
+        c = cell(subcell)
+        push!(cells, c)
+        for i in siteindices(subcell)
+            offset += blocksize(bs, i)
+            push!(siteoffsets, offset)
+        end
+        push!(subcelloffsets, offset)
+    end
+    contactinds = Vector{Int}[contact_indices(ls´, siteoffsets, ls) for ls´ in lss]
+    return MultiBlockStructure(cells, subcelloffsets, siteoffsets, contactinds)
+end
+
+# find flatindices corresponding to merged_ls of sites in ls´
+function contact_indices(ls´, siteoffsets, merged_ls)
+    contactinds = Int[]
+    for scell´ in subcells(ls´)
+        so = findsubcell(cell(scell´), merged_ls)
+        so === nothing && continue
+        # here offset is the number of sites in merged_ls before scell
+        (scell, offset) = so
+        for i´ in siteindices(scell´), (n, i) in enumerate(siteindices(scell))
+            n´ = offset + n
+            i == i´ && append!(contactinds, siteoffsets[n´]+1:siteoffsets[n´+1])
+        end
+    end
+    return contactinds
+end
 
 #endregion
 #endregion

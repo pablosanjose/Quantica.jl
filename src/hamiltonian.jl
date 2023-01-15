@@ -385,7 +385,7 @@ function Base.getindex(h::AbstractHamiltonian{<:Any,<:Any,L}, dn::SVector{L,Int}
     for har in harmonics(h)
         dn == dcell(har) && return matrix(har)
     end
-    @boundscheck(throw(BoundsError(harmonics(h), dn)))
+    @boundscheck(boundserror(harmonics(h), dn))
 end
 
 Base.isassigned(h::AbstractHamiltonian, dn::Tuple) = isassigned(h, SVector(dn))

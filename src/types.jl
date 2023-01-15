@@ -320,7 +320,7 @@ Base.copy(s::Subcell) = Subcell(copy(s.inds), s.cell)
 #             return (nc, iunflat - counter)
 #         end
 #     end
-#     @boundscheck(throw(BoundsError(l, iunflat)))
+#     @boundscheck(boundserror(l, iunflat))
 # end
 
 function Base.getindex(l::LatticeSlice{<:Any,<:Any,L}, i::Integer) where {L}
@@ -333,7 +333,7 @@ function Base.getindex(l::LatticeSlice{<:Any,<:Any,L}, i::Integer) where {L}
             return cell(scell), siteindices(scell)[i-offset]
         end
     end
-    @boundscheck(throw(BoundsError(l, i)))
+    @boundscheck(boundserror(l, i))
 end
 
 Base.length(l::LatticeSlice) = nsites(l)
@@ -1050,9 +1050,16 @@ function Contacts(oh::OpenHamiltonian)
     return Contacts(Σs, latsliceall, bs)
 end
 
+struct ContactIndex
+    i::Int
+end
+
 #endregion
 
 #region ## API ##
+
+contact(i::Integer) = ContactIndex(i)
+contact(c::ContactIndex) = c.i
 
 latslice(c::Contacts) = c.latsliceall
 
@@ -1077,12 +1084,12 @@ call!(c::Contacts; params...) =
 #     - call!(s, h, contacts, ω; params...) -> GreenMatrix
 #     This GreenMatrix provides in particular:
 #        - GreenMatrixSolver to compute e.g. G[cell,cell´]::HybridMatrix for any cells
-#        - g::HybridMatrix = G(ω; params...) over merged contact latslice
+#        - g::HybridMatrix = G(ω; params...) over merged contacts.latsliceall
 #        - linewidth operatod Γᵢ::Matrix for each contact
-#   Any new s::GreenMatrixSolver must implement
-#      - s[] -> G::HybridMatrix over contact sites
-#      - s[cell, cell´] G::HybridMatrix between unitcells cell <= cell´
-#      - s[subcell, subcell´] G::HybridMatrix between subcell <= subcell´
+#   Any new s::GreenMatrixSolver must implement the following, without aliasing
+#      - s() -> G::HybridMatrix over contact sites
+#      - s(cell, cell´) G::HybridMatrix between unitcells cell <= cell´
+#      - s(subcell, subcell´) G::HybridMatrix between subcell <= subcell´
 #region
 
 # Generic system-independent directives for solvers, e.g. GS.Schur()
@@ -1108,7 +1115,7 @@ struct GreenFunction{T,E,L,S<:AppliedGreenSolver,H<:AbstractHamiltonian{T,E,L},C
 end
 
 # Obtained with gω = call!(g::GreenFunction, ω; params...) or g(ω; params...)
-# Allows gω[i, j] -> HybridMatrix for i,j integer Σs indices ("contacts")
+# Allows gω[contact(i), contact(j)] -> HybridMatrix for i,j integer Σs indices ("contacts")
 # Allows gω[cell, cell´] -> HybridMatrix using T-matrix, with cell::Union{SVector,Subcell}
 # Allows also view(gω, ...)
 struct GreenMatrix{T,E,L,D<:GreenMatrixSolver,M<:NTuple{<:Any,AbstractMatrix}}
@@ -1121,9 +1128,10 @@ end
 # Obtained with gs = g[; siteselection...]
 # Alows call!(gs, ω; params...) -> View{HybridMatrix} or gs(ω; params...) -> HybridMatrix
 #   required to do h |> attach(g´[sites´], couplingmodel; sites...)
-struct GreenFunctionSlice{T,E,L,G<:GreenFunction{T,E,L}}
-    g::G
-    latslice::LatticeSlice{T,E,L}
+struct GreenFunctionSlice{T,E,L,G<:GreenFunction{T,E,L},R,C}
+    parent::G
+    rows::R
+    cols::C
 end
 
 #region ## Constructors ##
@@ -1137,19 +1145,24 @@ GreenFunction(oh::OpenHamiltonian, as::AppliedGreenSolver) =
 
 hamiltonian(g::GreenFunction) = g.parent
 
+lattice(g::GreenFunction) = lattice(g.parent)
+
 solver(g::GreenFunction) = g.solver
 
 contacts(g::GreenFunction) = g.contacts
 
+greenfunction(g::GreenFunctionSlice) = g.g
+
+greencontacts(g::GreenMatrix) = g.g
+
+linewidth(g::GreenMatrix) = g.Γs
+
+latslice(g::GreenMatrix) = g.latslice
+
+lattice(g::GreenMatrix) = parent(g.latslice)
+
 Base.parent(g::GreenFunction) = g.parent
-
-Base.getindex(g::GreenMatrix, c::Subcell, c´::Subcell) =
-    g.solver(cell(c), cell(c´), siteindices(c), siteindices(c´))
-
-Base.getindex(g::GreenMatrix{<:Any,<:Any,L}, c::NTuple{L,Int}, c´::NTuple{L,Int}) where {L} =
-    g.solver(SVector(c), SVector(c´))
-
-Base.getindex(g::GreenMatrix) = g.solver()
+Base.parent(g::GreenFunctionSlice) = g.parent
 
 #endregion
 #endregion

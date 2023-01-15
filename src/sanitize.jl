@@ -79,6 +79,15 @@ function sanitize_Matrix(::Type{T}, E, m::AbstractMatrix) where {T}
     return m´
 end
 
+sanitize_Green_index(i::Integer, _) = Int(i)
+sanitize_Green_index(i::Subcell, _) = i
+sanitize_Green_index(i::LatticeSlice, _) = i
+sanitize_Green_index(i::NamedTuple, lat::Lattice) = lat[i...]
+sanitize_Green_index(i::NTuple{L,Integer}, _) where {L} = SVector{L,Int}(i)
+sanitize_Green_index(i::SVector{L,<:Integer}, _) where {L} = SVector{L,Int}(i)
+sanitize_Green_index(_, _) =
+    argerror("Unrecognized index format. Expected an Integer (contact index), a Subcell, a LatticeSlice or a NTuple/SVector of Integer's (cell)")
+
 #endregion
 
 # ############################################################################################

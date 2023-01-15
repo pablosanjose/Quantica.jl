@@ -23,7 +23,7 @@ export sublat, lattice, supercell, bravais_matrix,
        hamiltonian, parametric, call!,
        flat, unflat, wrap, transform, transform!, translate, translate!,
        spectrum, energies, states, bands, mesh, subbands, slice,
-       greenfunction, attach
+       greenfunction, attach, contact
 
 # export sublat, lattice, dims, supercell, bravais_matrix, siteindices, sitepositions,
 #        hopping, onsite, @onsite!, @hopping!, @block!, parameters, neighbors,
@@ -46,11 +46,13 @@ export ftuple
 include("iterators.jl")
 include("builders.jl")
 include("tools.jl")
-include("sanitize.jl")
-include("specialmatrices.jl")
 
-# Core
+# Types
+include("specialmatrixtypes.jl")
 include("types.jl")
+
+# API
+include("specialmatrices.jl")
 include("selector.jl")
 include("lattice.jl")
 include("model.jl")
@@ -61,14 +63,13 @@ include("supercell.jl")
 include("transform.jl")
 include("mesh.jl")
 include("spectrum.jl")
-# include("coupler.jl")
+
+# Plumbing
 include("apply.jl")
 include("show.jl")
 include("convert.jl")
-# include("ket.jl")
-# include("KPM.jl")
-# include("effective.jl")
-# include("greens.jl")
+include("sanitize.jl")
+
 
 # Solvers
 include("solvers/eigensolvers.jl")
