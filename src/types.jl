@@ -1070,7 +1070,7 @@ function Contacts(oh::OpenHamiltonian)
     Σs = selfenergies(oh)
     Σlatslices = latslice.(Σs)
     latsliceall = merge(Σlatslices...)
-    bs = MultiBlockStructure(latsliceall, hamiltonian(oh), Σlatslices)
+    bs = MultiBlockStructure(latsliceall, hamiltonian(oh), Σlatslices)  # see selfenergy.jl
     return Contacts(Σs, latsliceall, bs)
 end
 
@@ -1221,7 +1221,6 @@ lattice(g::GreenFixed) = parent(g.latslice)
 
 Base.parent(g::GreenFunction) = g.parent
 Base.parent(g::GreenFunctionSlice) = g.parent
-
 
 minimal_callsafe_copy(g::GreenFunction) =
     GreenFunction(minimal_callsafe_copy(g.parent), deepcopy(g.solver), minimal_callsafe_copy(g.contacts))
