@@ -103,7 +103,7 @@ end
 hamiltonian(m::AbstractModel = TightbindingModel(); kw...) = lat -> hamiltonian(lat, m; kw...)
 
 hamiltonian(lat::Lattice, m::ParametricModel; kw...) =
-    parametric(hamiltonian(lat, nonparametric(m); kw...), modifier.(terms(m))...)
+    parametric(hamiltonian(lat, basemodel(m); kw...), modifier.(terms(m))...)
 
 # Base.@constprop :aggressive may be needed for type-stable non-Val orbitals?
 function hamiltonian(lat::Lattice{T}, m::TightbindingModel = TightbindingModel(); orbitals = Val(1)) where {T}

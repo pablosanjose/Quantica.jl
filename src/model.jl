@@ -129,7 +129,7 @@ function modifier(term::ParametricHoppingTerm{N}) where {N}
     return HoppingModifier(pf, selector(term))
 end
 
-zero_model(m::ParametricModel) = TightbindingModel(zero_model.(terms(m)))
+basemodel(m::ParametricModel) = nonparametric(m) + TightbindingModel(zero_model.(terms(m)))
 
 # transforms the first argument in each model term to a parameter named pname
 model_ω_to_param(model::ParametricModel) =
