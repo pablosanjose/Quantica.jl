@@ -685,6 +685,9 @@ harmonics(h::Hamiltonian) = h.harmonics
 
 bloch(h::Hamiltonian) = h.bloch
 
+minimal_callsafe_copy(h::Hamiltonian) = Hamiltonian(
+    lattice(h), blockstructure(h), copy.(harmonics(h)), copy_matrices(bloch(h)))
+
 Base.size(h::Hamiltonian, i...) = size(first(harmonics(h)), i...)
 
 Base.copy(h::Hamiltonian) = Hamiltonian(
@@ -735,6 +738,9 @@ blockstructure(h::ParametricHamiltonian) = blockstructure(parent(h))
 blocktype(h::ParametricHamiltonian) = blocktype(parent(h))
 
 lattice(h::ParametricHamiltonian) = lattice(parent(h))
+
+minimal_callsafe_copy(p::ParametricHamiltonian) = ParametricHamiltonian(
+    p.hparent, minimal_callsafe_copy(p.h), p.modifiers, p.allptrs, p.allparams)
 
 Base.size(h::ParametricHamiltonian, i...) = size(parent(h), i...)
 
@@ -1011,6 +1017,8 @@ solver(c::SelfEnergy) = c.solver
 call!(Σ::SelfEnergy; params...) = SelfEnergy(call!(Σ.solver; params...), Σ.latslice)
 call!(Σ::SelfEnergy, ω; params...) = call!(Σ.solver, ω; params...) # returns a MatrixBlock
 
+minimal_callsafe_copy(s::SelfEnergy) = SelfEnergy(deepcopy(s.solver), s.latslice)
+
 #endregion
 #endregion
 
@@ -1116,7 +1124,9 @@ contactinds(b::MultiBlockStructure, i) = b.contactinds[i]
 
 call!(c::Contacts, ω; params...) = call!.(c.selfenergies, Ref(ω); params...)
 call!(c::Contacts; params...) =
-    Contacts(call!.(c.selfenergies; params...), c.mergedlatslice, c.blockstruct)
+    Contacts(call!.(c.selfenergies; params...), c.latsliceall, c.blockstruct)
+
+minimal_callsafe_copy(s::Contacts) = Contacts(deepcopy.(s.selfenergies), s.latsliceall, s.blockstruct)
 
 #endregion
 
@@ -1212,7 +1222,12 @@ lattice(g::GreenFixed) = parent(g.latslice)
 Base.parent(g::GreenFunction) = g.parent
 Base.parent(g::GreenFunctionSlice) = g.parent
 
-Base.copy(g::GreenFixed) =
+
+minimal_callsafe_copy(g::GreenFunction) =
+    GreenFunction(minimal_callsafe_copy(g.parent), deepcopy(g.solver), minimal_callsafe_copy(g.contacts))
+
+minimal_callsafe_copy(g::GreenFixed) =
     GreenFixed(deepcopy(g.solver), g.g, g.Γs, g.blockstruct, g.latslice)
+
 #endregion
 #endregion

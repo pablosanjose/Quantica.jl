@@ -103,18 +103,18 @@ end
 
 ## Call API ##
 
-# # copy_callsafe should copy anything that may mutate with call!(...; params...) and any
+# # minimal_callsafe_copy should copy anything that may mutate with call!(...; params...) and any
 # # object in the output of call!(::SchurFactorsSolver, ...; params...)
-# function copy_callsafe(s::SchurFactorsSolver)
-#     hm, h0, hp = copy_callsafe(s.hm), copy_callsafe(s.h0), copy_callsafe(s.hp)
+# function minimal_callsafe_copy(s::SchurFactorsSolver)
+#     hm, h0, hp = minimal_callsafe_copy(s.hm), minimal_callsafe_copy(s.h0), minimal_callsafe_copy(s.hp)
 #     L, R = copy(s.L), copy(s.R)
-#     tmp = copy_callsafe(s.tmp)
+#     tmp = minimal_callsafe_copy(s.tmp)
 #     return SchurFactorsSolver(s.shift, hm, h0, hp, s.l_leq_r, s.iG, s.ptrs, s.sinds,
 #                               L, R, s.R´L´, tmp)
 # end
 
 
-# function copy_callsafe(w::SchurWorkspace)
+# function minimal_callsafe_copy(w::SchurWorkspace)
 #     Z11, Z21, Z11´, Z21´ = copy(w.Z11), copy(w.Z21), copy(w.Z11´), copy(w.Z21´)
 #     return SchurWorkspace(w.GL, w.GR, w.A, w.B, Z11, Z21, Z11´, Z21´)
 # end
@@ -296,9 +296,9 @@ end
 
 #region ## call API ##
 
-# function copy_callsafe(s::AppliedSchurSolver)
-#     factors = copy_callsafe(s.factors)
-#     h = copy_callsafe(s.h)
+# function minimal_callsafe_copy(s::AppliedSchurSolver)
+#     factors = minimal_callsafe_copy(s.factors)
+#     h = minimal_callsafe_copy(s.h)
 #     return AppliedSchurSolver(factors, h, s.boundary)
 # end
 

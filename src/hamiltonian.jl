@@ -168,7 +168,7 @@ function parametric(hparent::Hamiltonian)
     allparams = Symbol[]
     allptrs = [Int[] for _ in harmonics(hparent)]
     # We must decouple hparent from the result, which will modify h in various ways
-    h = copy_callsafe(hparent)
+    h = minimal_callsafe_copy(hparent)
     return ParametricHamiltonian(hparent, h, modifiers, allptrs, allparams)
 end
 
@@ -217,20 +217,6 @@ function _merge_pointers!(p, m::AppliedHoppingModifier)
     end
     return p
 end
-
-#endregion
-
-############################################################################################
-# copy_callsafe - minimally decoupled copy such that the call! output will not be modified
-#      by later call!'s
-#region
-
-copy_callsafe(p::ParametricHamiltonian) = ParametricHamiltonian(
-    p.hparent, copy_callsafe(p.h), p.modifiers, p.allptrs, p.allparams)
-
-copy_callsafe(h::Hamiltonian) = Hamiltonian(
-    lattice(h), blockstructure(h), copy.(harmonics(h)), copy_matrices(bloch(h)))
-
 
 #endregion
 

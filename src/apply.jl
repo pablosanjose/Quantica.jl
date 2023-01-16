@@ -166,7 +166,7 @@ end
 
 function apply(solver::AbstractEigenSolver, h::AbstractHamiltonian, S::Type{SVector{L,T}}, mapping, transform) where {L,T}
     B = blocktype(h)
-    h´ = copy_callsafe(h)
+    h´ = minimal_callsafe_copy(h)
     # Some solvers (e.g. ES.LinearAlgebra) only accept certain matrix types
     # so this mat´ could be an alias of the call! output, or an unaliased conversion
     mat´ = ES.input_matrix(solver, h´)

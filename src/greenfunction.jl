@@ -21,8 +21,8 @@ default_green_solver(::AbstractHamiltonian) = GS.NoSolver()
 #region
 
 ## TODO: test copy(g) for aliasing problems
-(g::GreenFunction)(; params...) = copy(call!(g; params...))
-(g::GreenFunction)(ω; params...) = copy(call!(g, ω; params...))
+(g::GreenFunction)(; params...) = minimal_callsafe_copy(call!(g; params...))
+(g::GreenFunction)(ω; params...) = minimal_callsafe_copy(call!(g, ω; params...))
 
 function call!(g::GreenFunction; params...)
     h´ = call!(hamiltonian(g); params...)
