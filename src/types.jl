@@ -1046,7 +1046,8 @@ attach(h::AbstractHamiltonian, Σ::SelfEnergy) = OpenHamiltonian(h, (Σ,))
 struct Contacts{T,E,L,S<:NTuple{<:Any,SelfEnergy}}
     selfenergies::S                       # used to produce MatrixBlock's
     latsliceall::LatticeSlice{T,E,L}      # merged latslice for all self-energies
-    blockstruct::MultiBlockStructure{L}   # needed to build HybridMatrix'es over latsliceall
+    blockstruct::SubcellBlockStructure{L}   # needed to build GreenMatrix'es over latsliceall
+    contactinds::Vector{Vector{Int}}      # non-extended orbital indices for each contact
 end
 
 #region ## Constructors ##
@@ -1055,8 +1056,9 @@ function Contacts(oh::OpenHamiltonian)
     Σs = selfenergies(oh)
     Σlatslices = latslice.(Σs)
     latsliceall = merge(Σlatslices...)
-    bs = MultiBlockStructure(latsliceall, hamiltonian(oh))
-    return Contacts(Σs, latsliceall, bs)
+    bs = SubcellBlockStructure(latsliceall, hamiltonian(oh))
+    contactinds = contact_indices(Σlatslices, latsliceall, bs)
+    return Contacts(Σs, latsliceall, bs, contactinds)
 end
 
 struct ContactIndex
@@ -1076,9 +1078,12 @@ selfenergies(c::Contacts) = c.selfenergies
 
 blockstruct(c::Contacts) = c.blockstruct
 
+contactinds(c::Contacts) = c.contactinds
+contactinds(c::Contacts, i) = c.contactinds[i]
+
 call!(c::Contacts, ω; params...) = call!.(c.selfenergies, Ref(ω); params...)
 call!(c::Contacts; params...) =
-    Contacts(call!.(c.selfenergies; params...), c.mergedlatslice, c.blockstruct)
+    Contacts(call!.(c.selfenergies; params...), c.mergedlatslice, c.blockstruct, c.contactinds)
 
 #endregion
 
@@ -1090,15 +1095,15 @@ call!(c::Contacts; params...) =
 #     - apply(s, h::OpenHamiltonian) -> AppliedGreenSolver
 #   Any new s::AppliedGreenSolver must implement
 #     - call!(s; params...) -> AppliedGreenSolver
-#     - call!(s, h, contacts, ω; params...) -> GreenMatrix
-#     This GreenMatrix provides in particular:
-#        - GreenMatrixSolver to compute e.g. G[cell,cell´]::HybridMatrix for any cells
-#        - g::HybridMatrix = G(ω; params...) over merged contacts.latsliceall
+#     - call!(s, h, contacts, ω; params...) -> GreenFixed
+#     This GreenFixed provides in particular:
+#        - GreenFixedSolver to compute e.g. G[cell,cell´]::GreenMatrix for any cells
+#        - g::GreenMatrix = G(ω; params...) over merged contacts.latsliceall
 #        - linewidth operatod Γᵢ::Matrix for each contact
-#   Any new s::GreenMatrixSolver must implement the following, without aliasing
-#      - s() -> G::HybridMatrix over contact sites
-#      - s(cell, cell´) G::HybridMatrix between unitcells cell <= cell´
-#      - s(subcell, subcell´) G::HybridMatrix between subcell <= subcell´
+#   Any new s::GreenFixedSolver must implement the following
+#      - s() -> G::GreenMatrix over all contact sites
+#      - s(cell, cell´) G::GreenMatrix between unitcells cell <- cell´
+#      - s(subcell, subcell´) G::GreenMatrix between subcell <- subcell´
 #region
 
 # Generic system-independent directives for solvers, e.g. GS.Schur()
@@ -1109,7 +1114,7 @@ abstract type AppliedGreenSolver end
 
 # Solver with fixed ω and params that can compute G[subcell, subcell´] or G[cell, cell´]
 # It should also be able to return contact G with G[]
-abstract type GreenMatrixSolver end
+abstract type GreenFixedSolver end
 
 #endregion
 
@@ -1124,18 +1129,19 @@ struct GreenFunction{T,E,L,S<:AppliedGreenSolver,H<:AbstractHamiltonian{T,E,L},C
 end
 
 # Obtained with gω = call!(g::GreenFunction, ω; params...) or g(ω; params...)
-# Allows gω[contact(i), contact(j)] -> HybridMatrix for i,j integer Σs indices ("contacts")
-# Allows gω[cell, cell´] -> HybridMatrix using T-matrix, with cell::Union{SVector,Subcell}
+# Allows gω[contact(i), contact(j)] -> GreenMatrix for i,j integer Σs indices ("contacts")
+# Allows gω[cell, cell´] -> GreenMatrix using T-matrix, with cell::Union{SVector,Subcell}
 # Allows also view(gω, ...)
-struct GreenMatrix{T,E,L,D<:GreenMatrixSolver,M<:NTuple{<:Any,AbstractMatrix}}
+struct GreenFixed{T,E,L,D<:GreenFixedSolver,M<:NTuple{<:Any,AbstractMatrix}}
     solver::D                        # computes G(ω; p...)[cell,cell´] for any cell/subcell
-    g::HybridMatrix{Complex{T},L}    # hybrid matrix G(ω; p...)[i,i´] on latslice sites i
+    g::GreenMatrix{Complex{T},L}     # matrix G(ω; p...)[i,i´] on latslice sites i
     Γs::M                            # linewidths Γ=i(Σ-Σ⁺) for each contact
+    contactinds::Vector{Vector{Int}} # latslice flatinds for each contact === Contacts field
     latslice::LatticeSlice{T,E,L}    # === contacts.mergedlatslice from parent GreenFunction
 end
 
 # Obtained with gs = g[; siteselection...]
-# Alows call!(gs, ω; params...) -> View{HybridMatrix} or gs(ω; params...) -> HybridMatrix
+# Alows call!(gs, ω; params...) -> View{GreenMatrix} or gs(ω; params...) -> GreenMatrix
 #   required to do h |> attach(g´[sites´], couplingmodel; sites...)
 struct GreenFunctionSlice{T,E,L,G<:GreenFunction{T,E,L},R,C}
     parent::G
@@ -1162,13 +1168,13 @@ contacts(g::GreenFunction) = g.contacts
 
 greenfunction(g::GreenFunctionSlice) = g.g
 
-greencontacts(g::GreenMatrix) = g.g
+greencontacts(g::GreenFixed) = g.g
 
-linewidth(g::GreenMatrix) = g.Γs
+linewidth(g::GreenFixed) = g.Γs
 
-latslice(g::GreenMatrix) = g.latslice
+latslice(g::GreenFixed) = g.latslice
 
-lattice(g::GreenMatrix) = parent(g.latslice)
+lattice(g::GreenFixed) = parent(g.latslice)
 
 Base.parent(g::GreenFunction) = g.parent
 Base.parent(g::GreenFunctionSlice) = g.parent

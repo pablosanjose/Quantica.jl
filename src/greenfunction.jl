@@ -1,19 +1,18 @@
 ############################################################################################
-# HybridMatrix indexing
+# GreenMatrix indexing
 #region
 
-Base.view(m::HybridMatrix) = m
-Base.view(m::HybridMatrix, i, j) =
-    HybridMatrix(view(parent(m), hybrid_inds(m, i), hybrid_inds(m, j)), blockstruct(m))
+Base.view(m::GreenMatrix, i, j) = view(parent(m), green_inds(i, m), green_inds(j, m))
 
-hybrid_inds(i::Integer, m) = siterange(m, i)
-hybrid_inds(i::ContactIndex, m) = siterange(m, i)
-hybrid_inds(c::SVector{<:Any,<:Integer}, m) = subcellrange(m, c)
-hybrid_inds(c::NTuple{<:Any,<:Integer}, m) = subcellrange(m, c)
+green_inds(i::Integer, m::GreenMatrix) = siterange(m, i)
+green_inds(c::SVector{<:Any,<:Integer}, m::GreenMatrix) = subcellrange(m, c)
+green_inds(c::NTuple{<:Any,Integer}, m::GreenMatrix) = subcellrange(m, c)
+green_inds(::Colon, m::GreenMatrix) = Colon()
+green_inds(xs, m::GreenMatrix) = Interators.flatten(green_inds(x, m) for x in xs)
 
-Base.size(m::HybridMatrix) = (unflatsize(m), unflatsize(m))
+Base.size(m::GreenMatrix) = (unflatsize(m), unflatsize(m))
 
-function Base.size(m::HybridMatrix, i::Integer)
+function Base.size(m::GreenMatrix, i::Integer)
     s = if i<1
         @boundscheck(boundserror(m, i))
     elseif i<=2
@@ -24,11 +23,11 @@ function Base.size(m::HybridMatrix, i::Integer)
     return s
 end
 
-Base.getindex(m::HybridMatrix, i...) = copy(view(m, i...))
+Base.getindex(m::GreenMatrix, i...) = copy(view(m, i...))
 
-Base.setindex!(m::HybridMatrix, val, i...) = (view(m, i...) .= val)
+Base.setindex!(m::GreenMatrix, val, i...) = (view(m, i...) .= val)
 
-function Base.setindex!(m::HybridMatrix, val::UniformScaling, i...)
+function Base.setindex!(m::GreenMatrix, val::UniformScaling, i...)
     v = view(m, i...)
     λ = val.λ
     for c in CartesianIndices(v)
@@ -59,7 +58,7 @@ default_green_solver(::AbstractHamiltonian) = GS.NoSolver()
 #endregion
 
 ############################################################################################
-# call API
+# GreenFunction call API
 #region
 
 ## TODO: test copy(g) for aliasing problems
@@ -82,19 +81,21 @@ call!(g::GreenFunctionSlice, ω; params...) =
 #endregion
 
 ############################################################################################
-# GreenMatrix indexing
+# GreenFixed indexing
 #region
 
-Base.view(g::GreenMatrix) = view(greencontacts(g))
-Base.view(g::GreenMatrix, ::Missing, ::Missing) = view(greencontacts(g))
-Base.view(g::GreenMatrix, i, j) = view(greencontacts(g), i, j)
+Base.view(g::GreenFixed, i, j = i) =
+    view(greencontacts(g), greenfix_inds(i, g), greenfix_inds(j, g))
 
-Base.getindex(g::GreenMatrix) =  copy(view(g))
-Base.getindex(g::GreenMatrix, i, j) = copy(view(g, i, j))
+green_inds(c::ContactIndex, g::GreenFixed) = contactinds(g, contact(c))
+green_inds(x, g::GreenFixed) = green_inds(x, greencontacts(g))
 
-function Base.getindex(g::GreenMatrix, lsrow::LatticeSlice, lscol::LatticeSlice = lsrow)
+Base.getindex(g::GreenFixed) =  copy(view(g))
+Base.getindex(g::GreenFixed, i, j) = copy(view(g, i, j))
+
+function Base.getindex(g::GreenFixed, lsrow::LatticeSlice, lscol::LatticeSlice = lsrow)
     lattice(g) == parent(lsrow) == parent(lscol) ||
-        argerror("Can only index a GreenMatrix over its own Lattice")
+        argerror("Can only index a GreenFixed over its own Lattice")
     ls = merge(lrow, lcol)
 
 end
@@ -116,15 +117,15 @@ Base.getindex(g::GreenFunction, c, c´ = c) =
 # end
 
 # overrides the base method above
-Base.getindex(g::GreenFunction) = GreenFunctionSlice(g, missing, missing)
+Base.getindex(g::GreenFunction) = GreenFunctionSlice(g, :, :)
 
 #endregion
 
 ############################################################################################
-# GreenMatrixSolver call API
+# GreenFixedSolver call API
 #region
 
-function (s::GreenMatrixSolver)(i::Integer, j::Integer)
+function (s::GreenFixedSolver)(i::Integer, j::Integer)
 
 end
 

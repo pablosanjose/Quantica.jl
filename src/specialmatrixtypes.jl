@@ -280,64 +280,47 @@ SparseArrays.sparse(b::BlockSparseMatrix) = b.mat
 #endregion
 
 ############################################################################################
-## HybridMatrix
-#   Flat dense matrix endowed with a MultiBlockStructure (subcell, site (orbital) & contact)
-#   A HybridMatrix is the final output of a GreenFunction call
+## GreenMatrix
+#   Flat dense matrix endowed with a SubcellBlockStructure (subcell and site blocks)
+#   A GreenMatrix is the final output of a GreenFunction call
 #region
 
-struct MultiBlockStructure{L}
+struct SubcellBlockStructure{L}
     cells::Vector{SVector{L,Int}}    # cells corresponding to for each subcell block
     subcelloffsets::Vector{Int}      # block offsets for each subcell
     siteoffsets::Vector{Int}         # block offsets for each site (for multiorbital sites)
-    contactinds::Vector{Vector{Int}} # parent indices for each Σ contact
 end
 
-struct HybridMatrix{C,L,A<:AbstractMatrix{C}} <: AbstractMatrix{C}
+struct GreenMatrix{C,L,A<:AbstractMatrix{C}} <: AbstractMatrix{C}
     parent::A
-    blockstruct::MultiBlockStructure{L}
+    blockstruct::SubcellBlockStructure{L}  # offset and cell structure for parent matrix
 end
 
 #region ## API ##
 
-blockstructure(m::HybridMatrix) = m.blockstruct
+blockstructure(m::GreenMatrix) = m.blockstruct
 
-cells(m::HybridMatrix) = cells(m.blockstruct)
-cells(m::MultiBlockStructure) = m.cells
+cells(m::GreenMatrix) = cells(m.blockstruct)
+cells(m::SubcellBlockStructure) = m.cells
 
-flat(m::HybridMatrix) = m.parent
+flat(m::GreenMatrix) = m.parent
 
-flatsize(m::HybridMatrix) = flatsize(m.blockstruct)
-flatsize(m::MultiBlockStructure) = last(m.subcelloffsets)
+flatsize(m::GreenMatrix) = flatsize(m.blockstruct)
+flatsize(m::SubcellBlockStructure) = last(m.subcelloffsets)
 
-unflatsize(m::HybridMatrix) = unflatsize(m.blockstruct)
-unflatsize(m::MultiBlockStructure) = length(m.siteoffsets) - 1
+unflatsize(m::GreenMatrix) = unflatsize(m.blockstruct)
+unflatsize(m::SubcellBlockStructure) = length(m.siteoffsets) - 1
 
-siteoffsets(m::HybridMatrix, i...) = siteoffsets(m.blockstruct)
-siteoffsets(m::MultiBlockStructure) = m.siteoffsets
-siteoffsets(m::MultiBlockStructure, i) = m.siteoffsets[i]
+siteoffsets(m::GreenMatrix, i...) = siteoffsets(m.blockstruct)
+siteoffsets(m::SubcellBlockStructure) = m.siteoffsets
+siteoffsets(m::SubcellBlockStructure, i) = m.siteoffsets[i]
 
-subcelloffsets(m::HybridMatrix, i...) = subcelloffsets(m.blockstruct, i...)
-subcelloffsets(m::MultiBlockStructure) = m.subcelloffsets
-subcelloffsets(m::MultiBlockStructure, i) = m.subcelloffsets[i]
+subcelloffsets(m::GreenMatrix, i...) = subcelloffsets(m.blockstruct, i...)
+subcelloffsets(m::SubcellBlockStructure) = m.subcelloffsets
+subcelloffsets(m::SubcellBlockStructure, i) = m.subcelloffsets[i]
 
-contactinds(m::HybridMatrix, i...) = contactinds(m.blockstruct, i...)
-contactinds(m::MultiBlockStructure) = m.contactinds
-contactinds(m::MultiBlockStructure, i) = m.contactinds[i]
-
-Base.parent(m::HybridMatrix) = m.parent
+Base.parent(m::GreenMatrix) = m.parent
 
 #endregion
 #endregion
 
-############################################################################################
-## BlockHybridMatrix
-#    Represents a collection of blocks of a parent HybridMatrix
-#region
-
-# struct BlockHybridMatrix{A}
-
-# end
-
-#endregion
-
-#endregion top

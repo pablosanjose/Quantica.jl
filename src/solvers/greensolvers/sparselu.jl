@@ -5,7 +5,7 @@
 
 struct InverseGreenBlockSparse{C}
     mat::BlockSparseMatrix{C}
-    contactinds::Vector{Int}         # uniqued and sorted non-extended contact indices
+    allcontactinds::Vector{Int}    # merged, uniqued and sorted non-extended contact indices
 end
 
 #region ## Contructor ##
@@ -16,37 +16,37 @@ function InverseGreenBlockSparse(h::AbstractHamiltonian{T}, Σs) where {T}
     ωblock = MatrixBlock((zero(Complex{T}) * I)(hdim), haxis, haxis)
     hblock = MatrixBlock(call!_output(h), haxis, haxis)
     extoffset = hdim
-    contactinds = Int[]
+    allcontactinds = Int[]
     solvers = solver.(Σs)
-    blocks = selfenergyblocks!(extoffset, contactinds, (ωblock, -hblock), solvers...)
-    unique!(sort!(contactinds))
-    checkcontactindices(contactinds, hdim)
+    blocks = selfenergyblocks!(extoffset, allcontactinds, (ωblock, -hblock), solvers...)
+    unique!(sort!(allcontactinds))
+    checkcontactindices(allcontactinds, hdim)
     mat = BlockSparseMatrix(blocks...)
-    return InverseGreenBlockSparse(mat, contactinds)
+    return InverseGreenBlockSparse(mat, allcontactinds)
 end
 
-selfenergyblocks!(extoffset, contactinds, blocks) = blocks
+selfenergyblocks!(extoffset, allcontactinds, blocks) = blocks
 
-function selfenergyblocks!(extoffset, contactinds, blocks, s::RegularSelfEnergySolver, ss...)
+function selfenergyblocks!(extoffset, allcontactinds, blocks, s::RegularSelfEnergySolver, ss...)
     block = call!_output(s)
-    appendinds!(contactinds, block)
-    return selfenergyblocks!(extoffset, contactinds, (blocks..., -block), ss...)
+    appendinds!(allcontactinds, block)
+    return selfenergyblocks!(extoffset, allcontactinds, (blocks..., -block), ss...)
 end
 
-function selfenergyblocks!(extoffset, contactinds, blocks, s::ExtendedSelfEnergySolver, ss...)
+function selfenergyblocks!(extoffset, allcontactinds, blocks, s::ExtendedSelfEnergySolver, ss...)
     Σᵣᵣ, Vᵣₑ, gₑₑ⁻¹, Vₑᵣ = blockshift!(call!_output(s), extoffset)
-    appendinds!(contactinds, Σᵣᵣ)
+    appendinds!(allcontactinds, Σᵣᵣ)
     extoffset += size(gₑₑ⁻¹, 1)
-    return selfenergyblocks!(extoffset, contactinds, (blocks..., -Σᵣᵣ, -Vᵣₑ, -gₑₑ⁻¹, -Vₑᵣ), ss...)
+    return selfenergyblocks!(extoffset, allcontactinds, (blocks..., -Σᵣᵣ, -Vᵣₑ, -gₑₑ⁻¹, -Vₑᵣ), ss...)
 end
 
-function appendinds!(contactinds, block)
+function appendinds!(allcontactinds, block)
     blockrows(block) == blockcols(block) ||
         internalerror("Unexpected mismatch between rows and columns of self-energy block")
-    return append!(contactinds, blockrows(block))
+    return append!(allcontactinds, blockrows(block))
 end
 
-checkcontactindices(contactinds, hdim) = maximum(contactinds) <= hdim ||
+checkcontactindices(allcontactinds, hdim) = maximum(allcontactinds) <= hdim ||
         internalerror("Unexpected contact indices beyond Hamiltonian dimension")
 
 #endregion
@@ -73,10 +73,10 @@ struct AppliedSparseLU{C} <:AppliedGreenSolver
     invgreen::InverseGreenBlockSparse{C}
 end
 
-struct ExecutedSparseLU{C} <:GreenMatrixSolver
+struct ExecutedSparseLU{C} <:GreenFixedSolver
     fact::SparseArrays.UMFPACK.UmfpackLU{C,Int}  # of full system plus extended orbs
-    blockstruct::MultiBlockStructure{0}          # of merged contact LatticeSlice
-    contactinds::Vector{Int}                     # non-extended contact indices
+    blockstruct::SubcellBlockStructure{0}        # of merged contact LatticeSlice
+    allcontactinds::Vector{Int}                  # all non-extended contact indices
     source::Matrix{C}                            # preallocation for ldiv! solve
 end
 
@@ -96,7 +96,8 @@ function call!(s::AppliedSparseLU{C}, h, contacts, ω; params...) where {C}
     call!(h, (); params...)       # call!_output is wrapped in invgreen's hblock - update it
     Σs = call!(contacts, ω; params...)                        # same for invgreen's Σ blocks
     invgreen = s.invgreen
-    cinds = invgreen.contactinds
+    allcinds = invgreen.allcontactinds
+    cinds = contactinds(contacts)
     bs = blockstruct(contacts)
     update!(invgreen, ω)
     igmat = sparse(invgreen)
@@ -105,25 +106,25 @@ function call!(s::AppliedSparseLU{C}, h, contacts, ω; params...) where {C}
     catch
         argerror("Encountered a singular G⁻¹(ω) at ω = $ω, cannot factorize")
     end
-    source = zeros(C, size(igmat, 2), length(cinds))
-    so = ExecutedSparseLU(fact, bs, cinds, source)
+    source = zeros(C, size(igmat, 2), length(allcinds))
+    so = ExecutedSparseLU(fact, bs, allcinds, source)
     gc = so()
     Γs = linewidth.(Σs)
     ls = latslice(contacts)
-    return GreenMatrix(so, gc, Γs, ls)
+    return GreenFixed(so, gc, Γs, cinds, ls)
 end
 
 function (s::ExecutedSparseLU{C})() where {C}
     bs = s.blockstruct
     fact = s.fact
-    cinds = s.contactinds
+    allcinds = s.allcontactinds
     source = s.source
     fill!(source, zero(C))
-    for (col, row) in enumerate(cinds)
+    for (col, row) in enumerate(allcinds)
         source[row, col] = one(C)
     end
     gext = ldiv!(fact, source)
-    g = HybridMatrix(gext[cinds, :], bs)
+    g = GreenMatrix(gext[allcinds, :], bs)
     return g
 end
 

@@ -4,7 +4,6 @@
 
 ############################################################################################
 ## HybridSparseBlochMatrix
-#    Internal Matrix type for Bloch harmonics in Hamiltonians
 #region
 
 ############################################################################################
@@ -361,7 +360,6 @@ end
 
 ############################################################################################
 ## MatrixBlock API
-#   A Block within a parent matrix, at a given set of rows and cols
 #region
 
 function appendIJ!(I, J, b::MatrixBlock{<:Any,<:AbstractSparseMatrixCSC})
@@ -408,7 +406,6 @@ Base.:-(b::MatrixBlock) =
 
 ############################################################################################
 ## BlockSparseMatrix
-#   Flat sparse matrix that can be efficiently updated using block matrices `blocks`
 #region
 
 ############################################################################################
@@ -503,24 +500,25 @@ Base.eltype(m::BlockSparseMatrix) = eltype(sparse(m))
 #endregion top
 
 ############################################################################################
-## HybridMatrix
-#   Flat dense matrix endowed with a MultiBlockStructure (subcell, site (orbital) & contact)
-#   A HybridMatrix is the final output of a GreenFunction call
+## GreenMatrix
 #region
 
 ############################################################################################
-# HybridMatrix API
+# GreenMatrix API
 #region
 
-siterange(m::HybridMatrix, x) = siterange(blockstructure(m), x)
-siterange(m::MultiBlockStructure, iunflat::Integer) = siteoffsets(m, iunflat)+1:siteoffsets(m, iunflat+1)
-siterange(m::MultiBlockStructure, c::ContactIndex) = contactinds(m, contact(c))
+siterange(m::GreenMatrix, x) = siterange(blockstructure(m), x)
+siterange(m::SubcellBlockStructure, iunflat::Integer) =
+    siteoffsets(m, iunflat)+1:siteoffsets(m, iunflat+1)
 
-subcellrange(m::HybridMatrix, x) = subcellrange(blockstructure(m), x)
-subcellrange(m::MultiBlockStructure, si::Integer) = subcelloffsets(m, si)+1:subcelloffsets(m, si+1)
-subcellrange(m::MultiBlockStructure, cell::SVector) = subcellrange(m, subcellindex(m, cell))
+subcellrange(m::GreenMatrix, x) =
+    subcellrange(blockstructure(m), x)
+subcellrange(m::SubcellBlockStructure, si::Integer) =
+    subcelloffsets(m, si)+1:subcelloffsets(m, si+1)
+subcellrange(m::SubcellBlockStructure, cell::SVector) =
+    subcellrange(m, subcellindex(m, cell))
 
-function subcellindex(m::MultiBlockStructure, cell::SVector)
+function subcellindex(m::SubcellBlockStructure, cell::SVector)
     for (i, cell´) in enumerate(m.cells)
         cell === cell´ && return i
     end
@@ -530,32 +528,32 @@ end
 #endregion
 
 ############################################################################################
-# HybridMatrix and MultiBlockStructure smart constructors
+# GreenMatrix and SubcellBlockStructure smart constructors
 #region
 
 #region ## Constructors ##
 
-HybridMatrix(ls::LatticeSlice, h::Union{AbstractHamiltonian,SublatBlockStructure}) =
-    HybridMatrix(0I, ls, h)
+GreenMatrix(ls::LatticeSlice, h::Union{AbstractHamiltonian,SublatBlockStructure}) =
+    GreenMatrix(0I, ls, h)
 
-function HybridMatrix(mat, ls::LatticeSlice, h::AbstractHamiltonian)
-    mb = MultiBlockStructure(ls, h)
+function GreenMatrix(mat, ls::LatticeSlice, h::AbstractHamiltonian)
+    mb = SubcellBlockStructure(ls, h)
     s = flatsize(mb)
     checkblocksize(mat, (s, s))
-    return HybridMatrix(mat, mb)
+    return GreenMatrix(mat, mb)
 end
 
-function HybridMatrix(mat::UniformScaling{T}, mb::MultiBlockStructure) where {T}
+function GreenMatrix(mat::UniformScaling{T}, mb::SubcellBlockStructure) where {T}
     s = flatsize(mb)
     mat´ = Matrix{T}(mat, s, s)
-    return HybridMatrix(mat´, mb)
+    return GreenMatrix(mat´, mb)
 end
 
-MultiBlockStructure(ls::LatticeSlice, h::AbstractHamiltonian, lss = ()) =
-    MultiBlockStructure(ls, blockstructure(h), lss)
+SubcellBlockStructure(ls::LatticeSlice, h::AbstractHamiltonian) =
+    SubcellBlockStructure(ls, blockstructure(h))
 
-function MultiBlockStructure(ls::LatticeSlice{<:Any,<:Any,L},
-                             bs::SublatBlockStructure, lss = ()) where {L}
+function SubcellBlockStructure(ls::LatticeSlice{<:Any,<:Any,L},
+                             bs::SublatBlockStructure) where {L}
     cells = SVector{L,Int}[]
     subcelloffsets = [0]
     siteoffsets = [0]
@@ -569,24 +567,7 @@ function MultiBlockStructure(ls::LatticeSlice{<:Any,<:Any,L},
         end
         push!(subcelloffsets, offset)
     end
-    contactinds = Vector{Int}[contact_indices(ls´, siteoffsets, ls) for ls´ in lss]
-    return MultiBlockStructure(cells, subcelloffsets, siteoffsets, contactinds)
-end
-
-# find flatindices corresponding to merged_ls of sites in ls´
-function contact_indices(ls´, siteoffsets, merged_ls)
-    contactinds = Int[]
-    for scell´ in subcells(ls´)
-        so = findsubcell(cell(scell´), merged_ls)
-        so === nothing && continue
-        # here offset is the number of sites in merged_ls before scell
-        (scell, offset) = so
-        for i´ in siteindices(scell´), (n, i) in enumerate(siteindices(scell))
-            n´ = offset + n
-            i == i´ && append!(contactinds, siteoffsets[n´]+1:siteoffsets[n´+1])
-        end
-    end
-    return contactinds
+    return SubcellBlockStructure(cells, subcelloffsets, siteoffsets)
 end
 
 #endregion

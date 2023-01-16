@@ -26,6 +26,31 @@ blockshift!(r::AbstractVector, shift) = (r .+= shift)
 #endregion
 
 ############################################################################################
+# contact_indices
+#   find orbital indices corresponding to a merged latslice for sites in another latstlice
+#region
+
+contact_indices(lss::NTuple{<:Any,LatticeSlice}, lsmerged::LatticeSlice, bs::SubcellBlockStructure) =
+    Vector{Int}[contact_indices(ls´, lsmerged, bs) for ls´ in lss]
+
+function contact_indices(ls´::LatticeSlice, lsmerged::LatticeSlice, bs::SubcellBlockStructure)
+    contactinds = Int[]
+    for scell´ in subcells(ls´)
+        so = findsubcell(cell(scell´), lsmerged)
+        so === nothing && continue
+        # here offset is the number of sites in lsmerged before scell
+        (scell, offset) = so
+        for i´ in siteindices(scell´), (n, i) in enumerate(siteindices(scell))
+            n´ = offset + n
+            i == i´ && append!(contactinds, siterange(bs, n´))
+        end
+    end
+    return contactinds
+end
+
+#endregion
+
+############################################################################################
 # SelfEnergyModel <: RegularSelfEnergySolver <: AbstractSelfEnergySolver
 #region
 
@@ -47,14 +72,14 @@ function SelfEnergy(h::AbstractHamiltonian, model::ParametricModel, sel::SiteSel
     # this fills sliceinds with the latslice index for each lat0 site
     lat0 = lattice(latslice, sliceinds)
     ph = hamiltonian(lat0, modelω; orbitals = norbitals(h))
-    bs = MultiBlockStructure(latslice, h)
+    bs = SubcellBlockStructure(latslice, h)
     # orbital index on latslice for each orbital in lat0
     flatorbinds = flatinds(sliceinds, bs)
     solver = SelfEnergyModel(latslice, flatorbinds, ph)
     return SelfEnergy(solver, latslice)
 end
 
-function flatinds(sliceinds, bs::MultiBlockStructure)
+function flatinds(sliceinds, bs::SubcellBlockStructure)
     finds = Int[]
     for iunflat in sliceinds
         append!(finds, siterange(bs, iunflat))

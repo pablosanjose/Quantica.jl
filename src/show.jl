@@ -236,7 +236,7 @@ Base.summary(::Bands{T,E,L}) where {T,E,L} =
 #endregion
 
 ############################################################################################
-# GreenFunction and GreenMatrix
+# GreenFunction and GreenFixed
 #region
 
 function Base.show(io::IO, g::GreenFunction)
@@ -254,13 +254,13 @@ end
 Base.summary(g::GreenFunction{T,E,L}) where {T,E,L} =
     "GreenFunction{$T,$E,$L}: Green function of a $(typename(hamiltonian(g))){$T,$E,$L}"
 
-function Base.show(io::IO, g::GreenMatrix)
+function Base.show(io::IO, g::GreenFixed)
     i = get(io, :indent, "")
     print(io, i, summary(g))
 end
 
-Base.summary(g::GreenMatrix{T,E,L}) where {T,E,L} =
-    "GreenMatrix{$T,$E,$L}: Green matrix evaluator"
+Base.summary(g::GreenFixed{T,E,L}) where {T,E,L} =
+    "GreenFixed{$T,$E,$L}: Green matrix evaluator"
 
 #endregion
 
