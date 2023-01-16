@@ -65,7 +65,7 @@ end
 #region
 
 function Base.show(io::IO, m::TightbindingModel)
-    ioindent = IOContext(io, :indent => "  ")
+    ioindent = IOContext(io, :indent =>"  ")
     print(io, "TightbindingModel: model with $(pluraltext(m, "term"))", "\n")
     foreach(t -> print(ioindent, t, "\n"), m.terms)
 end
@@ -74,25 +74,28 @@ function Base.show(io::IO, m::ParametricModel)
     ioindent = IOContext(io, :indent => "  ")
     print(io, "ParametricModel: model with $(pluraltext(m, "term"))", "\n")
     foreach(t -> print(ioindent, t, "\n"), m.terms)
+    if !isempty(terms(nonparametric(m)))
+        show(ioindent, nonparametric(m))
+    end
 end
 
 function Base.show(io::IO, o::OnsiteTerm{F,<:SiteSelector}) where {F}
     i = get(io, :indent, "")
     print(io,
 "$(i)OnsiteTerm{$(displayparameter(F))}:
-$(i)  Sublattices      : $(o.selector.sublats === missing ? "any" : o.selector.sublats)
-$(i)  Coefficient      : $(o.coefficient)")
+$(i)  Sublattices       : $(o.selector.sublats === missing ? "any" : o.selector.sublats)
+$(i)  Coefficient       : $(o.coefficient)")
 end
 
 function Base.show(io::IO, h::HoppingTerm{F,<:HopSelector}) where {F}
     i = get(io, :indent, "")
     print(io,
 "$(i)HoppingTerm{$(displayparameter(F))}:
-$(i)  Sublattice pairs : $(h.selector.sublats === missing ? "any" : h.selector.sublats)
-$(i)  dn cell distance : $(h.selector.dcells === missing ? "any" : h.selector.dcells)
-$(i)  Hopping range    : $(displayrange(h.selector.range))
-$(i)  Coefficient      : $(h.coefficient)
-$(i)  Reverse hops     : $(h.selector.adjoint)")
+$(i)  Sublattice pairs  : $(h.selector.sublats === missing ? "any" : h.selector.sublats)
+$(i)  dn cell distance  : $(h.selector.dcells === missing ? "any" : h.selector.dcells)
+$(i)  Hopping range     : $(displayrange(h.selector.range))
+$(i)  Coefficient       : $(h.coefficient)
+$(i)  Reverse hops      : $(h.selector.adjoint)")
 end
 
 function Base.show(io::IO, o::ParametricOnsiteTerm{N}) where {N}

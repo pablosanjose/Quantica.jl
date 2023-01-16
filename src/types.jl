@@ -405,8 +405,9 @@ end
 
 const AbstractParametricTerm{N} = Union{ParametricOnsiteTerm{N},ParametricHoppingTerm{N}}
 
-struct ParametricModel{T<:NTuple{<:Any,AbstractParametricTerm}} <: AbstractModel
-    terms::T  # Collection of `AbstractParametricTerm`s
+struct ParametricModel{T<:NTuple{<:Any,AbstractParametricTerm},M<:TightbindingModel} <: AbstractModel
+    npmodel::M  # non-parametric model to use as base
+    terms::T    # Collection of `AbstractParametricTerm`s
 end
 
 const AppliedParametricTerm{N} = Union{ParametricOnsiteTerm{N,<:AppliedSiteSelector},
@@ -419,7 +420,7 @@ ParametricFunction{N}(f::F, params = Symbol[]) where {N,F} =
     ParametricFunction{N,F}(f, params)
 
 TightbindingModel(ts::AbstractTightbindingTerm...) = TightbindingModel(ts)
-ParametricModel(ts::AbstractParametricTerm...) = ParametricModel(ts)
+ParametricModel(ts::AbstractParametricTerm...) = ParametricModel(TightbindingModel(), ts)
 
 OnsiteTerm(t::OnsiteTerm, os::SiteSelector) = OnsiteTerm(t.f, os, t.coefficient)
 ParametricOnsiteTerm(t::ParametricOnsiteTerm, os::SiteSelector) =
@@ -440,6 +441,9 @@ selector(t::AbstractModelTerm) = t.selector
 functor(t::AbstractModelTerm) = t.f
 
 parameters(t::AbstractParametricTerm) = t.f.params
+
+nonparametric(m::TightbindingModel) = m
+nonparametric(m::ParametricModel) = m.npmodel
 
 coefficient(t::OnsiteTerm) = t.coefficient
 coefficient(t::HoppingTerm) = t.coefficient
@@ -478,12 +482,17 @@ end
 # Model term algebra
 
 Base.:*(x::Number, m::TightbindingModel) = TightbindingModel(x .* terms(m))
-Base.:*(x::Number, m::ParametricModel) = ParametricModel(x .* terms(m))
+Base.:*(x::Number, m::ParametricModel) = ParametricModel(x * nonparametric(m), x .* terms(m))
 Base.:*(m::AbstractModel, x::Number) = x * m
 Base.:-(m::AbstractModel) = (-1) * m
 
-Base.:+(m::TightbindingModel, m´::TightbindingModel) = TightbindingModel((terms(m)..., terms(m´)...))
-Base.:+(m::AbstractModel, m´::AbstractModel) = ParametricModel((terms(m)..., terms(m´)...))
+Base.:+(m::TightbindingModel, m´::TightbindingModel) =
+    TightbindingModel((terms(m)..., terms(m´)...))
+Base.:+(m::ParametricModel, m´::ParametricModel) =
+    ParametricModel(nonparametric(m) + nonparametric(m´), (terms(m)..., terms(m´)...))
+Base.:+(m::TightbindingModel, m´::ParametricModel) =
+    ParametricModel(m + nonparametric(m´), terms(m´))
+Base.:+(m::ParametricModel, m´::TightbindingModel) = m´ + m
 Base.:-(m::AbstractModel, m´::AbstractModel) = m + (-m´)
 
 Base.:*(x::Number, o::OnsiteTerm) = OnsiteTerm(o.f, o.selector, x * o.coefficient)
