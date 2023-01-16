@@ -75,7 +75,6 @@ end
 
 struct ExecutedSparseLU{C} <:GreenFixedSolver
     fact::SparseArrays.UMFPACK.UmfpackLU{C,Int}  # of full system plus extended orbs
-    blockstruct::SubcellBlockStructure{0}        # of merged contact LatticeSlice
     allcontactinds::Vector{Int}                  # all non-extended contact indices
     source::Matrix{C}                            # preallocation for ldiv! solve
 end
@@ -98,7 +97,6 @@ function call!(s::AppliedSparseLU{C}, h, contacts, ω; params...) where {C}
     invgreen = s.invgreen
     allcinds = invgreen.allcontactinds
     cinds = contactinds(contacts)
-    bs = blockstruct(contacts)
     update!(invgreen, ω)
     igmat = sparse(invgreen)
     fact = try
@@ -107,7 +105,7 @@ function call!(s::AppliedSparseLU{C}, h, contacts, ω; params...) where {C}
         argerror("Encountered a singular G⁻¹(ω) at ω = $ω, cannot factorize")
     end
     source = zeros(C, size(igmat, 2), length(allcinds))
-    so = ExecutedSparseLU(fact, bs, allcinds, source)
+    so = ExecutedSparseLU(fact, allcinds, source)
     gc = so()
     Γs = linewidth.(Σs)
     ls = latslice(contacts)
@@ -115,7 +113,6 @@ function call!(s::AppliedSparseLU{C}, h, contacts, ω; params...) where {C}
 end
 
 function (s::ExecutedSparseLU{C})() where {C}
-    bs = s.blockstruct
     fact = s.fact
     allcinds = s.allcontactinds
     source = s.source
@@ -124,7 +121,7 @@ function (s::ExecutedSparseLU{C})() where {C}
         source[row, col] = one(C)
     end
     gext = ldiv!(fact, source)
-    g = GreenMatrix(gext[allcinds, :], bs)
+    g = gext[allcinds, :]
     return g
 end
 

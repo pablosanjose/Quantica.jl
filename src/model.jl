@@ -133,7 +133,7 @@ basemodel(m::ParametricModel) = nonparametric(m) + TightbindingModel(zero_model.
 
 # transforms the first argument in each model term to a parameter named pname
 model_ω_to_param(model::ParametricModel) =
-    ParametricModel(model_ω_to_param.(terms(model)))
+    ParametricModel(nonparametric(model), model_ω_to_param.(terms(model)))
 
 function model_ω_to_param(term::ParametricOnsiteTerm{N}, default = 0) where {N}
     ps = push!(parameters(term), :ω_internal)
