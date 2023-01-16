@@ -1108,10 +1108,11 @@ latslice(c::Contacts) = c.latsliceall
 
 selfenergies(c::Contacts) = c.selfenergies
 
-blockstruct(c::Contacts) = c.blockstruct
+blockstructure(c::Contacts) = c.blockstruct
 
-contactinds(c::Contacts) = c.contactinds
-contactinds(c::Contacts, i) = c.contactinds[i]
+contactinds(c::Contacts, i...) = contactinds(c.blockstruct, i...)
+contactinds(b::MultiBlockStructure) = b.contactinds
+contactinds(b::MultiBlockStructure, i) = b.contactinds[i]
 
 call!(c::Contacts, ω; params...) = call!.(c.selfenergies, Ref(ω); params...)
 call!(c::Contacts; params...) =
@@ -1211,5 +1212,7 @@ lattice(g::GreenFixed) = parent(g.latslice)
 Base.parent(g::GreenFunction) = g.parent
 Base.parent(g::GreenFunctionSlice) = g.parent
 
+Base.copy(g::GreenFixed) =
+    GreenFixed(deepcopy(g.solver), g.g, g.Γs, g.blockstruct, g.latslice)
 #endregion
 #endregion

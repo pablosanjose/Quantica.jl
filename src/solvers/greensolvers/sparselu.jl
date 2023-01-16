@@ -96,7 +96,7 @@ function call!(s::AppliedSparseLU{C}, h, contacts, ω; params...) where {C}
     Σs = call!(contacts, ω; params...)                        # same for invgreen's Σ blocks
     invgreen = s.invgreen
     allcinds = invgreen.allcontactinds
-    cinds = contactinds(contacts)
+    bs = blockstructure(contacts)
     update!(invgreen, ω)
     igmat = sparse(invgreen)
     fact = try
@@ -109,7 +109,7 @@ function call!(s::AppliedSparseLU{C}, h, contacts, ω; params...) where {C}
     gc = so()
     Γs = linewidth.(Σs)
     ls = latslice(contacts)
-    return GreenFixed(so, gc, Γs, cinds, ls)
+    return GreenFixed(so, gc, Γs, bs, ls)
 end
 
 function (s::ExecutedSparseLU{C})() where {C}
