@@ -146,7 +146,7 @@ checkstored(mat, i, j) = i in view(rowvals(mat), nzrange(mat, j)) ||
 # HybridSparseBlochMatrix flat/unflat conversion
 #region
 
-function flat(b::SublatBlockStructure{B}, unflat::SparseMatrixCSC{B´}) where {N,T,B<:MatrixElementNonscalarType{T,N},B´<:MatrixElementNonscalarType{T,N}}
+function flat(b::OrbitalBlockStructure{B}, unflat::SparseMatrixCSC{B´}) where {N,T,B<:MatrixElementNonscalarType{T,N},B´<:MatrixElementNonscalarType{T,N}}
     nnzguess = nnz(unflat) * N * N
     builder = CSC{Complex{T}}(flatsize(b), nnzguess)
     nzs = nonzeros(unflat)
@@ -165,7 +165,7 @@ function flat(b::SublatBlockStructure{B}, unflat::SparseMatrixCSC{B´}) where {N
     return sparse(builder, n, n)
 end
 
-function unflat(b::SublatBlockStructure{B}, flat::SparseMatrixCSC{<:Number}) where {N,B<:MatrixElementNonscalarType{<:Any,N}}
+function unflat(b::OrbitalBlockStructure{B}, flat::SparseMatrixCSC{<:Number}) where {N,B<:MatrixElementNonscalarType{<:Any,N}}
     @boundscheck(checkblocks(b, flat)) # tools.jl
     nnzguess = nnz(flat) ÷ (N * N)
     ncols = unflatsize(b)
@@ -267,7 +267,7 @@ function merged_mul!(C::SparseMatrixCSC{<:Number}, A::HybridSparseBlochMatrix, b
     return C
 end
 
-function merged_mul!(C::SparseMatrixCSC{<:Number}, ::SublatBlockStructure, A::SparseMatrixCSC{B}, b::Number, α = 1, β = 0) where {B<:Complex}
+function merged_mul!(C::SparseMatrixCSC{<:Number}, ::OrbitalBlockStructure, A::SparseMatrixCSC{B}, b::Number, α = 1, β = 0) where {B<:Complex}
     nzA = nonzeros(A)
     nzC = nonzeros(C)
     αb = α * b
@@ -289,7 +289,7 @@ function merged_mul!(C::SparseMatrixCSC{<:Number}, ::SublatBlockStructure, A::Sp
     return C
 end
 
-function merged_mul!(C::SparseMatrixCSC{<:Number}, bs::SublatBlockStructure{B}, A::SparseMatrixCSC{B}, b::Number, α = 1, β = 0) where {B<:MatrixElementNonscalarType}
+function merged_mul!(C::SparseMatrixCSC{<:Number}, bs::OrbitalBlockStructure{B}, A::SparseMatrixCSC{B}, b::Number, α = 1, β = 0) where {B<:MatrixElementNonscalarType}
     colsA = axes(A, 2)
     rowsA = rowvals(A)
     valsA = nonzeros(A)

@@ -5,7 +5,7 @@
 contact_block_structure(h::AbstractHamiltonian, lss...) =
     contact_block_structure(blockstructure(h), lss...)
 
-function contact_block_structure(bs::SublatBlockStructure, lss...)
+function contact_block_structure(bs::OrbitalBlockStructure, lss...)
     lsall = merge(lss...)
     subcelloffsets = [0]
     siteoffsets = [0]

@@ -55,14 +55,14 @@ const MatrixElementNonscalarType{T,N} = Union{
 #endregion
 
 ############################################################################################
-# SublatBlockStructure
+# OrbitalBlockStructure
 #   Block structure for Hamiltonians, sorted by sublattices
 #region
 
-struct SublatBlockStructure{B}
+struct OrbitalBlockStructure{B}
     blocksizes::Vector{Int}       # block sizes (number of site orbitals) in each sublattice
     subsizes::Vector{Int}         # number of blocks (sites) in each sublattice
-    function SublatBlockStructure{B}(blocksizes, subsizes) where {B}
+    function OrbitalBlockStructure{B}(blocksizes, subsizes) where {B}
         subsizes´ = Quantica.sanitize_Vector_of_Type(Int, subsizes)
         # This checks also that they are of equal length
         blocksizes´ = Quantica.sanitize_Vector_of_Type(Int, length(subsizes´), blocksizes)
@@ -72,9 +72,9 @@ end
 
 #region ## Constructors ##
 
-@inline function SublatBlockStructure(T, blocksizes, subsizes)
+@inline function OrbitalBlockStructure(T, blocksizes, subsizes)
     B = blocktype(T, blocksizes)
-    return SublatBlockStructure{B}(blocksizes, subsizes)
+    return OrbitalBlockStructure{B}(blocksizes, subsizes)
 end
 
 blocktype(T::Type, norbs) = SMatrixView(blocktype(T, val_maximum(norbs)))
@@ -92,28 +92,28 @@ argval(n::Int) = n
 
 #region ## API ##
 
-blocktype(::SublatBlockStructure{B}) where {B} = B
+blocktype(::OrbitalBlockStructure{B}) where {B} = B
 
-blockeltype(::SublatBlockStructure{<:MatrixElementType{T}}) where {T} = Complex{T}
+blockeltype(::OrbitalBlockStructure{<:MatrixElementType{T}}) where {T} = Complex{T}
 
-blocksizes(b::SublatBlockStructure) = b.blocksizes
+blocksizes(b::OrbitalBlockStructure) = b.blocksizes
 
-subsizes(b::SublatBlockStructure) = b.subsizes
+subsizes(b::OrbitalBlockStructure) = b.subsizes
 
-flatsize(b::SublatBlockStructure) = blocksizes(b)' * subsizes(b)
+flatsize(b::OrbitalBlockStructure) = blocksizes(b)' * subsizes(b)
 
-unflatsize(b::SublatBlockStructure) = sum(subsizes(b))
+unflatsize(b::OrbitalBlockStructure) = sum(subsizes(b))
 
-blocksize(b::SublatBlockStructure, iunflat, junflat) = (blocksize(b, iunflat), blocksize(b, junflat))
+blocksize(b::OrbitalBlockStructure, iunflat, junflat) = (blocksize(b, iunflat), blocksize(b, junflat))
 
-blocksize(b::SublatBlockStructure{<:SMatrixView}, iunflat) = length(flatrange(b, iunflat))
+blocksize(b::OrbitalBlockStructure{<:SMatrixView}, iunflat) = length(flatrange(b, iunflat))
 
-blocksize(b::SublatBlockStructure{B}, iunflat) where {N,B<:SMatrix{N}} = N
+blocksize(b::OrbitalBlockStructure{B}, iunflat) where {N,B<:SMatrix{N}} = N
 
-blocksize(b::SublatBlockStructure{B}, iunflat) where {B<:Number} = 1
+blocksize(b::OrbitalBlockStructure{B}, iunflat) where {B<:Number} = 1
 
 # Basic relation: iflat - 1 == (iunflat - soffset - 1) * b + soffset´
-function flatrange(b::SublatBlockStructure{<:SMatrixView}, iunflat::Integer)
+function flatrange(b::OrbitalBlockStructure{<:SMatrixView}, iunflat::Integer)
     soffset  = 0
     soffset´ = 0
     @boundscheck(iunflat < 0 && blockbounds_error())
@@ -128,13 +128,13 @@ function flatrange(b::SublatBlockStructure{<:SMatrixView}, iunflat::Integer)
     @boundscheck(blockbounds_error())
 end
 
-flatrange(b::SublatBlockStructure{<:SMatrix{N}}, iunflat::Integer) where {N} =
+flatrange(b::OrbitalBlockStructure{<:SMatrix{N}}, iunflat::Integer) where {N} =
     (iunflat - 1) * N + 1 : iunflat * N
-flatrange(b::SublatBlockStructure{<:Number}, iunflat::Integer) = iunflat:inflat
+flatrange(b::OrbitalBlockStructure{<:Number}, iunflat::Integer) = iunflat:inflat
 
-flatindex(b::SublatBlockStructure, i) = first(flatrange(b, i))
+flatindex(b::OrbitalBlockStructure, i) = first(flatrange(b, i))
 
-function unflatindex(b::SublatBlockStructure{<:SMatrixView}, iflat::Integer)
+function unflatindex(b::OrbitalBlockStructure{<:SMatrixView}, iflat::Integer)
     soffset  = 0
     soffset´ = 0
     @boundscheck(iflat < 0 && blockbounds_error())
@@ -149,12 +149,12 @@ function unflatindex(b::SublatBlockStructure{<:SMatrixView}, iflat::Integer)
     @boundscheck(blockbounds_error())
 end
 
-unflatindex(b::SublatBlockStructure{B}, iflat::Integer) where {N,B<:SMatrix{N}} =
+unflatindex(b::OrbitalBlockStructure{B}, iflat::Integer) where {N,B<:SMatrix{N}} =
     (iflat - 1)÷N + 1, N
-unflatindex(b::SublatBlockStructure{<:Number}, iflat::Integer) = iflat, 1
+unflatindex(b::OrbitalBlockStructure{<:Number}, iflat::Integer) = iflat, 1
 
-Base.copy(b::SublatBlockStructure{B}) where {B} =
-    SublatBlockStructure{B}(copy(blocksizes(b)), copy(subsizes(b)))
+Base.copy(b::OrbitalBlockStructure{B}) where {B} =
+    OrbitalBlockStructure{B}(copy(blocksizes(b)), copy(subsizes(b)))
 
 @noinline blockbounds_error() = throw(BoundsError())
 
@@ -167,7 +167,7 @@ Base.copy(b::SublatBlockStructure{B}) where {B} =
 #region
 
 struct HybridSparseBlochMatrix{T,B<:MatrixElementType{T}} <: SparseArrays.AbstractSparseMatrixCSC{B,Int}
-    blockstruct::SublatBlockStructure{B}
+    blockstruct::OrbitalBlockStructure{B}
     unflat::SparseMatrixCSC{B,Int}
     flat::SparseMatrixCSC{Complex{T},Int}
     sync_state::Ref{Int}  # 0 = in sync, 1 = flat needs sync, -1 = unflat needs sync, 2 = none initialized
@@ -175,16 +175,16 @@ end
 
 #region ## Constructors ##
 
-HybridSparseBlochMatrix(b::SublatBlockStructure{Complex{T}}, flat::SparseMatrixCSC{Complex{T},Int}) where {T} =
+HybridSparseBlochMatrix(b::OrbitalBlockStructure{Complex{T}}, flat::SparseMatrixCSC{Complex{T},Int}) where {T} =
     HybridSparseBlochMatrix(b, flat, flat, Ref(0))  # aliasing
 
-function HybridSparseBlochMatrix(b::SublatBlockStructure{B}, unflat::SparseMatrixCSC{B,Int}) where {T,B<:MatrixElementNonscalarType{T}}
+function HybridSparseBlochMatrix(b::OrbitalBlockStructure{B}, unflat::SparseMatrixCSC{B,Int}) where {T,B<:MatrixElementNonscalarType{T}}
     m = HybridSparseBlochMatrix(b, unflat, flat(b, unflat), Ref(0))
     needs_flat_sync!(m)
     return m
 end
 
-function HybridSparseBlochMatrix(b::SublatBlockStructure{B}, flat::SparseMatrixCSC{Complex{T},Int}) where {T,B<:MatrixElementNonscalarType{T}}
+function HybridSparseBlochMatrix(b::OrbitalBlockStructure{B}, flat::SparseMatrixCSC{Complex{T},Int}) where {T,B<:MatrixElementNonscalarType{T}}
     m = HybridSparseBlochMatrix(b, unflat(b, flat), flat, Ref(0))
     needs_unflat_sync!(m)
     return m

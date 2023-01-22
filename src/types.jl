@@ -597,7 +597,7 @@ const AbstractHamiltonian1D{T,E,B} = AbstractHamiltonian{T,E,1,B}
 
 struct Hamiltonian{T,E,L,B} <: AbstractHamiltonian{T,E,L,B}
     lattice::Lattice{T,E,L}
-    blockstruct::SublatBlockStructure{B}
+    blockstruct::OrbitalBlockStructure{B}
     harmonics::Vector{Harmonic{T,L,B}}
     bloch::HybridSparseBlochMatrix{T,B}
     # Enforce sorted-dns-starting-from-zero invariant onto harmonics
@@ -629,10 +629,10 @@ flatrange(h::AbstractHamiltonian, iunflat) = flatrange(blockstructure(h), iunfla
 
 ## Hamiltonian
 
-Hamiltonian(l::Lattice{T,E,L}, b::SublatBlockStructure{B}, h::Vector{Harmonic{T,L,B}}, bl) where {T,E,L,B} =
+Hamiltonian(l::Lattice{T,E,L}, b::OrbitalBlockStructure{B}, h::Vector{Harmonic{T,L,B}}, bl) where {T,E,L,B} =
     Hamiltonian{T,E,L,B}(l, b, h, bl)
 
-function Hamiltonian(l, b::SublatBlockStructure{B}, h) where {B}
+function Hamiltonian(l, b::OrbitalBlockStructure{B}, h) where {B}
     n = nsites(l)
     bloch = HybridSparseBlochMatrix(b, spzeros(B, n, n))
     needs_initialization!(bloch)
@@ -768,7 +768,7 @@ abstract type AbstractEigenSolver end
 
 struct Spectrum{T,B}
     eigen::Eigen{Complex{T},Complex{T},Matrix{Complex{T}},Vector{Complex{T}}}
-    blockstruct::SublatBlockStructure{B}
+    blockstruct::OrbitalBlockStructure{B}
 end
 
 #region ## Constructors ##

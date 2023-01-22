@@ -18,26 +18,26 @@ end
 
 struct IJVBuilder{T,E,L,B} <: AbstractHamiltonianBuilder{T,E,L,B}
     lat::Lattice{T,E,L}
-    blockstruct::SublatBlockStructure{B}
+    blockstruct::OrbitalBlockStructure{B}
     harmonics::Vector{IJVHarmonic{L,B}}
     kdtrees::Vector{KDTree{SVector{E,T},Euclidean,T}}
 end
 
 struct CSCBuilder{T,E,L,B} <: AbstractHamiltonianBuilder{T,E,L,B}
     lat::Lattice{T,E,L}
-    blockstruct::SublatBlockStructure{B}
+    blockstruct::OrbitalBlockStructure{B}
     harmonics::Vector{CSCHarmonic{L,B}}
 end
 
 ## Constructors ##
 
-function IJVBuilder(lat::Lattice{T,E,L}, blockstruct::SublatBlockStructure{B}) where {E,L,T,B}
+function IJVBuilder(lat::Lattice{T,E,L}, blockstruct::OrbitalBlockStructure{B}) where {E,L,T,B}
     harmonics = IJVHarmonic{L,B}[]
     kdtrees = Vector{KDTree{SVector{E,T},Euclidean,T}}(undef, nsublats(lat))
     return IJVBuilder(lat, blockstruct, harmonics, kdtrees)
 end
 
-function CSCBuilder(lat::Lattice{<:Any,<:Any,L}, blockstruct::SublatBlockStructure{B}) where {L,B}
+function CSCBuilder(lat::Lattice{<:Any,<:Any,L}, blockstruct::OrbitalBlockStructure{B}) where {L,B}
     harmonics = CSCHarmonic{L,B}[]
     return CSCBuilder(lat, blockstruct, harmonics)
 end
@@ -89,7 +89,7 @@ function SparseArrays.sparse(builder::AbstractHamiltonianBuilder{T,<:Any,L,B}) w
     return hars
 end
 
-function SparseArrays.sparse(b::SublatBlockStructure{B}, har::AbstractBuilderHarmonic{L,B}, m::Integer, n::Integer) where {L,B}
+function SparseArrays.sparse(b::OrbitalBlockStructure{B}, har::AbstractBuilderHarmonic{L,B}, m::Integer, n::Integer) where {L,B}
     s = sparse(collector(har), m, n)
     return Harmonic(dcell(har), HybridSparseBlochMatrix(b, s))
 end
@@ -108,7 +108,7 @@ hamiltonian(lat::Lattice, m::ParametricModel; kw...) =
 # Base.@constprop :aggressive may be needed for type-stable non-Val orbitals?
 function hamiltonian(lat::Lattice{T}, m::TightbindingModel = TightbindingModel(); orbitals = Val(1)) where {T}
     orbitals´ = sanitize_orbitals(orbitals)
-    blockstruct = SublatBlockStructure(T, orbitals´, sublatlengths(lat))
+    blockstruct = OrbitalBlockStructure(T, orbitals´, sublatlengths(lat))
     builder = IJVBuilder(lat, blockstruct)
     apmod = apply(m, (lat, blockstruct))
     # using foreach here foils precompilation of applyterm! for some reason
