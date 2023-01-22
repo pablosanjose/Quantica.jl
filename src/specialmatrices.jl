@@ -362,6 +362,24 @@ end
 ## MatrixBlock API
 #region
 
+# Try to revert subarray to parent through a simple reordering of rows and cols
+# This is possible if rows and cols is a permutation of the parent axes.
+function simplify_matrixblock!(block::SubArray, rows, cols)
+    viewrows, viewcols = block.indices
+    if isperm(viewrows) && (viewrows === viewcols || isperm(viewcols))
+        invpermute!(rows, viewrows)
+        # aliasing checking
+        if cols === rows
+            viewcols === viewrows || invpermute!(copy(cols), viewcols)
+        else
+            invpermute!(cols, viewcols)
+        end
+        return MatrixBlock(parent(block), rows, cols)
+    else # cannot simplify
+        return MatrixBlock(sparse(block), rows, cols)
+    end
+end
+
 function appendIJ!(I, J, b::MatrixBlock{<:Any,<:AbstractSparseMatrixCSC})
     for col in axes(blockmat(b), 2), ptr in nzrange(blockmat(b), col)
         push!(I, blockrows(b)[rowvals(blockmat(b))[ptr]])
@@ -370,18 +388,18 @@ function appendIJ!(I, J, b::MatrixBlock{<:Any,<:AbstractSparseMatrixCSC})
     return I, J
 end
 
-function appendIJ!(I, J, b::MatrixBlock{<:Any,<:StridedMatrix})
-    for c in CartesianIndices(blockmat(b))
-        row, col = Tuple(c)
+function appendIJ!(I, J, b::MatrixBlock{<:Any,<:Diagonal})
+    for col in axes(blockmat(b), 2)
+        row = col
         push!(I, blockrows(b)[row])
         push!(J, blockcols(b)[col])
     end
     return I, J
 end
 
-function appendIJ!(I, J, b::MatrixBlock{<:Any,<:Diagonal})
-    for col in axes(blockmat(b), 2)
-        row = col
+function appendIJ!(I, J, b::MatrixBlock{<:Any,<:StridedArray})
+    for c in CartesianIndices(blockmat(b))
+        row, col = Tuple(c)
         push!(I, blockrows(b)[row])
         push!(J, blockcols(b)[col])
     end

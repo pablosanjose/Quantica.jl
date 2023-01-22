@@ -312,7 +312,7 @@ function call!(s::AppliedSchurSolver, ω, Σs; params...)
     call!(s; params...)
     factors = call!(s.factors, ω)
     g0solver = DecoupledSchurSolver(factors, s.boundary)
-    return GreenFixed(g0solver, Σs)
+    return GreenSolution(g0solver, Σs)
 end
 
 # WIP placeholder for no Σs

@@ -25,14 +25,14 @@ abstract type AbstractGreenSolver end
 
 # Locations(; kw...) = Locations((; kw...))
 
-# struct CellSites{L}
+# struct Subcell{L}
 #     cell::SVector{L,Int}
 #     sites::Vector{Int}
 # end
 
 # struct AppliedLocations{L,B<:NTuple{L,Any}}
 #     boundaries::B
-#     cellsites::Vector{CellSites{L}}
+#     cellsites::Vector{Subcell{L}}
 # end
 
 # apply(l::Locations, h::AbstractHamiltonian{<:Any,<:Any,L}) where {L} =

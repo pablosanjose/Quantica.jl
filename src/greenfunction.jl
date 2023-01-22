@@ -6,8 +6,11 @@ greenfunction(s::AbstractGreenSolver) = oh -> greenfunction(oh, s)
 
 greenfunction() = h -> greenfunction(h)
 
-greenfunction(oh::OpenHamiltonian, s::AbstractGreenSolver = default_green_solver(hamiltonian(oh))) =
-    GreenFunction(oh, apply(s, oh))
+function greenfunction(oh::OpenHamiltonian, s::AbstractGreenSolver = default_green_solver(hamiltonian(oh)))
+    cs = Contacts(oh)
+    h = hamiltonian(oh)
+    return GreenFunction(h, apply(s, oh, cs), cs)
+end
 
 default_green_solver(::AbstractHamiltonian0D) = GS.SparseLU()
 # default_green_solver(::AbstractHamiltonian1D) = GS.Schur()
@@ -31,30 +34,34 @@ function call!(g::GreenFunction; params...)
     return GreenFunction(h´, solver´, contacts´)
 end
 
-call!(g::GreenFunction, ω; params...) =
-    call!(solver(g), hamiltonian(g), contacts(g), ω; params...)
+function call!(g::GreenFunction, ω; params...)
+    call!(h, (); params...)               # call!_output is wrapped in solver(g) - update it
+    Σs = call!(contacts, ω; params...)                                  # same for Σs blocks
+    bs = blockstructure(contacts)
+    return solver(g)(ω, Σs, bs)   # -> ::GreenSolution
+end
 
-call!(g::GreenFunctionSlice, ω; params...) =
-    call!(parent(g), ω; params...)[slicerows(g), slicecols(g)]
+# call!(g::GreenFunctionSlice, ω; params...) =
+#     call!(parent(g), ω; params...)[slicerows(g), slicecols(g)]
 
 #endregion
 
 ############################################################################################
-# GreenFixed indexing
+# GreenSolution indexing
 #region
 
-Base.view(g::GreenFixed, i, j = i) =
+Base.view(g::GreenSolution, i, j = i) =
     view(greencontacts(g), greenfix_inds(i, g), greenfix_inds(j, g))
 
-green_inds(c::ContactIndex, g::GreenFixed) = contactinds(g, contact(c))
-green_inds(x, g::GreenFixed) = green_inds(x, greencontacts(g))
+green_inds(c::ContactIndex, g::GreenSolution) = contactinds(g, contact(c))
+green_inds(x, g::GreenSolution) = green_inds(x, greencontacts(g))
 
-Base.getindex(g::GreenFixed) =  copy(view(g))
-Base.getindex(g::GreenFixed, i, j) = copy(view(g, i, j))
+Base.getindex(g::GreenSolution) =  copy(view(g))
+Base.getindex(g::GreenSolution, i, j) = copy(view(g, i, j))
 
-function Base.getindex(g::GreenFixed, lsrow::LatticeSlice, lscol::LatticeSlice = lsrow)
+function Base.getindex(g::GreenSolution, lsrow::LatticeSlice, lscol::LatticeSlice = lsrow)
     lattice(g) == parent(lsrow) == parent(lscol) ||
-        argerror("Can only index a GreenFixed over its own Lattice")
+        argerror("Can only index a GreenSolution over its own Lattice")
     ls = merge(lrow, lcol)
 
 end
@@ -81,10 +88,10 @@ Base.getindex(g::GreenFunction) = GreenFunctionSlice(g, :, :)
 #endregion
 
 ############################################################################################
-# GreenFixedSolver call API
+# GreenSlicer call API
 #region
 
-function (s::GreenFixedSolver)(i::Integer, j::Integer)
+function (s::GreenSlicer)(i::Integer, j::Integer)
 
 end
 

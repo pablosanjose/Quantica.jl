@@ -84,7 +84,7 @@ function Base.getindex(lat::Lattice, as::AppliedSiteSelector)
     sinds = Int[]
     foreach_cell(as) do cell
         isempty(sinds) || (sinds = Int[])
-        scell = Subcell(sinds, cell)
+        scell = Subcell(cell, sinds)
         foreach_site(as, cell) do s, i, r
             push!(scell, i)
         end
@@ -101,6 +101,19 @@ end
 Base.getindex(ls::LatticeSlice; kw...) = getindex(ls, siteselector(; kw...))
 
 Base.getindex(ls::LatticeSlice, ss::SiteSelector) = getindex(ls, apply(ss, parent(ls)))
+
+function Base.getindex(l::LatticeSlice{<:Any,<:Any,L}, i::Integer) where {L}
+    offset = 0
+    for scell in subcells(l)
+        ninds = length(siteindices(scell))
+        if ninds + offset < i
+            offset += ninds
+        else
+            return cell(scell), siteindices(scell)[i-offset]
+        end
+    end
+    @boundscheck(boundserror(l, i))
+end
 
 # indexlist is populated with latslice indices of selected sites
 function Base.getindex(latslice::LatticeSlice, as::AppliedSiteSelector)
@@ -154,20 +167,31 @@ findsite(i::Integer, s::Subcell) = findfirst(==(i), siteindices(s))
 #endregion
 
 ############################################################################################
-# merge and merge!
+# merge, merge! and intersect!
 #region
 
-merge(ls::LatticeSlice) = ls
-merge(ls::LatticeSlice, lss::LatticeSlice...) =
-    merge!(LatticeSlice(lattice(first(lss))), ls, lss...)
+Base.merge(ls::LatticeSlice, lss::LatticeSlice...) =
+    merge!(LatticeSlice(parent(ls)), ls, lss...)
+# Base.merge(os::OrbitalSlice{L}, oss::OrbitalSlice{L}...) where {L} =
+#     merge!(OrbitalSlice{L}(), os, oss...)
+
+# Base.merge!(os::OrbitalSlice, oss::OrbitalSlice...) =
+#     OrbitalSlice(merge_subcells!(subcells(os), subcells.(oss)...))
 
 function Base.merge!(ls0::S, lss::S...) where {L,S<:LatticeSlice{<:Any,<:Any,L}}
     lat = parent(ls0)
     all(l -> l === lat, parent.(lss)) ||
         argerror("Cannot merge LatticeBlocks of different lattices")
+    isempty(lss) || merge_subcells!(subcells(ls0), subcells.(lss)...)
+    return ls0
+end
 
+# Using Base.merge! or Base.merge here would cause invalidations
+merge_subcells(scs::Vector{S}...) where {L,S<:Subcell{L}} = merge_subcells!(S[], scs...)
+
+function merge_subcells!(sc0::Vector{S}, scs::Vector{S}...) where {L, S<:Subcell{L}}
     allcellinds = Tuple{SVector{L,Int},Int}[]
-    for ls in (ls0, lss...), scell in subcells(ls), ind in siteindices(scell)
+    for scells in (sc0, scs...), scell in scells, ind in siteindices(scell)
         push!(allcellinds, (cell(scell), ind))
     end
     sort!(allcellinds)
@@ -175,7 +199,7 @@ function Base.merge!(ls0::S, lss::S...) where {L,S<:LatticeSlice{<:Any,<:Any,L}}
 
     currentcell = first(first(allcellinds))
     scell = Subcell(currentcell)
-    scells = subcells(ls0)
+    scells = sc0
     empty!(scells)
     push!(scells, scell)
     for (c, i) in allcellinds
@@ -188,8 +212,25 @@ function Base.merge!(ls0::S, lss::S...) where {L,S<:LatticeSlice{<:Any,<:Any,L}}
             currentcell = c
         end
     end
-    return ls0
+    return sc0
 end
+
+# Unused?
+# function Base.intersect!(ls::L, ls´::L) where {L<:LatticeSlice}
+#     for subcell in subcells(ls)
+#         found = false
+#         for subcell´ in subcells(ls´)
+#             if cell(subcell) == cell(subcell´)
+#                 intersect!(siteindices(subcell), siteindices(subcell´))
+#                 found = true
+#                 break
+#             end
+#         end
+#         found || empty!(subcell)
+#     end
+#     deleteif!(isempty, subcells(ls))
+#     return ls
+# end
 
 #endregion
 

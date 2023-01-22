@@ -240,26 +240,32 @@ Base.adjoint(s::HopSelector) = HopSelector(s.region, s.sublats, s.dcells, s.rang
 #endregion
 
 ############################################################################################
-# LatticeSlice - see lattice.jl for methods
-#   Encodes subsets of sites of a lattice in different cells. Produced by lat[siteselector]
-#   No ordering of cells or sites indices is guaranteed, but both must be unique
+# LatticeSlice and OrbitalSlice - see lattice.jl for methods
+#   Encodes subsets of sites (or orbitals) of a lattice in different cells. Produced e.g. by
+#   lat[siteselector]. No ordering is guaranteed, but cells and sites must both be unique
 #region
 
-struct Subcell{L}
-    inds::Vector{Int}
+struct Subcell{L,V}
     cell::SVector{L,Int}
+    inds::V      # Can be anything: a vector of site or orb indices, a Colon, a UnitRange...
 end
 
 struct LatticeSlice{T,E,L}
     lat::Lattice{T,E,L}
-    subcells::Vector{Subcell{L}}
+    subcells::Vector{Subcell{L,Vector{Int}}}
+end
+
+struct OrbitalSlice{L}
+    orbs::Vector{Subcell{L,Vector{Int}}}     # indices here correpond to orbitals, not sites
 end
 
 #region ## Constructors ##
 
-Subcell(cell) = Subcell(Int[], cell)
+Subcell(cell) = Subcell(cell, Int[])
 
-LatticeSlice(lat::Lattice{<:Any,<:Any,L}) where {L} = LatticeSlice(lat, Subcell{L}[])
+LatticeSlice(lat::Lattice{<:Any,<:Any,L}) where {L} = LatticeSlice(lat, Subcell{L,Vector{Int}}[])
+
+OrbitalSlice{L}() where {L} = OrbitalSlice(Subcell{L,Vector{Int}}[])
 
 #endregion
 
@@ -270,6 +276,7 @@ siteindices(s::Subcell) = s.inds
 cell(s::Subcell) = s.cell
 
 subcells(l::LatticeSlice) = l.subcells
+subcells(o::OrbitalSlice) = o.orbs
 
 cells(l::LatticeSlice) = (s.cell for s in l.subcells)
 
@@ -292,49 +299,6 @@ Base.push!(s::Subcell, i::Int) = push!(s.inds, i)
 Base.push!(ls::LatticeSlice, s::Subcell) = push!(ls.subcells, s)
 
 Base.copy(s::Subcell) = Subcell(copy(s.inds), s.cell)
-
-# Unused?
-# function Base.intersect!(ls::L, ls´::L) where {L<:LatticeSlice}
-#     for subcell in subcells(ls)
-#         found = false
-#         for subcell´ in subcells(ls´)
-#             if cell(subcell) == cell(subcell´)
-#                 intersect!(siteindices(subcell), siteindices(subcell´))
-#                 found = true
-#                 break
-#             end
-#         end
-#         found || empty!(subcell)
-#     end
-#     deleteif!(isempty, subcells(ls))
-#     return ls
-# end
-
-# function subcellind(l::LatticeSlice, iunflat)
-#     counter = 0
-#     for (nc, scell) in enumerate(subcells(l))
-#         ns = nsites(scell)
-#         if counter + ns < iunflat
-#             counter += ns
-#         else
-#             return (nc, iunflat - counter)
-#         end
-#     end
-#     @boundscheck(boundserror(l, iunflat))
-# end
-
-function Base.getindex(l::LatticeSlice{<:Any,<:Any,L}, i::Integer) where {L}
-    offset = 0
-    for scell in subcells(l)
-        ninds = length(siteindices(scell))
-        if ninds + offset < i
-            offset += ninds
-        else
-            return cell(scell), siteindices(scell)[i-offset]
-        end
-    end
-    @boundscheck(boundserror(l, i))
-end
 
 Base.length(l::LatticeSlice) = nsites(l)
 Base.length(s::Subcell) = nsites(s)
@@ -966,10 +930,11 @@ subbands(b::Bands, i...) = getindex(b.subbands, i...)
 #   For each such form we must add a SelfEnergy constructor that will be used by attach
 #     - SelfEnergy(h::AbstractHamiltonian, sargs...; siteselect...) -> SelfEnergy
 #   This wraps the s::AbstractSelfEnergySolver that should support the call! API
-#     - call!(s::RegularSelfEnergySolver, ω; params...) -> Σreg::MatrixBlock
-#     - call!(s::ExtendedSelfEnergySolver, ω; params...) -> (Σᵣᵣ, Vᵣₑ, gₑₑ⁻¹, Vₑᵣ) MatrixBlock's
+#     - call!(s::RegularSelfEnergySolver, ω; params...) -> Σreg::AbstractMatrix
+#     - call!(s::ExtendedSelfEnergySolver, ω; params...) -> (Σᵣᵣ, Vᵣₑ, gₑₑ⁻¹, Vₑᵣ) AbstractMatrices
 #         With the extended case, the equivalent Σreg reads Σreg = Σᵣᵣ + VᵣₑgₑₑVₑᵣ
 #     - call!_output(s::AbstractSelfEnergySolver) -> object returned by call!(s, ω; params...)
+#   These AbstractMatrices are flat and are defined over a LatticeSlice that is also wrapped
 #region
 
 abstract type AbstractSelfEnergySolver end
@@ -1000,12 +965,12 @@ call!(s::WrappedExtendedSelfEnergySolver; params...) = s
 
 ############################################################################################
 # SelfEnergy - see selfenergy.jl
-#   Contacts is a collection of SelfEnergy's finalized to be wrapped into a GreenFunction
+#   A producer of Σs(ω)::AbstractMatrix over a LatticeSlice
 #region
 
-struct SelfEnergy{T,E,L,S<:AbstractSelfEnergySolver}
-    solver::S                                        # returns MatrixBlock over latslice
-    latslice::LatticeSlice{T,E,L}
+struct SelfEnergy{L,S<:AbstractSelfEnergySolver}
+    solver::S                                # returns AbstractMatrix over latslice
+    latslice::LatticeSlice{L}                # sites on each unitcell with a selfenergy
 end
 
 #region ## API ##
@@ -1015,7 +980,7 @@ latslice(c::SelfEnergy) = c.latslice
 solver(c::SelfEnergy) = c.solver
 
 call!(Σ::SelfEnergy; params...) = SelfEnergy(call!(Σ.solver; params...), Σ.latslice)
-call!(Σ::SelfEnergy, ω; params...) = call!(Σ.solver, ω; params...) # returns a MatrixBlock
+call!(Σ::SelfEnergy, ω; params...) = call!(Σ.solver, ω; params...)
 
 minimal_callsafe_copy(s::SelfEnergy) = SelfEnergy(deepcopy(s.solver), s.latslice)
 
@@ -1024,18 +989,19 @@ minimal_callsafe_copy(s::SelfEnergy) = SelfEnergy(deepcopy(s.solver), s.latslice
 
 ############################################################################################
 # OpenHamiltonian
+#    A collector of selfenergies `attach`ed to an AbstractHamiltonian
 #region
 
-struct OpenHamiltonian{T,E,L,H<:AbstractHamiltonian{T,E,L},S<:NTuple{<:Any,SelfEnergy{T,E,L}}}
+struct OpenHamiltonian{T,E,L,H<:AbstractHamiltonian{T,E,L},S<:NTuple{<:Any,SelfEnergy}}
     h::H
     selfenergies::S
 end
 
 #region ## API ##
 
-hamiltonian(oh::OpenHamiltonian) = oh.h
-
 selfenergies(oh::OpenHamiltonian) = oh.selfenergies
+
+hamiltonian(oh::OpenHamiltonian) = oh.h
 
 attach(Σ::SelfEnergy) = oh -> attach(oh, Σ)
 attach(args...; kw...) = oh -> attach(oh, args...; kw...)
@@ -1049,19 +1015,24 @@ attach(h::AbstractHamiltonian, Σ::SelfEnergy) = OpenHamiltonian(h, (Σ,))
 
 ############################################################################################
 # Contacts - see selfenergy.jl
+#    Collection of selfenergies defined over blockstruct.osbslice = flat merged Σlatslices
+#    Supports call!(c, ω; params...) -> (Σs::MatrixBlock...) over orbslice
 #region
 
-struct MultiBlockStructure{L}
-    cells::Vector{SVector{L,Int}}    # cells corresponding to for each subcell block
-    subcelloffsets::Vector{Int}      # block offsets for each subcell
-    siteoffsets::Vector{Int}         # block offsets for each site (for multiorbital sites)
-    contactinds::Vector{Vector{Int}} # non-extended orbital indices for each contact
+struct ContactBlockStructure{L}
+    orbslice::OrbitalSlice{L}            # non-extended orbital indices for all contacts
+    contactinds::Vector{Vector{Int}}     # orbital indices in orbslice for each contact
+    siteoffsets::Vector{Int}             # block offsets for each site in orbslice
+    subcelloffsets::Vector{Int}          # block offsets for each subcell in orbslice
 end
 
-struct Contacts{T,E,L,S<:NTuple{<:Any,SelfEnergy}}
+struct Contacts{L,S<:NTuple{<:Any,SelfEnergy}}
     selfenergies::S                       # used to produce MatrixBlock's
-    latsliceall::LatticeSlice{T,E,L}      # merged latslice for all self-energies
-    blockstruct::MultiBlockStructure{L}   # offsets to extract site/subcell/contact blocks
+    blockstruct::ContactBlockStructure{L} # needed to extract site/subcell/contact blocks
+end
+
+struct ContactIndex
+    i::Int
 end
 
 #region ## Constructors ##
@@ -1069,40 +1040,37 @@ end
 function Contacts(oh::OpenHamiltonian)
     Σs = selfenergies(oh)
     Σlatslices = latslice.(Σs)
-    latsliceall = merge(Σlatslices...)
-    bs = MultiBlockStructure(latsliceall, hamiltonian(oh), Σlatslices)  # see selfenergy.jl
-    return Contacts(Σs, latsliceall, bs)
-end
-
-struct ContactIndex
-    i::Int
+    h = hamiltonian(oh)
+    bs = contact_block_structure(h, Σlatslices...)  # see selfenergy.jl
+    return Contacts(Σs, bs)
 end
 
 #endregion
 
 #region ## API ##
 
-cells(m::MultiBlockStructure) = m.cells
+orbslice(c::Contacts) = orbslice(c.blockstruct)
+orbslice(m::ContactBlockStructure) = m.orbslice
 
-flatsize(m::MultiBlockStructure) = last(m.subcelloffsets)
+flatsize(m::ContactBlockStructure) = last(m.subcelloffsets)
 
-unflatsize(m::MultiBlockStructure) = length(m.siteoffsets) - 1
+unflatsize(m::ContactBlockStructure) = length(m.siteoffsets) - 1
 
-siteoffsets(m::MultiBlockStructure) = m.siteoffsets
-siteoffsets(m::MultiBlockStructure, i) = m.siteoffsets[i]
+siteoffsets(m::ContactBlockStructure) = m.siteoffsets
+siteoffsets(m::ContactBlockStructure, i) = m.siteoffsets[i]
 
-subcelloffsets(m::MultiBlockStructure) = m.subcelloffsets
-subcelloffsets(m::MultiBlockStructure, i) = m.subcelloffsets[i]
+subcelloffsets(m::ContactBlockStructure) = m.subcelloffsets
+subcelloffsets(m::ContactBlockStructure, i) = m.subcelloffsets[i]
 
-siterange(m::MultiBlockStructure, iunflat::Integer) =
+siterange(m::ContactBlockStructure, iunflat::Integer) =
     siteoffsets(m, iunflat)+1:siteoffsets(m, iunflat+1)
 
-subcellrange(m::MultiBlockStructure, si::Integer) =
+subcellrange(m::ContactBlockStructure, si::Integer) =
     subcelloffsets(m, si)+1:subcelloffsets(m, si+1)
-subcellrange(m::MultiBlockStructure, cell::SVector) =
+subcellrange(m::ContactBlockStructure, cell::SVector) =
     subcellrange(m, subcellindex(m, cell))
 
-function subcellindex(m::MultiBlockStructure, cell::SVector)
+function subcellindex(m::ContactBlockStructure, cell::SVector)
     for (i, cell´) in enumerate(m.cells)
         cell === cell´ && return i
     end
@@ -1112,21 +1080,24 @@ end
 contact(i::Integer) = ContactIndex(i)
 contact(c::ContactIndex) = c.i
 
-latslice(c::Contacts) = c.latsliceall
-
 selfenergies(c::Contacts) = c.selfenergies
 
 blockstructure(c::Contacts) = c.blockstruct
 
 contactinds(c::Contacts, i...) = contactinds(c.blockstruct, i...)
-contactinds(b::MultiBlockStructure) = b.contactinds
-contactinds(b::MultiBlockStructure, i) = b.contactinds[i]
+contactinds(b::ContactBlockStructure) = b.contactinds
+contactinds(b::ContactBlockStructure, i) = b.contactinds[i]
 
-call!(c::Contacts, ω; params...) = call!.(c.selfenergies, Ref(ω); params...)
-call!(c::Contacts; params...) =
-    Contacts(call!.(c.selfenergies; params...), c.latsliceall, c.blockstruct)
+call!(c::Contacts; params...) = Contacts(call!.(c.selfenergies; params...), c.blockstruct)
 
-minimal_callsafe_copy(s::Contacts) = Contacts(deepcopy.(s.selfenergies), s.latsliceall, s.blockstruct)
+function call!(c::Contacts, ω; params...)
+    cinds = contactinds(c)
+    Σmats = call!.(c.selfenergies, Ref(ω); params...)
+    Σblocks = MatrixBlock.(Σmats, cinds, cinds)
+    return Σblocks
+end
+
+minimal_callsafe_copy(s::Contacts) = Contacts(deepcopy.(s.selfenergies), s.blockstruct)
 
 #endregion
 
@@ -1135,29 +1106,39 @@ minimal_callsafe_copy(s::Contacts) = Contacts(deepcopy.(s.selfenergies), s.latsl
 ############################################################################################
 # Green solvers - see solvers/greensolvers.jl
 #   Any new S::AbstractGreenSolver must implement
-#     - apply(s, h::OpenHamiltonian) -> AppliedGreenSolver
+#     - apply(s, h::OpenHamiltonian, c::Contacts) -> AppliedGreenSolver
 #   Any new s::AppliedGreenSolver must implement
-#     - call!(s; params...) -> AppliedGreenSolver
-#     - call!(s, h, contacts, ω; params...) -> GreenFixed
-#     This GreenFixed provides in particular:
-#        - GreenFixedSolver to compute e.g. G[cell,cell´] for any cells
-#        - g = G(ω; params...) (flat) over merged contacts.latsliceall
-#        - linewidth operatod Γᵢ for each contact
-#   Any new s::GreenFixedSolver must implement the following
-#      - s() -> flat G over all contact sites
-#      - s(cell, cell´) -> flat G between unitcells cell <- cell´
-#      - s(subcell, subcell´) -> flat G between subcell <- subcell´
+#      - s(ω, Σblocks, blockstruct) -> GreenSolution
+#   This GreenSolution provides in particular:
+#      - GreenSlicer to compute e.g. G[gi, gi´]::AbstractMatrix for gi::AppliedGreenIndex
+#      - linewidth flat matrix Γᵢ for each contact
+#      - LatticeSlice for merged contacts
+#      - bscontacts::ContactBlockStructure for contacts LatticeSlice
+#   Valid AppliedGreenIndex are produced by apply(::GreenIndex, blockstruct)
+#      - single_contact_orbital::Int
+#      - collection_contact_orbitals
+#      - ContactIndex
+#      - Subcell{L,Union{Vector,Colon,UnitRange...}} for specific sites in a cell
+#      - latslice::LatticeSlice{L}
+#   Valid GreenIndex are
+#      - contact(i)::ContactIndex -> Sites of Contact number i
+#      - cellsites(cell::Tuple, sind::Int)::Subcell -> Single site in a cell
+#      - cellsites(cell::Tuple, slat::Symbol)::Subcell -> Whole sublattice in a cell
+#      - cellsites(cell::Tuple, indcollection)::Subcell -> Site collection in a cell
+#      - cell::Union{NTuple,SVector} -> All sites in a cell
+#      - sel::SiteSelector
 #region
 
 # Generic system-independent directives for solvers, e.g. GS.Schur()
 abstract type AbstractGreenSolver end
 
-# Application to a given system, but still independent from ω, system params or Σs
+# Application to a given OpenHamiltonian, but still independent from (ω; params...)
+# It should support call!(::AppliedGreenSolver, ω; params...) -> GreenSolution
 abstract type AppliedGreenSolver end
 
 # Solver with fixed ω and params that can compute G[subcell, subcell´] or G[cell, cell´]
 # It should also be able to return contact G with G[]
-abstract type GreenFixedSolver end
+abstract type GreenSlicer end
 
 #endregion
 
@@ -1175,29 +1156,27 @@ end
 # Allows gω[contact(i), contact(j)] for i,j integer Σs indices ("contacts")
 # Allows gω[cell, cell´] using T-matrix, with cell::Union{SVector,Subcell}
 # Allows also view(gω, ...)
-struct GreenFixed{T,E,L,D<:GreenFixedSolver,M<:NTuple{<:Any,AbstractMatrix}}
-    solver::D                           # computes G(ω; p...)[cell,cell´]
-    g::Matrix{Complex{T}}               # flat matrix G(ω; p...) over latslice sites i
-    Γs::M                               # flat linewidths Γ=i(Σ-Σ⁺) for each contact
-    blockstruct::MultiBlockStructure{L} # for block indexing of g
-    latslice::LatticeSlice{T,E,L}       # === contacts.latsliceall from parent GreenFunction
+struct GreenSolution{T,E,L,S<:GreenSlicer,M<:NTuple{<:Any,MatrixBlock}}
+    slicer::S                             # gives G(ω; p...)[i,j] for i,j::AppliedGreenIndex
+    Σcontacts::M                          # selfenergy Σ(ω)::MatrixBlock for each contact
+    blockstruct::ContactBlockStructure{L}
 end
 
 # Obtained with gs = g[; siteselection...]
 # Alows call!(gs, ω; params...) or gs(ω; params...)
-#   required to do h |> attach(g´[sites´], couplingmodel; sites...)
+#   required to do e.g. h |> attach(g´[sites´], couplingmodel; sites...)
 struct GreenFunctionSlice{T,E,L,G<:GreenFunction{T,E,L},R,C}
     parent::G
     rows::R
     cols::C
 end
 
-#region ## Constructors ##
+# #region ## Constructors ##
 
-GreenFunction(oh::OpenHamiltonian, as::AppliedGreenSolver) =
-    GreenFunction(hamiltonian(oh), as, Contacts(oh))
+# GreenFunction(oh::OpenHamiltonian, as::AppliedGreenSolver) =
+#     GreenFunction(hamiltonian(oh), as, Contacts(oh))
 
-#endregion
+# #endregion
 
 #region ## API ##
 
@@ -1211,13 +1190,13 @@ contacts(g::GreenFunction) = g.contacts
 
 greenfunction(g::GreenFunctionSlice) = g.g
 
-greencontacts(g::GreenFixed) = g.g
+greencontacts(g::GreenSolution) = g.gcontacts
 
-linewidth(g::GreenFixed) = g.Γs
+linewidth(g::GreenSolution) = g.Γgcontacts
 
-latslice(g::GreenFixed) = g.latslice
+latslice(g::GreenSolution) = g.lscontacts
 
-lattice(g::GreenFixed) = parent(g.latslice)
+lattice(g::GreenSolution) = parent(g.lscontacts)
 
 Base.parent(g::GreenFunction) = g.parent
 Base.parent(g::GreenFunctionSlice) = g.parent
@@ -1225,8 +1204,8 @@ Base.parent(g::GreenFunctionSlice) = g.parent
 minimal_callsafe_copy(g::GreenFunction) =
     GreenFunction(minimal_callsafe_copy(g.parent), deepcopy(g.solver), minimal_callsafe_copy(g.contacts))
 
-minimal_callsafe_copy(g::GreenFixed) =
-    GreenFixed(deepcopy(g.solver), g.g, g.Γs, g.blockstruct, g.latslice)
+minimal_callsafe_copy(g::GreenSolution) =
+    GreenSolution(deepcopy(g.solver), g.Σcontacts, g.blockstruct)
 
 #endregion
 #endregion

@@ -1,38 +1,38 @@
 ############################################################################################
-# MultiBlockStructure constructors
+# contact_block_structure constructors
 #region
 
-MultiBlockStructure(ls::LatticeSlice, h::AbstractHamiltonian, lss = ()) =
-    MultiBlockStructure(ls, blockstructure(h), lss)
+contact_block_structure(h::AbstractHamiltonian, lss...) =
+    contact_block_structure(blockstructure(h), lss...)
 
-function MultiBlockStructure(ls::LatticeSlice{<:Any,<:Any,L},
-                             bs::SublatBlockStructure, lss = ()) where {L}
-    cells = SVector{L,Int}[]
+function contact_block_structure(bs::SublatBlockStructure, lss...)
+    lsall = merge(lss...)
     subcelloffsets = [0]
     siteoffsets = [0]
-    offset = 0
-    for subcell in subcells(ls)
-        c = cell(subcell)
-        push!(cells, c)
-        for i in siteindices(subcell)
-            offset += blocksize(bs, i)
-            push!(siteoffsets, offset)
+    orbscells = [Subcell(cell(sc), Int[]) for sc in subcells(lsall)]
+    offsetall = offsetcell = 0
+    for (oc, sc) in zip(orbscells, subcells(lsall))
+        offsetcell = 0
+        for i in siteindices(sc)
+            bsize = blocksize(bs, i)
+            append!(siteindices(oc), offsetcell+1:offsetcell+bsize)
+            offsetall += bsize
+            offsetcell += bsize
+            push!(siteoffsets, offsetall)
         end
-        push!(subcelloffsets, offset)
+        push!(subcelloffsets, offsetall)
     end
-    contactinds = contact_indices(ls, siteoffsets, lss)
-    return MultiBlockStructure(cells, subcelloffsets, siteoffsets, contactinds)
+    contactinds = [contact_indices(lsall, siteoffsets, ls) for ls in lss]
+    osall = OrbitalSlice(orbscells)
+    return ContactBlockStructure(osall, contactinds, siteoffsets, subcelloffsets)
 end
 
-contact_indices(lsmerged::LatticeSlice, siteoffsets, lss::NTuple{<:Any,LatticeSlice}) =
-    Vector{Int}[contact_indices(lsmerged, siteoffsets, ls´) for ls´ in lss]
-
-function contact_indices(lsmerged::LatticeSlice, siteoffsets, ls´::LatticeSlice)
+function contact_indices(lsall::LatticeSlice, siteoffsets, ls::LatticeSlice)
     contactinds = Int[]
-    for scell´ in subcells(ls´)
-        so = findsubcell(cell(scell´), lsmerged)
+    for scell´ in subcells(ls)
+        so = findsubcell(cell(scell´), lsall)
         so === nothing && continue
-        # here offset is the number of sites in lsmerged before scell
+        # here offset is the number of sites in lsall before scell
         (scell, offset) = so
         for i´ in siteindices(scell´), (n, i) in enumerate(siteindices(scell))
             n´ = offset + n
@@ -41,33 +41,6 @@ function contact_indices(lsmerged::LatticeSlice, siteoffsets, ls´::LatticeSlice
     end
     return contactinds
 end
-
-#endregion
-
-############################################################################################
-# blockshift for ExtendedSelfEnergySolver output
-#    ExtendedSelfEnergySolver returns Σᵣᵣ, Vᵣₑ, gₑₑ⁻¹, Vₑᵣ, which are MatrixBlock's
-#    All but Σᵣᵣ are defined over extended orbitals, adjacent to those of Σᵣᵣ
-#    blockshift shifts the orbital indices by a fixed quantity
-#region
-
-function blockshift!((Σᵣᵣ, Vᵣₑ, gₑₑ⁻¹, Vₑᵣ)::Tuple{MatrixBlock}, shift)
-    Vᵣₑ´ = blockshift!(Vᵣₑ, (0, shift))
-    Vₑᵣ´ = blockshift!(Vₑᵣ, (0, shift))
-    gₑₑ⁻¹ = blockshift!(gₑₑ⁻¹, (shift, shift))
-    return Σᵣᵣ, Vᵣₑ´, gₑₑ⁻¹´, Vₑᵣ´
-end
-
-function blockshift!(b::MatrixBlock, (rowshift, colshift))
-    mat = blockmat(m)
-    coeff = coefficient(m)
-    rows = blockshift!(blockrows(b), rowshift)
-    cols = blockshift!(blockcols(b), colshift)
-    return MatrixBlock(mat, rows, cols, coeff)
-end
-
-blockshift!(r::AbstractUnitRange, shift) = r .+ shift
-blockshift!(r::AbstractVector, shift) = (r .+= shift)
 
 #endregion
 
@@ -90,17 +63,20 @@ function SelfEnergy(h::AbstractHamiltonian, model::ParametricModel, sel::SiteSel
     modelω = model_ω_to_param(model)  # see model.jl - transforms ω into a ω_internal param
     latslice = lattice(h)[sel]
     sliceinds = Int[]
-    # this fills sliceinds with the latslice index for each lat0 site
+    # this fills sliceinds::Vector{Int} with the latslice index for each lat0 site
     lat0 = lattice(latslice, sliceinds)
+    # this is a 0D ParametricHamiltonian to build the Σ(ω) as a view over flat(ph(; ...))
     ph = hamiltonian(lat0, modelω; orbitals = norbitals(h))
-    bs = MultiBlockStructure(latslice, h)
-    # orbital index on latslice for each orbital in lat0
-    flatorbinds = flatinds(sliceinds, bs)
-    solver = SelfEnergyModel(latslice, flatorbinds, ph)
+    # this build siteoffsets for all h orbitals over latslice
+    bs = contact_block_structure(h, latslice)
+    # translation from lat0 to latslice orbital indices
+    # i.e. orbital index on latslice for each orbital in lat0
+    flatorbinds´ = flatorbinds(sliceinds, bs)
+    solver = SelfEnergyModel(latslice, flatorbinds´, ph)
     return SelfEnergy(solver, latslice)
 end
 
-function flatinds(sliceinds, bs::MultiBlockStructure)
+function flatorbinds(sliceinds, bs::ContactBlockStructure)
     finds = Int[]
     for iunflat in sliceinds
         append!(finds, siterange(bs, iunflat))
@@ -111,11 +87,11 @@ end
 function call!(s::SelfEnergyModel, ω; params...)
     m = call!(s.ph, (); ω_internal = ω, params...)
     rows = cols = s.flatorbinds
-    return MatrixBlock(m, rows, cols)
+    return view(m, rows, cols)
 end
 
 call!_output(s::SelfEnergyModel) =
-    MatrixBlock(call!_output(s.ph), s.flatorbinds, s.flatorbinds)
+    view(call!_output(s.ph), s.flatorbinds, s.flatorbinds)
 
 #endregion
 #endregion

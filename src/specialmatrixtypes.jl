@@ -219,15 +219,28 @@ isaliased(::HybridSparseBlochMatrix) = false
 
 struct MatrixBlock{C<:Number, A<:AbstractMatrix{C},U}
     block::A
-    rows::U             # row indices in parent matrix
-    cols::U             # col indices in parent matrix
+    rows::U             # row indices in parent matrix for each row in block
+    cols::U             # col indices in parent matrix for each col in block
     coefficient::C      # coefficient to apply to block
 end
 
 #region ## Constructors ##
 
-MatrixBlock(block::AbstractMatrix{C}, rows, cols) where {C} =
-    MatrixBlock(block, rows, cols, one(C))
+function MatrixBlock(block::AbstractMatrix{C}, rows, cols) where {C}
+    checkblocks(block, rows, cols)
+    return MatrixBlock(block, rows, cols, one(C))
+end
+
+function MatrixBlock(block::SubArray, rows, cols)
+    checkblocks(block, rows, cols)
+    return simplify_matrixblock!(block, rows, cols)
+end
+
+function checkblocks(block, rows, cols)
+    length.((rows, cols)) == size(block) && allunique(rows) &&
+        (cols === rows || allunique(cols)) || internalerror("MatrixBlock: mismatched size")
+    return nothing
+end
 
 #endregion
 

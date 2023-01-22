@@ -32,14 +32,14 @@ hopping(m::TightbindingModel; kw...) = TightbindingModel(
 
 # version with site selector kwargs
 macro onsite(kw, f)
-    f, N, params = get_f_N_params(f, "Only @onsite!(args -> body; kw...) syntax supported. Mind the `;`.")
+    f, N, params = get_f_N_params(f, "Only @onsite(args -> body; kw...) syntax supported. Mind the `;`.")
     return esc(:(Quantica.ParametricModel(Quantica.ParametricOnsiteTerm(
         Quantica.ParametricFunction{$N}($f, $(params)), Quantica.siteselector($kw), 1))))
 end
 
 # version without site selector kwargs
 macro onsite(f)
-    f, N, params = get_f_N_params(f, "Only @onsite!(args -> body; kw...) syntax supported.  Mind the `;`.")
+    f, N, params = get_f_N_params(f, "Only @onsite(args -> body; kw...) syntax supported.  Mind the `;`.")
     return esc(:(Quantica.ParametricModel(Quantica.ParametricOnsiteTerm(
             Quantica.ParametricFunction{$N}($f, $(params)), Quantica.siteselector(), 1))))
 end
@@ -47,14 +47,14 @@ end
 # version with hop selector kwargs
 ## TODO: this doesn't accept plusadjoint like hopping(...; ...) does
 macro hopping(kw, f)
-    f, N, params = get_f_N_params(f, "Only @hopping!(args -> body; kw...) syntax supported. Mind the `;`.")
+    f, N, params = get_f_N_params(f, "Only @hopping(args -> body; kw...) syntax supported. Mind the `;`.")
     return esc(:(Quantica.ParametricModel(Quantica.ParametricHoppingTerm(
         Quantica.ParametricFunction{$N}($f, $(params)), Quantica.hopselector($kw), 1))))
 end
 
 # version without hop selector kwargs
 macro hopping(f)
-    f, N, params = get_f_N_params(f, "Only @hopping!(args -> body; kw...) syntax supported. Mind the `;`.")
+    f, N, params = get_f_N_params(f, "Only @hopping(args -> body; kw...) syntax supported. Mind the `;`.")
     return esc(:(Quantica.ParametricModel(Quantica.ParametricHoppingTerm(
         Quantica.ParametricFunction{$N}($f, $(params)), Quantica.hopselector(), 1))))
 end
@@ -136,16 +136,16 @@ model_ω_to_param(model::ParametricModel) =
     ParametricModel(nonparametric(model), model_ω_to_param.(terms(model)))
 
 function model_ω_to_param(term::ParametricOnsiteTerm{N}, default = 0) where {N}
-    ps = push!(parameters(term), :ω_internal)
+    # parameters(term) only needed for reporting, we omit adding :ω_internal
     f = (args...; ω_internal = default, kw...) -> term(ω_internal, args...; kw...)
-    pf = ParametricFunction{N-1}(f, ps)
+    pf = ParametricFunction{N-1}(f, parameters(term))
     return ParametricOnsiteTerm(pf, selector(term), coefficient(term))
 end
 
 function model_ω_to_param(term::ParametricHoppingTerm{N}, default = 0) where {N}
-    ps = push!(parameters(term), :ω_internal)
+    # parameters(term) only needed for reporting, we omit adding :ω_internal
     f = (args...; ω_internal = default, kw...) -> term(ω_internal, args...; kw...)
-    pf = ParametricFunction{N-1}(f, ps)
+    pf = ParametricFunction{N-1}(f, parameters(term))
     return ParametricHoppingTerm(pf, selector(term), coefficient(term))
 end
 
