@@ -130,7 +130,7 @@ end
 
 flatrange(b::OrbitalBlockStructure{<:SMatrix{N}}, iunflat::Integer) where {N} =
     (iunflat - 1) * N + 1 : iunflat * N
-flatrange(b::OrbitalBlockStructure{<:Number}, iunflat::Integer) = iunflat:inflat
+flatrange(b::OrbitalBlockStructure{<:Number}, iunflat::Integer) = iunflat:iunflat
 
 flatindex(b::OrbitalBlockStructure, i) = first(flatrange(b, i))
 
@@ -288,6 +288,8 @@ end
 blocks(m::BlockSparseMatrix) = m.blocks
 
 SparseArrays.sparse(b::BlockSparseMatrix) = b.mat
+
+Base.size(b::BlockSparseMatrix, i...) = size(b.mat, i...)
 
 #endregion
 #endregion

@@ -10,14 +10,12 @@ function contact_block_structure(bs::OrbitalBlockStructure, lss...)
     subcelloffsets = [0]
     siteoffsets = [0]
     orbscells = [Subcell(cell(sc), Int[]) for sc in subcells(lsall)]
-    offsetall = offsetcell = 0
+    offsetall = 0
     for (oc, sc) in zip(orbscells, subcells(lsall))
-        offsetcell = 0
         for i in siteindices(sc)
-            bsize = blocksize(bs, i)
-            append!(siteindices(oc), offsetcell+1:offsetcell+bsize)
-            offsetall += bsize
-            offsetcell += bsize
+            irng = flatrange(bs, i)
+            append!(siteindices(oc), irng)
+            offsetall += length(irng)
             push!(siteoffsets, offsetall)
         end
         push!(subcelloffsets, offsetall)
@@ -27,6 +25,7 @@ function contact_block_structure(bs::OrbitalBlockStructure, lss...)
     return ContactBlockStructure(osall, contactinds, siteoffsets, subcelloffsets)
 end
 
+# computes the orbital indices of ls sites inside the merged lsall
 function contact_indices(lsall::LatticeSlice, siteoffsets, ls::LatticeSlice)
     contactinds = Int[]
     for scell´ in subcells(ls)

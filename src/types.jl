@@ -120,8 +120,9 @@ sites(u::Unitcell, name::Symbol) = sites(u, sublatindex(u, name))
 site(l::Lattice, i) = sites(l)[i]
 site(l::Lattice, i, dn) = site(l, i) + bravais_matrix(l) * dn
 
-siterange(l::Lattice, sublat) = siterange(l.unitcell, sublat)
+siterange(l::Lattice, sublat...) = siterange(l.unitcell, sublat...)
 siterange(u::Unitcell, sublat) = (1+u.offsets[sublat]):u.offsets[sublat+1]
+siterange(u::Unitcell) = 1:last(u.offsets)
 
 sitesublat(lat::Lattice, siteidx) = sitesublat(lat.unitcell.offsets, siteidx)
 
@@ -1031,10 +1032,6 @@ struct Contacts{L,S<:NTuple{<:Any,SelfEnergy}}
     blockstruct::ContactBlockStructure{L} # needed to extract site/subcell/contact blocks
 end
 
-struct ContactIndex
-    i::Int
-end
-
 #region ## Constructors ##
 
 function Contacts(oh::OpenHamiltonian)
@@ -1077,9 +1074,6 @@ function subcellindex(m::ContactBlockStructure, cell::SVector)
     @boundscheck(boundserror(m, cell))
 end
 
-contact(i::Integer) = ContactIndex(i)
-contact(c::ContactIndex) = c.i
-
 selfenergies(c::Contacts) = c.selfenergies
 
 blockstructure(c::Contacts) = c.blockstruct
@@ -1093,9 +1087,13 @@ call!(c::Contacts; params...) = Contacts(call!.(c.selfenergies; params...), c.bl
 function call!(c::Contacts, ω; params...)
     cinds = contactinds(c)
     Σmats = call!.(c.selfenergies, Ref(ω); params...)
-    Σblocks = MatrixBlock.(Σmats, cinds, cinds)
+    # cinds is a Vector, and we want a tuple for Σblocks, so we cannot simply broadcast
+    Σblocks = matrixblocks(Σmats, cinds, cinds)
     return Σblocks
 end
+
+matrixblocks(Σ::NTuple{N,<:Any}, is, js) where {N} =
+    ntuple(i -> MatrixBlock(Σ[i], is[i], js[i]), Val(N))
 
 minimal_callsafe_copy(s::Contacts) = Contacts(deepcopy.(s.selfenergies), s.blockstruct)
 
@@ -1105,28 +1103,30 @@ minimal_callsafe_copy(s::Contacts) = Contacts(deepcopy.(s.selfenergies), s.block
 
 ############################################################################################
 # Green solvers - see solvers/greensolvers.jl
-#   Any new S::AbstractGreenSolver must implement
+#   All new S::AbstractGreenSolver must implement
 #     - apply(s, h::OpenHamiltonian, c::Contacts) -> AppliedGreenSolver
-#   Any new s::AppliedGreenSolver must implement
-#      - s(ω, Σblocks, blockstruct) -> GreenSolution
+#   All new s::AppliedGreenSolver must implement
+#      - minimal_callsafe_copy(gs) -> optional, has a deepcopy fallback
+#      - s(ω, Σblocks, orbital_blockstruct) -> AbstractGreenSlicer
 #   This GreenSolution provides in particular:
-#      - GreenSlicer to compute e.g. G[gi, gi´]::AbstractMatrix for gi::AppliedGreenIndex
+#      - GreenSlicer to compute e.g. G[gi, gi´]::AbstractMatrix for indices gi, see below
 #      - linewidth flat matrix Γᵢ for each contact
 #      - LatticeSlice for merged contacts
 #      - bscontacts::ContactBlockStructure for contacts LatticeSlice
-#   Valid AppliedGreenIndex are produced by apply(::GreenIndex, blockstruct)
-#      - single_contact_orbital::Int
-#      - collection_contact_orbitals
-#      - ContactIndex
-#      - Subcell{L,Union{Vector,Colon,UnitRange...}} for specific sites in a cell
-#      - latslice::LatticeSlice{L}
-#   Valid GreenIndex are
+#   All gs::GreenSlicer's must implement
+#      - minimal_callsafe_copy(gs) -> optional, has a deepcopy fallback
+#      - view(gs, ::ContactIndex, ::ContactIndex) -> g(ω; kw...) between specific contacts
+#      - view(gs, ::Colon, ::Colon) -> g(ω; kw...) between all contacts
+#      - gs[i,j] with i,j::GreenIndex, where GreenIndex is either of:
+#          - Subcell{L,Union{[collection],Colon}} -> specific sites in a cell
+#          - ContactIndex -> all sites in a given contact
+#   The user-facing indexing API accepts:
 #      - contact(i)::ContactIndex -> Sites of Contact number i
 #      - cellsites(cell::Tuple, sind::Int)::Subcell -> Single site in a cell
+#      - cellsites(cell::Tuple, sindcollection)::Subcell -> Site collection in a cell
 #      - cellsites(cell::Tuple, slat::Symbol)::Subcell -> Whole sublattice in a cell
-#      - cellsites(cell::Tuple, indcollection)::Subcell -> Site collection in a cell
-#      - cell::Union{NTuple,SVector} -> All sites in a cell
-#      - sel::SiteSelector
+#      - cellsites(cell::Tuple, :) ~ cell::Union{NTuple,SVector} -> All sites in a cell
+#      - sel::SiteSelector ~ NamedTuple -> forms a LatticeSlice
 #region
 
 # Generic system-independent directives for solvers, e.g. GS.Schur()
@@ -1139,6 +1139,24 @@ abstract type AppliedGreenSolver end
 # Solver with fixed ω and params that can compute G[subcell, subcell´] or G[cell, cell´]
 # It should also be able to return contact G with G[]
 abstract type GreenSlicer end
+
+struct ContactIndex
+    i::Int
+end
+
+#region ## API ##
+
+contact(i::Integer) = ContactIndex(i)
+
+Base.Int(c::ContactIndex) = c.i
+
+cellsites(cell, x) = Subcell(cell, x)
+
+# fallback
+minimal_callsafe_copy(gs::AppliedGreenSolver) = deepcopy(gs)
+minimal_callsafe_copy(gs::GreenSlicer) = deepcopy(gs)
+
+#endregion
 
 #endregion
 
@@ -1156,10 +1174,11 @@ end
 # Allows gω[contact(i), contact(j)] for i,j integer Σs indices ("contacts")
 # Allows gω[cell, cell´] using T-matrix, with cell::Union{SVector,Subcell}
 # Allows also view(gω, ...)
-struct GreenSolution{T,E,L,S<:GreenSlicer,M<:NTuple{<:Any,MatrixBlock}}
+struct GreenSolution{T,E,L,S<:GreenSlicer,H<:AbstractHamiltonian{T,E,L},M<:NTuple{<:Any,MatrixBlock}}
+    parent::H
     slicer::S                             # gives G(ω; p...)[i,j] for i,j::AppliedGreenIndex
-    Σcontacts::M                          # selfenergy Σ(ω)::MatrixBlock for each contact
-    blockstruct::ContactBlockStructure{L}
+    contactΣs::M                          # selfenergy Σ(ω)::MatrixBlock for each contact
+    contactbs::ContactBlockStructure{L}
 end
 
 # Obtained with gs = g[; siteselection...]
@@ -1181,31 +1200,32 @@ end
 #region ## API ##
 
 hamiltonian(g::GreenFunction) = g.parent
+hamiltonian(g::GreenSolution) = g.parent
 
 lattice(g::GreenFunction) = lattice(g.parent)
+lattice(g::GreenSolution) = lattice(g.parent)
 
 solver(g::GreenFunction) = g.solver
 
 contacts(g::GreenFunction) = g.contacts
 
-greenfunction(g::GreenFunctionSlice) = g.g
+slicer(g::GreenSolution) = g.slicer
 
-greencontacts(g::GreenSolution) = g.gcontacts
+selfenergies(g::GreenSolution) = g.contactΣs
 
-linewidth(g::GreenSolution) = g.Γgcontacts
+blockstructure(g::GreenSolution) = g.contactbs
 
-latslice(g::GreenSolution) = g.lscontacts
-
-lattice(g::GreenSolution) = parent(g.lscontacts)
+greenfunction(g::GreenFunctionSlice) = g.parent
 
 Base.parent(g::GreenFunction) = g.parent
+Base.parent(g::GreenSolution) = g.parent
 Base.parent(g::GreenFunctionSlice) = g.parent
 
 minimal_callsafe_copy(g::GreenFunction) =
-    GreenFunction(minimal_callsafe_copy(g.parent), deepcopy(g.solver), minimal_callsafe_copy(g.contacts))
+    GreenFunction(minimal_callsafe_copy(g.parent), minimal_callsafe_copy(g.solver), minimal_callsafe_copy(g.contacts))
 
 minimal_callsafe_copy(g::GreenSolution) =
-    GreenSolution(deepcopy(g.solver), g.Σcontacts, g.blockstruct)
+    GreenSolution(minimal_callsafe_copy(g.parent), minimal_callsafe_copy(g.slicer), g.contactΣs, g.contactbs)
 
 #endregion
 #endregion

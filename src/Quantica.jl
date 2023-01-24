@@ -23,7 +23,7 @@ export sublat, lattice, supercell, bravais_matrix,
        hamiltonian, parametric, call!,
        flat, unflat, wrap, transform, transform!, translate, translate!,
        spectrum, energies, states, bands, mesh, subbands, slice,
-       greenfunction, attach, contact
+       greenfunction, attach, contact, cellsites
 
 # export sublat, lattice, dims, supercell, bravais_matrix, siteindices, sitepositions,
 #        hopping, onsite, @onsite!, @hopping!, @block!, parameters, neighbors,

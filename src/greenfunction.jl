@@ -35,38 +35,46 @@ function call!(g::GreenFunction; params...)
 end
 
 function call!(g::GreenFunction, ω; params...)
+    h = parent(g)
+    cs = contacts(g)
     call!(h, (); params...)               # call!_output is wrapped in solver(g) - update it
-    Σs = call!(contacts, ω; params...)                                  # same for Σs blocks
-    bs = blockstructure(contacts)
-    return solver(g)(ω, Σs, bs)   # -> ::GreenSolution
+    Σs = call!(cs, ω; params...)                                        # same for Σs blocks
+    cbs = blockstructure(cs)
+    slicer = solver(g)(ω, Σs, cbs)
+    return GreenSolution(h, slicer, Σs, cbs)
 end
-
-# call!(g::GreenFunctionSlice, ω; params...) =
-#     call!(parent(g), ω; params...)[slicerows(g), slicecols(g)]
 
 #endregion
 
 ############################################################################################
 # GreenSolution indexing
+#    The output of green_inds(i, g) must be a GreenIndex
 #region
 
-Base.view(g::GreenSolution, i, j = i) =
-    view(greencontacts(g), greenfix_inds(i, g), greenfix_inds(j, g))
+const GreenIndex = Union{ContactIndex,Subcell}
 
-green_inds(c::ContactIndex, g::GreenSolution) = contactinds(g, contact(c))
-green_inds(x, g::GreenSolution) = green_inds(x, greencontacts(g))
+green_inds(c::ContactIndex, _) = c
+green_inds(s::Subcell, _) = s
+green_inds(kw::NamedTuple, g) = lattice(g)[kw...]
+green_inds(cell::NTuple{<:Any,Int}, _) = cellsites(cell, :)
 
-Base.getindex(g::GreenSolution) =  copy(view(g))
-Base.getindex(g::GreenSolution, i, j) = copy(view(g, i, j))
+Base.getindex(g::GreenSolution, i, j) = getindex(g, green_inds(i, g), green_inds(j, g))
 
-function Base.getindex(g::GreenSolution, lsrow::LatticeSlice, lscol::LatticeSlice = lsrow)
-    lattice(g) == parent(lsrow) == parent(lscol) ||
-        argerror("Can only index a GreenSolution over its own Lattice")
-    ls = merge(lrow, lcol)
-
+function Base.getindex(g::GreenSolution, i)
+    ai = green_inds(i, g)
+    return getindex(g, ai, ai)
 end
 
-#g.solver(sanitize_Green_index(c, lattice(g)), sanitize_Green_index(c´, lattice(g)))
+Base.getindex(g::GreenSolution, i::LatticeSlice, j::ContactIndex) =
+    mortar([g[si, j] for si in subcells(i), _ in 1:1])
+Base.getindex(g::GreenSolution, i::ContactIndex, j::LatticeSlice) =
+    mortar([g[i, sj] for _ in 1:1, sj in subcells(j)])
+Base.getindex(g::GreenSolution, i::LatticeSlice, j::LatticeSlice) =
+    mortar([g[si, sj] for si in subcells(i), sj in subcells(j)])
+Base.getindex(g::GreenSolution, i::ContactIndex, j::ContactIndex) = copy(view(g, i, j))
+
+Base.view(g::GreenSolution, i::ContactIndex, j::ContactIndex = i) = view(slicer(g), i, j)
+Base.view(g::GreenSolution, i::Colon, j::Colon = i) = view(slicer(g), i, j)
 
 #endregion
 
@@ -74,16 +82,16 @@ end
 # GreenFunction indexing
 #region
 
-Base.getindex(g::GreenFunction, c, c´ = c) =
-    GreenFunctionSlice(g, sanitize_Green_index(c, lattice(g)), sanitize_Green_index(c´, lattice(g)))
+# Base.getindex(g::GreenFunction, c, c´ = c) =
+#     GreenFunctionSlice(g, sanitize_Green_index(c, lattice(g)), sanitize_Green_index(c´, lattice(g)))
 
-# function Base.getindex(g::GreenFunction; kw...)
-#     ls = lattice(g)[kw...]
-#     return GreenFunctionSlice(g, ls, ls)
-# end
+# # function Base.getindex(g::GreenFunction; kw...)
+# #     ls = lattice(g)[kw...]
+# #     return GreenFunctionSlice(g, ls, ls)
+# # end
 
-# overrides the base method above
-Base.getindex(g::GreenFunction) = GreenFunctionSlice(g, :, :)
+# # overrides the base method above
+# Base.getindex(g::GreenFunction) = GreenFunctionSlice(g, :, :)
 
 #endregion
 
@@ -91,9 +99,9 @@ Base.getindex(g::GreenFunction) = GreenFunctionSlice(g, :, :)
 # GreenSlicer call API
 #region
 
-function (s::GreenSlicer)(i::Integer, j::Integer)
+# function (s::GreenSlicer)(i::Integer, j::Integer)
 
-end
+# end
 
 #endregion
 

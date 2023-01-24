@@ -186,10 +186,4 @@ applymap(mapping, φs) = mapping(Tuple(φs)...)
 
 #endregion
 
-############################################################################################
-# apply AbstractGreenSolver
-#region
-
-# apply(solver::AbstractGreenSolver, h::AbstractHamiltonian) = GS.apply(solver, h)
-
 #endregion
