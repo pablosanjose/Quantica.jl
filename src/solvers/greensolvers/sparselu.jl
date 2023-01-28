@@ -131,11 +131,18 @@ minimal_callsafe_copy(s::SparseLUSlicer) =
 # SparseLUSlicer indexing
 #region
 
-function Base.view(s::SparseLUSlicer{C}, i::ContactIndex, j::ContactIndex) where {C}
-    fact = s.fact
-    srcinds = s.unitcinds[Int(j)]
+function Base.view(s::SparseLUSlicer, i::ContactIndex, j::ContactIndex)
     dstinds = s.unitcinds[Int(i)]
+    srcinds = s.unitcinds[Int(j)]
     source = view(s.source, :, 1:length(srcinds))
+    return _view(s, dstinds, srcinds, source)
+end
+
+Base.view(s::SparseLUSlicer, ::Colon, j::Colon) =
+    _view(s, s.unitcindsall, s.unitcindsall, s.source)
+
+function _view(s::SparseLUSlicer{C}, dstinds::Vector{Int}, srcinds::Vector{Int}, source) where {C}
+    fact = s.fact
     fill!(source, zero(C))
     for (col, row) in enumerate(srcinds)
         source[row, col] = one(C)
@@ -145,22 +152,10 @@ function Base.view(s::SparseLUSlicer{C}, i::ContactIndex, j::ContactIndex) where
     return g
 end
 
-function Base.view(s::SparseLUSlicer{C}, ::Colon, ::Colon) where {C}
-    fact = s.fact
-    source = s.source
-    allinds = s.unitcindsall
-    fill!(source, zero(C))
-    for col in axes(source, 2)
-        source[allinds[col], col] = one(C)
-    end
-    gext = ldiv!(fact, source)
-    g = view(gext, allinds, :)
-    return g
+function Base.getindex(s::SparseLUSlicer, i::CellOrbitals, j::CellOrbitals)
+    source = similar(s.source, size(s.source, 1), norbs(j))
+    return _view(s, orbindices(i), orbindices(j), source)
 end
-
-# function Base.getindex(s::SparseLUSlicer{C}, i::OrbitalSlice, j::OrbitalSlice)
-
-# end
 
 #endregion
 

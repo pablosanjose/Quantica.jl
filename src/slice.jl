@@ -221,7 +221,7 @@ function sublatsites(l::LatticeSlice, s::Integer, store = missing)
 end
 
 orbslice(x, h::AbstractHamiltonian, store...) = orbslice(x, blockstructure(h), store...)
-orbslice(sc::CellSites, bs::OrbitalBlockStructure, args...) = _orbslice((sc,), bs, store...)
+orbslice(sc::CellSites, bs::OrbitalBlockStructure, store...) = _orbslice((sc,), bs, store...)
 orbslice(ls::LatticeSlice, bs::OrbitalBlockStructure, store...) =
     _orbslice(subcells(ls), bs, store...)
 

@@ -121,7 +121,8 @@ site(l::Lattice, i) = sites(l)[i]
 site(l::Lattice, i, dn) = site(l, i) + bravais_matrix(l) * dn
 
 siterange(l::Lattice, sublat...) = siterange(l.unitcell, sublat...)
-siterange(u::Unitcell, sublat) = (1+u.offsets[sublat]):u.offsets[sublat+1]
+siterange(u::Unitcell, sublat::Integer) = (1+u.offsets[sublat]):u.offsets[sublat+1]
+siterange(u::Unitcell, name::Symbol) = siterange(u, sublatindex(u, name))
 siterange(u::Unitcell) = 1:last(u.offsets)
 
 sitesublat(lat::Lattice, siteidx) = sitesublat(lat.unitcell.offsets, siteidx)
@@ -1135,7 +1136,7 @@ contact(i::Integer) = ContactIndex(i)
 
 Base.Int(c::ContactIndex) = c.i
 
-cellsites(cell, x) = CellSites(cell, x)
+cellsites(cell, x) = CellSites(sanitize_SVector(Int, cell), x)
 
 # fallback
 minimal_callsafe_copy(gs::AppliedGreenSolver) = deepcopy(gs)
