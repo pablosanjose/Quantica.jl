@@ -101,8 +101,10 @@ ind_to_slice(c::CellSites, g) = orbslice(c, hamiltonian(g))
 ind_to_slice(l::LatticeSlice, g) = orbslice(l, hamiltonian(g))
 ind_to_slice(kw::NamedTuple, g) = ind_to_slice(getindex(lattice(g); kw...), g)
 
-Base.getindex(g::GreenSolution, ::CellOrbitals, ::CellOrbitals) =
-    internalerror("getindex $(typeof(slicer(g))) not implemented")
+Base.getindex(g::GreenSolution, i::CellOrbitals, j::CellOrbitals) = slicer(g)[i, j]
+
+Base.getindex(s::GreenSlicer, ::CellOrbitals, ::CellOrbitals) =
+    internalerror("getindex of $(nameof(typeof(s))): not implemented")
 
 #endregion
 
