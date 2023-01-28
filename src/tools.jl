@@ -48,8 +48,8 @@ function mortar(ms::AbstractMatrix{M}) where {C,M<:AbstractMatrix{C}}
     coff = prepend!(cumsum(view(mcols, 1, :)), 0)
     mat = zeros(C, last(roff), last(coff))
     for c in CartesianIndices(ms)
+        src = ms[c]
         i, j = Tuple(c)
-        src = ms[i, j]
         Rdst = CartesianIndices((roff[i]+1:roff[i+1], coff[j]+1:coff[j+1]))
         Rsrc = CartesianIndices(src)
         copyto!(mat, Rdst, src, Rsrc)

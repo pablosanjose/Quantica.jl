@@ -259,8 +259,8 @@ function Base.show(io::IO, g::GreenSolution)
     print(io, i, summary(g))
 end
 
-Base.summary(g::GreenSolution{T,E,L}) where {T,E,L} =
-    "GreenSolution{$T,$E,$L}: Green matrix evaluator"
+Base.summary(g::GreenSolution{T,E,L,S}) where {T,E,L,S} =
+    "GreenSolution{$T,$E,$L}: Green matrix evaluator using $(nameof(S))"
 
 #endregion
 

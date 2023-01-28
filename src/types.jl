@@ -241,48 +241,66 @@ Base.adjoint(s::HopSelector) = HopSelector(s.region, s.sublats, s.dcells, s.rang
 #endregion
 
 ############################################################################################
-# LatticeSlice and OrbitalSlice - see lattice.jl for methods
+# LatticeSlice and OrbitalSlice - see slice.jl for methods
 #   Encodes subsets of sites (or orbitals) of a lattice in different cells. Produced e.g. by
 #   lat[siteselector]. No ordering is guaranteed, but cells and sites must both be unique
 #region
 
-struct Subcell{L,V}
+struct CellSites{L,V}
     cell::SVector{L,Int}
-    inds::V      # Can be anything: a vector of site or orb indices, a Colon, a UnitRange...
+    inds::V             # Can be anything: a vector of site indices, a Colon, a UnitRange...
 end
 
 struct LatticeSlice{T,E,L}
     lat::Lattice{T,E,L}
-    subcells::Vector{Subcell{L,Vector{Int}}}
+    subcells::Vector{CellSites{L,Vector{Int}}}
+end
+
+struct CellOrbitals{L}
+    cell::SVector{L,Int}
+    inds::Vector{Int}   # Always encodes orbital indices
 end
 
 struct OrbitalSlice{L}
-    orbs::Vector{Subcell{L,Vector{Int}}}     # indices here correpond to orbitals, not sites
+    subcells::Vector{CellOrbitals{L}}     # indices here correpond to orbitals, not sites
 end
 
 #region ## Constructors ##
 
-Subcell(cell) = Subcell(cell, Int[])
+CellSites(cell) = CellSites(cell, Int[])
 
-LatticeSlice(lat::Lattice{<:Any,<:Any,L}) where {L} = LatticeSlice(lat, Subcell{L,Vector{Int}}[])
+CellOrbitals(cell) = CellOrbitals(cell, Int[])
 
-OrbitalSlice{L}() where {L} = OrbitalSlice(Subcell{L,Vector{Int}}[])
+LatticeSlice(lat::Lattice{<:Any,<:Any,L}) where {L} =
+    LatticeSlice(lat, CellSites{L,Vector{Int}}[])
+
+OrbitalSlice{L}() where {L} = OrbitalSlice(CellOrbitals{L}[])
 
 #endregion
 
 #region ## API ##
 
-siteindices(s::Subcell) = s.inds
+siteindices(s::CellSites) = s.inds
+orbindices(s::CellOrbitals) = s.inds
 
-cell(s::Subcell) = s.cell
+cell(s::CellSites) = s.cell
+cell(s::CellOrbitals) = s.cell
 
 subcells(l::LatticeSlice) = l.subcells
-subcells(o::OrbitalSlice) = o.orbs
+subcells(l::LatticeSlice, i) = l.subcells[i]
+subcells(o::OrbitalSlice) = o.subcells
+subcells(o::OrbitalSlice, i) = o.subcells[i]
 
 cells(l::LatticeSlice) = (s.cell for s in l.subcells)
+cells(l::OrbitalSlice) = (s.cell for s in l.subcells)
 
 nsites(l::LatticeSlice) = isempty(l) ? 0 : sum(nsites, subcells(l))
-nsites(s::Subcell) = length(s.inds)
+nsites(l::LatticeSlice, i) = isempty(l) ? 0 : nsites(subcells(l, i))
+nsites(c::CellSites) = length(c.inds)
+
+norbs(o::OrbitalSlice) = isempty(o) ? 0 : sum(norbs, subcells(o))
+norbs(o::OrbitalSlice, i) = isempty(o) ? 0 : norbs(subcells(o, i))
+norbs(c::CellOrbitals) = length(c.inds)
 
 boundingbox(l::LatticeSlice) = boundingbox(cell(c) for c in subcells(l))
 
@@ -292,17 +310,17 @@ sites(l::LatticeSlice) =
 Base.parent(ls::LatticeSlice) = ls.lat
 
 Base.isempty(s::LatticeSlice) = isempty(s.subcells)
-Base.isempty(s::Subcell) = isempty(s.inds)
+Base.isempty(s::CellSites) = isempty(s.inds)
 
-Base.empty!(s::Subcell) = empty!(s.inds)
+Base.empty!(s::CellSites) = empty!(s.inds)
 
-Base.push!(s::Subcell, i::Int) = push!(s.inds, i)
-Base.push!(ls::LatticeSlice, s::Subcell) = push!(ls.subcells, s)
+Base.push!(s::CellSites, i::Int) = push!(s.inds, i)
+Base.push!(ls::LatticeSlice, s::CellSites) = push!(ls.subcells, s)
 
-Base.copy(s::Subcell) = Subcell(copy(s.inds), s.cell)
+Base.copy(s::CellSites) = CellSites(copy(s.inds), s.cell)
 
 Base.length(l::LatticeSlice) = nsites(l)
-Base.length(s::Subcell) = nsites(s)
+Base.length(s::CellSites) = nsites(s)
 
 #endregion
 #endregion
@@ -927,15 +945,6 @@ subbands(b::Bands, i...) = getindex(b.subbands, i...)
 
 ############################################################################################
 # SelfEnergy solvers - see selfenergy.jl for self-energy solvers
-#   Any new s::AbstractSelfEnergySolver is associated to some forms of attach(g, sargs...)
-#   For each such form we must add a SelfEnergy constructor that will be used by attach
-#     - SelfEnergy(h::AbstractHamiltonian, sargs...; siteselect...) -> SelfEnergy
-#   This wraps the s::AbstractSelfEnergySolver that should support the call! API
-#     - call!(s::RegularSelfEnergySolver, ω; params...) -> Σreg::AbstractMatrix
-#     - call!(s::ExtendedSelfEnergySolver, ω; params...) -> (Σᵣᵣ, Vᵣₑ, gₑₑ⁻¹, Vₑᵣ) AbstractMatrices
-#         With the extended case, the equivalent Σreg reads Σreg = Σᵣᵣ + VᵣₑgₑₑVₑᵣ
-#     - call!_output(s::AbstractSelfEnergySolver) -> object returned by call!(s, ω; params...)
-#   These AbstractMatrices are flat and are defined over a LatticeSlice that is also wrapped
 #region
 
 abstract type AbstractSelfEnergySolver end
@@ -976,14 +985,14 @@ end
 
 #region ## API ##
 
-latslice(c::SelfEnergy) = c.latslice
+latslice(Σ::SelfEnergy) = Σ.latslice
 
-solver(c::SelfEnergy) = c.solver
+solver(Σ::SelfEnergy) = Σ.solver
 
 call!(Σ::SelfEnergy; params...) = SelfEnergy(call!(Σ.solver; params...), Σ.latslice)
 call!(Σ::SelfEnergy, ω; params...) = call!(Σ.solver, ω; params...)
 
-minimal_callsafe_copy(s::SelfEnergy) = SelfEnergy(deepcopy(s.solver), s.latslice)
+minimal_callsafe_copy(Σ::SelfEnergy) = SelfEnergy(deepcopy(Σ.solver), Σ.latslice)
 
 #endregion
 #endregion
@@ -1103,30 +1112,6 @@ minimal_callsafe_copy(s::Contacts) = Contacts(deepcopy.(s.selfenergies), s.block
 
 ############################################################################################
 # Green solvers - see solvers/greensolvers.jl
-#   All new S::AbstractGreenSolver must implement
-#     - apply(s, h::OpenHamiltonian, c::Contacts) -> AppliedGreenSolver
-#   All new s::AppliedGreenSolver must implement
-#      - minimal_callsafe_copy(gs) -> optional, has a deepcopy fallback
-#      - s(ω, Σblocks, orbital_blockstruct) -> AbstractGreenSlicer
-#   This GreenSolution provides in particular:
-#      - GreenSlicer to compute e.g. G[gi, gi´]::AbstractMatrix for indices gi, see below
-#      - linewidth flat matrix Γᵢ for each contact
-#      - LatticeSlice for merged contacts
-#      - bscontacts::ContactBlockStructure for contacts LatticeSlice
-#   All gs::GreenSlicer's must implement
-#      - minimal_callsafe_copy(gs) -> optional, has a deepcopy fallback
-#      - view(gs, ::ContactIndex, ::ContactIndex) -> g(ω; kw...) between specific contacts
-#      - view(gs, ::Colon, ::Colon) -> g(ω; kw...) between all contacts
-#      - gs[i,j] with i,j::GreenIndex, where GreenIndex is either of:
-#          - Subcell{L,Union{[collection],Colon}} -> specific sites in a cell
-#          - ContactIndex -> all sites in a given contact
-#   The user-facing indexing API accepts:
-#      - contact(i)::ContactIndex -> Sites of Contact number i
-#      - cellsites(cell::Tuple, sind::Int)::Subcell -> Single site in a cell
-#      - cellsites(cell::Tuple, sindcollection)::Subcell -> Site collection in a cell
-#      - cellsites(cell::Tuple, slat::Symbol)::Subcell -> Whole sublattice in a cell
-#      - cellsites(cell::Tuple, :) ~ cell::Union{NTuple,SVector} -> All sites in a cell
-#      - sel::SiteSelector ~ NamedTuple -> forms a LatticeSlice
 #region
 
 # Generic system-independent directives for solvers, e.g. GS.Schur()
@@ -1150,7 +1135,7 @@ contact(i::Integer) = ContactIndex(i)
 
 Base.Int(c::ContactIndex) = c.i
 
-cellsites(cell, x) = Subcell(cell, x)
+cellsites(cell, x) = CellSites(cell, x)
 
 # fallback
 minimal_callsafe_copy(gs::AppliedGreenSolver) = deepcopy(gs)
@@ -1172,7 +1157,7 @@ end
 
 # Obtained with gω = call!(g::GreenFunction, ω; params...) or g(ω; params...)
 # Allows gω[contact(i), contact(j)] for i,j integer Σs indices ("contacts")
-# Allows gω[cell, cell´] using T-matrix, with cell::Union{SVector,Subcell}
+# Allows gω[cell, cell´] using T-matrix, with cell::Union{SVector,CellSites}
 # Allows also view(gω, ...)
 struct GreenSolution{T,E,L,S<:GreenSlicer,H<:AbstractHamiltonian{T,E,L},M<:NTuple{<:Any,MatrixBlock}}
     parent::H

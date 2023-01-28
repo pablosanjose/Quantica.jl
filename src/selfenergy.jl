@@ -1,56 +1,23 @@
 ############################################################################################
-# contact_block_structure constructors
+# SelfEnergy solvers
+#   Any new s::AbstractSelfEnergySolver is associated with some form of attach(g, sargs...)
+#   For each such form we must add a SelfEnergy constructor that will be used by attach
+#     - SelfEnergy(h::AbstractHamiltonian, sargs...; siteselect...) -> SelfEnergy
+#   This wraps the s::AbstractSelfEnergySolver that should support the call! API
+#     - call!(s::RegularSelfEnergySolver, ω; params...) -> Σreg::AbstractMatrix
+#     - call!(s::ExtendedSelfEnergySolver, ω; params...) -> (Σᵣᵣ, Vᵣₑ, gₑₑ⁻¹, Vₑᵣ) AbstractMatrices
+#         With the extended case, the equivalent Σreg reads Σreg = Σᵣᵣ + VᵣₑgₑₑVₑᵣ
+#     - call!_output(s::AbstractSelfEnergySolver) -> object returned by call!(s, ω; params...)
+#   These AbstractMatrices are flat and are defined over a LatticeSlice that is also wrapped
 #region
-
-contact_block_structure(h::AbstractHamiltonian, lss...) =
-    contact_block_structure(blockstructure(h), lss...)
-
-function contact_block_structure(bs::OrbitalBlockStructure, lss...)
-    lsall = merge(lss...)
-    subcelloffsets = [0]
-    siteoffsets = [0]
-    orbscells = [Subcell(cell(sc), Int[]) for sc in subcells(lsall)]
-    offsetall = 0
-    for (oc, sc) in zip(orbscells, subcells(lsall))
-        for i in siteindices(sc)
-            irng = flatrange(bs, i)
-            append!(siteindices(oc), irng)
-            offsetall += length(irng)
-            push!(siteoffsets, offsetall)
-        end
-        push!(subcelloffsets, offsetall)
-    end
-    contactinds = [contact_indices(lsall, siteoffsets, ls) for ls in lss]
-    osall = OrbitalSlice(orbscells)
-    return ContactBlockStructure(osall, contactinds, siteoffsets, subcelloffsets)
-end
-
-# computes the orbital indices of ls sites inside the merged lsall
-function contact_indices(lsall::LatticeSlice, siteoffsets, ls::LatticeSlice)
-    contactinds = Int[]
-    for scell´ in subcells(ls)
-        so = findsubcell(cell(scell´), lsall)
-        so === nothing && continue
-        # here offset is the number of sites in lsall before scell
-        (scell, offset) = so
-        for i´ in siteindices(scell´), (n, i) in enumerate(siteindices(scell))
-            n´ = offset + n
-            i == i´ && append!(contactinds, siteoffsets[n´]+1:siteoffsets[n´+1])
-        end
-    end
-    return contactinds
-end
-
-#endregion
 
 ############################################################################################
 # SelfEnergyModel <: RegularSelfEnergySolver <: AbstractSelfEnergySolver
 #region
 
-struct SelfEnergyModel{T,E,L,P<:ParametricHamiltonian{T,E,0}} <: RegularSelfEnergySolver
-    latslice::LatticeSlice{T,E,L}
-    flatorbinds::Vector{Int}      # stores the latslice orbital index for each orbital in ph
-    ph::P                         # has an extra parameter :ω_internal for the frequency
+struct SelfEnergyModel{T,E,P<:ParametricHamiltonian{T,E,0}} <: RegularSelfEnergySolver
+    flatorbinds::Vector{Int}   # stores the orb index in parent latslice for each ph orbital
+    ph::P                      # has an extra parameter :ω_internal for the frequency
 end
 
 #region ## API ##
@@ -71,7 +38,7 @@ function SelfEnergy(h::AbstractHamiltonian, model::ParametricModel, sel::SiteSel
     # translation from lat0 to latslice orbital indices
     # i.e. orbital index on latslice for each orbital in lat0
     flatorbinds´ = flatorbinds(sliceinds, bs)
-    solver = SelfEnergyModel(latslice, flatorbinds´, ph)
+    solver = SelfEnergyModel(flatorbinds´, ph)
     return SelfEnergy(solver, latslice)
 end
 
@@ -95,3 +62,38 @@ call!_output(s::SelfEnergyModel) =
 #endregion
 #endregion
 
+#endregion top
+
+############################################################################################
+# contact_block_structure constructors
+#region
+
+contact_block_structure(h::AbstractHamiltonian, lss...) =
+    contact_block_structure(blockstructure(h), lss...)
+
+function contact_block_structure(bs::OrbitalBlockStructure, lss...)
+    lsall = merge(lss...)
+    subcelloffsets = Int[]
+    siteoffsets = Int[]
+    osall = orbslice(lsall, bs, siteoffsets, subcelloffsets)
+    contactinds = [contact_indices(lsall, siteoffsets, ls) for ls in lss]
+    return ContactBlockStructure(osall, contactinds, siteoffsets, subcelloffsets)
+end
+
+# computes the orbital indices of ls sites inside the merged lsall
+function contact_indices(lsall::LatticeSlice, siteoffsets, ls::LatticeSlice)
+    contactinds = Int[]
+    for scell´ in subcells(ls)
+        so = findsubcell(cell(scell´), lsall)
+        so === nothing && continue
+        # here offset is the number of sites in lsall before scell
+        (scell, offset) = so
+        for i´ in siteindices(scell´), (n, i) in enumerate(siteindices(scell))
+            n´ = offset + n
+            i == i´ && append!(contactinds, siteoffsets[n´]+1:siteoffsets[n´+1])
+        end
+    end
+    return contactinds
+end
+
+#endregion

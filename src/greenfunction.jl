@@ -48,33 +48,61 @@ end
 
 ############################################################################################
 # GreenSolution indexing
-#    The output of green_inds(i, g) must be a GreenIndex
 #region
 
-const GreenIndex = Union{ContactIndex,Subcell}
+# green_inds(c::ContactIndex, _) = c
+# green_inds(s::LatticeSlice, g) = orbslice(s, hamiltonian(g))
+# green_inds(s::CellSites, g) = orbslice(s, hamiltonian(g))
+# green_inds(kw::NamedTuple, g) = orbslice(getindex(lattice(g); kw...), hamiltonian(g))
+# green_inds(cell::NTuple{<:Any,Int}, g) = orbslice(cellsites(cell, :), hamiltonian(g))
 
-green_inds(c::ContactIndex, _) = c
-green_inds(s::Subcell, _) = s
-green_inds(kw::NamedTuple, g) = lattice(g)[kw...]
-green_inds(cell::NTuple{<:Any,Int}, _) = cellsites(cell, :)
+# Base.getindex(g::GreenSolution, i, j) = getindex(g, green_inds(i, g), green_inds(j, g))
 
-Base.getindex(g::GreenSolution, i, j) = getindex(g, green_inds(i, g), green_inds(j, g))
+# Base.getindex(g::GreenSolution; kw...) = g[getindex(lattice(g); kw...)]
 
-function Base.getindex(g::GreenSolution, i)
-    ai = green_inds(i, g)
-    return getindex(g, ai, ai)
-end
+# function Base.getindex(g::GreenSolution, i)
+#     ai = green_inds(i, g)
+#     return getindex(g, ai, ai)
+# end
 
-Base.getindex(g::GreenSolution, i::LatticeSlice, j::ContactIndex) =
-    mortar([g[si, j] for si in subcells(i), _ in 1:1])
-Base.getindex(g::GreenSolution, i::ContactIndex, j::LatticeSlice) =
-    mortar([g[i, sj] for _ in 1:1, sj in subcells(j)])
-Base.getindex(g::GreenSolution, i::LatticeSlice, j::LatticeSlice) =
-    mortar([g[si, sj] for si in subcells(i), sj in subcells(j)])
-Base.getindex(g::GreenSolution, i::ContactIndex, j::ContactIndex) = copy(view(g, i, j))
+# Base.getindex(g::GreenSolution, i::LatticeSlice, j::ContactIndex) =
+#     mortar([g[si, j] for si in subcells(i), _ in 1:1])
+# Base.getindex(g::GreenSolution, i::ContactIndex, j::LatticeSlice) =
+#     mortar([g[i, sj] for _ in 1:1, sj in subcells(j)])
+# Base.getindex(g::GreenSolution, i::LatticeSlice, j::LatticeSlice) =
+#     mortar([g[si, sj] for si in subcells(i), sj in subcells(j)])
+# Base.getindex(g::GreenSolution, i::ContactIndex, j::ContactIndex) = copy(view(g, i, j))
 
 Base.view(g::GreenSolution, i::ContactIndex, j::ContactIndex = i) = view(slicer(g), i, j)
 Base.view(g::GreenSolution, i::Colon, j::Colon = i) = view(slicer(g), i, j)
+Base.getindex(g::GreenSolution, i::ContactIndex, j::ContactIndex = i) = copy(view(g, i, j))
+Base.getindex(g::GreenSolution, ::Colon, ::Colon = :) = copy(view(g, :, :))
+
+Base.getindex(g::GreenSolution; kw...) = g[(; kw...)]
+
+function Base.getindex(g::GreenSolution, i)
+    ai = ind_to_slice(i, g)
+    return getindex(g, ai, ai)
+end
+
+Base.getindex(g::GreenSolution, i, j) = getindex(g, ind_to_slice(i, g), ind_to_slice(j, g))
+
+Base.getindex(g::GreenSolution, i::OrbitalSlice, j::OrbitalSlice) =
+    mortar([g[si, sj] for si in subcells(i), sj in subcells(j)])
+
+function ind_to_slice(c::ContactIndex, g)
+    contactbs = blockstructure(g)
+    cinds = contactinds(contactbs, Int(c))
+    os = orbslice(contactbs)[cinds]
+    return os
+end
+
+ind_to_slice(c::CellSites, g) = orbslice(c, hamiltonian(g))
+ind_to_slice(l::LatticeSlice, g) = orbslice(l, hamiltonian(g))
+ind_to_slice(kw::NamedTuple, g) = ind_to_slice(getindex(lattice(g); kw...), g)
+
+Base.getindex(g::GreenSolution, ::CellOrbitals, ::CellOrbitals) =
+    internalerror("getindex $(typeof(slicer(g))) not implemented")
 
 #endregion
 

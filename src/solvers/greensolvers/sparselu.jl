@@ -33,7 +33,7 @@ end
 # switch from contactinds (relative to merged contact orbslice) to unitcinds (relative
 # to parent unitcell)
 function unit_contact_inds(contacts)
-    orbindsall = siteindices(only(subcells(orbslice(contacts))))
+    orbindsall = orbindices(only(subcells(orbslice(contacts))))
     unitcinds = [orbindsall[cinds] for cinds in contactinds(contacts)]
     return unitcinds
 end
@@ -157,6 +157,10 @@ function Base.view(s::SparseLUSlicer{C}, ::Colon, ::Colon) where {C}
     g = view(gext, allinds, :)
     return g
 end
+
+# function Base.getindex(s::SparseLUSlicer{C}, i::OrbitalSlice, j::OrbitalSlice)
+
+# end
 
 #endregion
 
