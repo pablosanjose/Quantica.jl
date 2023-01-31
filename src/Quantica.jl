@@ -48,23 +48,21 @@ include("builders.jl")
 include("tools.jl")
 
 # Types
-include("specialmatrixtypes.jl")
 include("types.jl")
 
 # API
 include("specialmatrices.jl")
 include("selector.jl")
 include("lattice.jl")
+include("slice.jl")
 include("model.jl")
 include("hamiltonian.jl")
-include("slice.jl")
-include("greenfunction.jl")
-include("selfenergy.jl")
 include("supercell.jl")
 include("transform.jl")
 include("mesh.jl")
 include("spectrum.jl")
-
+include("selfenergy.jl")
+include("greenfunction.jl")
 # Plumbing
 include("apply.jl")
 include("show.jl")

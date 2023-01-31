@@ -1,15 +1,15 @@
 ############################################################################################
 # GreenSolvers module
 #   All new S::AbstractGreenSolver must implement
-#     - apply(s, h::OpenHamiltonian, c::Contacts) -> AppliedGreenSolver
-#   All new s::AppliedGreenSolver must implement
-#      - s(ω, Σblocks, orbital_blockstruct) -> AbstractGreenSlicer
+#     - apply(s, h::AbstractHamiltonian, c::Contacts) -> AppliedGreenSolver
+#   All new s::AppliedGreenSolver usually wraps relevant Contacts info, and must implement
+#      - s(ω) -> AbstractGreenSlicer
 #      - minimal_callsafe_copy(gs) -> has a deepcopy fallback
 #   This GreenSolution provides in particular:
 #      - GreenSlicer to compute e.g. G[gi, gi´]::AbstractMatrix for indices gi, see below
 #      - linewidth flat matrix Γᵢ for each contact
 #      - LatticeSlice for merged contacts
-#      - bscontacts::ContactBlockStructure for contacts LatticeSlice
+#      - bs::ContactBlockStructure for contacts LatticeSlice
 #   All gs::GreenSlicer's must implement
 #      - view(gs, ::ContactIndex, ::ContactIndex) -> g(ω; kw...) between specific contacts
 #      - view(gs, ::Colon, ::Colon) -> g(ω; kw...) between all contacts

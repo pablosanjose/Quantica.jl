@@ -573,6 +573,322 @@ end
 #endregion
 
 ############################################################################################
+# OrbitalBlockStructure
+#    Block structure for Hamiltonians, sorted by sublattices
+#region
+
+struct SMatrixView{N,M,T,NM}
+    s::SMatrix{N,M,T,NM}
+    SMatrixView{N,M,T,NM}(s) where {N,M,T,NM} = new(convert(SMatrix{N,M,T,NM}, s))
+end
+
+struct OrbitalBlockStructure{B}
+    blocksizes::Vector{Int}       # block sizes (number of site orbitals) in each sublattice
+    subsizes::Vector{Int}         # number of blocks (sites) in each sublattice
+    function OrbitalBlockStructure{B}(blocksizes, subsizes) where {B}
+        subsizes´ = Quantica.sanitize_Vector_of_Type(Int, subsizes)
+        # This checks also that they are of equal length
+        blocksizes´ = Quantica.sanitize_Vector_of_Type(Int, length(subsizes´), blocksizes)
+        return new(blocksizes´, subsizes´)
+    end
+end
+
+const MatrixElementType{T} = Union{
+    Complex{T},
+    SMatrix{N,N,Complex{T}} where {N},
+    SMatrixView{N,N,Complex{T}} where {N}}
+
+const MatrixElementUniformType{T} = Union{
+    Complex{T},
+    SMatrix{N,N,Complex{T}} where {N}}
+
+const MatrixElementNonscalarType{T,N} = Union{
+    SMatrix{N,N,Complex{T}},
+    SMatrixView{N,N,Complex{T}}}
+
+#region ## Constructors ##
+
+SMatrixView(s::SMatrix{N,M,T,NM}) where {N,M,T,NM} = SMatrixView{N,M,T,NM}(s)
+
+SMatrixView(::Type{<:SMatrix{N,M,T,NM}}) where {N,M,T,NM} = SMatrixView{N,M,T,NM}
+
+SMatrixView{N,M}(s) where {N,M} = SMatrixView(SMatrix{N,M}(s))
+
+@inline function OrbitalBlockStructure(T, blocksizes, subsizes)
+    B = blocktype(T, blocksizes)
+    return OrbitalBlockStructure{B}(blocksizes, subsizes)
+end
+
+blocktype(T::Type, norbs) = SMatrixView(blocktype(T, val_maximum(norbs)))
+blocktype(::Type{T}, m::Val{1}) where {T} = Complex{T}
+blocktype(::Type{T}, m::Val{N}) where {T,N} = SMatrix{N,N,Complex{T},N*N}
+# blocktype(::Type{T}, N::Int) where {T} = blocktype(T, Val(N))
+
+val_maximum(n::Int) = Val(n)
+val_maximum(ns) = Val(maximum(argval.(ns)))
+
+argval(::Val{N}) where {N} = N
+argval(n::Int) = n
+
+#endregion
+
+#region ## API ##
+
+blocktype(::OrbitalBlockStructure{B}) where {B} = B
+
+blockeltype(::OrbitalBlockStructure{<:MatrixElementType{T}}) where {T} = Complex{T}
+
+blocksizes(b::OrbitalBlockStructure) = b.blocksizes
+
+subsizes(b::OrbitalBlockStructure) = b.subsizes
+
+flatsize(b::OrbitalBlockStructure) = blocksizes(b)' * subsizes(b)
+
+unflatsize(b::OrbitalBlockStructure) = sum(subsizes(b))
+
+blocksize(b::OrbitalBlockStructure, iunflat, junflat) = (blocksize(b, iunflat), blocksize(b, junflat))
+
+blocksize(b::OrbitalBlockStructure{<:SMatrixView}, iunflat) = length(flatrange(b, iunflat))
+
+blocksize(b::OrbitalBlockStructure{B}, iunflat) where {N,B<:SMatrix{N}} = N
+
+blocksize(b::OrbitalBlockStructure{B}, iunflat) where {B<:Number} = 1
+
+# Basic relation: iflat - 1 == (iunflat - soffset - 1) * b + soffset´
+function flatrange(b::OrbitalBlockStructure{<:SMatrixView}, iunflat::Integer)
+    soffset  = 0
+    soffset´ = 0
+    @boundscheck(iunflat < 0 && blockbounds_error())
+    @inbounds for (s, b) in zip(b.subsizes, b.blocksizes)
+        if soffset + s >= iunflat
+            offset = muladd(iunflat - soffset - 1, b, soffset´)
+            return offset+1:offset+b
+        end
+        soffset  += s
+        soffset´ += b * s
+    end
+    @boundscheck(blockbounds_error())
+end
+
+flatrange(::OrbitalBlockStructure{<:SMatrix{N}}, iunflat::Integer) where {N} =
+    (iunflat - 1) * N + 1 : iunflat * N
+flatrange(::OrbitalBlockStructure{<:Number}, iunflat::Integer) = iunflat:iunflat
+
+flatindex(b::OrbitalBlockStructure, i) = first(flatrange(b, i))
+
+function unflatindex(b::OrbitalBlockStructure{<:SMatrixView}, iflat::Integer)
+    soffset  = 0
+    soffset´ = 0
+    @boundscheck(iflat < 0 && blockbounds_error())
+    @inbounds for (s, b) in zip(b.subsizes, b.blocksizes)
+        if soffset´ + b * s >= iflat
+            iunflat = (iflat - soffset´ - 1) ÷ b + soffset + 1
+            return iunflat, b
+        end
+        soffset  += s
+        soffset´ += b * s
+    end
+    @boundscheck(blockbounds_error())
+end
+
+@noinline blockbounds_error() = throw(BoundsError())
+
+unflatindex(::OrbitalBlockStructure{B}, iflat::Integer) where {N,B<:SMatrix{N}} =
+    (iflat - 1)÷N + 1, N
+unflatindex(::OrbitalBlockStructure{<:Number}, iflat::Integer) = (iflat, 1)
+
+Base.copy(b::OrbitalBlockStructure{B}) where {B} =
+    OrbitalBlockStructure{B}(copy(blocksizes(b)), copy(subsizes(b)))
+
+#endregion
+#endregion
+
+############################################################################################
+# Special matrices  -  see specialmatrices.jl for methods
+#region
+
+  ############################################################################################
+  # HybridSparseBlochMatrix
+  #    Internal Matrix type for Bloch harmonics in Hamiltonians
+  #    Wraps site-block + flat versions of the same SparseMatrixCSC
+  #region
+
+struct HybridSparseBlochMatrix{T,B<:MatrixElementType{T}} <: SparseArrays.AbstractSparseMatrixCSC{B,Int}
+    blockstruct::OrbitalBlockStructure{B}
+    unflat::SparseMatrixCSC{B,Int}
+    flat::SparseMatrixCSC{Complex{T},Int}
+    sync_state::Ref{Int}  # 0 = in sync, 1 = flat needs sync, -1 = unflat needs sync, 2 = none initialized
+end
+
+#region ## Constructors ##
+
+HybridSparseBlochMatrix(b::OrbitalBlockStructure{Complex{T}}, flat::SparseMatrixCSC{Complex{T},Int}) where {T} =
+    HybridSparseBlochMatrix(b, flat, flat, Ref(0))  # aliasing
+
+function HybridSparseBlochMatrix(b::OrbitalBlockStructure{B}, unflat::SparseMatrixCSC{B,Int}) where {T,B<:MatrixElementNonscalarType{T}}
+    m = HybridSparseBlochMatrix(b, unflat, flat(b, unflat), Ref(0))
+    needs_flat_sync!(m)
+    return m
+end
+
+function HybridSparseBlochMatrix(b::OrbitalBlockStructure{B}, flat::SparseMatrixCSC{Complex{T},Int}) where {T,B<:MatrixElementNonscalarType{T}}
+    m = HybridSparseBlochMatrix(b, unflat(b, flat), flat, Ref(0))
+    needs_unflat_sync!(m)
+    return m
+end
+
+#endregion
+
+#region ## API ##
+
+blockstructure(s::HybridSparseBlochMatrix) = s.blockstruct
+
+unflat_unsafe(s::HybridSparseBlochMatrix) = s.unflat
+
+flat_unsafe(s::HybridSparseBlochMatrix) = s.flat
+
+syncstate(s::HybridSparseBlochMatrix) = s.sync_state
+
+# are flat === unflat? Only for scalar eltype
+isaliased(::HybridSparseBlochMatrix{<:Any,<:Complex}) = true
+isaliased(::HybridSparseBlochMatrix) = false
+
+SparseArrays.nnz(b::HybridSparseBlochMatrix) = nnz(unflat(b))
+
+function nnzdiag(m::HybridSparseBlochMatrix)
+    b = unflat(m)
+    count = 0
+    rowptrs = rowvals(b)
+    for col in 1:size(b, 2)
+        for ptr in nzrange(b, col)
+            rowptrs[ptr] == col && (count += 1; break)
+        end
+    end
+    return count
+end
+
+Base.size(h::HybridSparseBlochMatrix, i::Integer...) = size(unflat_unsafe(h), i...)
+
+flatsize(h::HybridSparseBlochMatrix) = flatsize(blockstructure(h))
+
+#endregion
+#endregion
+
+  ############################################################################################
+  # BlockSparseMatrix
+  #   MatrixBlock : Block within a parent matrix, at a given set of rows and cols
+  #   BlockSparseMatrix : SparseMatrixCSC with added blocks that can be updated in place
+  #region
+
+struct MatrixBlock{C<:Number, A<:AbstractMatrix{C},U}
+    block::A
+    rows::U             # row indices in parent matrix for each row in block
+    cols::U             # col indices in parent matrix for each col in block
+    coefficient::C      # coefficient to apply to block
+end
+
+struct BlockSparseMatrix{C,N,M<:NTuple{N,MatrixBlock}}
+    mat::SparseMatrixCSC{C,Int}
+    blocks::M
+    ptrs::NTuple{N,Vector{Int}}    # nzvals indices for blocks
+end
+
+#region ## Constructors ##
+
+function MatrixBlock(block::AbstractMatrix{C}, rows, cols) where {C}
+    checkblockinds(block, rows, cols)
+    return MatrixBlock(block, rows, cols, one(C))
+end
+
+function MatrixBlock(block::SubArray, rows, cols)
+    checkblockinds(block, rows, cols)
+    return simplify_matrixblock!(block, rows, cols)
+end
+
+function BlockSparseMatrix(mblocks::MatrixBlock...)
+    blocks = blockmat.(mblocks)
+    C = promote_type(eltype.(blocks)...)
+    I, J = Int[], Int[]
+    foreach(b -> appendIJ!(I, J, b), mblocks)
+    mat = sparse(I, J, zero(C))
+    ptrs = getblockptrs.(mblocks, Ref(mat))
+    return BlockSparseMatrix(mat, mblocks, ptrs)
+end
+
+#endregion
+
+#region ## API ##
+
+blockmat(m::MatrixBlock) = m.block
+
+blockrows(m::MatrixBlock) = m.rows
+
+blockcols(m::MatrixBlock) = m.cols
+
+coefficient(m::MatrixBlock) = m.coefficient
+
+blocks(m::BlockSparseMatrix) = m.blocks
+
+SparseArrays.sparse(b::BlockSparseMatrix) = b.mat
+
+Base.size(b::BlockSparseMatrix, i...) = size(b.mat, i...)
+
+Base.size(b::MatrixBlock, i...) = size(blockmat(b), i...)
+
+Base.eltype(b::MatrixBlock) = eltype(blockmat(b))
+Base.eltype(m::BlockSparseMatrix) = eltype(sparse(m))
+
+Base.:-(b::MatrixBlock) =
+    MatrixBlock(blockmat(b), blockrows(b), blockcols(b), -coefficient(b))
+
+@noinline function checkblockinds(block, rows, cols)
+    length.((rows, cols)) == size(block) && allunique(rows) &&
+        (cols === rows || allunique(cols)) || internalerror("MatrixBlock: mismatched size")
+    return nothing
+end
+
+function linewidth(Σ::MatrixBlock)
+    Σmat = blockmat(Σ)
+    Γ = Σmat - Σmat'
+    Γ .*= im
+    return Γ
+end
+
+#endregion
+
+#endregion
+
+  ############################################################################################
+  # InverseGreenBlockSparse
+  #    BlockSparseMatrix representing G⁻¹ on a unitcell (+ possibly extended sites)
+  #    with self-energies as blocks. It knows which indices correspond to which contacts
+  #region
+
+struct InverseGreenBlockSparse{C}
+    mat::BlockSparseMatrix{C}
+    unitcinds::Vector{Vector{Int}}  # orbital indices in parent unitcell of each contact
+    unitcindsall::Vector{Int}       # merged, uniqued and sorted unitcinds
+    source::Matrix{C}               # preallocation for ldiv! solve
+end
+
+#region ## API ##
+
+SparseArrays.sparse(s::InverseGreenBlockSparse) = sparse(s.mat)
+
+# updates only ω block and applies all blocks to BlockSparseMatrix
+function update!(s::InverseGreenBlockSparse, ω)
+    bsm = s.mat
+    Imat = blockmat(first(blocks(bsm)))
+    Imat.diag .= ω   # Imat should be <: Diagonal
+    return update!(bsm)
+end
+
+#endregion
+#endregion
+
+#endregion top
+
+############################################################################################
 # Harmonic  -  see hamiltonian.jl for methods
 #region
 
@@ -976,7 +1292,8 @@ call!(s::WrappedExtendedSelfEnergySolver; params...) = s
 
 ############################################################################################
 # SelfEnergy - see selfenergy.jl
-#   A producer of Σs(ω)::AbstractMatrix over a LatticeSlice
+#   A producer of Σs(ω)::AbstractMatrix defined over a LatticeSlice
+#   If solver::ExtendedSelfEnergySolver -> four AbstractMatrix blocks over latslice+extended
 #region
 
 struct SelfEnergy{L,S<:AbstractSelfEnergySolver}
@@ -1026,7 +1343,8 @@ attach(h::AbstractHamiltonian, Σ::SelfEnergy) = OpenHamiltonian(h, (Σ,))
 
 ############################################################################################
 # Contacts - see selfenergy.jl
-#    Collection of selfenergies defined over blockstruct.osbslice = flat merged Σlatslices
+#    Collection of selfenergies supplemented with a ContactBlockStructure
+#    ContactBlockStructure includes orbslice = flat merged Σlatslices + block info
 #    Supports call!(c, ω; params...) -> (Σs::MatrixBlock...) over orbslice
 #region
 

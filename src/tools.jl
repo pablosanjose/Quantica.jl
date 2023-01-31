@@ -18,8 +18,8 @@ padtuple(t, x, N) = ntuple(i -> i <= length(t) ? t[i] : x, N)
 
 @noinline boundserror(m, i) = throw(BoundsError(m, i))
 
-@noinline checkblocksize(::UniformScaling, s) = nothing
-@noinline checkblocksize(val, s) = (size(val, 1), size(val, 2)) == s ||
+@noinline checkmatrixsize(::UniformScaling, s) = nothing
+@noinline checkmatrixsize(val, s) = (size(val, 1), size(val, 2)) == s ||
     throw(ArgumentError("Expected an block or matrix of size $s, got size $((size(val, 1), size(val, 2)))"))
 
 function boundingbox(positions)

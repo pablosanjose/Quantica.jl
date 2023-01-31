@@ -1,233 +1,10 @@
 ############################################################################################
-# Functionality for various matrix structures in Quantica.jl - see spectialmatrixtypes.jl
+# Functionality for various matrix structures in Quantica.jl
 ############################################################################################
 
 ############################################################################################
-## HybridSparseBlochMatrix
+## SparseMatrixCSC tools
 #region
-
-############################################################################################
-# HybridSparseBlochMatrix API
-#region
-
-function unflat(s::HybridSparseBlochMatrix)
-    needs_unflat_sync(s) && unflat_sync!(s)
-    return unflat_unsafe(s)
-end
-
-function flat(s::HybridSparseBlochMatrix)
-    needs_flat_sync(s) && flat_sync!(s)
-    return flat_unsafe(s)
-end
-
-# Sync states
-needs_no_sync!(s::HybridSparseBlochMatrix)     = (syncstate(s)[] = 0)
-needs_flat_sync!(s::HybridSparseBlochMatrix)   = (syncstate(s)[] = 1)
-needs_unflat_sync!(s::HybridSparseBlochMatrix) = (syncstate(s)[] = -1)
-needs_initialization!(s::HybridSparseBlochMatrix) = (syncstate(s)[] = 2)
-
-needs_no_sync(s::HybridSparseBlochMatrix)      = (syncstate(s)[] == 0)
-needs_flat_sync(s::HybridSparseBlochMatrix)    = (syncstate(s)[] == 1)
-needs_unflat_sync(s::HybridSparseBlochMatrix)  = (syncstate(s)[] == -1)
-needs_initialization(s::HybridSparseBlochMatrix) = (syncstate(s)[] == 2)
-
-needs_no_sync!(s::HybridSparseBlochMatrix{<:Any,<:Complex})     = (syncstate(s)[] = 0)
-needs_flat_sync!(s::HybridSparseBlochMatrix{<:Any,<:Complex})   = (syncstate(s)[] = 0)
-needs_unflat_sync!(s::HybridSparseBlochMatrix{<:Any,<:Complex}) = (syncstate(s)[] = 0)
-
-needs_no_sync(s::HybridSparseBlochMatrix{<:Any,<:Complex})      = true
-needs_flat_sync(s::HybridSparseBlochMatrix{<:Any,<:Complex})    = false
-needs_unflat_sync(s::HybridSparseBlochMatrix{<:Any,<:Complex})  = false
-
-function Base.copy!(h::HybridSparseBlochMatrix{T,B}, h´::HybridSparseBlochMatrix{T,B}) where {T,B}
-    copy!(blockstructure(h), blockstructure(h´))
-    copy!(unflat_unsafe(h), unflat_unsafe(h´))
-    isaliased(h´) || copy!(flat_unsafe(h), flat_unsafe(h´))
-    syncstate(h)[] = syncstate(h´)[]
-    return h
-end
-
-function Base.copy(h::HybridSparseBlochMatrix)
-    b = copy(blockstructure(h))
-    u = copy(unflat_unsafe(h))
-    f = isaliased(h) ? u : copy(flat_unsafe(h))
-    s = Ref(syncstate(h)[])
-    return HybridSparseBlochMatrix(b, u, f, s)
-end
-
-function copy_matrices(h::HybridSparseBlochMatrix)
-    b = blockstructure(h)
-    u = copy(unflat_unsafe(h))
-    f = isaliased(h) ? u : copy(flat_unsafe(h))
-    s = Ref(syncstate(h)[])
-    return HybridSparseBlochMatrix(b, u, f, s)
-end
-
-SparseArrays.nnz(b::HybridSparseBlochMatrix) = nnz(unflat(b))
-
-function nnzdiag(m::HybridSparseBlochMatrix)
-    b = unflat(m)
-    count = 0
-    rowptrs = rowvals(b)
-    for col in 1:size(b, 2)
-        for ptr in nzrange(b, col)
-            rowptrs[ptr] == col && (count += 1; break)
-        end
-    end
-    return count
-end
-
-Base.size(h::HybridSparseBlochMatrix, i::Integer...) = size(unflat_unsafe(h), i...)
-
-flatsize(h::HybridSparseBlochMatrix) = flatsize(blockstructure(h))
-
-#endregion
-
-############################################################################################
-# HybridSparseBlochMatrix indexing
-#region
-
-Base.getindex(b::HybridSparseBlochMatrix{<:Any,<:SMatrixView}, i::Integer, j::Integer) =
-    view(parent(unflat(b)[i, j]), flatrange(b, i), flatrange(b, j))
-
-Base.getindex(b::HybridSparseBlochMatrix, i::Integer, j::Integer) = unflat(b)[i, j]
-
-# only allowed for elements that are already stored
-function Base.setindex!(b::HybridSparseBlochMatrix{<:Any,B}, val::AbstractVecOrMat, i::Integer, j::Integer) where {B<:SMatrixView}
-    @boundscheck(checkstored(unflat(b), i, j))
-    val´ = mask_block(B, val, blocksize(blockstructure(b), i, j))
-    unflat(b)[i, j] = val´
-    needs_flat_sync!(b)
-    return val´
-end
-
-function Base.setindex!(b::HybridSparseBlochMatrix, val::AbstractVecOrMat, i::Integer, j::Integer)
-    @boundscheck(checkstored(unflat(b), i, j))
-    unflat(b)[i, j] = val
-    needs_flat_sync!(b)
-    return val
-end
-
-mask_block(::Type{B}, val::UniformScaling, args...) where {N,B<:MatrixElementNonscalarType{<:Any,N}} =
-    mask_block(B, SMatrix{N,N}(val))
-
-mask_block(::Type{B}, val::UniformScaling, args...) where {B<:Number} =
-    mask_block(B, convert(B, val.λ))
-
-function mask_block(B, val, size)
-    @boundscheck(checkblocksize(val, size)) # tools.jl
-    return mask_block(B, val)
-end
-
-@inline mask_block(::Type{B}, val) where {N,B<:SMatrix{N,N}} = B(val)
-
-@inline mask_block(::Type{B}, val::Number) where {B<:Complex} = convert(B, val)
-
-@inline mask_block(::Type{B}, val::SMatrix{R,C}) where {R,C,N,T,B<:SMatrixView{N,N,T}} =
-    SMatrixView(SMatrix{N,R}(I) * val * SMatrix{C,N}(I))
-
-function mask_block(::Type{B}, val) where {N,T,B<:SMatrixView{N,N,T}}
-    (nrows, ncols) = size(val)
-    s = ntuple(Val(N*N)) do i
-        n, m = mod1(i, N), fld1(i, N)
-        @inbounds n > nrows || m > ncols ? zero(T) : T(val[n,m])
-    end
-    return SMatrixView(SMatrix{N,N,T}(s))
-end
-
-mask_block(t, val) = throw(ArgumentError("Unexpected block size"))
-
-checkstored(mat, i, j) = i in view(rowvals(mat), nzrange(mat, j)) ||
-    throw(ArgumentError("Adding new structural elements is not allowed"))
-
-#endregion
-
-############################################################################################
-# HybridSparseBlochMatrix flat/unflat conversion
-#region
-
-function flat(b::OrbitalBlockStructure{B}, unflat::SparseMatrixCSC{B´}) where {N,T,B<:MatrixElementNonscalarType{T,N},B´<:MatrixElementNonscalarType{T,N}}
-    nnzguess = nnz(unflat) * N * N
-    builder = CSC{Complex{T}}(flatsize(b), nnzguess)
-    nzs = nonzeros(unflat)
-    rows = rowvals(unflat)
-    cols = 1:unflatsize(b)
-    for col in cols, bcol in 1:blocksize(b, col)
-        for ptr in nzrange(unflat, col)
-            row = rows[ptr]
-            firstrow´ = flatindex(b, row)
-            vals = view(nzs[ptr], 1:blocksize(b, row), bcol)
-            appendtocolumn!(builder, firstrow´, vals)
-        end
-        finalizecolumn!(builder, false)  # no need to sort column
-    end
-    n = flatsize(b)
-    return sparse(builder, n, n)
-end
-
-function unflat(b::OrbitalBlockStructure{B}, flat::SparseMatrixCSC{<:Number}) where {N,B<:MatrixElementNonscalarType{<:Any,N}}
-    @boundscheck(checkblocks(b, flat)) # tools.jl
-    nnzguess = nnz(flat) ÷ (N * N)
-    ncols = unflatsize(b)
-    builder = CSC{B}(ncols, nnzguess)
-    rowsflat = rowvals(flat)
-    for ucol in 1:ncols
-        colrng = flatrange(b, ucol)
-        fcol = first(colrng)
-        Ncol = length(colrng)
-        ptrs = nzrange(flat, fcol)
-        ptr = first(ptrs)
-        while ptr in ptrs
-            frow = rowsflat[ptr]
-            urow, Nrow = unflatindex(b, frow)
-            valview = view(flat, frow:frow+Nrow-1, fcol:fcol+Ncol-1)
-            val = mask_block(B, valview)
-            pushtocolumn!(builder, urow, val)
-            ptr += Nrow
-        end
-        finalizecolumn!(builder, false)  # no need to sort column
-    end
-    n = unflatsize(b)
-    return sparse(builder, n, n)
-end
-
-checkblocks(b, flat) = nothing ## TODO: must check that all structural elements come in blocks
-
-#endregion
-
-############################################################################################
-# HybridSparseBlochMatrix syncing
-#region
-
-# Uniform case
-function flat_sync!(s::HybridSparseBlochMatrix{<:Any,S}) where {N,S<:SMatrix{N,N}}
-    checkinitialized(s)
-    flat, unflat = flat_unsafe(s), unflat_unsafe(s)
-    cols = axes(unflat, 2)
-    nzflat, nzunflat = nonzeros(flat), nonzeros(unflat)
-    ptr´ = 1
-    for col in cols, bcol in 1:N, ptr in nzrange(unflat, col)
-        nz = nzunflat[ptr]
-        for brow in 1:N
-            nzflat[ptr´] = nz[brow, bcol]
-            ptr´ += 1
-        end
-    end
-    needs_no_sync!(s)
-    return s
-end
-
-checkinitialized(s) =
-    needs_initialization(s) && internalerror("sync!: Tried to sync uninitialized matrix")
-
-## TODO
-flat_sync!(s::HybridSparseBlochMatrix{<:Any,S}) where {S<:SMatrixView} =
-    internalerror("flat_sync!: not yet implemented method for non-uniform orbitals")
-
-## TODO
-unflat_sync!(s) = internalerror("unflat_sync!: method not yet implemented")
-
-#endregion
 
 ############################################################################################
 # SparseMatrix transformations
@@ -355,11 +132,226 @@ function store_diagonal_ptrs(mat::SparseMatrixCSC{T}) where {T}
 end
 
 #endregion
+#endregion top
+
+############################################################################################
+## HybridSparseBlochMatrix
+#region
+
+############################################################################################
+# HybridSparseBlochMatrix - flat/unflat
+#region
+
+function unflat(s::HybridSparseBlochMatrix)
+    needs_unflat_sync(s) && unflat_sync!(s)
+    return unflat_unsafe(s)
+end
+
+function flat(s::HybridSparseBlochMatrix)
+    needs_flat_sync(s) && flat_sync!(s)
+    return flat_unsafe(s)
+end
+
+# Sync states
+needs_no_sync!(s::HybridSparseBlochMatrix)     = (syncstate(s)[] = 0)
+needs_flat_sync!(s::HybridSparseBlochMatrix)   = (syncstate(s)[] = 1)
+needs_unflat_sync!(s::HybridSparseBlochMatrix) = (syncstate(s)[] = -1)
+needs_initialization!(s::HybridSparseBlochMatrix) = (syncstate(s)[] = 2)
+
+needs_no_sync(s::HybridSparseBlochMatrix)      = (syncstate(s)[] == 0)
+needs_flat_sync(s::HybridSparseBlochMatrix)    = (syncstate(s)[] == 1)
+needs_unflat_sync(s::HybridSparseBlochMatrix)  = (syncstate(s)[] == -1)
+needs_initialization(s::HybridSparseBlochMatrix) = (syncstate(s)[] == 2)
+
+needs_no_sync!(s::HybridSparseBlochMatrix{<:Any,<:Complex})     = (syncstate(s)[] = 0)
+needs_flat_sync!(s::HybridSparseBlochMatrix{<:Any,<:Complex})   = (syncstate(s)[] = 0)
+needs_unflat_sync!(s::HybridSparseBlochMatrix{<:Any,<:Complex}) = (syncstate(s)[] = 0)
+
+needs_no_sync(s::HybridSparseBlochMatrix{<:Any,<:Complex})      = true
+needs_flat_sync(s::HybridSparseBlochMatrix{<:Any,<:Complex})    = false
+needs_unflat_sync(s::HybridSparseBlochMatrix{<:Any,<:Complex})  = false
+
+# flat/unflat conversion
+function flat(b::OrbitalBlockStructure{B}, unflat::SparseMatrixCSC{B´}) where {N,T,B<:MatrixElementNonscalarType{T,N},B´<:MatrixElementNonscalarType{T,N}}
+    nnzguess = nnz(unflat) * N * N
+    builder = CSC{Complex{T}}(flatsize(b), nnzguess)
+    nzs = nonzeros(unflat)
+    rows = rowvals(unflat)
+    cols = 1:unflatsize(b)
+    for col in cols, bcol in 1:blocksize(b, col)
+        for ptr in nzrange(unflat, col)
+            row = rows[ptr]
+            firstrow´ = flatindex(b, row)
+            vals = view(nzs[ptr], 1:blocksize(b, row), bcol)
+            appendtocolumn!(builder, firstrow´, vals)
+        end
+        finalizecolumn!(builder, false)  # no need to sort column
+    end
+    n = flatsize(b)
+    return sparse(builder, n, n)
+end
+
+function unflat(b::OrbitalBlockStructure{B}, flat::SparseMatrixCSC{<:Number}) where {N,B<:MatrixElementNonscalarType{<:Any,N}}
+    @boundscheck(checkblocks(b, flat))
+    nnzguess = nnz(flat) ÷ (N * N)
+    ncols = unflatsize(b)
+    builder = CSC{B}(ncols, nnzguess)
+    rowsflat = rowvals(flat)
+    for ucol in 1:ncols
+        colrng = flatrange(b, ucol)
+        fcol = first(colrng)
+        Ncol = length(colrng)
+        ptrs = nzrange(flat, fcol)
+        ptr = first(ptrs)
+        while ptr in ptrs
+            frow = rowsflat[ptr]
+            urow, Nrow = unflatindex(b, frow)
+            valview = view(flat, frow:frow+Nrow-1, fcol:fcol+Ncol-1)
+            val = mask_block(B, valview)
+            pushtocolumn!(builder, urow, val)
+            ptr += Nrow
+        end
+        finalizecolumn!(builder, false)  # no need to sort column
+    end
+    n = unflatsize(b)
+    return sparse(builder, n, n)
+end
+
+checkblocks(b, flat) = nothing ## TODO: must check that all structural elements come in blocks
+
+#endregion
+
+############################################################################################
+# HybridSparseBlochMatrix - copying
+#region
+
+function Base.copy!(h::HybridSparseBlochMatrix{T,B}, h´::HybridSparseBlochMatrix{T,B}) where {T,B}
+    copy!(blockstructure(h), blockstructure(h´))
+    copy!(unflat_unsafe(h), unflat_unsafe(h´))
+    isaliased(h´) || copy!(flat_unsafe(h), flat_unsafe(h´))
+    syncstate(h)[] = syncstate(h´)[]
+    return h
+end
+
+function Base.copy(h::HybridSparseBlochMatrix)
+    b = copy(blockstructure(h))
+    u = copy(unflat_unsafe(h))
+    f = isaliased(h) ? u : copy(flat_unsafe(h))
+    s = Ref(syncstate(h)[])
+    return HybridSparseBlochMatrix(b, u, f, s)
+end
+
+function copy_matrices(h::HybridSparseBlochMatrix)
+    b = blockstructure(h)
+    u = copy(unflat_unsafe(h))
+    f = isaliased(h) ? u : copy(flat_unsafe(h))
+    s = Ref(syncstate(h)[])
+    return HybridSparseBlochMatrix(b, u, f, s)
+end
+
+#endregion
+
+############################################################################################
+# HybridSparseBlochMatrix indexing
+#region
+
+Base.getindex(b::HybridSparseBlochMatrix{<:Any,<:SMatrixView}, i::Integer, j::Integer) =
+    view(parent(unflat(b)[i, j]), flatrange(b, i), flatrange(b, j))
+
+Base.getindex(b::HybridSparseBlochMatrix, i::Integer, j::Integer) = unflat(b)[i, j]
+
+# only allowed for elements that are already stored
+function Base.setindex!(b::HybridSparseBlochMatrix{<:Any,B}, val::AbstractVecOrMat, i::Integer, j::Integer) where {B<:SMatrixView}
+    @boundscheck(checkstored(unflat(b), i, j))
+    val´ = mask_block(B, val, blocksize(blockstructure(b), i, j))
+    unflat(b)[i, j] = val´
+    needs_flat_sync!(b)
+    return val´
+end
+
+function Base.setindex!(b::HybridSparseBlochMatrix, val::AbstractVecOrMat, i::Integer, j::Integer)
+    @boundscheck(checkstored(unflat(b), i, j))
+    unflat(b)[i, j] = val
+    needs_flat_sync!(b)
+    return val
+end
+
+mask_block(::Type{B}, val::UniformScaling, args...) where {N,B<:MatrixElementNonscalarType{<:Any,N}} =
+    mask_block(B, SMatrix{N,N}(val))
+
+mask_block(::Type{B}, val::UniformScaling, args...) where {B<:Number} =
+    mask_block(B, convert(B, val.λ))
+
+function mask_block(B, val, size)
+    @boundscheck(checkmatrixsize(val, size)) # tools.jl
+    return mask_block(B, val)
+end
+
+@inline mask_block(::Type{B}, val) where {N,B<:SMatrix{N,N}} = B(val)
+
+@inline mask_block(::Type{B}, val::Number) where {B<:Complex} = convert(B, val)
+
+@inline mask_block(::Type{B}, val::SMatrix{R,C}) where {R,C,N,T,B<:SMatrixView{N,N,T}} =
+    SMatrixView(SMatrix{N,R}(I) * val * SMatrix{C,N}(I))
+
+function mask_block(::Type{B}, val) where {N,T,B<:SMatrixView{N,N,T}}
+    (nrows, ncols) = size(val)
+    s = ntuple(Val(N*N)) do i
+        n, m = mod1(i, N), fld1(i, N)
+        @inbounds n > nrows || m > ncols ? zero(T) : T(val[n,m])
+    end
+    return SMatrixView(SMatrix{N,N,T}(s))
+end
+
+mask_block(t, val) = throw(ArgumentError("Unexpected block size"))
+
+checkstored(mat, i, j) = i in view(rowvals(mat), nzrange(mat, j)) ||
+    throw(ArgumentError("Adding new structural elements is not allowed"))
+
+#endregion
+
+############################################################################################
+# HybridSparseBlochMatrix syncing
+#region
+
+# Uniform case
+function flat_sync!(s::HybridSparseBlochMatrix{<:Any,S}) where {N,S<:SMatrix{N,N}}
+    checkinitialized(s)
+    flat, unflat = flat_unsafe(s), unflat_unsafe(s)
+    cols = axes(unflat, 2)
+    nzflat, nzunflat = nonzeros(flat), nonzeros(unflat)
+    ptr´ = 1
+    for col in cols, bcol in 1:N, ptr in nzrange(unflat, col)
+        nz = nzunflat[ptr]
+        for brow in 1:N
+            nzflat[ptr´] = nz[brow, bcol]
+            ptr´ += 1
+        end
+    end
+    needs_no_sync!(s)
+    return s
+end
+
+checkinitialized(s) =
+    needs_initialization(s) && internalerror("sync!: Tried to sync uninitialized matrix")
+
+## TODO
+flat_sync!(s::HybridSparseBlochMatrix{<:Any,S}) where {S<:SMatrixView} =
+    internalerror("flat_sync!: not yet implemented method for non-uniform orbitals")
+
+## TODO
+unflat_sync!(s) = internalerror("unflat_sync!: method not yet implemented")
+
+#endregion
 
 #endregion top
 
 ############################################################################################
-## MatrixBlock API
+## BlockSparseMatrix
+#region
+
+############################################################################################
+# MatrixBlock simplify
 #region
 
 # Try to revert subarray to parent through a simple reordering of rows and cols
@@ -406,25 +398,7 @@ function appendIJ!(I, J, b::MatrixBlock{<:Any,<:StridedArray})
     return I, J
 end
 
-function linewidth(Σ::MatrixBlock)
-    Σmat = blockmat(Σ)
-    Γ = Σmat - Σmat'
-    Γ .*= im
-    return Γ
-end
-
-Base.size(b::MatrixBlock, i...) = size(blockmat(b), i...)
-
-Base.eltype(b::MatrixBlock) = eltype(blockmat(b))
-
-Base.:-(b::MatrixBlock) =
-    MatrixBlock(blockmat(b), blockrows(b), blockcols(b), -coefficient(b))
-
-#endregion top
-
-############################################################################################
-## BlockSparseMatrix
-#region
+#endregion
 
 ############################################################################################
 # BlockSparseMatrix getblockptrs
@@ -433,7 +407,7 @@ Base.:-(b::MatrixBlock) =
 getblockptrs(mblock, mat) = getblockptrs(mblock.block, mblock.rows, mblock.cols, mat)
 
 function getblockptrs(block::AbstractSparseMatrixCSC, is, js, mat)
-    checkblocksize(block, is, js)
+    checkblockinds(block, is, js)
     ptrs = Int[]
     for col in axes(block, 2)
         colmat = js[col]
@@ -454,7 +428,7 @@ function getblockptrs(block::AbstractSparseMatrixCSC, is, js, mat)
 end
 
 function getblockptrs(block::StridedMatrix, is, js, mat)
-    checkblocksize(block, is, js)
+    checkblockinds(block, is, js)
     ptrs = Int[]
     for c in CartesianIndices(block)
         row, col = Tuple(c)
@@ -469,7 +443,7 @@ function getblockptrs(block::StridedMatrix, is, js, mat)
 end
 
 function getblockptrs(block::Diagonal, is, js, mat)
-    checkblocksize(block, is, js)
+    checkblockinds(block, is, js)
     ptrs = Int[]
     for (col, colmat) in enumerate(js)
         col > size(block, 1) && break
@@ -483,12 +457,10 @@ function getblockptrs(block::Diagonal, is, js, mat)
     return ptrs
 end
 
-checkblocksize(block, is, js) =
-    (length(is), length(js)) == size(block) || argerror("Block indices size mismatch")
 #endregion
 
 ############################################################################################
-# BlockSparseMatrix API
+# BlockSparseMatrix update!
 #region
 
 function update!(m::BlockSparseMatrix)
@@ -512,7 +484,65 @@ stored(block::AbstractSparseMatrixCSC) = nonzeros(block)
 stored(block::StridedMatrix) = block
 stored(block::Diagonal) = block.diag
 
-Base.eltype(m::BlockSparseMatrix) = eltype(sparse(m))
-
 #endregion
 #endregion top
+
+############################################################################################
+## InverseGreenBlockSparse
+#region
+
+# inverse_green from 0D AbstractHamiltonian + contacts
+function inverse_green(h::AbstractHamiltonian{T,<:Any,0}, contacts) where {T}
+    Σs = selfenergies(contacts)
+    hdim = flatsize(h)
+    haxis = 1:hdim
+    ωblock = MatrixBlock((zero(Complex{T}) * I)(hdim), haxis, haxis)
+    hblock = MatrixBlock(call!_output(h), haxis, haxis)
+    extoffset = hdim
+    # these are indices of contact orbitals within the merged orbital slice
+    unitcinds = unit_contact_inds(contacts)
+    # holds all non-extended orbital indices
+    unitcindsall = unique!(sort!(reduce(vcat, unitcinds)))
+    checkcontactindices(unitcindsall, hdim)
+    solvers = solver.(Σs)
+    blocks = selfenergyblocks!(extoffset, unitcinds, 1, (ωblock, -hblock), solvers...)
+    mat = BlockSparseMatrix(blocks...)
+    source = zeros(Complex{T}, size(mat, 2), length(unitcindsall))
+    return InverseGreenBlockSparse(mat, unitcinds, unitcindsall, source)
+end
+
+# switch from contactinds (relative to merged contact orbslice) to unitcinds (relative
+# to parent unitcell)
+function unit_contact_inds(contacts)
+    orbindsall = orbindices(only(subcells(orbslice(contacts))))
+    unitcinds = [orbindsall[cinds] for cinds in contactinds(contacts)]
+    return unitcinds
+end
+
+selfenergyblocks!(extoffset, contactinds, ci, blocks) = blocks
+
+function selfenergyblocks!(extoffset, contactinds, ci, blocks, s::RegularSelfEnergySolver, ss...)
+    c = contactinds[ci]
+    Σblock = MatrixBlock(call!_output(s), c, c)
+    return selfenergyblocks!(extoffset, contactinds, ci + 1, (blocks..., -Σblock), ss...)
+end
+
+function selfenergyblocks!(extoffset, contactinds, ci, blocks, s::ExtendedSelfEnergySolver, ss...)
+    Σᵣᵣ, Vᵣₑ, gₑₑ⁻¹, Vₑᵣ = shiftedmatblocks(call!_output(s), contactinds[ci], extoffset)
+    extoffset += size(gₑₑ⁻¹, 1)
+    return selfenergyblocks!(extoffset, contactinds, ci + 1, (blocks..., -Σᵣᵣ, -Vᵣₑ, -gₑₑ⁻¹, -Vₑᵣ), ss...)
+end
+
+function shiftedmatblocks((Σᵣᵣ, Vᵣₑ, gₑₑ⁻¹, Vₑᵣ)::Tuple{AbstractArray}, cinds, shift)
+    extsize = size(gₑₑ⁻¹, 1)
+    Σᵣᵣ´ = MatrixBlock(Σᵣᵣ, cinds, cinds)
+    Vᵣₑ´ = MatrixBlock(Vᵣₑ, cinds, shift+1:shift+extsize)
+    Vₑᵣ´ = MatrixBlock(Vₑᵣ, shift+1:shift+extsize, cinds)
+    gₑₑ⁻¹ = MatrixBlock(gₑₑ⁻¹, shift+1:shift+extsize, shift+1:shift+extsize)
+    return Σᵣᵣ´, Vᵣₑ´, gₑₑ⁻¹´, Vₑᵣ´
+end
+
+checkcontactindices(allcontactinds, hdim) = maximum(allcontactinds) <= hdim ||
+    internalerror("InverseGreenBlockSparse: unexpected contact indices beyond Hamiltonian dimension")
+
+#endregion
