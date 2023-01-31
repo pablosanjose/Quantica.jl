@@ -41,7 +41,7 @@ function call!(g::GreenFunction, ω; params...)
     call!(h, (); params...)               # call!_output is wrapped in solver(g) - update it
     Σs = call!(cs, ω; params...)                                        # same for Σs blocks
     cbs = blockstructure(cs)
-    slicer = solver(g)(ω, Σs, cbs)
+    slicer = solver(g)(ω)
     return GreenSolution(h, slicer, Σs, cbs)
 end
 
