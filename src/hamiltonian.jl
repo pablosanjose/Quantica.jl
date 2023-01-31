@@ -100,10 +100,18 @@ end
 # hamiltonian
 #region
 
-hamiltonian(m::AbstractModel = TightbindingModel(); kw...) = lat -> hamiltonian(lat, m; kw...)
+hamiltonian(args...; kw...) = lat -> hamiltonian(lat, args...; kw...)
 
-hamiltonian(lat::Lattice, m::ParametricModel; kw...) =
-    parametric(hamiltonian(lat, basemodel(m); kw...), modifier.(terms(m))...)
+hamiltonian(lat::Lattice, m0::TightbindingModel, m::Modifier, ms::Modifier...; kw...) =
+    parametric(hamiltonian(lat, m0; kw...), m, ms...)
+
+hamiltonian(lat::Lattice, m0::ParametricModel, ms::Modifier...; kw...) =
+    parametric(hamiltonian(lat, basemodel(m0); kw...), modifier.(terms(m0))..., ms...)
+
+hamiltonian(lat::Lattice, m::Modifier, ms::Modifier...; kw...) =
+    parametric(hamiltonian(lat; kw...), m, ms...)
+
+hamiltonian(h::AbstractHamiltonian, m::Modifier, ms::Modifier...) = parametric(h, m, ms...)
 
 # Base.@constprop :aggressive may be needed for type-stable non-Val orbitals?
 function hamiltonian(lat::Lattice{T}, m::TightbindingModel = TightbindingModel(); orbitals = Val(1)) where {T}
@@ -160,8 +168,6 @@ isinblock(i, irng) = i in irng
 ############################################################################################
 # parametric
 #region
-
-parametric(modifiers::Modifier...) = h -> parametric(h, modifiers...)
 
 function parametric(hparent::Hamiltonian)
     modifiers = ()

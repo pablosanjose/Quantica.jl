@@ -463,7 +463,7 @@ function (t::ParametricHoppingTerm{N})(; kw...) where {N}
     return ParametricHoppingTerm(f, t.selector, t.coefficient)
 end
 
-# Model term algebra
+## Model term algebra
 
 Base.:*(x::Number, m::TightbindingModel) = TightbindingModel(x .* terms(m))
 Base.:*(x::Number, m::ParametricModel) = ParametricModel(x * nonparametric(m), x .* terms(m))
@@ -1019,8 +1019,6 @@ end
 
 #region ## API ##
 
-Base.parent(h::ParametricHamiltonian) = h.hparent
-
 hamiltonian(h::ParametricHamiltonian) = h.h
 
 bloch(h::ParametricHamiltonian) = h.h.bloch
@@ -1032,7 +1030,7 @@ modifiers(h::ParametricHamiltonian) = h.modifiers
 pointers(h::ParametricHamiltonian) = h.allptrs
 
 # refers to hparent [not h.h, which is only used as the return of call!(ph, ω; ...)]
-harmonics(h::ParametricHamiltonian) = harmonics(parent(h))
+harmonics(h::ParametricHamiltonian) = harmonics(h.hparent)
 
 blockstructure(h::ParametricHamiltonian) = blockstructure(parent(h))
 
@@ -1042,6 +1040,8 @@ lattice(h::ParametricHamiltonian) = lattice(parent(h))
 
 minimal_callsafe_copy(p::ParametricHamiltonian) = ParametricHamiltonian(
     p.hparent, minimal_callsafe_copy(p.h), p.modifiers, p.allptrs, p.allparams)
+
+Base.parent(h::ParametricHamiltonian) = h.hparent
 
 Base.size(h::ParametricHamiltonian, i...) = size(parent(h), i...)
 
