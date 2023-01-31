@@ -543,9 +543,9 @@ const AppliedModifier = Union{AppliedOnsiteModifier,AppliedHoppingModifier}
 
 selector(m::Modifier) = m.selector
 
-parameters(m::Union{Modifier,AppliedModifier}) = m.f.params
+parameters(m::AbstractModifier) = m.f.params
 
-parametric_function(m::Union{Modifier,AppliedModifier}) = m.f
+parametric_function(m::AbstractModifier) = m.f
 
 pointers(m::AppliedModifier) = m.ptrs
 

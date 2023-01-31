@@ -403,6 +403,38 @@ coordination(h::AbstractHamiltonian) = iszero(nhoppings(h)) ? 0.0 : round(nhoppi
 
 #endregion
 
+############################################################################################
+# unitcell_hamiltonian
+#    Builds the intra-unitcell 0D Hamiltonian
+#region
+
+function unitcell_hamiltonian(h::Hamiltonian)
+    lat = lattice(lattice(h), bravais = ())
+    bs = blockstructure(h)
+    hars = [Harmonic(SVector{0,Int}(), matrix(first(harmonics(h))))]
+    return Hamiltonian(lat, bs, hars)
+end
+
+function unitcell_hamiltonian(ph::ParametricHamiltonian)
+    hparent = unitcell_hamiltonian(parent(ph))
+    h = minimal_callsafe_copy(hparent)
+    ams = unitcell_applied_modifiers.(modifiers(ph))
+    allparams = parameters(ph)
+    allptrs = merge_pointers!([Int[]], ams...)
+    return ParametricHamiltonian(hparent, h, ams, allptrs, allparams)
+end
+
+unitcell_applied_modifiers(m::AppliedOnsiteModifier) = m
+
+function unitcell_applied_modifiers(m::AppliedHoppingModifier)
+    b = blocktype(m)
+    f = parametric_function(m)
+    ptrs = [first(pointers(m))]
+    return AppliedHoppingModifier(b, f, ptrs)
+end
+
+#endregion
+
 # ############################################################################################
 # # store_onsites - AbstractHamiltonian with onsites as structural SparseMatrix elements
 # #    Note: if hasdiagonal, then no-op
