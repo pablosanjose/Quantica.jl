@@ -1031,6 +1031,7 @@ modifiers(h::ParametricHamiltonian) = h.modifiers
 
 pointers(h::ParametricHamiltonian) = h.allptrs
 
+# refers to hparent [not h.h, which is only used as the return of call!(ph, ω; ...)]
 harmonics(h::ParametricHamiltonian) = harmonics(parent(h))
 
 blockstructure(h::ParametricHamiltonian) = blockstructure(parent(h))

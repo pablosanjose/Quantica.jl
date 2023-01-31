@@ -7,7 +7,7 @@
 #region
 
 ############################################################################################
-# SparseMatrix transformations
+# SparseMatrix merged transformations
 # all merged_* functions assume matching structure of sparse matrices
 #region
 

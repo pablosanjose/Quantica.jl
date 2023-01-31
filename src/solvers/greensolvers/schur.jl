@@ -1,7 +1,7 @@
 ############################################################################################
 # SchurFactorsSolver - see scattering.pdf notes for derivations
 #   Auxiliary functions for AppliedSchurSolver
-#   Computes the factors R, Z21 and Z11. The retarded self-energy on the open unitcell
+#   Computes the dense factors R, Z21 and Z11. The retarded self-energy on the open unitcell
 #   surface of a semi-infinite lead extending towards the right reads Σᵣ = R Z21 Z11⁻¹ R'.
 #   Computes also the L, Z21´ and Z11´ for the lead towards the left  Σₗ = L Z21´ Z11´⁻¹ L'.
 #region
@@ -38,7 +38,7 @@ SchurFactorsSolver(::AbstractHamiltonian, _) =
     argerror("The Schur solver requires 1D Hamiltonians with 0 and ±1 as only Bloch Harmonics.")
 
 function SchurFactorsSolver(h::Hamiltonian{T,<:Any,1}, shift) where {T}
-    hm, h0, hp = hybridharmonics(h)
+    hm, h0, hp = nearest_cell_harmonics(h)
     fhm, fh0, fhp = flat(hm), flat(h0), flat(hp)
     L, R, sinds, l_leq_r = left_right_projectors(fhm, fhp)
     R´L´ = [R'; -L']
@@ -60,11 +60,11 @@ function SchurWorkspace{C}((n, d)) where {C}
     return SchurWorkspace(GL, GR, A, B, Z11, Z21, Z11´, Z21´)
 end
 
-function hybridharmonics(h)
+function nearest_cell_harmonics(h)
     for hh in harmonics(h)
         dn = dcell(hh)
         dn == SA[0] || dn == SA[1] || dn == SA[-1] ||
-            argerror("Too many harmonics, try `supercell` to reduce to strictly nearest-neighbors.")
+            argerror("Too many harmonics, try `supercell` to reduce to strictly nearest-cell harmonics.")
     end
     hm, h0, hp = h[-1], h[0], h[1]
     flat(hm) == flat(hp)' ||
