@@ -704,7 +704,7 @@ Base.copy(b::OrbitalBlockStructure{B}) where {B} =
 #endregion
 
 ############################################################################################
-# Special matrices  -  see specialmatrices.jl for methods
+## Special matrices  -  see specialmatrices.jl for methods
 #region
 
   ############################################################################################
@@ -771,14 +771,21 @@ Base.size(h::HybridSparseBlochMatrix, i::Integer...) = size(unflat_unsafe(h), i.
 
 flatsize(h::HybridSparseBlochMatrix) = flatsize(blockstructure(h))
 
+SparseArrays.getcolptr(s::HybridSparseBlochMatrix) = getcolptr(s.unflat)
+SparseArrays.rowvals(s::HybridSparseBlochMatrix) = rowvals(s.unflat)
+SparseArrays.nonzeros(s::HybridSparseBlochMatrix) = nonzeros(s.unflat)
+
 #endregion
 #endregion
 
   ############################################################################################
-  # BlockSparseMatrix
+  # BlockSparseMatrix and BlockMatrix
   #   MatrixBlock : Block within a parent matrix, at a given set of rows and cols
   #   BlockSparseMatrix : SparseMatrixCSC with added blocks that can be updated in place
+  #   BlockMatrix : Matrix with added blocks that can be updated in place
   #region
+
+abstract type AbstractBlockMatrix end
 
 struct MatrixBlock{C<:Number, A<:AbstractMatrix{C},U}
     block::A
@@ -787,10 +794,15 @@ struct MatrixBlock{C<:Number, A<:AbstractMatrix{C},U}
     coefficient::C      # coefficient to apply to block
 end
 
-struct BlockSparseMatrix{C,N,M<:NTuple{N,MatrixBlock}}
+struct BlockSparseMatrix{C,N,M<:NTuple{N,MatrixBlock}} <: AbstractBlockMatrix
     mat::SparseMatrixCSC{C,Int}
     blocks::M
     ptrs::NTuple{N,Vector{Int}}    # nzvals indices for blocks
+end
+
+struct BlockMatrix{C,N,M<:NTuple{N,MatrixBlock}} <: AbstractBlockMatrix
+    mat::Matrix{C}
+    blocks::M
 end
 
 #region ## Constructors ##
@@ -815,6 +827,14 @@ function BlockSparseMatrix(mblocks::MatrixBlock...)
     return BlockSparseMatrix(mat, mblocks, ptrs)
 end
 
+function BlockMatrix(mblocks::MatrixBlock...)
+    nrows = maximum(b -> maximum(b.rows), mblocks; init = 0)
+    ncols = maximum(b -> maximum(b.cols), mblocks; init = 0)
+    C = promote_type(eltype.(blocks)...)
+    mat = zeros(C, nrows, ncols)
+    return BlockMatrix(mat, blocks)
+end
+
 #endregion
 
 #region ## API ##
@@ -827,16 +847,17 @@ blockcols(m::MatrixBlock) = m.cols
 
 coefficient(m::MatrixBlock) = m.coefficient
 
-blocks(m::BlockSparseMatrix) = m.blocks
+pointers(m::BlockSparseMatrix) = m.ptrs
 
-SparseArrays.sparse(b::BlockSparseMatrix) = b.mat
+blocks(m::AbstractBlockMatrix) = m.blocks
 
-Base.size(b::BlockSparseMatrix, i...) = size(b.mat, i...)
+matrix(b::AbstractBlockMatrix) = b.mat
 
+Base.size(b::AbstractBlockMatrix, i...) = size(b.mat, i...)
 Base.size(b::MatrixBlock, i...) = size(blockmat(b), i...)
 
 Base.eltype(b::MatrixBlock) = eltype(blockmat(b))
-Base.eltype(m::BlockSparseMatrix) = eltype(sparse(m))
+Base.eltype(m::AbstractBlockMatrix) = eltype(matrix(m))
 
 Base.:-(b::MatrixBlock) =
     MatrixBlock(blockmat(b), blockrows(b), blockcols(b), -coefficient(b))
@@ -855,7 +876,6 @@ function linewidth(Σ::MatrixBlock)
 end
 
 #endregion
-
 #endregion
 
   ############################################################################################
@@ -1270,6 +1290,7 @@ abstract type RegularSelfEnergySolver <: AbstractSelfEnergySolver end
 abstract type ExtendedSelfEnergySolver <: AbstractSelfEnergySolver end
 
 # Support for call!(s::AbstractSelfEnergySolver; params...) -> AbstractSelfEnergySolver
+## TODO: revisit to see if there is a better/simpler approach
 
 struct WrappedRegularSelfEnergySolver{F} <: RegularSelfEnergySolver
     f::F
@@ -1289,16 +1310,23 @@ call!(s::ExtendedSelfEnergySolver; params...) =
 call!(s::WrappedRegularSelfEnergySolver; params...) = s
 call!(s::WrappedExtendedSelfEnergySolver; params...) = s
 
+# fallback
+minimal_callsafe_copy(s::AbstractSelfEnergySolver) = deepcopy(s)
+
 #endregion
 
 ############################################################################################
 # SelfEnergy - see selfenergy.jl
-#   A producer of Σs(ω)::AbstractMatrix defined over a LatticeSlice
-#   If solver::ExtendedSelfEnergySolver -> four AbstractMatrix blocks over latslice+extended
+#   Wraps an AbstractSelfEnergySolver and a LatticeSlice
+#     -It produces Σs(ω)::AbstractMatrix defined over a LatticeSlice
+#     -If solver::ExtendedSelfEnergySolver -> 3 AbstractMatrix blocks over latslice+extended
+#   AbstractSelfEnergySolvers can be associated with methods of attach(h, sargs...; kw...)
+#   To associate such a method we add a SelfEnergy constructor that will be used by attach
+#     - SelfEnergy(h::AbstractHamiltonian, sargs...; kw...) -> SelfEnergy
 #region
 
 struct SelfEnergy{L,S<:AbstractSelfEnergySolver}
-    solver::S                                # returns AbstractMatrix over latslice
+    solver::S                                # returns AbstractMatrix block(s) over latslice
     latslice::LatticeSlice{L}                # sites on each unitcell with a selfenergy
 end
 
@@ -1311,7 +1339,10 @@ solver(Σ::SelfEnergy) = Σ.solver
 call!(Σ::SelfEnergy; params...) = SelfEnergy(call!(Σ.solver; params...), Σ.latslice)
 call!(Σ::SelfEnergy, ω; params...) = call!(Σ.solver, ω; params...)
 
-minimal_callsafe_copy(Σ::SelfEnergy) = SelfEnergy(deepcopy(Σ.solver), Σ.latslice)
+call!_output(Σ::SelfEnergy) = call!_output(solver(Σ))
+
+minimal_callsafe_copy(Σ::SelfEnergy) =
+    SelfEnergy(minimal_callsafe_copy(Σ.solver), Σ.latslice)
 
 #endregion
 #endregion
@@ -1357,7 +1388,7 @@ struct ContactBlockStructure{L}
 end
 
 struct Contacts{L,S<:NTuple{<:Any,SelfEnergy}}
-    selfenergies::S                       # used to produce MatrixBlock's
+    selfenergies::S                       # used to produce flat AbstractMatrices
     blockstruct::ContactBlockStructure{L} # needed to extract site/subcell/contact blocks
 end
 
@@ -1367,7 +1398,7 @@ function Contacts(oh::OpenHamiltonian)
     Σs = selfenergies(oh)
     Σlatslices = latslice.(Σs)
     h = hamiltonian(oh)
-    bs = contact_block_structure(h, Σlatslices...)  # see selfenergy.jl
+    bs = contact_blockstructure(h, Σlatslices...)  # see selfenergy.jl
     return Contacts(Σs, bs)
 end
 
@@ -1414,17 +1445,15 @@ contactinds(b::ContactBlockStructure, i) = b.contactinds[i]
 call!(c::Contacts; params...) = Contacts(call!.(c.selfenergies; params...), c.blockstruct)
 
 function call!(c::Contacts, ω; params...)
-    cinds = contactinds(c)
-    Σmats = call!.(c.selfenergies, Ref(ω); params...)
-    # cinds is a Vector, and we want a tuple for Σblocks, so we cannot simply broadcast
-    Σblocks = matrixblocks(Σmats, cinds, cinds)
+    Σblocks = selfenergyblocks(c)
+    call!.(c.selfenergies, Ref(ω); params...) # updates matrices in Σblocks
     return Σblocks
 end
 
-matrixblocks(Σ::NTuple{N,<:Any}, is, js) where {N} =
-    ntuple(i -> MatrixBlock(Σ[i], is[i], js[i]), Val(N))
+call!_output(c::Contacts) = selfenergyblocks(c)
 
-minimal_callsafe_copy(s::Contacts) = Contacts(deepcopy.(s.selfenergies), s.blockstruct)
+minimal_callsafe_copy(s::Contacts) =
+    Contacts(minimal_callsafe_copy.(s.selfenergies), s.blockstruct)
 
 #endregion
 
@@ -1467,6 +1496,14 @@ minimal_callsafe_copy(gs::GreenSlicer) = deepcopy(gs)
 
 ############################################################################################
 # Green - see greenfunction.jl
+#  General strategy:
+#  -Contacts: Σs::[Selfenergy...] + contactBS -> call! produces MatrixBlocks for Σs
+#      -SelfEnergy: latslice + solver -> call! produces flat matrices (one or three)
+#  -GreenFunction: ham + c::Contacts + an AppliedGreenSolver = apply(GS.AbsSolver, ham, c)
+#      -call!(::GreenFunction, ω; params...) -> call! ham + Contacts, returns GreenSolution
+#      -AppliedGreenSolver: usually wraps the SelfEnergy flat matrices. call! -> GreenSlicer
+#  -GreenSolution: ham, slicer, Σblocks, contactBS
+#      -GreenSlicer: implements getindex to build g(ω)[rows, cols]
 #region
 
 struct GreenFunction{T,E,L,S<:AppliedGreenSolver,H<:AbstractHamiltonian{T,E,L},C<:Contacts}
@@ -1494,13 +1531,6 @@ struct GreenFunctionSlice{T,E,L,G<:GreenFunction{T,E,L},R,C}
     rows::R
     cols::C
 end
-
-# #region ## Constructors ##
-
-# GreenFunction(oh::OpenHamiltonian, as::AppliedGreenSolver) =
-#     GreenFunction(hamiltonian(oh), as, Contacts(oh))
-
-# #endregion
 
 #region ## API ##
 

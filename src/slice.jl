@@ -26,6 +26,8 @@ function Base.getindex(lat::Lattice, as::AppliedSiteSelector)
     return latslice
 end
 
+Base.getindex(l::Lattice, c::CellSites) = LatticeSlice(l, [c])
+
 Base.getindex(ls::LatticeSlice; kw...) = getindex(ls, siteselector(; kw...))
 
 Base.getindex(ls::LatticeSlice, ss::SiteSelector) = getindex(ls, apply(ss, parent(ls)))

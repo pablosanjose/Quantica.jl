@@ -68,6 +68,113 @@ end
 #endregion
 
 ############################################################################################
+# SparseMatrixCSC tools
+# all merged_* functions assume matching structure of sparse matrices
+#region
+
+stored_rows(m::AbstractSparseMatrixCSC) = unique!(sort!(copy(rowvals(m))))
+
+function stored_cols(m::AbstractSparseMatrixCSC)
+    cols = Int[]
+    for col in axes(m, 2)
+        isempty(nzrange(m, col)) || push!(cols, col)
+    end
+    return cols
+end
+
+# merge several sparse matrices onto the first using only structural zeros
+function merge_sparse(mats, ::Type{B} = eltype(first(mats))) where {B}
+    mat0 = first(mats)
+    nrows, ncols = size(mat0)
+    nrows == ncols || throw(ArgumentError("Internal error: matrix not square"))
+    nnzguess = sum(mat -> nnz(mat), mats)
+    collector = CSC{B}(ncols, nnzguess)
+    for col in 1:ncols
+        for (n, mat) in enumerate(mats)
+            vals = nonzeros(mat)
+            rows = rowvals(mat)
+            for p in nzrange(mat, col)
+                val = zero(B)
+                row = rows[p]
+                pushtocolumn!(collector, row, val, false) # skips repeated rows
+            end
+        end
+        finalizecolumn!(collector)
+    end
+    matrix = sparse(collector, ncols, ncols)
+    return matrix
+end
+
+function merged_mul!(C::SparseMatrixCSC{<:Number}, A::HybridSparseBlochMatrix, b::Number, α = 1, β = 0)
+    bs = blockstructure(A)
+    if needs_flat_sync(A)
+        merged_mul!(C, bs, unflat(A), b, α, β)
+    else
+        merged_mul!(C, bs, flat(A), b, α, β)
+    end
+    return C
+end
+
+function merged_mul!(C::SparseMatrixCSC{<:Number}, ::OrbitalBlockStructure, A::SparseMatrixCSC{B}, b::Number, α = 1, β = 0) where {B<:Complex}
+    nzA = nonzeros(A)
+    nzC = nonzeros(C)
+    αb = α * b
+    if length(nzA) == length(nzC)  # assume idential structure (C has merged structure)
+        @. nzC = muladd(αb, nzA, β * nzC)
+    else
+        # A has less elements than C
+        for col in axes(A, 2), p in nzrange(A, col)
+            row = rowvals(A)[p]
+            for p´ in nzrange(C, col)
+                row´ = rowvals(C)[p´]
+                if row == row´
+                    nzC[p´] = muladd(αb, nzA[p], β * nzC[p´])
+                    break
+                end
+            end
+        end
+    end
+    return C
+end
+
+function merged_mul!(C::SparseMatrixCSC{<:Number}, bs::OrbitalBlockStructure{B}, A::SparseMatrixCSC{B}, b::Number, α = 1, β = 0) where {B<:MatrixElementNonscalarType}
+    colsA = axes(A, 2)
+    rowsA = rowvals(A)
+    valsA = nonzeros(A)
+    rowsC = rowvals(C)
+    valsC = nonzeros(C)
+    αb = α * b
+    colC = 1
+    for colA in colsA
+        N = blocksize(bs, colA)
+        for colN in 1:N
+            ptrsA, ptrsC = nzrange(A, colA), nzrange(C, colC)
+            ptrA, ptrC = first(ptrsA), first(ptrsC)
+            while ptrA in ptrsA && ptrC in ptrsC
+                rowA, rowC = rowsA[ptrA], rowsC[ptrC]
+                rngflat = flatrange(bs, rowA)
+                rowAflat, N´ = first(rngflat), length(rngflat)
+                if rowAflat == rowC
+                    valA = valsA[ptrA]
+                    for rowN in 1:N´
+                        valsC[ptrC] = muladd(αb, valA[rowN, colN], β * valsC[ptrC])
+                        ptrC += 1
+                    end
+                elseif rowAflat > rowC
+                    ptrC += N´
+                else
+                    ptrA += 1
+                end
+            end
+            colC += 1
+        end
+    end
+    return C
+end
+
+#endregion
+
+############################################################################################
 # Dynamic package loader
 #   This is in global Quantica scope to avoid name collisions
 #   We also `import` instead of `using` to avoid collisions between several backends

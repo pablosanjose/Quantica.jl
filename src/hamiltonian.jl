@@ -411,7 +411,8 @@ coordination(h::AbstractHamiltonian) = iszero(nhoppings(h)) ? 0.0 : round(nhoppi
 
 ############################################################################################
 # unitcell_hamiltonian
-#    Builds the intra-unitcell 0D Hamiltonian
+#    Builds the intra-unitcell 0D Hamiltonian. If parent is p::ParametricHamiltonian, the
+#    obtained uh::Hamiltonian is aliased with p, so call!(p,...) also updates uh
 #region
 
 function unitcell_hamiltonian(h::Hamiltonian)
@@ -421,23 +422,7 @@ function unitcell_hamiltonian(h::Hamiltonian)
     return Hamiltonian(lat, bs, hars)
 end
 
-function unitcell_hamiltonian(ph::ParametricHamiltonian)
-    hparent = unitcell_hamiltonian(parent(ph))
-    h = minimal_callsafe_copy(hparent)
-    ams = unitcell_applied_modifiers.(modifiers(ph))
-    allparams = parameters(ph)
-    allptrs = merge_pointers!([Int[]], ams...)
-    return ParametricHamiltonian(hparent, h, ams, allptrs, allparams)
-end
-
-unitcell_applied_modifiers(m::AppliedOnsiteModifier) = m
-
-function unitcell_applied_modifiers(m::AppliedHoppingModifier)
-    b = blocktype(m)
-    f = parametric_function(m)
-    ptrs = [first(pointers(m))]
-    return AppliedHoppingModifier(b, f, ptrs)
-end
+unitcell_hamiltonian(ph::ParametricHamiltonian) = unitcell_hamiltonian(hamiltonian(ph))
 
 #endregion
 

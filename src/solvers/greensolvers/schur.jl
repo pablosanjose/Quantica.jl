@@ -1,9 +1,9 @@
 ############################################################################################
 # SchurFactorsSolver - see scattering.pdf notes for derivations
-#   Auxiliary functions for AppliedSchurSolver
-#   Computes the dense factors R, Z21 and Z11. The retarded self-energy on the open unitcell
-#   surface of a semi-infinite lead extending towards the right reads Σᵣ = R Z21 Z11⁻¹ R'.
-#   Computes also the L, Z21´ and Z11´ for the lead towards the left  Σₗ = L Z21´ Z11´⁻¹ L'.
+#   Auxiliary functions for AppliedSchurGreenSolverSolver
+#   Computes dense factors PR*R*Z21, Z11 and R'*PR'. The retarded self-energy on the open
+#   unitcell surface of a semi-infinite rightward lead reads Σᵣ = PR R Z21 Z11⁻¹ R' PR'
+#   Computes also the leftward PL*L*Z21´, Z11´, L'*PL', with  Σₗ = PL L Z21´ Z11´⁻¹ L' PL'
 #region
 
 struct SchurWorkspace{C}
@@ -15,6 +15,10 @@ struct SchurWorkspace{C}
     Z21::Matrix{C}
     Z11´::Matrix{C}
     Z21´::Matrix{C}
+    LD::Matrix{C}
+    DL::Matrix{C}
+    RD::Matrix{C}
+    DR::Matrix{C}
 end
 
 struct SchurFactorsSolver{T,B}
@@ -25,10 +29,12 @@ struct SchurFactorsSolver{T,B}
     l_leq_r::Bool                                     # whether l <= r (left and right surface dims)
     iG::SparseMatrixCSC{Complex{T},Int}               # to store iG = ω - h0 - Σₐᵤₓ
     ptrs::Tuple{Vector{Int},Vector{Int},Vector{Int}}  # iG ptrs for h0 nzvals, diagonal and Σₐᵤₓ surface
-    sinds::Vector{Int}                                # site indices on the smalles surface (left for l<=r, right for l>r)
-    L::Matrix{Complex{T}}                             # l<=r ? PL : PL*H' === hp PR
-    R::Matrix{Complex{T}}                             # l<=r ? PR*H === hm PL : PR
-    R´L´::Matrix{Complex{T}}  # [R'; -L']
+    linds::Vector{Int}                                # orbital indices on left surface
+    rinds::Vector{Int}                                # orbital indices on right surface
+    sinds::Vector{Int}                                # orbital indices on the smallest surface (left for l<=r, right for l>r)
+    L::Matrix{Complex{T}}                             # l<=r ? PL : PL*H' === hp PR  (n × min(l,r))
+    R::Matrix{Complex{T}}                             # l<=r ? PR*H === hm PL : PR   (n × min(l,r))
+    R´L´::Matrix{Complex{T}}                          # [R'; -L']. L and R must be dense for iG \ (L,R)
     tmp::SchurWorkspace{Complex{T}}
 end
 
@@ -37,18 +43,19 @@ end
 SchurFactorsSolver(::AbstractHamiltonian, _) =
     argerror("The Schur solver requires 1D Hamiltonians with 0 and ±1 as only Bloch Harmonics.")
 
-function SchurFactorsSolver(h::Hamiltonian{T,<:Any,1}, shift) where {T}
+function SchurFactorsSolver(h::Hamiltonian{T,<:Any,1}, shift = one(Complex{T})) where {T}
     hm, h0, hp = nearest_cell_harmonics(h)
     fhm, fh0, fhp = flat(hm), flat(h0), flat(hp)
-    L, R, sinds, l_leq_r = left_right_projectors(fhm, fhp)
+    # h*'s may be updated after flat but only fh* structure matters
+    linds, rinds, L, R, sinds, l_leq_r = left_right_projectors(fhm, fhp)
     R´L´ = [R'; -L']
     iG, (p, pd) = store_diagonal_ptrs(fh0)
     ptrs = (p, pd, pd[sinds])
-    workspace = SchurWorkspace{Complex{T}}(size(L))
-    return SchurFactorsSolver(shift, hm, h0, hp, l_leq_r, iG, ptrs, sinds, L, R, R´L´, workspace)
+    workspace = SchurWorkspace{Complex{T}}(size(L), length(linds), length(rinds))
+    return SchurFactorsSolver(shift, hm, h0, hp, l_leq_r, iG, ptrs, linds, rinds, sinds, L, R, R´L´, workspace)
 end
 
-function SchurWorkspace{C}((n, d)) where {C}
+function SchurWorkspace{C}((n, d), l, r) where {C}
     GL = Matrix{C}(undef, n, d)
     GR = Matrix{C}(undef, n, d)
     A = Matrix{C}(undef, 2d, 2d)
@@ -57,7 +64,11 @@ function SchurWorkspace{C}((n, d)) where {C}
     Z21 = Matrix{C}(undef, d, d)
     Z11´ = Matrix{C}(undef, d, d)
     Z21´ = Matrix{C}(undef, d, d)
-    return SchurWorkspace(GL, GR, A, B, Z11, Z21, Z11´, Z21´)
+    LD = Matrix{C}(undef, l, d)
+    DL = Matrix{C}(undef, d, l)
+    RD = Matrix{C}(undef, r, d)
+    DR = Matrix{C}(undef, d, r)
+    return SchurWorkspace(GL, GR, A, B, Z11, Z21, Z11´, Z21´, LD, DL, RD, DR)
 end
 
 function nearest_cell_harmonics(h)
@@ -74,11 +85,8 @@ end
 
 # hp = L*R' = PL H' PR'. We assume hm = hp'
 function left_right_projectors(hm::SparseMatrixCSC, hp::SparseMatrixCSC)
-    linds = unique!(sort!(copy(rowvals(hp))))
-    rinds = Int[]
-    for col in axes(hp, 2)
-        isempty(nzrange(hp, col)) || push!(rinds, col)
-    end
+    linds = stored_cols(hm)
+    rinds = stored_cols(hp)
     # dense projectors
     o = one(eltype(hp)) * I
     allrows = 1:size(hp,1)
@@ -94,7 +102,32 @@ function left_right_projectors(hm::SparseMatrixCSC, hp::SparseMatrixCSC)
         R = PR
         L = Matrix(hp[:, rinds])  # L = PL H' = hp PR
     end
-    return L, R, sinds, l_leq_r
+    return linds, rinds, L, R, sinds, l_leq_r
+end
+
+# Build a new sparse matrix mat´ with same structure as mat plus the diagonal
+# return also: (1) ptrs to mat´ for each nonzero in mat, (2) diagonal ptrs in mat´
+function store_diagonal_ptrs(mat::SparseMatrixCSC{T}) where {T}
+    # same structure as mat + I, but avoiding accidental cancellations
+    # (note that the nonzeros of G⁻¹ = mat´ will be overwritten by update_iG! before use)
+    mat´ = mat + Diagonal(iszero.(diag(mat)))
+    pmat, pdiag = Int[], Int[]
+    rows, rows´ = rowvals(mat), rowvals(mat´)
+    for col in axes(mat´, 2)
+        ptrs = nzrange(mat, col)
+        ptrs´ = nzrange(mat´, col)
+        p, p´ = first(ptrs), first(ptrs´)
+        while p´ in ptrs´
+            row´ = rows´[p´]
+            row´ == col && push!(pdiag, p´)
+            if p in ptrs && row´ == rows[p]
+                push!(pmat, p´)
+                p += 1
+            end
+            p´ += 1
+        end
+    end
+    return mat´, (pmat, pdiag)
 end
 
 #endregion
@@ -103,8 +136,8 @@ end
 
 ## Call API ##
 
-# # minimal_callsafe_copy should copy anything that may mutate with call!(...; params...) and any
-# # object in the output of call!(::SchurFactorsSolver, ...; params...)
+# # minimal_callsafe_copy should copy anything that may mutate with call!(...; params...) and
+# # any object in the output of call!(::SchurFactorsSolver, ...; params...)
 # function minimal_callsafe_copy(s::SchurFactorsSolver)
 #     hm, h0, hp = minimal_callsafe_copy(s.hm), minimal_callsafe_copy(s.h0), minimal_callsafe_copy(s.hp)
 #     L, R = copy(s.L), copy(s.R)
@@ -119,12 +152,13 @@ end
 #     return SchurWorkspace(w.GL, w.GR, w.A, w.B, Z11, Z21, Z11´, Z21´)
 # end
 
-(s::SchurFactorsSolver)(ω) = deepcopy(call!(s, ω))
+call!_output(s::SchurFactorsSolver) =
+    (s.tmp.RD, s.tmp.Z11, s.tmp.DR), (s.tmp.LD, s.tmp.Z11´, s.DL)
 
 function call!(s::SchurFactorsSolver, ω)
     R, Z11, Z21, L, Z11´, Z21´ = s.R, s.tmp.Z11, s.tmp.Z21, s.L, s.tmp.Z11´, s.tmp.Z21´
-    update_LR!(s)
-    update_iG!(s, ω)
+    update_LR!(s)     # We must update L, R in case a parametric parent has been call!-ed
+    update_iG!(s, ω)  # also iG = ω - h0 + iΩP'P
 
     A, B = pencilAB!(s)
     sch = schur!(A, B)
@@ -144,7 +178,16 @@ function call!(s::SchurFactorsSolver, ω)
     copy!(Z11´, view(sch.Z, 1:r, 1:sum(whichmodes)))
     copy!(Z21´, view(sch.Z, r+1:2r, 1:sum(whichmodes)))
 
-    return (R, Z11, Z21), (L, Z11´, Z21´)
+    RZ21, LZ21´, LD, DL, RD, DR = s.tmp.GR, s.tmp.GL, s.tmp.LD, s.tmp.DL, s.tmp.RD, s.tmp.DR
+    linds, rinds = s.linds, s.rinds
+    mul!(RZ21, R, Z21)
+    PR_R_Z21 = copy!(RD, view(RZ21, rinds, :))
+    R´_PR = copy!(DR, view(R', :, rinds))
+    mul!(LZ21´, L, Z21´)
+    PL_L_Z21´ = copy!(LD, view(LZ21´, linds, :))
+    L´_PL = copy!(DL, view(L', :, linds))
+
+    return (PR_R_Z21, Z11, R´_PR), (PL_L_Z21´, Z11´, L´_PL)
 end
 
 # need this barrier for type-stability (sch.α and sch.β are finicky)
@@ -193,13 +236,15 @@ function pencilAB!(s::SchurFactorsSolver{T}) where {T}
     return A, B
 end
 
-# updates L and R from the present hm and hp
+# updates L and R from the current hm and hp
 function update_LR!(s)
     d = size(s.L, 2)
     if s.l_leq_r
+        # slicing is faster than a view of sparse
         copy!(s.R, flat(s.hm)[:, s.sinds])
         view(s.R´L´, 1:d, :) .= s.R'
     else
+        # slicing is faster than a view of sparse
         copy!(s.L, flat(s.hp)[:, s.sinds])
         view(s.R´L´, d+1:2d, :) .= .- s.L'
     end
@@ -228,105 +273,110 @@ end
 #endregion
 
 ############################################################################################
-# DecoupledSchurSolver
+# SelfEnergySchurSolver <: ExtendedSelfEnergySolver <: AbstractSelfEnergySolver
 #region
 
-struct DecoupledSchurSolver{T} <: DecoupledGreenSolver
-    R::Matrix{Complex{T}}
-    Z11::Matrix{Complex{T}}
-    Z21::Matrix{Complex{T}}
-    L::Matrix{Complex{T}}
-    Z11´::Matrix{Complex{T}}
-    Z21´::Matrix{Complex{T}}
-    boundary::T
+struct SelfEnergySchurSolver{T,B,M<:BlockSparseMatrix} <: ExtendedSelfEnergySolver
+    fsolver::SchurFactorsSolver{T,B}
+    leftside::Bool
 end
 
 #region ## Constructors ##
 
-DecoupledSchurSolver(((R, Z11, Z21), (L, Z11´, Z21´))::Tuple, boundary)=
-    DecoupledSchurSolver(R, Z11, Z21, L, Z11´, Z21´, boundary)
+SelfEnergySchurSolver(fsolver::SchurFactorsSolver, side::Symbol) =
+    SelfEnergySchurSolver(fsolver, isleftside(side))
+
+function isleftside(side)
+    if side == :R
+        return false
+    elseif side == :L
+        return true
+    else
+        argerror("Unexpeced side = $side in SelfEnergySchurSolver. Only :L and :R are allowed.")
+    end
+end
 
 #endregion
 
 #region ## API ##
 
-fullsize(s::DecoupledSchurSolver) = size(s.R, 1)
-
-deflatedsize(s::DecoupledSchurSolver) = size(s.R, 2)
-
-function (s::DecoupledSchurSolver)(cell, cell´, inds = 1:fullsize(s), inds´ = 1:fullsize(s))
-
+# This solver produces two solutions (L/R) for the price of one. We can opt out of calling
+# it if we know it has already been called, so the solution is already in its call!_output
+function call!(s::SelfEnergySchurSolver, ω;
+               skipsolve_internal = false, params...)
+    fsolver = s.fsolver
+    Rfactors, Lfactors = skipsolve_internal ? call!_output(fsolver) : call!(fsolver, ω)
+    return ifelse(leftside_internal, Lfactors, Rfactors)
 end
 
 #endregion
 
-#endregion
+#endregion top
 
 ############################################################################################
-# Schur and AppliedSchurSolver
+# AppliedSchurGreenSolverSolver
 #region
 
-struct Schur{T<:AbstractFloat} <: AbstractGreenSolver
-    shift::T
+struct AppliedSchurGreenSolver{T,G<:GreenFunction{T,<:Any,0}} <: AppliedGreenSolver
     boundary::T
+    gR::G           # GreenFunction for unitcell with ΣR
+    gL::G           # GreenFunction for unitcell with ΣL
+    g∞::G           # GreenFunction for unitcell with ΣR + ΣL
 end
-
-struct AppliedSchurSolver{T<:AbstractFloat,E,B,H<:AbstractHamiltonian1D{T,E,B}} <: AppliedGreenSolver
-    factors::SchurFactorsSolver{T,B}
-    h::H
-    boundary::T
-end
-
-#region ## Constructors ##
-
-Schur(; shift = 1.0, boundary = Inf) = Schur(shift, boundary)
-
-#endregion
 
 #region ## apply ##
 
-function apply(s::Schur, h::AbstractHamiltonian1D)
+function apply(s::GS.Schur, h::AbstractHamiltonian1D, contacts::Contacts)
+    h´ = hamiltonian(h)
+    fsolver = SchurFactorsSolver(h´, s.shift)
+    ΣR_solver = SelfEnergySchurSolver(fsolver, :R)
+    ΣL_solver = SelfEnergySchurSolver(fsolver, :L)
+    h0 = unitcell_hamiltonian(h)
+    rsites = stored_cols(unflat(h[1]))
+    lsites = stored_cols(unflat(h[-1]))
+    latslice_l = lattice(h0)[cellsites((), lsites)]
+    latslice_r = lattice(h0)[cellsites((), rsites)]
+    ΣL = SelfEnergy(ΣL_solver, latslice_l)
+    ΣR = SelfEnergy(ΣR_solver, latslice_r)
+    ohR = attach(h0, ΣR)
+    gR = greenfunction(ohR, GS.SparseLU())
+    ohL = attach(h0, ΣL)
+    gL = greenfunction(ohL, GS.SparseLU())
+    oh∞ = attach(ohL, ΣR)
+    g∞ = greenfunction(oh∞, GS.SparseLU())
     boundary = round(only(s.boundary))
-    h´ = hamiltonian(h)  # to extract the Hamiltonian if h isa ParametricHamiltonian
-    factors = SchurFactorsSolver(h´, s.shift)
-    return AppliedSchurSolver(factors, h, boundary)
+    return AppliedSchurGreenSolver(boundary, gR, gL, g∞)
 end
 
 #endregion
 
 #region ## call API ##
 
-# function minimal_callsafe_copy(s::AppliedSchurSolver)
-#     factors = minimal_callsafe_copy(s.factors)
-#     h = minimal_callsafe_copy(s.h)
-#     return AppliedSchurSolver(factors, h, s.boundary)
-# end
+minimal_callsafe_copy(s::AppliedSchurGreenSolver) = AppliedSchurGreenSolver(
+    s.boundary, minimal_callsafe_copy.((s.gr, s.gl, s.g∞))...)
 
-function call!(s::AppliedSchurSolver; params...)
-    h´ = call!(s.h; params...)
-    # the h wrapped into s.factors should be === h´, see apply above
-    return AppliedSchurSolver(s.factors, h´, s.boundary)
-end
-
-function call!(s::AppliedSchurSolver, ω, Σs; params...)
-    call!(s; params...)
-    factors = call!(s.factors, ω)
-    g0solver = DecoupledSchurSolver(factors, s.boundary)
-    return GreenSolution(g0solver, Σs)
-end
-
-# WIP placeholder for no Σs
-build_gΣT(s::DecoupledSchurSolver{T}, ω, Σs::Tuple{}; params...) where {T} =
-    Complex{T}[;;], Complex{T}[;;], Complex{T}[;;]
-
-# Semiinifinite:
-# Gₙₘ = (Ghⁿ⁻ᵐ - GhⁿGh⁻ᵐ)G∞₀₀ = G∞ₙₘ - GhⁿG∞₀ₘ
-# Gₙₘ = G∞ₙₘ - G₁₁L(R'G₁₁L)ⁿ⁻¹ R'G∞₀ₘ       for n > 1
-# Gₙₘ = G∞ₙₘ - G₋₁₋₁R(L'G₋₁₋₁R)⁻ⁿ⁻¹L'G∞₀ₘ   for n < -1
-function green_schur_semi!(gblock, ((R, Z11, Z21), (L, Z11´, Z21´)), (xi, indsi), (xj, indsj))
-    # WIP
+function (s::AppliedSchurGreenSolver)(ω, Σblocks, cblockstruct)
+    gRω = call!(s.gR, ω)
+    gLω = call!(s.gL, ω; skipsolve_internal = true) # already solved in gRω (aliased)
+    g∞ω = call!(s.gL, ω; skipsolve_internal = true) # already solved in gRω (aliased)
+    g0 = SchurGreenSlicer(gRω, gLω, g∞ω, s.boundary)
+    slicer = TMatrixSlicer(g0, Σblocks, cblockstruct)
+    return slicer
 end
 
 #endregion
-#endregion
 
+############################################################################################
+# SchurGreenSlicer
+#   Slicer for a 1D lead, with or without a single boundary
+#   Semiinifinite:
+#       Gₙₘ = (Ghⁿ⁻ᵐ - GhⁿGh⁻ᵐ)G∞₀₀ = G∞ₙₘ - GhⁿG∞₀ₘ
+#       Gₙₘ = G∞ₙₘ - G₁₁L(R'G₁₁L)ⁿ⁻¹ R'G∞₀ₘ       for n > 1
+#       Gₙₘ = G∞ₙₘ - G₋₁₋₁R(L'G₋₁₋₁R)⁻ⁿ⁻¹L'G∞₀ₘ   for n < -1
+#region
+
+struct SchurGreenSlicer{T}  <: GreenSlicer
+    
+end
+
+#endregion

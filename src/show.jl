@@ -264,15 +264,6 @@ Base.summary(g::GreenSolution{T,E,L,S}) where {T,E,L,S} =
 
 #endregion
 
-############################################################################################
-# HybridSparseBlochMatrix
-#region
-
-Base.show(io::IO, m::MIME"text/plain", s::HybridSparseBlochMatrix) =
-    show(io, m, unflat(s))
-
-#endregion
-
 # ############################################################################################
 # # Coupler
 # #region

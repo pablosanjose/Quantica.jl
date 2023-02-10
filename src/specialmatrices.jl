@@ -3,138 +3,6 @@
 ############################################################################################
 
 ############################################################################################
-## SparseMatrixCSC tools
-#region
-
-############################################################################################
-# SparseMatrix merged transformations
-# all merged_* functions assume matching structure of sparse matrices
-#region
-
-# merge several sparse matrices onto the first using only structural zeros
-function merge_sparse(mats, ::Type{B} = eltype(first(mats))) where {B}
-    mat0 = first(mats)
-    nrows, ncols = size(mat0)
-    nrows == ncols || throw(ArgumentError("Internal error: matrix not square"))
-    nnzguess = sum(mat -> nnz(mat), mats)
-    collector = CSC{B}(ncols, nnzguess)
-    for col in 1:ncols
-        for (n, mat) in enumerate(mats)
-            vals = nonzeros(mat)
-            rows = rowvals(mat)
-            for p in nzrange(mat, col)
-                val = zero(B)
-                row = rows[p]
-                pushtocolumn!(collector, row, val, false) # skips repeated rows
-            end
-        end
-        finalizecolumn!(collector)
-    end
-    matrix = sparse(collector, ncols, ncols)
-    return matrix
-end
-
-function merged_mul!(C::SparseMatrixCSC{<:Number}, A::HybridSparseBlochMatrix, b::Number, α = 1, β = 0)
-    bs = blockstructure(A)
-    if needs_flat_sync(A)
-        merged_mul!(C, bs, unflat(A), b, α, β)
-    else
-        merged_mul!(C, bs, flat(A), b, α, β)
-    end
-    return C
-end
-
-function merged_mul!(C::SparseMatrixCSC{<:Number}, ::OrbitalBlockStructure, A::SparseMatrixCSC{B}, b::Number, α = 1, β = 0) where {B<:Complex}
-    nzA = nonzeros(A)
-    nzC = nonzeros(C)
-    αb = α * b
-    if length(nzA) == length(nzC)  # assume idential structure (C has merged structure)
-        @. nzC = muladd(αb, nzA, β * nzC)
-    else
-        # A has less elements than C
-        for col in axes(A, 2), p in nzrange(A, col)
-            row = rowvals(A)[p]
-            for p´ in nzrange(C, col)
-                row´ = rowvals(C)[p´]
-                if row == row´
-                    nzC[p´] = muladd(αb, nzA[p], β * nzC[p´])
-                    break
-                end
-            end
-        end
-    end
-    return C
-end
-
-function merged_mul!(C::SparseMatrixCSC{<:Number}, bs::OrbitalBlockStructure{B}, A::SparseMatrixCSC{B}, b::Number, α = 1, β = 0) where {B<:MatrixElementNonscalarType}
-    colsA = axes(A, 2)
-    rowsA = rowvals(A)
-    valsA = nonzeros(A)
-    rowsC = rowvals(C)
-    valsC = nonzeros(C)
-    αb = α * b
-    colC = 1
-    for colA in colsA
-        N = blocksize(bs, colA)
-        for colN in 1:N
-            ptrsA, ptrsC = nzrange(A, colA), nzrange(C, colC)
-            ptrA, ptrC = first(ptrsA), first(ptrsC)
-            while ptrA in ptrsA && ptrC in ptrsC
-                rowA, rowC = rowsA[ptrA], rowsC[ptrC]
-                rngflat = flatrange(bs, rowA)
-                rowAflat, N´ = first(rngflat), length(rngflat)
-                if rowAflat == rowC
-                    valA = valsA[ptrA]
-                    for rowN in 1:N´
-                        valsC[ptrC] = muladd(αb, valA[rowN, colN], β * valsC[ptrC])
-                        ptrC += 1
-                    end
-                elseif rowAflat > rowC
-                    ptrC += N´
-                else
-                    ptrA += 1
-                end
-            end
-            colC += 1
-        end
-    end
-    return C
-end
-
-#endregion
-
-############################################################################################
-# SparseMatrix injection and pointers
-#region
-
-# Build a new sparse matrix mat´ with same structure as mat plus the diagonal
-# return also: (1) ptrs to mat´ for each nonzero in mat, (2) diagonal ptrs in mat´
-function store_diagonal_ptrs(mat::SparseMatrixCSC{T}) where {T}
-    # like mat + I, but avoiding accidental cancellations
-    mat´ = mat + Diagonal(iszero.(diag(s)))
-    pmat, pdiag = Int[], Int[]
-    rows, rows´ = rowvals(mat), rowvals(mat´)
-    for col in axes(mat´, 2)
-        ptrs = nzrange(mat, col)
-        ptrs´ = nzrange(mat´, col)
-        p, p´ = first(ptrs), first(ptrs´)
-        while p´ in ptrs´
-            row´ = rows´[p´]
-            row´ == col && push!(pdiag, p´)
-            if p in ptrs && row´ == rows[p]
-                push!(pmat, p´)
-                p += 1
-            end
-            p´ += 1
-        end
-    end
-    return mat´, (pmat, pdiag)
-end
-
-#endregion
-#endregion top
-
-############################################################################################
 ## HybridSparseBlochMatrix
 #region
 
@@ -464,17 +332,17 @@ end
 #region
 
 function update!(m::BlockSparseMatrix)
-    fill!(nonzeros(m.mat), 0)
+    fill!(nonzeros(matrix(m)), 0)
     addblocks!(m)
     return m
 end
 
 function addblocks!(m::BlockSparseMatrix)
-    for (mblock, ptrs) in zip(m.blocks, m.ptrs)
+    for (mblock, ptrs) in zip(blocks(m), pointers(m))
         mat = blockmat(mblock)
         coef = coefficient(mblock)
         for (x, ptr) in zip(stored(mat), ptrs)
-            nonzeros(m.mat)[ptr] += coef * x
+            nonzeros(matrix(m))[ptr] += coef * x
         end
     end
     return m
@@ -483,6 +351,29 @@ end
 stored(block::AbstractSparseMatrixCSC) = nonzeros(block)
 stored(block::StridedMatrix) = block
 stored(block::Diagonal) = block.diag
+
+#endregion
+
+############################################################################################
+# BlockMatrix update!
+#region
+
+function update!(m::BlockMatrix)
+    fill!(matrix(m), 0)
+    addblocks!(m)
+    return m
+end
+
+function addblocks!(m::BlockMatrix)
+    mat = matrix(m)
+    for mblock in blocks(m)
+        bmat = blockmat(mblock)
+        coef = coefficient(mblock)
+        vmat = view(mat, blockrows(mblock), blockcols(mblock))
+        vmat .+= coef .* bmat
+    end
+    return m
+end
 
 #endregion
 #endregion top
@@ -505,7 +396,7 @@ function inverse_green(h::AbstractHamiltonian{T,<:Any,0}, contacts) where {T}
     unitcindsall = unique!(sort!(reduce(vcat, unitcinds)))
     checkcontactindices(unitcindsall, hdim)
     solvers = solver.(Σs)
-    blocks = selfenergyblocks!(extoffset, unitcinds, 1, (ωblock, -hblock), solvers...)
+    blocks = selfenergyblocks(extoffset, unitcinds, 1, (ωblock, -hblock), solvers...)
     mat = BlockSparseMatrix(blocks...)
     source = zeros(Complex{T}, size(mat, 2), length(unitcindsall))
     return InverseGreenBlockSparse(mat, unitcinds, unitcindsall, source)
@@ -517,29 +408,6 @@ function unit_contact_inds(contacts)
     orbindsall = orbindices(only(subcells(orbslice(contacts))))
     unitcinds = [orbindsall[cinds] for cinds in contactinds(contacts)]
     return unitcinds
-end
-
-selfenergyblocks!(extoffset, contactinds, ci, blocks) = blocks
-
-function selfenergyblocks!(extoffset, contactinds, ci, blocks, s::RegularSelfEnergySolver, ss...)
-    c = contactinds[ci]
-    Σblock = MatrixBlock(call!_output(s), c, c)
-    return selfenergyblocks!(extoffset, contactinds, ci + 1, (blocks..., -Σblock), ss...)
-end
-
-function selfenergyblocks!(extoffset, contactinds, ci, blocks, s::ExtendedSelfEnergySolver, ss...)
-    Σᵣᵣ, Vᵣₑ, gₑₑ⁻¹, Vₑᵣ = shiftedmatblocks(call!_output(s), contactinds[ci], extoffset)
-    extoffset += size(gₑₑ⁻¹, 1)
-    return selfenergyblocks!(extoffset, contactinds, ci + 1, (blocks..., -Σᵣᵣ, -Vᵣₑ, -gₑₑ⁻¹, -Vₑᵣ), ss...)
-end
-
-function shiftedmatblocks((Σᵣᵣ, Vᵣₑ, gₑₑ⁻¹, Vₑᵣ)::Tuple{AbstractArray}, cinds, shift)
-    extsize = size(gₑₑ⁻¹, 1)
-    Σᵣᵣ´ = MatrixBlock(Σᵣᵣ, cinds, cinds)
-    Vᵣₑ´ = MatrixBlock(Vᵣₑ, cinds, shift+1:shift+extsize)
-    Vₑᵣ´ = MatrixBlock(Vₑᵣ, shift+1:shift+extsize, cinds)
-    gₑₑ⁻¹ = MatrixBlock(gₑₑ⁻¹, shift+1:shift+extsize, shift+1:shift+extsize)
-    return Σᵣᵣ´, Vᵣₑ´, gₑₑ⁻¹´, Vₑᵣ´
 end
 
 checkcontactindices(allcontactinds, hdim) = maximum(allcontactinds) <= hdim ||

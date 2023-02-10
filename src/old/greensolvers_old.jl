@@ -112,7 +112,7 @@ function copy_flat!(f::FlatHarmonics)
     return f
 end
 
-#### AppliedSchur ##########################################################################
+#### AppliedSchurGreenSolver ##########################################################################
 
 struct SchurWorkspace{C}
     GL::Matrix{C}
@@ -125,7 +125,7 @@ struct SchurWorkspace{C}
     Z21bar::Matrix{C}
 end
 
-struct AppliedSchur{C<:Number,F<:FlatHarmonics{C},N<:NamedTuple} <: AbstractAppliedGreenSolver
+struct AppliedSchurGreenSolver{C<:Number,F<:FlatHarmonics{C},N<:NamedTuple} <: AbstractAppliedGreenSolver
     options::N
     flathars::F
     l_leq_r::Bool                           # whether l <= r
@@ -163,7 +163,7 @@ function apply(s::Schur, h::AbstractHamiltonian)
     diagonal_pointers!(Dptrs, h0)
     C = eltype(h0)
     workspace = SchurWorkspace{C}(size(L))
-    return AppliedSchur(options, flathars, l_leq_r, (Dptrs, Sptrs), L, R, LmR´, workspace)
+    return AppliedSchurGreenSolver(options, flathars, l_leq_r, (Dptrs, Sptrs), L, R, LmR´, workspace)
 end
 
 # hp = L*R' = PL H' PR'. We assume hm = hp'
@@ -195,7 +195,7 @@ end
 #    A = [1-im*L'GL  -L'GLhp; im*R'GL  R'GLhp] and B = [L'GRhp' im*L'GR; -R'GRhp' 1-im*R'GR]
 #    A = [-im*Γₗ -Γₗhp] + [1 0; 0 0] and B = [Γᵣhp' im*Γᵣ] + [0 0; 0 1]
 #    Γₗ = [L'; -R']*G*L  and  Γᵣ = [L'; -R']*G*R
-function pencilAB(s::AppliedSchur, ω; kw...)
+function pencilAB(s::AppliedSchurGreenSolver, ω; kw...)
     h0, hp, hm = call!(s.flathars; kw...)
     Hp = s.tmp.Hp
     copyto!(Hp, nonzeros(hp))

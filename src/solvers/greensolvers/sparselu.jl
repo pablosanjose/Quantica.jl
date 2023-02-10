@@ -15,7 +15,7 @@ end
 
 #region ## API ##
 
-function apply(::GS.SparseLU, h::AbstractHamiltonian{<:Any,<:Any,0}, cs::Contacts)
+function apply(::GS.SparseLU, h::AbstractHamiltonian0D, cs::Contacts)
     invgreen = inverse_green(h, cs)
     return AppliedSparseLU(invgreen)
 end
@@ -23,7 +23,8 @@ end
 apply(::GS.SparseLU, ::OpenHamiltonian) =
     argerror("Can only use SparseLU with bounded Hamiltonians")
 
-function (s::AppliedSparseLU)(ω)
+# Σblocks and contactblockstruct are not used here, because they are already inside invgreen
+function (s::AppliedSparseLU)(ω, Σblocks, contactblockstruct)
     invgreen = s.invgreen
     unitcinds = invgreen.unitcinds
     unitcindsall = invgreen.unitcindsall
@@ -56,7 +57,7 @@ function Base.view(s::SparseLUSlicer, i::ContactIndex, j::ContactIndex)
     return _view(s, dstinds, srcinds, source)
 end
 
-Base.view(s::SparseLUSlicer, ::Colon, j::Colon) =
+Base.view(s::SparseLUSlicer, ::Colon, ::Colon) =
     _view(s, s.unitcindsall, s.unitcindsall, s.source)
 
 function _view(s::SparseLUSlicer{C}, dstinds::Vector{Int}, srcinds::Vector{Int}, source) where {C}

@@ -14,14 +14,13 @@ function greenfunction(oh::OpenHamiltonian, s::AbstractGreenSolver = default_gre
 end
 
 default_green_solver(::AbstractHamiltonian0D) = GS.SparseLU()
-# default_green_solver(::AbstractHamiltonian1D) = GS.Schur()
+default_green_solver(::AbstractHamiltonian1D) = GS.Schur()
 # default_green_solver(::AbstractHamiltonian) = GS.Bands()
-default_green_solver(::AbstractHamiltonian) = GS.NoSolver()
 
 #endregion
 
 ############################################################################################
-# GreenFunction call API
+# GreenFuntion call! API
 #region
 
 ## TODO: test copy(g) for aliasing problems
@@ -37,12 +36,12 @@ end
 
 function call!(g::GreenFunction, ω; params...)
     h = parent(g)
-    cs = contacts(g)
-    call!(h, (); params...)               # call!_output is wrapped in solver(g) - update it
-    Σs = call!(cs, ω; params...)                                        # same for Σs blocks
-    cbs = blockstructure(cs)
-    slicer = solver(g)(ω)
-    return GreenSolution(h, slicer, Σs, cbs)
+    contacts´ = contacts(g)
+    call!(h; params...)
+    Σblocks = call!(contacts´, ω; params...)
+    cbs = blockstructure(contacts´)
+    slicer = solver(g)(ω, Σblocks, cbs)
+    return GreenSolution(h, slicer, Σblocks, cbs)
 end
 
 #endregion
@@ -68,6 +67,7 @@ Base.getindex(g::GreenSolution, i, j) = getindex(g, ind_to_slice(i, g), ind_to_s
 Base.getindex(g::GreenSolution, i::OrbitalSlice, j::OrbitalSlice) =
     mortar([g[si, sj] for si in subcells(i), sj in subcells(j)])
 
+# fallback for cases where i and j are not *both* ContactIndex -> convert to OrbitalSlice
 function ind_to_slice(c::ContactIndex, g)
     contactbs = blockstructure(g)
     cinds = contactinds(contactbs, Int(c))
@@ -90,33 +90,6 @@ Base.getindex(g::GreenSolution, i::CellOrbitals, j::CellOrbitals) = slicer(g)[i,
 # fallback
 Base.getindex(s::GreenSlicer, ::CellOrbitals, ::CellOrbitals) =
     internalerror("getindex of $(nameof(typeof(s))): not implemented")
-
-#endregion
-
-############################################################################################
-# GreenFunction indexing
-#region
-
-# Base.getindex(g::GreenFunction, c, c´ = c) =
-#     GreenFunctionSlice(g, sanitize_Green_index(c, lattice(g)), sanitize_Green_index(c´, lattice(g)))
-
-# # function Base.getindex(g::GreenFunction; kw...)
-# #     ls = lattice(g)[kw...]
-# #     return GreenFunctionSlice(g, ls, ls)
-# # end
-
-# # overrides the base method above
-# Base.getindex(g::GreenFunction) = GreenFunctionSlice(g, :, :)
-
-#endregion
-
-############################################################################################
-# GreenSlicer call API
-#region
-
-# function (s::GreenSlicer)(i::Integer, j::Integer)
-
-# end
 
 #endregion
 
