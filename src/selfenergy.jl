@@ -77,11 +77,14 @@ end
 # contact_blockstructure constructors
 #region
 
-contact_blockstructure(h::AbstractHamiltonian, lss...) =
-    contact_blockstructure(blockstructure(h), lss...)
+contact_blockstructure(h::AbstractHamiltonian{<:Any,<:Any,L}) where {L} =
+    ContactBlockStructure{L}()
+
+contact_blockstructure(h::AbstractHamiltonian, ls, lss...) =
+    contact_blockstructure(blockstructure(h), ls, lss...)
 
 function contact_blockstructure(bs::OrbitalBlockStructure, lss...)
-    lsall = merge(lss...)
+    lsall = combine(lss...)
     subcelloffsets = Int[]
     siteoffsets = Int[]
     osall = orbslice(lsall, bs, siteoffsets, subcelloffsets)
@@ -89,7 +92,7 @@ function contact_blockstructure(bs::OrbitalBlockStructure, lss...)
     return ContactBlockStructure(osall, contactinds, siteoffsets, subcelloffsets)
 end
 
-# computes the orbital indices of ls sites inside the merged lsall
+# computes the orbital indices of ls sites inside the combined lsall
 function contact_indices(lsall::LatticeSlice, siteoffsets, ls::LatticeSlice)
     contactinds = Int[]
     for scell´ in subcells(ls)

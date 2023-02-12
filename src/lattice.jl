@@ -72,18 +72,18 @@ end
 #endregion
 
 ############################################################################################
-# merge lattices - combine sublats if equal name
+# combine lattices - combine sublats if equal name
 #region
 
-function Base.merge(lats::Lattice{T,E,L}...) where {T,E,L}
+function combine(lats::Lattice{T,E,L}...) where {T,E,L}
     isapprox_modulo_shuffle(bravais_matrix.(lats)...) ||
-        throw(ArgumentError("To merge lattices they must all share the same Bravais matrix"))
+        throw(ArgumentError("To combine lattices they must all share the same Bravais matrix"))
     bravais´ = bravais(first(lats))
     unitcell´ = combine(unitcell.(lats)...)
     return Lattice(bravais´, unitcell´)
 end
 
-function Base.merge(ucells::Unitcell...)
+function combine(ucells::Unitcell...)
     names´ = vcat(sublatnames.(ucells)...)
     sites´ = vcat(sites.(ucells)...)
     offsets´ = combined_offsets(offsets.(ucells)...)

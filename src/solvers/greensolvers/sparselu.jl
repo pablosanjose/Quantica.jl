@@ -41,6 +41,9 @@ function (s::AppliedSparseLU)(ω, Σblocks, contactblockstruct)
     return so
 end
 
+unitcellinds_contacts(s::SparseLUSlicer) = s.unitcinds
+unitcellinds_contacts_merged(s::SparseLUSlicer) = s.unitcindsall
+
 minimal_callsafe_copy(s::SparseLUSlicer) =
     SparseLUSlicer(s.fact, s.unitcinds, s.unitcindsall, copy(s.source))
 
@@ -62,16 +65,14 @@ Base.view(s::SparseLUSlicer, ::Colon, ::Colon) =
 
 function _view(s::SparseLUSlicer{C}, dstinds::Vector{Int}, srcinds::Vector{Int}, source) where {C}
     fact = s.fact
-    fill!(source, zero(C))
-    for (col, row) in enumerate(srcinds)
-        source[row, col] = one(C)
-    end
+    one!(source, srcinds)
     gext = ldiv!(fact, source)
     g = view(gext, dstinds, :)
     return g
 end
 
 function Base.getindex(s::SparseLUSlicer, i::CellOrbitals, j::CellOrbitals)
+    # cannot use source, because it has only ncols = number of orbitals in contacts
     source = similar(s.source, size(s.source, 1), norbs(j))
     return _view(s, orbindices(i), orbindices(j), source)
 end

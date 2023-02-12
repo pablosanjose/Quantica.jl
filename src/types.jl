@@ -1357,6 +1357,12 @@ struct OpenHamiltonian{T,E,L,H<:AbstractHamiltonian{T,E,L},S<:NTuple{<:Any,SelfE
     selfenergies::S
 end
 
+#region ## Constructors ##
+
+OpenHamiltonian(h::AbstractHamiltonian) = OpenHamiltonian(h, ())
+
+#endregion
+
 #region ## API ##
 
 selfenergies(oh::OpenHamiltonian) = oh.selfenergies
@@ -1393,6 +1399,9 @@ struct Contacts{L,S<:NTuple{<:Any,SelfEnergy}}
 end
 
 #region ## Constructors ##
+
+ContactBlockStructure{L}() where {L} =
+    ContactBlockStructure(OrbitalSlice{L}(), Vector{Int}[], [0], [0])
 
 function Contacts(oh::OpenHamiltonian)
     Σs = selfenergies(oh)

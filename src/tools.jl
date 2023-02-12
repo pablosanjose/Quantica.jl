@@ -57,6 +57,16 @@ function mortar(ms::AbstractMatrix{M}) where {C,M<:AbstractMatrix{C}}
     return mat
 end
 
+# equivalent to mat = I[:, cols]. Useful for Green function source
+# no check of mat size vs cols is done
+function one!(mat::StridedMatrix{T}, cols = axes(mat, 1)) where {T}
+    fill!(mat, zero(T))
+    for (col, row) in enumerate(cols)
+        mat[row, col] = one(T)
+    end
+    return mat
+end
+
 # function get_or_push!(by, x, xs)
 #     for x´ in xs
 #         by(x) == by(x´) && return x´
@@ -64,6 +74,41 @@ end
 #     push!(xs, x)
 #     return x
 # end
+
+#endregion
+
+############################################################################################
+# Lazy wrapper
+#    A wrapper for a type whose value is only evaluated on the first access
+#region
+
+struct Lazy{T}
+    evaluator::FunctionWrapper{T,Tuple{}}
+    value::Ref{T}
+    evaluated::Ref{Bool}
+end
+
+#region ## Constructors ##
+
+Lazy{T}(f::Function) where {T} = Lazy(FunctionWrapper{T,Tuple{}}(f), Ref{T}(), Ref(false))
+
+#endregion
+
+#region ## API ##
+
+function Base.getindex(l::Lazy)
+    if l.evaluated[]
+        l.value[] = l.evaluator()
+        l.evaluated[] = true
+    end
+    return l.value[]
+end
+
+# unused:
+# init!(l::Lazy) = (l.value[] = l.evaluator(); l.evaluated[] = true; l)
+# uninit!(l::Lazy) = (l.evaluated[] = false; l)
+
+#endregion
 
 #endregion
 

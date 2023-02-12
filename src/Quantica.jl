@@ -42,13 +42,13 @@ export @SMatrix, @SVector, SMatrix, SVector, SA
 export ishermitian, I
 export ftuple
 
+# Types
+include("types.jl")
+
 # Preamble
 include("iterators.jl")
 include("builders.jl")
 include("tools.jl")
-
-# Types
-include("types.jl")
 
 # API
 include("specialmatrices.jl")

@@ -6,6 +6,8 @@ greenfunction(s::AbstractGreenSolver) = oh -> greenfunction(oh, s)
 
 greenfunction() = h -> greenfunction(h)
 
+greenfunction(h::AbstractHamiltonian, args...) = greenfunction(OpenHamiltonian(h), args...)
+
 function greenfunction(oh::OpenHamiltonian, s::AbstractGreenSolver = default_green_solver(hamiltonian(oh)))
     cs = Contacts(oh)
     h = hamiltonian(oh)

@@ -131,31 +131,30 @@ findsite(i::Integer, s::CellSites) = findfirst(==(i), siteindices(s))
 #endregion
 
 ############################################################################################
-# merge, merge! and intersect!
+# combine, combine! and intersect!
 #region
 
-Base.merge(ls::LatticeSlice, lss::LatticeSlice...) =
-    merge!(LatticeSlice(parent(ls)), ls, lss...)
+combine(ls::LatticeSlice, lss::LatticeSlice...) =
+    combine!(LatticeSlice(parent(ls)), ls, lss...)
 
 ## unused
-# Base.merge(os::OrbitalSlice{L}, oss::OrbitalSlice{L}...) where {L} =
-#     merge!(OrbitalSlice{L}(), os, oss...)
+# combine(os::OrbitalSlice{L}, oss::OrbitalSlice{L}...) where {L} =
+#     combine!(OrbitalSlice{L}(), os, oss...)
 
-# Base.merge!(os::OrbitalSlice, oss::OrbitalSlice...) =
-#     OrbitalSlice(merge_subcells!(subcells(os), subcells.(oss)...))
+# combine!(os::OrbitalSlice, oss::OrbitalSlice...) =
+#     OrbitalSlice(combine_subcells!(subcells(os), subcells.(oss)...))
 
-function Base.merge!(ls0::S, lss::S...) where {L,S<:LatticeSlice{<:Any,<:Any,L}}
+function combine!(ls0::S, lss::S...) where {L,S<:LatticeSlice{<:Any,<:Any,L}}
     lat = parent(ls0)
     all(l -> l === lat, parent.(lss)) ||
-        argerror("Cannot merge LatticeBlocks of different lattices")
-    isempty(lss) || merge_subcells!(subcells(ls0), subcells.(lss)...)
+        argerror("Cannot combine LatticeBlocks of different lattices")
+    isempty(lss) || combine_subcells!(subcells(ls0), subcells.(lss)...)
     return ls0
 end
 
-# Using Base.merge! or Base.merge here would cause invalidations
-merge_subcells(scs::Vector{S}...) where {L,S<:CellSites{L}} = merge_subcells!(S[], scs...)
+combine_subcells(scs::Vector{S}...) where {L,S<:CellSites{L}} = combine_subcells!(S[], scs...)
 
-function merge_subcells!(sc0::Vector{S}, scs::Vector{S}...) where {L, S<:CellSites{L}}
+function combine_subcells!(sc0::Vector{S}, scs::Vector{S}...) where {L, S<:CellSites{L}}
     allcellinds = Tuple{SVector{L,Int},Int}[]
     for scells in (sc0, scs...), scell in scells, ind in siteindices(scell)
         push!(allcellinds, (cell(scell), ind))
