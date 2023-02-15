@@ -414,10 +414,10 @@ function SchurGreenSlicer(gLω::Lazy{S}, gRω::Lazy{S}, g∞ω::Lazy{S}, boundar
     L, R = fsolver.L, fsolver.R
     # temporaries
     gL, gR, L´g, R´g = fsolver.tmp.GL, fsolver.tmp.GR, fsolver.tmp.LG, fsolver.tmp.RG
-    G₁₁L   = lazy_ldiv!(gRω, L, gL)
-    G₋₁₋₁R = lazy_ldiv!(gLω, R, gR)
-    L´G∞₀₀ = lazy_rdiv!(L, g∞ω, L´g)
-    R´G∞₀₀ = lazy_rdiv!(R, g∞ω, R´g)
+    G₁₁L   = lazy_ldiv!(gL, gRω, L)
+    G₋₁₋₁R = lazy_ldiv!(gR, gLω, R)
+    L´G∞₀₀ = lazy_rdiv!(L´g, L, g∞ω)
+    R´G∞₀₀ = lazy_rdiv!(R´g, R, g∞ω)
 
     d = size(L, 2)
     RGL = similar(R, d, d)
@@ -431,7 +431,7 @@ end
 # note that gLω[].source and gRω[].source are taller than L, R, due to extended sites
 # but size(L, 2) = size(R, 2) = min(l, r) = d (deflated surface)
 # and size(gLω[].source, 2) = l, size(gRω[].source, 2) = r
-function lazy_ldiv!(gω::Lazy{G}, L, gL) where {C,G<:SparseLUSlicer{C}}
+function lazy_ldiv!(gL::Matrix{C}, gω::Lazy, L) where {C}
     lazy = Lazy{Matrix{C}}() do
         g = gω[]
         Lext = view(g.source, :, axes(L, 2))
@@ -443,7 +443,7 @@ function lazy_ldiv!(gω::Lazy{G}, L, gL) where {C,G<:SparseLUSlicer{C}}
     return lazy
 end
 
-function lazy_rdiv!(L, g∞ω::Lazy{G}, L´g) where {C,G<:SparseLUSlicer{C}}
+function lazy_rdiv!(L´g::Matrix{C}, L, g∞ω::Lazy) where {C}
     lazy = Lazy{Matrix{C}}() do
         g = g∞ω[]
         Lext = view(g.source, :, axes(L, 2))
