@@ -14,7 +14,6 @@
 #      - view(gs, ::ContactIndex, ::ContactIndex) -> g(ω; kw...) between specific contacts
 #      - view(gs, ::Colon, ::Colon) -> g(ω; kw...) between all contacts
 #      - gs[i::CellOrbitals, j::CellOrbitals] -> must return a Matrix for type stability
-#      - Optional: copyto!(m, gs, i::CellOrbitals, j::CellOrbitals)
 #      - Optional: minimal_callsafe_copy(gs) -> has a deepcopy fallback
 #   The user-facing indexing API accepts:
 #      - contact(i)::ContactIndex -> Sites of Contact number i

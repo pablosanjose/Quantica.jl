@@ -9,6 +9,8 @@
 struct SchurWorkspace{C}
     GL::Matrix{C}
     GR::Matrix{C}
+    LG::Matrix{C}
+    RG::Matrix{C}
     A::Matrix{C}
     B::Matrix{C}
     Z11::Matrix{C}
@@ -58,6 +60,8 @@ end
 function SchurWorkspace{C}((n, d), l, r) where {C}
     GL = Matrix{C}(undef, n, d)
     GR = Matrix{C}(undef, n, d)
+    LG = Matrix{C}(undef, d, n)
+    RG = Matrix{C}(undef, d, n)
     A = Matrix{C}(undef, 2d, 2d)
     B = Matrix{C}(undef, 2d, 2d)
     Z11 = Matrix{C}(undef, d, d)
@@ -68,7 +72,7 @@ function SchurWorkspace{C}((n, d), l, r) where {C}
     DL = Matrix{C}(undef, d, l)
     RD = Matrix{C}(undef, r, d)
     DR = Matrix{C}(undef, d, r)
-    return SchurWorkspace(GL, GR, A, B, Z11, Z21, Z11´, Z21´, LD, DL, RD, DR)
+    return SchurWorkspace(GL, GR, LG, RG, A, B, Z11, Z21, Z11´, Z21´, LD, DL, RD, DR)
 end
 
 function nearest_cell_harmonics(h)
@@ -408,10 +412,12 @@ end
 
 function SchurGreenSlicer(gLω::Lazy{S}, gRω::Lazy{S}, g∞ω::Lazy{S}, boundary, fsolver) where {C,S<:SparseLUSlicer{C}}
     L, R = fsolver.L, fsolver.R
-    G₁₁L   = lazy_ldiv!(gRω, L)
-    G₋₁₋₁R = lazy_ldiv!(gLω, R)
-    L´G∞₀₀ = lazy_rdiv!(L, g∞ω, :L)
-    R´G∞₀₀ = lazy_rdiv!(R, g∞ω, :R)
+    # temporaries
+    gL, gR, L´g, R´g = fsolver.tmp.GL, fsolver.tmp.GR, fsolver.tmp.LG, fsolver.tmp.RG
+    G₁₁L   = lazy_ldiv!(gRω, L, gL)
+    G₋₁₋₁R = lazy_ldiv!(gLω, R, gR)
+    L´G∞₀₀ = lazy_rdiv!(L, g∞ω, L´g)
+    R´G∞₀₀ = lazy_rdiv!(R, g∞ω, R´g)
 
     d = size(L, 2)
     RGL = similar(R, d, d)
@@ -425,33 +431,26 @@ end
 # note that gLω[].source and gRω[].source are taller than L, R, due to extended sites
 # but size(L, 2) = size(R, 2) = min(l, r) = d (deflated surface)
 # and size(gLω[].source, 2) = l, size(gRω[].source, 2) = r
-function lazy_ldiv!(gω::Lazy{G}, L) where {C,G<:SparseLUSlicer{C}}
-    drng = 1:size(L, 2)
+function lazy_ldiv!(gω::Lazy{G}, L, gL) where {C,G<:SparseLUSlicer{C}}
     lazy = Lazy{Matrix{C}}() do
         g = gω[]
-        s = view(g.source, :, drng)
-        fill!(s, zero(C))
-        copyto!(s, CartesianIndices(L), L, CartesianIndices(L))
-        gL = ldiv!(g.fact, s)
-        return gL[axes(L)...]
+        Lext = view(g.source, :, axes(L, 2))
+        fill!(Lext, zero(C))
+        copyto!(Lext, CartesianIndices(L), L, CartesianIndices(L))
+        copy!(gL, view(ldiv!(g.fact, Lext), axes(L)...))
+        return gL
     end
     return lazy
 end
 
-# we must use non-overlapping portions of g∞ω[].source for rdiv! of L and R
-function lazy_rdiv!(L, g∞ω::Lazy{G}, side) where {C,G<:SparseLUSlicer{C}}
+function lazy_rdiv!(L, g∞ω::Lazy{G}, L´g) where {C,G<:SparseLUSlicer{C}}
     lazy = Lazy{Matrix{C}}() do
         g = g∞ω[]
-        maxcols = size(g.source, 2)
-        ncols = size(L, 2)
-        drng = ifelse(side == :L, 1:ncols, maxcols-ncols:maxcols)
-        maxcols >= 2 * ncols ||
-            internalerror("lazy_rdiv!: unexpected source size $(maxcols)<$(2 * ncols)")
-        s = view(g.source, :, drng)
-        fill!(s, zero(C))
-        copyto!(s, CartesianIndices(L), L, CartesianIndices(L))
-        L´g = ldiv!(g.fact', s)'
-        return L´g[axes(L')...]
+        Lext = view(g.source, :, axes(L, 2))
+        fill!(Lext, zero(C))
+        copyto!(Lext, CartesianIndices(L), L, CartesianIndices(L))
+        copy!(L´g, view(ldiv!(g.fact', Lext), axes(L)...)')
+        return L´g
     end
     return lazy
 end
@@ -475,18 +474,18 @@ function inf_schur_slice(s::SchurGreenSlicer, i::CellOrbitals, j::CellOrbitals)
         g = s.G∞₀₀[]
         i´, j´ = cellorbs((), rows), cellorbs((), cols)
         return g[i´, j´]
-    elseif dist >= 1                                        # G₁₁L (R'G₁₁L)ⁿ⁻ᵐ⁻¹ R'G∞₀₀
+    elseif dist >= 1                                      # G∞ₙₘ = G₁₁L (R'G₁₁L)ⁿ⁻ᵐ⁻¹ R'G∞₀₀
         R´G∞₀₀ = view(s.R´G∞₀₀[], :, cols)
         R´G₁₁L = s.R´G₁₁L[]
         G₁₁L = view(s.G₁₁L[], rows, :)
         G = G₁₁L * (R´G₁₁L^(dist - 1)) * R´G∞₀₀
         # add view for type-stability
         return G
-    else # dist <= -1                                      # G₋₁₋₁R(L'G₋₁₋₁R)ᵐ⁻ⁿ⁻¹L'G∞₀₀
+    else # dist <= -1                                 # G∞ₙₘ = G₋₁₋₁R (L'G₋₁₋₁R)ᵐ⁻ⁿ⁻¹ L'G∞₀₀
         L´G∞₀₀ = view(s.L´G∞₀₀[], :, cols)
         L´G₋₁₋₁R = s.L´G₋₁₋₁R[]
         G₋₁₋₁R = view(s.G₋₁₋₁R[], rows, :)
-        G = G₋₁₋₁R * (L´G₋₁₋₁R^(dist - 1)) * L´G∞₀₀
+        G = G₋₁₋₁R * (L´G₋₁₋₁R^(- dist - 1)) * L´G∞₀₀
         # add view for type-stability
         return G
     end
@@ -507,30 +506,30 @@ function semi_schur_slice(s::SchurGreenSlicer{C}, i, j) where {C}
         g = s.G₋₁₋₁[]
         i´, j´ = cellorbs((), rows), cellorbs((), cols)
         return g[i´, j´]
-    elseif m >= 1  # also n >= 1                             # G∞ₙₘ - G₁₁L(R'G₁₁L)ⁿ⁻¹ R'G∞₀ₘ
+    elseif m >= 1  # also n >= 1                       # Gₙₘ = G∞ₙₘ - G₁₁L(R'G₁₁L)ⁿ⁻¹ R'G∞₀ₘ
         i´ = cellorbs(n, rows)
         j´ = cellorbs(m, cols)
-        Gnm = inf_schur_slice(s, i´, j´)
+        G∞ₙₘ = inf_schur_slice(s, i´, j´)
         i´ = cellorbs(0, :)
-        R´G0m = s.R' * inf_schur_slice(s, i´, j´)
+        R´G∞₀ₘ = s.R' * inf_schur_slice(s, i´, j´)
         R´G₁₁L = s.R´G₁₁L[]
         G₁₁L = view(s.G₁₁L[], rows, :)
-        G = n == 1 ?
-            mul!(Gnm, G₁₁L, R´G0m, -1, 1) :
-            mul!(Gnm, G₁₁L, (R´G₁₁L^(n-1)) * R´G0m, -1, 1)
-        return G
-    else  # m, n <= -1                              # Gₙₘ = G∞ₙₘ - G₋₁₋₁R(L'G₋₁₋₁R)¹⁻ⁿL'G∞₀ₘ
+        Gₙₘ = n == 1 ?
+            mul!(G∞ₙₘ, G₁₁L, R´G∞₀ₘ, -1, 1) :
+            mul!(G∞ₙₘ, G₁₁L, (R´G₁₁L^(n-1)) * R´G∞₀ₘ, -1, 1)
+        return Gₙₘ
+    else  # m, n <= -1                             # Gₙₘ = G∞ₙₘ - G₋₁₋₁R(L'G₋₁₋₁R)⁻ⁿ⁻¹L'G∞₀ₘ
         i´ = cellorbs(n, rows)
         j´ = cellorbs(m, cols)
-        Gnm = inf_schur_slice(s, i´, j´)
+        G∞ₙₘ = inf_schur_slice(s, i´, j´)
         i´ = cellorbs(0, :)
-        L´G0m = s.L' * inf_schur_slice(s, i´, j´)
+        L´G∞₀ₘ = s.L' * inf_schur_slice(s, i´, j´)
         L´G₋₁₋₁R = s.L´G₋₁₋₁R[]
         G₋₁₋₁R = view(s.G₋₁₋₁R[], rows, :)
-        G = n == -1 ?
-            mul!(Gnm, G₋₁₋₁R, L´G0m, -1, 1) :
-            mul!(Gnm, G₋₁₋₁R, (L´G₋₁₋₁R^(1-n)) * L´G0m, -1, 1)
-        return G
+        Gₙₘ = n == -1 ?
+            mul!(G∞ₙₘ, G₋₁₋₁R, L´G∞₀ₘ, -1, 1) :
+            mul!(G∞ₙₘ, G₋₁₋₁R, (L´G₋₁₋₁R^(-n-1)) * L´G∞₀ₘ, -1, 1)
+        return Gₙₘ
     end
 end
 
