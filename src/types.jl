@@ -247,7 +247,9 @@ Base.adjoint(s::HopSelector) = HopSelector(s.region, s.sublats, s.dcells, s.rang
 #   lat[siteselector]. No ordering is guaranteed, but cells and sites must both be unique
 #region
 
-struct CellSites{L,V}
+abstract type AbstractCellElements end
+
+struct CellSites{L,V} <: AbstractCellElements
     cell::SVector{L,Int}
     inds::V             # Can be anything: a vector of site indices, a Colon, a UnitRange...
 end
@@ -257,13 +259,13 @@ struct LatticeSlice{T,E,L}
     subcells::Vector{CellSites{L,Vector{Int}}}
 end
 
-struct CellOrbitals{L}
+struct CellOrbitals{L,V} <: AbstractCellElements
     cell::SVector{L,Int}
-    inds::Vector{Int}   # Always encodes orbital indices
+    inds::V             # Can be anything: a vector of site indices, a Colon, a UnitRange...
 end
 
 struct OrbitalSlice{L}
-    subcells::Vector{CellOrbitals{L}}     # indices here correpond to orbitals, not sites
+    subcells::Vector{CellOrbitals{L,Vector{Int}}}     # indices here correpond to orbitals, not sites
 end
 
 #region ## Constructors ##
@@ -275,7 +277,10 @@ CellOrbitals(cell) = CellOrbitals(cell, Int[])
 LatticeSlice(lat::Lattice{<:Any,<:Any,L}) where {L} =
     LatticeSlice(lat, CellSites{L,Vector{Int}}[])
 
-OrbitalSlice{L}() where {L} = OrbitalSlice(CellOrbitals{L}[])
+OrbitalSlice{L}() where {L} = OrbitalSlice(CellOrbitals{L,Vector{Int}}[])
+
+cellsites(cell, x) = CellSites(sanitize_SVector(Int, cell), x)      # exported
+cellorbs(cell, x) = CellOrbitals(sanitize_SVector(Int, cell), x)    # unexported
 
 #endregion
 
@@ -284,8 +289,7 @@ OrbitalSlice{L}() where {L} = OrbitalSlice(CellOrbitals{L}[])
 siteindices(s::CellSites) = s.inds
 orbindices(s::CellOrbitals) = s.inds
 
-cell(s::CellSites) = s.cell
-cell(s::CellOrbitals) = s.cell
+cell(s::AbstractCellElements) = s.cell
 
 subcells(l::LatticeSlice) = l.subcells
 subcells(l::LatticeSlice, i) = l.subcells[i]
@@ -303,6 +307,8 @@ norbs(o::OrbitalSlice) = isempty(o) ? 0 : sum(norbs, subcells(o))
 norbs(o::OrbitalSlice, i) = isempty(o) ? 0 : norbs(subcells(o, i))
 norbs(c::CellOrbitals) = length(c.inds)
 
+offsets(o::OrbitalSlice) = lengths_to_offsets(norbs.(subcells(o)))
+
 boundingbox(l::LatticeSlice) = boundingbox(cell(c) for c in subcells(l))
 
 sites(l::LatticeSlice) =
@@ -311,11 +317,12 @@ sites(l::LatticeSlice) =
 Base.parent(ls::LatticeSlice) = ls.lat
 
 Base.isempty(s::LatticeSlice) = isempty(s.subcells)
-Base.isempty(s::CellSites) = isempty(s.inds)
+Base.isempty(s::OrbitalSlice) = isempty(s.subcells)
+Base.isempty(s::AbstractCellElements) = isempty(s.inds)
 
-Base.empty!(s::CellSites) = empty!(s.inds)
+Base.empty!(s::AbstractCellElements) = empty!(s.inds)
 
-Base.push!(s::CellSites, i::Int) = push!(s.inds, i)
+Base.push!(s::AbstractCellElements, i::Int) = push!(s.inds, i)
 Base.push!(ls::LatticeSlice, s::CellSites) = push!(ls.subcells, s)
 
 Base.copy(s::CellSites) = CellSites(copy(s.inds), s.cell)
@@ -717,7 +724,7 @@ struct HybridSparseBlochMatrix{T,B<:MatrixElementType{T}} <: SparseArrays.Abstra
     blockstruct::OrbitalBlockStructure{B}
     unflat::SparseMatrixCSC{B,Int}
     flat::SparseMatrixCSC{Complex{T},Int}
-    sync_state::Ref{Int}  # 0 = in sync, 1 = flat needs sync, -1 = unflat needs sync, 2 = none initialized
+    sync_state::Base.RefValue{Int}  # 0 = in sync, 1 = flat needs sync, -1 = unflat needs sync, 2 = none initialized
 end
 
 #region ## Constructors ##
@@ -787,10 +794,10 @@ SparseArrays.nonzeros(s::HybridSparseBlochMatrix) = nonzeros(s.unflat)
 
 abstract type AbstractBlockMatrix end
 
-struct MatrixBlock{C<:Number, A<:AbstractMatrix{C},U}
+struct MatrixBlock{C<:Number,A<:AbstractMatrix{C},UR,UC}
     block::A
-    rows::U             # row indices in parent matrix for each row in block
-    cols::U             # col indices in parent matrix for each col in block
+    rows::UR             # row indices in parent matrix for each row in block
+    cols::UC             # col indices in parent matrix for each col in block
     coefficient::C      # coefficient to apply to block
 end
 
@@ -828,8 +835,8 @@ function BlockSparseMatrix(mblocks::MatrixBlock...)
 end
 
 function BlockMatrix(mblocks::MatrixBlock...)
-    nrows = maximum(b -> maximum(b.rows), mblocks; init = 0)
-    ncols = maximum(b -> maximum(b.cols), mblocks; init = 0)
+    nrows = maxrows(mblocks)
+    ncols = maxcols(mblocks)
     C = promote_type(eltype.(blocks)...)
     mat = zeros(C, nrows, ncols)
     return BlockMatrix(mat, blocks)
@@ -852,6 +859,9 @@ pointers(m::BlockSparseMatrix) = m.ptrs
 blocks(m::AbstractBlockMatrix) = m.blocks
 
 matrix(b::AbstractBlockMatrix) = b.mat
+
+maxrows(mblocks::NTuple{<:Any,MatrixBlock}) = maximum(b -> maximum(b.rows), mblocks; init = 0)
+maxcols(mblocks::NTuple{<:Any,MatrixBlock}) = maximum(b -> maximum(b.cols), mblocks; init = 0)
 
 Base.size(b::AbstractBlockMatrix, i...) = size(b.mat, i...)
 Base.size(b::MatrixBlock, i...) = size(blockmat(b), i...)
@@ -893,7 +903,7 @@ end
 
 #region ## API ##
 
-SparseArrays.sparse(s::InverseGreenBlockSparse) = sparse(s.mat)
+matrix(s::InverseGreenBlockSparse) = matrix(s.mat)
 
 # updates only ω block and applies all blocks to BlockSparseMatrix
 function update!(s::InverseGreenBlockSparse, ω)
@@ -1325,9 +1335,9 @@ minimal_callsafe_copy(s::AbstractSelfEnergySolver) = deepcopy(s)
 #     - SelfEnergy(h::AbstractHamiltonian, sargs...; kw...) -> SelfEnergy
 #region
 
-struct SelfEnergy{L,S<:AbstractSelfEnergySolver}
+struct SelfEnergy{T,E,L,S<:AbstractSelfEnergySolver}
     solver::S                                # returns AbstractMatrix block(s) over latslice
-    latslice::LatticeSlice{L}                # sites on each unitcell with a selfenergy
+    latslice::LatticeSlice{T,E,L}                # sites on each unitcell with a selfenergy
 end
 
 #region ## API ##
@@ -1393,7 +1403,7 @@ struct ContactBlockStructure{L}
     subcelloffsets::Vector{Int}          # block offsets for each subcell in orbslice
 end
 
-struct Contacts{L,S<:NTuple{<:Any,SelfEnergy}}
+struct Contacts{L,N,S<:NTuple{N,SelfEnergy}}
     selfenergies::S                       # used to produce flat AbstractMatrices
     blockstruct::ContactBlockStructure{L} # needed to extract site/subcell/contact blocks
 end
@@ -1481,7 +1491,7 @@ abstract type AppliedGreenSolver end
 
 # Solver with fixed ω and params that can compute G[subcell, subcell´] or G[cell, cell´]
 # It should also be able to return contact G with G[]
-abstract type GreenSlicer end
+abstract type GreenSlicer{C<:Complex} end   # C is the eltype of the slice
 
 struct ContactIndex
     i::Int
@@ -1492,8 +1502,6 @@ end
 contact(i::Integer) = ContactIndex(i)
 
 Base.Int(c::ContactIndex) = c.i
-
-cellsites(cell, x) = CellSites(sanitize_SVector(Int, cell), x)
 
 # fallback
 minimal_callsafe_copy(gs::AppliedGreenSolver) = deepcopy(gs)
@@ -1525,10 +1533,10 @@ end
 # Allows gω[contact(i), contact(j)] for i,j integer Σs indices ("contacts")
 # Allows gω[cell, cell´] using T-matrix, with cell::Union{SVector,CellSites}
 # Allows also view(gω, ...)
-struct GreenSolution{T,E,L,S<:GreenSlicer,H<:AbstractHamiltonian{T,E,L},M<:NTuple{<:Any,MatrixBlock}}
+struct GreenSolution{T,E,L,S<:GreenSlicer,H<:AbstractHamiltonian{T,E,L},Σ<:NTuple{<:Any,MatrixBlock}}
     parent::H
     slicer::S                             # gives G(ω; p...)[i,j] for i,j::AppliedGreenIndex
-    contactΣs::M                          # selfenergy Σ(ω)::MatrixBlock for each contact
+    contactΣs::Σ                          # selfenergy Σ(ω)::MatrixBlock for each contact
     contactbs::ContactBlockStructure{L}
 end
 

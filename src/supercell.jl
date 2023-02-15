@@ -143,8 +143,7 @@ function supercell_offsets(masklist, nsublats)
     @simd for m in masklist
         ds[first(m)] += 1
     end
-    offsets = cumsum(ds)
-    prepend!(offsets, 0)
+    offsets = lengths_to_offsets(ds)
     return offsets
 end
 

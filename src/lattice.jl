@@ -99,11 +99,7 @@ function isapprox_modulo_shuffle(s::AbstractMatrix, ss::AbstractMatrix...)
     return true
 end
 
-function combined_offsets(offsets...)
-    offsets´ = cumsum(Iterators.flatten(diff.(offsets)))
-    prepend!(offsets´, 0)
-    return offsets´
-end
+combined_offsets(offsets...) = lengths_to_offsets(Iterators.flatten(diff.(offsets)))
 
 #endregion
 

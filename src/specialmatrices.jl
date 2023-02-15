@@ -328,7 +328,7 @@ end
 #endregion
 
 ############################################################################################
-# BlockSparseMatrix update!
+# BlockSparseMatrix/BlockMatrix update!
 #region
 
 function update!(m::BlockSparseMatrix)
@@ -339,9 +339,9 @@ end
 
 function addblocks!(m::BlockSparseMatrix)
     for (mblock, ptrs) in zip(blocks(m), pointers(m))
-        mat = blockmat(mblock)
+        bmat = blockmat(mblock)
         coef = coefficient(mblock)
-        for (x, ptr) in zip(stored(mat), ptrs)
+        for (x, ptr) in zip(stored(bmat), ptrs)
             nonzeros(matrix(m))[ptr] += coef * x
         end
     end
@@ -351,12 +351,6 @@ end
 stored(block::AbstractSparseMatrixCSC) = nonzeros(block)
 stored(block::StridedMatrix) = block
 stored(block::Diagonal) = block.diag
-
-#endregion
-
-############################################################################################
-# BlockMatrix update!
-#region
 
 function update!(m::BlockMatrix)
     fill!(matrix(m), 0)

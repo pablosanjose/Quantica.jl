@@ -60,14 +60,15 @@ end
 function selfenergyblocks(extoffset, contactinds, ci, blocks, s::ExtendedSelfEnergySolver, ss...)
     Vᵣₑ, gₑₑ⁻¹, Vₑᵣ = shiftedmatblocks(call!_output(s), contactinds[ci], extoffset)
     extoffset += size(gₑₑ⁻¹, 1)
-    return selfenergyblocks(extoffset, contactinds, ci + 1, (blocks..., -Vᵣₑ, -gₑₑ⁻¹, -Vₑᵣ), ss...)
+    # there is no minus sign here!
+    return selfenergyblocks(extoffset, contactinds, ci + 1, (blocks..., Vᵣₑ, gₑₑ⁻¹, Vₑᵣ), ss...)
 end
 
-function shiftedmatblocks((Vᵣₑ, gₑₑ⁻¹, Vₑᵣ)::Tuple{AbstractArray}, cinds, shift)
+function shiftedmatblocks((Vᵣₑ, gₑₑ⁻¹, Vₑᵣ)::NTuple{3,AbstractArray}, cinds, shift)
     extsize = size(gₑₑ⁻¹, 1)
     Vᵣₑ´ = MatrixBlock(Vᵣₑ, cinds, shift+1:shift+extsize)
     Vₑᵣ´ = MatrixBlock(Vₑᵣ, shift+1:shift+extsize, cinds)
-    gₑₑ⁻¹ = MatrixBlock(gₑₑ⁻¹, shift+1:shift+extsize, shift+1:shift+extsize)
+    gₑₑ⁻¹´ = MatrixBlock(gₑₑ⁻¹, shift+1:shift+extsize, shift+1:shift+extsize)
     return Vᵣₑ´, gₑₑ⁻¹´, Vₑᵣ´
 end
 

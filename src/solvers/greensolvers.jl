@@ -49,7 +49,7 @@ struct Schur{T<:AbstractFloat} <: AbstractGreenSolver
     boundary::T                   # Cell index for boundary (float to allow boundary at Inf)
 end
 
-Schur(; shift = 1.0, boundary = Inf) = Schur(shift, boundary)
+Schur(; shift = 1.0, boundary = Inf) = Schur(shift, float(boundary))
 
 end # module
 

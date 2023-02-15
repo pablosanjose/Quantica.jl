@@ -3,7 +3,7 @@
 #   Auxiliary functions for AppliedSchurGreenSolverSolver
 #   Computes dense factors PR*R*Z21, Z11 and R'*PR'. The retarded self-energy on the open
 #   unitcell surface of a semi-infinite rightward lead reads Σᵣ = PR R Z21 Z11⁻¹ R' PR'
-#   Computes also the leftward PL*L*Z21´, Z11´, L'*PL', with  Σₗ = PL L Z21´ Z11´⁻¹ L' PL'
+#   Computes also the leftward PL*L*Z11´, Z21´, L'*PL', with  Σₗ = PL L Z11´ Z21´⁻¹ L' PL'
 #region
 
 struct SchurWorkspace{C}
@@ -136,24 +136,8 @@ end
 
 ## Call API ##
 
-# # minimal_callsafe_copy should copy anything that may mutate with call!(...; params...) and
-# # any object in the output of call!(::SchurFactorsSolver, ...; params...)
-# function minimal_callsafe_copy(s::SchurFactorsSolver)
-#     hm, h0, hp = minimal_callsafe_copy(s.hm), minimal_callsafe_copy(s.h0), minimal_callsafe_copy(s.hp)
-#     L, R = copy(s.L), copy(s.R)
-#     tmp = minimal_callsafe_copy(s.tmp)
-#     return SchurFactorsSolver(s.shift, hm, h0, hp, s.l_leq_r, s.iG, s.ptrs, s.sinds,
-#                               L, R, s.R´L´, tmp)
-# end
-
-
-# function minimal_callsafe_copy(w::SchurWorkspace)
-#     Z11, Z21, Z11´, Z21´ = copy(w.Z11), copy(w.Z21), copy(w.Z11´), copy(w.Z21´)
-#     return SchurWorkspace(w.GL, w.GR, w.A, w.B, Z11, Z21, Z11´, Z21´)
-# end
-
 call!_output(s::SchurFactorsSolver) =
-    (s.tmp.RD, s.tmp.Z11, s.tmp.DR), (s.tmp.LD, s.tmp.Z11´, s.DL)
+    (s.tmp.RD, s.tmp.Z11, s.tmp.DR), (s.tmp.LD, s.tmp.Z21´, s.tmp.DL)
 
 function call!(s::SchurFactorsSolver, ω)
     R, Z11, Z21, L, Z11´, Z21´ = s.R, s.tmp.Z11, s.tmp.Z21, s.L, s.tmp.Z11´, s.tmp.Z21´
@@ -179,16 +163,18 @@ function call!(s::SchurFactorsSolver, ω)
     copy!(Z11´, view(sch.Z, 1:r, 1:sum(whichmodes)))
     copy!(Z21´, view(sch.Z, r+1:2r, 1:sum(whichmodes)))
 
-    RZ21, LZ21´, LD, DL, RD, DR = s.tmp.GR, s.tmp.GL, s.tmp.LD, s.tmp.DL, s.tmp.RD, s.tmp.DR
+    RZ21, LZ11´, LD, DL, RD, DR = s.tmp.GR, s.tmp.GL, s.tmp.LD, s.tmp.DL, s.tmp.RD, s.tmp.DR
     linds, rinds = s.linds, s.rinds
+    # compute rightward blocks: PR*R*Z21, Z11 and R'*PR'
     mul!(RZ21, R, Z21)
     PR_R_Z21 = copy!(RD, view(RZ21, rinds, :))
     R´_PR = copy!(DR, view(R', :, rinds))
-    mul!(LZ21´, L, Z21´)
-    PL_L_Z21´ = copy!(LD, view(LZ21´, linds, :))
+    # compute leftward blocks: PL*L*Z11´, Z21´, L'*PL'
+    mul!(LZ11´, L, Z11´)
+    PL_L_Z11´ = copy!(LD, view(LZ11´, linds, :))
     L´_PL = copy!(DL, view(L', :, linds))
 
-    return (PR_R_Z21, Z11, R´_PR), (PL_L_Z21´, Z11´, L´_PL)
+    return (PR_R_Z21, Z11, R´_PR), (PL_L_Z11´, Z21´, L´_PL)
 end
 
 # need this barrier for type-stability (sch.α and sch.β are finicky)
@@ -308,8 +294,10 @@ function call!(s::SelfEnergySchurSolver, ω;
                skipsolve_internal = false, params...)
     fsolver = s.fsolver
     Rfactors, Lfactors = skipsolve_internal ? call!_output(fsolver) : call!(fsolver, ω)
-    return ifelse(leftside_internal, Lfactors, Rfactors)
+    return ifelse(s.leftside, Lfactors, Rfactors)
 end
+
+call!_output(s::SelfEnergySchurSolver) = call!(s, 0.0; skipsolve_internal = true)
 
 #endregion
 
@@ -319,15 +307,15 @@ end
 # AppliedSchurGreenSolverSolver
 #region
 
-const GreenFunctionUnitcell{T,E,H} =
-    GreenFunction{T,E,0,AppliedSparseLU{Complex{T}},H,Contacts{1,Tuple{}}}
+const GFUnit{T,E,H,N,S} =
+    GreenFunction{T,E,0,AppliedSparseLU{Complex{T}},H,Contacts{0,N,S}}
 
 # With Lazy we delay computing fields until first use
-struct AppliedSchurGreenSolver{T,B,G<:GreenFunctionUnitcell{T}} <: AppliedGreenSolver
+struct AppliedSchurGreenSolver{T,B,GL<:GFUnit{T},GR<:GFUnit{T},G∞<:GFUnit{T}} <: AppliedGreenSolver
     boundary::T
-    gL::Lazy{G}                   # GreenFunction for unitcell with ΣL
-    gR::Lazy{G}                   # GreenFunction for unitcell with ΣR
-    g∞::Lazy{G}                   # GreenFunction for unitcell with ΣR + ΣL
+    gL::Lazy{GL}                   # GreenFunction for unitcell with ΣL
+    gR::Lazy{GR}                   # GreenFunction for unitcell with ΣR
+    g∞::Lazy{G∞}                   # GreenFunction for unitcell with ΣR + ΣL
     fsolver::SchurFactorsSolver{T,B}
 end
 
@@ -336,7 +324,6 @@ end
 function apply(s::GS.Schur, h::AbstractHamiltonian1D, contacts::Contacts)
     h´ = hamiltonian(h)
     fsolver = SchurFactorsSolver(h´, s.shift)
-    L, R = fsolver.L, fsolver.R
     ΣR_solver = SelfEnergySchurSolver(fsolver, :R)
     ΣL_solver = SelfEnergySchurSolver(fsolver, :L)
     h0 = unitcell_hamiltonian(h)
@@ -347,19 +334,21 @@ function apply(s::GS.Schur, h::AbstractHamiltonian1D, contacts::Contacts)
     ΣL = SelfEnergy(ΣL_solver, latslice_l)
     ΣR = SelfEnergy(ΣR_solver, latslice_r)
 
-    G = _green_type(h0)
     ohL = attach(h0, ΣL)
-    gL = Lazy{G}(() -> greenfunction(ohL, GS.SparseLU()))
+    gL = Lazy{green_type(h0, ΣL)}(() -> greenfunction(ohL, GS.SparseLU()))
     ohR = attach(h0, ΣR)
-    gR = Lazy{G}(() -> greenfunction(ohR, GS.SparseLU()))
+    gR = Lazy{green_type(h0, ΣR)}(() -> greenfunction(ohR, GS.SparseLU()))
     oh∞ = attach(ohL, ΣR)
-    g∞ = Lazy{G}(() -> greenfunction(oh∞, GS.SparseLU()))
+    g∞ = Lazy{green_type(h0, ΣL, ΣR)}(() -> greenfunction(oh∞, GS.SparseLU()))
 
     boundary = round(only(s.boundary))
     return AppliedSchurGreenSolver(boundary, gL, gR, g∞, fsolver)
 end
 
-_green_type(::H) where {T,E,H<:AbstractHamiltonian{T,E}} = GreenFunctionUnitcell{T,E,H}
+green_type(::H,::S) where {T,E,H<:AbstractHamiltonian{T,E},S} =
+    GFUnit{T,E,H,1,Tuple{S}}
+green_type(::H,::S1,::S2) where {T,E,H<:AbstractHamiltonian{T,E},S1,S2} =
+    GFUnit{T,E,H,2,Tuple{S1,S2}}
 
 #endregion
 
@@ -371,16 +360,15 @@ minimal_callsafe_copy(s::AppliedSchurGreenSolver) = AppliedSchurGreenSolver(
 function (s::AppliedSchurGreenSolver)(ω, Σblocks, cblockstruct)
     # call! fsolver once for all the g's
     call!(s.fsolver, ω)
-    G = _green_type(s)
-    gLω = Lazy{G}(() -> call!(s.gL[], ω; skipsolve_internal = true))
-    gRω = Lazy{G}(() -> call!(s.gR[], ω; skipsolve_internal = true))
-    g∞ω = Lazy{G}(() -> call!(s.g∞[], ω; skipsolve_internal = true))
+    gLω = Lazy{slicer_type(s.gL)}(() -> slicer(call!(s.gL[], ω; skipsolve_internal = true)))
+    gRω = Lazy{slicer_type(s.gR)}(() -> slicer(call!(s.gR[], ω; skipsolve_internal = true)))
+    g∞ω = Lazy{slicer_type(s.g∞)}(() -> slicer(call!(s.g∞[], ω; skipsolve_internal = true)))
     g0slicer = SchurGreenSlicer(gLω, gRω, g∞ω, s.boundary, s.fsolver)
     gslicer = TMatrixSlicer(g0slicer, Σblocks, cblockstruct)
     return gslicer
 end
 
-_green_type(::AppliedSchurGreenSolver{T}) where {T} = SparseLUSlicer{Complex{T}}
+slicer_type(::Lazy{<:GFUnit{T}}) where {T} = SparseLUSlicer{Complex{T}}
 
 #endregion
 
@@ -401,17 +389,19 @@ _green_type(::AppliedSchurGreenSolver{T}) where {T} = SparseLUSlicer{Complex{T}}
 #region
 
 # With Lazy we delay computing fields until first use
-struct SchurGreenSlicer{T}  # Is not general <:GreenSlicer, since it does not admit contacts
-    G₋₁₋₁::Lazy{SparseLUSlicer{Complex{T}}}     # gLω
-    G₁₁::Lazy{SparseLUSlicer{Complex{T}}}       # gRω
-    G∞₀₀::Lazy{SparseLUSlicer{Complex{T}}}      # g∞ω
-    L´G∞₀₀::Lazy{Matrix{Complex{T}}}
-    R´G∞₀₀::Lazy{Matrix{Complex{T}}}
-    G₁₁L::Lazy{Matrix{Complex{T}}}
-    G₋₁₋₁R::Lazy{Matrix{Complex{T}}}
-    R´G₁₁L::Lazy{Matrix{Complex{T}}}
-    L´G₋₁₋₁R::Lazy{Matrix{Complex{T}}}
-    boundary::T
+struct SchurGreenSlicer{C}  <: GreenSlicer{C}
+    L::Matrix{C}
+    R::Matrix{C}
+    G₋₁₋₁::Lazy{SparseLUSlicer{C}}     # gLω
+    G₁₁::Lazy{SparseLUSlicer{C}}       # gRω
+    G∞₀₀::Lazy{SparseLUSlicer{C}}      # g∞ω
+    L´G∞₀₀::Lazy{Matrix{C}}
+    R´G∞₀₀::Lazy{Matrix{C}}
+    G₁₁L::Lazy{Matrix{C}}
+    G₋₁₋₁R::Lazy{Matrix{C}}
+    R´G₁₁L::Lazy{Matrix{C}}
+    L´G₋₁₋₁R::Lazy{Matrix{C}}
+    boundary::C
 end
 
 #region ## Constructors ##
@@ -429,37 +419,39 @@ function SchurGreenSlicer(gLω::Lazy{S}, gRω::Lazy{S}, g∞ω::Lazy{S}, boundar
     R´G₁₁L = Lazy{Matrix{C}}(() -> mul!(RGL, R', G₁₁L[]))
     L´G₋₁₋₁R = Lazy{Matrix{C}}(() -> mul!(LGR, L', G₋₁₋₁R[]))
 
-    return SchurGreenSlicer(gLω, gRω, g∞ω, L´G∞₀₀, R´G∞₀₀, G₁₁L, G₋₁₋₁R, R´G₁₁L, L´G₋₁₋₁R, boundary)
+    return SchurGreenSlicer(L, R, gLω, gRω, g∞ω, L´G∞₀₀, R´G∞₀₀, G₁₁L, G₋₁₋₁R, R´G₁₁L, L´G₋₁₋₁R, complex(boundary))
 end
 
 # note that gLω[].source and gRω[].source are taller than L, R, due to extended sites
 # but size(L, 2) = size(R, 2) = min(l, r) = d (deflated surface)
 # and size(gLω[].source, 2) = l, size(gRω[].source, 2) = r
-function lazy_ldiv!(gω::Lazy{G}, LorR) where {C,G<:SparseLUSlicer{C}}
-    drng = 1:size(LorR, 2)
+function lazy_ldiv!(gω::Lazy{G}, L) where {C,G<:SparseLUSlicer{C}}
+    drng = 1:size(L, 2)
     lazy = Lazy{Matrix{C}}() do
         g = gω[]
         s = view(g.source, :, drng)
         fill!(s, zero(C))
-        copyto!(s, CartesianIndices(LorR), LorR, CartesianIndices(LorR))
-        return ldiv!(g.fact, s)
+        copyto!(s, CartesianIndices(L), L, CartesianIndices(L))
+        gL = ldiv!(g.fact, s)
+        return gL[axes(L)...]
     end
     return lazy
 end
 
 # we must use non-overlapping portions of g∞ω[].source for rdiv! of L and R
-function lazy_rdiv!(LorR, g∞ω::Lazy{G}, side) where {C,G<:SparseLUSlicer{C}}
+function lazy_rdiv!(L, g∞ω::Lazy{G}, side) where {C,G<:SparseLUSlicer{C}}
     lazy = Lazy{Matrix{C}}() do
         g = g∞ω[]
         maxcols = size(g.source, 2)
-        ncols = size(LorR, 2)
+        ncols = size(L, 2)
         drng = ifelse(side == :L, 1:ncols, maxcols-ncols:maxcols)
         maxcols >= 2 * ncols ||
             internalerror("lazy_rdiv!: unexpected source size $(maxcols)<$(2 * ncols)")
         s = view(g.source, :, drng)
         fill!(s, zero(C))
-        copyto!(s, CartesianIndices(LorR), LorR, CartesianIndices(LorR))
-        return rdiv!(s', g.fact)
+        copyto!(s, CartesianIndices(L), L, CartesianIndices(L))
+        L´g = ldiv!(g.fact', s)'
+        return L´g[axes(L')...]
     end
     return lazy
 end
@@ -481,57 +473,60 @@ function inf_schur_slice(s::SchurGreenSlicer, i::CellOrbitals, j::CellOrbitals)
     dist = only(cell(i) - cell(j))
     if dist == 0
         g = s.G∞₀₀[]
-        return g[i, j]
-    else
-        return inf_schur_slice(s, rows, cols, dist)
-    end
-end
-
-function inf_schur_slice(s, rows, cols, dist)
-    if dist >= 1                                            # G₁₁L (R'G₁₁L)ⁿ⁻ᵐ⁻¹ R'G∞₀₀
+        i´, j´ = cellorbs((), rows), cellorbs((), cols)
+        return g[i´, j´]
+    elseif dist >= 1                                        # G₁₁L (R'G₁₁L)ⁿ⁻ᵐ⁻¹ R'G∞₀₀
         R´G∞₀₀ = view(s.R´G∞₀₀[], :, cols)
         R´G₁₁L = s.R´G₁₁L[]
         G₁₁L = view(s.G₁₁L[], rows, :)
         G = G₁₁L * (R´G₁₁L^(dist - 1)) * R´G∞₀₀
         # add view for type-stability
-        Gview = view(G, 1:length(rows), 1:length(cols))
+        Gview = view(G, collect(axes(G, 1)), :)
         return Gview
-    else # dist <= -1                                       # G₋₁₋₁R(L'G₋₁₋₁R)ᵐ⁻ⁿ⁻¹L'G∞₀₀
+    elseif dist <= -1                                       # G₋₁₋₁R(L'G₋₁₋₁R)ᵐ⁻ⁿ⁻¹L'G∞₀₀
         L´G∞₀₀ = view(s.L´G∞₀₀[], :, cols)
         L´G₋₁₋₁R = s.L´G₋₁₋₁R[]
         G₋₁₋₁R = view(s.G₋₁₋₁R[], rows, :)
         G = G₋₁₋₁R * (L´G₋₁₋₁R^(dist - 1)) * L´G∞₀₀
         # add view for type-stability
-        Gview = view(G, 1:length(rows), 1:length(cols))
+        Gview = view(G, collect(axes(G, 1)), :)
         return Gview
     end
 end
 
-function semi_schur_slice(s::SchurGreenSlicer{T}, i, j) where {T}
-    n = only(cell(i)) - s.boundary
-    m = only(cell(j)) - s.boundary
+function semi_schur_slice(s::SchurGreenSlicer{C}, i, j) where {C}
+    n = only(cell(i)) - Int(s.boundary)
+    m = only(cell(j)) - Int(s.boundary)
     rows, cols = orbindices(i), orbindices(j)
     if n * m <= 0 # This includes inter-boundary
-        # need to add view for type stability
-        return view(zeros(Complex{T}, norbs(i), norbs(j)), 1:norbs(i), 1:norbs(j))
+        # need to add view with specific index types for type stability
+        return view(zeros(C, norbs(i), norbs(j)), collect(1:norbs(i)), :)
     elseif n == m == 1
         g = s.G₁₁[]
-        return g[i, j]
+        i´, j´ = cellorbs((), rows), cellorbs((), cols)
+        return g[i´, j´]
     elseif n == m == -1
         g = s.G₋₁₋₁[]
-        return g[i, j]
+        i´, j´ = cellorbs((), rows), cellorbs((), cols)
+        return g[i´, j´]
     elseif m >= 1  # also n >= 1                             # G∞ₙₘ - G₁₁L(R'G₁₁L)ⁿ⁻¹ R'G∞₀ₘ
-        Gnm = inf_schur_slice(s, rows, cols, n - m)
-        R´G0m = R' * inf_schur_slice(s, :, cols, -m)
+        i´ = cellorbs(n, rows)
+        j´ = cellorbs(m, cols)
+        Gnm = inf_schur_slice(s, i´, j´)
+        i´ = cellorbs(0, :)
+        R´G0m = s.R' * inf_schur_slice(s, i´, j´)
         R´G₁₁L = s.R´G₁₁L[]
         G₁₁L = view(s.G₁₁L[], rows, :)
         G = n == 1 ?
             mul!(Gnm, G₁₁L, R´G0m, -1, 1) :
             mul!(Gnm, G₁₁L, (R´G₁₁L^(n-1)) * R´G0m, -1, 1)
         return G
-    elseif m <= -1  # also n <= -1                  # Gₙₘ = G∞ₙₘ - G₋₁₋₁R(L'G₋₁₋₁R)¹⁻ⁿL'G∞₀ₘ
-        Gnm = inf_schur_slice(s, rows, cols, n - m)
-        L´G0m = L' * inf_schur_slice(s, :, cols, -m)
+    else  # m, n <= -1                              # Gₙₘ = G∞ₙₘ - G₋₁₋₁R(L'G₋₁₋₁R)¹⁻ⁿL'G∞₀ₘ
+        i´ = cellorbs(n, rows)
+        j´ = cellorbs(m, cols)
+        Gnm = inf_schur_slice(s, i´, j´)
+        i´ = cellorbs(0, :)
+        L´G0m = s.L' * inf_schur_slice(s, i´, j´)
         L´G₋₁₋₁R = s.L´G₋₁₋₁R[]
         G₋₁₋₁R = view(s.G₋₁₋₁R[], rows, :)
         G = n == -1 ?

@@ -86,12 +86,81 @@ ind_to_slice(c::CellSites{<:Any,Colon}, g) =
     ind_to_slice(cellsites(cell(c), siterange(lattice(g))), g)
 ind_to_slice(c::CellSites{<:Any,Symbol}, g) =
     ind_to_slice(cellsites(cell(c), siterange(lattice(g), siteindices(c))), g)
+ind_to_slice(c::CellOrbitals, g) = c
 
 Base.getindex(g::GreenSolution, i::CellOrbitals, j::CellOrbitals) = slicer(g)[i, j]
 
 # fallback
 Base.getindex(s::GreenSlicer, ::CellOrbitals, ::CellOrbitals) =
     internalerror("getindex of $(nameof(typeof(s))): not implemented")
+
+#endregion
+
+############################################################################################
+# TMatrixSlicer <: GreenSlicer
+#    Given a slicer that works without any contacts, implement slicing with contacts through
+#    a T-Matrix equation g(i, j) = g0(i, j) + g0(i, k)T(k,k')g0(k', j), and T = (1-Σ*g0)⁻¹*Σ
+#region
+
+struct TMatrixSlicer{C,L,V<:SubArray{C},S} <: GreenSlicer{C}
+    g0slicer::S
+    tmatrix::V
+    gcontacts::V
+    blockstruct::ContactBlockStructure{L}
+end
+
+#region ## Constructors ##
+
+function TMatrixSlicer(g0slicer::GreenSlicer{C}, Σblocks::NTuple{<:Any,MatrixBlock{C}}, blockstruct) where {C}
+    if isempty(Σblocks)
+        zeromat = view(zeros(C, 0, 0), 1:0, 1:0)
+        return TMatrixSlicer(g0slicer, zeromat, zeromat, blockstruct)
+    else
+        os = orbslice(blockstruct)
+        nos = norbs(os)
+        n = max(nos, maxrows(Σblocks), maxcols(Σblocks))        # includes extended sites
+        Σmat = Matrix{C}(undef, n, n)
+        Σbm = BlockMatrix(Σmat, Σblocks)
+        update!(Σbm)                                            # updates Σmat with Σblocks
+        g0mat = zeros(C, n, n)
+        off = offsets(os)
+        for (j, sj) in enumerate(subcells(os)), (i, si) in enumerate(subcells(os))
+            irng = off[i]+1:off[i+1]
+            jrng = off[j]+1:off[j+1]
+            g0view = view(g0mat, irng, jrng)
+            copy!(g0view, g0slicer[si, sj])
+        end
+        den = Matrix{C}(I, n, n)
+        mul!(den, Σmat, g0mat, -1, 1)                           # den = 1-Σ*g0
+        luden = lu!(den)
+        tmatrix = view(ldiv!(luden, Σmat), 1:nos, 1:nos)        # tmatrix = (1 - Σ*g0)⁻¹Σ
+        gcontacts = view(rdiv!(g0mat, luden), 1:nos, 1:nos)     # gcontacts = g0*(1 - Σ*g0)⁻¹
+        return TMatrixSlicer(g0slicer, tmatrix, gcontacts, blockstruct)
+    end
+end
+
+#endregion
+
+#region ## API ##
+
+Base.view(s::TMatrixSlicer, i::ContactIndex, j::ContactIndex) =
+    view(s.gcontacts, contactinds(s.blockstruct, Int(i)), contactinds(s.blockstruct, Int(j)))
+
+Base.view(s::TMatrixSlicer, ::Colon, ::Colon) = s.gcontacts
+
+function Base.getindex(s::TMatrixSlicer, i::CellOrbitals, j::CellOrbitals)
+    g0 = s.g0slicer
+    g0ij = g0[i, j]
+    tkk´ = s.tmatrix
+    isempty(tkk´) && return g0ij
+    k = orbslice(s.blockstruct)
+    g0ik = mortar([g0[si, sk] for si in (i,), sk in subcells(k)])
+    g0k´j = mortar([g0[sk´, sj] for sk´ in subcells(k), sj in (j,)])
+    gij = g0ij + g0ik * tkk´ * g0k´j
+    return gij
+end
+
+#endregion
 
 #endregion
 
