@@ -18,7 +18,7 @@ using IntervalTrees
 using FrankenTuples
 using Statistics: mean
 
-# using Infiltrator # debugging
+using Infiltrator # debugging
 
 export sublat, lattice, supercell, bravais_matrix,
        hopping, onsite, @onsite, @hopping, @onsite!, @hopping!, neighbors,

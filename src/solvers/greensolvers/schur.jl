@@ -311,10 +311,10 @@ const GFUnit{T,E,H,N,S} =
     GreenFunction{T,E,0,AppliedSparseLU{Complex{T}},H,Contacts{0,N,S}}
 
 # With Lazy we delay computing fields until first use
-struct AppliedSchurGreenSolver{T,B,GL<:GFUnit{T},GR<:GFUnit{T},G∞<:GFUnit{T}} <: AppliedGreenSolver
+struct AppliedSchurGreenSolver{T,B,G<:GFUnit{T},G∞<:GFUnit{T}} <: AppliedGreenSolver
     boundary::T
-    gL::Lazy{GL}                   # GreenFunction for unitcell with ΣL
-    gR::Lazy{GR}                   # GreenFunction for unitcell with ΣR
+    gL::Lazy{G}                    # GreenFunction for unitcell with ΣL
+    gR::Lazy{G}                    # GreenFunction for unitcell with ΣR
     g∞::Lazy{G∞}                   # GreenFunction for unitcell with ΣR + ΣL
     fsolver::SchurFactorsSolver{T,B}
 end
@@ -483,7 +483,7 @@ function inf_schur_slice(s::SchurGreenSlicer, i::CellOrbitals, j::CellOrbitals)
         # add view for type-stability
         Gview = view(G, collect(axes(G, 1)), :)
         return Gview
-    elseif dist <= -1                                       # G₋₁₋₁R(L'G₋₁₋₁R)ᵐ⁻ⁿ⁻¹L'G∞₀₀
+    else # dist <= -1                                      # G₋₁₋₁R(L'G₋₁₋₁R)ᵐ⁻ⁿ⁻¹L'G∞₀₀
         L´G∞₀₀ = view(s.L´G∞₀₀[], :, cols)
         L´G₋₁₋₁R = s.L´G₋₁₋₁R[]
         G₋₁₋₁R = view(s.G₋₁₋₁R[], rows, :)

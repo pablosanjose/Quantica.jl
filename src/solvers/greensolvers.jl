@@ -4,7 +4,7 @@
 #     - apply(s, h::AbstractHamiltonian, c::Contacts) -> AppliedGreenSolver
 #   All new s::AppliedGreenSolver must implement
 #      - s(ω, Σblocks, ::ContactBlockStructure) -> AbstractGreenSlicer
-#      - minimal_callsafe_copy(gs) -> optional, has a deepcopy fallback
+#      - Optional: minimal_callsafe_copy(gs) -> has a deepcopy fallback
 #   This GreenSolution provides in particular:
 #      - GreenSlicer to compute e.g. G[gi, gi´]::AbstractMatrix for indices gi, see below
 #      - linewidth flat matrix Γᵢ for each contact
@@ -13,8 +13,9 @@
 #   All gs::GreenSlicer's must implement
 #      - view(gs, ::ContactIndex, ::ContactIndex) -> g(ω; kw...) between specific contacts
 #      - view(gs, ::Colon, ::Colon) -> g(ω; kw...) between all contacts
-#      - gs[i::CellOrbitals, j::CellOrbitals]
-#      - minimal_callsafe_copy(gs) -> optional, has a deepcopy fallback
+#      - gs[i::CellOrbitals, j::CellOrbitals] -> must return a Matrix for type stability
+#      - Optional: copyto!(m, gs, i::CellOrbitals, j::CellOrbitals)
+#      - Optional: minimal_callsafe_copy(gs) -> has a deepcopy fallback
 #   The user-facing indexing API accepts:
 #      - contact(i)::ContactIndex -> Sites of Contact number i
 #      - cellsites(cell::Tuple, sind::Int)::Subcell -> Single site in a cell

@@ -39,8 +39,8 @@ merge_parameters!(p) = unique!(sort!(p))
 
 typename(::T) where {T} = nameof(T)
 
-function mortar(ms::AbstractMatrix{M}) where {C,M<:AbstractMatrix{C}}
-    isempty(ms) && return ms
+function mortar(ms::AbstractMatrix{M}) where {C<:Number,M<:AbstractMatrix{C}}
+    isempty(ms) && return convert(Matrix{C}, ms)
     mrows = size.(ms, 1)
     mcols = size.(ms, 2)
     allequal(eachrow(mcols)) && allequal(eachcol(mrows)) ||
@@ -86,59 +86,19 @@ lengths_to_offsets(v::NTuple{<:Any,Integer}) = (0, cumsum(v)...)
 #    A wrapper for a type whose value is only evaluated on the first access
 #region
 
-# struct Lazy{T,F}
-#     evaluator::F
-#     value::Base.RefValue{T}
-#     evaluated::Base.RefValue{Bool}
-#     function Lazy{T,F}(evaluator) where {T,F}
-#         R = Base.return_types(evaluator, Tuple{})
-#         length(R) == 1 && only(R) === T ||
-#             internalerror("Lazy: evaluator returns wrong type, expected Any[$T], got $R")
-#         return new(evaluator, Ref{T}(), Ref(false))
-#     end
-# end
-
-# Lazy{T}(f::F) where {T,F} = Lazy{T,F}(f)
-
-# struct Lazy{T}
-#     evaluator::FunctionWrapper{T,Tuple{}}
-#     value::Base.RefValue{T}
-#     evaluated::Base.RefValue{Bool}
-#     function Lazy{T}(evaluator) where {T}
-#         R = Base.return_types(evaluator, Tuple{})
-#         length(R) == 1 && only(R) === T ||
-#             internalerror("Lazy: evaluator returns wrong type, expected Any[$T], got $R")
-#         return new(FunctionWrapper{T,Tuple{}}(evaluator), Ref{T}(), Ref(false))
-#     end
-# end
-
 mutable struct Lazy{T}
-    evaluator::FunctionWrapper{T,Tuple{}}
+    evaluator::Function   # Using FunctionWrapper instead leads to segfaults for some reason
     value::T
     evaluated::Bool
     function Lazy{T}(evaluator) where {T}
-        R = Base.return_types(evaluator, Tuple{})
-        length(R) == 1 && only(R) === T ||
-            internalerror("Lazy: evaluator returns wrong type, expected $T, got $(only(R))")
-        isconcretetype(only(R)) ||
-            internalerror("Lazy: evaluator returns non-concrete type $(only(R))")
         l = new()
-        l.evaluator = FunctionWrapper{T,Tuple{}}(evaluator)
+        l.evaluator = evaluator
         l.evaluated = false
         return l
     end
 end
 
-
 #region ## API ##
-
-# function Base.getindex(l::Lazy{T}) where {T}
-#     if !isdefined(l.evaluated, 1) || !isdefined(l.value, 1) || !l.evaluated[]
-#         l.value[] = l.evaluator()
-#         l.evaluated[] = true
-#     end
-#     return l.value[]
-# end
 
 function Base.getindex(l::Lazy{T}) where {T}
     if !l.evaluated
@@ -147,10 +107,6 @@ function Base.getindex(l::Lazy{T}) where {T}
     end
     return l.value
 end
-
-# unused:
-# init!(l::Lazy) = (l.value[] = l.evaluator(); l.evaluated[] = true; l)
-# uninit!(l::Lazy) = (l.evaluated[] = false; l)
 
 #endregion
 
