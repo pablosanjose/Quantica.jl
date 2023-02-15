@@ -156,7 +156,7 @@ function Base.getindex(s::TMatrixSlicer, i::CellOrbitals, j::CellOrbitals)
     k = orbslice(s.blockstruct)
     g0ik = mortar([g0[si, sk] for si in (i,), sk in subcells(k)])
     g0k´j = mortar([g0[sk´, sj] for sk´ in subcells(k), sj in (j,)])
-    gij = view(g0ij + g0ik * tkk´ * g0k´j, collect(axes(g0ij, 1)), :)
+    gij = mul!(g0ij, g0ik, tkk´ * g0k´j, 1, 1)  # = g0ij + g0ik * tkk´ * g0k´j
     return gij
 end
 

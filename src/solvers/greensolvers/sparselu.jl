@@ -73,11 +73,15 @@ function _view(s::SparseLUSlicer{C}, dstinds, srcinds, source) where {C}
     return g
 end
 
-function Base.getindex(s::SparseLUSlicer, i::CellOrbitals, j::CellOrbitals)
+function Base.view(s::SparseLUSlicer, i::CellOrbitals, j::CellOrbitals)
     # cannot use s.source, because it has only ncols = number of orbitals in contacts
     source = similar(s.source, size(s.source, 1), norbs(j))
-    return _view(s, orbindices(i), orbindices(j), source)
+    v = _view(s, orbindices(i), orbindices(j), source)
+    return v
 end
+
+# getindex must return a Matrix
+Base.getindex(s::SparseLUSlicer, i::CellOrbitals, j::CellOrbitals) = copy(view(s, i, j))
 
 #endregion
 

@@ -481,16 +481,14 @@ function inf_schur_slice(s::SchurGreenSlicer, i::CellOrbitals, j::CellOrbitals)
         G₁₁L = view(s.G₁₁L[], rows, :)
         G = G₁₁L * (R´G₁₁L^(dist - 1)) * R´G∞₀₀
         # add view for type-stability
-        Gview = view(G, collect(axes(G, 1)), :)
-        return Gview
+        return G
     else # dist <= -1                                      # G₋₁₋₁R(L'G₋₁₋₁R)ᵐ⁻ⁿ⁻¹L'G∞₀₀
         L´G∞₀₀ = view(s.L´G∞₀₀[], :, cols)
         L´G₋₁₋₁R = s.L´G₋₁₋₁R[]
         G₋₁₋₁R = view(s.G₋₁₋₁R[], rows, :)
         G = G₋₁₋₁R * (L´G₋₁₋₁R^(dist - 1)) * L´G∞₀₀
         # add view for type-stability
-        Gview = view(G, collect(axes(G, 1)), :)
-        return Gview
+        return G
     end
 end
 
@@ -500,7 +498,7 @@ function semi_schur_slice(s::SchurGreenSlicer{C}, i, j) where {C}
     rows, cols = orbindices(i), orbindices(j)
     if n * m <= 0 # This includes inter-boundary
         # need to add view with specific index types for type stability
-        return view(zeros(C, norbs(i), norbs(j)), collect(1:norbs(i)), :)
+        return zeros(C, norbs(i), norbs(j))
     elseif n == m == 1
         g = s.G₁₁[]
         i´, j´ = cellorbs((), rows), cellorbs((), cols)
