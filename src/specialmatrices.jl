@@ -332,42 +332,46 @@ end
 #region
 
 function update!(m::BlockSparseMatrix)
-    fill!(nonzeros(matrix(m)), 0)
-    addblocks!(m)
+    nzs = nonzeros(matrix(m))
+    fill!(nzs, 0)
+    # Since blocks(m) is an inhomogeneous tuple, we cannot do a type-stable loop
+    sparse_addblocks!(nzs, 1, pointers(m), blocks(m)...)
     return m
 end
 
-function addblocks!(m::BlockSparseMatrix)
-    for (mblock, ptrs) in zip(blocks(m), pointers(m))
-        bmat = blockmat(mblock)
-        coef = coefficient(mblock)
-        for (x, ptr) in zip(stored(bmat), ptrs)
-            nonzeros(matrix(m))[ptr] += coef * x
-        end
+function sparse_addblocks!(nzs, i, ps, mblock, bs...)
+    ptrs = ps[i]
+    bmat = blockmat(mblock)
+    coef = coefficient(mblock)
+    for (x, ptr) in zip(stored(bmat), ptrs)
+        nzs[ptr] += coef * x
     end
-    return m
+    return sparse_addblocks!(nzs, i+1, ps, bs...)
 end
+
+sparse_addblocks!(nzs, _, _) = nzs
 
 stored(block::AbstractSparseMatrixCSC) = nonzeros(block)
 stored(block::StridedMatrix) = block
 stored(block::Diagonal) = block.diag
 
 function update!(m::BlockMatrix)
-    fill!(matrix(m), 0)
-    addblocks!(m)
+    mat = matrix(m)
+    fill!(mat, 0)
+    # Since blocks(m) is an inhomogeneous tuple, we cannot do a type-stable loop
+    dense_addblocks!(mat, blocks(m)...)
     return m
 end
 
-function addblocks!(m::BlockMatrix)
-    mat = matrix(m)
-    for mblock in blocks(m)
-        bmat = blockmat(mblock)
-        coef = coefficient(mblock)
-        vmat = view(mat, blockrows(mblock), blockcols(mblock))
-        vmat .+= coef .* bmat
-    end
-    return m
+function dense_addblocks!(mat, mblock, bs...)
+    bmat = blockmat(mblock)
+    coef = coefficient(mblock)
+    vmat = view(mat, blockrows(mblock), blockcols(mblock))
+    vmat .+= coef .* bmat
+    return dense_addblocks!(mat, bs...)
 end
+
+dense_addblocks!(mat) = mat
 
 #endregion
 #endregion top

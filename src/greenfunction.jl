@@ -28,6 +28,8 @@ default_green_solver(::AbstractHamiltonian1D) = GS.Schur()
 ## TODO: test copy(g) for aliasing problems
 (g::GreenFunction)(; params...) = minimal_callsafe_copy(call!(g; params...))
 (g::GreenFunction)(ω; params...) = minimal_callsafe_copy(call!(g, ω; params...))
+(g::GreenFunctionSlice)(; params...) = minimal_callsafe_copy(call!(g; params...))
+(g::GreenFunctionSlice)(ω; params...) = copy(call!(g, ω; params...))
 
 function call!(g::GreenFunction; params...)
     h´ = call!(hamiltonian(g); params...)
@@ -46,11 +48,19 @@ function call!(g::GreenFunction, ω; params...)
     return GreenSolution(h, slicer, Σblocks, cbs)
 end
 
+call!(g::GreenFunctionSlice; params...) =
+    GreenFunctionSlice(call!(greenfunction(g); params...), slicerows(g), slicecols(g))
+
+call!(g::GreenFunctionSlice, ω; params...) =
+    call!(greenfunction(g), ω; params...)[slicerows(g), slicecols(g)]
+
 #endregion
 
 ############################################################################################
 # GreenSolution indexing
 #region
+
+Base.getindex(g::GreenFunction, i, j = i) = GreenFunctionSlice(g, i, j)
 
 Base.view(g::GreenSolution, i::ContactIndex, j::ContactIndex = i) = view(slicer(g), i, j)
 Base.view(g::GreenSolution, i::Colon, j::Colon = i) = view(slicer(g), i, j)

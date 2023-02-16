@@ -1569,6 +1569,10 @@ blockstructure(g::GreenSolution) = g.contactbs
 
 greenfunction(g::GreenFunctionSlice) = g.parent
 
+slicerows(g::GreenFunctionSlice) = g.rows
+
+slicecols(g::GreenFunctionSlice) = g.cols
+
 Base.parent(g::GreenFunction) = g.parent
 Base.parent(g::GreenSolution) = g.parent
 Base.parent(g::GreenFunctionSlice) = g.parent
@@ -1578,6 +1582,9 @@ minimal_callsafe_copy(g::GreenFunction) =
 
 minimal_callsafe_copy(g::GreenSolution) =
     GreenSolution(minimal_callsafe_copy(g.parent), minimal_callsafe_copy(g.slicer), g.contactΣs, g.contactbs)
+
+minimal_callsafe_copy(g::GreenFunctionSlice) =
+    GreenFunctionSlice(minimal_callsafe_copy(g.parent), g.rows, g.cols)
 
 #endregion
 #endregion

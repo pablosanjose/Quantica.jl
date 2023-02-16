@@ -82,37 +82,6 @@ lengths_to_offsets(v::NTuple{<:Any,Integer}) = (0, cumsum(v)...)
 #endregion
 
 ############################################################################################
-# Lazy wrapper
-#    A wrapper for a type whose value is only evaluated on the first access
-#region
-
-mutable struct Lazy{T}
-    evaluator::Function   # Using FunctionWrapper instead leads to segfaults for some reason
-    value::T
-    evaluated::Bool
-    function Lazy{T}(evaluator) where {T}
-        l = new()
-        l.evaluator = evaluator
-        l.evaluated = false
-        return l
-    end
-end
-
-#region ## API ##
-
-function Base.getindex(l::Lazy{T}) where {T}
-    if !l.evaluated
-        l.value = l.evaluator()
-        l.evaluated = true
-    end
-    return l.value
-end
-
-#endregion
-
-#endregion
-
-############################################################################################
 # SparseMatrixCSC tools
 # all merged_* functions assume matching structure of sparse matrices
 #region

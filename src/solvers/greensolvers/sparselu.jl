@@ -33,11 +33,12 @@ function (s::AppliedSparseLU)(ω, Σblocks, contactblockstruct)
     update!(invgreen, ω)
     igmat = matrix(invgreen)
 
-    fact = try
-        lu(igmat)
-    catch
-        argerror("Encountered a singular G⁻¹(ω) at ω = $ω, cannot factorize")
-    end
+    # fact = try
+    #     lu(igmat)
+    # catch
+    #     argerror("Encountered a singular G⁻¹(ω) at ω = $ω, cannot factorize")
+    # end
+    fact = lu(igmat)
 
     so = SparseLUSlicer(fact, unitcinds, unitcindsall, source)
     return so

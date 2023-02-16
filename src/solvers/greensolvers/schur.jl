@@ -311,17 +311,48 @@ call!_output(s::SelfEnergySchurSolver) = call!(s, 0.0; skipsolve_internal = true
 # AppliedSchurGreenSolverSolver
 #region
 
-const GFUnit{T,E,H,N,S} =
-    GreenFunction{T,E,0,AppliedSparseLU{Complex{T}},H,Contacts{0,N,S}}
-
-# With Lazy we delay computing fields until first use
-struct AppliedSchurGreenSolver{T,B,G<:GFUnit{T},G∞<:GFUnit{T}} <: AppliedGreenSolver
-    boundary::T
-    gL::Lazy{G}                    # GreenFunction for unitcell with ΣL
-    gR::Lazy{G}                    # GreenFunction for unitcell with ΣR
-    g∞::Lazy{G∞}                   # GreenFunction for unitcell with ΣR + ΣL
+# We delay initialization of some fields until they are first needed (which may be never)
+mutable struct AppliedSchurGreenSolver{T,B,O,O∞,G,G∞} <: AppliedGreenSolver
     fsolver::SchurFactorsSolver{T,B}
+    boundary::T
+    ohL::O                  # OpenHamiltonian for unitcell with ΣL
+    ohR::O                  # OpenHamiltonian for unitcell with ΣR
+    oh∞::O∞                 # OpenHamiltonian for unitcell with ΣL + ΣR
+    gL::G                   # Lazy field: GreenFunction for ohL
+    gR::G                   # Lazy field: GreenFunction for ohR
+    g∞::G∞                  # Lazy field: GreenFunction for oh∞
+    function AppliedSchurGreenSolver{T,B,O,O∞,G,G∞}(fsolver, boundary, ohL, ohR, oh∞) where {T,B,O,O∞,G,G∞}
+        s = new()
+        s.fsolver = fsolver
+        s.boundary = boundary
+        s.ohL = ohL
+        s.ohR = ohR
+        s.oh∞ = oh∞
+        return s
+    end
 end
+
+AppliedSchurGreenSolver{G,G∞}(fsolver::SchurFactorsSolver{T,B}, boundary, ohL::O, ohR::O, oh∞::O∞) where {T,B,O,O∞,G,G∞} =
+    AppliedSchurGreenSolver{T,B,O,O∞,G,G∞}(fsolver, boundary, ohL, ohR, oh∞)
+
+#region ## getproperty ##
+
+function Base.getproperty(s::AppliedSchurGreenSolver, f::Symbol)
+    if !isdefined(s, f)
+        if f == :gL
+            s.gL = greenfunction(s.ohL, GS.SparseLU())
+        elseif f == :gR
+            s.gR = greenfunction(s.ohR, GS.SparseLU())
+        elseif f == :g∞
+            s.g∞ = greenfunction(s.oh∞, GS.SparseLU())
+        else
+            argerror("Unknown field $f for AppliedSchurGreenSolver")
+        end
+    end
+    return getfield(s, f)
+end
+
+#endregion
 
 #region ## apply ##
 
@@ -339,15 +370,16 @@ function apply(s::GS.Schur, h::AbstractHamiltonian1D, contacts::Contacts)
     ΣR = SelfEnergy(ΣR_solver, latslice_r)
 
     ohL = attach(h0, ΣL)
-    gL = Lazy{green_type(h0, ΣL)}(() -> greenfunction(ohL, GS.SparseLU()))
     ohR = attach(h0, ΣR)
-    gR = Lazy{green_type(h0, ΣR)}(() -> greenfunction(ohR, GS.SparseLU()))
     oh∞ = attach(ohL, ΣR)
-    g∞ = Lazy{green_type(h0, ΣL, ΣR)}(() -> greenfunction(oh∞, GS.SparseLU()))
-
+    G, G∞ = green_type(h0, ΣL), green_type(h0, ΣL, ΣR)
     boundary = round(only(s.boundary))
-    return AppliedSchurGreenSolver(boundary, gL, gR, g∞, fsolver)
+    slicer = AppliedSchurGreenSolver{G,G∞}(fsolver, boundary, ohL, ohR, oh∞)
+    return slicer
 end
+
+const GFUnit{T,E,H,N,S} =
+    GreenFunction{T,E,0,AppliedSparseLU{Complex{T}},H,Contacts{0,N,S}}
 
 green_type(::H,::S) where {T,E,H<:AbstractHamiltonian{T,E},S} =
     GFUnit{T,E,H,1,Tuple{S}}
@@ -364,15 +396,10 @@ minimal_callsafe_copy(s::AppliedSchurGreenSolver) = AppliedSchurGreenSolver(
 function (s::AppliedSchurGreenSolver)(ω, Σblocks, cblockstruct)
     # call! fsolver once for all the g's
     call!(s.fsolver, ω)
-    gLω = Lazy{slicer_type(s.gL)}(() -> slicer(call!(s.gL[], ω; skipsolve_internal = true)))
-    gRω = Lazy{slicer_type(s.gR)}(() -> slicer(call!(s.gR[], ω; skipsolve_internal = true)))
-    g∞ω = Lazy{slicer_type(s.g∞)}(() -> slicer(call!(s.g∞[], ω; skipsolve_internal = true)))
-    g0slicer = SchurGreenSlicer(gLω, gRω, g∞ω, s.boundary, s.fsolver)
+    g0slicer = SchurGreenSlicer(ω, s)
     gslicer = TMatrixSlicer(g0slicer, Σblocks, cblockstruct)
     return gslicer
 end
-
-slicer_type(::Lazy{<:GFUnit{T}}) where {T} = SparseLUSlicer{Complex{T}}
 
 #endregion
 
@@ -392,99 +419,116 @@ slicer_type(::Lazy{<:GFUnit{T}}) where {T} = SparseLUSlicer{Complex{T}}
 #       Gₙₘ = G∞ₙₘ - G₋₁₋₁R(L'G₋₁₋₁R)¹⁻ⁿL'G∞₀ₘ                              for m,n <= -1
 #region
 
-# With Lazy we delay computing fields until first use
-struct SchurGreenSlicer{C}  <: GreenSlicer{C}
+# We delay initialization of most fields until they are first needed (which may be never)
+mutable struct SchurGreenSlicer{C,A<:AppliedSchurGreenSolver}  <: GreenSlicer{C}
+    ω::C
+    solver::A
+    boundary::C
     L::Matrix{C}
     R::Matrix{C}
-    G₋₁₋₁::Lazy{SparseLUSlicer{C}}     # gLω
-    G₁₁::Lazy{SparseLUSlicer{C}}       # gRω
-    G∞₀₀::Lazy{SparseLUSlicer{C}}      # g∞ω
-    L´G∞₀₀::Lazy{Matrix{C}}
-    R´G∞₀₀::Lazy{Matrix{C}}
-    G₁₁L::Lazy{Matrix{C}}
-    G₋₁₋₁R::Lazy{Matrix{C}}
-    R´G₁₁L::Lazy{Matrix{C}}
-    L´G₋₁₋₁R::Lazy{Matrix{C}}
-    boundary::C
-end
-
-#region ## Constructors ##
-
-function SchurGreenSlicer(gLω::Lazy{S}, gRω::Lazy{S}, g∞ω::Lazy{S}, boundary, fsolver) where {C,S<:SparseLUSlicer{C}}
-    L, R = fsolver.L, fsolver.R
-    # temporaries
-    gL, gR, L´g, R´g = fsolver.tmp.GL, fsolver.tmp.GR, fsolver.tmp.LG, fsolver.tmp.RG
-    G₁₁L   = lazy_ldiv!(gL, gRω, L)
-    G₋₁₋₁R = lazy_ldiv!(gR, gLω, R)
-    L´G∞₀₀ = lazy_rdiv!(L´g, L, g∞ω)
-    R´G∞₀₀ = lazy_rdiv!(R´g, R, g∞ω)
-
-    d = size(L, 2)
-    RGL = similar(R, d, d)
-    LGR = similar(L, d, d)
-    R´G₁₁L = Lazy{Matrix{C}}(() -> mul!(RGL, R', G₁₁L[]))
-    L´G₋₁₋₁R = Lazy{Matrix{C}}(() -> mul!(LGR, L', G₋₁₋₁R[]))
-
-    return SchurGreenSlicer(L, R, gLω, gRω, g∞ω, L´G∞₀₀, R´G∞₀₀, G₁₁L, G₋₁₋₁R, R´G₁₁L, L´G₋₁₋₁R, complex(boundary))
-end
-
-# note that gLω[].source and gRω[].source are taller than L, R, due to extended sites
-# but size(L, 2) = size(R, 2) = min(l, r) = d (deflated surface)
-# and size(gLω[].source, 2) = l, size(gRω[].source, 2) = r
-function lazy_ldiv!(gL::Matrix{C}, gω::Lazy, L) where {C}
-    lazy = Lazy{Matrix{C}}() do
-        g = gω[]
-        Lext = view(g.source, :, axes(L, 2))
-        fill!(Lext, zero(C))
-        copyto!(Lext, CartesianIndices(L), L, CartesianIndices(L))
-        copy!(gL, view(ldiv!(g.fact, Lext), axes(L)...))
-        return gL
+    G₋₁₋₁::SparseLUSlicer{C}
+    G₁₁::SparseLUSlicer{C}
+    G∞₀₀::SparseLUSlicer{C}
+    L´G∞₀₀::Matrix{C}
+    R´G∞₀₀::Matrix{C}
+    G₁₁L::Matrix{C}
+    G₋₁₋₁R::Matrix{C}
+    R´G₁₁L::Matrix{C}
+    L´G₋₁₋₁R::Matrix{C}
+    function SchurGreenSlicer{C,A}(ω, solver) where {C,A}
+        s = new()
+        s.ω = ω
+        s.solver = solver
+        s.boundary = solver.boundary
+        s.L = solver.fsolver.L
+        s.R = solver.fsolver.R
+        return s
     end
-    return lazy
 end
 
-function lazy_rdiv!(L´g::Matrix{C}, L, g∞ω::Lazy) where {C}
-    lazy = Lazy{Matrix{C}}() do
-        g = g∞ω[]
-        Lext = view(g.source, :, axes(L, 2))
-        fill!(Lext, zero(C))
-        copyto!(Lext, CartesianIndices(L), L, CartesianIndices(L))
-        copy!(L´g, view(ldiv!(g.fact', Lext), axes(L)...)')
-        return L´g
+SchurGreenSlicer(ω, solver::A) where {T,A<:AppliedSchurGreenSolver{T}} =
+    SchurGreenSlicer{Complex{T},A}(ω, solver)
+
+#region ## getproperty ##
+
+function Base.getproperty(s::SchurGreenSlicer, f::Symbol)
+    if !isdefined(s, f)
+        solver = s.solver
+        d = size(s.L, 2)
+        if f == :G₋₁₋₁
+            s.G₋₁₋₁ = slicer(call!(solver.gL, s.ω; skipsolve_internal = true))
+        elseif f == :G₁₁
+            s.G₁₁ = slicer(call!(solver.gR, s.ω; skipsolve_internal = true))
+        elseif f == :G∞₀₀
+            s.G∞₀₀ = slicer(call!(solver.g∞, s.ω; skipsolve_internal = true))
+        elseif f == L´G∞₀₀
+            L´g = solver.fsolver.tmp.LG
+            s.L´G∞₀₀ = extended_rdiv!(L´g, s.L, s.G∞₀₀)
+        elseif f == R´G∞₀₀
+            R´G = solver.fsolver.tmp.RG
+            s.R´G∞₀₀ = extended_rdiv!(R´G, s.R, s.G∞₀₀)
+        elseif f == G₁₁L
+            GL = solver.fsolver.tmp.GL
+            s.G₁₁L = extended_ldiv!(GL, s.G₁₁, s.L)
+        elseif f == G₋₁₋₁R
+            GR = solver.fsolver.tmp.GR
+            s.G₋₁₋₁R = extended_ldiv!(GR, s.G₋₁₋₁, s.R)
+        elseif f == R´G₁₁L
+            RGL = similar(s.R, d, d)
+            s.R´G₁₁L = mul!(RGL, s.R', s.G₁₁L)
+        elseif f == L´G₋₁₋₁R
+            LGR = similar(L, d, d)
+            s.L´G₋₁₋₁R = mul!(LGR, L', G₋₁₋₁R)
+        else
+            argerror("Unknown field $f for SchurGreenSlicer")
+        end
     end
-    return lazy
+    return getfield(s, f)
+end
+
+# note that g.source is taller than L, R, due to extended sites, but of >= witdth
+# size(L, 2) = size(R, 2) = min(l, r) = d (deflated surface)
+function extended_ldiv!(gL::Matrix{C}, g::SparseLUSlicer, L) where {C}
+    Lext = view(g.source, :, axes(L, 2))
+    fill!(Lext, zero(C))
+    copyto!(Lext, CartesianIndices(L), L, CartesianIndices(L))
+    copy!(gL, view(ldiv!(g.fact, Lext), axes(L)...))
+    return gL
+end
+
+function extended_rdiv!(L´g::Matrix{C}, L, g::SparseLUSlicer) where {C}
+    Lext = view(g.source, :, axes(L, 2))
+    fill!(Lext, zero(C))
+    copyto!(Lext, CartesianIndices(L), L, CartesianIndices(L))
+    copy!(L´g, view(ldiv!(g.fact', Lext), axes(L)...)')
+    return L´g
 end
 
 #endregion
 
 #region ## API ##
 
-function Base.getindex(s::SchurGreenSlicer, i::CellOrbitals, j::CellOrbitals)
-    if isinf(s.boundary)
-        return inf_schur_slice(s, i, j)
-    else
-        return semi_schur_slice(s, i, j)
-    end
-end
+Base.getindex(s::SchurGreenSlicer, i::CellOrbitals, j::CellOrbitals) =
+    isinf(s.boundary) ? inf_schur_slice(s, i, j) : semi_schur_slice(s, i, j)
 
 function inf_schur_slice(s::SchurGreenSlicer, i::CellOrbitals, j::CellOrbitals)
     rows, cols = orbindices(i), orbindices(j)
     dist = only(cell(i) - cell(j))
     if dist == 0
-        g = s.G∞₀₀[]
+        g = s.G∞₀₀
         i´, j´ = cellorbs((), rows), cellorbs((), cols)
         return g[i´, j´]
     elseif dist >= 1                                      # G∞ₙₘ = G₁₁L (R'G₁₁L)ⁿ⁻ᵐ⁻¹ R'G∞₀₀
-        R´G∞₀₀ = view(s.R´G∞₀₀[], :, cols)
-        R´G₁₁L = s.R´G₁₁L[]
-        G₁₁L = view(s.G₁₁L[], rows, :)
+        R´G∞₀₀ = view(s.R´G∞₀₀, :, cols)
+        R´G₁₁L = s.R´G₁₁L
+        G₁₁L = view(s.G₁₁L, rows, :)
         G = G₁₁L * (R´G₁₁L^(dist - 1)) * R´G∞₀₀
         # add view for type-stability
         return G
     else # dist <= -1                                 # G∞ₙₘ = G₋₁₋₁R (L'G₋₁₋₁R)ᵐ⁻ⁿ⁻¹ L'G∞₀₀
-        L´G∞₀₀ = view(s.L´G∞₀₀[], :, cols)
-        L´G₋₁₋₁R = s.L´G₋₁₋₁R[]
-        G₋₁₋₁R = view(s.G₋₁₋₁R[], rows, :)
+        L´G∞₀₀ = view(s.L´G∞₀₀, :, cols)
+        L´G₋₁₋₁R = s.L´G₋₁₋₁R
+        G₋₁₋₁R = view(s.G₋₁₋₁R, rows, :)
         G = G₋₁₋₁R * (L´G₋₁₋₁R^(- dist - 1)) * L´G∞₀₀
         # add view for type-stability
         return G
@@ -499,11 +543,11 @@ function semi_schur_slice(s::SchurGreenSlicer{C}, i, j) where {C}
         # need to add view with specific index types for type stability
         return zeros(C, norbs(i), norbs(j))
     elseif n == m == 1
-        g = s.G₁₁[]
+        g = s.G₁₁
         i´, j´ = cellorbs((), rows), cellorbs((), cols)
         return g[i´, j´]
     elseif n == m == -1
-        g = s.G₋₁₋₁[]
+        g = s.G₋₁₋₁
         i´, j´ = cellorbs((), rows), cellorbs((), cols)
         return g[i´, j´]
     elseif m >= 1  # also n >= 1                       # Gₙₘ = G∞ₙₘ - G₁₁L(R'G₁₁L)ⁿ⁻¹ R'G∞₀ₘ
@@ -512,8 +556,8 @@ function semi_schur_slice(s::SchurGreenSlicer{C}, i, j) where {C}
         G∞ₙₘ = inf_schur_slice(s, i´, j´)
         i´ = cellorbs(0, :)
         R´G∞₀ₘ = s.R' * inf_schur_slice(s, i´, j´)
-        R´G₁₁L = s.R´G₁₁L[]
-        G₁₁L = view(s.G₁₁L[], rows, :)
+        R´G₁₁L = s.R´G₁₁L
+        G₁₁L = view(s.G₁₁L, rows, :)
         Gₙₘ = n == 1 ?
             mul!(G∞ₙₘ, G₁₁L, R´G∞₀ₘ, -1, 1) :
             mul!(G∞ₙₘ, G₁₁L, (R´G₁₁L^(n-1)) * R´G∞₀ₘ, -1, 1)
@@ -524,8 +568,8 @@ function semi_schur_slice(s::SchurGreenSlicer{C}, i, j) where {C}
         G∞ₙₘ = inf_schur_slice(s, i´, j´)
         i´ = cellorbs(0, :)
         L´G∞₀ₘ = s.L' * inf_schur_slice(s, i´, j´)
-        L´G₋₁₋₁R = s.L´G₋₁₋₁R[]
-        G₋₁₋₁R = view(s.G₋₁₋₁R[], rows, :)
+        L´G₋₁₋₁R = s.L´G₋₁₋₁R
+        G₋₁₋₁R = view(s.G₋₁₋₁R, rows, :)
         Gₙₘ = n == -1 ?
             mul!(G∞ₙₘ, G₋₁₋₁R, L´G∞₀ₘ, -1, 1) :
             mul!(G∞ₙₘ, G₋₁₋₁R, (L´G₋₁₋₁R^(-n-1)) * L´G∞₀ₘ, -1, 1)
