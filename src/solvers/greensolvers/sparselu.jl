@@ -7,7 +7,7 @@ struct AppliedSparseLU{C} <:AppliedGreenSolver
 end
 
 mutable struct SparseLUSlicer{C} <:GreenSlicer{C}
-    fact::SparseSuite.UMFPACK.UmfpackLU{C,Int}  # of full system plus extended orbs
+    fact::SuiteSparse.UMFPACK.UmfpackLU{C,Int}  # of full system plus extended orbs
     nonextrng::UnitRange{Int}                    # range of non-extended orbital indices
     unitcinds::Vector{Vector{Int}}               # non-extended fact indices per contact
     unitcindsall::Vector{Int}                    # merged and uniqued unitcinds
