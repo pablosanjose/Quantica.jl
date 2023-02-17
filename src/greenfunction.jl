@@ -92,10 +92,10 @@ ind_to_slice(l::LatticeSlice, g) = orbslice(l, hamiltonian(g))
 ind_to_slice(kw::NamedTuple, g) = ind_to_slice(getindex(lattice(g); kw...), g)
 ind_to_slice(cell::Union{SVector,Tuple}, g::GreenSolution{<:Any,<:Any,L}) where {L} =
     ind_to_slice(cellsites(sanitize_SVector(SVector{L,Int}, cell), :), g)
-ind_to_slice(c::CellSites{<:Any,Colon}, g) =
-    ind_to_slice(cellsites(cell(c), siterange(lattice(g))), g)
+ind_to_slice(c::CellSites{<:Any,Colon}, g) = cellorbs(cell(c), :)
 ind_to_slice(c::CellSites{<:Any,Symbol}, g) =
-    ind_to_slice(cellsites(cell(c), siterange(lattice(g), siteindices(c))), g)
+    # uses a UnitRange instead of a Vector
+    cellorbs(cell(c), flatrange(hamiltonian(g), siteindices(c)))
 ind_to_slice(c::CellOrbitals, g) = c
 
 Base.getindex(g::GreenSolution, i::CellOrbitals, j::CellOrbitals) = slicer(g)[i, j]

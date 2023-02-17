@@ -96,6 +96,7 @@ sublatname(l::Lattice, s) = sublatname(l.unitcell, s)
 sublatname(u::Unitcell, s) = u.names[s]
 sublatname(s::Sublat) = s.name
 
+sublatindex(l::Lattice, name::Symbol) = sublatindex(l.unitcell, name)
 sublatindex(u::Unitcell, name::Symbol) = findfirst(==(name), sublatnames(u))
 
 nsublats(l::Lattice) = nsublats(l.unitcell)
@@ -661,6 +662,14 @@ blocksize(b::OrbitalBlockStructure{B}, iunflat) where {N,B<:SMatrix{N}} = N
 
 blocksize(b::OrbitalBlockStructure{B}, iunflat) where {B<:Number} = 1
 
+function sublatorbrange(b::OrbitalBlockStructure, sind::Integer)
+    bss = blocksizes(b)
+    sss = subsizes(b)
+    offset = sind == 1 ? 0 : sum(i -> bss[i] * sss[i], 1:sind-1)
+    rng = offset + 1:offset + bss[sind] * sss[sind]
+    return rng
+end
+
 # Basic relation: iflat - 1 == (iunflat - soffset - 1) * b + soffset´
 function flatrange(b::OrbitalBlockStructure{<:SMatrixView}, iunflat::Integer)
     soffset  = 0
@@ -896,6 +905,7 @@ end
 
 struct InverseGreenBlockSparse{C}
     mat::BlockSparseMatrix{C}
+    nonextrng::UnitRange{Int}       # range of indices for non-extended sites
     unitcinds::Vector{Vector{Int}}  # orbital indices in parent unitcell of each contact
     unitcindsall::Vector{Int}       # merged, uniqued and sorted unitcinds
     source::Matrix{C}               # preallocation for ldiv! solve
@@ -904,6 +914,8 @@ end
 #region ## API ##
 
 matrix(s::InverseGreenBlockSparse) = matrix(s.mat)
+
+orbrange(s::InverseGreenBlockSparse) = s.nonextrng
 
 # updates only ω block and applies all blocks to BlockSparseMatrix
 function update!(s::InverseGreenBlockSparse, ω)
@@ -991,7 +1003,10 @@ blocktype(h::AbstractHamiltonian) = blocktype(blockstructure(h))
 flatsize(h::AbstractHamiltonian) = flatsize(blockstructure(h))
 
 # see specialmatrices.jl
-flatrange(h::AbstractHamiltonian, iunflat) = flatrange(blockstructure(h), iunflat)
+flatrange(h::AbstractHamiltonian, iunflat::Integer) = flatrange(blockstructure(h), iunflat)
+
+flatrange(h::AbstractHamiltonian, name::Symbol) =
+    sublatorbrange(blockstructure(h), sublatindex(lattice(h), name))
 
 ## Hamiltonian
 

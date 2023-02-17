@@ -76,11 +76,13 @@ function SchurWorkspace{C}((n, d), l, r) where {C}
 end
 
 function nearest_cell_harmonics(h)
-    for hh in harmonics(h)
+    is_nearest = length(harmonics(h)) == 3 && all(harmonics(h)) do hh
         dn = dcell(hh)
-        dn == SA[0] || dn == SA[1] || dn == SA[-1] ||
-            argerror("Too many harmonics, try `supercell` to reduce to strictly nearest-cell harmonics.")
+        dn == SA[0] || dn == SA[1] || dn == SA[-1]
     end
+    is_nearest ||
+        argerror("Too many or too few harmonics. Perhaps try `supercell` to ensure strictly nearest-cell harmonics.")
+
     hm, h0, hp = h[-1], h[0], h[1]
     flat(hm) == flat(hp)' ||
         argerror("The Hamiltonian should have h[1] = h[-1]' to use the Schur solver")
@@ -461,24 +463,24 @@ function Base.getproperty(s::SchurGreenSlicer, f::Symbol)
             s.G₁₁ = slicer(call!(solver.gR, s.ω; skipsolve_internal = true))
         elseif f == :G∞₀₀
             s.G∞₀₀ = slicer(call!(solver.g∞, s.ω; skipsolve_internal = true))
-        elseif f == L´G∞₀₀
+        elseif f == :L´G∞₀₀
             L´g = solver.fsolver.tmp.LG
             s.L´G∞₀₀ = extended_rdiv!(L´g, s.L, s.G∞₀₀)
-        elseif f == R´G∞₀₀
+        elseif f == :R´G∞₀₀
             R´G = solver.fsolver.tmp.RG
             s.R´G∞₀₀ = extended_rdiv!(R´G, s.R, s.G∞₀₀)
-        elseif f == G₁₁L
+        elseif f == :G₁₁L
             GL = solver.fsolver.tmp.GL
             s.G₁₁L = extended_ldiv!(GL, s.G₁₁, s.L)
-        elseif f == G₋₁₋₁R
+        elseif f == :G₋₁₋₁R
             GR = solver.fsolver.tmp.GR
             s.G₋₁₋₁R = extended_ldiv!(GR, s.G₋₁₋₁, s.R)
-        elseif f == R´G₁₁L
+        elseif f == :R´G₁₁L
             RGL = similar(s.R, d, d)
             s.R´G₁₁L = mul!(RGL, s.R', s.G₁₁L)
-        elseif f == L´G₋₁₋₁R
-            LGR = similar(L, d, d)
-            s.L´G₋₁₋₁R = mul!(LGR, L', G₋₁₋₁R)
+        elseif f == :L´G₋₁₋₁R
+            LGR = similar(s.L, d, d)
+            s.L´G₋₁₋₁R = mul!(LGR, s.L', s.G₋₁₋₁R)
         else
             argerror("Unknown field $f for SchurGreenSlicer")
         end
@@ -523,14 +525,12 @@ function inf_schur_slice(s::SchurGreenSlicer, i::CellOrbitals, j::CellOrbitals)
         R´G₁₁L = s.R´G₁₁L
         G₁₁L = view(s.G₁₁L, rows, :)
         G = G₁₁L * (R´G₁₁L^(dist - 1)) * R´G∞₀₀
-        # add view for type-stability
         return G
     else # dist <= -1                                 # G∞ₙₘ = G₋₁₋₁R (L'G₋₁₋₁R)ᵐ⁻ⁿ⁻¹ L'G∞₀₀
         L´G∞₀₀ = view(s.L´G∞₀₀, :, cols)
         L´G₋₁₋₁R = s.L´G₋₁₋₁R
         G₋₁₋₁R = view(s.G₋₁₋₁R, rows, :)
         G = G₋₁₋₁R * (L´G₋₁₋₁R^(- dist - 1)) * L´G∞₀₀
-        # add view for type-stability
         return G
     end
 end

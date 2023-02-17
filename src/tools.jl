@@ -60,13 +60,15 @@ end
 
 # equivalent to mat = I[:, cols]. Useful for Green function source
 # no check of mat size vs cols is done
-function one!(mat::StridedMatrix{T}, cols = axes(mat, 1)) where {T}
+function one!(mat::StridedMatrix{T}, cols::AbstractRange = axes(mat, 2)) where {T}
     fill!(mat, zero(T))
     for (col, row) in enumerate(cols)
         mat[row, col] = one(T)
     end
     return mat
 end
+
+one!(mat::StridedMatrix, ::Colon) = one!(mat)
 
 lengths_to_offsets(v::AbstractVector{<:Integer}) = prepend!(cumsum(v), 0)
 lengths_to_offsets(v::NTuple{<:Any,Integer}) = (0, cumsum(v)...)
