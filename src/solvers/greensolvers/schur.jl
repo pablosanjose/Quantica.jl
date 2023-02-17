@@ -464,23 +464,23 @@ function Base.getproperty(s::SchurGreenSlicer, f::Symbol)
         elseif f == :G∞₀₀
             s.G∞₀₀ = slicer(call!(solver.g∞, s.ω; skipsolve_internal = true))
         elseif f == :L´G∞₀₀
-            L´g = solver.fsolver.tmp.LG
-            s.L´G∞₀₀ = extended_rdiv!(L´g, s.L, s.G∞₀₀)
+            tmp = solver.fsolver.tmp.LG
+            s.L´G∞₀₀ = extended_rdiv!(tmp, s.L, s.G∞₀₀)
         elseif f == :R´G∞₀₀
-            R´G = solver.fsolver.tmp.RG
-            s.R´G∞₀₀ = extended_rdiv!(R´G, s.R, s.G∞₀₀)
+            tmp = solver.fsolver.tmp.RG
+            s.R´G∞₀₀ = extended_rdiv!(tmp, s.R, s.G∞₀₀)
         elseif f == :G₁₁L
-            GL = solver.fsolver.tmp.GL
-            s.G₁₁L = extended_ldiv!(GL, s.G₁₁, s.L)
+            tmp = solver.fsolver.tmp.GL
+            s.G₁₁L = extended_ldiv!(tmp, s.G₁₁, s.L)
         elseif f == :G₋₁₋₁R
-            GR = solver.fsolver.tmp.GR
-            s.G₋₁₋₁R = extended_ldiv!(GR, s.G₋₁₋₁, s.R)
+            tmp = solver.fsolver.tmp.GR
+            s.G₋₁₋₁R = extended_ldiv!(tmp, s.G₋₁₋₁, s.R)
         elseif f == :R´G₁₁L
-            RGL = similar(s.R, d, d)
-            s.R´G₁₁L = mul!(RGL, s.R', s.G₁₁L)
+            tmp = similar(s.R, d, d)
+            s.R´G₁₁L = mul!(tmp, s.R', s.G₁₁L)
         elseif f == :L´G₋₁₋₁R
-            LGR = similar(s.L, d, d)
-            s.L´G₋₁₋₁R = mul!(LGR, s.L', s.G₋₁₋₁R)
+            tmp = similar(s.L, d, d)
+            s.L´G₋₁₋₁R = mul!(tmp, s.L', s.G₋₁₋₁R)
         else
             argerror("Unknown field $f for SchurGreenSlicer")
         end

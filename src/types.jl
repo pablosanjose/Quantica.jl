@@ -1474,7 +1474,8 @@ blockstructure(c::Contacts) = c.blockstruct
 
 contactinds(c::Contacts, i...) = contactinds(c.blockstruct, i...)
 contactinds(b::ContactBlockStructure) = b.contactinds
-contactinds(b::ContactBlockStructure, i) = b.contactinds[i]
+contactinds(b::ContactBlockStructure, i) = 1 <= i <= length(b.contactinds) ? b.contactinds[i] :
+    argerror("Cannot access contact $i, there are $(length(b.contactinds)) contacts")
 
 call!(c::Contacts; params...) = Contacts(call!.(c.selfenergies; params...), c.blockstruct)
 

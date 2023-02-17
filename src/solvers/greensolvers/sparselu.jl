@@ -88,7 +88,8 @@ function compute_or_retrieve_green(s::SparseLUSlicer{C}, dstinds, srcinds, sourc
         fact = s.fact
         one!(source, srcinds)
         gext = ldiv!(fact, source)
-        g = view(gext, dstinds, :)
+        dstinds´ = ifelse(dstinds === Colon(), s.nonextrng, dstinds)
+        g = view(gext, dstinds´, :)
         if srcinds === Colon()
             s.unitg = copy(view(gext, s.nonextrng, s.nonextrng))
         end
