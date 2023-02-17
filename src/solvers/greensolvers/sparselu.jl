@@ -47,10 +47,12 @@ function (s::AppliedSparseLU{C})(ω, Σblocks, contactblockstruct) where {C}
     # the H0 and Σs inside invgreen have already been updated by the parent call!(g, ω; ...)
     update!(invgreen, ω)
     igmat = matrix(invgreen)
+    @show sum(nonzeros(igmat))
+    @show sum(igmat.colptr)
+    @show sum(igmat.rowval)
 
     fact = try
         lu(igmat)
-        # lu!(Matrix(igmat))
     catch
         argerror("Encountered a singular G⁻¹(ω) at ω = $ω, cannot factorize")
     end

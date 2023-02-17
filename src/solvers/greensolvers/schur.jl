@@ -399,6 +399,7 @@ function (s::AppliedSchurGreenSolver)(ω, Σblocks, cblockstruct)
     # call! fsolver once for all the g's
     call!(s.fsolver, ω)
     g0slicer = SchurGreenSlicer(ω, s)
+    g0slicer.G∞₀₀
     gslicer = TMatrixSlicer(g0slicer, Σblocks, cblockstruct)
     return gslicer
 end
