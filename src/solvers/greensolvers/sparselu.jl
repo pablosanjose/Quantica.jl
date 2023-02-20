@@ -24,8 +24,8 @@ mutable struct SparseLUSlicer{C} <:GreenSlicer{C}
     end
 end
 
-SparseLUSlicer(fact::Factorization{C}, unitcinds, unitcindsall, source) where {C} =
-    SparseLUSlicer(fact, unitcinds, unitcindsall, source)
+SparseLUSlicer(fact::Factorization{C}, nonextrng, unitcinds, unitcindsall, source) where {C} =
+    SparseLUSlicer{C}(fact, nonextrng, unitcinds, unitcindsall, source)
 
 #region ## API ##
 
