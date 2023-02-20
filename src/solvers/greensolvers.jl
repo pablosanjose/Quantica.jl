@@ -62,7 +62,7 @@ end # module
 
 const GS = GreenSolvers
 
-include("greensolvers/SelfEnergyModelSolver.jl")
+include("greensolvers/selfenergymodel.jl")
 include("greensolvers/sparselu.jl")
 include("greensolvers/schur.jl")
 # include("greensolvers/bands.jl")
