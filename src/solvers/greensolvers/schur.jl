@@ -292,6 +292,18 @@ end
 
 #endregion
 
+#region ## SelfEnergy (attach) API ##
+
+# function SelfEnergy(h::AbstractHamiltonian, g::GreenFunction{<:Any,<:Any,<:Any,<:AppliedSchurGreenSolver}; reverse = false, kw...)
+#     sel = siteselector(; kw...)
+#     latslice = lattice(h)[sel]
+#     fsolver = schurfactorsolver(solver(g))
+#     solver = SelfEnergySchurSolver(fsolver, reverse)
+#     return SelfEnergy(solver, latslice)
+# end
+
+#endregion
+
 #region ## API ##
 
 # This solver produces two solutions (L/R) for the price of one. We can opt out of calling
@@ -310,7 +322,7 @@ call!_output(s::SelfEnergySchurSolver) = call!(s, 0.0; skipsolve_internal = true
 #endregion top
 
 ############################################################################################
-# AppliedSchurGreenSolverSolver
+# AppliedSchurGreenSolver
 #region
 
 # We delay initialization of some fields until they are first needed (which may be never)
@@ -337,6 +349,12 @@ end
 AppliedSchurGreenSolver{G,G∞}(fsolver::SchurFactorsSolver{T,B}, boundary, ohL::O, ohR::O, oh∞::O∞) where {T,B,O,O∞,G,G∞} =
     AppliedSchurGreenSolver{T,B,O,O∞,G,G∞}(fsolver, boundary, ohL, ohR, oh∞)
 
+#region ## API ##
+
+schurfactorsolver(s::AppliedSchurGreenSolver) = s.fsolver
+
+#endregion
+
 #region ## getproperty ##
 
 function Base.getproperty(s::AppliedSchurGreenSolver, f::Symbol)
@@ -361,13 +379,13 @@ end
 function apply(s::GS.Schur, h::AbstractHamiltonian1D, contacts::Contacts)
     h´ = hamiltonian(h)
     fsolver = SchurFactorsSolver(h´, s.shift)
-    ΣR_solver = SelfEnergySchurSolver(fsolver, :R)
-    ΣL_solver = SelfEnergySchurSolver(fsolver, :L)
     h0 = unitcell_hamiltonian(h)
     rsites = stored_cols(unflat(h[1]))
     lsites = stored_cols(unflat(h[-1]))
     latslice_l = lattice(h0)[cellsites((), lsites)]
     latslice_r = lattice(h0)[cellsites((), rsites)]
+    ΣR_solver = SelfEnergySchurSolver(fsolver, :R)
+    ΣL_solver = SelfEnergySchurSolver(fsolver, :L)
     ΣL = SelfEnergy(ΣL_solver, latslice_l)
     ΣR = SelfEnergy(ΣR_solver, latslice_r)
 
@@ -402,6 +420,8 @@ function (s::AppliedSchurGreenSolver)(ω, Σblocks, cblockstruct)
     gslicer = TMatrixSlicer(g0slicer, Σblocks, cblockstruct)
     return gslicer
 end
+
+#endregion
 
 #endregion
 

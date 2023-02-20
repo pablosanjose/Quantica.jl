@@ -63,7 +63,6 @@ include("supercell.jl")
 include("transform.jl")
 include("mesh.jl")
 include("spectrum.jl")
-include("selfenergy.jl")
 include("greenfunction.jl")
 # Plumbing
 include("apply.jl")

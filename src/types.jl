@@ -458,7 +458,7 @@ coefficient(t::AbstractParametricTerm) = t.coefficient
 (term::AbstractParametricTerm{2})(x, y, args...; kw...) = term.coefficient * term.f.f(x, y; kw...)
 (term::AbstractParametricTerm{3})(x, y, z, args...; kw...) = term.coefficient * term.f.f(x, y, z; kw...)
 
-# We need these for SelfEnergyModel, which uses a ParametricModel. We return a
+# We need these for SelfEnergyModelSolver, which uses a ParametricModel. We return a
 # ParametricOnsiteTerm, not an OnsiteTerm because the latter is tied to a Hamiltonian at its
 # orbital structure, not only to a site selection
 function (t::ParametricOnsiteTerm{N})(; kw...) where {N}

@@ -11,8 +11,8 @@ mutable struct SparseLUSlicer{C} <:GreenSlicer{C}
     nonextrng::UnitRange{Int}                    # range of non-extended orbital indices
     unitcinds::Vector{Vector{Int}}               # non-extended fact indices per contact
     unitcindsall::Vector{Int}                    # merged and uniqued unitcinds
-    source::Matrix{C}                            # preallocation for ldiv! solve
-    unitg::Matrix{C}
+    source::Matrix{C}                            # preallocation for ldiv! source @ contacts
+    unitg::Matrix{C}                             # lazy storage of a full ldiv! solve
     function SparseLUSlicer{C}(fact, nonextrng, unitcinds, unitcindsall, source) where {C}
         s = new()
         s.fact = fact

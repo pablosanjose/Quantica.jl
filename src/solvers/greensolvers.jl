@@ -34,8 +34,15 @@
 #     - minimal_callsafe_copy(s::AbstractSelfEnergySolver) ->  optional, deepcopy fallback
 #   These AbstractMatrices are flat, defined on the LatticeSlice in parent SelfEnergy
 #       Note: `params` are only needed in cases where s adds new parameters that must be
-#       applied (e.g. SelfEnergyModel). Otherwise one must assume that any parent
+#       applied (e.g. SelfEnergyModelSolver). Otherwise one must assume that any parent
 #       ParametricHamiltonian to GreenFunction has already been call!-ed before calling s.
+############################################################################################
+
+############################################################################################
+# SelfEnergy constructors
+#   For each attach(h, sargs...; kw...) syntax we need, we must implement:
+#     - SelfEnergy(h::AbstractHamiltonian, sargs...; kw...) -> SelfEnergy
+#   SelfEnergy wraps the corresponding SelfEnergySolver, be it Regular or Extended
 ############################################################################################
 
 module GreenSolvers
@@ -55,7 +62,7 @@ end # module
 
 const GS = GreenSolvers
 
-include("greensolvers/selfenergymodel.jl")
+include("greensolvers/SelfEnergyModelSolver.jl")
 include("greensolvers/sparselu.jl")
 include("greensolvers/schur.jl")
 # include("greensolvers/bands.jl")
