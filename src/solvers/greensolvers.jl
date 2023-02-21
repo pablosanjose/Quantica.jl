@@ -4,7 +4,7 @@
 #     - apply(s, h::AbstractHamiltonian, c::Contacts) -> AppliedGreenSolver
 #   All new s::AppliedGreenSolver must implement
 #      - s(ω, Σblocks, ::ContactBlockStructure) -> AbstractGreenSlicer
-#      - Optional: minimal_callsafe_copy(gs) -> has a deepcopy fallback
+#      - minimal_callsafe_copy(gs)
 #   This GreenSolution provides in particular:
 #      - GreenSlicer to compute e.g. G[gi, gi´]::AbstractMatrix for indices gi, see below
 #      - linewidth flat matrix Γᵢ for each contact
@@ -14,7 +14,7 @@
 #      - view(gs, ::ContactIndex, ::ContactIndex) -> g(ω; kw...) between specific contacts
 #      - view(gs, ::Colon, ::Colon) -> g(ω; kw...) between all contacts
 #      - gs[i::CellOrbitals, j::CellOrbitals] -> must return a Matrix for type stability
-#      - Optional: minimal_callsafe_copy(gs) -> has a deepcopy fallback
+#      - minimal_callsafe_copy(gs)
 #   The user-facing indexing API accepts:
 #      - contact(i)::ContactIndex -> Sites of Contact number i
 #      - cellsites(cell::Tuple, sind::Int)::Subcell -> Single site in a cell
@@ -31,7 +31,7 @@
 #     - call!(s::ExtendedSelfEnergySolver, ω; params...) -> (Vᵣₑ, gₑₑ⁻¹, Vₑᵣ) AbsMats
 #         With the extended case, the equivalent Σreg reads Σreg = VᵣₑgₑₑVₑᵣ
 #     - call!_output(s::AbstractSelfEnergySolver) -> object returned by call!(s, ω; kw...)
-#     - minimal_callsafe_copy(s::AbstractSelfEnergySolver) ->  optional, deepcopy fallback
+#     - minimal_callsafe_copy(s::AbstractSelfEnergySolver)
 #   These AbstractMatrices are flat, defined on the LatticeSlice in parent SelfEnergy
 #       Note: `params` are only needed in cases where s adds new parameters that must be
 #       applied (e.g. SelfEnergyModelSolver). Otherwise one must assume that any parent

@@ -197,6 +197,15 @@ end
 checkmodes(whichmodes) = sum(whichmodes) == length(whichmodes) ÷ 2 ||
     argerror("Cannot differentiate retarded from advanced modes. Consider increasing imag(ω) or check that your Hamiltonian is Hermitian")
 
+minimal_callsafe_copy(s::SchurFactorsSolver) =
+    SchurFactorsSolver(s.shift, copy(s.hm), copy(s.h0), copy(s.hp), s.l_leq_r, copy(s.iG),
+    s.ptrs, s.linds, s.rinds, s.sinds, copy(s.L), copy(s.R), copy(s.R´L´),
+    minimal_callsafe_copy(s.tmp))
+
+minimal_callsafe_copy(s::SchurWorkspace) =
+    SchurWorkspace(copy.((s.GL, s.GR, s.LG, s.RG, s.A, s.B, s.Z11, s.Z21, s.Z11´, s.Z21´,
+    s.LD, s.DL, s.RD, s.DR))...)
+
 ## Pencil A - λB ##
 
 # Compute G*R and G*L where G = inv(ω - h0 - Σₐᵤₓ) for Σₐᵤₓ = -iΩL'L or -iΩR'R
@@ -331,6 +340,9 @@ maybe_match_parent((V, ig, V´), parentinds) =
 
 maybe_match_parent(factors, ::Missing) = factors
 
+minimal_callsafe_copy(s::SelfEnergySchurSolver) =
+    SelfEnergySchurSolver(minimal_callsafe_copy(s.fsolver), s.leftside)
+
 #endregion
 
 #endregion top
@@ -424,13 +436,22 @@ green_type(::H,::S1,::S2) where {T,E,H<:AbstractHamiltonian{T,E},S1,S2} =
 
 #region ## call API ##
 
-minimal_callsafe_copy(s::AppliedSchurGreenSolver) = AppliedSchurGreenSolver(
-    s.boundary, minimal_callsafe_copy.((s.gr, s.gl, s.g∞))...)
+function minimal_callsafe_copy(s::AppliedSchurGreenSolver{<:Any,<:Any,<:Any,<:Any,G,G∞}) where {G,G∞}
+    s´ = AppliedSchurGreenSolver{G,G∞}(s.fsolver, s.boundary,
+        minimal_callsafe_copy(s.ohL),
+        minimal_callsafe_copy(s.ohR),
+        minimal_callsafe_copy(s.oh∞))
+    isdefined(s, :gR) && (s´.gR = minimal_callsafe_copy(s.gR))
+    isdefined(s, :gL) && (s´.gL = minimal_callsafe_copy(s.gL))
+    isdefined(s, :g∞) && (s´.g∞ = minimal_callsafe_copy(s.g∞))
+    return s´
+end
 
 function (s::AppliedSchurGreenSolver)(ω, Σblocks, cblockstruct)
     # call! fsolver once for all the g's
     call!(s.fsolver, ω)
     g0slicer = SchurGreenSlicer(ω, s)
+    g0slicer.G∞₀₀
     gslicer = TMatrixSlicer(g0slicer, Σblocks, cblockstruct)
     return gslicer
 end
@@ -611,6 +632,20 @@ function semi_schur_slice(s::SchurGreenSlicer{C}, i, j) where {C}
     end
 end
 
+# TODO: Perhaps too conservative
+function minimal_callsafe_copy(s::SchurGreenSlicer)
+    s´ = SchurGreenSlicer(s.ω, minimal_callsafe_copy(s.solver))
+    isdefined(s, :G₋₁₋₁)    && (s´.G₋₁₋₁    = minimal_callsafe_copy(s.G₋₁₋₁))
+    isdefined(s, :G₁₁)      && (s´.G₁₁      = minimal_callsafe_copy(s.G₁₁))
+    isdefined(s, :G∞₀₀)     && (s´.G∞₀₀     = minimal_callsafe_copy(s.G∞₀₀))
+    isdefined(s, :L´G∞₀₀)   && (s´.L´G∞₀₀   = copy(s.L´G∞₀₀))
+    isdefined(s, :R´G∞₀₀)   && (s´.R´G∞₀₀   = copy(s.R´G∞₀₀))
+    isdefined(s, :G₁₁L)     && (s´.G₁₁L     = copy(s.G₁₁L))
+    isdefined(s, :G₋₁₋₁R)   && (s´.G₋₁₋₁R   = copy(s.G₋₁₋₁R))
+    isdefined(s, :R´G₁₁L)   && (s´.R´G₁₁L   = copy(s.R´G₁₁L))
+    isdefined(s, :L´G₋₁₋₁R) && (s´.L´G₋₁₋₁R = copy(s.L´G₋₁₋₁R))
+    return s´
+end
 #endregion
 
 #endregion
