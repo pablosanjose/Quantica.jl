@@ -306,18 +306,18 @@ function match_schur_solver()
 
 #region ## SelfEnergy (attach) API ##
 
-# function SelfEnergy(h::AbstractHamiltonian, g::GreenFunction{<:Any,<:Any,<:Any,<:AppliedSchurGreenSolver}; reverse = false, kw...)
-#     sel = siteselector(; kw...)
-#     latslice = lattice(h)[sel]
-#     fsolver = schurfactorsolver(solver(g))
-#     parentinds = match_lead_to_parent(h, latslice, hamiltonian(g))
-#     solver = SelfEnergySchurSolver(fsolver, reverse, parentinds)
-#     return SelfEnergy(solver, latslice)
-# end
+function SelfEnergy(h::AbstractHamiltonian, g::GreenFunction{<:Any,<:Any,<:Any,<:AppliedSchurGreenSolver}; reverse = false, kw...)
+    sel = siteselector(; kw...)
+    latslice = lattice(h)[sel]
+    fsolver = schurfactorsolver(solver(g))
+    parentinds = match_lead_to_parent(h, latslice, hamiltonian(g))
+    solver = SelfEnergySchurSolver(fsolver, reverse, parentinds)
+    return SelfEnergy(solver, latslice)
+end
 
-# function match_lead_to_parent(hcentral, lscentral, hlead)
-#     parentinds = contact_sites_to_orbitals(sliceinds, bs)
-# end
+function match_lead_to_parent(hparent, lsparent, hlead)
+    parentinds = contact_sites_to_orbitals(sliceinds, bs)
+end
 
 #endregion
 

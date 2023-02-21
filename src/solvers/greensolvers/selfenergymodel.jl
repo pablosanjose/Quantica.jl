@@ -14,7 +14,7 @@ function SelfEnergyModelSolver(h::AbstractHamiltonian, model::ParametricModel, l
     modelω = model_ω_to_param(model)  # see model.jl - transforms ω into a ω_internal param
     sliceinds = Int[]
     # this fills sliceinds::Vector{Int} with the latslice index for each lat0 site
-    lat0 = lattice(latslice, sliceinds)
+    lat0 = lattice0D(latslice, sliceinds)
     # this is a 0D ParametricHamiltonian to build the Σ(ω) as a view over flat(ph(; ...))
     ph = hamiltonian(lat0, modelω; orbitals = norbitals(h))
     # this build siteoffsets for all h orbitals over latslice

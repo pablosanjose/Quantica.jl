@@ -200,11 +200,11 @@ end
 #endregion
 
 ############################################################################################
-# convert LatticeSlice to Lattice/OrbitalSlice
-#    build a 0D Lattice or an OrbitalSlice using the sites in LatticeSlice
+# convert LatticeSlice to a 0D Lattice
+#    build a 0D Lattice using the sites in LatticeSlice
 #region
 
-function lattice(ls::LatticeSlice{T,E}, store = missing) where {T,E}
+function lattice0D(ls::LatticeSlice{T,E}, store = missing) where {T,E}
     lat = parent(ls)
     _empty!(store)
     sls = [sublat(collect(sublatsites(ls, s, store)); name = sublatname(lat, s))
@@ -220,6 +220,13 @@ function sublatsites(l::LatticeSlice, s::Integer, store = missing)
         if (n += 1; i in siterange(l.lat, s)))
     return gen
 end
+
+#endregion
+
+############################################################################################
+# convert a LatticeSlice to an OrbitalSlice
+#    build an OrbitalSlice using the sites in LatticeSlice
+#region
 
 orbslice(x, h::AbstractHamiltonian, store...) = orbslice(x, blockstructure(h), store...)
 orbslice(sc::CellSites, bs::OrbitalBlockStructure, store...) = _orbslice((sc,), bs, store...)
