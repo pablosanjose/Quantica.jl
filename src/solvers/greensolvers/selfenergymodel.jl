@@ -4,8 +4,8 @@
 #region
 
 struct SelfEnergyModelSolver{T,E,P<:ParametricHamiltonian{T,E,0}} <: RegularSelfEnergySolver
-    flatorbinds::Vector{Int}   # stores the orb index in parent latslice for each ph orbital
     ph::P                      # has an extra parameter :ω_internal for the frequency
+    parentinds::Vector{Int}   # stores the orb index in parent latslice for each ph orbital
 end
 
 #region ## Constructor ##
@@ -21,16 +21,8 @@ function SelfEnergyModelSolver(h::AbstractHamiltonian, model::ParametricModel, l
     bs = contact_blockstructure(h, latslice)
     # translation from lat0 to latslice orbital indices
     # i.e. orbital index on latslice for each orbital in lat0
-    flatorbinds = flat_orbital_indices(sliceinds, bs)
-    return SelfEnergyModelSolver(flatorbinds, ph)
-end
-
-function flat_orbital_indices(sliceinds, bs::ContactBlockStructure)
-    finds = Int[]
-    for iunflat in sliceinds
-        append!(finds, siterange(bs, iunflat))
-    end
-    return finds
+    parentinds = contact_sites_to_orbitals(sliceinds, bs)
+    return SelfEnergyModelSolver(ph, parentinds)
 end
 
 #endregion
@@ -50,12 +42,12 @@ end
 
 function call!(s::SelfEnergyModelSolver, ω; params...)
     m = call!(s.ph, (); ω_internal = ω, params...)
-    rows = cols = s.flatorbinds
+    rows = cols = s.parentinds
     return view(m, rows, cols)
 end
 
 call!_output(s::SelfEnergyModelSolver) =
-    view(call!_output(s.ph), s.flatorbinds, s.flatorbinds)
+    view(call!_output(s.ph), s.parentinds, s.parentinds)
 
 #endregion
 

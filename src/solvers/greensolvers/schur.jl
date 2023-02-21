@@ -270,15 +270,16 @@ end
 # SelfEnergySchurSolver <: ExtendedSelfEnergySolver <: AbstractSelfEnergySolver
 #region
 
-struct SelfEnergySchurSolver{T,B} <: ExtendedSelfEnergySolver
+struct SelfEnergySchurSolver{T,B,V<:Union{Missing,Vector{Int}}} <: ExtendedSelfEnergySolver
     fsolver::SchurFactorsSolver{T,B}
     leftside::Bool
+    parentinds::V  # row/col reordering of fsolver mats to match orbitals in parent latslice
 end
 
 #region ## Constructors ##
 
-SelfEnergySchurSolver(fsolver::SchurFactorsSolver, side::Symbol) =
-    SelfEnergySchurSolver(fsolver, isleftside(side))
+SelfEnergySchurSolver(fsolver::SchurFactorsSolver, side::Symbol, parentinds = missing) =
+    SelfEnergySchurSolver(fsolver, isleftside(side), parentinds)
 
 function isleftside(side)
     if side == :L
@@ -290,6 +291,8 @@ function isleftside(side)
     end
 end
 
+function match_schur_solver()
+
 #endregion
 
 #region ## SelfEnergy (attach) API ##
@@ -298,8 +301,13 @@ end
 #     sel = siteselector(; kw...)
 #     latslice = lattice(h)[sel]
 #     fsolver = schurfactorsolver(solver(g))
-#     solver = SelfEnergySchurSolver(fsolver, reverse)
+#     parentinds = match_lead_to_parent(h, latslice, hamiltonian(g))
+#     solver = SelfEnergySchurSolver(fsolver, reverse, parentinds)
 #     return SelfEnergy(solver, latslice)
+# end
+
+# function match_lead_to_parent(hcentral, lscentral, hlead)
+#     parentinds = contact_sites_to_orbitals(sliceinds, bs)
 # end
 
 #endregion
@@ -312,10 +320,16 @@ function call!(s::SelfEnergySchurSolver, ω;
                skipsolve_internal = false, params...)
     fsolver = s.fsolver
     Rfactors, Lfactors = skipsolve_internal ? call!_output(fsolver) : call!(fsolver, ω)
-    return ifelse(s.leftside, Lfactors, Rfactors)
+    factors = maybe_match_parent(ifelse(s.leftside, Lfactors, Rfactors), s.parentinds)
+    return factors
 end
 
-call!_output(s::SelfEnergySchurSolver) = call!(s, 0.0; skipsolve_internal = true)
+call!_output(s::SelfEnergySchurSolver) = call!(s, missing; skipsolve_internal = true)
+
+maybe_match_parent((V, ig, V´), parentinds) =
+    (view(V, parentinds, :), ig, view(V´, :, parentinds))
+
+maybe_match_parent(factors, ::Missing) = factors
 
 #endregion
 

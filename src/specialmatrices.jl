@@ -236,7 +236,7 @@ function simplify_matrixblock!(block::SubArray, rows, cols)
         end
         return MatrixBlock(parent(block), rows, cols)
     else # cannot simplify
-        return MatrixBlock(sparse(block), rows, cols)
+        return MatrixBlock(matrix(block), rows, cols)
     end
 end
 
