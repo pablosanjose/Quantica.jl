@@ -157,7 +157,7 @@ numbertype(::Lattice{T}) where {T} = T
 
 zerocell(::Lattice{<:Any,<:Any,L}) where {L} = zero(SVector{L,Int})
 
-# Base.copy(l::Lattice) = deepcopy(l)
+Base.copy(l::Lattice) = deepcopy(l)
 
 #endregion
 #endregion
@@ -1346,9 +1346,6 @@ call!(s::ExtendedSelfEnergySolver; params...) =
 call!(s::WrappedRegularSelfEnergySolver; params...) = s
 call!(s::WrappedExtendedSelfEnergySolver; params...) = s
 
-# fallback
-# minimal_callsafe_copy(s::AbstractSelfEnergySolver) = deepcopy(s)
-
 #endregion
 
 ############################################################################################
@@ -1532,10 +1529,6 @@ end
 contact(i::Integer) = ContactIndex(i)
 
 Base.Int(c::ContactIndex) = c.i
-
-# fallback
-# minimal_callsafe_copy(gs::AppliedGreenSolver) = deepcopy(gs)
-# minimal_callsafe_copy(gs::GreenSlicer) = deepcopy(gs)
 
 #endregion
 
