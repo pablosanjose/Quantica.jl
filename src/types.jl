@@ -803,7 +803,7 @@ SparseArrays.nonzeros(s::HybridSparseBlochMatrix) = nonzeros(s.unflat)
 
 abstract type AbstractBlockMatrix end
 
-struct MatrixBlock{C<:Number,A<:AbstractMatrix{C},UR,UC}
+struct MatrixBlock{C<:Number,A<:AbstractMatrix,UR,UC}
     block::A
     rows::UR             # row indices in parent matrix for each row in block
     cols::UC             # col indices in parent matrix for each col in block
@@ -830,7 +830,7 @@ end
 
 function MatrixBlock(block::SubArray, rows, cols)
     checkblockinds(block, rows, cols)
-    return simplify_matrixblock!(block, rows, cols)
+    return simplify_matrixblock(block, rows, cols)
 end
 
 function BlockSparseMatrix(mblocks::MatrixBlock...)
@@ -1352,7 +1352,7 @@ minimal_callsafe_copy(s::AbstractSelfEnergySolver) = deepcopy(s)
 
 struct SelfEnergy{T,E,L,S<:AbstractSelfEnergySolver}
     solver::S                                # returns AbstractMatrix block(s) over latslice
-    latslice::LatticeSlice{T,E,L}                # sites on each unitcell with a selfenergy
+    latslice::LatticeSlice{T,E,L}            # sites on each unitcell with a selfenergy
 end
 
 #region ## API ##

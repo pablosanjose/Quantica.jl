@@ -220,25 +220,33 @@ unflat_sync!(s) = internalerror("unflat_sync!: method not yet implemented")
 
 ############################################################################################
 # MatrixBlock simplify
+#   Revert subarray to parent through a simple reordering of rows and cols
+#   This is possible if rows and cols is a permutation of the parent axes
+#   but we don't check this for performance reasons
 #region
 
-# Try to revert subarray to parent through a simple reordering of rows and cols
-# This is possible if rows and cols is a permutation of the parent axes.
-function simplify_matrixblock!(block::SubArray, rows, cols)
-    viewrows, viewcols = block.indices
-    if isperm(viewrows) && (viewrows === viewcols || isperm(viewcols))
-        invpermute!(rows, viewrows)
-        # aliasing checking
-        if cols === rows
-            viewcols === viewrows || invpermute!(copy(cols), viewcols)
-        else
-            invpermute!(cols, viewcols)
-        end
-        return MatrixBlock(parent(block), rows, cols)
-    else # cannot simplify
-        return MatrixBlock(matrix(block), rows, cols)
+simplify_matrixblock(block::SubArray, rows, cols) =
+    simplify_matrixblock(parent(block), block.indices..., rows, cols)
+
+function simplify_matrixblock(mat::AbstractMatrix, viewrows, viewcols, rows, cols)
+    if cols === rows
+        rows´ = cols´ = simplify_indices(viewrows, rows)
+    else
+        rows = simplify_indices(viewrows, rows)
+        cols = simplify_indices(viewcols, cols)
     end
+    return MatrixBlock(mat, rows´, cols´)
 end
+
+simplify_indices(viewinds, inds) =
+    invpermute!(convert(Vector{Int}, inds), viewinds)
+
+#endregion
+
+############################################################################################
+# appendIJ! for MatrixBlocks
+#   Useful to build a BlockSparseMatrix from a set of MatrixBlocks
+#region
 
 function appendIJ!(I, J, b::MatrixBlock{<:Any,<:AbstractSparseMatrixCSC})
     for col in axes(blockmat(b), 2), ptr in nzrange(blockmat(b), col)
