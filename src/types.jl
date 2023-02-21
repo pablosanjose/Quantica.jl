@@ -157,7 +157,7 @@ numbertype(::Lattice{T}) where {T} = T
 
 zerocell(::Lattice{<:Any,<:Any,L}) where {L} = zero(SVector{L,Int})
 
-Base.copy(l::Lattice) = deepcopy(l)
+# Base.copy(l::Lattice) = deepcopy(l)
 
 #endregion
 #endregion
@@ -791,6 +791,9 @@ SparseArrays.getcolptr(s::HybridSparseBlochMatrix) = getcolptr(s.unflat)
 SparseArrays.rowvals(s::HybridSparseBlochMatrix) = rowvals(s.unflat)
 SparseArrays.nonzeros(s::HybridSparseBlochMatrix) = nonzeros(s.unflat)
 
+Base.copy(s::HybridSparseBlochMatrix) =
+    HybridSparseBlochMatrix(s.blockstruct, copy(s.unflat), copy(s.flat), Ref(s.sync_state[]))
+
 #endregion
 #endregion
 
@@ -894,6 +897,10 @@ function linewidth(Σ::MatrixBlock)
     return Γ
 end
 
+minimal_callsafe_copy(s::BlockSparseMatrix) = BlockSparseMatrix(copy(s.mat), s.blocks, s.ptrs)
+
+minimal_callsafe_copy(s::BlockMatrix) = BlockMatrix(copy(s.mat), s.blocks)
+
 #endregion
 #endregion
 
@@ -924,6 +931,10 @@ function update!(s::InverseGreenBlockSparse, ω)
     Imat.diag .= ω   # Imat should be <: Diagonal
     return update!(bsm)
 end
+
+minimal_callsafe_copy(s::InverseGreenBlockSparse) =
+    InverseGreenBlockSparse(minimal_callsafe_copy(s.mat), s.nonextrng, s.unitcinds,
+    s.unitcindsall, copy(s.source))
 
 #endregion
 #endregion
@@ -1091,7 +1102,7 @@ Base.parent(h::ParametricHamiltonian) = h.hparent
 Base.size(h::ParametricHamiltonian, i...) = size(parent(h), i...)
 
 Base.copy(p::ParametricHamiltonian) = ParametricHamiltonian(
-    copy(p.hparent), copy(p.h), p.modifiers, deepcopy(p.allptrs), copy(p.allparams))
+    copy(p.hparent), copy(p.h), p.modifiers, copy.(p.allptrs), copy(p.allparams))
 
 #endregion
 #endregion
@@ -1136,7 +1147,7 @@ neighbors_forward(v::Vector, i::Int) = Iterators.filter(>(i), v[i])
 simplices(m::Mesh) = m.simps
 simplices(m::Mesh, i::Int) = m.simps[i]
 
-Base.copy(m::Mesh) = Mesh(copy(m.verts), deepcopy(m.neighs), copy(m.simps))
+Base.copy(m::Mesh) = Mesh(copy(m.verts), copy.(m.neighs), copy(m.simps))
 
 #endregion
 #endregion
@@ -1336,7 +1347,7 @@ call!(s::WrappedRegularSelfEnergySolver; params...) = s
 call!(s::WrappedExtendedSelfEnergySolver; params...) = s
 
 # fallback
-minimal_callsafe_copy(s::AbstractSelfEnergySolver) = deepcopy(s)
+# minimal_callsafe_copy(s::AbstractSelfEnergySolver) = deepcopy(s)
 
 #endregion
 
@@ -1400,6 +1411,9 @@ attach(oh::OpenHamiltonian, args...; kw...) = attach(oh, SelfEnergy(oh.h, args..
 attach(oh::OpenHamiltonian, Σ::SelfEnergy) = OpenHamiltonian(oh.h, (oh.selfenergies..., Σ))
 attach(h::AbstractHamiltonian, args...; kw...) = attach(h, SelfEnergy(h, args...; kw...))
 attach(h::AbstractHamiltonian, Σ::SelfEnergy) = OpenHamiltonian(h, (Σ,))
+
+minimal_callsafe_copy(oh::OpenHamiltonian) =
+    OpenHamiltonian(minimal_callsafe_copy(oh.h), minimal_callsafe_copy.(oh.selfenergies))
 
 #endregion
 #endregion
@@ -1520,8 +1534,8 @@ contact(i::Integer) = ContactIndex(i)
 Base.Int(c::ContactIndex) = c.i
 
 # fallback
-minimal_callsafe_copy(gs::AppliedGreenSolver) = deepcopy(gs)
-minimal_callsafe_copy(gs::GreenSlicer) = deepcopy(gs)
+# minimal_callsafe_copy(gs::AppliedGreenSolver) = deepcopy(gs)
+# minimal_callsafe_copy(gs::GreenSlicer) = deepcopy(gs)
 
 #endregion
 

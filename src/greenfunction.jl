@@ -118,7 +118,7 @@ Base.getindex(s::GreenSlicer, ::CellOrbitals, ::CellOrbitals) =
 #    a T-Matrix equation g(i, j) = g0(i, j) + g0(i, k)T(k,k')g0(k', j), and T = (1-Σ*g0)⁻¹*Σ
 #region
 
-struct TMatrixSlicer{C,L,V<:SubArray{C},S} <: GreenSlicer{C}
+struct TMatrixSlicer{C,L,V<:AbstractArray{C},S} <: GreenSlicer{C}
     g0slicer::S
     tmatrix::V
     gcontacts::V
@@ -175,6 +175,9 @@ function Base.getindex(s::TMatrixSlicer, i::CellOrbitals, j::CellOrbitals)
     gij = mul!(g0ij, g0ik, tkk´ * g0k´j, 1, 1)  # = g0ij + g0ik * tkk´ * g0k´j
     return gij
 end
+
+minimal_callsafe_copy(s::TMatrixSlicer) = TMatrixSlicer(minimal_callsafe_copy(s.g0slicer),
+    s.tmatrix, s.gcontacts, s.blockstruct)
 
 #endregion
 

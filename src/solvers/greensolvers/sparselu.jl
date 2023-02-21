@@ -61,6 +61,9 @@ end
 unitcellinds_contacts(s::SparseLUSlicer) = s.unitcinds
 unitcellinds_contacts_merged(s::SparseLUSlicer) = s.unitcindsall
 
+minimal_callsafe_copy(s::AppliedSparseLU) =
+    AppliedSparseLU(minimal_callsafe_copy(s.invgreen))
+
 minimal_callsafe_copy(s::SparseLUSlicer) =
     SparseLUSlicer(s.fact, s.nonextrng, s.unitcinds, s.unitcindsall, copy(s.source))
 
