@@ -232,8 +232,8 @@ function simplify_matrixblock(mat::AbstractMatrix, viewrows, viewcols, rows, col
     if cols === rows
         rows´ = cols´ = simplify_indices(viewrows, rows)
     else
-        rows = simplify_indices(viewrows, rows)
-        cols = simplify_indices(viewcols, cols)
+        rows´ = simplify_indices(viewrows, rows)
+        cols´ = simplify_indices(viewcols, cols)
     end
     return MatrixBlock(mat, rows´, cols´)
 end

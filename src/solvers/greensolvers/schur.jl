@@ -276,78 +276,6 @@ end
 #endregion
 
 ############################################################################################
-# SelfEnergySchurSolver <: ExtendedSelfEnergySolver <: AbstractSelfEnergySolver
-#region
-
-struct SelfEnergySchurSolver{T,B,V<:Union{Missing,Vector{Int}}} <: ExtendedSelfEnergySolver
-    fsolver::SchurFactorsSolver{T,B}
-    leftside::Bool
-    parentinds::V  # row/col reordering of fsolver mats to match orbitals in parent latslice
-end
-
-#region ## Constructors ##
-
-SelfEnergySchurSolver(fsolver::SchurFactorsSolver, side::Symbol, parentinds = missing) =
-    SelfEnergySchurSolver(fsolver, isleftside(side), parentinds)
-
-function isleftside(side)
-    if side == :L
-        return true
-    elseif side == :R
-        return false
-    else
-        argerror("Unexpeced side = $side in SelfEnergySchurSolver. Only :L and :R are allowed.")
-    end
-end
-
-function match_schur_solver()
-
-#endregion
-
-#region ## SelfEnergy (attach) API ##
-
-function SelfEnergy(h::AbstractHamiltonian, g::GreenFunction{<:Any,<:Any,<:Any,<:AppliedSchurGreenSolver}; reverse = false, kw...)
-    sel = siteselector(; kw...)
-    latslice = lattice(h)[sel]
-    fsolver = schurfactorsolver(solver(g))
-    parentinds = match_lead_to_parent(h, latslice, hamiltonian(g))
-    solver = SelfEnergySchurSolver(fsolver, reverse, parentinds)
-    return SelfEnergy(solver, latslice)
-end
-
-function match_lead_to_parent(hparent, lsparent, hlead)
-    parentinds = contact_sites_to_orbitals(sliceinds, bs)
-end
-
-#endregion
-
-#region ## API ##
-
-# This solver produces two solutions (L/R) for the price of one. We can opt out of calling
-# it if we know it has already been called, so the solution is already in its call!_output
-function call!(s::SelfEnergySchurSolver, ω;
-               skipsolve_internal = false, params...)
-    fsolver = s.fsolver
-    Rfactors, Lfactors = skipsolve_internal ? call!_output(fsolver) : call!(fsolver, ω)
-    factors = maybe_match_parent(ifelse(s.leftside, Lfactors, Rfactors), s.parentinds)
-    return factors
-end
-
-call!_output(s::SelfEnergySchurSolver) = call!(s, missing; skipsolve_internal = true)
-
-maybe_match_parent((V, ig, V´), parentinds) =
-    (view(V, parentinds, :), ig, view(V´, :, parentinds))
-
-maybe_match_parent(factors, ::Missing) = factors
-
-minimal_callsafe_copy(s::SelfEnergySchurSolver) =
-    SelfEnergySchurSolver(minimal_callsafe_copy(s.fsolver), s.leftside)
-
-#endregion
-
-#endregion top
-
-############################################################################################
 # AppliedSchurGreenSolver
 #region
 
@@ -425,7 +353,7 @@ function apply(s::GS.Schur, h::AbstractHamiltonian1D, contacts::Contacts)
 end
 
 const GFUnit{T,E,H,N,S} =
-    GreenFunction{T,E,0,AppliedSparseLU{Complex{T}},H,Contacts{0,N,S}}
+    GreenFunction{T,E,0,AppliedSparseLUGreenSolver{Complex{T}},H,Contacts{0,N,S}}
 
 green_type(::H,::S) where {T,E,H<:AbstractHamiltonian{T,E},S} =
     GFUnit{T,E,H,1,Tuple{S}}
@@ -649,3 +577,97 @@ end
 #endregion
 
 #endregion
+
+############################################################################################
+# SelfEnergySchurSolver <: ExtendedSelfEnergySolver <: AbstractSelfEnergySolver
+#region
+
+struct SelfEnergySchurSolver{T,B,V<:Union{Missing,Vector{Int}}} <: ExtendedSelfEnergySolver
+    fsolver::SchurFactorsSolver{T,B}
+    leftside::Bool
+    leadtoparent::V  # orbital index in parent for each orbital in open lead surface
+                     # so that Σlead[leadtoparent, leadtoparent] == Σparent
+end
+
+#region ## Constructors ##
+
+SelfEnergySchurSolver(fsolver::SchurFactorsSolver, side::Symbol, parentinds = missing) =
+    SelfEnergySchurSolver(fsolver, isleftside(side), parentinds)
+
+function isleftside(side)
+    if side == :L
+        return true
+    elseif side == :R
+        return false
+    else
+        argerror("Unexpeced side = $side in SelfEnergySchurSolver. Only :L and :R are allowed.")
+    end
+end
+
+#endregion
+
+#region ## SelfEnergy (attach) API ##
+
+function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunction{<:Any,<:Any,1,<:AppliedSchurGreenSolver}; reverse = false, kw...)
+    sel = siteselector(; kw...)
+    lsparent = lattice(hparent)[sel]
+    schursolver = solver(glead)
+    fsolver = schurfactorsolver(schursolver)
+    # we obtain latslice of open surface in gL/gR
+    gunit = reverse ? schursolver.gL : schursolver.gR
+    blocksizes(blockstructure(hamiltonian(gunit))) == blocksizes(blockstructure(hparent)) ||
+        argerror("The orbital structure of parent and lead Hamiltonians do not match")
+    # This is a SelfEnergy for a lead unit cell with a SelfEnergySchurSolver
+    Σlead = only(selfenergies(contacts(gunit)))
+    lslead = latslice(Σlead)
+    # find lead site index in lslead for each site in lsparent
+    leadsites = lead_siteids_foreach_parent_siteids(lsparent, lslead)
+    # translate lead site indices to lead orbital indices using lead's ContactBlockStructure
+    leadcbs = blockstructure(contacts(gunit))
+    leadorbs = contact_sites_to_orbitals(leadsites, leadcbs)
+    solver´ = SelfEnergySchurSolver(fsolver, reverse, leadorbs)
+    return SelfEnergy(solver´, lsparent)
+end
+
+# find ordering of lslead sites that match lsparent sites, modulo a displacement
+function lead_siteids_foreach_parent_siteids(lsparent, lslead)
+    np, nl = nsites(lsparent), nsites(lslead)
+    np == nl || argerror("The contact surface has $np sites, which doesn't match the $nl sites in the lead surface")
+    sp = collect(sites(lsparent))
+    sl = collect(sites(lslead))
+    displacement = mean(sl) - mean(sp)
+    sl .-= Ref(displacement)
+    tree = KDTree(sl)
+    indslead, dists = nn(tree, sp)
+    iszero(chop(maximum(dists))) && allunique(indslead) ||
+        argerror("The contact and lead surface sites do not match (modulo a displacement). Perhaps an error in the `attach` site selection?")
+    return indslead
+end
+
+#endregion
+
+#region ## API ##
+
+# This solver produces two solutions (L/R) for the price of one. We can opt out of calling
+# it if we know it has already been called, so the solution is already in its call!_output
+function call!(s::SelfEnergySchurSolver, ω;
+               skipsolve_internal = false, params...)
+    fsolver = s.fsolver
+    Rfactors, Lfactors = skipsolve_internal ? call!_output(fsolver) : call!(fsolver, ω)
+    factors = maybe_match_parent(ifelse(s.leftside, Lfactors, Rfactors), s.leadtoparent)
+    return factors
+end
+
+call!_output(s::SelfEnergySchurSolver) = call!(s, missing; skipsolve_internal = true)
+
+maybe_match_parent((V, ig, V´), leadtoparent) =
+    (view(V, leadtoparent, :), ig, view(V´, :, leadtoparent))
+
+maybe_match_parent(factors, ::Missing) = factors
+
+minimal_callsafe_copy(s::SelfEnergySchurSolver) =
+    SelfEnergySchurSolver(minimal_callsafe_copy(s.fsolver), s.leftside)
+
+#endregion
+
+#endregion top

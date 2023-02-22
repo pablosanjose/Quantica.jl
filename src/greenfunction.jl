@@ -158,7 +158,7 @@ end
 
 ############################################################################################
 # contact_blockstructure constructors
-#   Build a ContacBlockStructure from a Hamiltonian and a set of latslices
+#   Build a ContactBlockStructure from a Hamiltonian and a set of latslices
 #region
 
 contact_blockstructure(h::AbstractHamiltonian{<:Any,<:Any,L}) where {L} =
@@ -199,9 +199,9 @@ end
 #  convert a list of sites in a ContactBlockStructure to a list of orbitals
 #region
 
-function contact_sites_to_orbitals(sliceinds, bs::ContactBlockStructure)
+function contact_sites_to_orbitals(siteinds, bs::ContactBlockStructure)
     finds = Int[]
-    for iunflat in sliceinds
+    for iunflat in siteinds
         append!(finds, siterange(bs, iunflat))
     end
     return finds

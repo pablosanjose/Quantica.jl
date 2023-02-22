@@ -2,7 +2,7 @@
 # SparseLU - for 0D AbstractHamiltonians
 #region
 
-struct AppliedSparseLU{C} <:AppliedGreenSolver
+struct AppliedSparseLUGreenSolver{C} <:AppliedGreenSolver
     invgreen::InverseGreenBlockSparse{C}
 end
 
@@ -31,14 +31,14 @@ SparseLUSlicer(fact::Factorization{C}, nonextrng, unitcinds, unitcindsall, sourc
 
 function apply(::GS.SparseLU, h::AbstractHamiltonian0D, cs::Contacts)
     invgreen = inverse_green(h, cs)
-    return AppliedSparseLU(invgreen)
+    return AppliedSparseLUGreenSolver(invgreen)
 end
 
 apply(::GS.SparseLU, ::OpenHamiltonian) =
     argerror("Can only use SparseLU with bounded Hamiltonians")
 
 # Σblocks and contactblockstruct are not used here, because they are already inside invgreen
-function (s::AppliedSparseLU{C})(ω, Σblocks, contactblockstruct) where {C}
+function (s::AppliedSparseLUGreenSolver{C})(ω, Σblocks, contactblockstruct) where {C}
     invgreen = s.invgreen
     nonextrng = orbrange(invgreen)
     unitcinds = invgreen.unitcinds
@@ -61,8 +61,8 @@ end
 unitcellinds_contacts(s::SparseLUSlicer) = s.unitcinds
 unitcellinds_contacts_merged(s::SparseLUSlicer) = s.unitcindsall
 
-minimal_callsafe_copy(s::AppliedSparseLU) =
-    AppliedSparseLU(minimal_callsafe_copy(s.invgreen))
+minimal_callsafe_copy(s::AppliedSparseLUGreenSolver) =
+    AppliedSparseLUGreenSolver(minimal_callsafe_copy(s.invgreen))
 
 minimal_callsafe_copy(s::SparseLUSlicer) =
     SparseLUSlicer(s.fact, s.nonextrng, s.unitcinds, s.unitcindsall, copy(s.source))
@@ -77,7 +77,7 @@ function Base.view(s::SparseLUSlicer, i::ContactIndex, j::ContactIndex)
     dstinds = s.unitcinds[Int(i)]
     srcinds = s.unitcinds[Int(j)]
     source = view(s.source, :, 1:length(srcinds))
-    return _view(s, dstinds, srcinds, source)
+    return compute_or_retrieve_green(s, dstinds, srcinds, source)
 end
 
 Base.view(s::SparseLUSlicer, ::Colon, ::Colon) =

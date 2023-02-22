@@ -39,6 +39,8 @@ merge_parameters!(p) = unique!(sort!(p))
 
 typename(::T) where {T} = nameof(T)
 
+chop(x::T) where {T<:Number} = ifelse(abs2(x) < eps(real(T)), zero(T), x)
+
 function mortar(ms::AbstractMatrix{M}) where {C<:Number,M<:AbstractMatrix{C}}
     isempty(ms) && return convert(Matrix{C}, ms)
     mrows = size.(ms, 1)
@@ -60,7 +62,7 @@ end
 
 # equivalent to mat = I[:, cols]. Useful for Green function source
 # no check of mat size vs cols is done
-function one!(mat::StridedMatrix{T}, cols::AbstractRange = axes(mat, 2)) where {T}
+function one!(mat::AbstractArray{T}, cols = axes(mat, 2)) where {T}
     fill!(mat, zero(T))
     for (col, row) in enumerate(cols)
         mat[row, col] = one(T)
@@ -68,7 +70,7 @@ function one!(mat::StridedMatrix{T}, cols::AbstractRange = axes(mat, 2)) where {
     return mat
 end
 
-one!(mat::StridedMatrix, ::Colon) = one!(mat)
+one!(mat::AbstractArray, ::Colon) = one!(mat)
 
 lengths_to_offsets(v::AbstractVector{<:Integer}) = prepend!(cumsum(v), 0)
 lengths_to_offsets(v::NTuple{<:Any,Integer}) = (0, cumsum(v)...)

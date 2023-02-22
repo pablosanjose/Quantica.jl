@@ -32,7 +32,7 @@ function supercell_data(lat::Lattice{T,E,L},
                         applied_selector::AppliedSiteSelector{T,E},
                         only_one_perp::Bool = false) where {T,E,L,L´}
     sm´ = makefull(sm)
-    detsm´ = round(Int, det(sm´))
+    detsm´ = round(Int, abs(det(sm´)))
     iszero(detsm´) && throw(ArgumentError("Supercell is empty. Singular supercell matrix?"))
     # inverse of full supercell sm´ (times det(sm´) to make it integer)
     # projected back onto superlattice axes L´

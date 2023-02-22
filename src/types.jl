@@ -591,7 +591,7 @@ struct SMatrixView{N,M,T,NM}
 end
 
 struct OrbitalBlockStructure{B}
-    blocksizes::Vector{Int}       # block sizes (number of site orbitals) in each sublattice
+    blocksizes::Vector{Int}       # number of orbitals per site in each sublattice
     subsizes::Vector{Int}         # number of blocks (sites) in each sublattice
     function OrbitalBlockStructure{B}(blocksizes, subsizes) where {B}
         subsizes´ = Quantica.sanitize_Vector_of_Type(Int, subsizes)
@@ -790,9 +790,6 @@ flatsize(h::HybridSparseBlochMatrix) = flatsize(blockstructure(h))
 SparseArrays.getcolptr(s::HybridSparseBlochMatrix) = getcolptr(s.unflat)
 SparseArrays.rowvals(s::HybridSparseBlochMatrix) = rowvals(s.unflat)
 SparseArrays.nonzeros(s::HybridSparseBlochMatrix) = nonzeros(s.unflat)
-
-Base.copy(s::HybridSparseBlochMatrix) =
-    HybridSparseBlochMatrix(s.blockstruct, copy(s.unflat), copy(s.flat), Ref(s.sync_state[]))
 
 #endregion
 #endregion

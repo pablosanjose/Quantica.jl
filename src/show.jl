@@ -167,6 +167,25 @@ showextrainfo(io, i, h::ParametricHamiltonian) = print(io, i, "\n",
 #endregion
 
 ############################################################################################
+# OpenHamiltonian
+#region
+
+function Base.show(io::IO, oh::OpenHamiltonian)
+    i = get(io, :indent, "")
+    print(io, i, summary(oh), "\n",
+"$i  Number of contacts : $(length(selfenergies(oh)))
+$i  Contact solvers    : $(solvernames(oh))", "\n")
+    ioindent = IOContext(io, :indent => "  ")
+    show(ioindent, hamiltonian(oh))
+end
+
+Base.summary(oh::OpenHamiltonian{T,E,L}) where {T,E,L} = "OpenHamiltonian{$T,$E,$L}: Hamiltonian with a set of open contacts"
+
+solvernames(oh::OpenHamiltonian) = nameof.(typeof.(solver.(selfenergies(oh))))
+
+#endregion
+
+############################################################################################
 # AbstractEigenSolver
 #region
 
