@@ -16,6 +16,180 @@ padtuple(t, x, N) = ntuple(i -> i <= length(t) ? t[i] : x, N)
 
 @noinline argerror(msg) = throw(ArgumentError(msg))
 
+@noinline boundserror(m, i) = throw(BoundsError(m, i))
+
+@noinline checkmatrixsize(::UniformScaling, s) = nothing
+@noinline checkmatrixsize(val, s) = (size(val, 1), size(val, 2)) == s ||
+    throw(ArgumentError("Expected an block or matrix of size $s, got size $((size(val, 1), size(val, 2)))"))
+
+function boundingbox(positions)
+    isempty(positions) && argerror("Cannot find bounding box of an empty collection")
+    posmin = posmax = first(positions)
+    for pos in positions
+        posmin = min.(posmin, pos)
+        posmax = max.(posmax, pos)
+    end
+    return (posmin, posmax)
+end
+
+deleteif!(test, v::AbstractVector) = deleteat!(v, (i for (i, x) in enumerate(v) if test(x)))
+
+merge_parameters!(p, m, ms...) = merge_parameters!(append!(p, parameters(m)), ms...)
+merge_parameters!(p) = unique!(sort!(p))
+
+typename(::T) where {T} = nameof(T)
+
+chop(x::T) where {T<:Number} = ifelse(abs2(x) < eps(real(T)), zero(T), x)
+
+function mortar(ms::AbstractMatrix{M}) where {C<:Number,M<:AbstractMatrix{C}}
+    isempty(ms) && return convert(Matrix{C}, ms)
+    mrows = size.(ms, 1)
+    mcols = size.(ms, 2)
+    allequal(eachrow(mcols)) && allequal(eachcol(mrows)) ||
+        internalerror("mortar: inconsistent rows or columns")
+    roff = lengths_to_offsets(view(mrows, :, 1))
+    coff = lengths_to_offsets(view(mcols, 1, :))
+    mat = zeros(C, last(roff), last(coff))
+    for c in CartesianIndices(ms)
+        src = ms[c]
+        i, j = Tuple(c)
+        Rdst = CartesianIndices((roff[i]+1:roff[i+1], coff[j]+1:coff[j+1]))
+        Rsrc = CartesianIndices(src)
+        copyto!(mat, Rdst, src, Rsrc)
+    end
+    return mat
+end
+
+# equivalent to mat = I[:, cols]. Useful for Green function source
+# no check of mat size vs cols is done
+function one!(mat::AbstractArray{T}, cols = axes(mat, 2)) where {T}
+    fill!(mat, zero(T))
+    for (col, row) in enumerate(cols)
+        mat[row, col] = one(T)
+    end
+    return mat
+end
+
+one!(mat::AbstractArray, ::Colon) = one!(mat)
+
+lengths_to_offsets(v::AbstractVector{<:Integer}) = prepend!(cumsum(v), 0)
+lengths_to_offsets(v::NTuple{<:Any,Integer}) = (0, cumsum(v)...)
+
+# function get_or_push!(by, x, xs)
+#     for x´ in xs
+#         by(x) == by(x´) && return x´
+#     end
+#     push!(xs, x)
+#     return x
+# end
+
+#endregion
+
+############################################################################################
+# SparseMatrixCSC tools
+# all merged_* functions assume matching structure of sparse matrices
+#region
+
+stored_rows(m::AbstractSparseMatrixCSC) = unique!(sort!(copy(rowvals(m))))
+
+function stored_cols(m::AbstractSparseMatrixCSC)
+    cols = Int[]
+    for col in axes(m, 2)
+        isempty(nzrange(m, col)) || push!(cols, col)
+    end
+    return cols
+end
+
+# merge several sparse matrices onto the first using only structural zeros
+function merge_sparse(mats, ::Type{B} = eltype(first(mats))) where {B}
+    mat0 = first(mats)
+    nrows, ncols = size(mat0)
+    nrows == ncols || throw(ArgumentError("Internal error: matrix not square"))
+    nnzguess = sum(mat -> nnz(mat), mats)
+    collector = CSC{B}(ncols, nnzguess)
+    for col in 1:ncols
+        for (n, mat) in enumerate(mats)
+            vals = nonzeros(mat)
+            rows = rowvals(mat)
+            for p in nzrange(mat, col)
+                val = zero(B)
+                row = rows[p]
+                pushtocolumn!(collector, row, val, false) # skips repeated rows
+            end
+        end
+        finalizecolumn!(collector)
+    end
+    matrix = sparse(collector, ncols, ncols)
+    return matrix
+end
+
+function merged_mul!(C::SparseMatrixCSC{<:Number}, A::HybridSparseBlochMatrix, b::Number, α = 1, β = 0)
+    bs = blockstructure(A)
+    if needs_flat_sync(A)
+        merged_mul!(C, bs, unflat(A), b, α, β)
+    else
+        merged_mul!(C, bs, flat(A), b, α, β)
+    end
+    return C
+end
+
+function merged_mul!(C::SparseMatrixCSC{<:Number}, ::OrbitalBlockStructure, A::SparseMatrixCSC{B}, b::Number, α = 1, β = 0) where {B<:Complex}
+    nzA = nonzeros(A)
+    nzC = nonzeros(C)
+    αb = α * b
+    if length(nzA) == length(nzC)  # assume idential structure (C has merged structure)
+        @. nzC = muladd(αb, nzA, β * nzC)
+    else
+        # A has less elements than C
+        for col in axes(A, 2), p in nzrange(A, col)
+            row = rowvals(A)[p]
+            for p´ in nzrange(C, col)
+                row´ = rowvals(C)[p´]
+                if row == row´
+                    nzC[p´] = muladd(αb, nzA[p], β * nzC[p´])
+                    break
+                end
+            end
+        end
+    end
+    return C
+end
+
+function merged_mul!(C::SparseMatrixCSC{<:Number}, bs::OrbitalBlockStructure{B}, A::SparseMatrixCSC{B}, b::Number, α = 1, β = 0) where {B<:MatrixElementNonscalarType}
+    colsA = axes(A, 2)
+    rowsA = rowvals(A)
+    valsA = nonzeros(A)
+    rowsC = rowvals(C)
+    valsC = nonzeros(C)
+    αb = α * b
+    colC = 1
+    for colA in colsA
+        N = blocksize(bs, colA)
+        for colN in 1:N
+            ptrsA, ptrsC = nzrange(A, colA), nzrange(C, colC)
+            ptrA, ptrC = first(ptrsA), first(ptrsC)
+            while ptrA in ptrsA && ptrC in ptrsC
+                rowA, rowC = rowsA[ptrA], rowsC[ptrC]
+                rngflat = flatrange(bs, rowA)
+                rowAflat, N´ = first(rngflat), length(rngflat)
+                if rowAflat == rowC
+                    valA = valsA[ptrA]
+                    for rowN in 1:N´
+                        valsC[ptrC] = muladd(αb, valA[rowN, colN], β * valsC[ptrC])
+                        ptrC += 1
+                    end
+                elseif rowAflat > rowC
+                    ptrC += N´
+                else
+                    ptrA += 1
+                end
+            end
+            colC += 1
+        end
+    end
+    return C
+end
+
 #endregion
 
 ############################################################################################
@@ -33,201 +207,3 @@ function ensureloaded(package::Symbol)
 end
 
 #endregion
-
-############################################################################################
-# Matrix transformations [involves OrbitalStructure's]
-# all merged_* functions assume matching structure of sparse matrices
-#region
-
-# # merge several sparse matrices onto the first using only structural zeros
-# function merge_sparse(mats, ::Type{B} = eltype(first(mats))) where {B}
-#     mat0 = first(mats)
-#     nrows, ncols = size(mat0)
-#     nrows == ncols || throw(ArgumentError("Internal error: matrix not square"))
-#     nnzguess = sum(mat -> nnz(mat), mats)
-#     collector = CSC{B}(ncols, nnzguess)
-#     for col in 1:ncols
-#         for (n, mat) in enumerate(mats)
-#             vals = nonzeros(mat)
-#             rows = rowvals(mat)
-#             for p in nzrange(mat, col)
-#                 val = n == 1 ? vals[p] : zero(B)
-#                 row = rows[p]
-#                 pushtocolumn!(collector, row, val, false) # skips repeated rows
-#             end
-#         end
-#         finalizecolumn!(collector)
-#     end
-#     matrix = sparse(collector, ncols)
-#     return matrix
-# end
-
-# # flatten and merge several sparse matrices onto first according to OrbitalStructures
-# function merge_flatten_sparse(mats,
-#                               os::OrbitalStructure{<:SMatrix},
-#                               flatos::OrbitalStructure{T} = flatten(os)) where {T<:Number}
-#     mat0 = first(mats)
-#     check_orbstruct_consistency(mat0, os)
-#     norbs = norbitals(os)
-#     ncolsflatguess = size(mat0, 2) * maximum(norbs)
-#     nnzflatguess = nnz(mat0) * maximum(norbs)
-#     collector = CSC{T}(ncolsflatguess, nnzflatguess)
-#     multiple_matrices = length(mats) > 1
-#     needs_column_sort = multiple_matrices
-#     skip_column_dupcheck = !multiple_matrices
-#     for scol in sublats(os), col in siterange(os, scol)
-#         ncol = norbs[scol]
-#         for j in 1:ncol  # block column
-#             for (n, mat) in enumerate(mats)
-#                 vals = nonzeros(mat)
-#                 rows = rowvals(mat)
-#                 for p in nzrange(mat, col)
-#                     row = rows[p]
-#                     rowoffset´, nrow = site_to_flatoffset_norbs(row, os, flatos)
-#                     for i in 1:nrow
-#                         val´ = n == 1 ? vals[p][i, j] : zero(T)
-#                         pushtocolumn!(collector, rowoffset´ + i, val´, skip_column_dupcheck)
-#                     end
-#                 end
-#             end
-#             finalizecolumn!(collector, needs_column_sort)
-#         end
-#     end
-#     flatmat = sparse(collector, nsites(flatos))
-#     return flatmat
-# end
-
-# check_orbstruct_consistency(mat, os) = nsites(os) == size(mat, 1) == size(mat, 2) ||
-#     throw(ArgumentError("Matrix size $(size(mat)) inconsistent with number of sites $(nsites(os))"))
-
-# function site_to_sublat(siteidx, orbstruct)
-#     offsets´ = offsets(orbstruct)
-#     l = length(offsets´)
-#     for s in 2:l
-#         @inbounds offsets´[s] + 1 > siteidx && return s - 1
-#     end
-#     return l
-# end
-
-# function site_to_flatoffset_norbs(siteidx, orbstruct, flatorbstruct)
-#     s = site_to_sublat(siteidx, orbstruct)
-#     N = norbitals(orbstruct)[s]
-#     offset = offsets(orbstruct)[s]
-#     offset´ = offsets(flatorbstruct)[s]
-#     Δi = siteidx - offset
-#     flatoffset = offset´ + (Δi - 1) * N
-#     return flatoffset, N
-# end
-
-# flatten(mat::SparseMatrixCSC{B}, os::OrbitalStructure{B}, flatos::OrbitalStructure{<:Number} = flatten(os)) where {B<:SMatrix} =
-#     merge_flatten_sparse((mat,), os, flatos)
-
-# # flattening mul! specializations assuming the target, if sparse, does not need to change structure [is "merged"]
-
-# maybe_flatten_mul!(C::SparseMatrixCSC{<:Number}, _, A::SparseMatrixCSC{<:Number}, b::Number, α, β) =
-#     merged_mul!(C, A, b, α, β)
-
-# maybe_flatten_mul!(C::SparseMatrixCSC{<:SMatrix{N,N}}, _, A::SparseMatrixCSC{<:SMatrix{N,N}}, b::Number, α, β) where {N} =
-#     merged_mul!(C, A, b, α, β)
-
-# maybe_flatten_mul!(C::SparseMatrixCSC{<:Number}, osflatos, A::SparseMatrixCSC{<:SMatrix}, b::Number, α, β) =
-#     merged_flatten_mul!(C, osflatos, A, b, α, β)
-
-# maybe_flatten_mul!(C::StridedMatrix{<:Number}, _, A::SparseMatrixCSC{<:Number}, b::Number, α, β) =
-#     sparse_to_dense_mul!(C, A, b, α, β)
-
-# maybe_flatten_mul!(C::StridedMatrix{<:SMatrix}, _, A::SparseMatrixCSC{<:SMatrix}, b::Number, α, β) =
-#     sparse_to_dense_mul!(C, A, b, α, β)
-
-# maybe_flatten_mul!(C::StridedMatrix{<:Number}, osflatos, A::SparseMatrixCSC{<:SMatrix}, b::Number, α, β) =
-#     sparse_to_dense_flatten_mul!(C, osflatos, A, b, α, β)
-
-# function merged_mul!(C::SparseMatrixCSC, A::SparseMatrixCSC, b::Number, α = 1, β = 0)
-#     nzA = nonzeros(A)
-#     nzC = nonzeros(C)
-#     if length(nzA) == length(nzC)  # assume idential structure (C has merged structure)
-#         @. nzC = β * nzC + α * b * nzA
-#     else
-#         for col in axes(A, 2), p in nzrange(A, col)
-#             row = rowvals(A)[p]
-#             for p´ in nzrange(C, col)
-#                 row´ = rowvals(C)[p´]
-#                 if row == row´
-#                     nzC[p´] = β * nzC[p´] + α * b * nzA[p]
-#                     break
-#                 end
-#             end
-#         end
-#     end
-#     return C
-# end
-
-# function merged_flatten_mul!(C::SparseMatrixCSC, (os, flatos), A::SparseMatrixCSC, b::Number, α , β = 0)
-#     colsA = axes(A, 2)
-#     rowsA = rowvals(A)
-#     valsA = nonzeros(A)
-#     rowsC = rowvals(C)
-#     valsC = nonzeros(C)
-#     for col in colsA
-#         coloffset´, ncol = site_to_flatoffset_norbs(col, os, flatos)
-#         for p in nzrange(A, col)
-#             valA = valsA[p]
-#             rowA = rowsA[p]
-#             rowoffset´, nrow = site_to_flatoffset_norbs(rowA, os, flatos)
-#             rowfirst´ = rowoffset´ + 1
-#             for ocol in 1:ncol
-#                 col´ = coloffset´ + ocol
-#                 for p´ in nzrange(C, col´)
-#                     if rowsC[p´] == rowfirst´
-#                         for orow in 1:nrow
-#                             p´´ = p´ + orow - 1
-#                             valsC[p´´] = β * valsC[p´´] + α * b * valA[orow, ocol]
-#                         end
-#                         break
-#                     end
-#                 end
-#             end
-#         end
-#     end
-#     return C
-# end
-
-# function sparse_to_dense_mul!(C::StridedMatrix, A::SparseMatrixCSC, b::Number, α = 1, β = 0)
-#     valsA = nonzeros(A)
-#     rowsA = rowvals(A)
-#     if iszero(β)
-#         fill!(C, zero(eltype(C)))
-#     else
-#         C .*= β
-#     end
-#     for col in axes(A, 2), p in nzrange(A, col)
-#         row = rowsA[p]
-#         C[row, col] += α * b * valsA[p]
-#     end
-#     return C
-# end
-
-# function sparse_to_dense_flatten_mul!(C::StridedMatrix, (os, flatos), A::SparseMatrixCSC, b::Number, α = 1, β = 0)
-#     colsA = axes(A, 2)
-#     rowsA = rowvals(A)
-#     valsA = nonzeros(A)
-#     if iszero(β)
-#         fill!(C, zero(eltype(C)))
-#     else
-#         C .*= β
-#     end
-#     for col in colsA
-#         coloffset´, ncol = site_to_flatoffset_norbs(col, os, flatos)
-#         for p in nzrange(A, col)
-#             valA = valsA[p]
-#             rowA = rowsA[p]
-#             rowoffset´, nrow = site_to_flatoffset_norbs(rowA, os, flatos)
-#             for ocol in 1:ncol, orow in 1:nrow
-#                 C[rowoffset´ + orow, coloffset´ + ocol] += α * b * valA[orow, ocol]
-#             end
-#         end
-#     end
-#     return C
-# end
-
-# #endregion

@@ -19,14 +19,47 @@ hopping(m::TightbindingModel; kw...) = TightbindingModel(
 #endregion
 
 ############################################################################################
-# @onsite! and @hopping!
+# @onsite, @hopping, @onsite! and @hopping! - Parametric models and model modifiers
 #region
 
-# Modifiers need macros to read out number of f arguments (N) and kwarg names (params).
+# Macros are needed to read out number of f arguments (N) and kwarg names (params).
 # A kw... is appended to kwargs in the actual function method definition to skip
 # non-applicable kwargs.
 # An alternative based on internals (m = first(methods(f)), Base.kwarg_decl(m) and m.nargs)
 # has been considered, but decided against due to its fragility and slow runtime
+
+## Parametric models ##
+
+# version with site selector kwargs
+macro onsite(kw, f)
+    f, N, params = get_f_N_params(f, "Only @onsite(args -> body; kw...) syntax supported. Mind the `;`.")
+    return esc(:(Quantica.ParametricModel(Quantica.ParametricOnsiteTerm(
+        Quantica.ParametricFunction{$N}($f, $(params)), Quantica.siteselector($kw), 1))))
+end
+
+# version without site selector kwargs
+macro onsite(f)
+    f, N, params = get_f_N_params(f, "Only @onsite(args -> body; kw...) syntax supported.  Mind the `;`.")
+    return esc(:(Quantica.ParametricModel(Quantica.ParametricOnsiteTerm(
+            Quantica.ParametricFunction{$N}($f, $(params)), Quantica.siteselector(), 1))))
+end
+
+# version with hop selector kwargs
+## TODO: this doesn't accept plusadjoint like hopping(...; ...) does
+macro hopping(kw, f)
+    f, N, params = get_f_N_params(f, "Only @hopping(args -> body; kw...) syntax supported. Mind the `;`.")
+    return esc(:(Quantica.ParametricModel(Quantica.ParametricHoppingTerm(
+        Quantica.ParametricFunction{$N}($f, $(params)), Quantica.hopselector($kw), 1))))
+end
+
+# version without hop selector kwargs
+macro hopping(f)
+    f, N, params = get_f_N_params(f, "Only @hopping(args -> body; kw...) syntax supported. Mind the `;`.")
+    return esc(:(Quantica.ParametricModel(Quantica.ParametricHoppingTerm(
+        Quantica.ParametricFunction{$N}($f, $(params)), Quantica.hopselector(), 1))))
+end
+
+## Model modifiers ##
 
 macro onsite!(kw, f)
     f, N, params = get_f_N_params(f, "Only @onsite!(args -> body; kw...) syntax supported. Mind the `;`.")
@@ -72,5 +105,48 @@ end
 
 get_kwname(x::Symbol) = x
 get_kwname(x::Expr) = x.head === :kw ? x.args[1] : x.head  # x.head == :...
+
+#endregion
+
+############################################################################################
+# @onsite, @hopping conversions
+#region
+
+zero_model(term::ParametricOnsiteTerm) =
+    OnsiteTerm(r -> 0I, selector(term), coefficient(term))
+zero_model(term::ParametricHoppingTerm) =
+    HoppingTerm((r, dr) -> 0I, selector(term), coefficient(term))
+
+function modifier(term::ParametricOnsiteTerm{N}) where {N}
+    f = (o, args...; kw...) -> o + term(args...; kw...)
+    pf = ParametricFunction{N+1}(f, parameters(term))
+    return OnsiteModifier(pf, selector(term))
+end
+
+function modifier(term::ParametricHoppingTerm{N}) where {N}
+    f = (t, args...; kw...) -> t + term(args...; kw...)
+    pf = ParametricFunction{N+1}(f, parameters(term))
+    return HoppingModifier(pf, selector(term))
+end
+
+basemodel(m::ParametricModel) = nonparametric(m) + TightbindingModel(zero_model.(terms(m)))
+
+# transforms the first argument in each model term to a parameter named pname
+model_ω_to_param(model::ParametricModel) =
+    ParametricModel(nonparametric(model), model_ω_to_param.(terms(model)))
+
+function model_ω_to_param(term::ParametricOnsiteTerm{N}, default = 0) where {N}
+    # parameters(term) only needed for reporting, we omit adding :ω_internal
+    f = (args...; ω_internal = default, kw...) -> term(ω_internal, args...; kw...)
+    pf = ParametricFunction{N-1}(f, parameters(term))
+    return ParametricOnsiteTerm(pf, selector(term), coefficient(term))
+end
+
+function model_ω_to_param(term::ParametricHoppingTerm{N}, default = 0) where {N}
+    # parameters(term) only needed for reporting, we omit adding :ω_internal
+    f = (args...; ω_internal = default, kw...) -> term(ω_internal, args...; kw...)
+    pf = ParametricFunction{N-1}(f, parameters(term))
+    return ParametricHoppingTerm(pf, selector(term), coefficient(term))
+end
 
 #endregion

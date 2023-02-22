@@ -46,7 +46,7 @@ region_apply(r::SVector, region::Function) = ifelse(region(r), true, false)
 
 recursive_push!(v::Vector, ::Missing) = v
 recursive_push!(v::Vector{T}, x::T) where {T} = push!(v, x)
-recursive_push!(v::Vector{S}, x::NTuple{<:Any,Int}) where {S<:SVector,T} = push!(v, S(x))
+recursive_push!(v::Vector{S}, x::NTuple{<:Any,Int}) where {S<:SVector} = push!(v, S(x))
 recursive_push!(v::Vector{S}, x::Number) where {S<:SVector{1}}= push!(v, S(x))
 recursive_push!(v::Vector{Pair{T,T}}, x::T) where {T} = push!(v, x => x)
 recursive_push!(v::Vector{Pair{T,T}}, (x, y)::Tuple{T,T}) where {T} = push!(v, x => y)
@@ -70,19 +70,27 @@ end
 # apply model terms
 #region
 
-function apply(o::OnsiteTerm, (lat, os)::Tuple{Lattice{T,E,L},BlockStructure{B}}) where {T,E,L,B}
+function apply(o::OnsiteTerm, (lat, os)::Tuple{Lattice{T,E,L},OrbitalBlockStructure{B}}) where {T,E,L,B}
     f = (r, orbs) -> mask_block(B, o(r), (orbs, orbs))
     asel = apply(selector(o), lat)
     return AppliedOnsiteTerm{T,E,L,B}(f, asel)   # f gets wrapped in a FunctionWrapper
 end
 
-function apply(t::HoppingTerm, (lat, os)::Tuple{Lattice{T,E,L},BlockStructure{B}}) where {T,E,L,B}
+function apply(t::HoppingTerm, (lat, os)::Tuple{Lattice{T,E,L},OrbitalBlockStructure{B}}) where {T,E,L,B}
     f = (r, dr, orbs) -> mask_block(B, t(r, dr), orbs)
     asel = apply(selector(t), lat)
     return AppliedHoppingTerm{T,E,L,B}(f, asel)  # f gets wrapped in a FunctionWrapper
 end
 
 apply(m::TightbindingModel, latos) = TightbindingModel(apply.(terms(m), Ref(latos)))
+
+apply(t::ParametricOnsiteTerm, lat::Lattice) =
+    ParametricOnsiteTerm(functor(t), apply(selector(t), lat), coefficient(t))
+
+apply(t::ParametricHoppingTerm, lat::Lattice) =
+    ParametricHoppingTerm(functor(t), apply(selector(t), lat), coefficient(t))
+
+apply(m::ParametricModel, lat) = ParametricModel(apply.(terms(m), Ref(lat)))
 
 #endregion
 
@@ -158,13 +166,15 @@ end
 
 function apply(solver::AbstractEigenSolver, h::AbstractHamiltonian, S::Type{SVector{L,T}}, mapping, transform) where {L,T}
     B = blocktype(h)
-    h´ = copy_callsafe(h)
+    h´ = minimal_callsafe_copy(h)
     # Some solvers (e.g. ES.LinearAlgebra) only accept certain matrix types
+    # so this mat´ could be an alias of the call! output, or an unaliased conversion
     mat´ = ES.input_matrix(solver, h´)
     function sfunc(φs)
         φs´ = applymap(mapping, φs)
         mat = call!(h´, φs´)
         mat´ === mat || copy!(mat´, mat)
+        # the solver always receives the matrix type declared by ES.input_matrix
         eigen = solver(mat´)
         return Spectrum(eigen, h, transform)
     end
@@ -175,11 +185,5 @@ applymap(::Missing, φs) = φs
 applymap(mapping, φs) = mapping(Tuple(φs)...)
 
 #endregion
-
-############################################################################################
-# apply AbstractGreenSolver
-#region
-
-# apply(solver::AbstractGreenSolver, h::AbstractHamiltonian) = GS.apply(solver, h)
 
 #endregion

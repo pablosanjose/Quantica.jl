@@ -28,6 +28,8 @@ Base.:!(r1::Region{E}) where {E}  = Region{E}(r -> !r1.f(r))
 
 extended_eps(T = Float64) = sqrt(eps(T))
 
+segment(side = 10.0, c...) = Region{1}(_region_segment(side, c...))
+
 circle(radius = 10.0, c...) = Region{2}(_region_ellipse((radius, radius), c...))
 
 ellipse(radii = (10.0, 15.0), c...) = Region{2}(_region_ellipse(radii, c...))
@@ -43,6 +45,10 @@ spheroid(radii = (10.0, 15.0, 20.0), c...) = Region{3}(_region_ellipsoid(radii, 
 cube(side = 10.0, c...) = Region{3}(_region_cuboid((side, side, side), c...))
 
 cuboid(sides = (10.0, 15.0, 20.0), c...) = Region{3}(_region_cuboid(sides, c...))
+
+function _region_segment(l, c = 0)
+    return r -> abs(2*(r[1]-c)) <= l * (1 + extended_eps())
+end
 
 function _region_ellipse((rx, ry), (cx, cy) = (0, 0))
     return r -> ((r[1]-cx)/rx)^2 + ((r[2]-cy)/ry)^2 <= 1 + extended_eps(Float64)

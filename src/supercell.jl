@@ -32,7 +32,7 @@ function supercell_data(lat::Lattice{T,E,L},
                         applied_selector::AppliedSiteSelector{T,E},
                         only_one_perp::Bool = false) where {T,E,L,L´}
     sm´ = makefull(sm)
-    detsm´ = round(Int, det(sm´))
+    detsm´ = round(Int, abs(det(sm´)))
     iszero(detsm´) && throw(ArgumentError("Supercell is empty. Singular supercell matrix?"))
     # inverse of full supercell sm´ (times det(sm´) to make it integer)
     # projected back onto superlattice axes L´
@@ -143,8 +143,7 @@ function supercell_offsets(masklist, nsublats)
     @simd for m in masklist
         ds[first(m)] += 1
     end
-    offsets = cumsum(ds)
-    prepend!(offsets, 0)
+    offsets = lengths_to_offsets(ds)
     return offsets
 end
 
@@ -159,7 +158,7 @@ function supercell(h::Hamiltonian, v...; mincoordination = 0, kw...)
     # data.sitelist === sites(lat´), so any change to data will reflect in lat´ too
     lat´ = lattice(data)
     B = blocktype(h)
-    blk´ = BlockStructure{B}(norbitals(h), sublatlengths(lat´))
+    blk´ = OrbitalBlockStructure{B}(norbitals(h), sublatlengths(lat´))
     builder = CSCBuilder(lat´, blk´)
     har´ = supercell_harmonics(h, data, builder, mincoordination)
     return Hamiltonian(lat´, blk´, har´)
@@ -225,6 +224,7 @@ function supercell_indexlist(data)
     return indexlist, offset
 end
 
+# more general version of boundingbox(cells)
 function mask_bounding_box(masklist::Vector{Tuple{Int,SVector{L,Int},Int}}) where {L}
     cellmin = cellmax = ntuple(Returns(0), Val(L))
     imin = imax = 0
@@ -286,5 +286,15 @@ function remove_low_coordination_sites!(data, indexlist, offset, h, mincoordinat
     indexlist´, offset´ = supercell_indexlist(data)
     return indexlist´, offset´
 end
+
+#endregion
+
+############################################################################################
+# supercell(::ParametricHamiltonian, ...)
+#region
+
+## TODO
+supercell(p::ParametricHamiltonian, args...; kw...) =
+    argerror("supercell(::ParametricHamiltonian, ...) is not yet implemented. In the meantime, call supercell on the parent Hamiltonian or Lattice")
 
 #endregion

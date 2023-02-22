@@ -16,18 +16,27 @@ sublat(sites::Vector; name = :A) =
 
 lattice(s::Sublat, ss::Sublat...; kw...) = _lattice(promote(s, ss...)...; kw...)
 
+lattice(ss::AbstractVector{<:Sublat}; kw...) = _lattice(ss; kw...)
+
 # Start with an empty list of nranges, to be filled as they are requested
 Lattice(b::Bravais{T}, u::Unitcell{T}) where {T} = Lattice(b, u, Tuple{Int,T}[])
 
-function _lattice(ss::Sublat{T,E}...;
-                  bravais = (),
-                  dim = Val(E),
-                  type::Type{T´} = T,
-                  names = sublatname.(ss)) where {T,E,T´}
-    u = unitcell(ss, names, postype(dim, type))
-    b = Bravais(type, dim, bravais)
-    return Lattice(b, u)
-end
+_lattice(ss::Sublat{T,E}...;
+    bravais = (),
+    dim = Val(E),
+    type::Type{T´} = T,
+    names = sublatname.(ss)) where {T,E,T´} =
+    _lattice(ss, bravais, dim, type, names)
+
+_lattice(ss::AbstractVector{S};
+    bravais = (),
+    dim = Val(E),
+    type::Type{T´} = T,
+    names = sublatname.(ss)) where {T,E,T´,S<:Sublat{T,E}} =
+    _lattice(ss, bravais, dim, type, names)
+
+_lattice(ss, bravais, dim, type, names) =
+    Lattice(Bravais(type, dim, bravais), unitcell(ss, names, postype(dim, type)))
 
 function lattice(lat::Lattice{T,E};
                  bravais = bravais_matrix(lat),
@@ -63,29 +72,12 @@ end
 #endregion
 
 ############################################################################################
-# indexing Lattice
-#region
-
-# function Base.getindex(l::Lattice; kw...)
-#     isempty(kw) && return collect(enumerate(sites(l)))
-#     as = apply(siteselector(; kw...), l)
-#     selsites = ((i, r) for (i, r) in enumerate(sites(l)) if (i, r) in as)
-#     return selsites
-# end
-
-# siteindices(l::Lattice; kw...) = first.(getindex(l; kw...))
-
-# sitepositions(l::Lattice; kw...) = last.(getindex(l; kw...))
-
-#endregion
-
-############################################################################################
-# merge lattices - combine sublats if equal name
+# combine lattices - combine sublats if equal name
 #region
 
 function combine(lats::Lattice{T,E,L}...) where {T,E,L}
     isapprox_modulo_shuffle(bravais_matrix.(lats)...) ||
-        throw(ArgumentError("To merge lattices they must all share the same Bravais matrix"))
+        throw(ArgumentError("To combine lattices they must all share the same Bravais matrix"))
     bravais´ = bravais(first(lats))
     unitcell´ = combine(unitcell.(lats)...)
     return Lattice(bravais´, unitcell´)
@@ -107,11 +99,7 @@ function isapprox_modulo_shuffle(s::AbstractMatrix, ss::AbstractMatrix...)
     return true
 end
 
-function combined_offsets(offsets...)
-    offsets´ = cumsum(Iterators.flatten(diff.(offsets)))
-    prepend!(offsets´, 0)
-    return offsets´
-end
+combined_offsets(offsets...) = lengths_to_offsets(Iterators.flatten(diff.(offsets)))
 
 #endregion
 

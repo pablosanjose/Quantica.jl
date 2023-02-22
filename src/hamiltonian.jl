@@ -1,12 +1,122 @@
 ############################################################################################
+# Hamiltonian builders
+#region
+
+abstract type AbstractHamiltonianBuilder{T,E,L,B} end
+
+abstract type AbstractBuilderHarmonic{L,B} end
+
+struct IJVHarmonic{L,B} <: AbstractBuilderHarmonic{L,B}
+    dn::SVector{L,Int}
+    collector::IJV{B}
+end
+
+mutable struct CSCHarmonic{L,B} <: AbstractBuilderHarmonic{L,B}
+    dn::SVector{L,Int}
+    collector::CSC{B}
+end
+
+struct IJVBuilder{T,E,L,B} <: AbstractHamiltonianBuilder{T,E,L,B}
+    lat::Lattice{T,E,L}
+    blockstruct::OrbitalBlockStructure{B}
+    harmonics::Vector{IJVHarmonic{L,B}}
+    kdtrees::Vector{KDTree{SVector{E,T},Euclidean,T}}
+end
+
+struct CSCBuilder{T,E,L,B} <: AbstractHamiltonianBuilder{T,E,L,B}
+    lat::Lattice{T,E,L}
+    blockstruct::OrbitalBlockStructure{B}
+    harmonics::Vector{CSCHarmonic{L,B}}
+end
+
+## Constructors ##
+
+function IJVBuilder(lat::Lattice{T,E,L}, blockstruct::OrbitalBlockStructure{B}) where {E,L,T,B}
+    harmonics = IJVHarmonic{L,B}[]
+    kdtrees = Vector{KDTree{SVector{E,T},Euclidean,T}}(undef, nsublats(lat))
+    return IJVBuilder(lat, blockstruct, harmonics, kdtrees)
+end
+
+function CSCBuilder(lat::Lattice{<:Any,<:Any,L}, blockstruct::OrbitalBlockStructure{B}) where {L,B}
+    harmonics = CSCHarmonic{L,B}[]
+    return CSCBuilder(lat, blockstruct, harmonics)
+end
+
+empty_harmonic(b::CSCBuilder{<:Any,<:Any,L,B}, dn) where {L,B} =
+    CSCHarmonic{L,B}(dn, CSC{B}(nsites(b.lat)))
+
+empty_harmonic(::IJVBuilder{<:Any,<:Any,L,B}, dn) where {L,B} =
+    IJVHarmonic{L,B}(dn, IJV{B}())
+
+## API ##
+
+collector(har::AbstractBuilderHarmonic) = har.collector  # for IJVHarmonic and CSCHarmonic
+
+dcell(har::AbstractBuilderHarmonic) = har.dn
+
+kdtrees(b::IJVBuilder) = b.kdtrees
+
+Base.filter!(f::Function, b::IJVBuilder) =
+    foreach(bh -> filter!(f, bh.collector), b.harmonics)
+
+finalizecolumn!(b::CSCBuilder, x...) =
+    foreach(har -> finalizecolumn!(collector(har), x...), b.harmonics)
+
+Base.isempty(h::IJVHarmonic) = isempty(collector(h))
+Base.isempty(s::CSCHarmonic) = isempty(collector(s))
+
+lattice(b::AbstractHamiltonianBuilder) = b.lat
+
+blockstructure(b::AbstractHamiltonianBuilder) = b.blockstruct
+
+harmonics(b::AbstractHamiltonianBuilder) = b.harmonics
+
+function Base.getindex(b::AbstractHamiltonianBuilder{<:Any,<:Any,L}, dn::SVector{L,Int}) where {L}
+    hars = b.harmonics
+    for har in hars
+        dcell(har) == dn && return collector(har)
+    end
+    har = empty_harmonic(b, dn)
+    push!(hars, har)
+    return collector(har)
+end
+
+function SparseArrays.sparse(builder::AbstractHamiltonianBuilder{T,<:Any,L,B}) where {T,L,B}
+    HT = Harmonic{T,L,B}
+    b = blockstructure(builder)
+    n = nsites(lattice(builder))
+    hars = HT[sparse(b, har, n, n) for har in harmonics(builder) if !isempty(har)]
+    return hars
+end
+
+function SparseArrays.sparse(b::OrbitalBlockStructure{B}, har::AbstractBuilderHarmonic{L,B}, m::Integer, n::Integer) where {L,B}
+    s = sparse(collector(har), m, n)
+    return Harmonic(dcell(har), HybridSparseBlochMatrix(b, s))
+end
+
+#endregion
+
+############################################################################################
 # hamiltonian
 #region
 
-hamiltonian(m::TightbindingModel = TightbindingModel(); kw...) = lat -> hamiltonian(lat, m; kw...)
+hamiltonian(args...; kw...) = lat -> hamiltonian(lat, args...; kw...)
 
-# Base.@constprop :aggressive needed for type-stable non-Val orbitals
-Base.@constprop :aggressive function hamiltonian(lat::Lattice{T}, m = TightbindingModel(); orbitals = Val(1)) where {T}
-    blockstruct = BlockStructure(T, orbitals, sublatlengths(lat))
+hamiltonian(lat::Lattice, m0::TightbindingModel, m::Modifier, ms::Modifier...; kw...) =
+    parametric(hamiltonian(lat, m0; kw...), m, ms...)
+
+hamiltonian(lat::Lattice, m0::ParametricModel, ms::Modifier...; kw...) =
+    parametric(hamiltonian(lat, basemodel(m0); kw...), modifier.(terms(m0))..., ms...)
+
+hamiltonian(lat::Lattice, m::Modifier, ms::Modifier...; kw...) =
+    parametric(hamiltonian(lat; kw...), m, ms...)
+
+hamiltonian(h::AbstractHamiltonian, m::Modifier, ms::Modifier...) = parametric(h, m, ms...)
+
+# Base.@constprop :aggressive may be needed for type-stable non-Val orbitals?
+function hamiltonian(lat::Lattice{T}, m::TightbindingModel = TightbindingModel(); orbitals = Val(1)) where {T}
+    orbitals´ = sanitize_orbitals(orbitals)
+    blockstruct = OrbitalBlockStructure(T, orbitals´, sublatlengths(lat))
     builder = IJVBuilder(lat, blockstruct)
     apmod = apply(m, (lat, blockstruct))
     # using foreach here foils precompilation of applyterm! for some reason
@@ -59,14 +169,12 @@ isinblock(i, irng) = i in irng
 # parametric
 #region
 
-parametric(modifiers::Modifier...) = h -> parametric(h, modifiers...)
-
 function parametric(hparent::Hamiltonian)
     modifiers = ()
     allparams = Symbol[]
     allptrs = [Int[] for _ in harmonics(hparent)]
     # We must decouple hparent from the result, which will modify h in various ways
-    h = copy_callsafe(hparent)
+    h = minimal_callsafe_copy(hparent)
     return ParametricHamiltonian(hparent, h, modifiers, allptrs, allparams)
 end
 
@@ -116,39 +224,24 @@ function _merge_pointers!(p, m::AppliedHoppingModifier)
     return p
 end
 
-merge_parameters!(p, m, ms...) = merge_parameters!(append!(p, parameters(m)), ms...)
-merge_parameters!(p) = unique!(sort!(p))
-
-#endregion
-
-############################################################################################
-# copy_callsafe - minimal copy without side effects and race conditions between call!'s
-#region
-
-copy_bloch(h::Hamiltonian) = Hamiltonian(
-    lattice(h), blockstructure(h), harmonics(h), copy(bloch(h)))
-
-copy_harmonics(h::Hamiltonian) = Hamiltonian(
-    lattice(h), blockstructure(h), copy.(harmonics(h)), bloch(h))
-
-copy_callsafe(h::Hamiltonian) = copy_bloch(h)
-
-copy_callsafe(p::ParametricHamiltonian) = ParametricHamiltonian(
-    p.hparent, copy_harmonics(copy_bloch(p.h)), p.modifiers, p.allptrs, p.allparams)
-
 #endregion
 
 ############################################################################################
 # Hamiltonian call API
+#   call!(::AbstractHamiltonian; params...) returns a Hamiltonian with params applied
+#   call!(::AbstractHamiltonian, ϕs; params...) returns a HybridSparseMatrix with Bloch phases
+#     ϕs and params applied
+#   h(ϕs...; params...) is a copy decoupled from future call!'s
 #region
 
-(h::Hamiltonian)(phi...) = call!(copy_callsafe(h), phi...)
+(h::Hamiltonian)(phi...; params...) = copy(call!(h, phi; params...))
 
-call!(h::Hamiltonian, phi) = bloch_flat!(h, sanitize_SVector(phi))
-call!(h::Hamiltonian, phi...) = bloch_flat!(h, sanitize_SVector(phi))
+call!(h::Hamiltonian; params...) = h  # mimic partial call!(p::ParametricHamiltonian; params...)
+call!(h::Hamiltonian, φs; params...) = flat_bloch!(h, sanitize_SVector(φs))
+call!(h::Hamiltonian{<:Any,<:Any,0}, ::Tuple{}; params...) = flat(h[])
 
 # returns a flat sparse matrix
-function bloch_flat!(h::Hamiltonian{T}, φs::SVector, axis = missing) where {T}
+function flat_bloch!(h::Hamiltonian{T}, φs::SVector, axis = missing) where {T}
     hbloch = bloch(h)
     needs_initialization(hbloch) && initialize_bloch!(hbloch, harmonics(h))
     fbloch = flat(hbloch)
@@ -183,7 +276,9 @@ end
 @noinline checkbloch(::AbstractHamiltonian{<:Any,<:Any,L}, ::SVector{L´}) where {L,L´} =
     L == L´ || throw(ArgumentError("Need $L Bloch phases, got $(L´)"))
 
+# ouput of a call!(h, ϕs)
 call!_output(h::Hamiltonian) = flat(bloch(h))
+call!_output(h::Hamiltonian{<:Any,<:Any,0}) = flat(h[])
 
 #endregion
 
@@ -191,10 +286,10 @@ call!_output(h::Hamiltonian) = flat(bloch(h))
 # ParametricHamiltonian call API
 #region
 
-(p::ParametricHamiltonian)(; kw...) = call!(copy_callsafe(p); kw...)
-(p::ParametricHamiltonian)(x, xs...; kw...) = call!(call!(copy_callsafe(p); kw...), x, xs...)
+(p::ParametricHamiltonian)(; kw...) = copy(call!(p; kw...))
+(p::ParametricHamiltonian)(phi, phis...; kw...) = copy(call!(call!(p; kw...), (phi, phis...)))
 
-call!(p::ParametricHamiltonian, x, xs...; kw...) = call!(call!(p; kw...), x, xs...)
+call!(p::ParametricHamiltonian, phi; kw...) = call!(call!(p; kw...), phi)
 call!(p::ParametricHamiltonian, ft::FrankenTuple) = call!(p, Tuple(ft); NamedTuple(ft)...)
 
 function call!(ph::ParametricHamiltonian; kw...)
@@ -266,7 +361,8 @@ function applymodifiers!(h, m::AppliedHoppingModifier{B}; kw...) where {B<:SMatr
     return h
 end
 
-call!_output(p::ParametricHamiltonian) = flat(bloch(p))
+# ouput of a *full* call!(p, ϕs; kw...)
+call!_output(p::ParametricHamiltonian) = call!_output(hamiltonian(p))
 
 #endregion
 
@@ -281,7 +377,7 @@ function Base.getindex(h::AbstractHamiltonian{<:Any,<:Any,L}, dn::SVector{L,Int}
     for har in harmonics(h)
         dn == dcell(har) && return matrix(har)
     end
-    throw(BoundsError(harmonics(h), dn))
+    @boundscheck(boundserror(harmonics(h), dn))
 end
 
 Base.isassigned(h::AbstractHamiltonian, dn::Tuple) = isassigned(h, SVector(dn))
@@ -310,6 +406,23 @@ end
 nonsites(h::AbstractHamiltonian) = nnzdiag(h[])
 
 coordination(h::AbstractHamiltonian) = iszero(nhoppings(h)) ? 0.0 : round(nhoppings(h) / nsites(lattice(h)), digits = 5)
+
+#endregion
+
+############################################################################################
+# unitcell_hamiltonian
+#    Builds the intra-unitcell 0D Hamiltonian. If parent is p::ParametricHamiltonian, the
+#    obtained uh::Hamiltonian is aliased with p, so call!(p,...) also updates uh
+#region
+
+function unitcell_hamiltonian(h::Hamiltonian)
+    lat = lattice(lattice(h), bravais = ())
+    bs = blockstructure(h)
+    hars = [Harmonic(SVector{0,Int}(), matrix(first(harmonics(h))))]
+    return Hamiltonian(lat, bs, hars)
+end
+
+unitcell_hamiltonian(ph::ParametricHamiltonian) = unitcell_hamiltonian(hamiltonian(ph))
 
 #endregion
 

@@ -1,3 +1,16 @@
+############################################################################################
+# show tools
+#region
+
+display_as_tuple(v, prefix = "") = isempty(v) ? "()" :
+    string("(", prefix, join(v, string(", ", prefix)), ifelse(length(v) == 1, ",)", ")"))
+
+display_rounded_vectors(vs) = isempty(vs) ? "[]" : display_rounded_vector.(vs)
+display_rounded_vector(v) = round.(v, digits = 6)
+
+pluraltext(m, sing) = ifelse(length(terms(m)) == 1, "1 $sing", "$(length(terms(m))) $(sing)s")
+
+#endregion
 
 ############################################################################################
 # Lattice
@@ -28,11 +41,22 @@ displaynames(l::Lattice) = display_as_tuple(sublatnames(l), ":")
 
 displayname(s::Sublat) = sublatname(s) == Symbol(:_) ? "pending" : string(":", sublatname(s))
 
-display_as_tuple(v, prefix = "") = isempty(v) ? "()" :
-    string("(", prefix, join(v, string(", ", prefix)), ")")
+#endregion
 
-display_rounded_vectors(vs) = isempty(vs) ? "[]" : display_rounded_vector.(vs)
-display_rounded_vector(v) = round.(v, digits = 6)
+############################################################################################
+# LatticeSlice
+#region
+
+Base.summary(::LatticeSlice{T,E,L}) where {T,E,L} =
+    "LatticeSlice{$T,$E,$L} : collection of subcells for a $(L)D lattice in $(E)D space"
+
+function Base.show(io::IO, ls::LatticeSlice)
+    i = get(io, :indent, "")
+    print(io, i, summary(ls), "\n",
+"$i  Cells       : $(length(subcells(ls)))
+$i  Cell range  : $(isempty(ls) ? "empty" : boundingbox(ls))
+$i  Total sites : $(nsites(ls))")
+end
 
 #endregion
 
@@ -41,28 +65,60 @@ display_rounded_vector(v) = round.(v, digits = 6)
 #region
 
 function Base.show(io::IO, m::TightbindingModel)
-    ioindent = IOContext(io, :indent => "  ")
-    print(io, "TightbindingModel: model with $(length(terms(m))) terms", "\n")
+    ioindent = IOContext(io, :indent =>"  ")
+    print(io, "TightbindingModel: model with $(pluraltext(m, "term"))", "\n")
     foreach(t -> print(ioindent, t, "\n"), m.terms)
+end
+
+function Base.show(io::IO, m::ParametricModel)
+    ioindent = IOContext(io, :indent => "  ")
+    print(io, "ParametricModel: model with $(pluraltext(m, "term"))", "\n")
+    foreach(t -> print(ioindent, t, "\n"), m.terms)
+    if !isempty(terms(nonparametric(m)))
+        show(ioindent, nonparametric(m))
+    end
 end
 
 function Base.show(io::IO, o::OnsiteTerm{F,<:SiteSelector}) where {F}
     i = get(io, :indent, "")
     print(io,
 "$(i)OnsiteTerm{$(displayparameter(F))}:
-$(i)  Sublattices      : $(o.selector.sublats === missing ? "any" : o.selector.sublats)
-$(i)  Coefficient      : $(o.coefficient)")
+$(i)  Sublattices       : $(o.selector.sublats === missing ? "any" : o.selector.sublats)
+$(i)  Coefficient       : $(o.coefficient)")
 end
 
 function Base.show(io::IO, h::HoppingTerm{F,<:HopSelector}) where {F}
     i = get(io, :indent, "")
     print(io,
 "$(i)HoppingTerm{$(displayparameter(F))}:
-$(i)  Sublattice pairs : $(h.selector.sublats === missing ? "any" : h.selector.sublats)
-$(i)  dn cell distance : $(h.selector.dcells === missing ? "any" : h.selector.dcells)
-$(i)  Hopping range    : $(displayrange(h.selector.range))
-$(i)  Coefficient      : $(h.coefficient)
-$(i)  Reverse hops     : $(h.selector.adjoint)")
+$(i)  Sublattice pairs  : $(h.selector.sublats === missing ? "any" : h.selector.sublats)
+$(i)  dn cell distance  : $(h.selector.dcells === missing ? "any" : h.selector.dcells)
+$(i)  Hopping range     : $(displayrange(h.selector.range))
+$(i)  Coefficient       : $(h.coefficient)
+$(i)  Reverse hops      : $(h.selector.adjoint)")
+end
+
+function Base.show(io::IO, o::ParametricOnsiteTerm{N}) where {N}
+    i = get(io, :indent, "")
+    print(io,
+"$(i)ParametricOnsiteTerm{$N}:
+$(i)  Functor arguments : $N
+$(i)  Sublattices       : $(o.selector.sublats === missing ? "any" : o.selector.sublats)
+$(i)  Coefficient       : $(o.coefficient)
+$(i)  Parameters        : $(parameters(o))")
+end
+
+function Base.show(io::IO, h::ParametricHoppingTerm{N}) where {N}
+    i = get(io, :indent, "")
+    print(io,
+"$(i)ParametricHoppingTerm{$N}:
+$(i)  Functor arguments : $N
+$(i)  Sublattice pairs  : $(h.selector.sublats === missing ? "any" : h.selector.sublats)
+$(i)  dn cell distance  : $(h.selector.dcells === missing ? "any" : h.selector.dcells)
+$(i)  Hopping range     : $(displayrange(h.selector.range))
+$(i)  Coefficient       : $(h.coefficient)
+$(i)  Reverse hops      : $(h.selector.adjoint)
+$(i)  Parameters        : $(parameters(h))")
 end
 
 displayparameter(::Type{<:Function}) = "Function"
@@ -84,7 +140,7 @@ function Base.show(io::IO, h::Union{Hamiltonian,ParametricHamiltonian})
     print(io, i, summary(h), "\n",
 "$i  Bloch harmonics  : $(length(harmonics(h)))
 $i  Harmonic size    : $((n -> "$n × $n")(size(h, 1)))
-$i  Orbitals         : $(norbitals(h)))
+$i  Orbitals         : $(norbitals(h))
 $i  Element type     : $(displaytype(blocktype(h)))
 $i  Onsites          : $(nonsites(h))
 $i  Hoppings         : $(nhoppings(h))
@@ -107,6 +163,25 @@ showextrainfo(io, i, h) = nothing
 
 showextrainfo(io, i, h::ParametricHamiltonian) = print(io, i, "\n",
 "$i  Parameters       : $(parameters(h))")
+
+#endregion
+
+############################################################################################
+# OpenHamiltonian
+#region
+
+function Base.show(io::IO, oh::OpenHamiltonian)
+    i = get(io, :indent, "")
+    print(io, i, summary(oh), "\n",
+"$i  Number of contacts : $(length(selfenergies(oh)))
+$i  Contact solvers    : $(solvernames(oh))", "\n")
+    ioindent = IOContext(io, :indent => "  ")
+    show(ioindent, hamiltonian(oh))
+end
+
+Base.summary(oh::OpenHamiltonian{T,E,L}) where {T,E,L} = "OpenHamiltonian{$T,$E,$L}: Hamiltonian with a set of open contacts"
+
+solvernames(oh::OpenHamiltonian) = nameof.(typeof.(solver.(selfenergies(oh))))
 
 #endregion
 
@@ -180,20 +255,49 @@ Base.summary(::Bands{T,E,L}) where {T,E,L} =
 #endregion
 
 ############################################################################################
-# Coupler
+# GreenFunction and GreenSolution
 #region
 
-function Base.show(io::IO, ::MIME"text/plain", c::Coupler)
+function Base.show(io::IO, g::GreenFunction)
     i = get(io, :indent, "")
+    Σs = selfenergies(contacts(g))
+    print(io, i, summary(g), "\n",
+"$i  Solver          : $(typename(solver(g)))
+$i  Contacts        : $(length(Σs))
+$i  Contact solvers : $(display_as_tuple(typename.(solver.(Σs))))
+$i  Contact sizes   : $(display_as_tuple(nsites.(latslice.(Σs))))", "\n")
     ioindent = IOContext(io, :indent => "  ")
-    print(io, summary(c), "\n",
-"$i  Number of blocks  : $(size(c, 2))
-$i  Assigned blocks   : $(showassignedblocks(c))", "\n")
-    print(ioindent, lattice(c))
+    show(ioindent, parent(g))
 end
 
-showassignedblocks(c) = ifelse.(assignedblocks(c), :assigned, :unassigned)
+Base.summary(g::GreenFunction{T,E,L}) where {T,E,L} =
+    "GreenFunction{$T,$E,$L}: Green function of a $(typename(hamiltonian(g))){$T,$E,$L}"
 
-Base.summary(io::IO, ::Coupler{T,E,L,B}) where {T,E,L,B} = print(io, "Coupler{$T,$E,$L,$B}: AbstractHamiltonian coupler")
+function Base.show(io::IO, g::GreenSolution)
+    i = get(io, :indent, "")
+    print(io, i, summary(g))
+end
+
+Base.summary(g::GreenSolution{T,E,L,S}) where {T,E,L,S} =
+    "GreenSolution{$T,$E,$L}: Green matrix evaluator using $(nameof(S))"
 
 #endregion
+
+# ############################################################################################
+# # Coupler
+# #region
+
+# function Base.show(io::IO, ::MIME"text/plain", c::Coupler)
+#     i = get(io, :indent, "")
+#     ioindent = IOContext(io, :indent => "  ")
+#     print(io, summary(c), "\n",
+# "$i  Number of blocks  : $(size(c, 2))
+# $i  Assigned blocks   : $(showassignedblocks(c))", "\n")
+#     print(ioindent, lattice(c))
+# end
+
+# showassignedblocks(c) = ifelse.(assignedblocks(c), :assigned, :unassigned)
+
+# Base.summary(io::IO, ::Coupler{T,E,L,B}) where {T,E,L,B} = print(io, "Coupler{$T,$E,$L,$B}: AbstractHamiltonian coupler")
+
+# #endregion
