@@ -413,6 +413,7 @@ ParametricFunction{N}(f::F, params = Symbol[]) where {N,F} =
 
 TightbindingModel(ts::AbstractTightbindingTerm...) = TightbindingModel(ts)
 ParametricModel(ts::AbstractParametricTerm...) = ParametricModel(TightbindingModel(), ts)
+ParametricModel(m::TightbindingModel) = ParametricModel(m, ())
 
 OnsiteTerm(t::OnsiteTerm, os::SiteSelector) = OnsiteTerm(t.f, os, t.coefficient)
 ParametricOnsiteTerm(t::ParametricOnsiteTerm, os::SiteSelector) =

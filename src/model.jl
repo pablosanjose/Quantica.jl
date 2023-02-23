@@ -135,6 +135,8 @@ basemodel(m::ParametricModel) = nonparametric(m) + TightbindingModel(zero_model.
 model_ω_to_param(model::ParametricModel) =
     ParametricModel(nonparametric(model), model_ω_to_param.(terms(model)))
 
+model_ω_to_param(model::TightbindingModel) = model_ω_to_param(ParametricModel(model))
+
 function model_ω_to_param(term::ParametricOnsiteTerm{N}, default = 0) where {N}
     # parameters(term) only needed for reporting, we omit adding :ω_internal
     f = (args...; ω_internal = default, kw...) -> term(ω_internal, args...; kw...)

@@ -11,7 +11,7 @@ end
 
 #region ## Constructor ##
 
-function SelfEnergyModelSolver(h::AbstractHamiltonian, model::ParametricModel, latslice::LatticeSlice)
+function SelfEnergyModelSolver(h::AbstractHamiltonian, model::AbstractModel, latslice::LatticeSlice)
     modelω = model_ω_to_param(model)  # see model.jl - transforms ω into a ω_internal param
     siteinds = Int[]
     # this converts latslice to a 0D Lattice lat0
@@ -31,7 +31,7 @@ end
 
 #region ## SelfEnergy (attach) API ##
 
-function SelfEnergy(h::AbstractHamiltonian, model::ParametricModel; kw...)
+function SelfEnergy(h::AbstractHamiltonian, model::AbstractModel; kw...)
     sel = siteselector(; kw...)
     latslice = lattice(h)[sel]
     solver = SelfEnergyModelSolver(h, model, latslice)
