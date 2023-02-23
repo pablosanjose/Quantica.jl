@@ -1406,6 +1406,9 @@ attach(oh::OpenHamiltonian, Σ::SelfEnergy) = OpenHamiltonian(oh.h, (oh.selfener
 attach(h::AbstractHamiltonian, args...; kw...) = attach(h, SelfEnergy(h, args...; kw...))
 attach(h::AbstractHamiltonian, Σ::SelfEnergy) = OpenHamiltonian(h, (Σ,))
 
+# fallback for SelfEnergy constructor
+SelfEnergy(h::AbstractHamiltonian, args...; kw...) = argerror("Unknown attach/SelfEnergy systax")
+
 minimal_callsafe_copy(oh::OpenHamiltonian) =
     OpenHamiltonian(minimal_callsafe_copy(oh.h), minimal_callsafe_copy.(oh.selfenergies))
 
@@ -1484,6 +1487,8 @@ contactinds(c::Contacts, i...) = contactinds(c.blockstruct, i...)
 contactinds(b::ContactBlockStructure) = b.contactinds
 contactinds(b::ContactBlockStructure, i) = 1 <= i <= length(b.contactinds) ? b.contactinds[i] :
     argerror("Cannot access contact $i, there are $(length(b.contactinds)) contacts")
+
+Base.isempty(c::Contacts) = isempty(selfenergies(c))
 
 call!(c::Contacts; params...) = Contacts(call!.(c.selfenergies; params...), c.blockstruct)
 
