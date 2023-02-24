@@ -426,6 +426,38 @@ unitcell_hamiltonian(ph::ParametricHamiltonian) = unitcell_hamiltonian(hamiltoni
 
 #endregion
 
+
+############################################################################################
+# foreach_hop(h::AbstractHamiltonian)
+#region
+
+foreach_hop(f, ph::ParametricHamiltonian) = foreach_hop(f, hamiltonian(ph))
+
+function foreach_hop(f, h::Hamiltonian, sublatsrc = missing)
+    lat = lattice(h)
+    found = false
+    for har in harmonics(h)
+        found = found || foreach_hop(f, har, lat, sublatsrc)
+    end
+    return found
+end
+
+function foreach_hop(f, har::Harmonic, lat, sublatsrc = missing)
+    found = false
+    colrng = sublatsrc === missing ? axes(h, 2) : siterange(lat, sublatsrc)
+    mat = unflat(har)
+    dn = dcell(har)
+    for col in colrng, ptr in nzrange(mat, col)
+        row = rowvals(mat)[ptr]
+        row == col && continue
+        f(site(lat, col, zero(dn)) => site(lat, row, dn), dn)
+        found = true
+    end
+    return found
+end
+
+#endregion
+
 # ############################################################################################
 # # store_onsites - AbstractHamiltonian with onsites as structural SparseMatrix elements
 # #    Note: if hasdiagonal, then no-op

@@ -25,7 +25,8 @@ export sublat, lattice, supercell, bravais_matrix,
        hamiltonian, call!,
        flat, unflat, wrap, transform, transform!, translate, translate!,
        spectrum, energies, states, bands, mesh, subbands, slice,
-       greenfunction, attach, contact, cellsites
+       greenfunction, attach, contact, cellsites,
+       plotlattice, plotlattice!
 
 # export sublat, lattice, dims, supercell, bravais_matrix, siteindices, sitepositions,
 #        hopping, onsite, @onsite!, @hopping!, @block!, parameters, neighbors,
@@ -80,7 +81,11 @@ include("presets/lattices.jl")
 include("presets/regions.jl")
 # include("presets/hamiltonians.jl")
 
+# include("precompile.jl")
 
-include("precompile.jl")
+
+# Extension stubs for QuanticaMakieExt
+function plotlattice end
+function plotlattice! end
 
 end

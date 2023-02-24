@@ -114,6 +114,7 @@ sites(s::Sublat) = s.sites
 sites(l::Lattice, sublat...) = sites(l.unitcell, sublat...)
 sites(u::Unitcell) = u.sites
 sites(u::Unitcell, sublat) = view(u.sites, siterange(u, sublat))
+sites(u::Unitcell, ::Missing) = sites(u)            # to work with QuanticaMakieExt
 sites(u::Unitcell, ::Nothing) = view(u.sites, 1:0)  # to work with sublatindex
 sites(l::Lattice, name::Symbol) = sites(unitcell(l), name)
 sites(u::Unitcell, name::Symbol) = sites(u, sublatindex(u, name))
@@ -1042,7 +1043,8 @@ bloch(h::Hamiltonian) = h.bloch
 minimal_callsafe_copy(h::Hamiltonian) = Hamiltonian(
     lattice(h), blockstructure(h), copy.(harmonics(h)), copy_matrices(bloch(h)))
 
-Base.size(h::Hamiltonian, i...) = size(first(harmonics(h)), i...)
+Base.size(h::Hamiltonian, i...) = size(bloch(h), i...)
+Base.axes(h::Hamiltonian, i...) = axes(bloch(h), i...)
 
 Base.copy(h::Hamiltonian) = Hamiltonian(
     copy(lattice(h)), copy(blockstructure(h)), copy.(harmonics(h)), copy(bloch(h)))
