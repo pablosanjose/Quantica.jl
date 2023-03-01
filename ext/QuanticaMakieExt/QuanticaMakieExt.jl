@@ -2,11 +2,207 @@ module QuanticaMakieExt
 
 using Makie
 using Quantica
-using Makie.GeometryBasics: Line, Cylinder
-using Quantica: Lattice, AbstractHamiltonian, Harmonic, SVector, foreach_hop, dcell,
+using Makie.GeometryBasics
+using Quantica: Lattice, AbstractHamiltonian, Harmonic, Bravais, SVector, foreach_hop, dcell,
       harmonics, sublats, site, norm, normalize
 
-import Quantica: plotlattice, plotlattice!
+import Quantica: qplot, qplot!
+
+############################################################################################
+# QPlot recipe
+#region
+
+@recipe(QPlot) do scene
+    Theme(
+        ssao = true,
+        fxaa = true,
+        ambient = Vec3f(0.5),
+        diffuse = Vec3f(0.5),
+        backlight = 4.0f0,
+        shaded = false,
+        dimming = 0.95,
+        siteradius = 0.2,
+        siteborder = 3,
+        siteborderdarken = 0.6,
+        hopthickness = 6,
+        hopradius = 0.03,
+        hopoffset = 1.0,
+        hopdarken = 0.85,
+        supercell = missing,
+        tooltips = true,
+        digits = 3,
+        axes = missing, # can be e.g. (1,2) to project onto the x,y plane
+        hide = nothing, # :hops, :sites, :bravais
+        colormap = :Spectral_9,
+    )
+end
+
+Makie.plot!(plot::QPlot) = qplotdispatch!(plot, to_value(plot[1]))
+
+#endregion
+
+############################################################################################
+# QPlot for AbstractHamiltonian and Lattice
+#region
+
+function qplotdispatch!(plot::QPlot, h::AbstractHamiltonian)
+    lat = Quantica.lattice(h)
+    E = Quantica.embdim(lat)
+    colors = Iterators.cycle(RGBAf.(Makie.ColorSchemes.colorschemes[plot[:colormap][]]))
+
+    hidesites = ishidden((:sites, :all), plot)
+    hidehops = ishidden((:hops, :hoppings, :links, :all), plot)
+    hidebravais = ishidden((:bravais, :all), plot)
+    hidedimmed = ishidden((:dimmed, :all), plot)
+
+    sc = plot[:supercell][]
+
+    # plot bravais axes
+    if !hidebravais
+        plotbravais!(plot, lat, sc)
+    end
+
+    if sc !== missing
+        h = supercell(h, sc)
+        lat = Quantica.lattice(h)
+    end
+
+    # plot hoppings
+    if !hidehops
+        for har in reverse(harmonics(h))  # Draw intracell hops last
+            hidedimmed && !iszero(dcell(har)) && continue
+            for (sublatsrc, color) in zip(sublats(lat), colors)
+                color´ = darken(color, plot[:hopdarken][])
+                color´´ = maybedim(color´, dcell(har), plot[:dimming][])
+                plothops!(plot, har, lat, sublatsrc, color´´, hidesites)
+            end
+        end
+    end
+
+    # plot sites
+    if !hidesites
+        for har in harmonics(h)
+            hidedimmed && !iszero(dcell(har)) && break
+            for (sublat, color) in zip(sublats(lat), colors)
+                color´ = maybedim(color, dcell(har), plot[:dimming][])
+                sites = append_harmonic_sites!(Point{E,Float32}[], har, lat, sublat)
+                plotsites!(plot, sites, color´)
+            end
+        end
+    end
+
+    return plot
+end
+
+function qplotdispatch!(plot::QPlot, lat::Lattice)
+    E = Quantica.embdim(lat)
+    colors = Iterators.cycle(RGBAf.(Makie.ColorSchemes.colorschemes[plot[:colormap][]]))
+
+    sites = Point{E,Float32}[]
+    offset = 0
+    colors´ = RGBAf[]
+    for dn in dnshell(lat)
+        plot[:onlyonecell][] && !iszero(dn) && continue
+        for (sublat, color) in zip(sublats(lat), colors)
+            append_dcell_sites!(sites, dn, lat, sublat)
+            color´ = iszero(dn) ? color : transparent(color, 1 - plot[:dimming][])
+            colors´ = append!(colors´, Iterators.repeated(color´, length(sites) - offset))
+            offset = length(sites)
+        end
+    end
+
+    plotsites!(plot, sites, colors´)
+
+    return plot
+end
+
+function plotsites!(plot::QPlot, sites::Vector{<:Point{E}}, color) where {E}
+    if E == 3 && plot[:shaded][]
+        meshscatter!(plot, sites; color,
+            markerspace = :data,
+            markersize = plot[:siteradius][],
+            ssao = plot[:ssao][],
+            ambient = plot[:ambient][],
+            diffuse = plot[:diffuse][],
+            backlight = plot[:backlight][],
+            fxaa = plot[:fxaa][])
+    else
+        scatter!(plot, sites; color,
+            markerspace = :data,
+            markersize = sqrt(2) * 2 * plot[:siteradius][],
+            strokewidth = plot[:siteborder][],
+            strokecolor = darken(color, plot[:siteborderdarken][]),
+            ambient = plot[:ambient][],
+            diffuse = plot[:diffuse][],
+            backlight = plot[:backlight][],
+            fxaa = plot[:fxaa][],
+            overdraw = istransparent(color))
+    end
+    return plot
+end
+
+function plothops!(plot::QPlot, har, lat::Lattice{<:Any,E}, sublatsrc, color, hidesites) where {E}
+    if E == 3 && plot[:shaded][]
+        cyl = Cylinder(Point3f(0., 0., -1.0), Point3f(0., 0, 1.0), Float32(1))
+        radius = plot[:hopradius][]
+        offset = ifelse(hidesites, 0.0, 0.95 * plot[:hopoffset][]*plot[:siteradius][])
+        centers, vectors, scales = centers_vectors_and_scales(har, lat, radius, sublatsrc; offset)
+        meshscatter!(plot, centers; color,
+            rotations = vectors, markersize = scales, marker = cyl,
+            ssao = plot[:ssao][],
+            ambient = plot[:ambient][],
+            diffuse = plot[:diffuse][],
+            backlight = plot[:backlight][],
+            fxaa = plot[:fxaa][],
+            overdraw = istransparent(color))
+    else
+        offset = ifelse(hidesites, 0.0, plot[:hopoffset][] * plot[:siteradius][])
+        segments = Point{E,Float32}[]
+        append_segment!(segments, har, lat, sublatsrc; offset)
+        linesegments!(plot, segments; color,
+            linewidth = plot[:hopthickness][],
+            backlight = plot[:backlight][],
+            fxaa = plot[:fxaa][],
+            overdraw = istransparent(color))
+    end
+    return plot
+end
+
+istransparent(colors::Vector) = istransparen(first(colors))
+istransparent(color::RGBAf) = color.alpha != 1.0
+
+function plotbravais!(plot::QPlot, lat::Lattice{<:Any,E,L}, supercell) where {E,L}
+    overdraw = !(E == 3 && plot[:shaded][])
+
+    bravais = Quantica.bravais(lat)
+    vs = Point{E}.(Quantica.bravais_vectors(bravais))
+    vtot = sum(vs)
+    r0 = Point{E,Float32}(Quantica.mean(Quantica.sites(lat))) - 0.5 * vtot
+
+    if !ishidden(:axes, plot)
+        r0s = [r0 for _ in 1:L]
+        arrows!(plot, r0s, vs; color = [:red, :green, :blue])
+    end
+
+    shifts = supercell === missing ? (zero(SVector{L,Int}),) : dnshell(lat, 0:supercell-1)
+    if !ishidden(:cell, plot)
+        ILE = SMatrix{L,E,Int}(I)
+        corner = SVector{E,Int}(ntuple(i -> ifelse(i<=L, 1, 0), Val(E)))
+        for shift in shifts
+            rect = Rect{E,Float32}(Point{E,Int}(0), Point{E,Int}(corner))
+            m = GeometryBasics.mesh(rect)
+            mat = Quantica.bravais_matrix(bravais) * ILE
+            m.position .= Ref(r0) .+ Ref(mat) .* (m.position .+ Ref(ILE' * shift))
+            segments = [[s..., first(s)] for s in Iterators.partition(m.position, 4)]
+            mesh!(plot, m; color = RGBAf(0,0,1,0.05), overdraw)
+            lines!.(Ref(plot), segments; color = RGBAf(0,0,0.5,0.25), strokewidth = 1)
+        end
+    end
+
+    return plot
+end
+
+#endregion
 
 ############################################################################################
 # tools
@@ -82,19 +278,20 @@ function offset_pair(pair, offset, dn)
 end
 
 
-dnshell(::Lattice{<:Any,<:Any,L}) where {L} =
-    sort!(vec(SVector.(Iterators.product(ntuple(_ -> -1:1, Val(L))...))), by = norm)
+dnshell(::Lattice{<:Any,<:Any,L}, span = -1:1) where {L} =
+    sort!(vec(SVector.(Iterators.product(ntuple(_ -> span, Val(L))...))), by = norm)
+
+ishidden(s, plot::QPlot) = ishidden(s, plot[:hide][])
+ishidden(s, ::Nothing) = false
+ishidden(s::Symbol, hide::Symbol) = s === hide
+ishidden(s::Symbol, hides::Tuple) = s in hides
+ishidden(ss, hides) = any(s -> ishidden(s, hides), ss)
 
 #endregion
 
 ############################################################################################
 # convert_arguments
 #region
-
-Makie.convert_arguments(::PointBased, lat::Lattice, sublat = missing) =
-    (toPoint32.(sites(lat, sublat)),)
-Makie.convert_arguments(t::PointBased, h::AbstractHamiltonian, sublat = missing) =
-    convert_arguments(t, lattice(h), sublat)
 
 function Makie.convert_arguments(::PointBased, lat::Lattice{<:Any,E}, sublat = missing) where {E}
     lat = lattice(h)
@@ -131,136 +328,8 @@ end
 #endregion
 
 ############################################################################################
-# PlotLattice
+# Old
 #region
-
-@recipe(PlotLattice) do scene
-    Theme(
-        ssao = true,
-        fxaa = true,
-        ambient = Vec3f(0.5),
-        diffuse = Vec3f(0.5),
-        shaded = false,
-        dimming = 0.95,
-        siteradius = 0.2,
-        siteborder = 3,
-        siteborderdarken = 0.6,
-        hopthickness = 6,
-        hopradius = 0.05,
-        hopoffset = 1.0,
-        hopdarken = 0.8,
-        onlyonecell = false,
-        tooltips = true,
-        digits = 3,
-        _tooltips_rowcolhar = Vector{Tuple{Int,Int,Int}}[],
-        light = Vec3f[[0, 0, 10], [0, 10, 0], [10, 0, 0], [10, 10, 10], [-10, -10, -10]],
-        axes = missing, # can be e.g. (1,2) to project onto the x,y plane
-        hide = nothing, # :hops or :sites
-        colormap = :Spectral_9
-    )
-end
-
-Makie.plot!(plot::PlotLattice) = plotdispatch!(plot, to_value(plot[1]))
-
-function plotdispatch!(plot::PlotLattice, h::AbstractHamiltonian)
-    lat = Quantica.lattice(h)
-    E = Quantica.embdim(lat)
-    colors = Iterators.cycle(RGBAf.(Makie.ColorSchemes.colorschemes[plot[:colormap][]]))
-
-    hidesites = plot[:hide][] == :sites || plot[:hide][] == :all
-    hidehops = plot[:hide][] == :hops || plot[:hide][] == :hoppings ||
-               plot[:hide][] == :links || plot[:hide][] == :all
-    # plot hoppings
-    if !hidehops
-        cyl = Cylinder(Point3f(0., 0., -1.0), Point3f(0., 0, 1.0), Float32(1))
-        radius = plot[:hopradius][]
-        for har in reverse(harmonics(h))  # Draw intracell hops last
-            plot[:onlyonecell][] && !iszero(dcell(har)) && continue
-            for (sublatsrc, color) in zip(sublats(lat), colors)
-                color´ = darken(color, plot[:hopdarken][])
-                color´´ = maybedim(color´, dcell(har), plot[:dimming][])
-                if E == 3 && plot[:shaded][]
-                    offset = ifelse(hidesites, 0.0, 0.95 * plot[:hopoffset][]*plot[:siteradius][])
-                    centers, vectors, scales = centers_vectors_and_scales(har, lat, radius, sublatsrc; offset)
-                    meshscatter!(plot, centers;
-                        rotations = vectors, markersize = scales, color = color´´, marker = cyl,
-                        ssao = plot[:ssao][],
-                        ambient = plot[:ambient][],
-                        diffuse = plot[:diffuse][],
-                        light = plot[:light][],
-                        fxaa = plot[:fxaa][],
-                        shininess = 0.4, specular = Vec3f(0.4))
-                else
-                    offset = ifelse(hidesites, 0.0, plot[:hopoffset][]*plot[:siteradius][])
-                    segments = Point{E,Float32}[]
-                    append_segment!(segments, har, lat, sublatsrc; offset)
-                    linesegments!(plot, segments; color = color´´,
-                        linewidth = plot[:hopthickness][],
-                        fxaa = plot[:fxaa][])
-                end
-            end
-        end
-    end
-
-    # plot sites
-    if !hidesites
-        for har in harmonics(h)
-            plot[:onlyonecell][] && !iszero(dcell(har)) && continue
-            for (sublat, color) in zip(sublats(lat), colors)
-                color´ = maybedim(color, dcell(har), plot[:dimming][])
-                sites = append_harmonic_sites!(Point{E,Float32}[], har, lat, sublat)
-                plotsites!(plot, sites, color´)
-            end
-        end
-    end
-
-    return plot
-end
-
-function plotdispatch!(plot::PlotLattice, lat::Lattice)
-    E = Quantica.embdim(lat)
-    colors = Iterators.cycle(RGBAf.(Makie.ColorSchemes.colorschemes[plot[:colormap][]]))
-
-    sites = Point{E,Float32}[]
-    offset = 0
-    colors´ = RGBAf[]
-    for dn in dnshell(lat)
-        plot[:onlyonecell][] && !iszero(dn) && continue
-        for (sublat, color) in zip(sublats(lat), colors)
-            append_dcell_sites!(sites, dn, lat, sublat)
-            color´ = iszero(dn) ? color : transparent(color, 1 - plot[:dimming][])
-            colors´ = append!(colors´, Iterators.repeated(color´, length(sites) - offset))
-            offset = length(sites)
-        end
-    end
-
-    plotsites!(plot, sites, colors´)
-
-    return plot
-end
-
-function plotsites!(plot::PlotLattice, sites::Vector{<:Point{E}}, color) where {E}
-    # overdraw´ = color.alpha != 1
-    overdraw´ = false
-    if E == 3 && plot[:shaded][]
-        meshscatter!(plot, sites; color,
-            markerspace = :data,
-            markersize = plot[:siteradius][],
-            ssao = plot[:ssao][],
-            ambient = plot[:ambient][],
-            diffuse = plot[:diffuse][],
-            light = plot[:light][],
-            fxaa = plot[:fxaa][])
-    else
-        scatter!(plot, sites; color,
-            markerspace = :data,
-            markersize = sqrt(2) * 2 * plot[:siteradius][],
-            strokewidth = plot[:siteborder][],
-            strokecolor = darken(color, plot[:siteborderdarken][]),
-            fxaa = plot[:fxaa][])
-    end
-    return plot
-end
 
 function addtooltips!(scene, h)
     sceneplot = scene[end]
