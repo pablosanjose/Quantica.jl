@@ -3,6 +3,7 @@ module QuanticaMakieExt
 using Makie
 using Quantica
 using Makie.GeometryBasics
+using Makie.GeometryBasics: Ngon
 using Quantica: Lattice, AbstractHamiltonian, Harmonic, Bravais, SVector, foreach_hop, dcell,
       harmonics, sublats, site, norm, normalize
 
@@ -20,7 +21,8 @@ import Quantica: qplot, qplot!
         diffuse = Vec3f(0.5),
         backlight = 4.0f0,
         shaded = false,
-        dimming = 0.95,
+        boundary_dimming = 0.95,
+        cell_dimming = 0.98,
         siteradius = 0.2,
         siteborder = 3,
         siteborderdarken = 0.6,
@@ -53,7 +55,7 @@ function qplotdispatch!(plot::QPlot, h::AbstractHamiltonian)
     hidesites = ishidden((:sites, :all), plot)
     hidehops = ishidden((:hops, :hoppings, :links, :all), plot)
     hidebravais = ishidden((:bravais, :all), plot)
-    hidedimmed = ishidden((:dimmed, :all), plot)
+    hideboundary = ishidden((:boundary, :all), plot)
 
     sc = plot[:supercell][]
 
@@ -70,10 +72,10 @@ function qplotdispatch!(plot::QPlot, h::AbstractHamiltonian)
     # plot hoppings
     if !hidehops
         for har in reverse(harmonics(h))  # Draw intracell hops last
-            hidedimmed && !iszero(dcell(har)) && continue
+            hideboundary && !iszero(dcell(har)) && continue
             for (sublatsrc, color) in zip(sublats(lat), colors)
                 color´ = darken(color, plot[:hopdarken][])
-                color´´ = maybedim(color´, dcell(har), plot[:dimming][])
+                color´´ = maybedim(color´, dcell(har), plot[:boundary_dimming][])
                 plothops!(plot, har, lat, sublatsrc, color´´, hidesites)
             end
         end
@@ -82,9 +84,9 @@ function qplotdispatch!(plot::QPlot, h::AbstractHamiltonian)
     # plot sites
     if !hidesites
         for har in harmonics(h)
-            hidedimmed && !iszero(dcell(har)) && break
+            hideboundary && !iszero(dcell(har)) && break
             for (sublat, color) in zip(sublats(lat), colors)
-                color´ = maybedim(color, dcell(har), plot[:dimming][])
+                color´ = maybedim(color, dcell(har), plot[:boundary_dimming][])
                 sites = append_harmonic_sites!(Point{E,Float32}[], har, lat, sublat)
                 plotsites!(plot, sites, color´)
             end
@@ -105,7 +107,7 @@ function qplotdispatch!(plot::QPlot, lat::Lattice)
         plot[:onlyonecell][] && !iszero(dn) && continue
         for (sublat, color) in zip(sublats(lat), colors)
             append_dcell_sites!(sites, dn, lat, sublat)
-            color´ = iszero(dn) ? color : transparent(color, 1 - plot[:dimming][])
+            color´ = iszero(dn) ? color : transparent(color, 1 - plot[:boundary_dimming][])
             colors´ = append!(colors´, Iterators.repeated(color´, length(sites) - offset))
             offset = length(sites)
         end
@@ -172,9 +174,9 @@ end
 istransparent(colors::Vector) = istransparen(first(colors))
 istransparent(color::RGBAf) = color.alpha != 1.0
 
-function plotbravais!(plot::QPlot, lat::Lattice{<:Any,E,L}, supercell) where {E,L}
-    transparency = !(E == 3 && plot[:shaded][])
+using Infiltrator
 
+function plotbravais!(plot::QPlot, lat::Lattice{<:Any,E,L}, supercell) where {E,L}
     bravais = Quantica.bravais(lat)
     vs = Point{E}.(Quantica.bravais_vectors(bravais))
     vtot = sum(vs)
@@ -186,15 +188,19 @@ function plotbravais!(plot::QPlot, lat::Lattice{<:Any,E,L}, supercell) where {E,
     end
 
     if !ishidden(:cell, plot)
+        colface = RGBAf(0,0,1,1-plot[:cell_dimming][])
+        coledge = RGBAf(0,0,1, 5 * (1-plot[:cell_dimming][]))
         shifts = supercell === missing ? (zero(SVector{L,Int}),) : dnshell(lat, 0:supercell-1)
-        rect = Rect{L,Float32}(Point{L,Int}(0), Point{L,Int}(1))
+        rect = Rect{L,Int}(Point{L,Int}(0), Point{L,Int}(1))
+        mrect0 = GeometryBasics.mesh(rect, pointtype=Point{L,Float32}, facetype=QuadFace{Int})
+        vertices0 = mrect0.position
+        mat = Quantica.bravais_matrix(bravais)
         for shift in shifts
-            mat = Quantica.bravais_matrix(bravais)
-            vertices = [r0 + mat * (p + shift) for p in decompose(Point, rect)]
-            quadfaces = Ngon.([SVector{4,Point{3,Float32}}(vertices[s[i]] for i in 1:4) 
-                for s in decompose(QuadFace, rect)])
-            mesh!.(Ref(plot), quadfaces; color = RGBAf(0,0,1,0.05), transparency)
-            wireframe!.(Ref(plot), quadfaces; color = RGBAf(0,0,1,0.25), transparency, strokewidth = 1)
+            mrect = GeometryBasics.mesh(rect, pointtype=Point{E,Float32}, facetype=QuadFace{Int})
+            vertices = mrect.position
+            vertices .= Ref(r0) .+ Ref(mat) .* (vertices0 .+ Ref(shift))
+            mesh!(plot, mrect; color = colface, transparency = true)
+            wireframe!(plot, mrect; color = coledge, transparency = true, strokewidth = 1)
         end
     end
 
