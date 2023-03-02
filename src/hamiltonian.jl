@@ -428,10 +428,11 @@ unitcell_hamiltonian(ph::ParametricHamiltonian) = unitcell_hamiltonian(hamiltoni
 
 
 ############################################################################################
-# foreach_hop(h::AbstractHamiltonian)
+# foreach_hop(h::AbstractHamiltonian) and foreach_site(h::AbstractHamiltonian)
 #region
 
 foreach_hop(f, ph::ParametricHamiltonian) = foreach_hop(f, hamiltonian(ph))
+foreach_site(f, ph::AbstractHamiltonian) = foreach_site(f, lattice(hamiltonian(ph)))
 
 function foreach_hop(f, h::Hamiltonian, sublatsrc = missing)
     lat = lattice(h)

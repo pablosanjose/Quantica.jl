@@ -72,6 +72,18 @@ end
 #endregion
 
 ############################################################################################
+# foreach_site(l::Lattice)
+#region
+
+function foreach_site(f, lat::Lattice, sublatsrc = missing)
+    itr = sublatsrc === missing ? siterage(lat) : siterange(lat, sublatsrc)
+    for i in itr
+        f(site(lat, i))
+    end
+    return nothing
+end
+
+############################################################################################
 # combine lattices - combine sublats if equal name
 #region
 

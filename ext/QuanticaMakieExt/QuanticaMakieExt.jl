@@ -4,7 +4,8 @@ using Makie
 using Quantica
 using Makie.GeometryBasics
 using Makie.GeometryBasics: Ngon
-using Quantica: Lattice, AbstractHamiltonian, Harmonic, Bravais, SVector, foreach_hop, dcell,
+using Quantica: Lattice, AbstractHamiltonian, Harmonic, Bravais, SVector,
+      foreach_hop, foreach_site, dcell,
       harmonics, sublats, site, norm, normalize
 
 import Quantica: qplot, qplot!
@@ -34,7 +35,8 @@ import Quantica: qplot, qplot!
         tooltips = true,
         digits = 3,
         axes = missing, # can be e.g. (1,2) to project onto the x,y plane
-        hide = nothing, # :hops, :sites, :bravais
+        hide = nothing, # :hops, :sites, :bravais, :cell, :axes...
+        cellfaces = false,
         colormap = :Spectral_9,
     )
 end
@@ -64,7 +66,7 @@ function qplotdispatch!(plot::QPlot, h::AbstractHamiltonian)
         plotbravais!(plot, lat, sc)
     end
 
-    if sc !== missing
+    if sc !== missing && sc > 1
         h = supercell(h, sc)
         lat = Quantica.lattice(h)
     end
@@ -83,13 +85,18 @@ function qplotdispatch!(plot::QPlot, h::AbstractHamiltonian)
 
     # plot sites
     if !hidesites
+        site_label = site_tooltip(h)
         for har in harmonics(h)
-            hideboundary && !iszero(dcell(har)) && break
+            hideboundary && !iszero(dcell(har)) && continue
+            colors´ = RGBAf[]
+            sites = Point{E,Float32}[]
             for (sublat, color) in zip(sublats(lat), colors)
                 color´ = maybedim(color, dcell(har), plot[:boundary_dimming][])
-                sites = append_harmonic_sites!(Point{E,Float32}[], har, lat, sublat)
-                plotsites!(plot, sites, color´)
+                len = length(sites)
+                append_harmonic_sites!(sites, har, lat, sublat)
+                append!(colors´, Iterators.repeated(color´, length(sites) - len))
             end
+            plotsites!(plot, sites, colors´, site_label)
         end
     end
 
@@ -113,12 +120,13 @@ function qplotdispatch!(plot::QPlot, lat::Lattice)
         end
     end
 
-    plotsites!(plot, sites, colors´)
+    site_label = site_tooltip(lat)
+    plotsites!(plot, sites, colors´, site_label)
 
     return plot
 end
 
-function plotsites!(plot::QPlot, sites::Vector{<:Point{E}}, color) where {E}
+function plotsites!(plot::QPlot, sites::Vector{<:Point{E}}, color, inspector_label) where {E}
     if E == 3 && plot[:shaded][]
         meshscatter!(plot, sites; color,
             markerspace = :data,
@@ -128,7 +136,8 @@ function plotsites!(plot::QPlot, sites::Vector{<:Point{E}}, color) where {E}
             diffuse = plot[:diffuse][],
             backlight = plot[:backlight][],
             fxaa = plot[:fxaa][],
-            transparency = istransparent(color))
+            transparency = istransparent(color),
+            inspector_label)
     else
         scatter!(plot, sites; color,
             markerspace = :data,
@@ -139,7 +148,8 @@ function plotsites!(plot::QPlot, sites::Vector{<:Point{E}}, color) where {E}
             diffuse = plot[:diffuse][],
             backlight = plot[:backlight][],
             fxaa = plot[:fxaa][],
-            transparency = istransparent(color))
+            transparency = istransparent(color),
+            inspector_label)
     end
     return plot
 end
@@ -171,7 +181,7 @@ function plothops!(plot::QPlot, har, lat::Lattice{<:Any,E}, sublatsrc, color, hi
     return plot
 end
 
-istransparent(colors::Vector) = istransparen(first(colors))
+istransparent(colors::Vector) = istransparent(first(colors))
 istransparent(color::RGBAf) = color.alpha != 1.0
 
 function plotbravais!(plot::QPlot, lat::Lattice{<:Any,E,L}, supercell) where {E,L}
@@ -182,7 +192,7 @@ function plotbravais!(plot::QPlot, lat::Lattice{<:Any,E,L}, supercell) where {E,
 
     if !ishidden(:axes, plot)
         for (v, color) in zip(vs, (:red, :green, :blue))
-            arrows!(plot, [r0], [v]; color)
+            arrows!(plot, [r0], [v]; color, inspectable = false)
         end
     end
 
@@ -198,13 +208,39 @@ function plotbravais!(plot::QPlot, lat::Lattice{<:Any,E,L}, supercell) where {E,
             mrect = GeometryBasics.mesh(rect, pointtype=Point{E,Float32}, facetype=QuadFace{Int})
             vertices = mrect.position
             vertices .= Ref(r0) .+ Ref(mat) .* (vertices0 .+ Ref(shift))
-            mesh!(plot, mrect; color = colface, transparency = true)
-            wireframe!(plot, mrect; color = coledge, transparency = true, strokewidth = 1)
+            plot[:cellfaces][] &&
+                mesh!(plot, mrect; color = colface, transparency = true, inspectable = false)
+            wireframe!(plot, mrect; color = coledge, transparency = true, strokewidth = 1, inspectable = false)
         end
     end
 
     return plot
 end
+
+
+############################################################################################
+# tooltips
+#region
+
+function site_tooltip(h::AbstractHamiltonian)
+    return (self, i, p) -> matrixstring(i, h[][i,i])
+end
+
+matrixstring(row, x) = string("Onsite[$row] : ", matrixstring(x))
+matrixstring(row, col, x) = string("Hopping[$row, $col] : ", matrixstring(x))
+
+matrixstring(x::Number) = numberstring(x)
+
+function matrixstring(s::SMatrix)
+    ss = repr("text/plain", s)
+    pos = findfirst(isequal('\n'), ss)
+    return pos === nothing ? ss : ss[pos:end]
+end
+
+numberstring(x) = isreal(x) ? string(" ", real(x)) : isimag(x) ? string(" ", imag(x), "im") : string(" ", x)
+
+isreal(x) = all(o -> imag(o) ≈ 0, x)
+isimag(x) = all(o -> real(o) ≈ 0, x)
 
 #endregion
 
@@ -238,10 +274,16 @@ function append_dcell_sites!(sites, dn::SVector, lat::Lattice, sublatsrc)
 end
 
 function append_harmonic_sites!(sites, har::Harmonic, lat::Lattice, sublatsrc)
-    foreach_hop(har, lat, sublatsrc) do pair, dn
-        src, dst = pair
-        push!(sites, toPoint32(src))
-        !iszero(dn) && push!(sites, dst)
+    if iszero(dcell(har))
+        foreach_site(lat, sublatsrc) do r
+            push!(sites, toPoint32(r))
+        end
+    else
+        foreach_hop(har, lat, sublatsrc) do pair, dn
+            src, dst = pair
+            push!(sites, toPoint32(src))
+            push!(sites, toPoint32(dst))
+        end
     end
     return sites
 end
