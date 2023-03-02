@@ -125,7 +125,8 @@ function plotsites!(plot::QPlot, sites::Vector{<:Point{E}}, color) where {E}
             ambient = plot[:ambient][],
             diffuse = plot[:diffuse][],
             backlight = plot[:backlight][],
-            fxaa = plot[:fxaa][])
+            fxaa = plot[:fxaa][],
+            transparency = istransparent(color))
     else
         scatter!(plot, sites; color,
             markerspace = :data,
@@ -136,7 +137,7 @@ function plotsites!(plot::QPlot, sites::Vector{<:Point{E}}, color) where {E}
             diffuse = plot[:diffuse][],
             backlight = plot[:backlight][],
             fxaa = plot[:fxaa][],
-            overdraw = istransparent(color))
+            transparency = istransparent(color))
     end
     return plot
 end
@@ -154,7 +155,7 @@ function plothops!(plot::QPlot, har, lat::Lattice{<:Any,E}, sublatsrc, color, hi
             diffuse = plot[:diffuse][],
             backlight = plot[:backlight][],
             fxaa = plot[:fxaa][],
-            overdraw = istransparent(color))
+            transparency = istransparent(color))
     else
         offset = ifelse(hidesites, 0.0, plot[:hopoffset][] * plot[:siteradius][])
         segments = Point{E,Float32}[]
@@ -163,7 +164,7 @@ function plothops!(plot::QPlot, har, lat::Lattice{<:Any,E}, sublatsrc, color, hi
             linewidth = plot[:hopthickness][],
             backlight = plot[:backlight][],
             fxaa = plot[:fxaa][],
-            overdraw = istransparent(color))
+            transparency = istransparent(color))
     end
     return plot
 end
@@ -172,7 +173,7 @@ istransparent(colors::Vector) = istransparen(first(colors))
 istransparent(color::RGBAf) = color.alpha != 1.0
 
 function plotbravais!(plot::QPlot, lat::Lattice{<:Any,E,L}, supercell) where {E,L}
-    overdraw = !(E == 3 && plot[:shaded][])
+    transparency = !(E == 3 && plot[:shaded][])
 
     bravais = Quantica.bravais(lat)
     vs = Point{E}.(Quantica.bravais_vectors(bravais))
@@ -184,18 +185,16 @@ function plotbravais!(plot::QPlot, lat::Lattice{<:Any,E,L}, supercell) where {E,
         arrows!(plot, r0s, vs; color = [:red, :green, :blue])
     end
 
-    shifts = supercell === missing ? (zero(SVector{L,Int}),) : dnshell(lat, 0:supercell-1)
     if !ishidden(:cell, plot)
-        ILE = SMatrix{L,E,Int}(I)
-        corner = SVector{E,Int}(ntuple(i -> ifelse(i<=L, 1, 0), Val(E)))
+        shifts = supercell === missing ? (zero(SVector{L,Int}),) : dnshell(lat, 0:supercell-1)
+        rect = Rect{L,Float32}(Point{L,Int}(0), Point{L,Int}(1))
         for shift in shifts
-            rect = Rect{E,Float32}(Point{E,Int}(0), Point{E,Int}(corner))
-            m = GeometryBasics.mesh(rect)
-            mat = Quantica.bravais_matrix(bravais) * ILE
-            m.position .= Ref(r0) .+ Ref(mat) .* (m.position .+ Ref(ILE' * shift))
-            segments = [[s..., first(s)] for s in Iterators.partition(m.position, 4)]
-            mesh!(plot, m; color = RGBAf(0,0,1,0.05), overdraw)
-            lines!.(Ref(plot), segments; color = RGBAf(0,0,0.5,0.25), strokewidth = 1)
+            mat = Quantica.bravais_matrix(bravais)
+            vertices = [r0 + mat * (p + shift) for p in decompose(Point, rect)]
+            quadfaces = Ngon.([SVector{4,Point{3,Float32}}(vertices[s[i]] for i in 1:4) 
+                for s in decompose(QuadFace, rect)])
+            mesh!.(Ref(plot), quadfaces; color = RGBAf(0,0,1,0.05), transparency)
+            wireframe!.(Ref(plot), quadfaces; color = RGBAf(0,0,1,0.25), transparency, strokewidth = 1)
         end
     end
 
