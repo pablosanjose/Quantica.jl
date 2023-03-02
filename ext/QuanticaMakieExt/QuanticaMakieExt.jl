@@ -22,7 +22,7 @@ import Quantica: qplot, qplot!
         backlight = 4.0f0,
         shaded = false,
         boundary_dimming = 0.95,
-        cell_dimming = 0.98,
+        cell_dimming = 0.97,
         siteradius = 0.2,
         siteborder = 3,
         siteborderdarken = 0.6,
@@ -174,8 +174,6 @@ end
 istransparent(colors::Vector) = istransparen(first(colors))
 istransparent(color::RGBAf) = color.alpha != 1.0
 
-using Infiltrator
-
 function plotbravais!(plot::QPlot, lat::Lattice{<:Any,E,L}, supercell) where {E,L}
     bravais = Quantica.bravais(lat)
     vs = Point{E}.(Quantica.bravais_vectors(bravais))
@@ -183,8 +181,9 @@ function plotbravais!(plot::QPlot, lat::Lattice{<:Any,E,L}, supercell) where {E,
     r0 = Point{E,Float32}(Quantica.mean(Quantica.sites(lat))) - 0.5 * vtot
 
     if !ishidden(:axes, plot)
-        r0s = [r0 for _ in 1:L]
-        arrows!(plot, r0s, vs; color = [:red, :green, :blue])
+        for (v, color) in zip(vs, (:red, :green, :blue))
+            arrows!(plot, [r0], [v]; color)
+        end
     end
 
     if !ishidden(:cell, plot)
