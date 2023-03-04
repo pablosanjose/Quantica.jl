@@ -5,8 +5,8 @@ using Quantica
 using Makie.GeometryBasics
 using Makie.GeometryBasics: Ngon
 using Quantica: Lattice, AbstractHamiltonian, Harmonic, Bravais, SVector,
-      foreach_hop, foreach_site, dcell,
-      harmonics, sublats, site, norm, normalize
+      foreach_hop, foreach_site, dcell, argerror,
+      harmonics, sublats, site, norm, normalize, nsites
 
 import Quantica: qplot, qplot!
 
@@ -24,9 +24,12 @@ import Quantica: qplot, qplot!
         shaded = false,
         boundary_dimming = 0.95,
         cell_dimming = 0.97,
+        sitecolor = :sublat,
+        siteopacity = 1.0,
         siteradius = 0.2,
         siteborder = 3,
         siteborderdarken = 0.6,
+        hopcolor = :sublat,
         hopthickness = 6,
         hopradius = 0.03,
         hopoffset = 1.0,
@@ -52,7 +55,6 @@ Makie.plot!(plot::QPlot) = qplotdispatch!(plot, to_value(plot[1]))
 function qplotdispatch!(plot::QPlot, h::AbstractHamiltonian)
     lat = Quantica.lattice(h)
     E = Quantica.embdim(lat)
-    colors = Iterators.cycle(RGBAf.(Makie.ColorSchemes.colorschemes[plot[:colormap][]]))
 
     hidesites = ishidden((:sites, :all), plot)
     hidehops = ishidden((:hops, :hoppings, :links, :all), plot)
@@ -71,32 +73,33 @@ function qplotdispatch!(plot::QPlot, h::AbstractHamiltonian)
         lat = Quantica.lattice(h)
     end
 
-    # plot hoppings
-    if !hidehops
-        for har in reverse(harmonics(h))  # Draw intracell hops last
-            hideboundary && !iszero(dcell(har)) && continue
-            for (sublatsrc, color) in zip(sublats(lat), colors)
-                color´ = darken(color, plot[:hopdarken][])
-                color´´ = maybedim(color´, dcell(har), plot[:boundary_dimming][])
-                plothops!(plot, har, lat, sublatsrc, color´´, hidesites)
-            end
-        end
-    end
+    # # plot hoppings
+    # if !hidehops
+    #     for har in reverse(harmonics(h))  # Draw intracell hops last
+    #         hideboundary && !iszero(dcell(har)) && continue
+    #         # centers, vectors, colors, sizes, offsets
+    #         hop_prims = hopping_primitives(plot, har, lat)
+    #         hop_tts = hopping_tooltips(har)
+    #         if E == 3 && plot[:shaded][]
+    #             plothops_shaded!(plot, hop_prims, hop_tts)
+    #         else
+    #             plothops_flat!(plot, hop_prims, hop_tts)
+    #         end
+    #     end
+    # end
 
     # plot sites
     if !hidesites
-        site_label = site_tooltip(h)
         for har in harmonics(h)
             hideboundary && !iszero(dcell(har)) && continue
-            colors´ = RGBAf[]
-            sites = Point{E,Float32}[]
-            for (sublat, color) in zip(sublats(lat), colors)
-                color´ = maybedim(color, dcell(har), plot[:boundary_dimming][])
-                len = length(sites)
-                append_harmonic_sites!(sites, har, lat, sublat)
-                append!(colors´, Iterators.repeated(color´, length(sites) - len))
+            # centers, colors´, sizes, offsets
+            site_prims = site_primitives(plot, har, lat)
+            site_tts = site_tooltip(h)
+            if E == 3 && plot[:shaded][]
+                plotsites_shaded!(plot, site_prims, site_tts)
+            else
+                plotsites_flat!(plot, site_prims, site_tts)
             end
-            plotsites!(plot, sites, colors´, site_label)
         end
     end
 
@@ -105,24 +108,63 @@ end
 
 function qplotdispatch!(plot::QPlot, lat::Lattice)
     E = Quantica.embdim(lat)
-    colors = Iterators.cycle(RGBAf.(Makie.ColorSchemes.colorschemes[plot[:colormap][]]))
+    hideboundary = ishidden((:boundary, :all), plot)
+    hidesites = ishidden((:sites, :all), plot)
+    hidebravais = ishidden((:bravais, :all), plot)
 
-    sites = Point{E,Float32}[]
-    offset = 0
-    colors´ = RGBAf[]
-    for dn in dnshell(lat)
-        plot[:onlyonecell][] && !iszero(dn) && continue
-        for (sublat, color) in zip(sublats(lat), colors)
-            append_dcell_sites!(sites, dn, lat, sublat)
-            color´ = iszero(dn) ? color : transparent(color, 1 - plot[:boundary_dimming][])
-            colors´ = append!(colors´, Iterators.repeated(color´, length(sites) - offset))
-            offset = length(sites)
+    sc = plot[:supercell][]
+
+    # plot bravais axes
+    if !hidebravais
+        plotbravais!(plot, lat, sc)
+    end
+
+    if sc !== missing && sc > 1
+        lat = supercell(lat, sc)
+    end
+
+    # plot sites
+    if !hidesites
+        for dn in dnshell(lat)
+            hideboundary && !iszero(dn) && continue
+            # centers, colors´, sizes, offsets
+            site_prims = site_primitives(plot, dn, lat)
+            site_tts = site_tooltip(lat)
+            if E == 3 && plot[:shaded][]
+                plotsites_shaded!(plot, site_prims, site_tts)
+            else
+                plotsites_flat!(plot, site_prims, site_tts)
+            end
         end
     end
 
-    site_label = site_tooltip(lat)
-    plotsites!(plot, sites, colors´, site_label)
+    return plot
+end
 
+function plotsites_shaded!(plot::QPlot, (centers, colors, radii), inspector_label)
+    meshscatter!(plot, centers; color = colors, markersize = radii,
+            markerspace = :data,
+            ssao = plot[:ssao][],
+            ambient = plot[:ambient][],
+            diffuse = plot[:diffuse][],
+            backlight = plot[:backlight][],
+            fxaa = plot[:fxaa][],
+            transparency = istransparent(colors),
+            inspector_label)
+    return plot
+end
+
+function plotsites_flat!(plot::QPlot, (centers, colors, radii), inspector_label)
+    scatter!(plot, centers; color = colors, markersize = radii,
+            markerspace = :data,
+            strokewidth = plot[:siteborder][],
+            strokecolor = darken.(colors, Ref(plot[:siteborderdarken][])),
+            ambient = plot[:ambient][],
+            diffuse = plot[:diffuse][],
+            backlight = plot[:backlight][],
+            fxaa = plot[:fxaa][],
+            transparency = istransparent(colors),
+            inspector_label)
     return plot
 end
 
@@ -217,54 +259,89 @@ function plotbravais!(plot::QPlot, lat::Lattice{<:Any,E,L}, supercell) where {E,
     return plot
 end
 
-
 ############################################################################################
-# tooltips
+# site_primitives
+#   centers, colors, radii for a given lattice and dn
 #region
 
-function site_tooltip(h::AbstractHamiltonian)
-    return (self, i, p) -> matrixstring(i, h[][i,i])
+function site_primitives(plot, dn::SVector, lat::Lattice{<:Any,E}) where {E}
+    # centers
+    dr = Quantica.bravais_matrix(lat) * dn
+    centers = [Point{E,Float32}(r + dr) for r in Quantica.sites(lat)]
+
+    # colors
+    colormap = Makie.ColorSchemes.colorschemes[plot[:colormap][]]
+    colors = RGBAf[]
+    sitecolor = plot[:sitecolor][]
+    if sitecolor == :sublat
+        cyclic_colors = Iterators.cycle(RGBAf.(colormap))
+        for (s, color) in zip(sublats(lat), cyclic_colors)
+            iszero(dn) || (color = transparent(color, 1 - plot[:boundary_dimming][]))
+            append!(colors, Iterators.repeated(color, nsites(lat, s)))
+        end
+    elseif sitecolor isa AbstractVector
+        length(sitecolor) == length(centers) ||
+            argerror("The sitecolor vector has $(length(sitecolor)) elements, expected $(length(centers))")
+        normalized_colors = normalize_float_range(sitecolor)
+        resize!(colors, length(normalized_colors))
+        colors .= getindex.(Ref(colormap), normalized_colors)
+    elseif sitecolor isa Function
+        normalized_colors = [sitecolor(i, r) for (i, r) in enumerate(centers)]
+        normalize_float_range!(normalized_colors)
+        resize!(colors, length(normalized_colors))
+        colors .= getindex.(Ref(colormap), normalized_colors)
+    else
+        argerror("Unrecognized sitecolor")
+    end
+
+    # opacity
+    siteopacity = plot[:siteopacity][]
+    if siteopacity isa Real
+        if siteopacity < 1
+            colors .= transparent.(colors, siteopacity)
+        end
+    elseif siteopacity isa AbstractVector
+        length(siteopacity) == length(centers) ||
+            argerror("The siteopacity vector has $(length(siteopacity)) elements, expected $(length(centers))")
+        normalized_opacity = normalize_float_range(siteopacity)
+        colors .= transparent.(colors, normalized_opacity)
+    elseif sitecolor isa Function
+        normalized_opacity = [siteopacity(i, r) for (i, r) in enumerate(centers)]
+        normalize_float_range!(normalized_opacity)
+        colors .= transparent.(colors, normalized_opacity)
+    else
+        argerror("Unrecognized siteopacity")
+    end
+
+
+    # radii
+    maxradius, siteradius = sanitize_siteradius(plot[:siteradius][])
+    scatter_scaling = ifelse(plot[:shaded][], 1.0, (2 * sqrt(2)))
+    radii = Float32[]
+    if siteradius isa AbstractVector
+        length(siteradius) == length(centers) ||
+            argerror("The siteradius vector has $(length(siteradius)) elements, expected $(length(centers))")
+        resize!(radii, length(centers))
+        normalize_float_range!(radii, siteradius)
+        radii .*= scatter_scaling * maxradius
+    elseif siteradius isa Function
+        normalized_radii = [siteradius(i, r) for (i, r) in enumerate(centers)]
+        resize!(radii, length(centers))
+        normalize_float_range!(radii, normalized_radii)
+        radii .*= scatter_scaling * maxradius
+    else
+        argerror("Unrecognized siteradius")
+    end
+
+    return centers, colors, radii
 end
 
-matrixstring(row, x) = string("Onsite[$row] : ", matrixstring(x))
-matrixstring(row, col, x) = string("Hopping[$row, $col] : ", matrixstring(x))
-
-matrixstring(x::Number) = numberstring(x)
-
-function matrixstring(s::SMatrix)
-    ss = repr("text/plain", s)
-    pos = findfirst(isequal('\n'), ss)
-    return pos === nothing ? ss : ss[pos:end]
-end
-
-numberstring(x) = isreal(x) ? string(" ", real(x)) : isimag(x) ? string(" ", imag(x), "im") : string(" ", x)
-
-isreal(x) = all(o -> imag(o) ≈ 0, x)
-isimag(x) = all(o -> real(o) ≈ 0, x)
-
-#endregion
-
-############################################################################################
-# tools
-#region
-
-toPoint32(p::SVector{1}) = Point2f(SVector{2,Float32}(first(p), zero(Float32)))
-toPoint32(p::SVector{2}) = Point2f(p)
-toPoint32(p::SVector{3}) = Point3f(p)
-toPoint32(ps::Pair{S,S}) where {S<:SVector} = toPoint32(first(ps)) => toPoint32(last(ps))
-
-function darken(rgba::RGBAf, v = 0.66)
-    r = max(0, min(rgba.r * (1 - v), 1))
-    g = max(0, min(rgba.g * (1 - v), 1))
-    b = max(0, min(rgba.b * (1 - v), 1))
-    RGBAf(r,g,b,rgba.alpha)
-end
-
-darken(colors::Vector, v = 0.66) = darken.(colors, Ref(v))
-
-transparent(rgba::RGBAf, v = 0.5) = RGBAf(rgba.r, rgba.g, rgba.b, rgba.alpha * v)
-
-maybedim(color, dn, dimming) = iszero(dn) ? color : transparent(color, 1 - dimming)
+sanitize_siteradius(x::Real) = (x, Returns(x))
+sanitize_siteradius(f::Function) = (0.2, f)
+sanitize_siteradius(v::AbstractVector) = (0.2, v)
+sanitize_siteradius((x, f)::Tuple{Real,Function}) = (x, f)
+sanitize_siteradius((x, v)::Tuple{Real,AbstractVector}) = (x, v)
+sanitize_siteradius(_) = argerror("Invalid siteradius: expected a Real, a Function, an AbstractVector a Tuple{Real,Function} or a Tuple{Real,AbstractVector}")
 
 function append_dcell_sites!(sites, dn::SVector, lat::Lattice, sublatsrc)
     for i in siterange(lat, sublatsrc)
@@ -323,6 +400,67 @@ function offset_pair(pair, offset, dn)
     return src, dst
 end
 
+#endregion
+
+############################################################################################
+# tooltips
+#region
+
+function site_tooltip(h::AbstractHamiltonian)
+    return (self, i, p) -> matrixstring(i, h[][i,i])
+end
+
+function site_tooltip(lat::Lattice)
+    return (self, i, p) -> positionstring(i, SVector(p))
+end
+
+positionstring(i, r) = string("Site[$i] : ", vectorstring(r))
+
+function vectorstring(r::SVector)
+    rs = repr("text/plain", r)
+    pos = findfirst(isequal('\n'), rs)
+    return pos === nothing ? rs : rs[pos:end]
+end
+
+matrixstring(row, x) = string("Onsite[$row] : ", matrixstring(x))
+matrixstring(row, col, x) = string("Hopping[$row, $col] : ", matrixstring(x))
+
+matrixstring(x::Number) = numberstring(x)
+
+function matrixstring(s::SMatrix)
+    ss = repr("text/plain", s)
+    pos = findfirst(isequal('\n'), ss)
+    return pos === nothing ? ss : ss[pos:end]
+end
+
+numberstring(x) = isreal(x) ? string(" ", real(x)) : isimag(x) ? string(" ", imag(x), "im") : string(" ", x)
+
+isreal(x) = all(o -> imag(o) ≈ 0, x)
+isimag(x) = all(o -> real(o) ≈ 0, x)
+
+#endregion
+
+############################################################################################
+# tools
+#region
+
+toPoint32(p::SVector{1}) = Point2f(SVector{2,Float32}(first(p), zero(Float32)))
+toPoint32(p::SVector{2}) = Point2f(p)
+toPoint32(p::SVector{3}) = Point3f(p)
+toPoint32(ps::Pair{S,S}) where {S<:SVector} = toPoint32(first(ps)) => toPoint32(last(ps))
+
+function darken(rgba::RGBAf, v = 0.66)
+    r = max(0, min(rgba.r * (1 - v), 1))
+    g = max(0, min(rgba.g * (1 - v), 1))
+    b = max(0, min(rgba.b * (1 - v), 1))
+    RGBAf(r,g,b,rgba.alpha)
+end
+
+darken(colors::Vector, v = 0.66) = darken.(colors, Ref(v))
+
+transparent(rgba::RGBAf, v = 0.5) = RGBAf(rgba.r, rgba.g, rgba.b, rgba.alpha * v)
+
+maybedim(color, dn, dimming) = iszero(dn) ? color : transparent(color, 1 - dimming)
 
 dnshell(::Lattice{<:Any,<:Any,L}, span = -1:1) where {L} =
     sort!(vec(SVector.(Iterators.product(ntuple(_ -> span, Val(L))...))), by = norm)
@@ -332,6 +470,21 @@ ishidden(s, ::Nothing) = false
 ishidden(s::Symbol, hide::Symbol) = s === hide
 ishidden(s::Symbol, hides::Tuple) = s in hides
 ishidden(ss, hides) = any(s -> ishidden(s, hides), ss)
+
+
+normalize_float_range(v) = normalize_float_range!(similar(v), v)
+
+function normalize_float_range!(dst::AbstractVector{T}, v::AbstractVector{<:AbstractFloat}) where {T}
+    minv, maxv = extrema(v)
+    if maxv - minv ≈ 0
+        fill!(dst, T(one(eltype(v))))
+    else
+        @. dst = T((v - minv) / (maxv - minv))
+    end
+    return dst
+end
+
+normalize_float_range!(_...) = argerror("Unexpected input: expected a vector of floats")
 
 #endregion
 
