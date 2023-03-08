@@ -22,7 +22,7 @@ import Quantica: plotlattice, plotlattice!, qplot
         diffuse = Vec3f(0.5),
         backlight = 4.0f0,
         shaded = false,
-        boundary_opacity = 0.05,
+        inter_opacity = 0.05,
         cell_opacity = 0.03,
         sitecolor = missing,
         siteopacity = missing,
@@ -84,7 +84,7 @@ function append_site_primitives!(sp::SitePrimitives, plot, cell, har::Harmonic, 
             push!(sp.centers, r)
             push!(sp.indices, i)
             push_sitecolor!(sp, plot[:sitecolor][], i, r, s)
-            push_siteopacity!(sp, plot[:siteopacity][], plot[:boundary_opacity][], i, r, intracell)
+            push_siteopacity!(sp, plot[:siteopacity][], plot[:inter_opacity][], i, r, intracell)
             push_siteradius!(sp, plot[:siteradius][], i, r)
             push_sitetooltip!(sp, i, r, mat[i, i])
         end
@@ -97,7 +97,7 @@ function append_site_primitives!(sp::SitePrimitives, plot, cell, har::Harmonic, 
             push!(sp.centers, r)
             push!(sp.indices, i)
             push_sitecolor!(sp, plot[:sitecolor][], i, r, s)
-            push_siteopacity!(sp, plot[:siteopacity][], plot[:boundary_opacity][], i, r, intracell)
+            push_siteopacity!(sp, plot[:siteopacity][], plot[:inter_opacity][], i, r, intracell)
             push_siteradius!(sp, plot[:siteradius][], i, r)
             push_sitetooltip!(sp, i, r, mat[i, i])
         end
@@ -156,7 +156,7 @@ function append_hopping_primitives!(hp::HoppingPrimitives, plot, cell, har::Harm
         push!(hp.vectors, dr)
         push!(hp.indices, (i, j))
         push_hopcolor!(hp, plot[:hopcolor][], (i, j), (r, dr), sj)
-        push_hopopacity!(hp, plot[:hopopacity][], plot[:boundary_opacity][], (i, j), (r, dr), intracell)
+        push_hopopacity!(hp, plot[:hopopacity][], plot[:inter_opacity][], (i, j), (r, dr), intracell)
         push_hopradius!(hp, plot[:hopradius][], (i, j), (r, dr))
         push_hoptooltip!(hp, (i, j), mat[i, j])
     end
@@ -190,7 +190,7 @@ function plotlat_dispatch!(plot::PlotLattice, h::AbstractHamiltonian{<:Any,E,L})
     hidesites = ishidden((:sites, :all), plot)
     hidehops = ishidden((:hops, :hoppings, :links, :all), plot)
     hidebravais = ishidden((:bravais, :all), plot)
-    hideboundary = ishidden((:boundary, :all), plot)
+    hideinter = ishidden((:inter, :all), plot)
 
     cells = sanitize_plotcells(plot[:cells][], lat)
     hars = harmonics(h)
@@ -215,10 +215,10 @@ function plotlat_dispatch!(plot::PlotLattice, h::AbstractHamiltonian{<:Any,E,L})
         end
         if E == 3 && plot[:shaded][]
             plotsites_shaded!(plot, site_prims_intra, forcetrans)
-            hideboundary || plotsites_shaded!(plot, site_prims_inter, true)
+            hideinter || plotsites_shaded!(plot, site_prims_inter, true)
         else
             plotsites_flat!(plot, site_prims_intra, forcetrans)
-            hideboundary || plotsites_flat!(plot, site_prims_inter, true)
+            hideinter || plotsites_flat!(plot, site_prims_inter, true)
         end
     end
 
@@ -236,10 +236,10 @@ function plotlat_dispatch!(plot::PlotLattice, h::AbstractHamiltonian{<:Any,E,L})
         end
         if E == 3 && plot[:shaded][]
             plothops_shaded!(plot, hop_prims_intra, forcetrans)
-            hideboundary || plothops_shaded!(plot, hop_prims_inter, true)
+            hideinter || plothops_shaded!(plot, hop_prims_inter, true)
         else
             plothops_flat!(plot, hop_prims_intra, forcetrans)
-            hideboundary || plothops_flat!(plot, hop_prims_inter, true)
+            hideinter || plothops_flat!(plot, hop_prims_inter, true)
         end
     end
 
@@ -377,7 +377,7 @@ end
 primitive_color(c, extrema, colormap, ::Missing) = RGBAf(colormap[mod1(round(Int, c), length(colormap))])
 primitive_color(c, extrema, colormap, _) = RGBAf(colormap[normalize_range(c, extrema)])
 
-# opacity == missing means boundary opacity
+# opacity == missing means inter opacity
 primitite_opacity(α, extrema, ::Missing) = α
 primitite_opacity(α, extrema, _) = normalize_range(α, extrema)
 
