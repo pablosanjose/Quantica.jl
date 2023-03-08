@@ -6,7 +6,7 @@ using Makie.GeometryBasics
 using Makie.GeometryBasics: Ngon
 using Quantica: Lattice, AbstractHamiltonian, Harmonic, Bravais, SVector,
       dcell, argerror, harmonics, sublats, siterange, site, norm, normalize, nsites,
-      nzrange, rowvals
+      nzrange, rowvals, sanitize_SVector
 
 import Quantica: plotlattice, plotlattice!, qplot
 
@@ -26,14 +26,14 @@ import Quantica: plotlattice, plotlattice!, qplot
         cell_opacity = 0.03,
         sitecolor = missing,
         siteopacity = missing,
-        maxsiteradius = 0.2,
-        siteradius = 0.5,
+        maxsiteradius = 0.5,
+        siteradius = 0.25,
         siteborder = 3,
         siteborderdarken = 0.6,
         hopcolor = missing,
         hopopacity = missing,
-        maxhopradius = 0.03,
-        hopradius = 0.1,
+        maxhopradius = 0.1,
+        hopradius = 0.03,
         hopoffset = 1.0,
         hopdarken = 0.85,
         pixelscale = 6,
@@ -41,8 +41,7 @@ import Quantica: plotlattice, plotlattice!, qplot
         tooltips = true,
         digits = 3,
         axes = missing, # can be e.g. (1,2) to project onto the x,y plane
-        hide = nothing, # :hops, :sites, :bravais, :cell, :axes...
-        cellfaces = false,
+        hide = :cell, # :hops, :sites, :bravais, :cell, :axes...
         colormap = :Spectral_9,
     )
 end
@@ -141,14 +140,13 @@ end
 HoppingPrimitives{E}() where {E} =
     HoppingPrimitives(Point{E,Float32}[], Vec{E,Float32}[], Tuple{Int,Int}[], Float32[], Float32[], Float32[], String[])
 
-function append_hopping_primitives!(hp::HoppingPrimitives, plot, cell, har::Harmonic, lat::Lattice)
+function append_hopping_primitives!(hp::HoppingPrimitives, plot, cell, har::Harmonic, lat::Lattice, intracell)
     mat = Quantica.matrix(har)
     dn = dcell(har)
     r0dst = Quantica.bravais_matrix(lat) * (cell + dn)
     r0src = Quantica.bravais_matrix(lat) * cell
     sites = Quantica.sites(lat)
 
-    intracell = iszero(dn)
     for sj in sublats(lat), j in siterange(lat, sj), ptr in nzrange(mat, j)
         i = rowvals(mat)[ptr]
         src, dst = sites[j] + r0src, sites[i] + r0dst
@@ -195,40 +193,53 @@ function plotlat_dispatch!(plot::PlotLattice, h::AbstractHamiltonian{<:Any,E,L})
     hideboundary = ishidden((:boundary, :all), plot)
 
     cells = sanitize_plotcells(plot[:cells][], lat)
-    hars = hideboundary ? [first(harmonics(h))] : harmonics(h)
+    hars = harmonics(h)
 
     # plot bravais axes
     if !hidebravais
         plotbravais!(plot, lat, cells)
     end
 
-    # plot hoppings
-    if !hidehops
-        hop_prims = HoppingPrimitives{E}()
+    # plot sites
+    if !hidesites
+        site_prims_intra = SitePrimitives{E}()
+        site_prims_inter = SitePrimitives{E}()
+        siteopacity = plot[:siteopacity][]
+        forcetrans = siteopacity isa Function || (siteopacity isa Real && siteopacity < 1)
         for cell in cells, har in hars
             dcell´ = dcell(har)
-            !iszero(dcell´) && cell + dcell´ in cells && continue
-            append_hopping_primitives!(hop_prims, plot, cell, har, lat)
+            intracells = iszero(dcell´)
+            !intracells && cell + dcell´ in cells && continue
+            sp = ifelse(intracells, site_prims_intra, site_prims_inter)
+            append_site_primitives!(sp, plot, cell, har, lat)
         end
         if E == 3 && plot[:shaded][]
-            plothops_shaded!(plot, hop_prims)
+            plotsites_shaded!(plot, site_prims_intra, forcetrans)
+            hideboundary || plotsites_shaded!(plot, site_prims_inter, true)
         else
-            plothops_flat!(plot, hop_prims)
+            plotsites_flat!(plot, site_prims_intra, forcetrans)
+            hideboundary || plotsites_flat!(plot, site_prims_inter, true)
         end
     end
 
-    # plot sites
-    if !hidesites
-        site_prims = SitePrimitives{E}()
+    # plot hoppings
+    if !hidehops
+        hop_prims_intra = HoppingPrimitives{E}()
+        hop_prims_inter = HoppingPrimitives{E}()
+        hopopacity = plot[:hopopacity][]
+        forcetrans = hopopacity isa Function || (hopopacity isa Real && hopopacity < 1)
         for cell in cells, har in hars
             dcell´ = dcell(har)
-            !iszero(dcell´) && cell + dcell´ in cells && continue
-            append_site_primitives!(site_prims, plot, cell, har, lat)
+            intracells = cell + dcell´ in cells
+            hp = ifelse(intracells, hop_prims_intra, hop_prims_inter)
+            append_hopping_primitives!(hp, plot, cell, har, lat, intracells)
         end
         if E == 3 && plot[:shaded][]
-            plotsites_shaded!(plot, site_prims)
+            plothops_shaded!(plot, hop_prims_intra, forcetrans)
+            hideboundary || plothops_shaded!(plot, hop_prims_inter, true)
         else
-            plotsites_flat!(plot, site_prims)
+            plothops_flat!(plot, hop_prims_intra, forcetrans)
+            hideboundary || plothops_flat!(plot, hop_prims_inter, true)
         end
     end
 
@@ -237,11 +248,11 @@ function plotlat_dispatch!(plot::PlotLattice, h::AbstractHamiltonian{<:Any,E,L})
 end
 
 sanitize_plotcells(::Missing, lat) = (Quantica.zerocell(lat),)
-sanitize_plotcells(cells, lat) = SVector{Quantica.latdim(lat),Int}.(cells)
+sanitize_plotcells(cells, lat) = sanitize_SVector.(cells)
 
 plotlat_dispatch!(plot::PlotLattice, lat::Lattice) = plotlat_dispatch!(plot, hamiltonian(lat))
 
-function plotsites_shaded!(plot::PlotLattice, sp::SitePrimitives)
+function plotsites_shaded!(plot::PlotLattice, sp::SitePrimitives, transparency)
     inspector_label = (self, i, r) -> sp.tooltips[i]
     centers = sp.centers
     colors = primitive_colors(sp, plot)
@@ -253,12 +264,12 @@ function plotsites_shaded!(plot::PlotLattice, sp::SitePrimitives)
             diffuse = plot[:diffuse][],
             backlight = plot[:backlight][],
             fxaa = plot[:fxaa][],
-            transparency = true,
+            transparency,
             inspector_label)
     return plot
 end
 
-function plotsites_flat!(plot::PlotLattice, sp::SitePrimitives)
+function plotsites_flat!(plot::PlotLattice, sp::SitePrimitives, transparency)
     inspector_label = (self, i, r) -> sp.tooltips[i]
     centers = sp.centers
     colors = primitive_colors(sp, plot)
@@ -271,17 +282,17 @@ function plotsites_flat!(plot::PlotLattice, sp::SitePrimitives)
             diffuse = plot[:diffuse][],
             backlight = plot[:backlight][],
             fxaa = plot[:fxaa][],
-            transparency = true,
+            transparency,
             inspector_label)
     return plot
 end
 
-function plothops_shaded!(plot::PlotLattice, hp::HoppingPrimitives)
+function plothops_shaded!(plot::PlotLattice, hp::HoppingPrimitives, transparency)
     inspector_label = (self, i, r) -> hp.tooltips[i]
     centers = hp.centers
     vectors = hp.vectors
     colors = primitive_colors(hp, plot)
-    scales = primitive_scales(sp, plot)
+    scales = primitive_scales(hp, plot)
     cyl = Cylinder(Point3f(0., 0., -1.0), Point3f(0., 0, 1.0), Float32(1))
     meshscatter!(plot, centers; color = colors,
         rotations = vectors, markersize = scales, marker = cyl,
@@ -290,12 +301,12 @@ function plothops_shaded!(plot::PlotLattice, hp::HoppingPrimitives)
         diffuse = plot[:diffuse][],
         backlight = plot[:backlight][],
         fxaa = plot[:fxaa][],
-        transparency = true,
+        transparency,
         inspector_label)
     return plot
 end
 
-function plothops_flat!(plot::PlotLattice, hp::HoppingPrimitives)
+function plothops_flat!(plot::PlotLattice, hp::HoppingPrimitives, transparency)
     inspector_label = (self, i, r) -> hp.tooltips[i]
     colors = primitive_colors(hp, plot)
     segments = primitive_segments(hp, plot)
@@ -303,7 +314,7 @@ function plothops_flat!(plot::PlotLattice, hp::HoppingPrimitives)
     linesegments!(plot, segments; color = colors, linewidth = linewidths,
         backlight = plot[:backlight][],
         fxaa = plot[:fxaa][],
-        transparency = true,
+        transparency,
         inspector_label)
     return plot
 end
@@ -320,9 +331,9 @@ function plotbravais!(plot::PlotLattice, lat::Lattice{<:Any,E,L}, cells) where {
         end
     end
 
-    if !ishidden(:cell, plot)
-        colface = RGBAf(0,0,1,plot[:cell_opacity][])
-        coledge = RGBAf(0,0,1, 5 * plot[:cell_opacity][])
+    if !ishidden((:cell, :cells), plot)
+        colface = RGBAf(0, 0, 1, plot[:cell_opacity][])
+        coledge = RGBAf(0, 0, 1, 5 * plot[:cell_opacity][])
         rect = Rect{L,Int}(Point{L,Int}(0), Point{L,Int}(1))
         mrect0 = GeometryBasics.mesh(rect, pointtype=Point{L,Float32}, facetype=QuadFace{Int})
         vertices0 = mrect0.position
@@ -331,8 +342,7 @@ function plotbravais!(plot::PlotLattice, lat::Lattice{<:Any,E,L}, cells) where {
             mrect = GeometryBasics.mesh(rect, pointtype=Point{E,Float32}, facetype=QuadFace{Int})
             vertices = mrect.position
             vertices .= Ref(r0) .+ Ref(mat) .* (vertices0 .+ Ref(cell))
-            plot[:cellfaces][] &&
-                mesh!(plot, mrect; color = colface, transparency = true, inspectable = false)
+            mesh!(plot, mrect; color = colface, transparency = true, inspectable = false)
             wireframe!(plot, mrect; color = coledge, transparency = true, strokewidth = 1, inspectable = false)
         end
     end
@@ -353,6 +363,7 @@ primitive_colors(p::HoppingPrimitives, plot) =
                      Makie.ColorSchemes.colorschemes[plot[:colormap][]], plot[:hopdarken][])
 
 function primitive_colors(colors, opacity, pcolor, popacity, colormap, pdarken = 0.0)
+    isempty(colors) && return RGBAf[]
     minc, maxc = extrema(colors)
     mino, maxo = extrema(opacity)
     colors = [transparent(
@@ -371,6 +382,7 @@ primitite_opacity(α, extrema, ::Missing) = α
 primitite_opacity(α, extrema, _) = normalize_range(α, extrema)
 
 function primitive_radii(p::SitePrimitives, plot, factor = 1.0)
+    isempty(p.radii) && return Float32[]
     siteradius = plot[:siteradius][]
     maxsiteradius = plot[:maxsiteradius][]
     minr, maxr = extrema(p.radii)
@@ -382,6 +394,7 @@ primitive_radius(normr, siteradius::Number, maxsiteradius) = siteradius
 primitive_radius(normr, siteradius, maxsiteradius) = maxsiteradius * normr
 
 function primitive_scales(p::HoppingPrimitives, plot)
+    isempty(p.radii) && return Vec3f[]
     hopradius = plot[:hopradius][]
     maxhopradius = plot[:maxhopradius][]
     minr, maxr = extrema(p.radii)
@@ -390,8 +403,8 @@ function primitive_scales(p::HoppingPrimitives, plot)
     return scales
 end
 
-primitive_scale(normr, v, hopradius::Number, maxhopradius) = Vec{3}(hopradius, hopradius, norm(v)/2)
-primitive_scale(normr, v, hopradius, maxhopradius) = Vec{3}(normr * maxhopradius, normr * maxhopradius, norm(v)/2)
+primitive_scale(normr, v, hopradius::Number, maxhopradius) = Vec3f(hopradius, hopradius, norm(v)/2)
+primitive_scale(normr, v, hopradius, maxhopradius) = Vec3f(normr * maxhopradius, normr * maxhopradius, norm(v)/2)
 
 function primitive_segments(p::HoppingPrimitives{E}, plot) where {E}
     segments = Point{E,Float32}[]
@@ -403,6 +416,7 @@ function primitive_segments(p::HoppingPrimitives{E}, plot) where {E}
 end
 
 function primitive_linewidths(p::HoppingPrimitives{E}, plot) where {E}
+    isempty(p.radii) && return Float32[]
     pixelscale = plot[:pixelscale][]
     hopradius = plot[:hopradius][]
     minr, maxr = extrema(p.radii)
