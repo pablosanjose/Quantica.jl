@@ -5,16 +5,16 @@ using Quantica
 using Makie.GeometryBasics
 using Makie.GeometryBasics: Ngon
 using Quantica: Lattice, AbstractHamiltonian, Harmonic, Bravais, SVector,
-      foreach_hop, foreach_site, dcell, argerror,
-      harmonics, sublats, site, norm, normalize, nsites
+      dcell, argerror, harmonics, sublats, siterange, site, norm, normalize, nsites,
+      nzrange, rowvals
 
-import Quantica: qplot, qplot!
+import Quantica: plotlattice, plotlattice!, qplot
 
 ############################################################################################
-# QPlot recipe
+# plotlattice recipe
 #region
 
-@recipe(QPlot) do scene
+@recipe(PlotLattice) do scene
     Theme(
         ssao = true,
         fxaa = true,
@@ -22,19 +22,22 @@ import Quantica: qplot, qplot!
         diffuse = Vec3f(0.5),
         backlight = 4.0f0,
         shaded = false,
-        boundary_dimming = 0.95,
-        cell_dimming = 0.97,
-        sitecolor = :sublat,
-        siteopacity = 1.0,
-        siteradius = 0.2,
+        boundary_opacity = 0.05,
+        cell_opacity = 0.03,
+        sitecolor = missing,
+        siteopacity = missing,
+        maxsiteradius = 0.2,
+        siteradius = 0.5,
         siteborder = 3,
         siteborderdarken = 0.6,
-        hopcolor = :sublat,
-        hopthickness = 6,
-        hopradius = 0.03,
+        hopcolor = missing,
+        hopopacity = missing,
+        maxhopradius = 0.03,
+        hopradius = 0.1,
         hopoffset = 1.0,
         hopdarken = 0.85,
-        supercell = missing,
+        pixelscale = 6,
+        cells = missing,
         tooltips = true,
         digits = 3,
         axes = missing, # can be e.g. (1,2) to project onto the x,y plane
@@ -44,104 +47,205 @@ import Quantica: qplot, qplot!
     )
 end
 
-Makie.plot!(plot::QPlot) = qplotdispatch!(plot, to_value(plot[1]))
+Makie.plot!(plot::PlotLattice) = plotlat_dispatch!(plot, to_value(plot[1]))
+
+function Quantica.qplot(h::AbstractHamiltonian)
+    plotlattice(h)
+end
 
 #endregion
 
 ############################################################################################
-# QPlot for AbstractHamiltonian and Lattice
+# site_primitives
 #region
 
-function qplotdispatch!(plot::QPlot, h::AbstractHamiltonian)
+struct SitePrimitives{E}
+    centers::Vector{Point{E,Float32}}
+    indices::Vector{Int}
+    colors::Vector{Float32}
+    opacity::Vector{Float32}
+    radii::Vector{Float32}
+    tooltips::Vector{String}
+end
+
+SitePrimitives{E}() where {E} =
+    SitePrimitives(Point{E,Float32}[], Int[], Float32[], Float32[], Float32[], String[])
+
+function append_site_primitives!(sp::SitePrimitives, plot, cell, har::Harmonic, lat::Lattice)
+    mat = Quantica.matrix(har)
+    dn = dcell(har)
+    dr = Quantica.bravais_matrix(lat) * (cell + dn)
+    sites = Quantica.sites(lat)
+    offset = length(sp.centers)
+
+    intracell = iszero(dn)
+    if intracell
+        for s in sublats(lat), i in siterange(lat, s)
+            r = sites[i] + dr
+            push!(sp.centers, r)
+            push!(sp.indices, i)
+            push_sitecolor!(sp, plot[:sitecolor][], i, r, s)
+            push_siteopacity!(sp, plot[:siteopacity][], plot[:boundary_opacity][], i, r, intracell)
+            push_siteradius!(sp, plot[:siteradius][], i, r)
+            push_sitetooltip!(sp, i, r, mat[i, i])
+        end
+    else
+        for s in sublats(lat), j in siterange(lat, s), ptr in nzrange(mat, j)
+            i = rowvals(mat)[ptr]
+            # avoid adding duplicate targets
+            i in view(sp.indices, offset + 1:length(sp.indices)) && continue
+            r = sites[i] + dr
+            push!(sp.centers, r)
+            push!(sp.indices, i)
+            push_sitecolor!(sp, plot[:sitecolor][], i, r, s)
+            push_siteopacity!(sp, plot[:siteopacity][], plot[:boundary_opacity][], i, r, intracell)
+            push_siteradius!(sp, plot[:siteradius][], i, r)
+            push_sitetooltip!(sp, i, r, mat[i, i])
+        end
+    end
+    return sp
+end
+
+push_sitecolor!(sp, ::Missing, i, r, s) = push!(sp.colors, s)
+push_sitecolor!(sp, sitecolor::Function, i, r, s) = push!(sp.colors, sitecolor(i, r))
+push_sitecolor!(sp, sitecolor, i, r, s) = argerror("Unrecognized sitecolor")
+
+push_siteopacity!(sp, ::Missing, bop, i, r, intracell) = push!(sp.opacity, intracell ? 1.0 : bop)
+push_siteopacity!(sp, siteopacity::Real, bop, i, r, intracell) = push!(sp.opacity, siteopacity)
+push_siteopacity!(sp, siteopacity::Function, bop, i, r, intracell) = push!(sp.opacity, siteopacity(i, r))
+push_siteopacity!(sp, siteopacity, bop, i, r, intracell) = argerror("Unrecognized siteradius")
+
+push_siteradius!(sp, siteradius::Real, i, r) = push!(sp.radii, siteradius)
+push_siteradius!(sp, siteradius::Function, i, r) = push!(sp.radii, siteradius(i, r))
+push_siteradius!(sp, siteradius, i, r) = argerror("Unrecognized siteradius")
+
+push_sitetooltip!(sp, i, r, mat) = push!(sp.tooltips, matrixstring(i, mat))
+push_sitetooltip!(sp, i, r) = push!(sp.tooltips, positionstring(i, r))
+
+#endregion
+
+############################################################################################
+# hopping_primitives
+#region
+
+struct HoppingPrimitives{E}
+    centers::Vector{Point{E,Float32}}
+    vectors::Vector{Vec{E,Float32}}
+    indices::Vector{Tuple{Int,Int}}
+    colors::Vector{Float32}
+    opacity::Vector{Float32}
+    radii::Vector{Float32}
+    tooltips::Vector{String}
+end
+
+HoppingPrimitives{E}() where {E} =
+    HoppingPrimitives(Point{E,Float32}[], Vec{E,Float32}[], Tuple{Int,Int}[], Float32[], Float32[], Float32[], String[])
+
+function append_hopping_primitives!(hp::HoppingPrimitives, plot, cell, har::Harmonic, lat::Lattice)
+    mat = Quantica.matrix(har)
+    dn = dcell(har)
+    r0dst = Quantica.bravais_matrix(lat) * (cell + dn)
+    r0src = Quantica.bravais_matrix(lat) * cell
+    sites = Quantica.sites(lat)
+
+    intracell = iszero(dn)
+    for sj in sublats(lat), j in siterange(lat, sj), ptr in nzrange(mat, j)
+        i = rowvals(mat)[ptr]
+        src, dst = sites[j] + r0src, sites[i] + r0dst
+        intracell && (dst = (src + dst)/2)
+        r, dr = (src + dst)/2, (dst - src)
+        push!(hp.centers, r)
+        push!(hp.vectors, dr)
+        push!(hp.indices, (i, j))
+        push_hopcolor!(hp, plot[:hopcolor][], (i, j), (r, dr), sj)
+        push_hopopacity!(hp, plot[:hopopacity][], plot[:boundary_opacity][], (i, j), (r, dr), intracell)
+        push_hopradius!(hp, plot[:hopradius][], (i, j), (r, dr))
+        push_hoptooltip!(hp, (i, j), mat[i, j])
+    end
+    return hp
+end
+
+push_hopcolor!(hp, ::Missing, ij, rdr, s) = push!(hp.colors, s)
+push_hopcolor!(hp, hopcolor::Function, ij, rdr, s) = push!(hp.colors, hopcolor(ij, rdr))
+push_hopcolor!(hp, hopcolor, ij, rdr, s) = argerror("Unrecognized hopcolor")
+
+push_hopopacity!(hp, ::Missing, bop, ij, rdr, intracell) = push!(hp.opacity, intracell ? 1.0 : bop)
+push_hopopacity!(hp, hopopacity::Real, bop, ij, rdr, intracell) = push!(hp.opacity, hopopacity)
+push_hopopacity!(hp, hopopacity::Function, bop, ij, rdr, intracell) = push!(hp.opacity, hopopacity(ij, rdr))
+push_hopopacity!(hp, hopopacity, bop, ij, rdr, intracell) = argerror("Unrecognized hopradius")
+
+push_hopradius!(hp, hopradius::Real, ij, rdr) = push!(hp.radii, hopradius)
+push_hopradius!(hp, hopradius::Function, ij, rdr) = push!(hp.radii, hopradius(ij, rdr))
+push_hopradius!(hp, hopradius, ij, rdr) = argerror("Unrecognized hopradius")
+
+push_hoptooltip!(hp, (i, j), mat) = push!(hp.tooltips, matrixstring(i, j, mat))
+
+#endregion
+
+############################################################################################
+# PlotLattice for AbstractHamiltonian and Lattice
+#region
+
+function plotlat_dispatch!(plot::PlotLattice, h::AbstractHamiltonian{<:Any,E,L}) where {E,L}
     lat = Quantica.lattice(h)
-    E = Quantica.embdim(lat)
 
     hidesites = ishidden((:sites, :all), plot)
     hidehops = ishidden((:hops, :hoppings, :links, :all), plot)
     hidebravais = ishidden((:bravais, :all), plot)
     hideboundary = ishidden((:boundary, :all), plot)
 
-    sc = plot[:supercell][]
+    cells = sanitize_plotcells(plot[:cells][], lat)
+    hars = hideboundary ? [first(harmonics(h))] : harmonics(h)
 
     # plot bravais axes
     if !hidebravais
-        plotbravais!(plot, lat, sc)
+        plotbravais!(plot, lat, cells)
     end
 
-    if sc !== missing && sc > 1
-        h = supercell(h, sc)
-        lat = Quantica.lattice(h)
-    end
-
-    # # plot hoppings
-    # if !hidehops
-    #     for har in reverse(harmonics(h))  # Draw intracell hops last
-    #         hideboundary && !iszero(dcell(har)) && continue
-    #         # centers, vectors, colors, sizes, offsets
-    #         hop_prims = hopping_primitives(plot, har, lat)
-    #         hop_tts = hopping_tooltips(har)
-    #         if E == 3 && plot[:shaded][]
-    #             plothops_shaded!(plot, hop_prims, hop_tts)
-    #         else
-    #             plothops_flat!(plot, hop_prims, hop_tts)
-    #         end
-    #     end
-    # end
-
-    # plot sites
-    if !hidesites
-        for har in harmonics(h)
-            hideboundary && !iszero(dcell(har)) && continue
-            # centers, colors´, sizes, offsets
-            site_prims = site_primitives(plot, har, lat)
-            site_tts = site_tooltip(h)
-            if E == 3 && plot[:shaded][]
-                plotsites_shaded!(plot, site_prims, site_tts)
-            else
-                plotsites_flat!(plot, site_prims, site_tts)
-            end
+    # plot hoppings
+    if !hidehops
+        hop_prims = HoppingPrimitives{E}()
+        for cell in cells, har in hars
+            dcell´ = dcell(har)
+            !iszero(dcell´) && cell + dcell´ in cells && continue
+            append_hopping_primitives!(hop_prims, plot, cell, har, lat)
         end
-    end
-
-    return plot
-end
-
-function qplotdispatch!(plot::QPlot, lat::Lattice)
-    E = Quantica.embdim(lat)
-    hideboundary = ishidden((:boundary, :all), plot)
-    hidesites = ishidden((:sites, :all), plot)
-    hidebravais = ishidden((:bravais, :all), plot)
-
-    sc = plot[:supercell][]
-
-    # plot bravais axes
-    if !hidebravais
-        plotbravais!(plot, lat, sc)
-    end
-
-    if sc !== missing && sc > 1
-        lat = supercell(lat, sc)
+        if E == 3 && plot[:shaded][]
+            plothops_shaded!(plot, hop_prims)
+        else
+            plothops_flat!(plot, hop_prims)
+        end
     end
 
     # plot sites
     if !hidesites
-        for dn in dnshell(lat)
-            hideboundary && !iszero(dn) && continue
-            # centers, colors´, sizes, offsets
-            site_prims = site_primitives(plot, dn, lat)
-            site_tts = site_tooltip(lat)
-            if E == 3 && plot[:shaded][]
-                plotsites_shaded!(plot, site_prims, site_tts)
-            else
-                plotsites_flat!(plot, site_prims, site_tts)
-            end
+        site_prims = SitePrimitives{E}()
+        for cell in cells, har in hars
+            dcell´ = dcell(har)
+            !iszero(dcell´) && cell + dcell´ in cells && continue
+            append_site_primitives!(site_prims, plot, cell, har, lat)
+        end
+        if E == 3 && plot[:shaded][]
+            plotsites_shaded!(plot, site_prims)
+        else
+            plotsites_flat!(plot, site_prims)
         end
     end
+
 
     return plot
 end
 
-function plotsites_shaded!(plot::QPlot, (centers, colors, radii), inspector_label)
+sanitize_plotcells(::Missing, lat) = (Quantica.zerocell(lat),)
+sanitize_plotcells(cells, lat) = SVector{Quantica.latdim(lat),Int}.(cells)
+
+plotlat_dispatch!(plot::PlotLattice, lat::Lattice) = plotlat_dispatch!(plot, hamiltonian(lat))
+
+function plotsites_shaded!(plot::PlotLattice, sp::SitePrimitives)
+    inspector_label = (self, i, r) -> sp.tooltips[i]
+    centers = sp.centers
+    colors = primitive_colors(sp, plot)
+    radii = primitive_radii(sp, plot)
     meshscatter!(plot, centers; color = colors, markersize = radii,
             markerspace = :data,
             ssao = plot[:ssao][],
@@ -149,12 +253,16 @@ function plotsites_shaded!(plot::QPlot, (centers, colors, radii), inspector_labe
             diffuse = plot[:diffuse][],
             backlight = plot[:backlight][],
             fxaa = plot[:fxaa][],
-            transparency = istransparent(colors),
+            transparency = true,
             inspector_label)
     return plot
 end
 
-function plotsites_flat!(plot::QPlot, (centers, colors, radii), inspector_label)
+function plotsites_flat!(plot::PlotLattice, sp::SitePrimitives)
+    inspector_label = (self, i, r) -> sp.tooltips[i]
+    centers = sp.centers
+    colors = primitive_colors(sp, plot)
+    radii = primitive_radii(sp, plot, 2√2)
     scatter!(plot, centers; color = colors, markersize = radii,
             markerspace = :data,
             strokewidth = plot[:siteborder][],
@@ -163,70 +271,44 @@ function plotsites_flat!(plot::QPlot, (centers, colors, radii), inspector_label)
             diffuse = plot[:diffuse][],
             backlight = plot[:backlight][],
             fxaa = plot[:fxaa][],
-            transparency = istransparent(colors),
+            transparency = true,
             inspector_label)
     return plot
 end
 
-function plotsites!(plot::QPlot, sites::Vector{<:Point{E}}, color, inspector_label) where {E}
-    if E == 3 && plot[:shaded][]
-        meshscatter!(plot, sites; color,
-            markerspace = :data,
-            markersize = plot[:siteradius][],
-            ssao = plot[:ssao][],
-            ambient = plot[:ambient][],
-            diffuse = plot[:diffuse][],
-            backlight = plot[:backlight][],
-            fxaa = plot[:fxaa][],
-            transparency = istransparent(color),
-            inspector_label)
-    else
-        scatter!(plot, sites; color,
-            markerspace = :data,
-            markersize = sqrt(2) * 2 * plot[:siteradius][],
-            strokewidth = plot[:siteborder][],
-            strokecolor = darken(color, plot[:siteborderdarken][]),
-            ambient = plot[:ambient][],
-            diffuse = plot[:diffuse][],
-            backlight = plot[:backlight][],
-            fxaa = plot[:fxaa][],
-            transparency = istransparent(color),
-            inspector_label)
-    end
+function plothops_shaded!(plot::PlotLattice, hp::HoppingPrimitives)
+    inspector_label = (self, i, r) -> hp.tooltips[i]
+    centers = hp.centers
+    vectors = hp.vectors
+    colors = primitive_colors(hp, plot)
+    scales = primitive_scales(sp, plot)
+    cyl = Cylinder(Point3f(0., 0., -1.0), Point3f(0., 0, 1.0), Float32(1))
+    meshscatter!(plot, centers; color = colors,
+        rotations = vectors, markersize = scales, marker = cyl,
+        ssao = plot[:ssao][],
+        ambient = plot[:ambient][],
+        diffuse = plot[:diffuse][],
+        backlight = plot[:backlight][],
+        fxaa = plot[:fxaa][],
+        transparency = true,
+        inspector_label)
     return plot
 end
 
-function plothops!(plot::QPlot, har, lat::Lattice{<:Any,E}, sublatsrc, color, hidesites) where {E}
-    if E == 3 && plot[:shaded][]
-        cyl = Cylinder(Point3f(0., 0., -1.0), Point3f(0., 0, 1.0), Float32(1))
-        radius = plot[:hopradius][]
-        offset = ifelse(hidesites, 0.0, 0.95 * plot[:hopoffset][]*plot[:siteradius][])
-        centers, vectors, scales = centers_vectors_and_scales(har, lat, radius, sublatsrc; offset)
-        meshscatter!(plot, centers; color,
-            rotations = vectors, markersize = scales, marker = cyl,
-            ssao = plot[:ssao][],
-            ambient = plot[:ambient][],
-            diffuse = plot[:diffuse][],
-            backlight = plot[:backlight][],
-            fxaa = plot[:fxaa][],
-            transparency = istransparent(color))
-    else
-        offset = ifelse(hidesites, 0.0, plot[:hopoffset][] * plot[:siteradius][])
-        segments = Point{E,Float32}[]
-        append_segment!(segments, har, lat, sublatsrc; offset)
-        linesegments!(plot, segments; color,
-            linewidth = plot[:hopthickness][],
-            backlight = plot[:backlight][],
-            fxaa = plot[:fxaa][],
-            transparency = istransparent(color))
-    end
+function plothops_flat!(plot::PlotLattice, hp::HoppingPrimitives)
+    inspector_label = (self, i, r) -> hp.tooltips[i]
+    colors = primitive_colors(hp, plot)
+    segments = primitive_segments(hp, plot)
+    linewidths = primitive_linewidths(hp, plot)
+    linesegments!(plot, segments; color = colors, linewidth = linewidths,
+        backlight = plot[:backlight][],
+        fxaa = plot[:fxaa][],
+        transparency = true,
+        inspector_label)
     return plot
 end
 
-istransparent(colors::Vector) = istransparent(first(colors))
-istransparent(color::RGBAf) = color.alpha != 1.0
-
-function plotbravais!(plot::QPlot, lat::Lattice{<:Any,E,L}, supercell) where {E,L}
+function plotbravais!(plot::PlotLattice, lat::Lattice{<:Any,E,L}, cells) where {E,L}
     bravais = Quantica.bravais(lat)
     vs = Point{E}.(Quantica.bravais_vectors(bravais))
     vtot = sum(vs)
@@ -239,17 +321,16 @@ function plotbravais!(plot::QPlot, lat::Lattice{<:Any,E,L}, supercell) where {E,
     end
 
     if !ishidden(:cell, plot)
-        colface = RGBAf(0,0,1,1-plot[:cell_dimming][])
-        coledge = RGBAf(0,0,1, 5 * (1-plot[:cell_dimming][]))
-        shifts = supercell === missing ? (zero(SVector{L,Int}),) : dnshell(lat, 0:supercell-1)
+        colface = RGBAf(0,0,1,plot[:cell_opacity][])
+        coledge = RGBAf(0,0,1, 5 * plot[:cell_opacity][])
         rect = Rect{L,Int}(Point{L,Int}(0), Point{L,Int}(1))
         mrect0 = GeometryBasics.mesh(rect, pointtype=Point{L,Float32}, facetype=QuadFace{Int})
         vertices0 = mrect0.position
         mat = Quantica.bravais_matrix(bravais)
-        for shift in shifts
+        for cell in cells
             mrect = GeometryBasics.mesh(rect, pointtype=Point{E,Float32}, facetype=QuadFace{Int})
             vertices = mrect.position
-            vertices .= Ref(r0) .+ Ref(mat) .* (vertices0 .+ Ref(shift))
+            vertices .= Ref(r0) .+ Ref(mat) .* (vertices0 .+ Ref(cell))
             plot[:cellfaces][] &&
                 mesh!(plot, mrect; color = colface, transparency = true, inspectable = false)
             wireframe!(plot, mrect; color = coledge, transparency = true, strokewidth = 1, inspectable = false)
@@ -260,159 +341,119 @@ function plotbravais!(plot::QPlot, lat::Lattice{<:Any,E,L}, supercell) where {E,
 end
 
 ############################################################################################
-# site_primitives
-#   centers, colors, radii for a given lattice and dn
+# Primitive properties
 #region
 
-function site_primitives(plot, dn::SVector, lat::Lattice{<:Any,E}) where {E}
-    # centers
-    dr = Quantica.bravais_matrix(lat) * dn
-    centers = [Point{E,Float32}(r + dr) for r in Quantica.sites(lat)]
+primitive_colors(p::SitePrimitives, plot) =
+    primitive_colors(p.colors, p.opacity, plot[:sitecolor][], plot[:siteopacity][],
+                     Makie.ColorSchemes.colorschemes[plot[:colormap][]])
 
-    # colors
-    colormap = Makie.ColorSchemes.colorschemes[plot[:colormap][]]
-    colors = RGBAf[]
-    sitecolor = plot[:sitecolor][]
-    if sitecolor == :sublat
-        cyclic_colors = Iterators.cycle(RGBAf.(colormap))
-        for (s, color) in zip(sublats(lat), cyclic_colors)
-            iszero(dn) || (color = transparent(color, 1 - plot[:boundary_dimming][]))
-            append!(colors, Iterators.repeated(color, nsites(lat, s)))
-        end
-    elseif sitecolor isa AbstractVector
-        length(sitecolor) == length(centers) ||
-            argerror("The sitecolor vector has $(length(sitecolor)) elements, expected $(length(centers))")
-        normalized_colors = normalize_float_range(sitecolor)
-        resize!(colors, length(normalized_colors))
-        colors .= getindex.(Ref(colormap), normalized_colors)
-    elseif sitecolor isa Function
-        normalized_colors = [sitecolor(i, r) for (i, r) in enumerate(centers)]
-        normalize_float_range!(normalized_colors)
-        resize!(colors, length(normalized_colors))
-        colors .= getindex.(Ref(colormap), normalized_colors)
-    else
-        argerror("Unrecognized sitecolor")
-    end
+primitive_colors(p::HoppingPrimitives, plot) =
+    primitive_colors(p.colors, p.opacity, plot[:hopcolor][], plot[:hopopacity][],
+                     Makie.ColorSchemes.colorschemes[plot[:colormap][]], plot[:hopdarken][])
 
-    # opacity
-    siteopacity = plot[:siteopacity][]
-    if siteopacity isa Real
-        if siteopacity < 1
-            colors .= transparent.(colors, siteopacity)
-        end
-    elseif siteopacity isa AbstractVector
-        length(siteopacity) == length(centers) ||
-            argerror("The siteopacity vector has $(length(siteopacity)) elements, expected $(length(centers))")
-        normalized_opacity = normalize_float_range(siteopacity)
-        colors .= transparent.(colors, normalized_opacity)
-    elseif sitecolor isa Function
-        normalized_opacity = [siteopacity(i, r) for (i, r) in enumerate(centers)]
-        normalize_float_range!(normalized_opacity)
-        colors .= transparent.(colors, normalized_opacity)
-    else
-        argerror("Unrecognized siteopacity")
-    end
-
-
-    # radii
-    maxradius, siteradius = sanitize_siteradius(plot[:siteradius][])
-    scatter_scaling = ifelse(plot[:shaded][], 1.0, (2 * sqrt(2)))
-    radii = Float32[]
-    if siteradius isa AbstractVector
-        length(siteradius) == length(centers) ||
-            argerror("The siteradius vector has $(length(siteradius)) elements, expected $(length(centers))")
-        resize!(radii, length(centers))
-        normalize_float_range!(radii, siteradius)
-        radii .*= scatter_scaling * maxradius
-    elseif siteradius isa Function
-        normalized_radii = [siteradius(i, r) for (i, r) in enumerate(centers)]
-        resize!(radii, length(centers))
-        normalize_float_range!(radii, normalized_radii)
-        radii .*= scatter_scaling * maxradius
-    else
-        argerror("Unrecognized siteradius")
-    end
-
-    return centers, colors, radii
+function primitive_colors(colors, opacity, pcolor, popacity, colormap, pdarken = 0.0)
+    minc, maxc = extrema(colors)
+    mino, maxo = extrema(opacity)
+    colors = [transparent(
+              darken(primitive_color(c, (minc, maxc), colormap, pcolor), pdarken),
+              primitite_opacity(α, (mino, maxo), popacity))
+              for (c, α) in zip(colors, opacity)]
+    return colors
 end
 
-sanitize_siteradius(x::Real) = (x, Returns(x))
-sanitize_siteradius(f::Function) = (0.2, f)
-sanitize_siteradius(v::AbstractVector) = (0.2, v)
-sanitize_siteradius((x, f)::Tuple{Real,Function}) = (x, f)
-sanitize_siteradius((x, v)::Tuple{Real,AbstractVector}) = (x, v)
-sanitize_siteradius(_) = argerror("Invalid siteradius: expected a Real, a Function, an AbstractVector a Tuple{Real,Function} or a Tuple{Real,AbstractVector}")
+# color == missing means sublat color
+primitive_color(c, extrema, colormap, ::Missing) = RGBAf(colormap[mod1(round(Int, c), length(colormap))])
+primitive_color(c, extrema, colormap, _) = RGBAf(colormap[normalize_range(c, extrema)])
 
-function append_dcell_sites!(sites, dn::SVector, lat::Lattice, sublatsrc)
-    for i in siterange(lat, sublatsrc)
-        push!(sites, site(lat, i, dn))
-    end
-    return sites
+# opacity == missing means boundary opacity
+primitite_opacity(α, extrema, ::Missing) = α
+primitite_opacity(α, extrema, _) = normalize_range(α, extrema)
+
+function primitive_radii(p::SitePrimitives, plot, factor = 1.0)
+    siteradius = plot[:siteradius][]
+    maxsiteradius = plot[:maxsiteradius][]
+    minr, maxr = extrema(p.radii)
+    radii = [primitive_radius(factor * normalize_range(radius, (minr, maxr)), siteradius, maxsiteradius) for radius in p.radii]
+    return radii
 end
 
-function append_harmonic_sites!(sites, har::Harmonic, lat::Lattice, sublatsrc)
-    if iszero(dcell(har))
-        foreach_site(lat, sublatsrc) do r
-            push!(sites, toPoint32(r))
-        end
-    else
-        foreach_hop(har, lat, sublatsrc) do pair, dn
-            src, dst = pair
-            push!(sites, toPoint32(src))
-            push!(sites, toPoint32(dst))
-        end
-    end
-    return sites
+primitive_radius(normr, siteradius::Number, maxsiteradius) = siteradius
+primitive_radius(normr, siteradius, maxsiteradius) = maxsiteradius * normr
+
+function primitive_scales(p::HoppingPrimitives, plot)
+    hopradius = plot[:hopradius][]
+    maxhopradius = plot[:maxhopradius][]
+    minr, maxr = extrema(p.radii)
+    scales = [primitive_scale(normalize_range(r, (minr, maxr)), v, hopradius, maxhopradius)
+              for (r, v) in zip(p.radii, p.vectors)]
+    return scales
 end
 
-function append_segment!(segments, args...; offset = 0.0)
-    foreach_hop(args...) do pair, dn
-        src, dst = offset_pair(pair, offset, dn)
-        push!(segments, toPoint32(src))
-        push!(segments, toPoint32(dst))
+primitive_scale(normr, v, hopradius::Number, maxhopradius) = Vec{3}(hopradius, hopradius, norm(v)/2)
+primitive_scale(normr, v, hopradius, maxhopradius) = Vec{3}(normr * maxhopradius, normr * maxhopradius, norm(v)/2)
+
+function primitive_segments(p::HoppingPrimitives{E}, plot) where {E}
+    segments = Point{E,Float32}[]
+    for (r, dr) in zip(p.centers, p.vectors)
+        push!(segments, r - dr/2)
+        push!(segments, r + dr/2)
     end
     return segments
 end
 
-function centers_vectors_and_scales(har::Harmonic, lat, radius, sublatsrc; offset = 0.0)
-    centers = Point3f[]
-    vectors = Vec3f[]
-    scales  = Vec3f[]
-    foreach_hop(har, lat, sublatsrc) do pair, dn
-        src, dst = offset_pair(pair, offset, dn)
-        center, vector = (src + dst)/2, (dst - src)
-        scale = Vec3f(radius, radius, norm(vector)/2)
-        push!(centers, center)
-        push!(vectors, vector)
-        push!(scales, scale)
+function primitive_linewidths(p::HoppingPrimitives{E}, plot) where {E}
+    pixelscale = plot[:pixelscale][]
+    hopradius = plot[:hopradius][]
+    minr, maxr = extrema(p.radii)
+    linewidths = Float32[]
+    for r in p.radii
+        linewidth = primitive_linewidth(normalize_range(r, (minr, maxr)), hopradius, pixelscale)
+        append!(linewidths, (linewidth, linewidth))
     end
-    return centers, vectors, scales
+    return linewidths
 end
 
-function offset_pair(pair, offset, dn)
-    src, dst = pair
-    iszero(dn) && (dst = (src + dst)/2)
-    if !iszero(offset)
-        nvec = normalize(dst - src)
-        src += offset * nvec
-        iszero(dn) || (dst -= offset * nvec)
-    end
-    return src, dst
+primitive_linewidth(normr, hopradius::Number, pixelscale) = pixelscale
+primitive_linewidth(normr, hopradius, pixelscale) = pixelscale * normr
+
+
+#endregion
+
+
+############################################################################################
+# tools
+#region
+
+function darken(rgba::RGBAf, v = 0.66)
+    r = max(0, min(rgba.r * (1 - v), 1))
+    g = max(0, min(rgba.g * (1 - v), 1))
+    b = max(0, min(rgba.b * (1 - v), 1))
+    RGBAf(r,g,b,rgba.alpha)
 end
+
+darken(colors::Vector, v = 0.66) = darken.(colors, Ref(v))
+
+transparent(rgba::RGBAf, v = 0.5) = RGBAf(rgba.r, rgba.g, rgba.b, rgba.alpha * v)
+
+maybedim(color, dn, dimming) = iszero(dn) ? color : transparent(color, 1 - dimming)
+
+dnshell(::Lattice{<:Any,<:Any,L}, span = -1:1) where {L} =
+    sort!(vec(SVector.(Iterators.product(ntuple(_ -> span, Val(L))...))), by = norm)
+
+ishidden(s, plot::PlotLattice) = ishidden(s, plot[:hide][])
+ishidden(s, ::Nothing) = false
+ishidden(s::Symbol, hide::Symbol) = s === hide
+ishidden(s::Symbol, hides::Tuple) = s in hides
+ishidden(ss, hides) = any(s -> ishidden(s, hides), ss)
+
+normalize_range(c::T, (min, max)) where {T} = min ≈ max ? T(0.5) : T((c - min)/(max - min))
 
 #endregion
 
 ############################################################################################
-# tooltips
+# tooltip strings
 #region
-
-function site_tooltip(h::AbstractHamiltonian)
-    return (self, i, p) -> matrixstring(i, h[][i,i])
-end
-
-function site_tooltip(lat::Lattice)
-    return (self, i, p) -> positionstring(i, SVector(p))
-end
 
 positionstring(i, r) = string("Site[$i] : ", vectorstring(r))
 
@@ -440,148 +481,42 @@ isimag(x) = all(o -> real(o) ≈ 0, x)
 
 #endregion
 
-############################################################################################
-# tools
-#region
+# ############################################################################################
+# # convert_arguments
+# #region
 
-toPoint32(p::SVector{1}) = Point2f(SVector{2,Float32}(first(p), zero(Float32)))
-toPoint32(p::SVector{2}) = Point2f(p)
-toPoint32(p::SVector{3}) = Point3f(p)
-toPoint32(ps::Pair{S,S}) where {S<:SVector} = toPoint32(first(ps)) => toPoint32(last(ps))
+# function Makie.convert_arguments(::PointBased, lat::Lattice{<:Any,E}, sublat = missing) where {E}
+#     lat = lattice(h)
+#     sites = Point{E,Float32}[]
+#     dns = dnshell(lat)
+#     for dn in dns
+#         append_dcell_sites!(sites, dn, lat, sublatsrc)
+#     end
+#     return (sites,)
+# end
 
-function darken(rgba::RGBAf, v = 0.66)
-    r = max(0, min(rgba.r * (1 - v), 1))
-    g = max(0, min(rgba.g * (1 - v), 1))
-    b = max(0, min(rgba.b * (1 - v), 1))
-    RGBAf(r,g,b,rgba.alpha)
-end
+# function Makie.convert_arguments(::PointBased, h::AbstractHamiltonian{<:Any,E}, sublatsrc = missing) where {E}
+#     lat = lattice(h)
+#     sites = Point{E,Float32}[]
+#     for har in harmonics(h)
+#         append_harmonic_sites!(sites, har, lat, sublatsrc)
+#     end
+#     return (sites,)
+# end
 
-darken(colors::Vector, v = 0.66) = darken.(colors, Ref(v))
+# # linesegments is also PointBased
+# function Makie.convert_arguments(::Type{<:LineSegments}, h::AbstractHamiltonian{<:Any,E}, sublatsrc = missing) where {E}
+#     segments = Point{E,Float32}[]
+#     append_segment!(segments, h, sublatsrc)
+#     return (segments,)
+# end
 
-transparent(rgba::RGBAf, v = 0.5) = RGBAf(rgba.r, rgba.g, rgba.b, rgba.alpha * v)
+# function Makie.convert_arguments(::Type{<:LineSegments}, har::Harmonic, lat::Lattice{<:Any,E}, sublatsrc = missing) where {E}
+#     segments = Point{E,Float32}[]
+#     append_segment!(segments, har, lat, sublatsrc)
+#     return (segments,)
+# end
 
-maybedim(color, dn, dimming) = iszero(dn) ? color : transparent(color, 1 - dimming)
-
-dnshell(::Lattice{<:Any,<:Any,L}, span = -1:1) where {L} =
-    sort!(vec(SVector.(Iterators.product(ntuple(_ -> span, Val(L))...))), by = norm)
-
-ishidden(s, plot::QPlot) = ishidden(s, plot[:hide][])
-ishidden(s, ::Nothing) = false
-ishidden(s::Symbol, hide::Symbol) = s === hide
-ishidden(s::Symbol, hides::Tuple) = s in hides
-ishidden(ss, hides) = any(s -> ishidden(s, hides), ss)
-
-
-normalize_float_range(v) = normalize_float_range!(similar(v), v)
-
-function normalize_float_range!(dst::AbstractVector{T}, v::AbstractVector{<:AbstractFloat}) where {T}
-    minv, maxv = extrema(v)
-    if maxv - minv ≈ 0
-        fill!(dst, T(one(eltype(v))))
-    else
-        @. dst = T((v - minv) / (maxv - minv))
-    end
-    return dst
-end
-
-normalize_float_range!(_...) = argerror("Unexpected input: expected a vector of floats")
-
-#endregion
-
-############################################################################################
-# convert_arguments
-#region
-
-function Makie.convert_arguments(::PointBased, lat::Lattice{<:Any,E}, sublat = missing) where {E}
-    lat = lattice(h)
-    sites = Point{E,Float32}[]
-    dns = dnshell(lat)
-    for dn in dns
-        append_dcell_sites!(sites, dn, lat, sublatsrc)
-    end
-    return (sites,)
-end
-
-function Makie.convert_arguments(::PointBased, h::AbstractHamiltonian{<:Any,E}, sublatsrc = missing) where {E}
-    lat = lattice(h)
-    sites = Point{E,Float32}[]
-    for har in harmonics(h)
-        append_harmonic_sites!(sites, har, lat, sublatsrc)
-    end
-    return (sites,)
-end
-
-# linesegments is also PointBased
-function Makie.convert_arguments(::Type{<:LineSegments}, h::AbstractHamiltonian{<:Any,E}, sublatsrc = missing) where {E}
-    segments = Point{E,Float32}[]
-    append_segment!(segments, h, sublatsrc)
-    return (segments,)
-end
-
-function Makie.convert_arguments(::Type{<:LineSegments}, har::Harmonic, lat::Lattice{<:Any,E}, sublatsrc = missing) where {E}
-    segments = Point{E,Float32}[]
-    append_segment!(segments, har, lat, sublatsrc)
-    return (segments,)
-end
-
-#endregion
-
-############################################################################################
-# Old
-#region
-
-function addtooltips!(scene, h)
-    sceneplot = scene[end]
-    visible = Node(false)
-    N = Quantica.blockdim(h)
-    poprect = lift(scene.events.mouseposition) do mp
-        Rectf((mp .+ 5), 1,1)
-    end
-    textpos = lift(scene.events.mouseposition) do mp
-        Vec3f((mp .+ 5 .+ (0, -50))..., 0)
-    end
-    popup = poly!(campixel(scene), poprect, raw = true, color = RGBAf(1,1,1,0), visible = visible)
-    translate!(popup, Vec3f(0, 0, 10000))
-    text!(popup, " ", textsize = 30, position = textpos, align = (:center, :center),
-        color = :black, strokewidth = 4, strokecolor = :white, raw = true, visible = visible)
-    text_field = popup.plots[end]
-    on(scene.events.mouseposition) do event
-        subplot, idx = mouse_selection(scene)
-        layer = findfirst(isequal(subplot), sceneplot.plots)
-        if layer !== nothing && idx > 0
-            idx´ = fix_linesegments_bug(idx, subplot)
-            txt = popuptext(sceneplot, layer, idx´, h)
-            text_field[1] = txt
-            visible[] = true
-        else
-            visible[] = false
-        end
-        return
-    end
-    return scene
-end
-
-# idx returned by mouse_selection seems wrong by a factor 2 in LineSegments subplot
-fix_linesegments_bug(idx, subplot::LineSegments) = Int(idx/2) # catches odd idx
-fix_linesegments_bug(idx, subplot) = idx
-
-function popuptext(sceneplot, layer, idx, h)
-    cache = sceneplot[:_tooltips_rowcolhar][]
-    checkbounds(Bool, cache, layer) || return string("Bug in layer: ", layer, " of ", length(cache))
-    checkbounds(Bool, cache[layer], idx) || return string("Bug in idx: ", idx, " of ", length(cache[layer]))
-    (row, col_or_zero, haridx) = cache[layer][idx]
-    if col_or_zero == 0
-        col = iszero(col_or_zero) ? row : col_or_zero
-        har = h.harmonics[1]
-    else
-        col = col_or_zero
-        har = h.harmonics[haridx]
-    end
-    element = round.(har.h[row, col], digits = sceneplot[:digits][])
-    txt = iszero(col_or_zero) ? matrixstring(col, element) : matrixstring(row, col, element)
-    return txt
-end
-
-#endregion
+# #endregion
 
 end # module

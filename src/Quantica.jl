@@ -26,7 +26,7 @@ export sublat, lattice, supercell, bravais_matrix,
        flat, unflat, wrap, transform, transform!, translate, translate!,
        spectrum, energies, states, bands, mesh, subbands, slice,
        greenfunction, attach, contact, cellsites,
-       qplot, qplot!
+       plotlattice, plotlattice!, qplot
 
 # export sublat, lattice, dims, supercell, bravais_matrix, siteindices, sitepositions,
 #        hopping, onsite, @onsite!, @hopping!, @block!, parameters, neighbors,
@@ -85,7 +85,8 @@ include("presets/regions.jl")
 
 
 # Extension stubs for QuanticaMakieExt
+function plotlattice end
+function plotlattice! end
 function qplot end
-function qplot! end
 
 end
