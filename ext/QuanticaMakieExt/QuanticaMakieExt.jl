@@ -200,28 +200,6 @@ function plotlat_dispatch!(plot::PlotLattice, h::AbstractHamiltonian{<:Any,E,L})
         plotbravais!(plot, lat, cells)
     end
 
-    # plot sites
-    if !hidesites
-        site_prims_intra = SitePrimitives{E}()
-        site_prims_inter = SitePrimitives{E}()
-        siteopacity = plot[:siteopacity][]
-        forcetrans = siteopacity isa Function || (siteopacity isa Real && siteopacity < 1)
-        for cell in cells, har in hars
-            dcell´ = dcell(har)
-            intracells = iszero(dcell´)
-            !intracells && cell + dcell´ in cells && continue
-            sp = ifelse(intracells, site_prims_intra, site_prims_inter)
-            append_site_primitives!(sp, plot, cell, har, lat)
-        end
-        if E == 3 && plot[:shaded][]
-            plotsites_shaded!(plot, site_prims_intra, forcetrans)
-            hideinter || plotsites_shaded!(plot, site_prims_inter, true)
-        else
-            plotsites_flat!(plot, site_prims_intra, forcetrans)
-            hideinter || plotsites_flat!(plot, site_prims_inter, true)
-        end
-    end
-
     # plot hoppings
     if !hidehops
         hop_prims_intra = HoppingPrimitives{E}()
@@ -243,6 +221,27 @@ function plotlat_dispatch!(plot::PlotLattice, h::AbstractHamiltonian{<:Any,E,L})
         end
     end
 
+    # plot sites
+    if !hidesites
+        site_prims_intra = SitePrimitives{E}()
+        site_prims_inter = SitePrimitives{E}()
+        siteopacity = plot[:siteopacity][]
+        forcetrans = siteopacity isa Function || (siteopacity isa Real && siteopacity < 1)
+        for cell in cells, har in hars
+            dcell´ = dcell(har)
+            intracells = iszero(dcell´)
+            !intracells && cell + dcell´ in cells && continue
+            sp = ifelse(intracells, site_prims_intra, site_prims_inter)
+            append_site_primitives!(sp, plot, cell, har, lat)
+        end
+        if E == 3 && plot[:shaded][]
+            plotsites_shaded!(plot, site_prims_intra, forcetrans)
+            hideinter || plotsites_shaded!(plot, site_prims_inter, true)
+        else
+            plotsites_flat!(plot, site_prims_intra, forcetrans)
+            hideinter || plotsites_flat!(plot, site_prims_inter, true)
+        end
+    end
 
     return plot
 end
@@ -307,7 +306,7 @@ function plothops_shaded!(plot::PlotLattice, hp::HoppingPrimitives, transparency
 end
 
 function plothops_flat!(plot::PlotLattice, hp::HoppingPrimitives, transparency)
-    inspector_label = (self, i, r) -> hp.tooltips[i]
+    inspector_label = (self, i, r) -> (hp.tooltips[(i+1) ÷ 2])
     colors = primitive_colors(hp, plot)
     segments = primitive_segments(hp, plot)
     linewidths = primitive_linewidths(hp, plot)
