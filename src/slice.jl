@@ -251,6 +251,7 @@ function Base.setdiff!(ls::LatticeSlice, ls0::LatticeSlice)
         sc0 = first(s)
         setdiff!(siteindices(sc), siteindices(sc0))
     end
+    deleteif!(isempty, subcells(ls))
     return ls
 end
 
