@@ -87,21 +87,33 @@ SitePrimitives{E}() where {E} =
 HoppingPrimitives{E}() where {E} =
     HoppingPrimitives(Point{E,Float32}[], Vec{E,Float32}[], Tuple{Int,Int}[], Float32[], Float32[], Float32[], String[], RGBAf[])
 
-function siteprimitives(ls::LatticeSlice{<:Any,E}, h, plot, opacityflag) where {E}
+function siteprimitives(ls, h, plot, opacityflag)   # function barrier
+    opts = (plot[:sitecolor][], plot[:siteopacity][], plot[:shell_opacity][], plot[:siteradius][])
+    return _siteprimitives(ls, h, opts, opacityflag)
+end
+
+
+function _siteprimitives(ls::LatticeSlice{<:Any,E}, h, opts, opacityflag) where {E}
     sp = SitePrimitives{E}()
     mat = Quantica.matrix(first(harmonics(h)))
     lat = parent(ls)
     for sc in Quantica.subcells(ls)
         dn = Quantica.cell(sc)
         for i in Quantica.siteindices(sc)
-            push_siteprimitive!(sp, plot, lat, i, dn, mat[i, i], opacityflag)
+            push_siteprimitive!(sp, opts, lat, i, dn, mat[i, i], opacityflag)
         end
     end
     return sp
 end
 
-function hoppingprimitives((ls, ls´)::Pair{L,L}, h, radii, plot, opacityflag) where {E,L<:LatticeSlice{<:Any,E}}
+function hoppingprimitives(ls, selector, h, radii, plot)   # function barrier
+    opts = (plot[:hopcolor][], plot[:hopopacity][], plot[:shell_opacity][], plot[:hopradius][])
+    return _hoppingprimitives(ls, selector, h, radii, opts)
+end
+
+function _hoppingprimitives(ls::LatticeSlice{<:Any,E}, selector, h, radii, opts) where {E}
     hp = HoppingPrimitives{E}()
+    hp´ = HoppingPrimitives{E}()
     lat = parent(ls)
     counter = 0
     for sc in Quantica.subcells(ls)
@@ -115,25 +127,29 @@ function hoppingprimitives((ls, ls´)::Pair{L,L}, h, radii, plot, opacityflag) w
                 rows = rowvals(mat)
                 for ptr in nzrange(mat, j)
                     i = rows[ptr]
-                    (i, dni) in ls´ || continue
-                    push_hopprimitive!(hp, plot, lat, (i, j), (dni, dnj), radius, mat[i, j], opacityflag)
+                    ri = Quantica.site(lat, i, dni)
+                    if (i, ri, dni) in selector
+                        push_hopprimitive!(hp, opts, lat, (i, j), (dni, dnj), radius, mat[i, j], true)
+                    else
+                        push_hopprimitive!(hp´, opts, lat, (i, j), (dni, dnj), radius, mat[i, j], false)
+                    end
                 end
             end
         end
     end
-    return hp
+    return hp, hp´
 end
 
 ## push! ##
 
-function push_siteprimitive!(sp, plot, lat, i, dn, matii, opacityflag)
+function push_siteprimitive!(sp, (sitecolor, siteopacity, shell_opacity, siteradius), lat, i, dn, matii, opacityflag)
     r = Quantica.site(lat, i, dn)
     s = Quantica.sitesublat(lat, i)
     push!(sp.centers, r)
     push!(sp.indices, i)
-    push_sitehue!(sp, plot[:sitecolor][], i, r, s)
-    push_siteopacity!(sp, plot[:siteopacity][], plot[:shell_opacity][], i, r, opacityflag)
-    push_siteradius!(sp, plot[:siteradius][], i, r)
+    push_sitehue!(sp, sitecolor, i, r, s)
+    push_siteopacity!(sp, siteopacity, shell_opacity, i, r, opacityflag)
+    push_siteradius!(sp, siteradius, i, r)
     push_sitetooltip!(sp, i, r, matii)
     return sp
 end
@@ -154,7 +170,7 @@ push_siteradius!(sp, siteradius, i, r) = argerror("Unrecognized siteradius")
 push_sitetooltip!(sp, i, r, mat) = push!(sp.tooltips, matrixstring(i, mat))
 push_sitetooltip!(sp, i, r) = push!(sp.tooltips, positionstring(i, r))
 
-function push_hopprimitive!(hp, plot, lat, (i, j), (dni, dnj), radius, matij, opacityflag)
+function push_hopprimitive!(hp, (hopcolor, hopopacity, shell_opacity, hopradius), lat, (i, j), (dni, dnj), radius, matij, opacityflag)
     src, dst = Quantica.site(lat, j, dnj), Quantica.site(lat, i, dni)
     opacityflag && (dst = (src + dst)/2)
     src += normalize(dst - src) * radius
@@ -163,9 +179,9 @@ function push_hopprimitive!(hp, plot, lat, (i, j), (dni, dnj), radius, matij, op
     push!(hp.centers, r)
     push!(hp.vectors, dr)
     push!(hp.indices, (i, j))
-    push_hophue!(hp, plot[:hopcolor][], (i, j), (r, dr), sj)
-    push_hopopacity!(hp, plot[:hopopacity][], plot[:shell_opacity][], (i, j), (r, dr), opacityflag)
-    push_hopradius!(hp, plot[:hopradius][], (i, j), (r, dr))
+    push_hophue!(hp, hopcolor, (i, j), (r, dr), sj)
+    push_hopopacity!(hp, hopopacity, shell_opacity, (i, j), (r, dr), opacityflag)
+    push_hopradius!(hp, hopradius, (i, j), (r, dr))
     push_hoptooltip!(hp, (i, j), matij)
     return hp
 end
@@ -301,10 +317,13 @@ primitive_linewidth(normr, hopradius, pixelscale) = pixelscale * normr
 
 plotlat!(plot::PlotLattice, lat::Lattice) = plotlat!(plot, hamiltonian(lat))
 
+using Infiltrator
+
 function plotlat!(plot::PlotLattice, h::AbstractHamiltonian{<:Any,E,L}) where {E,L}
     lat = Quantica.lattice(h)
     sel = sanitize_selectoror(plot[:selector][])
-    latslice = lat[sel]
+    asel = Quantica.apply(sel, lat)
+    latslice = lat[asel]
     latslice´ = Quantica.growdiff(latslice, h)
 
     hidesites = ishidden((:sites, :all), plot)
@@ -331,13 +350,12 @@ function plotlat!(plot::PlotLattice, h::AbstractHamiltonian{<:Any,E,L}) where {E
 
     # collect hops
     if !hidehops
-        radii = sp.radii
-        hp  = hoppingprimitives(latslice => latslice, h, radii, plot, true)
+        radii = hidesites ? () : sp.radii
+        hp, hp´ = hoppingprimitives(latslice, asel, h, radii, plot)
         if hideshell
             update_colors!(hp, plot)
             update_radii!(hp, plot)
         else
-            hp´ = hoppingprimitives(latslice => latslice´, h, radii, plot, false)
             joint_colors_radii_update!(hp, hp´, plot)
         end
     end
