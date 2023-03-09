@@ -173,6 +173,8 @@ struct SiteSelector{F,S,C}
     cells::C
 end
 
+const UnboundedSiteSelector = SiteSelector{Missing,Missing,Missing}
+
 struct AppliedSiteSelector{T,E,L}
     lat::Lattice{T,E,L}
     region::FunctionWrapper{Bool,Tuple{SVector{E,T}}}
@@ -323,9 +325,6 @@ Base.isempty(s::OrbitalSlice) = isempty(s.subcells)
 Base.isempty(s::AbstractCellElements) = isempty(s.inds)
 
 Base.empty!(s::AbstractCellElements) = empty!(s.inds)
-
-Base.push!(s::AbstractCellElements, i::Int) = push!(s.inds, i)
-Base.push!(ls::LatticeSlice, s::CellSites) = push!(ls.subcells, s)
 
 Base.copy(s::CellSites) = CellSites(copy(s.inds), s.cell)
 

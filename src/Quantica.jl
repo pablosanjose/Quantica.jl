@@ -22,6 +22,7 @@ using Infiltrator # debugging
 
 export sublat, lattice, supercell, bravais_matrix,
        hopping, onsite, @onsite, @hopping, @onsite!, @hopping!, neighbors,
+       siteselector, hopselector,
        hamiltonian, call!,
        flat, unflat, wrap, transform, transform!, translate, translate!,
        spectrum, energies, states, bands, mesh, subbands, slice,
