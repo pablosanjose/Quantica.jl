@@ -29,7 +29,7 @@ import Quantica: plotlattice, plotlattice!, qplot
         siteopacity = missing,
         maxsiteradius = 0.5,
         siteradius = 0.25,
-        siteborder = 3,
+        siteborder = 2,
         siteborderdarken = 0.6,
         sitedarken = 0.0,
         sitecolormap = :Spectral_9,
