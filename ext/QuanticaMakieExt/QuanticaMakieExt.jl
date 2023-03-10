@@ -42,9 +42,7 @@ import Quantica: plotlattice, plotlattice!, qplot
         hopcolormap = :Spectral_9,
         pixelscale = 6,
         selector = missing,
-        tooltips = true,
-        digits = 3,
-        axes = missing, # can be e.g. (1,2) to project onto the x,y plane
+        flatsizefactor = 2√2,
         hide = :cell, # :hops, :sites, :bravais, :cell, :axes...
     )
 end
@@ -57,17 +55,20 @@ Makie.plot!(plot::PlotLattice) = plotlat!(plot, to_value(plot[1]))
 # qplot
 #region
 
-function Quantica.qplot(h::Union{Lattice,AbstractHamiltonian}; axis = (;), figure = (;))
-    fig = qplot_Figure(; default_figure..., figure...)
-    ax = qplot_Axis2D(fig[1,1];  default_axis2D..., axis...)
-    plotlattice!(ax, h)
+function Quantica.qplot(h::Union{Lattice,AbstractHamiltonian}; axis = (;), figure = (;), plotkw...)
+    fig = Figure(; default_figure..., figure...)
+    ax = Axis(fig[1,1]; default_axis2D..., axis...)
+    plotlattice!(ax, h; plotkw...)
     return fig
 end
 
-function Quantica.qplot(h::Union{Lattice{<:Any,3},AbstractHamiltonian{<:Any,3}}; axis = (;), figure = (;))
+function Quantica.qplot(h::Union{Lattice{<:Any,3},AbstractHamiltonian{<:Any,3}}; fancyaxis = true, axis = (;), figure = (;), plotkw...)
     fig = Figure(; default_figure..., figure...)
-    ax = Axis3(fig[1,1]; default_axis3D..., axis...)
-    plotlattice!(ax, h)
+    ax = fancyaxis ?
+        LScene(fig[1,1]; default_lscene..., axis...) :
+        Axis3(fig[1,1]; default_axis3D..., axis...)
+    fancyaxis ? plotlattice!(ax, h; plotkw...) :
+                plotlattice!(ax, h; flatsizefactor = 1.14, plotkw...)  # Makie BUG workaround?
     return fig
 end
 
@@ -75,7 +76,9 @@ default_figure = (; resolution = (1200, 1200), fontsize = 40)
 
 default_axis3D = (; perspectiveness = 0.2, viewmode = :fitzoom)
 
-default_axis2D = (;)
+default_axis2D = (; autolimitaspect = 1)
+
+default_lscene = (;)
 
 
 #endregion
@@ -153,6 +156,7 @@ function _hoppingprimitives(ls::LatticeSlice{<:Any,E}, selector, h, radii, opts)
                 rows = rowvals(mat)
                 for ptr in nzrange(mat, j)
                     i = rows[ptr]
+                    i == j && continue
                     ri = Quantica.site(lat, i, dni)
                     if (i, ri, dni) in selector
                         push_hopprimitive!(hp, opts, lat, (i, j), (dni, dnj), radius, mat[i, j], true)
@@ -443,7 +447,9 @@ end
 
 function plotsites_flat!(plot::PlotLattice, sp::SitePrimitives, transparency)
     inspector_label = (self, i, r) -> sp.tooltips[i]
-    scatter!(plot, sp.centers; color = sp.colors, markersize = 2√2 * sp.radii,
+    factor = plot[:flatsizefactor][]
+    markersize = factor ≈ 1 ? sp.radii : factor * sp.radii
+    scatter!(plot, sp.centers; color = sp.colors, markersize,
             markerspace = :data,
             strokewidth = plot[:siteborder][],
             strokecolor = darken.(sp.colors, Ref(plot[:siteborderdarken][])),
