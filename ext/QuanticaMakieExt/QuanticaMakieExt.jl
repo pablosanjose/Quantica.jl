@@ -22,27 +22,30 @@ import Quantica: plotlattice, plotlattice!, qplot
         diffuse = Vec3f(0.5),
         backlight = 4.0f0,
         shading = false,
-        shell_opacity = 0.05,
-        cell_opacity = 0.03,
+        shellopacity = 0.05,
+        cellopacity = 0.03,
+        cellcolor = RGBAf(0,0,1),
         sitecolor = missing,
         siteopacity = missing,
         maxsiteradius = 0.5,
         siteradius = 0.25,
         siteborder = 3,
         siteborderdarken = 0.6,
+        sitedarken = 0.0,
+        sitecolormap = :Spectral_9,
         hopcolor = missing,
         hopopacity = missing,
         maxhopradius = 0.1,
         hopradius = 0.03,
         hopoffset = 1.0,
         hopdarken = 0.85,
+        hopcolormap = :Spectral_9,
         pixelscale = 6,
         selector = missing,
         tooltips = true,
         digits = 3,
         axes = missing, # can be e.g. (1,2) to project onto the x,y plane
         hide = :cell, # :hops, :sites, :bravais, :cell, :axes...
-        colormap = :Spectral_9,
     )
 end
 
@@ -88,7 +91,7 @@ HoppingPrimitives{E}() where {E} =
     HoppingPrimitives(Point{E,Float32}[], Vec{E,Float32}[], Tuple{Int,Int}[], Float32[], Float32[], Float32[], String[], RGBAf[])
 
 function siteprimitives(ls, h, plot, opacityflag)   # function barrier
-    opts = (plot[:sitecolor][], plot[:siteopacity][], plot[:shell_opacity][], plot[:siteradius][])
+    opts = (plot[:sitecolor][], plot[:siteopacity][], plot[:shellopacity][], plot[:siteradius][])
     return _siteprimitives(ls, h, opts, opacityflag)
 end
 
@@ -107,7 +110,7 @@ function _siteprimitives(ls::LatticeSlice{<:Any,E}, h, opts, opacityflag) where 
 end
 
 function hoppingprimitives(ls, selector, h, radii, plot)   # function barrier
-    opts = (plot[:hopcolor][], plot[:hopopacity][], plot[:shell_opacity][], plot[:hopradius][])
+    opts = (plot[:hopcolor][], plot[:hopopacity][], plot[:shellopacity][], plot[:hopradius][])
     return _hoppingprimitives(ls, selector, h, radii, opts)
 end
 
@@ -142,13 +145,13 @@ end
 
 ## push! ##
 
-function push_siteprimitive!(sp, (sitecolor, siteopacity, shell_opacity, siteradius), lat, i, dn, matii, opacityflag)
+function push_siteprimitive!(sp, (sitecolor, siteopacity, shellopacity, siteradius), lat, i, dn, matii, opacityflag)
     r = Quantica.site(lat, i, dn)
     s = Quantica.sitesublat(lat, i)
     push!(sp.centers, r)
     push!(sp.indices, i)
     push_sitehue!(sp, sitecolor, i, r, s)
-    push_siteopacity!(sp, siteopacity, shell_opacity, i, r, opacityflag)
+    push_siteopacity!(sp, siteopacity, shellopacity, i, r, opacityflag)
     push_siteradius!(sp, siteradius, i, r)
     push_sitetooltip!(sp, i, r, matii)
     return sp
@@ -170,7 +173,7 @@ push_siteradius!(sp, siteradius, i, r) = argerror("Unrecognized siteradius")
 push_sitetooltip!(sp, i, r, mat) = push!(sp.tooltips, matrixstring(i, mat))
 push_sitetooltip!(sp, i, r) = push!(sp.tooltips, positionstring(i, r))
 
-function push_hopprimitive!(hp, (hopcolor, hopopacity, shell_opacity, hopradius), lat, (i, j), (dni, dnj), radius, matij, opacityflag)
+function push_hopprimitive!(hp, (hopcolor, hopopacity, shellopacity, hopradius), lat, (i, j), (dni, dnj), radius, matij, opacityflag)
     src, dst = Quantica.site(lat, j, dnj), Quantica.site(lat, i, dni)
     opacityflag && (dst = (src + dst)/2)
     src += normalize(dst - src) * radius
@@ -180,7 +183,7 @@ function push_hopprimitive!(hp, (hopcolor, hopopacity, shell_opacity, hopradius)
     push!(hp.vectors, dr)
     push!(hp.indices, (i, j))
     push_hophue!(hp, hopcolor, (i, j), (r, dr), sj)
-    push_hopopacity!(hp, hopopacity, shell_opacity, (i, j), (r, dr), opacityflag)
+    push_hopopacity!(hp, hopopacity, shellopacity, (i, j), (r, dr), opacityflag)
     push_hopradius!(hp, hopradius, (i, j), (r, dr))
     push_hoptooltip!(hp, (i, j), matij)
     return hp
@@ -215,11 +218,11 @@ update_colors!(p, plot) =
 
 update_colors!(p::SitePrimitives, plot, extremahues, extremaops) =
     update_colors!(p, extremahues, extremaops, plot[:sitecolor][], plot[:siteopacity][],
-        Makie.ColorSchemes.colorschemes[plot[:colormap][]], 0.0)
+        Makie.ColorSchemes.colorschemes[plot[:sitecolormap][]], plot[:sitedarken][])
 
 update_colors!(p::HoppingPrimitives, plot, extremahues, extremaops) =
     update_colors!(p, extremahues, extremaops, plot[:hopcolor][], plot[:hopopacity][],
-        Makie.ColorSchemes.colorschemes[plot[:colormap][]], plot[:hopdarken][])
+        Makie.ColorSchemes.colorschemes[plot[:hopcolormap][]], plot[:hopdarken][])
 
 function update_colors!(p, extremahues, extremaops, pcolor, popacity, colormap, pdarken)
     resize!(p.colors, length(p.hues))
@@ -474,8 +477,9 @@ function plotbravais!(plot::PlotLattice, lat::Lattice{<:Any,E,L}, latslice) wher
     end
 
     if !ishidden((:cell, :cells), plot)
-        colface = RGBAf(0, 0, 1, plot[:cell_opacity][])
-        coledge = RGBAf(0, 0, 1, 5 * plot[:cell_opacity][])
+        cellcolor = plot[:cellcolor][]
+        colface = transparent(cellcolor, plot[:cellopacity][])
+        coledge = transparent(cellcolor, 5 * plot[:cellopacity][])
         rect = Rect{L,Int}(Point{L,Int}(0), Point{L,Int}(1))
         mrect0 = GeometryBasics.mesh(rect, pointtype=Point{L,Float32}, facetype=QuadFace{Int})
         vertices0 = mrect0.position
