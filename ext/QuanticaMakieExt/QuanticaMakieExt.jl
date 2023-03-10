@@ -51,9 +51,32 @@ end
 
 Makie.plot!(plot::PlotLattice) = plotlat!(plot, to_value(plot[1]))
 
-function Quantica.qplot(h::Union{Lattice,AbstractHamiltonian})
-    plotlattice(h)
+#endregion
+
+############################################################################################
+# qplot
+#region
+
+function Quantica.qplot(h::Union{Lattice,AbstractHamiltonian}; axis = (;), figure = (;))
+    fig = qplot_Figure(; default_figure..., figure...)
+    ax = qplot_Axis2D(fig[1,1];  default_axis2D..., axis...)
+    plotlattice!(ax, h)
+    return fig
 end
+
+function Quantica.qplot(h::Union{Lattice{<:Any,3},AbstractHamiltonian{<:Any,3}}; axis = (;), figure = (;))
+    fig = Figure(; default_figure..., figure...)
+    ax = Axis3(fig[1,1]; default_axis3D..., axis...)
+    plotlattice!(ax, h)
+    return fig
+end
+
+default_figure = (; resolution = (1200, 1200), fontsize = 40)
+
+default_axis3D = (; perspectiveness = 0.2, viewmode = :fitzoom)
+
+default_axis2D = (;)
+
 
 #endregion
 
@@ -322,7 +345,7 @@ plotlat!(plot::PlotLattice, lat::Lattice) = plotlat!(plot, hamiltonian(lat))
 
 function plotlat!(plot::PlotLattice, h::AbstractHamiltonian{<:Any,E,L}) where {E,L}
     lat = Quantica.lattice(h)
-    sel = sanitize_selectoror(plot[:selector][])
+    sel = sanitize_selector(plot[:selector][], lat)
     asel = Quantica.apply(sel, lat)
     latslice = lat[asel]
     latslice´ = Quantica.growdiff(latslice, h)
@@ -390,9 +413,9 @@ function plotlat!(plot::PlotLattice, h::AbstractHamiltonian{<:Any,E,L}) where {E
     return plot
 end
 
-sanitize_selectoror(::Missing) = Quantica.siteselector()
-sanitize_selectoror(s::Quantica.SiteSelector) = s
-sanitize_selectoror(s) = argerror("Specify a site selector with `selector = siteselector(; kw...)`")
+sanitize_selector(::Missing, lat) = Quantica.siteselector(; cells = Quantica.zerocell(lat))
+sanitize_selector(s::Quantica.SiteSelector, lat) = s
+sanitize_selector(s, lat) = argerror("Specify a site selector with `selector = siteselector(; kw...)`")
 
 function joint_colors_radii_update!(p, p´, plot)
     hext, oext = jointextrema(p.hues, p´.hues), jointextrema(p.opacities, p´.opacities)
@@ -525,7 +548,7 @@ ishidden(ss, hides) = any(s -> ishidden(s, hides), ss)
 
 normalize_range(c::T, (min, max)) where {T} = min ≈ max ? T(0.5) : T((c - min)/(max - min))
 
-jointextrema(v, v´) = min(minimum(v), minimum(v´)), max(maximum(v), maximum(v´))
+jointextrema(v, v´) = min(minimum(v; init = 0f0), minimum(v´; init = 0f0)), max(maximum(v; init = 0f0), maximum(v´; init = 0f0))
 
 #endregion
 

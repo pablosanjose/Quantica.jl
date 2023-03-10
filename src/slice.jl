@@ -7,6 +7,8 @@ Base.getindex(lat::Lattice; kw...) = lat[siteselector(; kw...)]
 
 Base.getindex(lat::Lattice, ss::SiteSelector) = lat[apply(ss, lat)]
 
+Base.getindex(lat::Lattice, ::UnboundedSiteSelector) = lat[siteselector(; cells = zerocell(lat))]
+
 function Base.getindex(lat::Lattice, as::AppliedSiteSelector)
     latslice = LatticeSlice(lat)
     sinds = Int[]

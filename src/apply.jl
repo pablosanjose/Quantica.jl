@@ -16,8 +16,6 @@ function apply(s::SiteSelector, lat::Lattice{T,E,L}) where {T,E,L}
     return AppliedSiteSelector{T,E,L}(lat, region, sublats, cells)
 end
 
-apply(::UnboundedSiteSelector, lat::Lattice) = apply(siteselector(cells = zerocell(lat)), lat) 
-
 function apply(s::HopSelector, lat::Lattice{T,E,L}) where {T,E,L}
     rmin, rmax = sanitize_minmaxrange(s.range, lat)
     L > 0 && s.dcells === missing && rmax === missing &&
