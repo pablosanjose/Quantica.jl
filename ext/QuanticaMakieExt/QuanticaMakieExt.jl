@@ -363,36 +363,36 @@ function plotlat!(plot::PlotLattice, h::AbstractHamiltonian{<:Any,E,L}) where {E
         end
     end
 
-    # plot hops
-    if !hidehops
-        hopopacity = plot[:hopopacity][]
-        forcetrans = hopopacity isa Function || (hopopacity isa Real && hopopacity < 1)
-        if E == 3 && plot[:shading][]
-            plothops_shading!(plot, hp, forcetrans)
-            hideshell || plothops_shading!(plot, hp´, true)
-        else
-            plothops_flat!(plot, hp, forcetrans)
-            hideshell || plothops_flat!(plot, hp´, true)
-        end
-    end
+    # # plot hops
+    # if !hidehops
+    #     hopopacity = plot[:hopopacity][]
+    #     forcetrans = hopopacity isa Function || (hopopacity isa Real && hopopacity < 1)
+    #     if E == 3 && plot[:shading][]
+    #         plothops_shading!(plot, hp, forcetrans)
+    #         hideshell || plothops_shading!(plot, hp´, true)
+    #     else
+    #         plothops_flat!(plot, hp, forcetrans)
+    #         hideshell || plothops_flat!(plot, hp´, true)
+    #     end
+    # end
 
-    # plot sites
-    if !hidesites
-        siteopacity = plot[:siteopacity][]
-        transparency = siteopacity isa Function || (siteopacity isa Real && siteopacity < 1)
-        if E == 3 && plot[:shading][]
-            plotsites_shading!(plot, sp, transparency)
-            hideshell || plotsites_shading!(plot, sp´, true)
-        else
-            plotsites_flat!(plot, sp, transparency)
-            hideshell || plotsites_flat!(plot, sp´, true)
-        end
-    end
+    # # plot sites
+    # if !hidesites
+    #     siteopacity = plot[:siteopacity][]
+    #     transparency = siteopacity isa Function || (siteopacity isa Real && siteopacity < 1)
+    #     if E == 3 && plot[:shading][]
+    #         plotsites_shading!(plot, sp, transparency)
+    #         hideshell || plotsites_shading!(plot, sp´, true)
+    #     else
+    #         plotsites_flat!(plot, sp, transparency)
+    #         hideshell || plotsites_flat!(plot, sp´, true)
+    #     end
+    # end
 
     return plot
 end
 
-sanitize_selectoror(::Missing) = Quantica.siteselectoror()
+sanitize_selectoror(::Missing) = Quantica.siteselector()
 sanitize_selectoror(s::Quantica.SiteSelector) = s
 sanitize_selectoror(s) = argerror("Specify a site selector with `selector = siteselector(; kw...)`")
 
