@@ -608,7 +608,7 @@ end
 
 #region ## SelfEnergy (attach) API ##
 
-function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunction{<:Any,<:Any,1,<:AppliedSchurGreenSolver}; reverse = false, kw...)
+function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunction{<:Any,<:Any,1,<:AppliedSchurGreenSolver}; reverse = false, transform = missing, kw...)
     isempty(contacts(glead)) || argerror("Tried to attach a lead with $(length(selfenergies(contacts(glead)))) contacts. \nCurrently, a lead with contacts cannot be contacted to another system using the simple `attach(x, glead; ...)` syntax. Use `attach(x, glead, model; ...)` instead")
     sel = siteselector(; kw...)
     lsparent = lattice(hparent)[sel]
@@ -622,7 +622,7 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunction{<:Any,<:A
     Σlead = only(selfenergies(contacts(gunit)))
     lslead = latslice(Σlead)
     # find lead site index in lslead for each site in lsparent
-    leadsites = lead_siteids_foreach_parent_siteids(lsparent, lslead)
+    leadsites = lead_siteids_foreach_parent_siteids(lsparent, lslead, transform)
     # translate lead site indices to lead orbital indices using lead's ContactBlockStructure
     leadcbs = blockstructure(contacts(gunit))
     leadorbs = contact_sites_to_orbitals(leadsites, leadcbs)
@@ -631,17 +631,18 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunction{<:Any,<:A
 end
 
 # find ordering of lslead sites that match lsparent sites, modulo a displacement
-function lead_siteids_foreach_parent_siteids(lsparent, lslead)
+function lead_siteids_foreach_parent_siteids(lsparent, lslead, transform)
     np, nl = nsites(lsparent), nsites(lslead)
     np == nl || argerror("The contact surface has $np sites, which doesn't match the $nl sites in the lead surface")
     sp = collect(sites(lsparent))
     sl = collect(sites(lslead))
+    transform === missing || (sl .= transform.(sl))
     displacement = mean(sl) - mean(sp)
     sl .-= Ref(displacement)
     tree = KDTree(sl)
     indslead, dists = nn(tree, sp)
     iszero(chop(maximum(dists))) && allunique(indslead) ||
-        argerror("The contact and lead surface sites do not match (modulo a displacement). Perhaps an error in the `attach` site selection?")
+        argerror("The contact and lead surface sites have same number of sites but do not match (modulo a displacement). Perhaps an error in the `attach` site selection? Otherwise consider using the `transform` keyword to specify an attachment transformation.")
     return indslead
 end
 
@@ -667,7 +668,7 @@ maybe_match_parent((V, ig, V´), leadtoparent) =
 maybe_match_parent(factors, ::Missing) = factors
 
 minimal_callsafe_copy(s::SelfEnergySchurSolver) =
-    SelfEnergySchurSolver(minimal_callsafe_copy(s.fsolver), s.leftside)
+    SelfEnergySchurSolver(minimal_callsafe_copy(s.fsolver), s.leftside, s.leadtoparent)
 
 #endregion
 
