@@ -12,7 +12,7 @@
 function apply(s::SiteSelector, lat::Lattice{T,E,L}) where {T,E,L}
     region = r -> region_apply(r, s.region)
     sublats = recursive_push!(Symbol[], s.sublats)
-    cells = recursive_push!(SVector{L,Int}[], s.cells)
+    cells = recursive_push!(SVector{L,Int}[], sanitize_cells(s.cells, Val(L)))
     return AppliedSiteSelector{T,E,L}(lat, region, sublats, cells)
 end
 
@@ -34,6 +34,11 @@ end
 sanitize_minmaxrange(r, lat) = sanitize_minmaxrange((zero(numbertype(lat)), r), lat)
 sanitize_minmaxrange((rmin, rmax)::Tuple{Any,Any}, lat) =
     padrange(applyrange(rmin, lat), -1), padrange(applyrange(rmax, lat), 1)
+
+sanitize_cells(cells::Integer, ::Val{L}) where {L} = cells > 0 ?
+    Tuple.(CartesianIndices(ntuple(Returns(0:cells-1), Val(L)))) :
+    Tuple.(CartesianIndices(ntuple(Returns(cells+1:0), Val(L))))
+sanitize_cells(cells, _) = cells
 
 applyrange(r::Neighbors, lat) = nrange(Int(r), lat)
 applyrange(r::Real, lat) = r

@@ -114,6 +114,7 @@ sites(s::Sublat) = s.sites
 sites(l::Lattice, sublat...) = sites(l.unitcell, sublat...)
 sites(u::Unitcell) = u.sites
 sites(u::Unitcell, sublat) = view(u.sites, siterange(u, sublat))
+sites(u::Unitcell, ::Missing) = sites(u)            # to work with QuanticaMakieExt
 sites(u::Unitcell, ::Nothing) = view(u.sites, 1:0)  # to work with sublatindex
 sites(l::Lattice, name::Symbol) = sites(unitcell(l), name)
 sites(u::Unitcell, name::Symbol) = sites(u, sublatindex(u, name))
@@ -171,6 +172,8 @@ struct SiteSelector{F,S,C}
     sublats::S
     cells::C
 end
+
+const UnboundedSiteSelector = SiteSelector{Missing,Missing,Missing}
 
 struct AppliedSiteSelector{T,E,L}
     lat::Lattice{T,E,L}
@@ -322,9 +325,6 @@ Base.isempty(s::OrbitalSlice) = isempty(s.subcells)
 Base.isempty(s::AbstractCellElements) = isempty(s.inds)
 
 Base.empty!(s::AbstractCellElements) = empty!(s.inds)
-
-Base.push!(s::AbstractCellElements, i::Int) = push!(s.inds, i)
-Base.push!(ls::LatticeSlice, s::CellSites) = push!(ls.subcells, s)
 
 Base.copy(s::CellSites) = CellSites(copy(s.inds), s.cell)
 
@@ -1042,7 +1042,8 @@ bloch(h::Hamiltonian) = h.bloch
 minimal_callsafe_copy(h::Hamiltonian) = Hamiltonian(
     lattice(h), blockstructure(h), copy.(harmonics(h)), copy_matrices(bloch(h)))
 
-Base.size(h::Hamiltonian, i...) = size(first(harmonics(h)), i...)
+Base.size(h::Hamiltonian, i...) = size(bloch(h), i...)
+Base.axes(h::Hamiltonian, i...) = axes(bloch(h), i...)
 
 Base.copy(h::Hamiltonian) = Hamiltonian(
     copy(lattice(h)), copy(blockstructure(h)), copy.(harmonics(h)), copy(bloch(h)))

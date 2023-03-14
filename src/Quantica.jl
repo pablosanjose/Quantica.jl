@@ -22,10 +22,12 @@ using Infiltrator # debugging
 
 export sublat, lattice, supercell, bravais_matrix,
        hopping, onsite, @onsite, @hopping, @onsite!, @hopping!, neighbors,
+       siteselector, hopselector,
        hamiltonian, call!,
        flat, unflat, wrap, transform, transform!, translate, translate!,
        spectrum, energies, states, bands, mesh, subbands, slice,
-       greenfunction, attach, contact, cellsites
+       greenfunction, attach, contact, cellsites,
+       plotlattice, plotlattice!, qplot
 
 # export sublat, lattice, dims, supercell, bravais_matrix, siteindices, sitepositions,
 #        hopping, onsite, @onsite!, @hopping!, @block!, parameters, neighbors,
@@ -80,7 +82,12 @@ include("presets/lattices.jl")
 include("presets/regions.jl")
 # include("presets/hamiltonians.jl")
 
+# include("precompile.jl")
 
-include("precompile.jl")
+
+# Extension stubs for QuanticaMakieExt
+function plotlattice end
+function plotlattice! end
+function qplot end
 
 end
