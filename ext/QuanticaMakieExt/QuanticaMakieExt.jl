@@ -538,7 +538,7 @@ function plotbravais!(plot::PlotLattice, lat::Lattice{<:Any,E,L}, latslice) wher
         end
     end
 
-    if !ishidden((:cell, :cells), plot)
+    if !ishidden((:cell, :cells), plot) && L > 1
         cellcolor = plot[:cellcolor][]
         colface = transparent(cellcolor, plot[:cellopacity][])
         coledge = transparent(cellcolor, 5 * plot[:cellopacity][])
