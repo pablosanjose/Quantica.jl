@@ -29,6 +29,8 @@ SparseLUSlicer(fact::Factorization{C}, nonextrng, unitcinds, unitcindsall, sourc
 
 #region ## API ##
 
+inverse_green(s::AppliedSparseLUGreenSolver) = s.invgreen
+
 function apply(::GS.SparseLU, h::AbstractHamiltonian0D, cs::Contacts)
     invgreen = inverse_green(h, cs)
     return AppliedSparseLUGreenSolver(invgreen)

@@ -72,8 +72,8 @@ end
 
 one!(mat::AbstractArray, ::Colon) = one!(mat)
 
-lengths_to_offsets(v::AbstractVector{<:Integer}) = prepend!(cumsum(v), 0)
 lengths_to_offsets(v::NTuple{<:Any,Integer}) = (0, cumsum(v)...)
+lengths_to_offsets(v) = prepend!(cumsum(v), 0)
 
 # function get_or_push!(by, x, xs)
 #     for x´ in xs

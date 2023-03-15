@@ -348,8 +348,8 @@ function apply(s::GS.Schur, h::AbstractHamiltonian1D, contacts::Contacts)
     oh∞ = attach(ohL, ΣR)
     G, G∞ = green_type(h0, ΣL), green_type(h0, ΣL, ΣR)
     boundary = round(only(s.boundary))
-    slicer = AppliedSchurGreenSolver{G,G∞}(fsolver, boundary, ohL, ohR, oh∞)
-    return slicer
+    solver = AppliedSchurGreenSolver{G,G∞}(fsolver, boundary, ohL, ohR, oh∞)
+    return solver
 end
 
 const GFUnit{T,E,H,N,S} =
@@ -580,14 +580,17 @@ end
 
 ############################################################################################
 # SelfEnergySchurSolver <: ExtendedSelfEnergySolver <: AbstractSelfEnergySolver
+#   Extended self energy solver for deflated ΣL or ΣR Schur factors of lead unitcell
+#   Implements syntax attach(h0, glead; ...)
 #region
 
 struct SelfEnergySchurSolver{T,B,V<:Union{Missing,Vector{Int}}} <: ExtendedSelfEnergySolver
     fsolver::SchurFactorsSolver{T,B}
-    leftside::Bool
+    isleftside::Bool
     leadtoparent::V  # orbital index in parent for each orbital in open lead surface
                      # so that Σlead[leadtoparent, leadtoparent] == Σparent
 end
+
 
 #region ## Constructors ##
 
@@ -608,6 +611,9 @@ end
 
 #region ## SelfEnergy (attach) API ##
 
+
+# This syntax checks that the selected sites of hparent match the L/R surface of the semi-infinite lead
+# and if so, builds the extended Self Energy directly, with the correct site order
 function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunction{<:Any,<:Any,1,<:AppliedSchurGreenSolver}; reverse = false, transform = missing, kw...)
     isempty(contacts(glead)) || argerror("Tried to attach a lead with $(length(selfenergies(contacts(glead)))) contacts. \nCurrently, a lead with contacts cannot be contacted to another system using the simple `attach(x, glead; ...)` syntax. Use `attach(x, glead, model; ...)` instead")
     sel = siteselector(; kw...)
@@ -656,7 +662,7 @@ function call!(s::SelfEnergySchurSolver, ω;
                skipsolve_internal = false, params...)
     fsolver = s.fsolver
     Rfactors, Lfactors = skipsolve_internal ? call!_output(fsolver) : call!(fsolver, ω)
-    factors = maybe_match_parent(ifelse(s.leftside, Lfactors, Rfactors), s.leadtoparent)
+    factors = maybe_match_parent(ifelse(s.isleftside, Lfactors, Rfactors), s.leadtoparent)
     return factors
 end
 
@@ -668,8 +674,100 @@ maybe_match_parent((V, ig, V´), leadtoparent) =
 maybe_match_parent(factors, ::Missing) = factors
 
 minimal_callsafe_copy(s::SelfEnergySchurSolver) =
-    SelfEnergySchurSolver(minimal_callsafe_copy(s.fsolver), s.leftside, s.leadtoparent)
+    SelfEnergySchurSolver(minimal_callsafe_copy(s.fsolver), s.isleftside, s.leadtoparent)
 
 #endregion
+
+#endregion
+
+############################################################################################
+# SelfEnergyUnitcellSchurSolver <: ExtendedSelfEnergySolver <: AbstractSelfEnergySolver
+#   Extended self energy solver with g⁻¹ = h0 + ExtendedSchurΣ, plus arbitrary couplings
+#   to parent Hamiltonian
+#   Implements syntax attach(h0, glead, model; ...)
+#region
+
+struct SelfEnergyUnicellSchurSolver{C,G,H,S<:SparseMatrixView,S´<:SparseMatrixView} <: ExtendedSelfEnergySolver
+    gunit::G
+    hcoupling::H
+    V´::S´
+    g⁻¹::InverseGreenBlockSparse{C}
+    V::S
+end
+
+#region ## Constructors ##
+
+function SelfEnergyUnicellSchurSolver(gunit::GreenFunction{T}, hcoupling::AbstractHamiltonian{T}, nparent) where {T}
+    hmatrix = call!_output(hcoupling)
+    invgreen = inverse_green(solver(gunit))
+    lastflatparent = last(flatrange(hcoupling, nparent))
+    size(hmatrix, 1) == lastflatparent + length(orbrange(invgreen)) ||
+        internalerror("SelfEnergyUnicellSchurSolver builder: $(size(hmatrix, 1)) != $lastflatparent + $(length(orbrange(invgreen)))")
+    parentrng, leadrng = 1:lastflatparent, lastflatparent+1:size(hmatrix, 1)
+    sizeV = size(invgreen, 1), lastflatparent
+    V = SparseMatrixView(view(hmatrix, leadrng, parentrng), sizeV)
+    V´ = SparseMatrixView(view(hmatrix, parentrng, leadrng), reverse(sizeV))
+    return SelfEnergyUnicellSchurSolver(gunit, hcoupling, V´,invgreen,V)
+end
+
+#endregion
+
+#region ## API ##
+
+h0unit(s::SelfEnergyUnicellSchurSolver) = parent(s.gunit)
+
+hcoupling(s::SelfEnergyUnicellSchurSolver) = s.hcoupling
+
+#endregion
+
+#region ## SelfEnergy (attach) API ##
+
+# With this syntax we attach the surface unit cell of the lead (left or right) to hparent
+# through the model coupling. We thus first apply the model to the 0D lattice of hparent's
+# selected surface plus the lead unit cell (checking one unit cell is enough), and then
+# build an extended self energy
+function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunction{<:Any,<:Any,1,<:AppliedSchurGreenSolver}, model::AbstractModel; reverse = false, transform = missing, kw...)
+    isempty(contacts(glead)) || argerror("Tried to attach a lead with $(length(selfenergies(contacts(glead)))) contacts. \nCurrently, a lead with contacts cannot be contacted to another system using the simple `attach(x, glead; ...)` syntax. Use `attach(x, glead[...], model; ...)` instead")
+    schursolver = solver(glead)
+    gunit = copy_lattice(reverse ? schursolver.gL : schursolver.gR)
+    lat0lead = lattice(parent(gunit))
+    sitesunit = sites(lat0lead)
+    transform === missing || (sitesunit .= transform.(sitesunit))
+    sel = siteselector(; kw...)
+    lsparent = lattice(hparent)[sel]
+    lat0parent = lattice0D(lsparent)
+    nparent = nsites(lat0parent)
+    lat0 = combine(lat0parent, lat0lead)
+    hcoupling = hamiltonian(lat0, model)
+    solver´ = SelfEnergyUnicellSchurSolver(gunit, hcoupling, nparent)
+    return SelfEnergy(solver´, lsparent)
+end
+
+#endregion
+
+#region ## API ##
+
+function call!(s::SelfEnergyUnicellSchurSolver, ω; params...)
+    call!(s.hcoupling, (); params...)
+    call!(s.gunit, ω; params...)
+    update!(s.V)
+    update!(s.V´)
+    return matrix(s.V´), matrix(s.g⁻¹), matrix(s.V)
+end
+
+call!_output(s::SelfEnergyUnicellSchurSolver) = matrix(s.V´), matrix(s.g⁻¹), matrix(s.V)
+
+minimal_callsafe_copy(s::SelfEnergyUnicellSchurSolver) =
+    SelfEnergyUnicellSchurSolver(
+        minimal_callsafe_copy(s.gunit),
+        minimal_callsafe_copy(s.hcoupling),
+        minimal_callsafe_copy(s.V´),
+        minimal_callsafe_copy(s.g⁻¹),
+        minimal_callsafe_copy(s.V))
+
+#endregion
+
+#endregion
+
 
 #endregion top

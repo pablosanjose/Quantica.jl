@@ -5,7 +5,7 @@ using Quantica
 using Makie.GeometryBasics
 using Makie.GeometryBasics: Ngon
 using Quantica: Lattice, LatticeSlice, AbstractHamiltonian, Harmonic, Bravais, SVector,
-      argerror, harmonics, sublats, siterange, site, norm, normalize, nsites,
+      GreenFunction, argerror, harmonics, sublats, siterange, site, norm, normalize, nsites,
       nzrange, rowvals, sanitize_SVector
 
 import Quantica: plotlattice, plotlattice!, qplot
@@ -56,29 +56,53 @@ Makie.plot!(plot::PlotLattice) = plotlat!(plot, to_value(plot[1]))
 #region
 
 function Quantica.qplot(h::Union{Lattice,AbstractHamiltonian}; axis = (;), figure = (;), plotkw...)
-    fig = Figure(; default_figure..., figure...)
-    ax = Axis(fig[1,1]; default_axis2D..., axis...)
+    fig, ax = empty_fig_axis(h; axis, figure)
     plotlattice!(ax, h; plotkw...)
     return fig
 end
 
 function Quantica.qplot(h::Union{Lattice{<:Any,3},AbstractHamiltonian{<:Any,3}}; fancyaxis = true, axis = (;), figure = (;), plotkw...)
-    fig = Figure(; default_figure..., figure...)
-    ax = fancyaxis ?
-        LScene(fig[1,1]; default_lscene..., axis...) :
-        Axis3(fig[1,1]; default_axis3D..., axis...)
+    fig, ax = empty_fig_axis(h; fancyaxis, axis, figure)
     fancyaxis ? plotlattice!(ax, h; plotkw...) :
                 plotlattice!(ax, h; flatsizefactor = 1.14, plotkw...)  # Makie BUG workaround?
     return fig
 end
 
-default_figure = (; resolution = (1200, 1200), fontsize = 40)
+function Quantica.qplot(g::GreenFunction; fancyaxis = true, axis = (;), figure = (;), plotkw...)
+    fig, ax = empty_fig_axis(g; fancyaxis, axis, figure)
+    for Σ in Quantica.selfenergies(Quantica.contacts(g))
+        plotlattice!(ax, Quantica.solver(Σ); plotkw..., siteradius = 0.1, sitedarken = 0.5, siteopacity = 0.1)
+    end
+    plotlattice!(ax, parent(g); plotkw...)
+    return fig
+end
 
-default_axis3D = (; perspectiveness = 0.2, viewmode = :fitzoom)
+empty_fig_axis(::Union{Lattice{<:Any,3},AbstractHamiltonian{<:Any,3},GreenFunction{<:Any,3}}; kw...) =
+    empty_fig_axis_3D(; kw...)
 
-default_axis2D = (; autolimitaspect = 1)
+empty_fig_axis(x; kw...) = empty_fig_axis_2D(; kw...)
 
-default_lscene = (;)
+function empty_fig_axis_2D(; axis = (;), figure = (;), kw...)
+    fig = Figure(; default_figure..., figure...)
+    ax = Axis(fig[1,1]; default_axis2D..., axis...)
+    return fig, ax
+end
+
+function empty_fig_axis_3D(; fancyaxis = true, axis = (;), figure = (;), kw...)
+    fig = Figure(; default_figure..., figure...)
+    ax = fancyaxis ?
+        LScene(fig[1,1]; default_lscene..., axis...) :
+        Axis3(fig[1,1]; default_axis3D..., axis...)
+    return fig, ax
+end
+
+const default_figure = (; resolution = (1200, 1200), fontsize = 40)
+
+const default_axis3D = (; perspectiveness = 0.2, viewmode = :fitzoom)
+
+const default_axis2D = (; autolimitaspect = 1)
+
+const default_lscene = (;)
 
 
 #endregion
@@ -185,6 +209,7 @@ function push_siteprimitive!(sp, (sitecolor, siteopacity, shellopacity, siteradi
 end
 
 push_sitehue!(sp, ::Missing, i, r, s) = push!(sp.hues, s)
+push_sitehue!(sp, sitecolor::Real, i, r, s) = push!(sp.hues, sitecolor)
 push_sitehue!(sp, sitecolor::Function, i, r, s) = push!(sp.hues, sitecolor(i, r))
 push_sitehue!(sp, sitecolor, i, r, s) = argerror("Unrecognized sitecolor")
 
@@ -217,6 +242,7 @@ function push_hopprimitive!(hp, (hopcolor, hopopacity, shellopacity, hopradius),
 end
 
 push_hophue!(hp, ::Missing, ij, rdr, s) = push!(hp.hues, s)
+push_hophue!(hp, hopcolor::Real, ij, rdr, s) = push!(hp.hues, hopcolor)
 push_hophue!(hp, hopcolor::Function, ij, rdr, s) = push!(hp.hues, hopcolor(ij, rdr))
 push_hophue!(hp, hopcolor, ij, rdr, s) = argerror("Unrecognized hopcolor")
 
@@ -347,6 +373,14 @@ primitive_linewidth(normr, hopradius, pixelscale) = pixelscale * normr
 
 plotlat!(plot::PlotLattice, lat::Lattice) = plotlat!(plot, hamiltonian(lat))
 
+plotlat!(plot::PlotLattice, s::Quantica.AbstractSelfEnergySolver) = plot
+
+function plotlat!(plot::PlotLattice, s::Quantica.SelfEnergyUnicellSchurSolver)
+    plotlat!(plot, Quantica.h0unit(s))
+    plotlat!(plot, Quantica.hcoupling(s))
+    return plot
+end
+
 function plotlat!(plot::PlotLattice, h::AbstractHamiltonian{<:Any,E,L}) where {E,L}
     lat = Quantica.lattice(h)
     sel = sanitize_selector(plot[:selector][], lat)
@@ -357,7 +391,7 @@ function plotlat!(plot::PlotLattice, h::AbstractHamiltonian{<:Any,E,L}) where {E
     hidesites = ishidden((:sites, :all), plot)
     hidehops = ishidden((:hops, :hoppings, :links, :all), plot)
     hidebravais = ishidden((:bravais, :all), plot)
-    hideshell = ishidden((:shell, :all), plot)
+    hideshell = ishidden((:shell, :all), plot) || iszero(L)
 
     # plot bravais axes
     if !hidebravais
@@ -492,6 +526,7 @@ function plothops_flat!(plot::PlotLattice, hp::HoppingPrimitives, transparency)
 end
 
 function plotbravais!(plot::PlotLattice, lat::Lattice{<:Any,E,L}, latslice) where {E,L}
+    iszero(L) && return plot
     bravais = Quantica.bravais(lat)
     vs = Point{E}.(Quantica.bravais_vectors(bravais))
     vtot = sum(vs)
@@ -552,7 +587,7 @@ ishidden(s::Symbol, hide::Symbol) = s === hide
 ishidden(s::Symbol, hides::Tuple) = s in hides
 ishidden(ss, hides) = any(s -> ishidden(s, hides), ss)
 
-normalize_range(c::T, (min, max)) where {T} = min ≈ max ? T(0.5) : T((c - min)/(max - min))
+normalize_range(c::T, (min, max)) where {T} = min ≈ max ? T(c) : T((c - min)/(max - min))
 
 jointextrema(v, v´) = min(minimum(v; init = 0f0), minimum(v´; init = 0f0)), max(maximum(v; init = 0f0), maximum(v´; init = 0f0))
 

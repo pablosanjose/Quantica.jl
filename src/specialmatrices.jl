@@ -222,14 +222,16 @@ unflat_sync!(s) = internalerror("unflat_sync!: method not yet implemented")
 # MatrixBlock simplify
 #   Revert subarray to parent through a simple reordering of rows and cols
 #   This is possible if rows and cols is a permutation of the parent axes
-#   but we don't check this for performance reasons
+#   but we only do a weak check of this (parent size == view size) for performance reasons
 #region
 
 simplify_matrixblock(block::SubArray, rows, cols) =
     simplify_matrixblock(parent(block), block.indices..., rows, cols)
 
 function simplify_matrixblock(mat::AbstractMatrix, viewrows, viewcols, rows, cols)
-    if cols === rows
+    if size(mat) != (length(viewrows), length(viewcols))
+        internalerror("simplify_matrixblock: received a SubArray that is not a permutation")
+    elseif cols === rows
         rows´ = cols´ = simplify_indices(viewrows, rows)
     else
         rows´ = simplify_indices(viewrows, rows)

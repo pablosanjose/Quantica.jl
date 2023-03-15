@@ -59,7 +59,7 @@ function uniquenames!(names::Vector{Symbol})
             names[i] = uniquename(allnames, name, i)
             @warn "Renamed repeated sublattice :$name to :$(names[i])"
         end
-        push!(allnames, name)
+        push!(allnames, names[i])
     end
     return names
 end
@@ -796,6 +796,63 @@ SparseArrays.nonzeros(s::HybridSparseBlochMatrix) = nonzeros(s.unflat)
 #endregion
 
   ############################################################################################
+  # SparseMatrixView
+  #    View of a SparseMatrixCSC that can produce a proper SparseMatrixCSC
+  #    with self-energies as blocks. It knows which indices correspond to which contacts
+  #region
+
+struct SparseMatrixView{C,V<:SubArray}
+    matview::V
+    mat::SparseMatrixCSC{C,Int}
+    ptrs::Vector{Int}
+end
+
+#region ## Constructor ##
+
+function SparseMatrixView(matview::SubArray{C,<:Any,<:SparseMatrixCSC}, dims = missing) where {C}
+    matparent = parent(matview)
+    viewrows, viewcols = matview.indices
+    rows = rowvals(matparent)
+    ptrs = Int[]
+    for col in viewcols, ptr in nzrange(matparent, col)
+        rows[ptr] in viewrows && push!(ptrs, ptr)
+    end
+    if dims === missing || dims == size(matview)
+        mat = sparse(matview)
+    else
+        nr, mc = dims
+        nrv, mcv = size(matview)
+        nr >= nrv && mc >= mcv ||
+            argerror("SparseMatrixView dims cannot be smaller than size(view) = $((nrv, mcv))")
+        mat = [matview spzeros(C, nrv, mc - mcv);
+               spzeros(C, nr - nrv, mcv) spzeros(C, nr - nrv, mc - mcv)]
+    end
+    return SparseMatrixView(matview, mat, ptrs)
+end
+
+#endregion
+
+#region ## API ##
+
+matrix(s::SparseMatrixView) = s.mat
+
+function update!(s::SparseMatrixView)
+    nzs = nonzeros(s.mat)
+    nzs´ = nonzeros(parent(s.matview))
+    for (i, ptr) in enumerate(s.ptrs)
+        nzs[i] = nzs´[ptr]
+    end
+    return s
+end
+
+minimal_callsafe_copy(s::SparseMatrixView) =
+    SparseMatrixView(view(copy(parent(s.matview)), s.matview.indices...), copy(s.mat), s.ptrs)
+
+#endregion
+
+#endregion
+
+  ############################################################################################
   # BlockSparseMatrix and BlockMatrix
   #   MatrixBlock : Block within a parent matrix, at a given set of rows and cols
   #   BlockSparseMatrix : SparseMatrixCSC with added blocks that can be updated in place
@@ -834,12 +891,14 @@ function MatrixBlock(block::SubArray, rows, cols)
     return simplify_matrixblock(block, rows, cols)
 end
 
-function BlockSparseMatrix(mblocks::MatrixBlock...)
+BlockSparseMatrix(mblocks::MatrixBlock...) = BlockSparseMatrix(mblocks)
+
+function BlockSparseMatrix(mblocks::NTuple{<:Any,MatrixBlock}, dims = missing)
     blocks = blockmat.(mblocks)
     C = promote_type(eltype.(blocks)...)
     I, J = Int[], Int[]
     foreach(b -> appendIJ!(I, J, b), mblocks)
-    mat = sparse(I, J, zero(C))
+    mat = dims === missing ? sparse(I, J, zero(C)) : sparse(I, J, zero(C), dims...)
     ptrs = getblockptrs.(mblocks, Ref(mat))
     return BlockSparseMatrix(mat, mblocks, ptrs)
 end
@@ -921,6 +980,11 @@ end
 matrix(s::InverseGreenBlockSparse) = matrix(s.mat)
 
 orbrange(s::InverseGreenBlockSparse) = s.nonextrng
+
+extrange(s::InverseGreenBlockSparse) = last(s.nonextrng + 1):size(mat, 1)
+
+Base.size(s::InverseGreenBlockSparse, I::Integer...) = size(matrix(s), I...)
+Base.axes(s::InverseGreenBlockSparse, I::Integer...) = axes(matrix(s), I...)
 
 # updates only ω block and applies all blocks to BlockSparseMatrix
 function update!(s::InverseGreenBlockSparse, ω)
@@ -1048,6 +1112,9 @@ Base.axes(h::Hamiltonian, i...) = axes(bloch(h), i...)
 Base.copy(h::Hamiltonian) = Hamiltonian(
     copy(lattice(h)), copy(blockstructure(h)), copy.(harmonics(h)), copy(bloch(h)))
 
+copy_lattice(h::Hamiltonian) = Hamiltonian(
+    copy(lattice(h)), blockstructure(h), harmonics(h), bloch(h))
+
 function LinearAlgebra.ishermitian(h::Hamiltonian)
     for hh in h.harmonics
         isassigned(h, -hh.dn) || return false
@@ -1102,6 +1169,9 @@ Base.size(h::ParametricHamiltonian, i...) = size(parent(h), i...)
 
 Base.copy(p::ParametricHamiltonian) = ParametricHamiltonian(
     copy(p.hparent), copy(p.h), p.modifiers, copy.(p.allptrs), copy(p.allparams))
+
+copy_lattice(p::ParametricHamiltonian) = ParametricHamiltonian(
+    copy_lattice(p.hparent), p.h, p.modifiers, p.allptrs, p.allparams)
 
 #endregion
 #endregion
@@ -1541,7 +1611,7 @@ Base.Int(c::ContactIndex) = c.i
 ############################################################################################
 # Green - see greenfunction.jl
 #  General strategy:
-#  -Contacts: Σs::[Selfenergy...] + contactBS -> call! produces MatrixBlocks for Σs
+#  -Contacts: Σs::Tuple(Selfenergy...) + contactBS -> call! produces MatrixBlocks for Σs
 #      -SelfEnergy: latslice + solver -> call! produces flat matrices (one or three)
 #  -GreenFunction: ham + c::Contacts + an AppliedGreenSolver = apply(GS.AbsSolver, ham, c)
 #      -call!(::GreenFunction, ω; params...) -> call! ham + Contacts, returns GreenSolution
@@ -1603,6 +1673,12 @@ slicecols(g::GreenFunctionSlice) = g.cols
 Base.parent(g::GreenFunction) = g.parent
 Base.parent(g::GreenSolution) = g.parent
 Base.parent(g::GreenFunctionSlice) = g.parent
+
+copy_lattice(g::GreenFunction) = GreenFunction(copy_lattice(g.parent), g.solver, g.contacts)
+copy_lattice(g::GreenSolution) = GreenSolution(
+    copy_lattice(g.parent), g.slicer, g.contactΣs, g.contactbs)
+copy_lattice(g::GreenFunctionSlice) = GreenFunctionSlice(
+    copy_lattice(g.parent), g.rows, g.cols)
 
 minimal_callsafe_copy(g::GreenFunction) =
     GreenFunction(minimal_callsafe_copy(g.parent), minimal_callsafe_copy(g.solver), minimal_callsafe_copy(g.contacts))
