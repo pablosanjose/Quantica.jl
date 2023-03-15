@@ -71,7 +71,7 @@ end
 function Quantica.qplot(g::GreenFunction; fancyaxis = true, axis = (;), figure = (;), plotkw...)
     fig, ax = empty_fig_axis(g; fancyaxis, axis, figure)
     for Σ in Quantica.selfenergies(Quantica.contacts(g))
-        plotlattice!(ax, Quantica.solver(Σ); plotkw..., sitedarken = 0.5, siteopacity = 0.1)
+        plotlattice!(ax, Quantica.solver(Σ); plotkw..., sitedarken = 0.5, siteopacity = 0.1, selector = siteselector())
     end
     plotlattice!(ax, parent(g); plotkw...)
     return fig
