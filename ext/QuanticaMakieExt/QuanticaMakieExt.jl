@@ -71,7 +71,7 @@ end
 function Quantica.qplot(g::GreenFunction; fancyaxis = true, axis = (;), figure = (;), plotkw...)
     fig, ax = empty_fig_axis(g; fancyaxis, axis, figure)
     for Σ in Quantica.selfenergies(Quantica.contacts(g))
-        plotlattice!(ax, Quantica.solver(Σ); plotkw..., siteradius = 0.1, sitedarken = 0.5, siteopacity = 0.1)
+        plotlattice!(ax, Quantica.solver(Σ); plotkw..., sitedarken = 0.5, siteopacity = 0.1)
     end
     plotlattice!(ax, parent(g); plotkw...)
     return fig
@@ -267,7 +267,7 @@ embdim(p::HoppingPrimitives{E}) where {E} = E
 ## update_color! ##
 
 update_colors!(p, plot) =
-    update_colors!(p, plot, extrema(p.hues), extrema(p.opacities))
+    update_colors!(p, plot, safeextrema(p.hues), safeextrema(p.opacities))
 
 update_colors!(p::SitePrimitives, plot, extremahues, extremaops) =
     update_colors!(p, extremahues, extremaops, plot[:sitecolor][], plot[:siteopacity][],
@@ -297,7 +297,7 @@ primitite_opacity(α, extrema, _) = normalize_range(α, extrema)
 
 ## update_radii! ##
 
-update_radii!(p, plot) = update_radii!(p, plot, extrema(p.radii))
+update_radii!(p, plot) = update_radii!(p, plot, safeextrema(p.radii))
 
 function update_radii!(p::SitePrimitives, plot, extremarads)
     siteradius = plot[:siteradius][]
@@ -590,6 +590,9 @@ ishidden(ss, hides) = any(s -> ishidden(s, hides), ss)
 normalize_range(c::T, (min, max)) where {T} = min ≈ max ? T(c) : T((c - min)/(max - min))
 
 jointextrema(v, v´) = min(minimum(v; init = 0f0), minimum(v´; init = 0f0)), max(maximum(v; init = 0f0), maximum(v´; init = 0f0))
+
+safeextrema(v::Missing) = (Float32(0), Float32(1))
+safeextrema(v) = isempty(v) ? (Float32(0), Float32(1)) : extrema(v)
 
 #endregion
 
