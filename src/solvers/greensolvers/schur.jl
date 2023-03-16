@@ -633,8 +633,9 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunction{<:Any,<:A
     leadorbs = contact_sites_to_orbitals(leadsites, leadcbs)
     solver´ = SelfEnergySchurSolver(fsolver, negative, leadorbs)
     hlead = parent(glead)
-    plottables´ = plottables(solver´, hlead; negative, transform, displacement)
-    return SelfEnergy(solver´, lsparent, plottables´)
+    boundary = solver(glead).boundary
+    plottables = (hlead, negative, transform, displacement, boundary)
+    return SelfEnergy(solver´, lsparent, plottables)
 end
 
 # find ordering of lslead sites that match lsparent sites, modulo a displacement
@@ -743,8 +744,9 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunction{<:Any,<:A
     hcoupling = hamiltonian(lat0, interblockmodel)
     solver´ = SelfEnergyUnicellSchurSolver(gunit, hcoupling, nparent)
     hlead = parent(glead)
-    plottables´ = plottables(solver´, hlead, hcoupling; negative, transform)
-    return SelfEnergy(solver´, lsparent, plottables´)
+    boundary = solver(glead).boundary
+    plottables = (hlead, hcoupling, negative, transform, boundary)
+    return SelfEnergy(solver´, lsparent, plottables)
 end
 
 #endregion

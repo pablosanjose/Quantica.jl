@@ -71,20 +71,23 @@ function Quantica.qplot(h::Union{Lattice,AbstractHamiltonian}; axis = (;), figur
     return fig
 end
 
-function Quantica.qplot(g::GreenFunction; fancyaxis = true, axis = (;), figure = (;), inspector = false, plotkw...)
+function Quantica.qplot(g::GreenFunction; fancyaxis = true, axis = (;), figure = (;), inspector = false, children = missing, plotkw...)
     fig, ax = empty_fig_axis(g; fancyaxis, axis, figure)
-    for Σ in Quantica.selfenergies(Quantica.contacts(g)), plottable in Quantica.plottables(Σ)
-        p, pkw = parse_plottable(plottable, plotkw)
-        plotlattice!(ax, p; plotkw..., siteopacity = 0.3, sitedarken = 0.6, pkw...)
+    Σkws = Iterators.cycle(parse_children(children))
+    for (Σ, childkw) in zip(Quantica.selfenergies(Quantica.contacts(g)), Σkws)
+        primitives = selfenergy_plottable(Quantica.solver(Σ), Quantica.plottables(Σ)...; childkw...)
+        for (prim, primkw) in primitives
+            plotlattice!(ax, prim; plotkw..., siteopacity = 0.3, sitedarken = 0.6, childkw..., primkw...)
+        end
     end
     plotlattice!(ax, parent(g); plotkw...)
     inspector && DataInspector()
     return fig
 end
 
-parse_plottable(p::Tuple, plotkw) = p
-parse_plottable((p, pkw)::Tuple{<:Any,Function}, plotkw) = p, pkw(NamedTuple(plotkw))
-parse_plottable(p, plotkw) = p, (;)
+parse_children(::Missing) = (NamedTuple(),)
+parse_children(p::Tuple) = p
+parse_children(p::NamedTuple) = (p,)
 
 empty_fig_axis(::GreenFunction{<:Any,3}; kw...) = empty_fig_axis_3D(; kw...)
 empty_fig_axis(::GreenFunction; kw...) = empty_fig_axis_2D(; kw...)
@@ -628,29 +631,42 @@ isimag(x) = all(o -> real(o) ≈ 0, x)
 
 
 ############################################################################################
-# plottables
+# selfenergy_plottable
+#   Build plottable objects for each type of SelfEnergy (identified by its solver)
 #region
 
+selfenergy_plottable(::Quantica.AbstractSelfEnergySolver; kw...) = ()
 
-function plottables(solver::Quantica.SelfEnergyModelSolver)
-    return (solver.ph,)
+function selfenergy_plottable(solver::Quantica.SelfEnergyModelSolver; kw...)
+    p1, k1 = solver.ph, (;)
+    return ((p1, k1),)
 end
 
-function plottables(::Quantica.SelfEnergySchurSolver, hlead; negative, transform, displacement)
+function selfenergy_plottable(s::Quantica.SelfEnergySchurSolver,
+    hlead, negative, transform, displacement, boundary; numcells = 1, kw...)
     hlead´ = transform === missing ?
         Quantica.translate(hlead, displacement) :
         Quantica.transform(hlead, r -> displacement + transform(r))
-    p1 = hlead´, (; hide = :shell, selector = siteselector(; cells = (0,)))
-    return (p1,)
+
+    cellrng = negative ? (boundary-numcells-1:boundary-1) : (boundary+1:boundary+numcells+1)
+    p1 = hlead´
+    k1 = (; hide = :shell, selector = siteselector(; cells = cellrng))
+    return ((p1, k1),)
 end
 
-function plottables(::Quantica.SelfEnergyUnicellSchurSolver, hlead, hcoupling; negative, transform)
-    p1 = hcoupling, (; selector = siteselector())
+function selfenergy_plottable(s::Quantica.SelfEnergyUnicellSchurSolver,
+    hlead, hcoupling, negative, transform, boundary; numcells = 1, kw...)
+    p1 = hcoupling
+    k1 = (; selector = siteselector())
     hlead´ = transform === missing ?
         hlead :
         Quantica.transform(hlead, transform)
-    p2 = hlead´, (; hide = :shell, selector = siteselector(; cells = (0,)))
-    return (p1, p2)
+    b = isfinite(boundary) ? 0 : round(Int, boundary)
+    n = max(0, numcells)
+    cellrng = negative ? (b-n:b) : (b:b+n)
+    p2 = hlead´
+    k2 = (; hide = :shell, selector = siteselector(; cells = cellrng))
+    return ((p1, k1), (p2, k2))
 end
 
 #endregion

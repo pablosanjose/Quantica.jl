@@ -1460,9 +1460,6 @@ end
 SelfEnergy(solver::AbstractSelfEnergySolver, latslice::LatticeSlice) =
     SelfEnergy(solver, latslice, ())
 
-#fallback
-plottables(::AbstractSelfEnergySolver, args...; kw...) = ()
-
 #endregion
 
 #region ## API ##
