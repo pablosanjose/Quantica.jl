@@ -55,6 +55,14 @@ Makie.plot!(plot::PlotLattice) = plotlat!(plot, to_value(plot[1]))
 # qplot
 #region
 
+function Quantica.qplot(h::Union{Lattice{<:Any,3},AbstractHamiltonian{<:Any,3}}; fancyaxis = true, axis = (;), figure = (;), inspector = false, plotkw...)
+    fig, ax = empty_fig_axis(; fancyaxis, axis, figure)
+    fancyaxis ? plotlattice!(ax, h; plotkw...) :
+                plotlattice!(ax, h; flatsizefactor = 1.14, plotkw...)  # Makie BUG workaround?
+    inspector && DataInspector()
+    return fig
+end
+
 function Quantica.qplot(h::Union{Lattice,AbstractHamiltonian}; axis = (;), figure = (;), inspector = false, plotkw...)
     fig, ax = empty_fig_axis(h; axis, figure)
     plotlattice!(ax, h; plotkw...)
@@ -62,16 +70,8 @@ function Quantica.qplot(h::Union{Lattice,AbstractHamiltonian}; axis = (;), figur
     return fig
 end
 
-function Quantica.qplot(h::Union{Lattice{<:Any,3},AbstractHamiltonian{<:Any,3}}; fancyaxis = true, axis = (;), figure = (;), inspector = false, plotkw...)
-    fig, ax = empty_fig_axis(h; fancyaxis, axis, figure)
-    fancyaxis ? plotlattice!(ax, h; plotkw...) :
-                plotlattice!(ax, h; flatsizefactor = 1.14, plotkw...)  # Makie BUG workaround?
-    inspector && DataInspector()
-    return fig
-end
-
 function Quantica.qplot(g::GreenFunction; fancyaxis = true, axis = (;), figure = (;), inspector = false, plotkw...)
-    fig, ax = empty_fig_axis(g; fancyaxis, axis, figure)
+    fig, ax = empty_fig_axis(; fancyaxis, axis, figure)
     for Σ in Quantica.selfenergies(Quantica.contacts(g))
         plotlattice!(ax, Quantica.solver(Σ); plotkw..., sitedarken = 0.5, siteopacity = 0.1, selector = siteselector())
     end
@@ -80,13 +80,13 @@ function Quantica.qplot(g::GreenFunction; fancyaxis = true, axis = (;), figure =
     return fig
 end
 
-function empty_fig_axis(h; axis = (;), figure = (;), kw...)
+function empty_fig_axis(; axis = (;), figure = (;), kw...)
     fig = Figure(; default_figure..., figure...)
     ax = Axis(fig[1,1]; default_axis2D..., axis...)
     return fig, ax
 end
 
-function empty_fig_axis(h::Union{Lattice{<:Any,3},AbstractHamiltonian{<:Any,3},GreenFunction{<:Any,3}}; fancyaxis = true, axis = (;), figure = (;), kw...)
+function empty_fig_axis(; fancyaxis = true, axis = (;), figure = (;), kw...)
     fig = Figure(; default_figure..., figure...)
     ax = fancyaxis ?
         LScene(fig[1,1]; default_lscene..., axis...) :
@@ -94,13 +94,13 @@ function empty_fig_axis(h::Union{Lattice{<:Any,3},AbstractHamiltonian{<:Any,3},G
     return fig, ax
 end
 
-const default_figure = (; resolution = (1200, 1200), fontsize = 40)
+default_figure = (; resolution = (1200, 1200), fontsize = 40)
 
-const default_axis3D = (; perspectiveness = 0.0, viewmode = :fitzoom)
+default_axis3D = (; perspectiveness = 0.0, aspect = :data)
 
-const default_axis2D = (; autolimitaspect = 1)
+default_axis2D = (; autolimitaspect = 1)
 
-const default_lscene = (;)
+default_lscene = (;)
 
 
 #endregion
@@ -481,9 +481,11 @@ end
 function plotsites_flat!(plot::PlotLattice, sp::SitePrimitives, transparency)
     inspector_label = (self, i, r) -> sp.tooltips[i]
     factor = plot[:flatsizefactor][]
+    @show factor
     markersize = factor ≈ 1 ? sp.radii : factor * sp.radii
     scatter!(plot, sp.centers; color = sp.colors, markersize,
             markerspace = :data,
+            space = :data,
             strokewidth = plot[:siteborder][],
             strokecolor = darken.(sp.colors, Ref(plot[:siteborderdarken][])),
             ambient = plot[:ambient][],
