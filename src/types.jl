@@ -404,7 +404,20 @@ end
 
 const AppliedParametricTerm{N} = Union{ParametricOnsiteTerm{N,<:AppliedSiteSelector},
                                        ParametricHoppingTerm{N,<:AppliedHopSelector}}
-const AppliedParametricModel = ParametricModel{<:NTuple{<:Any,AppliedParametricTerm}}
+
+## BlockModels ##
+
+struct InterblockModel{M<:AbstractModel}
+    model::M
+    block::Tuple{UnitRange{Int},UnitRange{Int}}
+end
+
+struct IntrablockModel{M<:AbstractModel}
+    model::M
+    block::UnitRange{Int}
+end
+
+const AbstractBlockModel = Union{InterblockModel,IntrablockModel}
 
 #region ## Constructors ##
 
@@ -427,7 +440,13 @@ ParametricHoppingTerm(t::ParametricHoppingTerm, os::HopSelector) =
 
 #region ## API ##
 
+nonparametric(m::TightbindingModel) = m
+nonparametric(m::ParametricModel) = m.npmodel
+
 terms(t::AbstractModel) = t.terms
+
+allterms(t::TightbindingModel) = t.terms
+allterms(t::ParametricModel) = (terms(nonparametric(t))..., t.terms...)
 
 selector(t::AbstractModelTerm) = t.selector
 
@@ -435,12 +454,13 @@ functor(t::AbstractModelTerm) = t.f
 
 parameters(t::AbstractParametricTerm) = t.f.params
 
-nonparametric(m::TightbindingModel) = m
-nonparametric(m::ParametricModel) = m.npmodel
-
 coefficient(t::OnsiteTerm) = t.coefficient
 coefficient(t::HoppingTerm) = t.coefficient
 coefficient(t::AbstractParametricTerm) = t.coefficient
+
+Base.parent(m::InterblockModel) = m.model
+
+block(m::InterblockModel) = m.block
 
 ## call API##
 

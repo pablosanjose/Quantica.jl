@@ -4,8 +4,6 @@
 
 onsite(o; kw...) = onsite(o, siteselector(; kw...))
 onsite(o, sel::SiteSelector) = TightbindingModel(OnsiteTerm(o, sel, 1))
-onsite(m::TightbindingModel; kw...) = TightbindingModel(
-    Tuple(Any[OnsiteTerm(o, siteselector(selector(o); kw...)) for o in terms(m) if o isa OnsiteTerm]))
 
 function hopping(t; plusadjoint = false, kw...)
     hop = hopping(t, hopselector(; kw...))
@@ -13,8 +11,22 @@ function hopping(t; plusadjoint = false, kw...)
 end
 
 hopping(t, sel::HopSelector) = TightbindingModel(HoppingTerm(t, sel, 1))
-hopping(m::TightbindingModel; kw...) = TightbindingModel(
-    Tuple(Any[HoppingTerm(t, hopselector(selector(t); kw...)) for t in terms(m) if t isa HoppingTerm]))
+
+## filtering models, and modifying their selectors
+
+onsite(m::AbstractModel; kw...) =
+    reduce(+, (_onsite(t; kw...) for t in allterms(m) if t isa Union{OnsiteTerm,ParametricOnsiteTerm}))
+hopping(m::AbstractModel; kw...) =
+    reduce(+, (_hopping(t; kw...) for t in allterms(m) if t isa Union{HoppingTerm,ParametricHoppingTerm}))
+
+_onsite(o::OnsiteTerm; kw...) =
+    TightbindingModel(OnsiteTerm(functor(o), siteselector(selector(o); kw...), coefficient(o)))
+_hopping(t::HoppingTerm; kw...) =
+    TightbindingModel(HoppingTerm(functor(t), hopselector(selector(t); kw...), coefficient(t)))
+_onsite(o::ParametricOnsiteTerm; kw...) =
+    ParametricModel(ParametricOnsiteTerm(functor(o), siteselector(selector(o); kw...), coefficient(o)))
+_hopping(t::ParametricHoppingTerm; kw...) =
+    ParametricModel(ParametricHoppingTerm(functor(t), hopselector(selector(t); kw...), coefficient(t)))
 
 #endregion
 
@@ -150,5 +162,17 @@ function model_ω_to_param(term::ParametricHoppingTerm{N}, default = 0) where {N
     pf = ParametricFunction{N-1}(f, parameters(term))
     return ParametricHoppingTerm(pf, selector(term), coefficient(term))
 end
+
+#endregion
+
+############################################################################################
+# interblock and intrablock
+#region
+
+interblock(m::AbstractModel, inds, inds´) = isempty(intersect(inds, inds´)) ?
+    InterblockModel(hopping(m), (inds, inds´)) :
+    InterblockModel(m, (inds, inds´))
+
+intrablock(m::AbstractModel, inds) = IntrablockModel(m, inds)
 
 #endregion

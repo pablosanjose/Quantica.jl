@@ -736,9 +736,10 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunction{<:Any,<:A
     sel = siteselector(; kw...)
     lsparent = lattice(hparent)[sel]
     lat0parent = lattice0D(lsparent)
-    nparent = nsites(lat0parent)
     lat0 = combine(lat0parent, lat0lead)
-    hcoupling = hamiltonian(lat0, model)
+    nparent, ntotal = nsites(lat0parent), nsites(lat0)
+    interblockmodel = interblock(model, 1:nparent, nparent+1:ntotal)
+    hcoupling = hamiltonian(lat0, interblockmodel)
     solver´ = SelfEnergyUnicellSchurSolver(gunit, hcoupling, nparent)
     return SelfEnergy(solver´, lsparent)
 end

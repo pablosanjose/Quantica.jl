@@ -113,19 +113,22 @@ hamiltonian(lat::Lattice, m::Modifier, ms::Modifier...; kw...) =
 
 hamiltonian(h::AbstractHamiltonian, m::Modifier, ms::Modifier...) = parametric(h, m, ms...)
 
+hamiltonian(lat::Lattice, m::AbstractBlockModel; kw...) =
+    hamiltonian(lat, parent(m), block(m); kw...)
+
 # Base.@constprop :aggressive may be needed for type-stable non-Val orbitals?
-function hamiltonian(lat::Lattice{T}, m::TightbindingModel = TightbindingModel(); orbitals = Val(1)) where {T}
+function hamiltonian(lat::Lattice{T}, m::TightbindingModel = TightbindingModel(), block = missing; orbitals = Val(1)) where {T}
     orbitals´ = sanitize_orbitals(orbitals)
     blockstruct = OrbitalBlockStructure(T, orbitals´, sublatlengths(lat))
     builder = IJVBuilder(lat, blockstruct)
     apmod = apply(m, (lat, blockstruct))
     # using foreach here foils precompilation of applyterm! for some reason
-    applyterm!.(Ref(builder), terms(apmod))
+    applyterm!.(Ref(builder), Ref(block), terms(apmod))
     hars = sparse(builder)
     return Hamiltonian(lat, blockstruct, hars)
 end
 
-function applyterm!(builder, term::AppliedOnsiteTerm)
+function applyterm!(builder, block, term::AppliedOnsiteTerm)
     sel = selector(term)
     isempty(cells(sel)) || argerror("Cannot constrain cells in an onsite term, cell periodicity is assumed.")
     lat = lattice(builder)
@@ -134,6 +137,7 @@ function applyterm!(builder, term::AppliedOnsiteTerm)
     bs = blockstructure(builder)
     bsizes = blocksizes(bs)
     foreach_site(sel, dn0) do s, i, r
+        isinblock(i, block) || return nothing
         n = bsizes[s]
         v = term(r, n)
         push!(ijv, (i, i, v))
@@ -141,7 +145,7 @@ function applyterm!(builder, term::AppliedOnsiteTerm)
     return nothing
 end
 
-function applyterm!(builder, term::AppliedHoppingTerm, (irng, jrng) = (:, :))
+function applyterm!(builder, block, term::AppliedHoppingTerm)
     trees = kdtrees(builder)
     sel = selector(term)
     bs = blockstructure(builder)
@@ -149,7 +153,7 @@ function applyterm!(builder, term::AppliedHoppingTerm, (irng, jrng) = (:, :))
     foreach_cell(sel) do dn
         ijv = builder[dn]
         found = foreach_hop(sel, trees, dn) do (si, sj), (i, j), (r, dr)
-            isinblock(i, irng) && isinblock(j, jrng) || return nothing
+            isinblock(i, j, block) || return nothing
             ni = bsizes[si]
             nj = bsizes[sj]
             v = term(r, dr, (ni, nj))
@@ -160,8 +164,13 @@ function applyterm!(builder, term::AppliedHoppingTerm, (irng, jrng) = (:, :))
     return nothing
 end
 
-isinblock(i, ::Colon) = true
-isinblock(i, irng) = i in irng
+# block is Missing some index collections, see Inter/IntrablockModel
+isinblock(i, j, ::Missing) = true
+isinblock(i, j, (rng, rng´)::Tuple) =
+    (isinblock(i, rng) && isinblock(j, rng´)) || (isinblock(j, rng) && isinblock(i, rng´))
+isinblock(i, j, rng) = isinblock(i, rng) && isinblock(j, rng)
+isinblock(i, ::Missing) = true
+isinblock(i, rng) = i in rng
 
 #endregion
 
