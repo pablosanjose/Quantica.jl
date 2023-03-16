@@ -1447,16 +1447,31 @@ call!(s::WrappedExtendedSelfEnergySolver; params...) = s
 #     - SelfEnergy(h::AbstractHamiltonian, sargs...; kw...) -> SelfEnergy
 #region
 
-struct SelfEnergy{T,E,L,S<:AbstractSelfEnergySolver}
+struct SelfEnergy{T,E,L,S<:AbstractSelfEnergySolver,P<:Tuple}
     solver::S                                # returns AbstractMatrix block(s) over latslice
     latslice::LatticeSlice{T,E,L}            # sites on each unitcell with a selfenergy
+    plottables::P                            # objects to be plotted to visualize SelfEnergy
 end
+
+
+#region ## Constructors ##
+
+#fallback
+SelfEnergy(solver::AbstractSelfEnergySolver, latslice::LatticeSlice) =
+    SelfEnergy(solver, latslice, ())
+
+#fallback
+plottables(::AbstractSelfEnergySolver, args...; kw...) = ()
+
+#endregion
 
 #region ## API ##
 
 latslice(Σ::SelfEnergy) = Σ.latslice
 
 solver(Σ::SelfEnergy) = Σ.solver
+
+plottables(Σ::SelfEnergy) = Σ.plottables
 
 call!(Σ::SelfEnergy; params...) = SelfEnergy(call!(Σ.solver; params...), Σ.latslice)
 call!(Σ::SelfEnergy, ω; params...) = call!(Σ.solver, ω; params...)

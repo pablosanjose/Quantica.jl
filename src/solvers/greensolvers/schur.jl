@@ -611,7 +611,6 @@ end
 
 #region ## SelfEnergy (attach) API ##
 
-
 # This syntax checks that the selected sites of hparent match the L/R surface of the semi-infinite lead
 # and if so, builds the extended Self Energy directly, with the correct site order
 function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunction{<:Any,<:Any,1,<:AppliedSchurGreenSolver}; negative = false, transform = missing, kw...)
@@ -628,12 +627,14 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunction{<:Any,<:A
     Σlead = only(selfenergies(contacts(gunit)))
     lslead = latslice(Σlead)
     # find lead site index in lslead for each site in lsparent
-    leadsites = lead_siteids_foreach_parent_siteids(lsparent, lslead, transform)
+    leadsites, displacement = lead_siteids_foreach_parent_siteids(lsparent, lslead, transform)
     # translate lead site indices to lead orbital indices using lead's ContactBlockStructure
     leadcbs = blockstructure(contacts(gunit))
     leadorbs = contact_sites_to_orbitals(leadsites, leadcbs)
     solver´ = SelfEnergySchurSolver(fsolver, negative, leadorbs)
-    return SelfEnergy(solver´, lsparent)
+    hlead = parent(glead)
+    plottables´ = plottables(solver´, hlead; negative, transform, displacement)
+    return SelfEnergy(solver´, lsparent, plottables´)
 end
 
 # find ordering of lslead sites that match lsparent sites, modulo a displacement
@@ -643,13 +644,13 @@ function lead_siteids_foreach_parent_siteids(lsparent, lslead, transform)
     sp = collect(sites(lsparent))
     sl = collect(sites(lslead))
     transform === missing || (sl .= transform.(sl))
-    displacement = mean(sl) - mean(sp)
-    sl .-= Ref(displacement)
+    displacement = mean(sp) - mean(sl)
+    sl .+= Ref(displacement)
     tree = KDTree(sl)
     indslead, dists = nn(tree, sp)
     iszero(chop(maximum(dists))) && allunique(indslead) ||
         argerror("The contact and lead surface sites have same number of sites but do not match (modulo a displacement). Perhaps an error in the `attach` site selection? Otherwise consider using the `transform` keyword to specify an attachment transformation.")
-    return indslead
+    return indslead, displacement
 end
 
 #endregion
@@ -741,7 +742,9 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunction{<:Any,<:A
     interblockmodel = interblock(model, 1:nparent, nparent+1:ntotal)
     hcoupling = hamiltonian(lat0, interblockmodel)
     solver´ = SelfEnergyUnicellSchurSolver(gunit, hcoupling, nparent)
-    return SelfEnergy(solver´, lsparent)
+    hlead = parent(glead)
+    plottables´ = plottables(solver´, hlead, hcoupling; negative, transform)
+    return SelfEnergy(solver´, lsparent, plottables´)
 end
 
 #endregion

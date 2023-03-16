@@ -46,7 +46,7 @@ transform!(u::Unitcell, f::Function) = (map!(f, sites(u), sites(u)); u)
 translate!(lat::Lattice{T,E}, δr) where {T,E} = translate!(lat, sanitize_SVector(SVector{E,T}, δr))
 
 # translate! does not change neighbor ranges, keep whichever have already been computed
-translate!(lat::Lattice{T,E}, δr::SVector{E,T}) where {T,E} = transform!(l, r -> r + δr, true)
+translate!(lat::Lattice{T,E}, δr::SVector{E,T}) where {T,E} = transform!(lat, r -> r + δr, true)
 
 #endregion
 
@@ -54,9 +54,10 @@ translate!(lat::Lattice{T,E}, δr::SVector{E,T}) where {T,E} = transform!(l, r -
 # Hamiltonian transform
 #region
 
-# specialized
-transform(h::Hamiltonian, modifiers...; kw...) = transform!(copy_harmonics(h), modifiers...; kw...)
+transform(h::AbstractHamiltonian, f) = transform!(copy_lattice(h), f)
+transform!(h::AbstractHamiltonian, f) = (transform!(lattice(h), f); h)
 
-transform!(h::Hamiltonian, modifiers::Modifier...; kw...) = applymodifiers!(h, modifiers...; kw...)
+translate(h::AbstractHamiltonian, δr) = translate!(copy_lattice(h), δr)
+translate!(h::AbstractHamiltonian, δr) = (translate!(lattice(h), δr); h)
 
 #endregion

@@ -35,7 +35,8 @@ function SelfEnergy(h::AbstractHamiltonian, model::AbstractModel; kw...)
     sel = siteselector(; kw...)
     latslice = lattice(h)[sel]
     solver = SelfEnergyModelSolver(h, model, latslice)
-    return SelfEnergy(solver, latslice)
+    plottables´ = plottables(solver)
+    return SelfEnergy(solver, latslice, plottables´)
 end
 
 #endregion

@@ -8,7 +8,7 @@ using Quantica: Lattice, LatticeSlice, AbstractHamiltonian, Harmonic, Bravais, S
       GreenFunction, argerror, harmonics, sublats, siterange, site, norm, normalize, nsites,
       nzrange, rowvals, sanitize_SVector
 
-import Quantica: plotlattice, plotlattice!, qplot
+import Quantica: plotlattice, plotlattice!, qplot, plottables
 
 ############################################################################################
 # plotlattice recipe
@@ -43,6 +43,7 @@ import Quantica: plotlattice, plotlattice!, qplot
         pixelscale = 6,
         selector = missing,
         flatsizefactor = 2√2,
+        boundaries = missing,
         hide = :cell, # :hops, :sites, :bravais, :cell, :axes...
     )
 end
@@ -56,7 +57,7 @@ Makie.plot!(plot::PlotLattice) = plotlat!(plot, to_value(plot[1]))
 #region
 
 function Quantica.qplot(h::Union{Lattice{<:Any,3},AbstractHamiltonian{<:Any,3}}; fancyaxis = true, axis = (;), figure = (;), inspector = false, plotkw...)
-    fig, ax = empty_fig_axis(; fancyaxis, axis, figure)
+    fig, ax = empty_fig_axis_3D(; fancyaxis, axis, figure)
     fancyaxis ? plotlattice!(ax, h; plotkw...) :
                 plotlattice!(ax, h; flatsizefactor = 1.14, plotkw...)  # Makie BUG workaround?
     inspector && DataInspector()
@@ -64,29 +65,37 @@ function Quantica.qplot(h::Union{Lattice{<:Any,3},AbstractHamiltonian{<:Any,3}};
 end
 
 function Quantica.qplot(h::Union{Lattice,AbstractHamiltonian}; axis = (;), figure = (;), inspector = false, plotkw...)
-    fig, ax = empty_fig_axis(h; axis, figure)
+    fig, ax = empty_fig_axis_2D(; axis, figure)
     plotlattice!(ax, h; plotkw...)
     inspector && DataInspector()
     return fig
 end
 
 function Quantica.qplot(g::GreenFunction; fancyaxis = true, axis = (;), figure = (;), inspector = false, plotkw...)
-    fig, ax = empty_fig_axis(; fancyaxis, axis, figure)
-    for Σ in Quantica.selfenergies(Quantica.contacts(g))
-        plotlattice!(ax, Quantica.solver(Σ); plotkw..., sitedarken = 0.5, siteopacity = 0.1, selector = siteselector())
+    fig, ax = empty_fig_axis(g; fancyaxis, axis, figure)
+    for Σ in Quantica.selfenergies(Quantica.contacts(g)), plottable in Quantica.plottables(Σ)
+        p, pkw = parse_plottable(plottable, plotkw)
+        plotlattice!(ax, p; plotkw..., siteopacity = 0.3, sitedarken = 0.6, pkw...)
     end
     plotlattice!(ax, parent(g); plotkw...)
     inspector && DataInspector()
     return fig
 end
 
-function empty_fig_axis(; axis = (;), figure = (;), kw...)
+parse_plottable(p::Tuple, plotkw) = p
+parse_plottable((p, pkw)::Tuple{<:Any,Function}, plotkw) = p, pkw(NamedTuple(plotkw))
+parse_plottable(p, plotkw) = p, (;)
+
+empty_fig_axis(::GreenFunction{<:Any,3}; kw...) = empty_fig_axis_3D(; kw...)
+empty_fig_axis(::GreenFunction; kw...) = empty_fig_axis_2D(; kw...)
+
+function empty_fig_axis_2D(; axis = (;), figure = (;), kw...)
     fig = Figure(; default_figure..., figure...)
     ax = Axis(fig[1,1]; default_axis2D..., axis...)
     return fig, ax
 end
 
-function empty_fig_axis(; fancyaxis = true, axis = (;), figure = (;), kw...)
+function empty_fig_axis_3D(; fancyaxis = true, axis = (;), figure = (;), kw...)
     fig = Figure(; default_figure..., figure...)
     ax = fancyaxis ?
         LScene(fig[1,1]; default_lscene..., axis...) :
@@ -372,14 +381,6 @@ primitive_linewidth(normr, hopradius, pixelscale) = pixelscale * normr
 
 plotlat!(plot::PlotLattice, lat::Lattice) = plotlat!(plot, hamiltonian(lat))
 
-plotlat!(plot::PlotLattice, s::Quantica.AbstractSelfEnergySolver) = plot
-
-function plotlat!(plot::PlotLattice, s::Quantica.SelfEnergyUnicellSchurSolver)
-    plotlat!(plot, Quantica.h0unit(s))
-    plotlat!(plot, Quantica.hcoupling(s))
-    return plot
-end
-
 function plotlat!(plot::PlotLattice, h::AbstractHamiltonian{<:Any,E,L}) where {E,L}
     lat = Quantica.lattice(h)
     sel = sanitize_selector(plot[:selector][], lat)
@@ -622,6 +623,35 @@ numberstring(x) = isreal(x) ? string(" ", real(x)) : isimag(x) ? string(" ", ima
 
 isreal(x) = all(o -> imag(o) ≈ 0, x)
 isimag(x) = all(o -> real(o) ≈ 0, x)
+
+#endregion
+
+
+############################################################################################
+# plottables
+#region
+
+
+function plottables(solver::Quantica.SelfEnergyModelSolver)
+    return (solver.ph,)
+end
+
+function plottables(::Quantica.SelfEnergySchurSolver, hlead; negative, transform, displacement)
+    hlead´ = transform === missing ?
+        Quantica.translate(hlead, displacement) :
+        Quantica.transform(hlead, r -> displacement + transform(r))
+    p1 = hlead´, (; hide = :shell, selector = siteselector(; cells = (0,)))
+    return (p1,)
+end
+
+function plottables(::Quantica.SelfEnergyUnicellSchurSolver, hlead, hcoupling; negative, transform)
+    p1 = hcoupling, (; selector = siteselector())
+    hlead´ = transform === missing ?
+        hlead :
+        Quantica.transform(hlead, transform)
+    p2 = hlead´, (; hide = :shell, selector = siteselector(; cells = (0,)))
+    return (p1, p2)
+end
 
 #endregion
 
