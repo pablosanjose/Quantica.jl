@@ -481,7 +481,6 @@ end
 function plotsites_flat!(plot::PlotLattice, sp::SitePrimitives, transparency)
     inspector_label = (self, i, r) -> sp.tooltips[i]
     factor = plot[:flatsizefactor][]
-    @show factor
     markersize = factor ≈ 1 ? sp.radii : factor * sp.radii
     scatter!(plot, sp.centers; color = sp.colors, markersize,
             markerspace = :data,
