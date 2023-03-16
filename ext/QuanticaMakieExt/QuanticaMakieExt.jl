@@ -77,18 +77,13 @@ function Quantica.qplot(g::GreenFunction; fancyaxis = true, axis = (;), figure =
     return fig
 end
 
-empty_fig_axis(::Union{Lattice{<:Any,3},AbstractHamiltonian{<:Any,3},GreenFunction{<:Any,3}}; kw...) =
-    empty_fig_axis_3D(; kw...)
-
-empty_fig_axis(x; kw...) = empty_fig_axis_2D(; kw...)
-
-function empty_fig_axis_2D(; axis = (;), figure = (;), kw...)
+function empty_fig_axis(h; axis = (;), figure = (;), kw...)
     fig = Figure(; default_figure..., figure...)
     ax = Axis(fig[1,1]; default_axis2D..., axis...)
     return fig, ax
 end
 
-function empty_fig_axis_3D(; fancyaxis = true, axis = (;), figure = (;), kw...)
+function empty_fig_axis(h::Union{Lattice{<:Any,3},AbstractHamiltonian{<:Any,3},GreenFunction{<:Any,3}}; fancyaxis = true, axis = (;), figure = (;), kw...)
     fig = Figure(; default_figure..., figure...)
     ax = fancyaxis ?
         LScene(fig[1,1]; default_lscene..., axis...) :
@@ -98,7 +93,7 @@ end
 
 const default_figure = (; resolution = (1200, 1200), fontsize = 40)
 
-const default_axis3D = (; perspectiveness = 0.2, viewmode = :fitzoom)
+const default_axis3D = (; perspectiveness = 0.0, viewmode = :fitzoom)
 
 const default_axis2D = (; autolimitaspect = 1)
 
@@ -151,9 +146,9 @@ function _siteprimitives(ls::LatticeSlice{<:Any,E}, h, opts, opacityflag) where 
     mat = Quantica.matrix(first(harmonics(h)))
     lat = parent(ls)
     for sc in Quantica.subcells(ls)
-        dn = Quantica.cell(sc)
+        ni = Quantica.cell(sc)
         for i in Quantica.siteindices(sc)
-            push_siteprimitive!(sp, opts, lat, i, dn, mat[i, i], opacityflag)
+            push_siteprimitive!(sp, opts, lat, i, ni, mat[i, i], opacityflag)
         end
     end
     return sp
@@ -170,22 +165,23 @@ function _hoppingprimitives(ls::LatticeSlice{<:Any,E}, selector, h, radii, opts)
     lat = parent(ls)
     counter = 0
     for sc in Quantica.subcells(ls)
-        dnj = Quantica.cell(sc)
+        nj = Quantica.cell(sc)
         for j in Quantica.siteindices(sc)
             counter += 1
             radius = isempty(radii) ? Float32(0) : radii[counter]
             for har in harmonics(h)
-                dni = dnj + Quantica.dcell(har)
+                dn = Quantica.dcell(har)
+                ni = nj + dn
                 mat = Quantica.matrix(har)
                 rows = rowvals(mat)
                 for ptr in nzrange(mat, j)
                     i = rows[ptr]
-                    i == j && continue
-                    ri = Quantica.site(lat, i, dni)
-                    if (i, ri, dni) in selector
-                        push_hopprimitive!(hp, opts, lat, (i, j), (dni, dnj), radius, mat[i, j], true)
+                    Quantica.isonsite((i, j), dn) && continue
+                    ri = Quantica.site(lat, i, ni)
+                    if (i, ri, ni) in selector
+                        push_hopprimitive!(hp, opts, lat, (i, j), (ni, nj), radius, mat[i, j], true)
                     else
-                        push_hopprimitive!(hp´, opts, lat, (i, j), (dni, dnj), radius, mat[i, j], false)
+                        push_hopprimitive!(hp´, opts, lat, (i, j), (ni, nj), radius, mat[i, j], false)
                     end
                 end
             end
@@ -196,8 +192,8 @@ end
 
 ## push! ##
 
-function push_siteprimitive!(sp, (sitecolor, siteopacity, shellopacity, siteradius), lat, i, dn, matii, opacityflag)
-    r = Quantica.site(lat, i, dn)
+function push_siteprimitive!(sp, (sitecolor, siteopacity, shellopacity, siteradius), lat, i, ni, matii, opacityflag)
+    r = Quantica.site(lat, i, ni)
     s = Quantica.sitesublat(lat, i)
     push!(sp.centers, r)
     push!(sp.indices, i)
@@ -225,8 +221,8 @@ push_siteradius!(sp, siteradius, i, r) = argerror("Unrecognized siteradius")
 push_sitetooltip!(sp, i, r, mat) = push!(sp.tooltips, matrixstring(i, mat))
 push_sitetooltip!(sp, i, r) = push!(sp.tooltips, positionstring(i, r))
 
-function push_hopprimitive!(hp, (hopcolor, hopopacity, shellopacity, hopradius), lat, (i, j), (dni, dnj), radius, matij, opacityflag)
-    src, dst = Quantica.site(lat, j, dnj), Quantica.site(lat, i, dni)
+function push_hopprimitive!(hp, (hopcolor, hopopacity, shellopacity, hopradius), lat, (i, j), (ni, nj), radius, matij, opacityflag)
+    src, dst = Quantica.site(lat, j, nj), Quantica.site(lat, i, ni)
     opacityflag && (dst = (src + dst)/2)
     src += normalize(dst - src) * radius
     r, dr = (src + dst)/2, (dst - src)
