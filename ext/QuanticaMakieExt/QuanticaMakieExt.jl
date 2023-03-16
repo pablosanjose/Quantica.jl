@@ -484,7 +484,6 @@ function plotsites_flat!(plot::PlotLattice, sp::SitePrimitives, transparency)
     markersize = factor ≈ 1 ? sp.radii : factor * sp.radii
     scatter!(plot, sp.centers; color = sp.colors, markersize,
             markerspace = :data,
-            space = :data,
             strokewidth = plot[:siteborder][],
             strokecolor = darken.(sp.colors, Ref(plot[:siteborderdarken][])),
             ambient = plot[:ambient][],
