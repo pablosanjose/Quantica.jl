@@ -55,25 +55,28 @@ Makie.plot!(plot::PlotLattice) = plotlat!(plot, to_value(plot[1]))
 # qplot
 #region
 
-function Quantica.qplot(h::Union{Lattice,AbstractHamiltonian}; axis = (;), figure = (;), plotkw...)
+function Quantica.qplot(h::Union{Lattice,AbstractHamiltonian}; axis = (;), figure = (;), inspector = false, plotkw...)
     fig, ax = empty_fig_axis(h; axis, figure)
     plotlattice!(ax, h; plotkw...)
+    inspector && DataInspector()
     return fig
 end
 
-function Quantica.qplot(h::Union{Lattice{<:Any,3},AbstractHamiltonian{<:Any,3}}; fancyaxis = true, axis = (;), figure = (;), plotkw...)
+function Quantica.qplot(h::Union{Lattice{<:Any,3},AbstractHamiltonian{<:Any,3}}; fancyaxis = true, axis = (;), figure = (;), inspector = false, plotkw...)
     fig, ax = empty_fig_axis(h; fancyaxis, axis, figure)
     fancyaxis ? plotlattice!(ax, h; plotkw...) :
                 plotlattice!(ax, h; flatsizefactor = 1.14, plotkw...)  # Makie BUG workaround?
+    inspector && DataInspector()
     return fig
 end
 
-function Quantica.qplot(g::GreenFunction; fancyaxis = true, axis = (;), figure = (;), plotkw...)
+function Quantica.qplot(g::GreenFunction; fancyaxis = true, axis = (;), figure = (;), inspector = false, plotkw...)
     fig, ax = empty_fig_axis(g; fancyaxis, axis, figure)
     for Σ in Quantica.selfenergies(Quantica.contacts(g))
         plotlattice!(ax, Quantica.solver(Σ); plotkw..., sitedarken = 0.5, siteopacity = 0.1, selector = siteselector())
     end
     plotlattice!(ax, parent(g); plotkw...)
+    inspector && DataInspector()
     return fig
 end
 
