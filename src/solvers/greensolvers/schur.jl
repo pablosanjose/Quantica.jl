@@ -611,7 +611,8 @@ end
 
 #region ## SelfEnergy (attach) API ##
 
-# This syntax checks that the selected sites of hparent match the L/R surface of the semi-infinite lead
+# This syntax checks that the selected sites of hparent match the L/R surface of the
+# semi-infinite lead (possibly by first transforming the lead lattice with `transform`)
 # and if so, builds the extended Self Energy directly, with the correct site order
 function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunction{<:Any,<:Any,1,<:AppliedSchurGreenSolver}; negative = false, transform = missing, kw...)
     isempty(contacts(glead)) || argerror("Tried to attach a lead with $(length(selfenergies(contacts(glead)))) contacts. \nCurrently, a lead with contacts cannot be contacted to another system using the simple `attach(x, glead; ...)` syntax. Use `attach(x, glead, model; ...)` instead")
@@ -632,9 +633,10 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunction{<:Any,<:A
     leadcbs = blockstructure(contacts(gunit))
     leadorbs = contact_sites_to_orbitals(leadsites, leadcbs)
     solver´ = SelfEnergySchurSolver(fsolver, negative, leadorbs)
-    hlead = parent(glead)
+    hlead = copy_lattice(parent(glead))
+    translate!(hlead, displacement)
     boundary = solver(glead).boundary
-    plottables = (hlead, negative, transform, displacement, boundary)
+    plottables = (hlead, negative, boundary)
     return SelfEnergy(solver´, lsparent, plottables)
 end
 
@@ -728,13 +730,17 @@ hcoupling(s::SelfEnergyUnicellSchurSolver) = s.hcoupling
 # through the model coupling. We thus first apply the model to the 0D lattice of hparent's
 # selected surface plus the lead unit cell (checking one unit cell is enough), and then
 # build an extended self energy
-function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunction{<:Any,<:Any,1,<:AppliedSchurGreenSolver}, model::AbstractModel; negative = false, transform = missing, kw...)
+function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunction{<:Any,<:Any,1,<:AppliedSchurGreenSolver}, model::AbstractModel; negative = false, kw...)
     isempty(contacts(glead)) || argerror("Tried to attach a lead with $(length(selfenergies(contacts(glead)))) contacts. \nCurrently, a lead with contacts cannot be contacted to another system using the simple `attach(x, glead; ...)` syntax. Use `attach(x, glead[...], model; ...)` instead")
     schursolver = solver(glead)
+    boundary = solver(glead).boundary
     gunit = copy_lattice(negative ? schursolver.gL : schursolver.gR)
-    lat0lead = lattice(parent(gunit))
-    sitesunit = sites(lat0lead)
-    transform === missing || (sitesunit .= transform.(sitesunit))
+    lat0lead = lattice(gunit)
+    if isfinite(boundary)
+        bm = bravais_matrix(lattice(glead))
+        shift = bm * boundary
+        translate!(lat0lead, shift)
+    end
     sel = siteselector(; kw...)
     lsparent = lattice(hparent)[sel]
     lat0parent = lattice0D(lsparent)
@@ -744,8 +750,7 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunction{<:Any,<:A
     hcoupling = hamiltonian(lat0, interblockmodel)
     solver´ = SelfEnergyUnicellSchurSolver(gunit, hcoupling, nparent)
     hlead = parent(glead)
-    boundary = solver(glead).boundary
-    plottables = (hlead, hcoupling, negative, transform, boundary)
+    plottables = (hlead, hcoupling, negative, boundary)
     return SelfEnergy(solver´, lsparent, plottables)
 end
 

@@ -643,28 +643,23 @@ function selfenergy_plottable(solver::Quantica.SelfEnergyModelSolver; kw...)
 end
 
 function selfenergy_plottable(s::Quantica.SelfEnergySchurSolver,
-    hlead, negative, transform, displacement, boundary; numcells = 1, kw...)
-    hlead´ = transform === missing ?
-        Quantica.translate(hlead, displacement) :
-        Quantica.transform(hlead, r -> displacement + transform(r))
-
-    cellrng = negative ? (boundary-numcells-1:boundary-1) : (boundary+1:boundary+numcells+1)
-    p1 = hlead´
+    hlead, negative, boundary; numcells = 1, kw...)
+    b = isfinite(boundary) ? round(Int, boundary) : 0
+    n = max(0, numcells)
+    cellrng = negative ? (b-n:b) : (b:b+n)
+    p1 = hlead
     k1 = (; hide = :shell, selector = siteselector(; cells = cellrng))
     return ((p1, k1),)
 end
 
 function selfenergy_plottable(s::Quantica.SelfEnergyUnicellSchurSolver,
-    hlead, hcoupling, negative, transform, boundary; numcells = 1, kw...)
+    hlead, hcoupling, negative, boundary; numcells = 1, kw...)
     p1 = hcoupling
     k1 = (; selector = siteselector())
-    hlead´ = transform === missing ?
-        hlead :
-        Quantica.transform(hlead, transform)
-    b = isfinite(boundary) ? 0 : round(Int, boundary)
+    b = isfinite(boundary) ? round(Int, boundary) : 0
     n = max(0, numcells)
     cellrng = negative ? (b-n:b) : (b:b+n)
-    p2 = hlead´
+    p2 = hlead
     k2 = (; hide = :shell, selector = siteselector(; cells = cellrng))
     return ((p1, k1), (p2, k2))
 end
