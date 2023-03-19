@@ -629,14 +629,14 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunction{<:Any,<:A
     lslead = latslice(Σlead)
     # find lead site index in lslead for each site in lsparent
     leadsites, displacement = lead_siteids_foreach_parent_siteids(lsparent, lslead, transform)
-    # translate lead site indices to lead orbital indices using lead's ContactBlockStructure
+    # convert lead site indices to lead orbital indices using lead's ContactBlockStructure
     leadcbs = blockstructure(contacts(gunit))
     leadorbs = contact_sites_to_orbitals(leadsites, leadcbs)
     solver´ = SelfEnergySchurSolver(fsolver, negative, leadorbs)
+    # translate glead unitcell by displacement, so it overlaps sel sites (modulo transform)
     hlead = copy_lattice(parent(glead))
     translate!(hlead, displacement)
-    boundary = solver(glead).boundary
-    plottables = (hlead, negative, boundary)
+    plottables = (hlead, negative)
     return SelfEnergy(solver´, lsparent, plottables)
 end
 
@@ -694,9 +694,9 @@ minimal_callsafe_copy(s::SelfEnergySchurSolver) =
 struct SelfEnergyUnicellSchurSolver{C,G,H,S<:SparseMatrixView,S´<:SparseMatrixView} <: ExtendedSelfEnergySolver
     gunit::G
     hcoupling::H
-    V´::S´
-    g⁻¹::InverseGreenBlockSparse{C}
-    V::S
+    V´::S´                              # aliases a view of hcoupling
+    g⁻¹::InverseGreenBlockSparse{C}     # aliases the one in solver(gunit)::AppliedSparseLUGreenSolver
+    V::S                                # aliases a view of hcoupling
 end
 
 #region ## Constructors ##
@@ -727,30 +727,37 @@ hcoupling(s::SelfEnergyUnicellSchurSolver) = s.hcoupling
 #region ## SelfEnergy (attach) API ##
 
 # With this syntax we attach the surface unit cell of the lead (left or right) to hparent
-# through the model coupling. We thus first apply the model to the 0D lattice of hparent's
-# selected surface plus the lead unit cell (checking one unit cell is enough), and then
-# build an extended self energy
+# through the model coupling. The lead is transformed with `transform` to align it to
+# hparent. Then we apply the model to the 0D lattice of hparent's selected surface plus the
+# lead unit cell, and then build an extended self energy
 function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunction{<:Any,<:Any,1,<:AppliedSchurGreenSolver}, model::AbstractModel; negative = false, kw...)
     isempty(contacts(glead)) || argerror("Tried to attach a lead with $(length(selfenergies(contacts(glead)))) contacts. \nCurrently, a lead with contacts cannot be contacted to another system using the simple `attach(x, glead; ...)` syntax. Use `attach(x, glead[...], model; ...)` instead")
     schursolver = solver(glead)
-    boundary = solver(glead).boundary
+    hlead = copy_lattice(parent(glead))
     gunit = copy_lattice(negative ? schursolver.gL : schursolver.gR)
     lat0lead = lattice(gunit)
-    if isfinite(boundary)
-        bm = bravais_matrix(lattice(glead))
-        shift = bm * boundary
-        translate!(lat0lead, shift)
-    end
+
+    # move lattices of hlead and gunit to boundary ± 1 (if boundary is finite)
+    boundary = schursolver.boundary
+    x0 = isfinite(boundary) ? boundary : zero(boundary)
+    xunit = x0 + ifelse(negative, -1, 1)
+    bm = bravais_matrix(lattice(glead))
+    iszero(x0) || translate!(hlead, bm * SA[x0])
+    iszero(xunit) || translate!(lat0lead, bm * SA[xunit])
+
+    # combine gunit and parent sites into lat0
     sel = siteselector(; kw...)
     lsparent = lattice(hparent)[sel]
     lat0parent = lattice0D(lsparent)
     lat0 = combine(lat0parent, lat0lead)
     nparent, ntotal = nsites(lat0parent), nsites(lat0)
+
+    # apply model to lat0 to get hcoupling
     interblockmodel = interblock(model, 1:nparent, nparent+1:ntotal)
     hcoupling = hamiltonian(lat0, interblockmodel)
+
     solver´ = SelfEnergyUnicellSchurSolver(gunit, hcoupling, nparent)
-    hlead = parent(glead)
-    plottables = (hlead, hcoupling, negative, boundary)
+    plottables = (hlead, hcoupling, negative)
     return SelfEnergy(solver´, lsparent, plottables)
 end
 
