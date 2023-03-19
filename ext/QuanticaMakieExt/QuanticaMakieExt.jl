@@ -5,8 +5,8 @@ using Quantica
 using Makie.GeometryBasics
 using Makie.GeometryBasics: Ngon
 using Quantica: Lattice, LatticeSlice, AbstractHamiltonian, Harmonic, Bravais, SVector,
-      GreenFunction, argerror, harmonics, sublats, siterange, site, norm, normalize, nsites,
-      nzrange, rowvals, sanitize_SVector
+      GreenFunction, GreenSolution, argerror, harmonics, sublats, siterange, site, norm,
+      normalize, nsites, nzrange, rowvals, sanitize_SVector
 
 import Quantica: plotlattice, plotlattice!, qplot, plottables
 
@@ -666,42 +666,34 @@ end
 
 #endregion
 
-# ############################################################################################
-# # convert_arguments
-# #region
+############################################################################################
+# convert_arguments
+#region
 
-# function Makie.convert_arguments(::PointBased, lat::Lattice{<:Any,E}, sublat = missing) where {E}
-#     lat = lattice(h)
-#     sites = Point{E,Float32}[]
-#     dns = dnshell(lat)
-#     for dn in dns
-#         append_dcell_sites!(sites, dn, lat, sublatsrc)
-#     end
-#     return (sites,)
-# end
+Makie.convert_arguments(::PointBased, lat::Lattice, sublat = missing) =
+    (Point.(Quantica.sites(lat, sublat)),)
+Makie.convert_arguments(p::PointBased, h::Union{AbstractHamiltonian,GreenFunction,GreenSolution}, sublat = missing) =
+    Makie.convert_arguments(p, Quantica.lattice(h), sublat)
 
-# function Makie.convert_arguments(::PointBased, h::AbstractHamiltonian{<:Any,E}, sublatsrc = missing) where {E}
-#     lat = lattice(h)
-#     sites = Point{E,Float32}[]
-#     for har in harmonics(h)
-#         append_harmonic_sites!(sites, har, lat, sublatsrc)
-#     end
-#     return (sites,)
-# end
+Makie.convert_arguments(p::Type{<:LineSegments}, g::Union{GreenFunction,GreenSolution}, sublat = missing) =
+    Makie.convert_arguments(p, Quantica.hamiltonian(g), sublat)
 
-# # linesegments is also PointBased
-# function Makie.convert_arguments(::Type{<:LineSegments}, h::AbstractHamiltonian{<:Any,E}, sublatsrc = missing) where {E}
-#     segments = Point{E,Float32}[]
-#     append_segment!(segments, h, sublatsrc)
-#     return (segments,)
-# end
+function Makie.convert_arguments(::Type{<:LineSegments}, h::AbstractHamiltonian{<:Any,E}, sublat = missing) where {E}
+    segments = Point{E,Float32}[]
+    lat = Quantica.lattice(h)
+    for har in harmonics(h)
+        colrng = sublat === missing ? axes(h, 2) : siterange(lat, sublat)
+        mat = Quantica.unflat(har)
+        dn = Quantica.dcell(har)
+        for col in colrng, ptr in nzrange(mat, col)
+            row = rowvals(mat)[ptr]
+            row == col && continue
+            append!(segments, (site(lat, col, zero(dn)), site(lat, row, dn)))
+        end
+    end
+    return (segments,)
+end
 
-# function Makie.convert_arguments(::Type{<:LineSegments}, har::Harmonic, lat::Lattice{<:Any,E}, sublatsrc = missing) where {E}
-#     segments = Point{E,Float32}[]
-#     append_segment!(segments, har, lat, sublatsrc)
-#     return (segments,)
-# end
-
-# #endregion
+#endregion
 
 end # module
