@@ -22,7 +22,7 @@ import Quantica: plotlattice, plotlattice!, qplot, plottables
         diffuse = Vec3f(0.5),
         backlight = 4.0f0,
         shading = false,
-        shellopacity = 0.05,
+        shellopacity = 0.07,
         cellopacity = 0.03,
         cellcolor = RGBAf(0,0,1),
         sitecolor = missing,
@@ -77,7 +77,7 @@ function Quantica.qplot(g::GreenFunction; fancyaxis = true, axis = (;), figure =
     for (Σ, childkw) in zip(Quantica.selfenergies(Quantica.contacts(g)), Σkws)
         primitives = selfenergy_plottable(Quantica.solver(Σ), Quantica.plottables(Σ)...; childkw...)
         for (prim, primkw) in primitives
-            plotlattice!(ax, prim; plotkw..., siteopacity = 0.3, sitedarken = 0.6, childkw..., primkw...)
+            plotlattice!(ax, prim; plotkw..., childkw..., primkw...)
         end
     end
     plotlattice!(ax, parent(g); plotkw...)
@@ -660,7 +660,7 @@ function _selfenergy_plottable_hlead(hlead, negative, numcells)
     n = max(1, numcells)
     cellrng = negative ? (-n:-1) : (1:n)
     p = hlead
-    k = (; hide = :shell, selector = siteselector(; cells = cellrng))
+    k = (; selector = siteselector(; cells = cellrng))
     return (p, k)
 end
 
