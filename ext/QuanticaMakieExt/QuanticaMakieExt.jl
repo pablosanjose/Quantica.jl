@@ -644,24 +644,25 @@ end
 
 function selfenergy_plottable(s::Quantica.SelfEnergySchurSolver,
     hlead, negative, boundary; numcells = 1, kw...)
-    b = isfinite(boundary) ? round(Int, boundary) : 0
-    n = max(0, numcells)
-    cellrng = negative ? (b-n:b) : (b:b+n)
-    p1 = hlead
-    k1 = (; hide = :shell, selector = siteselector(; cells = cellrng))
-    return ((p1, k1),)
+    p1, k2 = _selfenergy_plottable_hlead(hlead, negative, boundary, numcells)
+    return ((p1, k2),)
 end
 
 function selfenergy_plottable(s::Quantica.SelfEnergyUnicellSchurSolver,
     hlead, hcoupling, negative, boundary; numcells = 1, kw...)
     p1 = hcoupling
     k1 = (; selector = siteselector())
+    (p2, k2) = _selfenergy_plottable_hlead(hlead, negative, boundary, numcells)
+    return ((p1, k1), (p2, k2))
+end
+
+function _selfenergy_plottable_hlead(hlead, negative, boundary, numcells)
     b = isfinite(boundary) ? round(Int, boundary) : 0
     n = max(0, numcells)
     cellrng = negative ? (b-n:b) : (b:b+n)
-    p2 = hlead
-    k2 = (; hide = :shell, selector = siteselector(; cells = cellrng))
-    return ((p1, k1), (p2, k2))
+    p = hlead
+    k = (; hide = :shell, selector = siteselector(; cells = cellrng))
+    return (p, k)
 end
 
 #endregion
