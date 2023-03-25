@@ -169,7 +169,7 @@ end
 # apply AbstractEigenSolver
 #region
 
-function apply(solver::AbstractEigenSolver, h::AbstractHamiltonian, S::Type{SVector{L,T}}, mapping, transform) where {L,T}
+function apply(solver::AbstractEigenSolver, h::AbstractHamiltonian{T}, S::Type{<:SVector{L}}, mapping, transform) where {L,T}
     B = blocktype(h)
     h´ = minimal_callsafe_copy(h)
     # Some solvers (e.g. ES.LinearAlgebra) only accept certain matrix types

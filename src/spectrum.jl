@@ -50,6 +50,8 @@ end
 # bands
 #region
 
+bands(h::AbstractHamiltonian, rngs::AbstractRange...; kw...) = bands(h, mesh(rngs...); kw...)
+
 function bands(h::AbstractHamiltonian, basemesh::Mesh{SVector{L,T}}; solver = ES.LinearAlgebra(),
               transform = missing, mapping = missing, showprogress = true, defects = (), patches = 0,
               degtol = missing, split = true, warn = true) where {T,L}

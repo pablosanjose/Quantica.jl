@@ -25,20 +25,9 @@ export sublat, lattice, supercell, bravais_matrix,
        siteselector, hopselector,
        hamiltonian, call!,
        flat, unflat, wrap, transform, transform!, translate, translate!,
-       spectrum, energies, states, bands, mesh, subbands, slice,
+       spectrum, energies, states, bands, subbands, slice,
        greenfunction, attach, contact, cellsites,
-       plotlattice, plotlattice!, qplot
-
-# export sublat, lattice, dims, supercell, bravais_matrix, siteindices, sitepositions,
-#        hopping, onsite, @onsite!, @hopping!, @block!, parameters, neighbors,
-#        ket, ketmodel, randomkets, basiskets,
-#        hamiltonian, parametric, bloch, bloch!, similarmatrix,
-#        flatten, unflatten, orbitalstructure, wrap, transform, translate, combine,
-#        spectrum, band, mesh, isometric, subbands,
-#        vertices, minima, maxima, gapedge, gap, isinband,
-#        energies, states, degeneracy,
-#        momentaKPM, dosKPM, averageKPM, densityKPM, bandrangeKPM,
-#        greens, greensolver, Schur1D
+       plotlattice, plotlattice!, plotbands, plotbands!, qplot
 
 export LatticePresets, LP, RegionPresets, RP  #, HamiltonianPresets, HP
 export EigenSolvers, ES, GreenSolvers, GS
@@ -84,10 +73,11 @@ include("presets/regions.jl")
 
 # include("precompile.jl")
 
-
 # Extension stubs for QuanticaMakieExt
 function plotlattice end
 function plotlattice! end
+function plotbands end
+function plotbands! end
 function qplot end
 
 end

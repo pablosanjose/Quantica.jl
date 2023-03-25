@@ -39,7 +39,7 @@ GeometryBasics = "0.4"
 NearestNeighbors = "0.4"
 ProgressMeter = "1.2"
 StaticArrays = "0.12.3, 0.13, 1.0"
-# Makie = "0.19.3, 0.20, 1.0"
+Makie = "0.19.3, 0.20, 1.0"
 
 [extras]
 ArnoldiMethod = "ec485272-7323-5ecc-a04f-4719b315124d"

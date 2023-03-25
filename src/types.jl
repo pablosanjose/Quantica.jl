@@ -1287,7 +1287,7 @@ end
 
 #region ## API ##
 
-(s::SpectrumSolver{T,L})(φs::Vararg{<:Any,L}) where {T,L} = s.solver(sanitize_SVector(SVector{L,T}, φs))
+(s::SpectrumSolver{T,L})(φ, φs::Vararg{<:Any,L}) where {T,L} = s.solver(sanitize_SVector(SVector{L,T}, (φ, φs...)))
 (s::SpectrumSolver{T,L})(φs::SVector{L}) where {T,L} = s.solver(sanitize_SVector(SVector{L,T}, φs))
 (s::SpectrumSolver{T,L})(φs::NTuple{L,Any}) where {T,L} = s.solver(sanitize_SVector(SVector{L,T}, φs))
 (s::SpectrumSolver{T,L})(φs...) where {T,L} =
@@ -1303,7 +1303,7 @@ end
 const MatrixView{C} = SubArray{C,2,Matrix{C},Tuple{Base.Slice{Base.OneTo{Int}}, UnitRange{Int}}, true}
 
 struct BandVertex{T<:AbstractFloat,E}
-    coordinates::SVector{E,T}
+    coordinates::SVector{E,T}       # SVector(momentum..., energy)
     states::MatrixView{Complex{T}}
 end
 
@@ -1397,7 +1397,7 @@ Base.isempty(s::Subband) = isempty(simplices(s))
 
 # Band #
 
-basemesh(b::Bands) = b.basemesh
+mesh(b::Bands) = b.mesh
 
 subbands(b::Bands) = b.subbands
 

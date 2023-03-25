@@ -7,9 +7,9 @@
     Theme(
         ssao = true,
         fxaa = true,
-        ambient = Vec3f(0.5),
+        ambient = Vec3f(0.7),
         diffuse = Vec3f(0.5),
-        backlight = 4.0f0,
+        backlight = 0.8f0,
         shading = false,
         shellopacity = 0.07,
         cellopacity = 0.03,
@@ -37,8 +37,6 @@
     )
 end
 
-Makie.plot!(plot::PlotLattice) = plotlat!(plot, to_value(plot[1]))
-
 #endregion
 
 ############################################################################################
@@ -46,15 +44,15 @@ Makie.plot!(plot::PlotLattice) = plotlat!(plot, to_value(plot[1]))
 #region
 
 function Quantica.qplot(h::Union{Lattice{<:Any,3},AbstractHamiltonian{<:Any,3}}; fancyaxis = true, axis = (;), figure = (;), inspector = false, plotkw...)
-    fig, ax = empty_fig_axis_3D(; fancyaxis, axis, figure)
+    fig, ax = empty_fig_axis_3D(plotlat_default_3D...; fancyaxis, axis, figure)
     fancyaxis ? plotlattice!(ax, h; plotkw...) :
-                plotlattice!(ax, h; flatsizefactor = 1.14, plotkw...)  # Makie BUG workaround?
+                plotlattice!(ax, h; flatsizefactor = 1, plotkw...)  # Makie BUG workaround?
     inspector && DataInspector()
     return fig
 end
 
 function Quantica.qplot(h::Union{Lattice,AbstractHamiltonian}; axis = (;), figure = (;), inspector = false, plotkw...)
-    fig, ax = empty_fig_axis_2D(; axis, figure)
+    fig, ax = empty_fig_axis_2D(plotlat_default_2D...; axis, figure)
     plotlattice!(ax, h; plotkw...)
     inspector && DataInspector()
     return fig
@@ -78,36 +76,36 @@ parse_children(::Missing) = (NamedTuple(),)
 parse_children(p::Tuple) = p
 parse_children(p::NamedTuple) = (p,)
 
-empty_fig_axis(::GreenFunction{<:Any,3}; kw...) = empty_fig_axis_3D(; kw...)
-empty_fig_axis(::GreenFunction; kw...) = empty_fig_axis_2D(; kw...)
+empty_fig_axis(::GreenFunction{<:Any,3}; kw...) =
+    empty_fig_axis_3D(plotlat_default_3D...; kw...)
+empty_fig_axis(::GreenFunction; kw...) =
+    empty_fig_axis_2D(plotlat_default_2D...; kw...)
 
-function empty_fig_axis_2D(; axis = (;), figure = (;), kw...)
-    fig = Figure(; default_figure..., figure...)
-    ax = Axis(fig[1,1]; default_axis2D..., axis...)
-    return fig, ax
-end
+const plotlat_default_figure = (; resolution = (1200, 1200), fontsize = 40)
 
-function empty_fig_axis_3D(; fancyaxis = true, axis = (;), figure = (;), kw...)
-    fig = Figure(; default_figure..., figure...)
-    ax = fancyaxis ?
-        LScene(fig[1,1]; default_lscene..., axis...) :
-        Axis3(fig[1,1]; default_axis3D..., axis...)
-    return fig, ax
-end
+const plotlat_default_axis3D = (;
+    xlabel = "x", ylabel = "y", zlabel = "z",
+    xticklabelcolor = :gray, yticklabelcolor = :gray, zticklabelcolor = :gray,
+    xspinewidth = 0.2, yspinewidth = 0.2, zspinewidth = 0.2,
+    xlabelrotation = 0, ylabelrotation = 0, zlabelrotation = 0,
+    xticklabelsize = 30, yticklabelsize = 30, zticklabelsize = 30,
+    xlabelsize = 40, ylabelsize = 40, zlabelsize = 40,
+    xlabelfont = :italic, ylabelfont = :italic, zlabelfont = :italic,
+    perspectiveness = 0.0, aspect = :data)
 
-default_figure = (; resolution = (1200, 1200), fontsize = 40)
+const plotlat_default_axis2D = (; autolimitaspect = 1)
 
-default_axis3D = (; perspectiveness = 0.0, aspect = :data)
+const plotlat_default_lscene = (;)
 
-default_axis2D = (; autolimitaspect = 1)
-
-default_lscene = (;)
-
+const plotlat_default_2D =
+    (plotlat_default_figure, plotlat_default_axis2D)
+const plotlat_default_3D =
+    (plotlat_default_figure, plotlat_default_axis3D, plotlat_default_lscene)
 
 #endregion
 
 ############################################################################################
-# Primitives
+# PlotLattice Primitives
 #region
 
 struct SitePrimitives{E}
@@ -266,7 +264,7 @@ embdim(p::HoppingPrimitives{E}) where {E} = E
 
 ## update_color! ##
 
-update_colors!(p, plot) =
+update_colors!(p::Union{SitePrimitives,HoppingPrimitives}, plot) =
     update_colors!(p, plot, safeextrema(p.hues), safeextrema(p.opacities))
 
 update_colors!(p::SitePrimitives, plot, extremahues, extremaops) =
@@ -288,8 +286,10 @@ function update_colors!(p, extremahues, extremaops, pcolor, popacity, colormap, 
 end
 
 # color == missing means sublat color
-primitive_color(c, extrema, colormap, ::Missing) = RGBAf(colormap[mod1(round(Int, c), length(colormap))])
-primitive_color(c, extrema, colormap, _) = RGBAf(colormap[normalize_range(c, extrema)])
+primitive_color(color, extrema, colormap, ::Missing) =
+    RGBAf(colormap[mod1(round(Int, color), length(colormap))])
+primitive_color(color, extrema, colormap, _) =
+    RGBAf(colormap[normalize_range(color, extrema)])
 
 # opacity == missing means reduced opacity in shell
 primitite_opacity(α, extrema, ::Missing) = α
@@ -371,9 +371,10 @@ primitive_linewidth(normr, hopradius, pixelscale) = pixelscale * normr
 # PlotLattice for AbstractHamiltonian and Lattice
 #region
 
-plotlat!(plot::PlotLattice, lat::Lattice) = plotlat!(plot, hamiltonian(lat))
+Makie.plot!(plot::PlotLattice{Tuple{L}}) where {L<:Lattice} = plotlattice!(plot, hamiltonian(lat))
 
-function plotlat!(plot::PlotLattice, h::AbstractHamiltonian{<:Any,E,L}) where {E,L}
+function Makie.plot!(plot::PlotLattice{Tuple{H}}) where {E,L,H<:AbstractHamiltonian{<:Any,E,L}}
+    h = to_value(plot[1])
     lat = Quantica.lattice(h)
     sel = sanitize_selector(plot[:selector][], lat)
     asel = Quantica.apply(sel, lat)
@@ -417,12 +418,12 @@ function plotlat!(plot::PlotLattice, h::AbstractHamiltonian{<:Any,E,L}) where {E
     # plot hops
     if !hidehops
         hopopacity = plot[:hopopacity][]
-        forcetrans = hopopacity isa Function || (hopopacity isa Real && hopopacity < 1)
+        transparency = has_transparencies(hopopacity)
         if E == 3 && plot[:shading][]
-            plothops_shading!(plot, hp, forcetrans)
+            plothops_shading!(plot, hp, transparency)
             hideshell || plothops_shading!(plot, hp´, true)
         else
-            plothops_flat!(plot, hp, forcetrans)
+            plothops_flat!(plot, hp, transparency)
             hideshell || plothops_flat!(plot, hp´, true)
         end
     end
@@ -430,7 +431,7 @@ function plotlat!(plot::PlotLattice, h::AbstractHamiltonian{<:Any,E,L}) where {E
     # plot sites
     if !hidesites
         siteopacity = plot[:siteopacity][]
-        transparency = siteopacity isa Function || (siteopacity isa Real && siteopacity < 1)
+        transparency = has_transparencies(siteopacity)
         if E == 3 && plot[:shading][]
             plotsites_shading!(plot, sp, transparency)
             hideshell || plotsites_shading!(plot, sp´, true)
@@ -550,41 +551,6 @@ function plotbravais!(plot::PlotLattice, lat::Lattice{<:Any,E,L}, latslice) wher
 
     return plot
 end
-
-#endregion
-
-############################################################################################
-# tools
-#region
-
-function darken(rgba::RGBAf, v = 0.66)
-    r = max(0, min(rgba.r * (1 - v), 1))
-    g = max(0, min(rgba.g * (1 - v), 1))
-    b = max(0, min(rgba.b * (1 - v), 1))
-    RGBAf(r,g,b,rgba.alpha)
-end
-
-darken(colors::Vector, v = 0.66) = darken.(colors, Ref(v))
-
-transparent(rgba::RGBAf, v = 0.5) = RGBAf(rgba.r, rgba.g, rgba.b, rgba.alpha * v)
-
-maybedim(color, dn, dimming) = iszero(dn) ? color : transparent(color, 1 - dimming)
-
-dnshell(::Lattice{<:Any,<:Any,L}, span = -1:1) where {L} =
-    sort!(vec(SVector.(Iterators.product(ntuple(_ -> span, Val(L))...))), by = norm)
-
-ishidden(s, plot::PlotLattice) = ishidden(s, plot[:hide][])
-ishidden(s, ::Nothing) = false
-ishidden(s::Symbol, hide::Symbol) = s === hide
-ishidden(s::Symbol, hides::Tuple) = s in hides
-ishidden(ss, hides) = any(s -> ishidden(s, hides), ss)
-
-normalize_range(c::T, (min, max)) where {T} = min ≈ max ? T(c) : T((c - min)/(max - min))
-
-jointextrema(v, v´) = min(minimum(v; init = 0f0), minimum(v´; init = 0f0)), max(maximum(v; init = 0f0), maximum(v´; init = 0f0))
-
-safeextrema(v::Missing) = (Float32(0), Float32(1))
-safeextrema(v) = isempty(v) ? (Float32(0), Float32(1)) : extrema(v)
 
 #endregion
 
