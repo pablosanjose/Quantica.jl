@@ -74,9 +74,10 @@ function Makie.plot!(plot::PlotBands{Tuple{B}}) where {B<:Bands{<:Any,2}}
     linewidth = bp.sizes[bp.simps]
     linesegments!(plot, verts; color, linewidth, inspectable = false)
     if !ishidden((:nodes), plot)
+        inspector_label = (self, i, r) -> bp.tooltips[i]
         markersize = bp.sizes
         color´ = darken.(bp.colors, plot[:nodedarken][])
-        scatter!(plot, bp.verts; color = color´, markersize)
+        scatter!(plot, bp.verts; color = color´, markersize, inspector_label)
     end
     return plot
 end
@@ -96,9 +97,11 @@ function Makie.plot!(plot::PlotBands{Tuple{B}}) where {B<:Bands{<:Any,3}}
         fxaa = plot[:fxaa][])
     mesh!(plot, verts, simps; color, inspectable = false, transparency, opts...)
     if !ishidden((:nodes), plot)
+        inspector_label = (self, i, r) -> bp.tooltips[i]
         markersize = bp.sizes
         color´ = darken.(color, plot[:nodedarken][])
-        scatter!(plot, verts; color = color´, markersize, transparency, opts...)
+        scatter!(plot, verts; color = color´, markersize, transparency, inspector_label,
+            opts...)
     end
     return plot
 end
@@ -115,13 +118,14 @@ struct BandPrimitives{E}
     hues::Vector{Float32}
     opacities::Vector{Float32}
     sizes::Vector{Float32}
+    tooltips::Vector{String}
     colors::Vector{RGBAf}
 end
 
 #region ## Constructors ##
 
 BandPrimitives{E}() where {E} =
-    BandPrimitives(Point{E,Float32}[], Int[], Float32[], Float32[], Float32[], RGBAf[])
+    BandPrimitives(Point{E,Float32}[], Int[], Float32[], Float32[], Float32[], String[], RGBAf[])
 
 function bandprimitives(bands, plot)   # function barrier
     opts = (plot[:color][], plot[:opacity][], plot[:size][])
@@ -145,6 +149,7 @@ function _bandprimitives(bands::Quantica.Bands{<:Any,E}, (hue, opacity, size)) w
             push_subbandhue!(bp, hue, ψ, ϵ, k, s)
             push_subbandopacity!(bp, opacity, ψ, ϵ, k, s)
             push_subbandsize!(bp, size, ψ, ϵ, k, s)
+            push_subbandtooltip!(bp, ψ, ϵ, k, s)
         end
     end
     return bp
@@ -175,6 +180,9 @@ push_subbandopacity!(bp, opacity, ψ, ϵ, k, s) = argerror("Unrecognized opacity
 push_subbandsize!(bp, size::Real, ψ, ϵ, k, s) = push!(bp.sizes, size)
 push_subbandsize!(bp, size::Function, ψ, ϵ, k, s) = push!(bp.sizes, size(ψ, ϵ, k))
 push_subbandsize!(bp, size, ψ, ϵ, k, s) = argerror("Unrecognized size")
+
+push_subbandtooltip!(bp, ψ, ϵ, k, s) =
+    push!(bp.tooltips, "Subband $s:\n k = $k\n ϵ = $ϵ\n degeneracy = $(size(ψ, 2))")
 
 ## update_color! ##
 
