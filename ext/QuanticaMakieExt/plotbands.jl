@@ -25,14 +25,16 @@ end
 # qplot
 #region
 
-function Quantica.qplot(b::Bands{<:Any,2}; axis = (;), figure = (;), inspector = false, plotkw...)
+const BandOrSubbands{E} = Union{Bands{<:Any,E},Vector{<:Quantica.Subband{<:Any,E}}}
+
+function Quantica.qplot(b::BandOrSubbands{2}; axis = (;), figure = (;), inspector = false, plotkw...)
     fig, ax = empty_fig_axis_2D(plotbands_default_2D...; axis, figure)
     plotbands!(ax, b; plotkw...)
     inspector && DataInspector()
     return fig
 end
 
-function Quantica.qplot(b::Bands{<:Any,3}; fancyaxis = false, axis = (;), figure = (;), inspector = false, plotkw...)
+function Quantica.qplot(b::BandOrSubbands{3}; fancyaxis = false, axis = (;), figure = (;), inspector = false, plotkw...)
     fig, ax = empty_fig_axis_3D(plotbands_default_3D...; fancyaxis, axis, figure)
     plotbands!(ax, b; plotkw...)
     inspector && DataInspector()
@@ -42,7 +44,6 @@ end
 const plotbands_default_figure = (; resolution = (1200, 1200), fontsize = 40)
 
 const plotbands_default_axis3D = (;
-    xlabel = "k₁", ylabel = "k₂", zlabel = "ϵ",
     xticklabelcolor = :gray, yticklabelcolor = :gray, zticklabelcolor = :gray,
     xspinewidth = 0.2, yspinewidth = 0.2, zspinewidth = 0.2,
     xlabelrotation = 0, ylabelrotation = 0, zlabelrotation = 0,
@@ -66,7 +67,7 @@ const plotbands_default_3D =
 # PlotBands for 2D Bands
 #region
 
-function Makie.plot!(plot::PlotBands{Tuple{B}}) where {B<:Bands{<:Any,2}}
+function Makie.plot!(plot::PlotBands{Tuple{B}}) where {B<:BandOrSubbands{2}}
     bands = to_value(plot[1])
     bp = bandprimitives(bands, plot)
     verts = bp.verts[bp.simps]
@@ -82,7 +83,7 @@ function Makie.plot!(plot::PlotBands{Tuple{B}}) where {B<:Bands{<:Any,2}}
     return plot
 end
 
-function Makie.plot!(plot::PlotBands{Tuple{B}}) where {B<:Bands{<:Any,3}}
+function Makie.plot!(plot::PlotBands{Tuple{B}}) where {B<:BandOrSubbands{3}}
     bands = to_value(plot[1])
     bp = bandprimitives(bands, plot)
     verts = bp.verts
@@ -135,9 +136,12 @@ function bandprimitives(bands, plot)   # function barrier
     return bp
 end
 
-function _bandprimitives(bands::Quantica.Bands{<:Any,E}, (hue, opacity, size)) where {E}
+_bandprimitives(bands::Quantica.Bands, opts) =
+    _bandprimitives(Quantica.subbands(bands), opts)
+
+function _bandprimitives(subbands::Vector{S}, (hue, opacity, size)) where {E,S<:Quantica.Subband{<:Any,E}}
     bp = BandPrimitives{E}()
-    for (s, subband) in enumerate(Quantica.subbands(bands))
+    for (s, subband) in enumerate(subbands)
         offset = length(bp.verts)
         append!(bp.simps, offset .+ reinterpret(Int, Quantica.simplices(subband)))
         for vert in Quantica.vertices(subband)
