@@ -27,7 +27,7 @@ export sublat, lattice, supercell, bravais_matrix,
        flat, unflat, wrap, transform, transform!, translate, translate!,
        spectrum, energies, states, bands, subbands, slice,
        greenfunction, attach, contact, cellsites,
-       plotlattice, plotlattice!, plotbands, plotbands!, qplot
+       plotlattice, plotlattice!, plotbands, plotbands!, qplot, qplot!
 
 export LatticePresets, LP, RegionPresets, RP  #, HamiltonianPresets, HP
 export EigenSolvers, ES, GreenSolvers, GS
@@ -79,5 +79,6 @@ function plotlattice! end
 function plotbands end
 function plotbands! end
 function qplot end
+function qplot! end
 
 end

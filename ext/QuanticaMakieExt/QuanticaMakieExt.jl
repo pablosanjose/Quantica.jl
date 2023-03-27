@@ -5,11 +5,11 @@ using Quantica
 using Makie.GeometryBasics
 using Makie.GeometryBasics: Ngon
 using Quantica: Lattice, LatticeSlice, AbstractHamiltonian, Harmonic, Bravais, SVector,
-      GreenFunction, GreenSolution, Bands,
+      GreenFunction, GreenSolution,
       argerror, harmonics, sublats, siterange, site, norm,
       normalize, nsites, nzrange, rowvals, sanitize_SVector
 
-import Quantica: plotlattice, plotlattice!, plotbands, plotbands!, qplot
+import Quantica: plotlattice, plotlattice!, plotbands, plotbands!, qplot, qplot!
 
 include("plotlattice.jl")
 include("plotbands.jl")

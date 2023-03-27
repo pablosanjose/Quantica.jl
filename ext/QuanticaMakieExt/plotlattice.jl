@@ -72,6 +72,9 @@ function Quantica.qplot(g::GreenFunction; fancyaxis = true, axis = (;), figure =
     return fig
 end
 
+Quantica.qplot!(x::Union{Lattice,AbstractHamiltonian,GreenFunction}; kw...) =
+    plotlattice!(x; kw...)
+
 parse_children(::Missing) = (NamedTuple(),)
 parse_children(p::Tuple) = p
 parse_children(p::NamedTuple) = (p,)
@@ -209,6 +212,8 @@ end
 push_sitehue!(sp, ::Missing, i, r, s) = push!(sp.hues, s)
 push_sitehue!(sp, sitecolor::Real, i, r, s) = push!(sp.hues, sitecolor)
 push_sitehue!(sp, sitecolor::Function, i, r, s) = push!(sp.hues, sitecolor(i, r))
+push_sitehue!(sp, ::Symbol, i, r, s) = push!(sp.hues, 0f0)
+push_sitehue!(sp, ::Makie.Colorant, i, r, s) = push!(sp.hues, 0f0)
 push_sitehue!(sp, sitecolor, i, r, s) = argerror("Unrecognized sitecolor")
 
 push_siteopacity!(sp, ::Missing, bop, i, r, flag) = push!(sp.opacities, flag ? 1.0 : bop)
@@ -242,6 +247,8 @@ end
 push_hophue!(hp, ::Missing, ij, rdr, s) = push!(hp.hues, s)
 push_hophue!(hp, hopcolor::Real, ij, rdr, s) = push!(hp.hues, hopcolor)
 push_hophue!(hp, hopcolor::Function, ij, rdr, s) = push!(hp.hues, hopcolor(ij, rdr))
+push_hophue!(hp, ::Symbol, ij, rdr, s) = push!(hp.hues, 0f0)
+push_hophue!(hp, ::Makie.Colorant, ij, rdr, s) = push!(hp.hues, 0f0)
 push_hophue!(hp, hopcolor, ij, rdr, s) = argerror("Unrecognized hopcolor")
 
 push_hopopacity!(hp, ::Missing, bop, ij, rdr, opacityflag) = push!(hp.opacities, opacityflag ? 1.0 : bop)
@@ -288,6 +295,10 @@ end
 # color == missing means sublat color
 primitive_color(color, extrema, colormap, ::Missing) =
     RGBAf(colormap[mod1(round(Int, color), length(colormap))])
+primitive_color(color, extrema, colormap, colorname::Symbol) =
+    parse(RGBAf, colorname)
+primitive_color(color, extrema, colormap, pcolor::Makie.Colorant) =
+    convert(RGBAf, pcolor)
 primitive_color(color, extrema, colormap, _) =
     RGBAf(colormap[normalize_range(color, extrema)])
 

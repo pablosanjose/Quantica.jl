@@ -14,7 +14,8 @@
         opacity = 1.0,
         size = 3,
         maxsize = 6,
-        nodedarken = 0.6,
+        nodesizefactor = 4,
+        nodedarken = 0.8,
         hide = ()
     )
 end
@@ -23,23 +24,29 @@ end
 
 ############################################################################################
 # qplot
+#   Supports plotting b::Bands, but also b[...]::Vector{Subbands} and
+#   slice(b, ...)::Vector{Mesh}
 #region
 
-const BandOrSubbands{E} = Union{Bands{<:Any,E},Vector{<:Quantica.Subband{<:Any,E}}}
+const BandOrSubbandsOrMeshes =
+    Union{Quantica.Bands,AbstractVector{<:Quantica.Subband},AbstractVector{<:Quantica.Mesh}}
 
-function Quantica.qplot(b::BandOrSubbands{2}; axis = (;), figure = (;), inspector = false, plotkw...)
-    fig, ax = empty_fig_axis_2D(plotbands_default_2D...; axis, figure)
+function Quantica.qplot(b::BandOrSubbandsOrMeshes; fancyaxis = true, axis = (;), figure = (;), inspector = false, plotkw...)
+    meshes = collect(Quantica.meshes(b))
+    E = Quantica.embdim(first(meshes))
+    fig, ax = if E < 3
+        empty_fig_axis_2D(plotbands_default_2D...; axis, figure)
+    elseif E == 3
+        empty_fig_axis_3D(plotbands_default_3D...; fancyaxis, axis, figure)
+    else
+        argerror("Cannot represent a mesh in an $E-dimensional embedding space")
+    end
     plotbands!(ax, b; plotkw...)
     inspector && DataInspector()
     return fig
 end
 
-function Quantica.qplot(b::BandOrSubbands{3}; fancyaxis = false, axis = (;), figure = (;), inspector = false, plotkw...)
-    fig, ax = empty_fig_axis_3D(plotbands_default_3D...; fancyaxis, axis, figure)
-    plotbands!(ax, b; plotkw...)
-    inspector && DataInspector()
-    return fig
-end
+Quantica.qplot!(b::BandOrSubbandsOrMeshes; kw...) = plotbands!(b; kw...)
 
 const plotbands_default_figure = (; resolution = (1200, 1200), fontsize = 40)
 
@@ -52,7 +59,7 @@ const plotbands_default_axis3D = (;
     xlabelfont = :italic, ylabelfont = :italic, zlabelfont = :italic,
     perspectiveness = 0.0, aspect = :data)
 
-const plotbands_default_axis2D = (; xlabel = "k", ylabel = "ϵ", autolimitaspect = nothing)
+const plotbands_default_axis2D = (; autolimitaspect = nothing)
 
 const plotbands_default_lscene = (;)
 
@@ -64,56 +71,10 @@ const plotbands_default_3D =
 #endregion
 
 ############################################################################################
-# PlotBands for 2D Bands
-#region
-
-function Makie.plot!(plot::PlotBands{Tuple{B}}) where {B<:BandOrSubbands{2}}
-    bands = to_value(plot[1])
-    bp = bandprimitives(bands, plot)
-    verts = bp.verts[bp.simps]
-    color = bp.colors[bp.simps]
-    linewidth = bp.sizes[bp.simps]
-    linesegments!(plot, verts; color, linewidth, inspectable = false)
-    if !ishidden((:nodes), plot)
-        inspector_label = (self, i, r) -> bp.tooltips[i]
-        markersize = bp.sizes
-        color´ = darken.(bp.colors, plot[:nodedarken][])
-        scatter!(plot, bp.verts; color = color´, markersize, inspector_label)
-    end
-    return plot
-end
-
-function Makie.plot!(plot::PlotBands{Tuple{B}}) where {B<:BandOrSubbands{3}}
-    bands = to_value(plot[1])
-    bp = bandprimitives(bands, plot)
-    verts = bp.verts
-    color = bp.colors
-    simps = simplices_matrix(bp)
-    transparency = has_transparencies(plot[:opacity][])
-    opts = (;
-        ssao = plot[:ssao][],
-        ambient = plot[:ambient][],
-        diffuse = plot[:diffuse][],
-        backlight = plot[:backlight][],
-        fxaa = plot[:fxaa][])
-    mesh!(plot, verts, simps; color, inspectable = false, transparency, opts...)
-    if !ishidden((:nodes), plot)
-        inspector_label = (self, i, r) -> bp.tooltips[i]
-        markersize = bp.sizes
-        color´ = darken.(color, plot[:nodedarken][])
-        scatter!(plot, verts; color = color´, markersize, transparency, inspector_label,
-            opts...)
-    end
-    return plot
-end
-
-#endregion
-
-############################################################################################
 # PlotBands Primitives
 #region
 
-struct BandPrimitives{E}
+struct MeshPrimitives{E,S}
     verts::Vector{Point{E,Float32}}
     simps::Vector{Int}                  # flattened neighbor matrix
     hues::Vector{Float32}
@@ -125,38 +86,36 @@ end
 
 #region ## Constructors ##
 
-BandPrimitives{E}() where {E} =
-    BandPrimitives(Point{E,Float32}[], Int[], Float32[], Float32[], Float32[], String[], RGBAf[])
+MeshPrimitives{E,S}() where {E,S} =
+    MeshPrimitives{E,S}(Point{E,Float32}[], Int[], Float32[], Float32[], Float32[], String[], RGBAf[])
 
-function bandprimitives(bands, plot)   # function barrier
+function meshprimitives(meshes, plot)   # function barrier
     opts = (plot[:color][], plot[:opacity][], plot[:size][])
-    bp = _bandprimitives(bands, opts)
-    update_colors!(bp, plot)
-    update_sizes!(bp, plot)
-    return bp
+    E, S = Quantica.dims(first(meshes))
+    mp = MeshPrimitives{E,S}()
+    for (s, mesh) in enumerate(meshes)
+        bandprimitives!(mp, mesh, s, opts)
+    end
+    update_colors!(mp, plot)
+    update_sizes!(mp, plot)
+    return mp
 end
 
-_bandprimitives(bands::Quantica.Bands, opts) =
-    _bandprimitives(Quantica.subbands(bands), opts)
-
-function _bandprimitives(subbands::Vector{S}, (hue, opacity, size)) where {E,S<:Quantica.Subband{<:Any,E}}
-    bp = BandPrimitives{E}()
-    for (s, subband) in enumerate(subbands)
-        offset = length(bp.verts)
-        append!(bp.simps, offset .+ reinterpret(Int, Quantica.simplices(subband)))
-        for vert in Quantica.vertices(subband)
-            ψ = Quantica.states(vert)
-            kϵ = Quantica.coordinates(vert)
-            k = Quantica.base_coordinates(vert)
-            ϵ = Quantica.energy(vert)
-            push!(bp.verts, kϵ)
-            push_subbandhue!(bp, hue, ψ, ϵ, k, s)
-            push_subbandopacity!(bp, opacity, ψ, ϵ, k, s)
-            push_subbandsize!(bp, size, ψ, ϵ, k, s)
-            push_subbandtooltip!(bp, ψ, ϵ, k, s)
-        end
+function bandprimitives!(mp, mesh, s, (hue, opacity, size))
+    offset = length(mp.verts)
+    append!(mp.simps, offset .+ reinterpret(Int, Quantica.simplices(mesh)))
+    for vert in Quantica.vertices(mesh)
+        ψ = Quantica.states(vert)
+        kϵ = Quantica.coordinates(vert)
+        k = Quantica.base_coordinates(vert)
+        ϵ = Quantica.energy(vert)
+        push!(mp.verts, kϵ)
+        push_subbandhue!(mp, hue, ψ, ϵ, k, s)
+        push_subbandopacity!(mp, opacity, ψ, ϵ, k, s)
+        push_subbandsize!(mp, size, ψ, ϵ, k, s)
+        push_subbandtooltip!(mp, ψ, ϵ, k, s)
     end
-    return bp
+    return mp
 end
 
 #endregion
@@ -166,31 +125,33 @@ end
 simplices_matrix(s::Quantica.Subband) = simplices_matrix(Quantica.mesh(s))
 
 simplices_matrix(m::Quantica.Mesh) =
-    reshape(reinterpret(Int, Quantica.simplices(m)), 3, length(Quantica.simplices(m)))'
+    reshape(reinterpret(Int, Quantica.simplices(m)), Quantica.embdim(m), length(Quantica.simplices(m)))'
 
-simplices_matrix(bp::BandPrimitives{E}) where {E} = reshape(bp.simps, E, length(bp.simps) ÷ E)'
+simplices_matrix(mp::MeshPrimitives{<:Any,S}) where {S} = reshape(mp.simps, S, length(mp.simps) ÷ S)'
 
 ## push! ##
 
-push_subbandhue!(bp, ::Missing, ψ, ϵ, k, s) = push!(bp.hues, s)
-push_subbandhue!(bp, hue::Real, ψ, ϵ, k, s) = push!(bp.hues, hue)
-push_subbandhue!(bp, hue::Function, ψ, ϵ, k, s) = push!(bp.hues, hue(ψ, ϵ, k))
-push_subbandhue!(bp, hue, ψ, ϵ, k, s) = argerror("Unrecognized color")
+push_subbandhue!(mp, ::Missing, ψ, ϵ, k, s) = push!(mp.hues, s)
+push_subbandhue!(mp, hue::Real, ψ, ϵ, k, s) = push!(mp.hues, hue)
+push_subbandhue!(mp, hue::Function, ψ, ϵ, k, s) = push!(mp.hues, hue(ψ, ϵ, k))
+push_subbandhue!(mp, ::Symbol, ψ, ϵ, k, s) = push!(mp.hues, 0f0)
+push_subbandhue!(mp, ::Makie.Colorant, ψ, ϵ, k, s) = push!(mp.hues, 0f0)
+push_subbandhue!(mp, hue, ψ, ϵ, k, s) = argerror("Unrecognized color")
 
-push_subbandopacity!(bp, opacity::Real, ψ, ϵ, k, s) = push!(bp.opacities, opacity)
-push_subbandopacity!(bp, opacity::Function, ψ, ϵ, k, s) = push!(bp.opacities, opacity(ψ, ϵ, k))
-push_subbandopacity!(bp, opacity, ψ, ϵ, k, s) = argerror("Unrecognized opacity")
+push_subbandopacity!(mp, opacity::Real, ψ, ϵ, k, s) = push!(mp.opacities, opacity)
+push_subbandopacity!(mp, opacity::Function, ψ, ϵ, k, s) = push!(mp.opacities, opacity(ψ, ϵ, k))
+push_subbandopacity!(mp, opacity, ψ, ϵ, k, s) = argerror("Unrecognized opacity")
 
-push_subbandsize!(bp, size::Real, ψ, ϵ, k, s) = push!(bp.sizes, size)
-push_subbandsize!(bp, size::Function, ψ, ϵ, k, s) = push!(bp.sizes, size(ψ, ϵ, k))
-push_subbandsize!(bp, size, ψ, ϵ, k, s) = argerror("Unrecognized size")
+push_subbandsize!(mp, size::Real, ψ, ϵ, k, s) = push!(mp.sizes, size)
+push_subbandsize!(mp, size::Function, ψ, ϵ, k, s) = push!(mp.sizes, size(ψ, ϵ, k))
+push_subbandsize!(mp, size, ψ, ϵ, k, s) = argerror("Unrecognized size")
 
-push_subbandtooltip!(bp, ψ, ϵ, k, s) =
-    push!(bp.tooltips, "Subband $s:\n k = $k\n ϵ = $ϵ\n degeneracy = $(size(ψ, 2))")
+push_subbandtooltip!(mp, ψ, ϵ, k, s) =
+    push!(mp.tooltips, "Subband $s:\n k = $k\n ϵ = $ϵ\n degeneracy = $(size(ψ, 2))")
 
 ## update_color! ##
 
-function update_colors!(p::BandPrimitives, plot)
+function update_colors!(p::MeshPrimitives, plot)
     extremahues = safeextrema(p.hues)
     extremaops = safeextrema(p.opacities)
     color = plot[:color][]
@@ -202,7 +163,7 @@ end
 
 ## update_sizes! ##
 
-function update_sizes!(p::BandPrimitives, plot)
+function update_sizes!(p::MeshPrimitives, plot)
     extremasizes = safeextrema(p.sizes)
     size = plot[:size][]
     maxsize = plot[:maxsize][]
@@ -221,6 +182,54 @@ primitive_size(normr, size::Number, maxsize) = size
 primitive_size(normr, size, maxsize) = maxsize * normr
 
 #endregion
+#endregion
+
+############################################################################################
+# PlotBands for 2D Bands
+#region
+
+function Makie.plot!(plot::PlotBands{Tuple{S}}) where {S<:BandOrSubbandsOrMeshes}
+    meshes = Quantica.meshes(to_value(plot[1]))
+    mp = meshprimitives(meshes, plot)
+    return plotmeshes!(plot, mp)
+end
+
+function plotmeshes!(plot, mp::MeshPrimitives{<:Any,2})
+    verts = mp.verts[mp.simps]
+    color = mp.colors[mp.simps]
+    linewidth = mp.sizes[mp.simps]
+    linesegments!(plot, verts; color, linewidth, inspectable = false)
+    if !ishidden((:nodes), plot)
+        inspector_label = (self, i, r) -> mp.tooltips[i]
+        markersize = mp.sizes .* plot[:nodesizefactor][]
+        color´ = darken.(mp.colors, plot[:nodedarken][])
+        scatter!(plot, mp.verts; color = color´, markersize, inspector_label)
+    end
+    return plot
+end
+
+function plotmeshes!(plot, mp::MeshPrimitives{<:Any,3})
+    verts = mp.verts
+    color = mp.colors
+    simps = simplices_matrix(mp)
+    transparency = has_transparencies(plot[:opacity][])
+    opts = (;
+        ssao = plot[:ssao][],
+        ambient = plot[:ambient][],
+        diffuse = plot[:diffuse][],
+        backlight = plot[:backlight][],
+        fxaa = plot[:fxaa][])
+    mesh!(plot, verts, simps; color, inspectable = false, transparency, opts...)
+    if !ishidden((:nodes), plot)
+        inspector_label = (self, i, r) -> mp.tooltips[i]
+        markersize = mp.sizes .* plot[:nodesizefactor][]
+        color´ = darken.(color, plot[:nodedarken][])
+        scatter!(plot, verts; color = color´, markersize, transparency, inspector_label,
+            opts...)
+    end
+    return plot
+end
+
 #endregion
 
 ############################################################################################

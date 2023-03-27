@@ -1362,12 +1362,6 @@ degeneracy(v::BandVertex) = size(v.states, 2)
 parentrows(v::BandVertex) = first(parentindices(v.states))
 parentcols(v::BandVertex) = last(parentindices(v.states))
 
-embdim(::AbstractMesh{<:SVector{E}}) where {E} = E
-
-embdim(::AbstractMesh{<:BandVertex{<:Any,E}}) where {E} = E
-
-# Subband #
-
 vertices(s::Subband, i...) = vertices(s.mesh, i...)
 
 neighbors(s::Subband, i...) = neighbors(s.mesh, i...)
@@ -1395,13 +1389,23 @@ interval_in_slice!(interval, s) = true
 
 Base.isempty(s::Subband) = isempty(simplices(s))
 
-# Band #
+mesh(s::Subband) = s.mesh
+mesh(m::Mesh) = m
 
-mesh(b::Bands) = b.mesh
+meshes(b::Bands) = (mesh(s) for s in subbands(b))
+meshes(xs) = (mesh(x) for x in xs)
 
 subbands(b::Bands) = b.subbands
 
 subbands(b::Bands, i...) = getindex(b.subbands, i...)
+
+embdim(::AbstractMesh{<:SVector{E}}) where {E} = E
+
+embdim(::AbstractMesh{<:BandVertex{<:Any,E}}) where {E} = E
+
+meshdim(::AbstractMesh{<:Any,S}) where {S} = S
+
+dims(m::AbstractMesh) = (embdim(m), meshdim(m))
 
 #endregion
 #endregion
