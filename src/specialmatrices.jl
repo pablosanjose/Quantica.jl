@@ -405,7 +405,8 @@ function inverse_green(h::AbstractHamiltonian{T,<:Any,0}, contacts) where {T}
     checkcontactindices(unitcindsall, hdim)
     solvers = solver.(Σs)
     blocks = selfenergyblocks(extoffset, unitcinds, 1, (ωblock, -hblock), solvers...)
-    mat = BlockSparseMatrix(blocks...)
+    # we need to flatten extended blocks, that come as NTuple{3}'s
+    mat = BlockSparseMatrix(tupleflatten(blocks...)...)
     source = zeros(Complex{T}, size(mat, 2), length(unitcindsall))
     nonextrng = 1:flatsize(h)
     return InverseGreenBlockSparse(mat, nonextrng, unitcinds, unitcindsall, source)

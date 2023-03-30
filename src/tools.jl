@@ -9,6 +9,12 @@ rdr((r1, r2)::Pair) = (0.5 * (r1 + r2), r2 - r1)
 @inline tuplejoin(x, y) = (x..., y...)
 @inline tuplejoin(x, y, z...) = (x..., tuplejoin(y, z...)...)
 
+@inline tupleflatten() = ()
+@inline tupleflatten(x::Tuple) = x
+@inline tupleflatten(x0, xs...) = tupleflatten((x0,), xs...)
+@inline tupleflatten(x0::Tuple, x1, xs...) = tupleflatten((x0..., x1), xs...)
+@inline tupleflatten(x0::Tuple, x1::Tuple, xs...) = tupleflatten((x0..., x1...), xs...)
+
 padtuple(t, x, N) = ntuple(i -> i <= length(t) ? t[i] : x, N)
 
 @noinline internalerror(func::String) =

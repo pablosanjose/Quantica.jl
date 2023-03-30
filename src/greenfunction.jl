@@ -113,6 +113,38 @@ Base.getindex(s::GreenSlicer, ::CellOrbitals, ::CellOrbitals) =
 #endregion
 
 ############################################################################################
+# selfenergy(::GreenSolution[, contact])
+#region
+
+selfenergy(g::GreenSolution, args...) = selfenergy!(similar_contactΣ(g), g, args...)
+
+function similar_contactΣ(g::GreenSolution{T}) where {T}
+    contactbs = blockstructure(g)
+    n = flatsize(contactbs)
+    Σ = zeros(Complex{T}, n, n)
+    return Σ
+end
+
+selfenergy!(Σ, g::GreenSolution) = (addselfenergy!.(Ref(Σ), selfenergies(g)); Σ)
+selfenergy!(Σ, g::GreenSolution, i::Int) = addselfenergy!(Σ, selfenergies(g)[i])
+
+# RegularSelfEnergy case
+function addselfenergy!(Σ, b::MatrixBlock)
+    v = view(Σ, blockrows(b), blockcols(b))
+    v .+= blockmat(b)
+    return Σ
+end
+
+# ExtendedSelfEnergy case
+function addselfenergy!(Σ, (V´, g⁻¹, V)::NTuple{<:Any,MatrixBlock})
+    v = view(Σ, blockrows(V´), blockcols(V))
+    v .+= blockmat(V´)*(blockmat(g⁻¹) \ blockmat(V))
+    return Σ
+end
+
+#endregion
+
+############################################################################################
 # selfenergyblocks
 #    Build MatrixBlocks from contacts, including extended inds for ExtendedSelfEnergySolvers
 #region
@@ -143,7 +175,7 @@ function selfenergyblocks(extoffset, contactinds, ci, blocks, s::ExtendedSelfEne
     Vᵣₑ, gₑₑ⁻¹, Vₑᵣ = shiftedmatblocks(call!_output(s), contactinds[ci], extoffset)
     extoffset += size(gₑₑ⁻¹, 1)
     # there is no minus sign here!
-    return selfenergyblocks(extoffset, contactinds, ci + 1, (blocks..., Vᵣₑ, gₑₑ⁻¹, Vₑᵣ), ss...)
+    return selfenergyblocks(extoffset, contactinds, ci + 1, (blocks..., (Vᵣₑ, gₑₑ⁻¹, Vₑᵣ)), ss...)
 end
 
 function shiftedmatblocks((Vᵣₑ, gₑₑ⁻¹, Vₑᵣ)::NTuple{3,AbstractArray}, cinds, shift)

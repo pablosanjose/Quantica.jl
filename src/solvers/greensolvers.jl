@@ -7,7 +7,7 @@
 #      - minimal_callsafe_copy(gs)
 #   This GreenSolution provides in particular:
 #      - GreenSlicer to compute e.g. G[gi, gi´]::AbstractMatrix for indices gi, see below
-#      - linewidth flat matrix Γᵢ for each contact
+#      - Selfenergy for each contact
 #      - LatticeSlice for merged contacts
 #      - bs::ContactBlockStructure for contacts LatticeSlice
 #   All gs::GreenSlicer's must implement

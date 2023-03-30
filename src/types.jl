@@ -967,13 +967,6 @@ Base.:-(b::MatrixBlock) =
     return nothing
 end
 
-function linewidth(Σ::MatrixBlock)
-    Σmat = blockmat(Σ)
-    Γ = Σmat - Σmat'
-    Γ .*= im
-    return Γ
-end
-
 minimal_callsafe_copy(s::BlockSparseMatrix) = BlockSparseMatrix(copy(s.mat), s.blocks, s.ptrs)
 
 minimal_callsafe_copy(s::BlockMatrix) = BlockMatrix(copy(s.mat), s.blocks)
@@ -1668,10 +1661,10 @@ end
 # Allows gω[contact(i), contact(j)] for i,j integer Σs indices ("contacts")
 # Allows gω[cell, cell´] using T-matrix, with cell::Union{SVector,CellSites}
 # Allows also view(gω, ...)
-struct GreenSolution{T,E,L,S<:GreenSlicer,H<:AbstractHamiltonian{T,E,L},Σ<:NTuple{<:Any,MatrixBlock}}
+struct GreenSolution{T,E,L,S<:GreenSlicer,H<:AbstractHamiltonian{T,E,L},Σ}
     parent::H
-    slicer::S                             # gives G(ω; p...)[i,j] for i,j::AppliedGreenIndex
-    contactΣs::Σ                          # selfenergy Σ(ω)::MatrixBlock for each contact
+    slicer::S       # gives G(ω; p...)[i,j] for i,j::AppliedGreenIndex
+    contactΣs::Σ    # selfenergy Σ(ω)::MatrixBlock or NTuple{3,MatrixBlock} for each contact
     contactbs::ContactBlockStructure{L}
 end
 
