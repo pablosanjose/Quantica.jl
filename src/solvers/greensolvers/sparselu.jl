@@ -75,9 +75,9 @@ minimal_callsafe_copy(s::SparseLUSlicer) =
 # SparseLUSlicer indexing
 #region
 
-function Base.view(s::SparseLUSlicer, i::ContactIndex, j::ContactIndex)
-    dstinds = s.unitcinds[Int(i)]
-    srcinds = s.unitcinds[Int(j)]
+function Base.view(s::SparseLUSlicer, i::Integer, j::Integer)
+    dstinds = s.unitcinds[i]
+    srcinds = s.unitcinds[j]
     source = view(s.source, :, 1:length(srcinds))
     return compute_or_retrieve_green(s, dstinds, srcinds, source)
 end

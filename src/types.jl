@@ -1625,18 +1625,6 @@ abstract type AppliedGreenSolver end
 # It should also be able to return contact G with G[]
 abstract type GreenSlicer{C<:Complex} end   # C is the eltype of the slice
 
-struct ContactIndex
-    i::Int
-end
-
-#region ## API ##
-
-contact(i::Integer) = ContactIndex(i)
-
-Base.Int(c::ContactIndex) = c.i
-
-#endregion
-
 #endregion
 
 ############################################################################################

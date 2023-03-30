@@ -64,9 +64,9 @@ Base.getindex(g::GreenFunction, i, j = i) = GreenFunctionSlice(g, i, j)
 
 Base.getindex(g::GreenSolution; kw...) = g[getindex(lattice(g); kw...)]
 
-Base.view(g::GreenSolution, i::ContactIndex, j::ContactIndex = i) = view(slicer(g), i, j)
+Base.view(g::GreenSolution, i::Integer, j::Integer = i) = view(slicer(g), i, j)
 Base.view(g::GreenSolution, i::Colon, j::Colon = i) = view(slicer(g), i, j)
-Base.getindex(g::GreenSolution, i::ContactIndex, j::ContactIndex = i) = copy(view(g, i, j))
+Base.getindex(g::GreenSolution, i::Integer, j::Integer = i) = copy(view(g, i, j))
 Base.getindex(g::GreenSolution, ::Colon, ::Colon = :) = copy(view(g, :, :))
 
 function Base.getindex(g::GreenSolution, i)
@@ -76,10 +76,10 @@ end
 
 Base.getindex(g::GreenSolution, i, j) = getindex(g, ind_to_slice(i, g), ind_to_slice(j, g))
 
-# fallback for cases where i and j are not *both* ContactIndex -> convert to OrbitalSlice
-function ind_to_slice(c::ContactIndex, g)
+# fallback for cases where i and j are not *both* contact indices -> convert to OrbitalSlice
+function ind_to_slice(c::Integer, g)
     contactbs = blockstructure(g)
-    cinds = contactinds(contactbs, Int(c))
+    cinds = contactinds(contactbs, c)
     os = orbslice(contactbs)[cinds]
     return os
 end
@@ -113,7 +113,7 @@ Base.getindex(s::GreenSlicer, ::CellOrbitals, ::CellOrbitals) =
 #endregion
 
 ############################################################################################
-# selfenergy(::GreenSolution[, contact])
+# selfenergy(::GreenSolution[, contact::Int])
 #region
 
 selfenergy(g::GreenSolution, args...) = selfenergy!(similar_contactΣ(g), g, args...)
@@ -288,8 +288,8 @@ end
 
 #region ## API ##
 
-Base.view(s::TMatrixSlicer, i::ContactIndex, j::ContactIndex) =
-    view(s.gcontacts, contactinds(s.blockstruct, Int(i)), contactinds(s.blockstruct, Int(j)))
+Base.view(s::TMatrixSlicer, i::Integer, j::Integer) =
+    view(s.gcontacts, contactinds(s.blockstruct, i), contactinds(s.blockstruct, j))
 
 Base.view(s::TMatrixSlicer, ::Colon, ::Colon) = s.gcontacts
 

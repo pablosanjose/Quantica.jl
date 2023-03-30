@@ -11,12 +11,12 @@
 #      - LatticeSlice for merged contacts
 #      - bs::ContactBlockStructure for contacts LatticeSlice
 #   All gs::GreenSlicer's must implement
-#      - view(gs, ::ContactIndex, ::ContactIndex) -> g(ω; kw...) between specific contacts
+#      - view(gs, ::Int, ::Int) -> g(ω; kw...) between specific contacts
 #      - view(gs, ::Colon, ::Colon) -> g(ω; kw...) between all contacts
 #      - gs[i::CellOrbitals, j::CellOrbitals] -> must return a Matrix for type stability
 #      - minimal_callsafe_copy(gs)
 #   The user-facing indexing API accepts:
-#      - contact(i)::ContactIndex -> Sites of Contact number i
+#      - i::Integer -> Sites of Contact number i
 #      - cellsites(cell::Tuple, sind::Int)::Subcell -> Single site in a cell
 #      - cellsites(cell::Tuple, sindcollection)::Subcell -> Site collection in a cell
 #      - cellsites(cell::Tuple, slat::Symbol)::Subcell -> Whole sublattice in a cell
