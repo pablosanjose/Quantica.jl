@@ -1520,6 +1520,8 @@ SelfEnergy(h::AbstractHamiltonian, args...; kw...) = argerror("Unknown attach/Se
 minimal_callsafe_copy(oh::OpenHamiltonian) =
     OpenHamiltonian(minimal_callsafe_copy(oh.h), minimal_callsafe_copy.(oh.selfenergies))
 
+Base.size(h::OpenHamiltonian, i...) = size(h.h, i...)
+
 #endregion
 #endregion
 
@@ -1709,6 +1711,9 @@ slicecols(g::GreenFunctionSlice) = g.cols
 Base.parent(g::GreenFunction) = g.parent
 Base.parent(g::GreenSolution) = g.parent
 Base.parent(g::GreenFunctionSlice) = g.parent
+
+Base.size(g::GreenFunction, i...) = size(g.parent, i...)
+Base.size(g::GreenSolution, i...) = size(g.parent, i...)
 
 copy_lattice(g::GreenFunction) = GreenFunction(copy_lattice(g.parent), g.solver, g.contacts)
 copy_lattice(g::GreenSolution) = GreenSolution(
