@@ -112,12 +112,12 @@ function left_right_projectors(hm::SparseMatrixCSC, hp::SparseMatrixCSC)
 end
 
 # Build a new sparse matrix mat´ with same structure as mat plus the diagonal
-# return also: (1) ptrs to mat´ for each nonzero in mat, (2) diagonal ptrs in mat´
+# Return also:
+#   (1) pointers pmat´ to mat´ for each nonzero in mat
+#   (2) diagonal ptrs pdiag´ in mat´
 function store_diagonal_ptrs(mat::SparseMatrixCSC{T}) where {T}
-    # same structure as mat + I, but avoiding accidental cancellations
-    # (note that the nonzeros of G⁻¹ = mat´ will be overwritten by update_iG! before use)
-    mat´ = mat + Diagonal(iszero.(diag(mat)))
-    pmat, pdiag = Int[], Int[]
+    mat´ = store_diagonal(mat)
+    pmat´, pdiag´ = Int[], Int[]
     rows, rows´ = rowvals(mat), rowvals(mat´)
     for col in axes(mat´, 2)
         ptrs = nzrange(mat, col)
@@ -125,15 +125,26 @@ function store_diagonal_ptrs(mat::SparseMatrixCSC{T}) where {T}
         p, p´ = first(ptrs), first(ptrs´)
         while p´ in ptrs´
             row´ = rows´[p´]
-            row´ == col && push!(pdiag, p´)
+            row´ == col && push!(pdiag´, p´)
             if p in ptrs && row´ == rows[p]
-                push!(pmat, p´)
+                push!(pmat´, p´)
                 p += 1
             end
             p´ += 1
         end
     end
-    return mat´, (pmat, pdiag)
+    return mat´, (pmat´, pdiag´)
+end
+
+# ensure diagonal is stored *without* dropping any structural zeros
+function store_diagonal(mat::SparseMatrixCSC{T}) where {T}
+    m, n = size(mat)
+    d = min(m, n)
+    I, J, V = findnz(mat)
+    append!(I, 1:d)
+    append!(J, 1:d)
+    append!(V, Iterators.repeated(zero(T), d))
+    return sparse(I, J, V, m, n)
 end
 
 #endregion
