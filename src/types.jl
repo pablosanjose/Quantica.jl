@@ -1683,6 +1683,9 @@ selfenergies(g::GreenSolution) = g.contactΣs
 
 blockstructure(g::GreenSolution) = g.contactbs
 
+contactinds(g::GreenFunction, i...) = contactinds(contacts(g), i...)
+contactinds(g::GreenSolution, i...) = contactinds(blockstructure(g), i...)
+
 greenfunction(g::GreenFunctionSlice) = g.parent
 
 slicerows(g::GreenFunctionSlice) = g.rows

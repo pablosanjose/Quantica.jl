@@ -114,16 +114,27 @@ Base.getindex(s::GreenSlicer, ::CellOrbitals, ::CellOrbitals) =
 #endregion
 
 ############################################################################################
-# selfenergy(::GreenSolution[, contact::Int]; onlyΓ = false)
+# selfenergy(::GreenSolution[, contactinds::Int...]; onlyΓ = false)
+#    if no contactinds are provided, all are returned. Otherwise, a view of Σ over contacts.
 #region
 
-function selfenergy(g::GreenSolution, args...; onlyΓ = false)
-    Σ = selfenergy!(similar_contactΣ(g), g, args...)
-    if onlyΓ
-        Σ .-= Σ'
-        Σ .*= im
-    end
+function selfenergy(g::GreenSolution; onlyΓ = false)
+    Σ = similar_contactΣ(g)
+    selfenergy!(Σ, g)
+    onlyΓ && extractΓ!(Σ)
     return Σ
+end
+
+function selfenergy(g::GreenSolution, cind::Int, cinds::Int...; onlyΓ = false)
+    Σ = similar_contactΣ(g)
+    selfenergy!(Σ, g, cind, cinds...)
+    onlyΓ && extractΓ!(Σ)
+    # view over selected contacts
+    inds = copy(contactinds(g, cind))
+    foreach(i -> append!(inds, contactinds(g, i)), cinds)
+    unique!(sort!(inds))
+    Σv = view(Σ, inds, inds)
+    return Σv
 end
 
 function similar_contactΣ(g::GreenSolution{T}) where {T}
@@ -133,8 +144,11 @@ function similar_contactΣ(g::GreenSolution{T}) where {T}
     return Σ
 end
 
-selfenergy!(Σ, g::GreenSolution) = (addselfenergy!.(Ref(Σ), selfenergies(g)); Σ)
-selfenergy!(Σ, g::GreenSolution, i::Int) = addselfenergy!(Σ, selfenergies(g)[i])
+selfenergy!(Σ, g::GreenSolution) = addselfenergy!.(Ref(Σ), selfenergies(g))
+selfenergy!(Σ, g::GreenSolution, i::Int, is...) =
+    addselfenergy!(addselfenergy!(Σ, selfenergies(g)[i]), g, is...)
+
+addselfenergy!(Σ, ::GreenSolution) = Σ
 
 # RegularSelfEnergy case
 function addselfenergy!(Σ, b::MatrixBlock)
@@ -147,6 +161,12 @@ end
 function addselfenergy!(Σ, (V´, g⁻¹, V)::NTuple{<:Any,MatrixBlock})
     v = view(Σ, blockrows(V´), blockcols(V))
     v .+= blockmat(V´)*(blockmat(g⁻¹) \ blockmat(V))
+    return Σ
+end
+
+function extractΓ!(Σ)
+    Σ .-= Σ'
+    Σ .*= im
     return Σ
 end
 
