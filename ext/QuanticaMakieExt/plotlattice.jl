@@ -11,6 +11,7 @@
         diffuse = Vec3f(0.5),
         backlight = 0.8f0,
         shading = false,
+        force_transparency = false,
         shellopacity = 0.07,
         cellopacity = 0.03,
         cellcolor = RGBAf(0,0,1),
@@ -67,7 +68,9 @@ function Quantica.qplot(g::GreenFunction; fancyaxis = true, axis = (;), figure =
             plotlattice!(ax, prim; plotkw..., childkw..., primkw...)
         end
     end
-    plotlattice!(ax, parent(g); plotkw...)
+    # Makie BUG: To allow inspector to show topmost tooltip, it must be transparent
+    # if other layers (here the leads) are transparent
+    plotlattice!(ax, parent(g); plotkw..., force_transparency = inspector)
     inspector && DataInspector()
     return fig
 end
@@ -429,10 +432,10 @@ function Makie.plot!(plot::PlotLattice{Tuple{H}}) where {E,L,H<:AbstractHamilton
     # plot hops
     if !hidehops
         hopopacity = plot[:hopopacity][]
-        transparency = has_transparencies(hopopacity)
+        transparency = plot[:force_transparency][] || has_transparencies(hopopacity)
         if E == 3 && plot[:shading][]
-            plothops_shading!(plot, hp, transparency)
-            hideshell || plothops_shading!(plot, hp´, true)
+            plothops_shaded!(plot, hp, transparency)
+            hideshell || plothops_shaded!(plot, hp´, true)
         else
             plothops_flat!(plot, hp, transparency)
             hideshell || plothops_flat!(plot, hp´, true)
@@ -442,10 +445,10 @@ function Makie.plot!(plot::PlotLattice{Tuple{H}}) where {E,L,H<:AbstractHamilton
     # plot sites
     if !hidesites
         siteopacity = plot[:siteopacity][]
-        transparency = has_transparencies(siteopacity)
+        transparency = plot[:force_transparency][] || has_transparencies(siteopacity)
         if E == 3 && plot[:shading][]
-            plotsites_shading!(plot, sp, transparency)
-            hideshell || plotsites_shading!(plot, sp´, true)
+            plotsites_shaded!(plot, sp, transparency)
+            hideshell || plotsites_shaded!(plot, sp´, true)
         else
             plotsites_flat!(plot, sp, transparency)
             hideshell || plotsites_flat!(plot, sp´, true)
@@ -469,7 +472,7 @@ function joint_colors_radii_update!(p, p´, plot)
     return nothing
 end
 
-function plotsites_shading!(plot::PlotLattice, sp::SitePrimitives, transparency)
+function plotsites_shaded!(plot::PlotLattice, sp::SitePrimitives, transparency)
     inspector_label = (self, i, r) -> sp.tooltips[i]
     meshscatter!(plot, sp.centers; color = sp.colors, markersize = sp.radii,
             markerspace = :data,
@@ -500,7 +503,7 @@ function plotsites_flat!(plot::PlotLattice, sp::SitePrimitives, transparency)
     return plot
 end
 
-function plothops_shading!(plot::PlotLattice, hp::HoppingPrimitives, transparency)
+function plothops_shaded!(plot::PlotLattice, hp::HoppingPrimitives, transparency)
     inspector_label = (self, i, r) -> hp.tooltips[i]
     scales = primitive_scales(hp, plot)
     cyl = Cylinder(Point3f(0., 0., -1.0), Point3f(0., 0, 1.0), Float32(1))

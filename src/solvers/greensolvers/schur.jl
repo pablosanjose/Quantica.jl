@@ -624,7 +624,8 @@ end
 
 # This syntax checks that the selected sites of hparent match the L/R surface of the
 # semi-infinite lead (possibly by first transforming the lead lattice with `transform`)
-# and if so, builds the extended Self Energy directly, with the correct site order
+# and if so, builds the extended Self Energy directly, using the same intercell coupling of
+# the lead, but using the correct site order of hparent
 function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunction{<:Any,<:Any,1,<:AppliedSchurGreenSolver}; negative = false, transform = missing, kw...)
     isempty(contacts(glead)) || argerror("Tried to attach a lead with $(length(selfenergies(contacts(glead)))) contacts. \nCurrently, a lead with contacts cannot be contacted to another system using the simple `attach(x, glead; ...)` syntax. Use `attach(x, glead, model; ...)` instead")
     sel = siteselector(; kw...)

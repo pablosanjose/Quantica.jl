@@ -113,10 +113,17 @@ Base.getindex(s::GreenSlicer, ::CellOrbitals, ::CellOrbitals) =
 #endregion
 
 ############################################################################################
-# selfenergy(::GreenSolution[, contact::Int])
+# selfenergy(::GreenSolution[, contact::Int]; onlyΓ = false)
 #region
 
-selfenergy(g::GreenSolution, args...) = selfenergy!(similar_contactΣ(g), g, args...)
+function selfenergy(g::GreenSolution, args...; onlyΓ = false)
+    Σ = selfenergy!(similar_contactΣ(g), g, args...)
+    if onlyΓ
+        Σ .-= Σ'
+        Σ .*= im
+    end
+    return Σ
+end
 
 function similar_contactΣ(g::GreenSolution{T}) where {T}
     contactbs = blockstructure(g)
