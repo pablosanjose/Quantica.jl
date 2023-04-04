@@ -31,13 +31,6 @@ default_green_solver(::AbstractHamiltonian1D) = GS.Schur()
 (g::GreenFunctionSlice)(; params...) = minimal_callsafe_copy(call!(g; params...))
 (g::GreenFunctionSlice)(ω; params...) = copy(call!(g, ω; params...))
 
-function call!(g::GreenFunction; params...)
-    h´ = call!(hamiltonian(g); params...)
-    solver´ = call!(solver(g); params...)
-    contacts´ = call!(contacts(g); params...)
-    return GreenFunction(h´, solver´, contacts´)
-end
-
 function call!(g::GreenFunction, ω; params...)
     h = parent(g)
     contacts´ = contacts(g)
@@ -53,6 +46,25 @@ call!(g::GreenFunctionSlice; params...) =
 
 call!(g::GreenFunctionSlice, ω; params...) =
     call!(greenfunction(g), ω; params...)[slicerows(g), slicecols(g)]
+
+#endregion
+
+############################################################################################
+# Contacts call! API
+#region
+
+call!(c::Contacts; params...) = Contacts(call!.(c.selfenergies; params...), c.blockstruct)
+
+function call!(c::Contacts, ω; params...)
+    Σblocks = selfenergyblocks(c)
+    call!.(c.selfenergies, Ref(ω); params...) # updates matrices in Σblocks
+    return Σblocks
+end
+
+call!_output(c::Contacts) = selfenergyblocks(c)
+
+minimal_callsafe_copy(s::Contacts) =
+    Contacts(minimal_callsafe_copy.(s.selfenergies), s.blockstruct)
 
 #endregion
 

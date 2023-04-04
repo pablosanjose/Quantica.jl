@@ -17,6 +17,7 @@ using ExprTools
 using IntervalTrees
 using FrankenTuples
 using Statistics: mean
+using QuadGK
 
 using Infiltrator # debugging
 
@@ -27,7 +28,8 @@ export sublat, lattice, supercell, bravais_matrix,
        flat, unflat, wrap, transform, transform!, translate, translate!,
        spectrum, energies, states, bands, subbands, slice,
        greenfunction, selfenergy, attach, contact, cellsites,
-       plotlattice, plotlattice!, plotbands, plotbands!, qplot, qplot!
+       plotlattice, plotlattice!, plotbands, plotbands!, qplot, qplot!,
+       josephson
 
 export LatticePresets, LP, RegionPresets, RP  #, HamiltonianPresets, HP
 export EigenSolvers, ES, GreenSolvers, GS
@@ -45,21 +47,22 @@ include("tools.jl")
 
 # API
 include("specialmatrices.jl")
-include("selector.jl")
+include("selectors.jl")
 include("lattice.jl")
-include("slice.jl")
-include("model.jl")
+include("slices.jl")
+include("models.jl")
 include("hamiltonian.jl")
 include("supercell.jl")
 include("transform.jl")
 include("mesh.jl")
 include("spectrum.jl")
 include("greenfunction.jl")
+include("observables.jl")
 # Plumbing
 include("apply.jl")
 include("show.jl")
 include("convert.jl")
-include("sanitize.jl")
+include("sanitizers.jl")
 
 
 # Solvers

@@ -349,8 +349,8 @@ function apply(s::GS.Schur, h::AbstractHamiltonian1D, contacts::Contacts)
     lsites = stored_cols(unflat(h[-1]))
     latslice_l = lattice(h0)[cellsites((), lsites)]
     latslice_r = lattice(h0)[cellsites((), rsites)]
-    ΣR_solver = SelfEnergySchurSolver(fsolver, :R)
-    ΣL_solver = SelfEnergySchurSolver(fsolver, :L)
+    ΣR_solver = SelfEnergySchurSolver(fsolver, h, :R)
+    ΣL_solver = SelfEnergySchurSolver(fsolver, h, :L)
     ΣL = SelfEnergy(ΣL_solver, latslice_l)
     ΣR = SelfEnergy(ΣR_solver, latslice_r)
 
@@ -595,8 +595,9 @@ end
 #   Implements syntax attach(h0, glead; ...)
 #region
 
-struct SelfEnergySchurSolver{T,B,V<:Union{Missing,Vector{Int}}} <: ExtendedSelfEnergySolver
+struct SelfEnergySchurSolver{T,B,V<:Union{Missing,Vector{Int}},H<:AbstractHamiltonian} <: ExtendedSelfEnergySolver
     fsolver::SchurFactorsSolver{T,B}
+    hlead::H
     isleftside::Bool
     leadtoparent::V  # orbital index in parent for each orbital in open lead surface
                      # so that Σlead[leadtoparent, leadtoparent] == Σparent
@@ -605,8 +606,8 @@ end
 
 #region ## Constructors ##
 
-SelfEnergySchurSolver(fsolver::SchurFactorsSolver, side::Symbol, parentinds = missing) =
-    SelfEnergySchurSolver(fsolver, isleftside(side), parentinds)
+SelfEnergySchurSolver(fsolver::SchurFactorsSolver, hlead, side::Symbol, parentinds = missing) =
+    SelfEnergySchurSolver(fsolver, hlead, isleftside(side), parentinds)
 
 function isleftside(side)
     if side == :L
@@ -644,10 +645,10 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunction{<:Any,<:A
     # convert lead site indices to lead orbital indices using lead's ContactBlockStructure
     leadcbs = blockstructure(contacts(gunit))
     leadorbs = contact_sites_to_orbitals(leadsites, leadcbs)
-    solver´ = SelfEnergySchurSolver(fsolver, negative, leadorbs)
     # translate glead unitcell by displacement, so it overlaps sel sites (modulo transform)
     hlead = copy_lattice(parent(glead))
     translate!(hlead, displacement)
+    solver´ = SelfEnergySchurSolver(fsolver, hlead, negative, leadorbs)
     plottables = (hlead, negative)
     return SelfEnergy(solver´, lsparent, plottables)
 end
@@ -677,7 +678,13 @@ end
 function call!(s::SelfEnergySchurSolver, ω;
                skipsolve_internal = false, params...)
     fsolver = s.fsolver
-    Rfactors, Lfactors = skipsolve_internal ? call!_output(fsolver) : call!(fsolver, ω)
+    Rfactors, Lfactors = if skipsolve_internal
+        call!_output(fsolver)
+    else
+        # first apply params to the lead Hamiltonian
+        call!(s.hlead; params...)
+        call!(fsolver, ω)
+    end
     factors = maybe_match_parent(ifelse(s.isleftside, Lfactors, Rfactors), s.leadtoparent)
     return factors
 end

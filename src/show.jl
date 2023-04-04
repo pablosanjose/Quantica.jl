@@ -283,21 +283,22 @@ Base.summary(g::GreenSolution{T,E,L,S}) where {T,E,L,S} =
 
 #endregion
 
-# ############################################################################################
-# # Coupler
-# #region
+############################################################################################
+# Josephson
+#region
 
-# function Base.show(io::IO, ::MIME"text/plain", c::Coupler)
-#     i = get(io, :indent, "")
-#     ioindent = IOContext(io, :indent => "  ")
-#     print(io, summary(c), "\n",
-# "$i  Number of blocks  : $(size(c, 2))
-# $i  Assigned blocks   : $(showassignedblocks(c))", "\n")
-#     print(ioindent, lattice(c))
-# end
+function Base.show(io::IO, J::Josephson)
+    i = get(io, :indent, "")
+    print(io, i, summary(J), "\n",
+"$i  kBT                 : $(temperature(J))
+$i  Contact             : $(contact(J))
+$i  Integration range   : [-$(maxenergy(J)), $(maxenergy(J))]
+$i  Integration options : $(display_namedtuple(options(J)))")
+end
 
-# showassignedblocks(c) = ifelse.(assignedblocks(c), :assigned, :unassigned)
+Base.summary(::Josephson{T}) where {T} =
+    "Josephson{$T}: Equilibrium (dc) Josephson current observable"
 
-# Base.summary(io::IO, ::Coupler{T,E,L,B}) where {T,E,L,B} = print(io, "Coupler{$T,$E,$L,$B}: AbstractHamiltonian coupler")
+display_namedtuple(nt::NamedTuple) = isempty(nt) ? "()" : "$nt"
 
-# #endregion
+#endregion

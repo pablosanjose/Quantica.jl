@@ -12,7 +12,7 @@ end
 #region ## Constructor ##
 
 function SelfEnergyModelSolver(h::AbstractHamiltonian, model::AbstractModel, latslice::LatticeSlice)
-    modelω = model_ω_to_param(model)  # see model.jl - transforms ω into a ω_internal param
+    modelω = model_ω_to_param(model)  # see models.jl - transforms ω into a ω_internal param
     siteinds = Int[]
     # this converts latslice to a 0D Lattice lat0
     # and fills siteinds::Vector{Int} with the latslice index for each lat0 site

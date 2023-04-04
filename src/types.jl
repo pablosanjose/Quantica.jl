@@ -164,7 +164,7 @@ Base.copy(l::Lattice) = deepcopy(l)
 #endregion
 
 ############################################################################################
-# Selectors  -  see selector.jl for methods
+# Selectors  -  see selectors.jl for methods
 #region
 
 struct SiteSelector{F,S,C}
@@ -246,7 +246,7 @@ Base.adjoint(s::HopSelector) = HopSelector(s.region, s.sublats, s.dcells, s.rang
 #endregion
 
 ############################################################################################
-# LatticeSlice and OrbitalSlice - see slice.jl for methods
+# LatticeSlice and OrbitalSlice - see slices.jl for methods
 #   Encodes subsets of sites (or orbitals) of a lattice in different cells. Produced e.g. by
 #   lat[siteselector]. No ordering is guaranteed, but cells and sites must both be unique
 #region
@@ -335,7 +335,7 @@ Base.length(s::CellSites) = nsites(s)
 #endregion
 
 ############################################################################################
-# Models  -  see model.jl for methods
+# Models  -  see models.jl for methods
 #region
 
 abstract type AbstractModel end
@@ -536,7 +536,7 @@ end
 #endregion
 
 ############################################################################################
-# Model Modifiers  -  see model.jl for methods
+# Model Modifiers  -  see models.jl for methods
 #region
 
 abstract type AbstractModifier end
@@ -1592,19 +1592,6 @@ contactinds(b::ContactBlockStructure, i) = 1 <= i <= length(b.contactinds) ? b.c
     argerror("Cannot access contact $i, there are $(length(b.contactinds)) contacts")
 
 Base.isempty(c::Contacts) = isempty(selfenergies(c))
-
-call!(c::Contacts; params...) = Contacts(call!.(c.selfenergies; params...), c.blockstruct)
-
-function call!(c::Contacts, ω; params...)
-    Σblocks = selfenergyblocks(c)
-    call!.(c.selfenergies, Ref(ω); params...) # updates matrices in Σblocks
-    return Σblocks
-end
-
-call!_output(c::Contacts) = selfenergyblocks(c)
-
-minimal_callsafe_copy(s::Contacts) =
-    Contacts(minimal_callsafe_copy.(s.selfenergies), s.blockstruct)
 
 #endregion
 
