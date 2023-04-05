@@ -697,7 +697,8 @@ maybe_match_parent((V, ig, V´), leadtoparent) =
 maybe_match_parent(factors, ::Missing) = factors
 
 minimal_callsafe_copy(s::SelfEnergySchurSolver) =
-    SelfEnergySchurSolver(minimal_callsafe_copy(s.fsolver), s.isleftside, s.leadtoparent)
+    SelfEnergySchurSolver(minimal_callsafe_copy(s.fsolver), minimal_callsafe_copy(s.hlead),
+        s.isleftside, s.leadtoparent)
 
 #endregion
 
@@ -744,7 +745,7 @@ hcoupling(s::SelfEnergyCouplingSchurSolver) = s.hcoupling
 #endregion
 
 #region ## SelfEnergy (attach) API ##
-using Infiltrator
+
 # With this syntax we attach the surface unit cell of the lead (left or right) to hparent
 # through the model coupling. The lead is transformed with `transform` to align it to
 # hparent. Then we apply the model to the 0D lattice of hparent's selected surface plus the

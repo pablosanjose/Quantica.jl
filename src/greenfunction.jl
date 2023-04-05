@@ -156,10 +156,20 @@ function similar_contactΣ(g::Union{GreenFunction{T},GreenSolution{T}}) where {T
     return Σ
 end
 
-selfenergy!(Σ, g::GreenSolution) = addselfenergy!.(Ref(Σ), selfenergies(g))
-selfenergy!(Σ, g::GreenSolution, i::Int, is...) =
-    addselfenergy!(addselfenergy!(Σ, selfenergies(g)[i]), g, is...)
+function selfenergy!(Σ::AbstractMatrix{T}, g::GreenSolution) where {T}
+    fill!(Σ, zero(T))
+    addselfenergy!.(Ref(Σ), selfenergies(g))
+    return Σ
+end
 
+function selfenergy!(Σ::AbstractMatrix{T}, g::GreenSolution, is...) where {T}
+    fill!(Σ, zero(T))
+    addselfenergy!(Σ, g, is...)
+    return Σ
+end
+
+addselfenergy!(Σ, g::GreenSolution, i::Int, is...) =
+    addselfenergy!(addselfenergy!(Σ, selfenergies(g)[i]), g, is...)
 addselfenergy!(Σ, ::GreenSolution) = Σ
 
 # RegularSelfEnergy case

@@ -19,6 +19,7 @@ struct Josephson{T<:AbstractFloat,G<:GreenFunction{T},O<:NamedTuple} <: Observab
     path::FunctionWrapper{Tuple{Complex{T},Complex{T}},Tuple{T}}
     opts::O
     Σ::Matrix{Complex{T}}
+    points::Vector{Tuple{T,T}}
 end
 
 #region ## Constructors ##
@@ -37,9 +38,10 @@ function josephson(g::GreenFunction, contactind::Integer, ωmax::Complex{T}; kBT
         dzdω = 1 + im * imz´
         return ω, dzdω
     end
-    Σ = similar_contactΣ(g)
     pathwrap = FunctionWrapper{Tuple{Complex{T},Complex{T}},Tuple{T}}(path´)
-    return Josephson(g, ωmax´, kBT´, contactind, normalsize, pathwrap, NamedTuple(kw), Σ)
+    Σ = similar_contactΣ(g)
+    points = Tuple{T,T}[]
+    return Josephson(g, ωmax´, kBT´, contactind, normalsize, pathwrap, NamedTuple(kw), Σ, points)
 end
 
 normal_size(h::AbstractHamiltonian) = normal_size(blockstructure(h))
@@ -67,7 +69,8 @@ options(J::Josephson) = J.opts
 function (J::Josephson{T})(; params...) where {T}
     ωmin = -J.ωmax
     ωmax = ifelse(iszero(J.kBT), zero(J.ωmax), J.ωmax)
-    Iᵢ, _ = quadgk(ω -> josephson_integrand(ω, J; params...), ωmin, ωmax; atol = sqrt(eps(T)), J.opts...)
+    empty!(J.points)
+    Iᵢ, err = quadgk(ω -> josephson_integrand(ω, J; params...), ωmin, ωmax; atol = sqrt(eps(T)), J.opts...)
     return Iᵢ
 end
 
@@ -76,13 +79,15 @@ function josephson_integrand(ω, J; params...)
     gω = call!(J.g, complexω; params...)
     trace = josephson_trace(gω, J)
     f = fermi(ω, J.kBT)
-    return real(f * trace * dzdω)
+    integ = real(f * trace * dzdω)
+    push!(J.points, (ω, integ))
+    return integ
 end
 
 # Do Tr[tmp*τz], where tmp = gr * Σi - Σi * gr
 function josephson_trace(gω, J)
-    Σi = selfenergy!(J.Σ, gω, J.contactind)
     gr = gω[J.contactind, J.contactind]
+    Σi = selfenergy!(J.Σ, gω, J.contactind)
     tmp = gr * Σi
     mul!(tmp, Σi, gr, -1, 1)
     trace = zero(eltype(tmp))

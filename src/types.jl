@@ -976,7 +976,7 @@ minimal_callsafe_copy(s::BlockSparseMatrix) = BlockSparseMatrix(copy(s.mat), min
 
 minimal_callsafe_copy(s::BlockMatrix) = BlockMatrix(copy(s.mat), minimal_callsafe_copy.(s.blocks))
 
-minimal_callsafe_copy(m::MatrixBlock) = BlockMatrix(m.block, m.rows, m.cols, m.coefficient, copy_ifnotmissing(m.denseblock))
+minimal_callsafe_copy(m::MatrixBlock) = MatrixBlock(m.block, m.rows, m.cols, m.coefficient, copy_ifnotmissing(m.denseblock))
 
 #endregion
 #endregion
