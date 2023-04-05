@@ -417,7 +417,7 @@ struct IntrablockModel{M<:AbstractModel}
     block::UnitRange{Int}
 end
 
-const AbstractBlockModel = Union{InterblockModel,IntrablockModel}
+const AbstractBlockModel{M} = Union{InterblockModel{M},IntrablockModel{M}}
 
 #region ## Constructors ##
 
