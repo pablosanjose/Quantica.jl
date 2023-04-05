@@ -385,9 +385,19 @@ primitive_linewidth(normr, hopradius, pixelscale) = pixelscale * normr
 # PlotLattice for AbstractHamiltonian and Lattice
 #region
 
-Makie.plot!(plot::PlotLattice{Tuple{L}}) where {L<:Lattice} = plotlattice!(plot, hamiltonian(lat))
+function Makie.plot!(plot::PlotLattice{Tuple{L}}) where {L<:Lattice}
+    lat = to_value(plot[1])
+    h = hamiltonian(lat)
+    return plotlattice!(plot, h; plot.attributes...)
+end
 
-function Makie.plot!(plot::PlotLattice{Tuple{H}}) where {E,L,H<:AbstractHamiltonian{<:Any,E,L}}
+function Makie.plot!(plot::PlotLattice{Tuple{L}}) where {L<:ParametricHamiltonian}
+    ph = to_value(plot[1])
+    h = ph()
+    return plotlattice!(plot, h; plot.attributes...)
+end
+
+function Makie.plot!(plot::PlotLattice{Tuple{H}}) where {E,L,H<:Hamiltonian{<:Any,E,L}}
     h = to_value(plot[1])
     lat = Quantica.lattice(h)
     sel = sanitize_selector(plot[:selector][], lat)
@@ -617,7 +627,7 @@ function selfenergy_plottable(s::Quantica.SelfEnergySchurSolver,
     return ((p1, k2),)
 end
 
-function selfenergy_plottable(s::Quantica.SelfEnergyUnicellSchurSolver,
+function selfenergy_plottable(s::Quantica.SelfEnergyCouplingSchurSolver,
     hlead, hcoupling, negative; numcells = 1, kw...)
     p1 = hcoupling
     k1 = (; selector = siteselector())
