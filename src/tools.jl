@@ -40,6 +40,9 @@ end
 
 deleteif!(test, v::AbstractVector) = deleteat!(v, (i for (i, x) in enumerate(v) if test(x)))
 
+copy_ifnotmissing(::Missing) = missing
+copy_ifnotmissing(d) = copy(d)
+
 merge_parameters!(p, m, ms...) = merge_parameters!(append!(p, parameters(m)), ms...)
 merge_parameters!(p) = unique!(sort!(p))
 

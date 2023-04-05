@@ -710,7 +710,7 @@ minimal_callsafe_copy(s::SelfEnergySchurSolver) =
 #   Implements syntax attach(h0, glead, model; ...)
 #region
 
-struct SelfEnergyUnicellSchurSolver{C,G,H,S<:SparseMatrixView,S´<:SparseMatrixView} <: ExtendedSelfEnergySolver
+struct SelfEnergyCouplingSchurSolver{C,G,H,S<:SparseMatrixView,S´<:SparseMatrixView} <: ExtendedSelfEnergySolver
     gunit::G
     hcoupling::H
     V´::S´                              # aliases a view of hcoupling
@@ -720,26 +720,26 @@ end
 
 #region ## Constructors ##
 
-function SelfEnergyUnicellSchurSolver(gunit::GreenFunction{T}, hcoupling::AbstractHamiltonian{T}, nparent) where {T}
+function SelfEnergyCouplingSchurSolver(gunit::GreenFunction{T}, hcoupling::AbstractHamiltonian{T}, nparent) where {T}
     hmatrix = call!_output(hcoupling)
     invgreen = inverse_green(solver(gunit))
     lastflatparent = last(flatrange(hcoupling, nparent))
     size(hmatrix, 1) == lastflatparent + length(orbrange(invgreen)) ||
-        internalerror("SelfEnergyUnicellSchurSolver builder: $(size(hmatrix, 1)) != $lastflatparent + $(length(orbrange(invgreen)))")
+        internalerror("SelfEnergyCouplingSchurSolver builder: $(size(hmatrix, 1)) != $lastflatparent + $(length(orbrange(invgreen)))")
     parentrng, leadrng = 1:lastflatparent, lastflatparent+1:size(hmatrix, 1)
     sizeV = size(invgreen, 1), lastflatparent
     V = SparseMatrixView(view(hmatrix, leadrng, parentrng), sizeV)
     V´ = SparseMatrixView(view(hmatrix, parentrng, leadrng), reverse(sizeV))
-    return SelfEnergyUnicellSchurSolver(gunit, hcoupling, V´,invgreen,V)
+    return SelfEnergyCouplingSchurSolver(gunit, hcoupling, V´,invgreen,V)
 end
 
 #endregion
 
 #region ## API ##
 
-h0unit(s::SelfEnergyUnicellSchurSolver) = parent(s.gunit)
+h0unit(s::SelfEnergyCouplingSchurSolver) = parent(s.gunit)
 
-hcoupling(s::SelfEnergyUnicellSchurSolver) = s.hcoupling
+hcoupling(s::SelfEnergyCouplingSchurSolver) = s.hcoupling
 
 #endregion
 
@@ -773,9 +773,10 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunction{<:Any,<:A
 
     # apply model to lat0 to get hcoupling
     interblockmodel = interblock(model, 1:nparent, nparent+1:ntotal)
-    hcoupling = hamiltonian(lat0, interblockmodel)
+    hcoupling = hamiltonian(lat0, interblockmodel;
+        orbitals = vcat(norbitals(hparent), norbitals(hlead)))
 
-    solver´ = SelfEnergyUnicellSchurSolver(gunit, hcoupling, nparent)
+    solver´ = SelfEnergyCouplingSchurSolver(gunit, hcoupling, nparent)
     plottables = (hlead, hcoupling, negative)
     return SelfEnergy(solver´, lsparent, plottables)
 end
@@ -784,7 +785,7 @@ end
 
 #region ## API ##
 
-function call!(s::SelfEnergyUnicellSchurSolver, ω; params...)
+function call!(s::SelfEnergyCouplingSchurSolver, ω; params...)
     call!(s.hcoupling, (); params...)
     call!(s.gunit, ω; params...)
     update!(s.V)
@@ -792,10 +793,10 @@ function call!(s::SelfEnergyUnicellSchurSolver, ω; params...)
     return matrix(s.V´), matrix(s.g⁻¹), matrix(s.V)
 end
 
-call!_output(s::SelfEnergyUnicellSchurSolver) = matrix(s.V´), matrix(s.g⁻¹), matrix(s.V)
+call!_output(s::SelfEnergyCouplingSchurSolver) = matrix(s.V´), matrix(s.g⁻¹), matrix(s.V)
 
-minimal_callsafe_copy(s::SelfEnergyUnicellSchurSolver) =
-    SelfEnergyUnicellSchurSolver(
+minimal_callsafe_copy(s::SelfEnergyCouplingSchurSolver) =
+    SelfEnergyCouplingSchurSolver(
         minimal_callsafe_copy(s.gunit),
         minimal_callsafe_copy(s.hcoupling),
         minimal_callsafe_copy(s.V´),

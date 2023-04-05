@@ -10,7 +10,7 @@ fermi(ω::C, kBT) where {C} =
 #   josephson(g::GreenFunctionSlice, ωmax; kBT = 0, path = ...)[i] -> Iᵢ in units of e/h
 #region
 
-struct Josephson{T<:AbstractFloat,G<:GreenFunction,O<:NamedTuple} <: Observable
+struct Josephson{T<:AbstractFloat,G<:GreenFunction{T},O<:NamedTuple} <: Observable
     g::G
     ωmax::T
     kBT::T
@@ -18,6 +18,7 @@ struct Josephson{T<:AbstractFloat,G<:GreenFunction,O<:NamedTuple} <: Observable
     normalsize::Int         # number of orbitals per site in normal Hamiltonian
     path::FunctionWrapper{Tuple{Complex{T},Complex{T}},Tuple{T}}
     opts::O
+    Σ::Matrix{Complex{T}}
 end
 
 #region ## Constructors ##
@@ -36,8 +37,9 @@ function josephson(g::GreenFunction, contactind::Integer, ωmax::Complex{T}; kBT
         dzdω = 1 + im * imz´
         return ω, dzdω
     end
+    Σ = similar_contactΣ(g)
     pathwrap = FunctionWrapper{Tuple{Complex{T},Complex{T}},Tuple{T}}(path´)
-    return Josephson(g, ωmax´, kBT´, contactind, normalsize, pathwrap, NamedTuple(kw))
+    return Josephson(g, ωmax´, kBT´, contactind, normalsize, pathwrap, NamedTuple(kw), Σ)
 end
 
 normal_size(h::AbstractHamiltonian) = normal_size(blockstructure(h))
@@ -72,20 +74,20 @@ end
 function josephson_integrand(ω, J; params...)
     complexω, dzdω = J.path(ω)
     gω = call!(J.g, complexω; params...)
-    trace = josephson_trace(gω, J.contactind, J.normalsize)
+    trace = josephson_trace(gω, J)
     f = fermi(ω, J.kBT)
     return real(f * trace * dzdω)
 end
 
 # Do Tr[tmp*τz], where tmp = gr * Σi - Σi * gr
-function josephson_trace(gω, contactind, normal)
-    Σi = selfenergy(gω, contactind)
-    gr = gω[contactind, contactind]
+function josephson_trace(gω, J)
+    Σi = selfenergy!(J.Σ, gω, J.contactind)
+    gr = gω[J.contactind, J.contactind]
     tmp = gr * Σi
     mul!(tmp, Σi, gr, -1, 1)
     trace = zero(eltype(tmp))
     for i in axes(tmp, 2)
-        c = ifelse(iseven(fld1(i, normal)), -1, 1)
+        c = ifelse(iseven(fld1(i, J.normalsize)), -1, 1)
         trace += c * tmp[i, i]
     end
     return trace

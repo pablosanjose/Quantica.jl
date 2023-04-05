@@ -149,8 +149,8 @@ function selfenergy(g::GreenSolution, cind::Int, cinds::Int...; onlyΓ = false)
     return Σv
 end
 
-function similar_contactΣ(g::GreenSolution{T}) where {T}
-    contactbs = blockstructure(g)
+function similar_contactΣ(g::Union{GreenFunction{T},GreenSolution{T}}) where {T}
+    contactbs = blockstructure(g)  # ContactBlockStructure
     n = flatsize(contactbs)
     Σ = zeros(Complex{T}, n, n)
     return Σ
@@ -172,7 +172,10 @@ end
 # ExtendedSelfEnergy case
 function addselfenergy!(Σ, (V´, g⁻¹, V)::NTuple{<:Any,MatrixBlock})
     v = view(Σ, blockrows(V´), blockcols(V))
-    v .+= blockmat(V´)*(blockmat(g⁻¹) \ blockmat(V))
+    Vd = denseblockmat(V)
+    copy!(Vd, blockmat(V))
+    ldiv!(lu(blockmat(g⁻¹)), Vd)
+    mul!(v, blockmat(V´), Vd, 1, 1)
     return Σ
 end
 
@@ -221,7 +224,8 @@ end
 function shiftedmatblocks((Vᵣₑ, gₑₑ⁻¹, Vₑᵣ)::NTuple{3,AbstractArray}, cinds, shift)
     extsize = size(gₑₑ⁻¹, 1)
     Vᵣₑ´ = MatrixBlock(Vᵣₑ, cinds, shift+1:shift+extsize)
-    Vₑᵣ´ = MatrixBlock(Vₑᵣ, shift+1:shift+extsize, cinds)
+    # adds denseblock for selfenergy ldiv
+    Vₑᵣ´ = MatrixBlock(Vₑᵣ, shift+1:shift+extsize, cinds, Matrix(Vₑᵣ))
     gₑₑ⁻¹´ = MatrixBlock(gₑₑ⁻¹, shift+1:shift+extsize, shift+1:shift+extsize)
     return Vᵣₑ´, gₑₑ⁻¹´, Vₑᵣ´
 end
@@ -296,17 +300,18 @@ end
 
 #region ## Constructors ##
 
-function TMatrixSlicer(g0slicer::GreenSlicer{C}, Σblocks::NTuple{<:Any,MatrixBlock{C}}, blockstruct) where {C}
+function TMatrixSlicer(g0slicer::GreenSlicer{C}, Σblocks, blockstruct) where {C}
     if isempty(Σblocks)
         zeromat = view(zeros(C, 0, 0), 1:0, 1:0)
         return TMatrixSlicer(g0slicer, zeromat, zeromat, blockstruct)
     else
+        Σblocks´ = tupleflatten(Σblocks...)
         os = orbslice(blockstruct)
         nos = norbs(os)
-        n = max(nos, maxrows(Σblocks), maxcols(Σblocks))        # includes extended sites
+        n = max(nos, maxrows(Σblocks´), maxcols(Σblocks´))        # includes extended sites
         Σmat = Matrix{C}(undef, n, n)
-        Σbm = BlockMatrix(Σmat, Σblocks)
-        update!(Σbm)                                            # updates Σmat with Σblocks
+        Σbm = BlockMatrix(Σmat, Σblocks´)
+        update!(Σbm)                                            # updates Σmat with Σblocks´
         g0mat = zeros(C, n, n)
         off = offsets(os)
         for (j, sj) in enumerate(subcells(os)), (i, si) in enumerate(subcells(os))
@@ -349,13 +354,5 @@ minimal_callsafe_copy(s::TMatrixSlicer) = TMatrixSlicer(minimal_callsafe_copy(s.
     s.tmatrix, s.gcontacts, s.blockstruct)
 
 #endregion
-
-#endregion
-
-############################################################################################
-# conductance
-#region
-
-conductance(g::GreenFunctionSlice, ω; params...) = conductance(call!(g, ω; params...))
 
 #endregion

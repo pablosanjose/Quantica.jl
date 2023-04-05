@@ -817,14 +817,14 @@ SparseArrays.nonzeros(s::HybridSparseBlochMatrix) = nonzeros(s.unflat)
 
   ############################################################################################
   # SparseMatrixView
-  #    View of a SparseMatrixCSC that can produce a proper SparseMatrixCSC
-  #    with self-energies as blocks. It knows which indices correspond to which contacts
+  #    View of a SparseMatrixCSC that can produce a proper (non-view) SparseMatrixCSC
+  #    of size possibly larger than the view (padded with zeros)
   #region
 
 struct SparseMatrixView{C,V<:SubArray}
     matview::V
     mat::SparseMatrixCSC{C,Int}
-    ptrs::Vector{Int}
+    ptrs::Vector{Int}           # ptrs of parent(matview) that affect mat
 end
 
 #region ## Constructor ##
@@ -844,7 +844,8 @@ function SparseMatrixView(matview::SubArray{C,<:Any,<:SparseMatrixCSC}, dims = m
         nrv, mcv = size(matview)
         nr >= nrv && mc >= mcv ||
             argerror("SparseMatrixView dims cannot be smaller than size(view) = $((nrv, mcv))")
-        mat = [matview spzeros(C, nrv, mc - mcv);
+        # it's important to preserve structural zeros in mat, which sparse(matview) does
+        mat = [sparse(matview) spzeros(C, nrv, mc - mcv);
                spzeros(C, nr - nrv, mcv) spzeros(C, nr - nrv, mc - mcv)]
     end
     return SparseMatrixView(matview, mat, ptrs)
@@ -881,11 +882,12 @@ minimal_callsafe_copy(s::SparseMatrixView) =
 
 abstract type AbstractBlockMatrix end
 
-struct MatrixBlock{C<:Number,A<:AbstractMatrix,UR,UC}
+struct MatrixBlock{C<:Number,A<:AbstractMatrix,UR,UC,D<:Union{Missing,Matrix}}
     block::A
     rows::UR             # row indices in parent matrix for each row in block
     cols::UC             # col indices in parent matrix for each col in block
-    coefficient::C      # coefficient to apply to block
+    coefficient::C       # coefficient to apply to block
+    denseblock::D        # either missing or Matrix(block), to aid in ldiv
 end
 
 struct BlockSparseMatrix{C,N,M<:NTuple{N,MatrixBlock}} <: AbstractBlockMatrix
@@ -901,14 +903,15 @@ end
 
 #region ## Constructors ##
 
-function MatrixBlock(block::AbstractMatrix{C}, rows, cols) where {C}
+function MatrixBlock(block::AbstractMatrix{C}, rows, cols, denseblock = missing) where {C}
     checkblockinds(block, rows, cols)
-    return MatrixBlock(block, rows, cols, one(C))
+    return MatrixBlock(block, rows, cols, one(C), denseblock)
 end
 
-function MatrixBlock(block::SubArray, rows, cols)
+function MatrixBlock(block::SubArray, rows, cols, denseblock = missing)
     checkblockinds(block, rows, cols)
-    return simplify_matrixblock(block, rows, cols)
+    m = simplify_matrixblock(block, rows, cols)
+    return MatrixBlock(m.mat, m.rows, m.cols, m.coefficient, denseblock)
 end
 
 BlockSparseMatrix(mblocks::MatrixBlock...) = BlockSparseMatrix(mblocks)
@@ -943,6 +946,8 @@ blockcols(m::MatrixBlock) = m.cols
 
 coefficient(m::MatrixBlock) = m.coefficient
 
+denseblockmat(m::MatrixBlock) = m.denseblock
+
 pointers(m::BlockSparseMatrix) = m.ptrs
 
 blocks(m::AbstractBlockMatrix) = m.blocks
@@ -959,7 +964,7 @@ Base.eltype(b::MatrixBlock) = eltype(blockmat(b))
 Base.eltype(m::AbstractBlockMatrix) = eltype(matrix(m))
 
 Base.:-(b::MatrixBlock) =
-    MatrixBlock(blockmat(b), blockrows(b), blockcols(b), -coefficient(b))
+    MatrixBlock(blockmat(b), blockrows(b), blockcols(b), -coefficient(b), denseblockmat(b))
 
 @noinline function checkblockinds(block, rows, cols)
     length.((rows, cols)) == size(block) && allunique(rows) &&
@@ -967,9 +972,11 @@ Base.:-(b::MatrixBlock) =
     return nothing
 end
 
-minimal_callsafe_copy(s::BlockSparseMatrix) = BlockSparseMatrix(copy(s.mat), s.blocks, s.ptrs)
+minimal_callsafe_copy(s::BlockSparseMatrix) = BlockSparseMatrix(copy(s.mat), minimal_callsafe_copy.(s.blocks), s.ptrs)
 
-minimal_callsafe_copy(s::BlockMatrix) = BlockMatrix(copy(s.mat), s.blocks)
+minimal_callsafe_copy(s::BlockMatrix) = BlockMatrix(copy(s.mat), minimal_callsafe_copy.(s.blocks))
+
+minimal_callsafe_copy(m::MatrixBlock) = BlockMatrix(m.block, m.rows, m.cols, m.coefficient, copy_ifnotmissing(m.denseblock))
 
 #endregion
 #endregion
@@ -1668,6 +1675,7 @@ slicer(g::GreenSolution) = g.slicer
 
 selfenergies(g::GreenSolution) = g.contactΣs
 
+blockstructure(g::GreenFunction) = blockstructure(g.contacts)
 blockstructure(g::GreenSolution) = g.contactbs
 
 contactinds(g::GreenFunction, i...) = contactinds(contacts(g), i...)
