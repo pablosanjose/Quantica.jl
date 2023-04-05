@@ -911,7 +911,7 @@ end
 function MatrixBlock(block::SubArray, rows, cols, denseblock = missing)
     checkblockinds(block, rows, cols)
     m = simplify_matrixblock(block, rows, cols)
-    return MatrixBlock(m.mat, m.rows, m.cols, m.coefficient, denseblock)
+    return MatrixBlock(m.block, m.rows, m.cols, m.coefficient, denseblock)
 end
 
 BlockSparseMatrix(mblocks::MatrixBlock...) = BlockSparseMatrix(mblocks)

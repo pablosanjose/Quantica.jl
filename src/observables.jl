@@ -27,21 +27,22 @@ end
 josephson(g::GreenFunction, contactind::Integer ,ωmax::Real; kw...) =
     josephson(g, contactind, ωmax + 0.0im; kw...)
 
-function josephson(g::GreenFunction, contactind::Integer, ωmax::Complex{T}; kBT = 0.0, path = x -> (abs(x)*(1-abs(x)), sign(x) - 2x), kw...) where {T}
+function josephson(g::GreenFunction, contactind::Integer, ωmax::Complex{T}; kBT = 0.0, path = x -> (x*(1-x), 1-2x), kw...) where {T}
     normalsize = normal_size(hamiltonian(g))
-    ωmax´ = real(ωmax)
+    realωmax = abs(real(ωmax))
     kBT´ = T(kBT)
     function path´(realω)
         η = imag(ωmax)
-        imz, imz´ = path((realω+η*im)/ωmax´)
-        ω = realω + im * (η + imz * ωmax´)
+        imz, imz´ = path(abs(realω)/realωmax)
+        imz´ *= sign(realω)
+        ω = realω + im * (η + imz * realωmax)
         dzdω = 1 + im * imz´
         return ω, dzdω
     end
     pathwrap = FunctionWrapper{Tuple{Complex{T},Complex{T}},Tuple{T}}(path´)
     Σ = similar_contactΣ(g)
     points = Tuple{T,T}[]
-    return Josephson(g, ωmax´, kBT´, contactind, normalsize, pathwrap, NamedTuple(kw), Σ, points)
+    return Josephson(g, realωmax, kBT´, contactind, normalsize, pathwrap, NamedTuple(kw), Σ, points)
 end
 
 normal_size(h::AbstractHamiltonian) = normal_size(blockstructure(h))
