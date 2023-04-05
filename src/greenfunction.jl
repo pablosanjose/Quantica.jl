@@ -317,12 +317,12 @@ function TMatrixSlicer(g0slicer::GreenSlicer{C}, Σblocks, blockstruct) where {C
     else
         Σblocks´ = tupleflatten(Σblocks...)
         os = orbslice(blockstruct)
-        nos = norbs(os)
-        n = max(nos, maxrows(Σblocks´), maxcols(Σblocks´))        # includes extended sites
-        Σmat = Matrix{C}(undef, n, n)
-        Σbm = BlockMatrix(Σmat, Σblocks´)
+        nreg = norbs(os)                                        # number of regular orbitals
+        n = max(nreg, maxrows(Σblocks´), maxcols(Σblocks´))     # includes extended orbitals
+        Σmatext = Matrix{C}(undef, n, n)
+        Σbm = BlockMatrix(Σmatext, Σblocks´)
         update!(Σbm)                                            # updates Σmat with Σblocks´
-        g0mat = zeros(C, n, n)
+        g0mat = zeros(C, nreg, nreg)
         off = offsets(os)
         for (j, sj) in enumerate(subcells(os)), (i, si) in enumerate(subcells(os))
             irng = off[i]+1:off[i+1]
@@ -330,11 +330,19 @@ function TMatrixSlicer(g0slicer::GreenSlicer{C}, Σblocks, blockstruct) where {C
             g0view = view(g0mat, irng, jrng)
             copy!(g0view, g0slicer[si, sj])
         end
-        den = Matrix{C}(I, n, n)
-        mul!(den, Σmat, g0mat, -1, 1)                           # den = 1-Σ*g0
+        Σmatᵣᵣ = view(Σmatext, 1:nreg, 1:nreg)
+        Σmatₑᵣ = view(Σmatext, nreg+1:n, 1:nreg)
+        Σmatᵣₑ = view(Σmatext, 1:nreg, nreg+1:n)
+        Σmatₑₑ = view(Σmatext, nreg+1:n, nreg+1:n)
+        Σmat = copy(Σmatᵣᵣ)
+        Σmat´ = ldiv!(lu!(Σmatₑₑ), Σmatₑᵣ)
+        mul!(Σmat, Σmatᵣₑ, Σmat´, 1, 1)              # Σmat = Σmatᵣᵣ + ΣmatᵣₑΣmatₑₑ⁻¹ Σmatₑᵣ
+        den = Matrix{C}(I, nreg, nreg)
+        mul!(den, Σmat, g0mat, -1, 1)                          # den = 1-Σ*g0
         luden = lu!(den)
-        tmatrix = view(ldiv!(luden, Σmat), 1:nos, 1:nos)        # tmatrix = (1 - Σ*g0)⁻¹Σ
-        gcontacts = view(rdiv!(g0mat, luden), 1:nos, 1:nos)     # gcontacts = g0*(1 - Σ*g0)⁻¹
+        tmatrix = ldiv!(luden, Σmat)                           # tmatrix = (1 - Σ*g0)⁻¹Σ
+        gcontacts = rdiv!(g0mat, luden)                        # gcontacts = g0*(1 - Σ*g0)⁻¹
+
         return TMatrixSlicer(g0slicer, tmatrix, gcontacts, blockstruct)
     end
 end

@@ -24,10 +24,10 @@ end
 
 #region ## Constructors ##
 
-josephson(g::GreenFunction, contactind::Integer ,ωmax::Real; kw...) =
-    josephson(g, contactind, ωmax + 0.0im; kw...)
+josephson(g::GreenFunction, ωmax::Real, contactind::Integer = 1; kw...) =
+    josephson(g, ωmax + 0.0im, contactind; kw...)
 
-function josephson(g::GreenFunction, contactind::Integer, ωmax::Complex{T}; kBT = 0.0, path = x -> (x*(1-x), 1-2x), kw...) where {T}
+function josephson(g::GreenFunction, ωmax::Complex{T}, contactind::Integer = 1; kBT = 0.0, path = x -> (x*(1-x), 1-2x), kw...) where {T}
     normalsize = normal_size(hamiltonian(g))
     realωmax = abs(real(ωmax))
     kBT´ = T(kBT)
@@ -65,7 +65,6 @@ maxenergy(J::Josephson) = J.ωmax
 contact(J::Josephson) = J.contactind
 
 options(J::Josephson) = J.opts
-
 
 function (J::Josephson{T})(; params...) where {T}
     ωmin = -J.ωmax
