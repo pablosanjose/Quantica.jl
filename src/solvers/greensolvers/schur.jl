@@ -345,6 +345,7 @@ function apply(s::GS.Schur, h::AbstractHamiltonian1D, contacts::Contacts)
     h´ = hamiltonian(h)
     fsolver = SchurFactorsSolver(h´, s.shift)
     h0 = unitcell_hamiltonian(h)
+    boundary = round(only(s.boundary))
     rsites = stored_cols(unflat(h[1]))
     lsites = stored_cols(unflat(h[-1]))
     latslice_l = lattice(h0)[cellsites((), lsites)]
@@ -356,9 +357,8 @@ function apply(s::GS.Schur, h::AbstractHamiltonian1D, contacts::Contacts)
 
     ohL = attach(h0, ΣL)
     ohR = attach(h0, ΣR)
-    oh∞ = attach(ohL, ΣR)
+    oh∞ = ohR |> attach(ΣL)
     G, G∞ = green_type(h0, ΣL), green_type(h0, ΣL, ΣR)
-    boundary = round(only(s.boundary))
     solver = AppliedSchurGreenSolver{G,G∞}(fsolver, boundary, ohL, ohR, oh∞)
     return solver
 end
@@ -744,25 +744,32 @@ hcoupling(s::SelfEnergyCouplingSchurSolver) = s.hcoupling
 #endregion
 
 #region ## SelfEnergy (attach) API ##
-
+using Infiltrator
 # With this syntax we attach the surface unit cell of the lead (left or right) to hparent
 # through the model coupling. The lead is transformed with `transform` to align it to
 # hparent. Then we apply the model to the 0D lattice of hparent's selected surface plus the
 # lead unit cell, and then build an extended self energy
-function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunction{<:Any,<:Any,1,<:AppliedSchurGreenSolver}, model::AbstractModel; negative = false, kw...)
+function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunction{<:Any,<:Any,1,<:AppliedSchurGreenSolver}, model::AbstractModel;
+                    negative = false, transform = missing, kw...)
     isempty(contacts(glead)) || argerror("Tried to attach a lead with $(length(selfenergies(contacts(glead)))) contacts. \nCurrently, a lead with contacts cannot be contacted to another system using the simple `attach(x, glead; ...)` syntax. Use `attach(x, glead[...], model; ...)` instead")
     schursolver = solver(glead)
-    hlead = copy_lattice(parent(glead))
     gunit = copy_lattice(negative ? schursolver.gL : schursolver.gR)
-    lat0lead = lattice(gunit)
+    lat0lead = lattice(gunit)            # lat0lead is the zero cell of parent(glead)
+    hlead = copy_lattice(parent(glead))  # hlead is used only for plottables
 
-    # move lattices of hlead and gunit to boundary ± 1 (if boundary is finite)
+    # move hlead and lat0lead to the left or right of boundary (if boundary is finite)
     boundary = schursolver.boundary
-    x0 = isfinite(boundary) ? boundary : zero(boundary)
-    xunit = x0 + ifelse(negative, -1, 1)
-    bm = bravais_matrix(lattice(glead))
-    iszero(x0) || translate!(hlead, bm * SA[x0])
-    iszero(xunit) || translate!(lat0lead, bm * SA[xunit])
+    xunit = isfinite(boundary) ? boundary + ifelse(negative, -1, 1) : zero(boundary)
+    if !iszero(xunit)
+        translate!(hlead, bm * SA[xunit])
+        translate!(lat0lead, bm * SA[xunit])
+    end
+
+    # apply transform
+    if transform !== missing
+        transform!(lat0lead, transform)
+        transform!(hlead, transform)
+    end
 
     # combine gunit and parent sites into lat0
     sel = siteselector(; kw...)
