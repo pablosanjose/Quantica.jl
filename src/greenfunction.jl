@@ -102,7 +102,7 @@ ind_to_slice(s::SiteSelector, g) = ind_to_slice(lattice(g)[s], g)
 ind_to_slice(kw::NamedTuple, g) = ind_to_slice(getindex(lattice(g); kw...), g)
 ind_to_slice(cell::Union{SVector,Tuple}, g::GreenSolution{<:Any,<:Any,L}) where {L} =
     ind_to_slice(cellsites(sanitize_SVector(SVector{L,Int}, cell), :), g)
-ind_to_slice(c::CellSites{<:Any,Colon}, g) = cellorbs(cell(c), :)
+ind_to_slice(c::CellSites{<:Any,Colon}, g) = cellorbs(cell(c), 1:flatsize(parent(g)))
 ind_to_slice(c::CellSites{<:Any,Symbol}, g) =
     # uses a UnitRange instead of a Vector
     cellorbs(cell(c), flatrange(hamiltonian(g), siteindices(c)))
