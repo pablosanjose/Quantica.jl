@@ -284,6 +284,22 @@ Base.summary(g::GreenSolution{T,E,L,S}) where {T,E,L,S} =
 #endregion
 
 ############################################################################################
+# Conductance
+#region
+
+function Base.show(io::IO, G::Conductance)
+    i = get(io, :indent, "")
+    print(io, i, summary(G), "\n",
+"$i  Current contact  : $(currentcontact(G))
+$i  Bias contact     : $(biascontact(G))")
+end
+
+Base.summary(::Conductance{T}) where {T} =
+    "Conductance{$T}: Zero-temperature conductance observable"
+
+#endregion
+
+############################################################################################
 # Josephson
 #region
 

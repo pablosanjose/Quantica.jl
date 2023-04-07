@@ -1562,31 +1562,32 @@ end
 #region ## API ##
 
 orbslice(c::Contacts) = orbslice(c.blockstruct)
-orbslice(m::ContactBlockStructure) = m.orbslice
+orbslice(c::ContactBlockStructure) = c.orbslice
 
-flatsize(m::ContactBlockStructure) = last(m.subcelloffsets)
+flatsize(c::ContactBlockStructure) = last(c.subcelloffsets)
+flatsize(c::ContactBlockStructure, i::Integer) = length(contactinds(c, i))
 
-unflatsize(m::ContactBlockStructure) = length(m.siteoffsets) - 1
+unflatsize(c::ContactBlockStructure) = length(c.siteoffsets) - 1
 
-siteoffsets(m::ContactBlockStructure) = m.siteoffsets
-siteoffsets(m::ContactBlockStructure, i) = m.siteoffsets[i]
+siteoffsets(c::ContactBlockStructure) = c.siteoffsets
+siteoffsets(c::ContactBlockStructure, i) = c.siteoffsets[i]
 
-subcelloffsets(m::ContactBlockStructure) = m.subcelloffsets
-subcelloffsets(m::ContactBlockStructure, i) = m.subcelloffsets[i]
+subcelloffsets(c::ContactBlockStructure) = c.subcelloffsets
+subcelloffsets(c::ContactBlockStructure, i) = c.subcelloffsets[i]
 
-siterange(m::ContactBlockStructure, iunflat::Integer) =
-    siteoffsets(m, iunflat)+1:siteoffsets(m, iunflat+1)
+siterange(c::ContactBlockStructure, iunflat::Integer) =
+    siteoffsets(c, iunflat)+1:siteoffsets(c, iunflat+1)
 
-subcellrange(m::ContactBlockStructure, si::Integer) =
-    subcelloffsets(m, si)+1:subcelloffsets(m, si+1)
-subcellrange(m::ContactBlockStructure, cell::SVector) =
-    subcellrange(m, subcellindex(m, cell))
+subcellrange(c::ContactBlockStructure, si::Integer) =
+    subcelloffsets(c, si)+1:subcelloffsets(c, si+1)
+subcellrange(c::ContactBlockStructure, cell::SVector) =
+    subcellrange(c, subcellindex(c, cell))
 
-function subcellindex(m::ContactBlockStructure, cell::SVector)
-    for (i, cell´) in enumerate(m.cells)
+function subcellindex(c::ContactBlockStructure, cell::SVector)
+    for (i, cell´) in enumerate(c.cells)
         cell === cell´ && return i
     end
-    @boundscheck(boundserror(m, cell))
+    @boundscheck(boundserror(c, cell))
 end
 
 selfenergies(c::Contacts) = c.selfenergies
@@ -1594,9 +1595,9 @@ selfenergies(c::Contacts) = c.selfenergies
 blockstructure(c::Contacts) = c.blockstruct
 
 contactinds(c::Contacts, i...) = contactinds(c.blockstruct, i...)
-contactinds(b::ContactBlockStructure) = b.contactinds
-contactinds(b::ContactBlockStructure, i) = 1 <= i <= length(b.contactinds) ? b.contactinds[i] :
-    argerror("Cannot access contact $i, there are $(length(b.contactinds)) contacts")
+contactinds(c::ContactBlockStructure) = c.contactinds
+contactinds(c::ContactBlockStructure, i) = 1 <= i <= length(c.contactinds) ? c.contactinds[i] :
+    argerror("Cannot access contact $i, there are $(length(c.contactinds)) contacts")
 
 Base.isempty(c::Contacts) = isempty(selfenergies(c))
 

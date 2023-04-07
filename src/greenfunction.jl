@@ -127,20 +127,20 @@ Base.getindex(s::GreenSlicer, ::CellOrbitals, ::CellOrbitals) =
 
 ############################################################################################
 # selfenergy(::GreenSolution[, contactinds::Int...]; onlyΓ = false)
-#    if no contactinds are provided, all are returned. Otherwise, a view of Σ over contacts.
+#   if no contactinds are provided, all are returned. Otherwise, a view of Σ over contacts.
+#   Note that a smaller, contact-specific similar_contactΣ(g, contact) cannot be used here,
+#   since selfenergies are MatrixBlock's over the complete similar_contactΣ(g)
 #region
 
-function selfenergy(g::GreenSolution; onlyΓ = false)
+function selfenergy(g::GreenSolution; kw...)
     Σ = similar_contactΣ(g)
-    selfenergy!(Σ, g)
-    onlyΓ && extractΓ!(Σ)
+    selfenergy!(Σ, g; kw...)
     return Σ
 end
 
-function selfenergy(g::GreenSolution, cind::Int, cinds::Int...; onlyΓ = false)
+function selfenergy(g::GreenSolution, cind::Int, cinds::Int...; kw...)
     Σ = similar_contactΣ(g)
-    selfenergy!(Σ, g, cind, cinds...)
-    onlyΓ && extractΓ!(Σ)
+    selfenergy!(Σ, g, cind, cinds...; kw...)
     # view over selected contacts
     inds = copy(contactinds(g, cind))
     foreach(i -> append!(inds, contactinds(g, i)), cinds)
@@ -156,15 +156,17 @@ function similar_contactΣ(g::Union{GreenFunction{T},GreenSolution{T}}) where {T
     return Σ
 end
 
-function selfenergy!(Σ::AbstractMatrix{T}, g::GreenSolution) where {T}
+function selfenergy!(Σ::AbstractMatrix{T}, g::GreenSolution; onlyΓ = false) where {T}
     fill!(Σ, zero(T))
     addselfenergy!.(Ref(Σ), selfenergies(g))
+    onlyΓ && extractΓ!(Σ)
     return Σ
 end
 
-function selfenergy!(Σ::AbstractMatrix{T}, g::GreenSolution, is...) where {T}
+function selfenergy!(Σ::AbstractMatrix{T}, g::GreenSolution, is...; onlyΓ = false) where {T}
     fill!(Σ, zero(T))
     addselfenergy!(Σ, g, is...)
+    onlyΓ && extractΓ!(Σ)
     return Σ
 end
 

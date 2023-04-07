@@ -29,7 +29,7 @@ export sublat, lattice, supercell, bravais_matrix,
        spectrum, energies, states, bands, subbands, slice,
        greenfunction, selfenergy, attach, contact, cellsites,
        plotlattice, plotlattice!, plotbands, plotbands!, qplot, qplot!,
-       josephson
+       conductance, josephson
 
 export LatticePresets, LP, RegionPresets, RP  #, HamiltonianPresets, HP
 export EigenSolvers, ES, GreenSolvers, GS
