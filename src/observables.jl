@@ -4,7 +4,7 @@
 
 abstract type Observable end
 
-fermi(ω::C, kBT) where {C} =
+fermi(ω::C, kBT = 0) where {C} =
     iszero(kBT) ? ifelse(real(ω) <= 0, C(1), C(0)) : C(1/(exp(ω/kBT) + 1))
 
 normal_size(h::AbstractHamiltonian) = normal_size(blockstructure(h))
@@ -34,6 +34,31 @@ mul_tau!(tau::Vector, g) = (g .*= tau)
 
 tauz_diag(i, normalsize) = ifelse(iseven(fld1(i, normalsize)), -1, 1)
 taue_diag(i, normalsize) = ifelse(iseven(fld1(i, normalsize)), 0, 1)
+
+#endregion
+
+############################################################################################
+# integrate - integrates a function f along a complex path ωcomplex(ω::Real), connecting ωi
+#   The path is piecewise linear in the form of a sawtooth
+#region
+
+function integrate(f, ωs...; imshift = 0, kw...)
+    ωs´ = sawtooth(imshift, ωs)
+    intf = first(quadgk(f, ωs´...; kw...))
+    return intf
+end
+
+function integrate!(f!, result, ωs...; imshift = 0, kw...)
+    ωs´ = sawtooth(imshift, ωs)
+    intf = first(quadgk!(f!, result, ωs´...; kw...))
+    return intf
+end
+
+sawtooth(s, ωs) = _sawtooth(s, (), ωs...)
+_sawtooth(s, ::Tuple{}, ω1, ωs...) = _sawtooth(s, (ω1 + im * s,), ωs...)
+_sawtooth(s, ωs´, ω, ωs...) = _sawtooth(s,
+    (ωs´..., 0.5 * (real(last(ωs´)) + ω) + im * (s + 0.5*(ω - real(last(ωs´)))), ω + im * s), ωs...)
+_sawtooth(s, ωs´) = ωs´
 
 #endregion
 
@@ -130,11 +155,10 @@ end
 struct Josephson{T<:AbstractFloat,P<:Union{Missing,Vector{T}},G<:GreenFunction{T},O<:NamedTuple} <: Observable
     g::G
     ωmax::T
+    imshift::T
     kBT::T
     contactind::Int          # contact index
-    path::FunctionWrapper{Tuple{Complex{T},Complex{T}},Tuple{T}}
     opts::O
-    points::Vector{Tuple{T,T}}
     phaseshifts::P
     traces::Vector{Complex{T}}
     tauz::Vector{Int}           # precomputed diagonal of tauz
@@ -148,27 +172,19 @@ end
 
 #region ## Constructors ##
 
-josephson(g::GreenFunction, ωmax::Real; kw...) = josephson(g, ωmax + 0.0im; kw...)
+josephson(g::GreenFunction{T}, ωmax::Real; kw...) where {T} =
+    josephson(g, ωmax + im * sqrt(eps(T)); kw...)
 
 function josephson(g::GreenFunction, ωmax::Complex{T};
-    contact = 1, kBT = 0.0, path = x -> (x*(1-x), 1-2x), phases = missing, kw...) where {T}
+    contact = 1, kBT = 0.0, phases = missing, kw...) where {T}
     realωmax = abs(real(ωmax))
+    imshift = imag(ωmax)
     kBT´ = T(kBT)
-    function path´(realω)
-        η = imag(ωmax)
-        imz, imz´ = path(abs(realω)/realωmax)
-        imz´ *= sign(realω)
-        ω = realω + im * (η + imz * realωmax)
-        dzdω = 1 + im * imz´
-        return ω, dzdω
-    end
-    pathwrap = FunctionWrapper{Tuple{Complex{T},Complex{T}},Tuple{T}}(path´)
     Σ = similar_contactΣ(g)
     normalsize = normal_size(hamiltonian(g))
     tauz = tauz_diag.(axes(Σ, 1), normalsize)
-    points = Tuple{T,T}[]
     phases´, traces = sanitize_phases_traces(phases, T)
-    return Josephson(g, realωmax, kBT´, contact, pathwrap, NamedTuple(kw), points, phases´,
+    return Josephson(g, realωmax, imshift, kBT´, contact, NamedTuple(kw), phases´,
         traces, tauz, Σ, similar(Σ), similar(Σ), similar(Σ), similar(Σ), similar(tauz, Complex{T}))
 end
 
@@ -193,46 +209,56 @@ options(J::Josephson) = J.opts
 
 phaseshifts(J::Josephson) = J.phaseshifts
 
-function (J::Josephson{T})(; params...) where {T}
-    ωmin = -J.ωmax
-    ωmax = ifelse(iszero(J.kBT), zero(J.ωmax), J.ωmax)
-    empty!(J.points)
-    Iᵢ, err = quadgk(ω -> josephson_integrand(ω, J; params...), ωmin, ωmax; atol = sqrt(eps(T)), J.opts...)
-    return Iᵢ
+function (J::Josephson{T,Missing})(; params...) where {T}
+    ωmax = J.ωmax
+    imshift = J.imshift
+    fω = ω -> josephson_integrand(ω, J; params...)
+    Iᵢ = iszero(J.kBT) ?
+        integrate(fω, -ωmax, zero(ωmax); atol = sqrt(eps(T)), imshift, J.opts...) :
+        integrate(fω, -ωmax, zero(ωmax), ωmax; atol = sqrt(eps(T)), imshift, J.opts...)
+    return real(Iᵢ)
+end
+
+function (J::Josephson{T,<:AbstractVector})(; params...) where {T}
+    ωmax = J.ωmax
+    imshift = J.imshift
+    result = zero(J.traces)
+    fω! = (integrand, ω) -> (integrand .= josephson_integrand(ω, J; params...))
+    Iᵢ = iszero(J.kBT) ?
+        integrate!(fω!, result, -ωmax, zero(ωmax); atol = sqrt(eps(T)), imshift, J.opts...) :
+        integrate!(fω!, result, -ωmax, zero(ωmax), ωmax; atol = sqrt(eps(T)), imshift, J.opts...)
+    return real(Iᵢ)
 end
 
 function josephson_integrand(ω, J; params...)
-    complexω, dzdω = J.path(ω)
-    gω = call!(J.g, complexω; params...)
-    traces = josephson_traces(J, gω)
+    gω = call!(J.g, ω; params...)
     f = fermi(ω, J.kBT)
-    integrand = real((f * dzdω) * traces)
-    push!(J.points, (ω, first(integrand)))
-    return integrand
+    traces = josephson_traces(J, gω, f)
+    return traces
 end
 
-function josephson_traces(J, gω)
+function josephson_traces(J, gω, f)
     gr = gω[J.contactind, J.contactind]
     Σi = selfenergy!(J.Σ, gω, J.contactind)
-    return josephson_traces!(J, gr, Σi)
+    return josephson_traces!(J, gr, Σi, f)
 end
 
-josephson_traces!(J::Josephson{<:Any,Missing}, gr, Σi) = josephson_one_trace!(J, gr, Σi)
+josephson_traces!(J::Josephson{<:Any,Missing}, gr, Σi) = josephson_one_trace!(J, gr, Σi, f)
 
-function josephson_traces!(J, gr, Σi)
+function josephson_traces!(J, gr, Σi, f)
     for (i, phaseshift) in enumerate(J.phaseshifts)
         gr´, Σi´ = apply_phaseshift!(J, gr, Σi, phaseshift)
-        J.traces[i] = josephson_one_trace!(J, gr´, Σi´)
+        J.traces[i] = josephson_one_trace!(J, gr´, Σi´, f)
     end
     return J.traces
 end
 
-# Tr[(gr * Σi - Σi * gr) * τz]
-function josephson_one_trace!(J, gr, Σi)
+# Tr[(gr * Σi - Σi * gr) * τz] * f(ω)
+function josephson_one_trace!(J, gr, Σi, f)
     gΣΣg = J.gΣΣg
     mul!(gΣΣg, gr, Σi)
     mul!(gΣΣg, Σi, gr, -1, 1)
-    trace = trace_tau(gΣΣg, J.tauz)
+    trace = f * trace_tau(gΣΣg, J.tauz)
     return trace
 end
 
