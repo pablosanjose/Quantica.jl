@@ -297,7 +297,7 @@ end
 #endregion
 
 ############################################################################################
-# density
+# ldos
 #region
 
 struct SpectralDensity{K,G<:GreenSolution}
