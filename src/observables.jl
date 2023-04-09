@@ -300,15 +300,27 @@ end
 # density
 #region
 
-struct Density{K,G<:Union{GreenFunctionSlice, GreenSolution}}
-    g::G
+struct SpectralDensity{K,G<:GreenSolution}
+    gω::G
     kernel::K
 end
 
 #region ## Constructors ##
 
-# density(g; kernel = tr)
+ldos(gω::GreenSolution; kernel = g -> -imag(tr(g))/π) = SpectralDensity(gω, kernel)
 
 #endregion
 
+#region ## API ##
+
+Base.parent(d::SpectralDensity) = d.gω
+
+function Base.getindex(d::SpectralDensity; kw...)
+    lat = lattice(parent(d))
+    latslice = getindex(lat; kw...)
+    result = [d.kernel(d.gω[c]) for c in cellsites(latslice)]
+    return result
+end
+
+#endregion
 #endregion

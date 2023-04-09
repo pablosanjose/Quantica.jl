@@ -318,6 +318,9 @@ boundingbox(l::LatticeSlice) = boundingbox(cell(c) for c in subcells(l))
 sites(l::LatticeSlice) =
     (site(l.lat, i, cell(subcell)) for subcell in subcells(l) for i in siteindices(subcell))
 
+cellsites(l::LatticeSlice) =
+    (cellsites(subcell.cell, i) for subcell in subcells(l) for i in siteindices(subcell))
+
 Base.parent(ls::LatticeSlice) = ls.lat
 
 Base.isempty(s::LatticeSlice) = isempty(s.subcells)
