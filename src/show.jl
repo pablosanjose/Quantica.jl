@@ -300,21 +300,39 @@ Base.summary(::Conductance{T}) where {T} =
 #endregion
 
 ############################################################################################
+# Integrator
+#region
+
+function Base.show(io::IO, I::Integrator)
+    i = get(io, :indent, "")
+    print(io, i, summary(I), "\n",
+"$i  Integration path    : $(points(I))
+$i  Integration options : $(display_namedtuple(options(I)))
+$i  integrand           :\n")
+    ioindent = IOContext(io, :indent => "  ")
+    show(ioindent, integrand(I))
+end
+
+Base.summary(::Integrator) = "Integrator: Complex-plane integrator"
+
+
+display_namedtuple(nt::NamedTuple) = isempty(nt) ? "()" : "$nt"
+
+#endregion
+
+############################################################################################
 # Josephson
 #region
 
-function Base.show(io::IO, J::Josephson)
+function Base.show(io::IO, J::JosephsonDensity)
     i = get(io, :indent, "")
     print(io, i, summary(J), "\n",
-"$i  kBT                 : $(temperature(J))
-$i  Contact             : $(contact(J))
-$i  Integration range   : [-$(maxenergy(J)), $(maxenergy(J))]
-$i  Integration options : $(display_namedtuple(options(J)))")
+"$i  kBT                     : $(temperature(J))
+$i  Contact                 : $(contact(J))
+$i  Number of phase shifts  : $(length(phaseshifts(J)))")
 end
 
-Base.summary(::Josephson{T}) where {T} =
-    "Josephson{$T}: Equilibrium (dc) Josephson current observable"
-
-display_namedtuple(nt::NamedTuple) = isempty(nt) ? "()" : "$nt"
+Base.summary(::JosephsonDensity{T}) where {T} =
+    "JosephsonDensity{$T} : Equilibrium (dc) Josephson current observable before integration over energy"
 
 #endregion

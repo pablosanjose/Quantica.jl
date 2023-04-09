@@ -38,28 +38,66 @@ taue_diag(i, normalsize) = ifelse(iseven(fld1(i, normalsize)), 0, 1)
 #endregion
 
 ############################################################################################
-# integrate - integrates a function f along a complex path ωcomplex(ω::Real), connecting ωi
-#   The path is piecewise linear in the form of a sawtooth
+# Integrator - integrates a function f along a complex path ωcomplex(ω::Real), connecting ωi
+#   The path is piecewise linear in the form of a sawtooth with a given ± slope
 #region
 
-function integrate(f, ωs...; imshift = 0, kw...)
-    ωs´ = sawtooth(imshift, ωs)
-    intf = first(quadgk(f, ωs´...; kw...))
-    return intf
+struct Integrator{I,T,P,O<:NamedTuple,F} <: Observable
+    integrand::I    # call!(integrand, ω::Complex; params...)::Union{Number,Array{Number}}
+    points::P       # a tuple of complex points that form the sawtooth integration path
+    result::T       # can be missing (for scalar integrand) or a mutable type (nonscalar)
+    opts::O         # kwargs for quadgk
+    post::F         # function to apply to the integrand at the end of integration
 end
 
-function integrate!(f!, result, ωs...; imshift = 0, kw...)
-    ωs´ = sawtooth(imshift, ωs)
-    intf = first(quadgk!(f!, result, ωs´...; kw...))
-    return intf
+#region ## Constructor ##
+
+function Integrator(result, f, pts::NTuple{<:Any,Number}; imshift = missing, post = identity, slope = 1, opts...)
+    imshift´ = imshift === missing ?
+        sqrt(eps(promote_type(typeof.(float.(real.(pts)))...))) : float(imshift)
+    pts´ = iszero(slope) ? pts .+ (im * imshift´) : sawtooth(imshift´, slope, pts)
+    opts´ = NamedTuple(opts)
+    return Integrator(f, pts´, result, opts´, post)
 end
 
-sawtooth(s, ωs) = _sawtooth(s, (), ωs...)
-_sawtooth(s, ::Tuple{}, ω1, ωs...) = _sawtooth(s, (ω1 + im * s,), ωs...)
-_sawtooth(s, ωs´, ω, ωs...) = _sawtooth(s,
-    (ωs´..., 0.5 * (real(last(ωs´)) + ω) + im * (s + 0.5*(ω - real(last(ωs´)))), ω + im * s), ωs...)
-_sawtooth(s, ωs´) = ωs´
+Integrator(f, pts::NTuple{<:Any,Number}; kw...) = Integrator(missing, f, pts; kw...)
 
+sawtooth(is, sl, ωs) = _sawtooth(is, sl, (), ωs...)
+_sawtooth(is, sl, ::Tuple{}, ω1, ωs...) = _sawtooth(is, sl, (ω1 + im * is,), ωs...)
+_sawtooth(is, sl, ωs´, ωn, ωs...) = _sawtooth(is, sl,
+    (ωs´..., 0.5 * (real(last(ωs´)) + ωn) + im * (is + sl * 0.5*(ωn - real(last(ωs´)))), ωn + im * is), ωs...)
+_sawtooth(is, sl, ωs´) = ωs´
+
+#endregion
+
+#region ## API ##
+
+integrand(I::Integrator) = I.integrand
+
+points(I::Integrator) = I.points
+
+options(I::Integrator) = I.opts
+
+## call! ##
+# scalar version
+function call!(I::Integrator{<:Any,Missing}; params...)
+    fx = x -> call!(I.integrand, x; params...)
+    result, err = quadgk(fx, I.points...; I.opts...)
+    result´ = I.post(result)
+    return result´
+end
+
+# nonscalar version
+function call!(I::Integrator; params...)
+    fx! = (y, x) -> (y .= call!(I.integrand, x; params...))
+    result, err = quadgk!(fx!, I.result, I.points...; I.opts...)
+    result´ = I.post.(result)
+    return result´
+end
+
+(I::Integrator)(; params...) = copy(call!(I; params...))
+
+#endregion
 #endregion
 
 ############################################################################################
@@ -142,26 +180,24 @@ end
 
 ############################################################################################
 # josephson
-#    Equilibrium (static) Josephson current given by
-#       Iᵢ = (e/h) Re ∫dω f(ω)Tr[(GʳΣʳᵢ-ΣʳᵢGʳ)τz]
-#    J = josephson(g::GreenFunction, ωmax; contact = i, kBT = 0, path = x -> (y, y'), phases, kw...)
-#    J(; params...) -> Iᵢ in units of e/h, or [Iᵢ(ϕⱼ) for ϕⱼ in phases] if phases is an
-#       integer (from 0 to π) or a collection of ϕ's
-#    Keywords kw are passed to quadgk for the integral
-#    A phase ϕ can be applied by gauging it away from the lead and into its coupling:
+#   The equilibrium (static) Josephson current given by
+#       I = Re ∫dω J(ω; params...), where J(ω; params...) = (e/h) f(ω)Tr[(GʳΣʳᵢ-ΣʳᵢGʳ)τz]
+#   J = JosephsonDensity(g::GreenFunction; contact = i, kBT = 0, phases)
+#   J(ω; params...) -> scalar or vector [J(ϕⱼ) for ϕⱼ in phases] if `phases` is an
+#       integer (num phases from 0 to π) or a collection of ϕ's
+#   A phase ϕ can be applied by gauging it away from the lead and into its coupling:
 #       Σʳᵢ(ϕ) = UᵩΣʳᵢUᵩ' and Gʳ(ϕ) = [1+Gʳ(Σʳᵢ-Σʳᵢ(ϕ))]⁻¹Gʳ, where Uᵩ = exp(iϕτz/2).
+#   I = josephson(Integrator(J, (-ωmax, 0, ωmax); post = real, opts...)
+#   Keywords opts are passed to quadgk for the integral
 #region
 
-struct Josephson{T<:AbstractFloat,P<:Union{Missing,Vector{T}},G<:GreenFunction{T},O<:NamedTuple} <: Observable
+struct JosephsonDensity{T<:AbstractFloat,P<:Union{Missing,AbstractArray},G<:GreenFunction{T}} <: Observable
     g::G
-    ωmax::T
-    imshift::T
     kBT::T
-    contactind::Int          # contact index
-    opts::O
-    phaseshifts::P
-    traces::Vector{Complex{T}}
+    contactind::Int             # contact index
     tauz::Vector{Int}           # precomputed diagonal of tauz
+    phaseshifts::P              # missing or collection of phase shifts to apply
+    traces::P                   # preallocated workspace
     Σ::Matrix{Complex{T}}       # preallocated workspace
     gΣΣg::Matrix{Complex{T}}    # preallocated workspace
     Σ´::Matrix{Complex{T}}      # preallocated workspace
@@ -172,65 +208,42 @@ end
 
 #region ## Constructors ##
 
-josephson(g::GreenFunction{T}, ωmax::Real; kw...) where {T} =
-    josephson(g, ωmax + im * sqrt(eps(T)); kw...)
-
-function josephson(g::GreenFunction, ωmax::Complex{T};
-    contact = 1, kBT = 0.0, phases = missing, kw...) where {T}
-    realωmax = abs(real(ωmax))
-    imshift = imag(ωmax)
+function josephson(g::GreenFunction{T}, ωmax; contact = 1, kBT = 0.0, phases = missing, imshift = missing, opts...) where {T}
     kBT´ = T(kBT)
     Σ = similar_contactΣ(g)
     normalsize = normal_size(hamiltonian(g))
     tauz = tauz_diag.(axes(Σ, 1), normalsize)
     phases´, traces = sanitize_phases_traces(phases, T)
-    return Josephson(g, realωmax, imshift, kBT´, contact, NamedTuple(kw), phases´,
-        traces, tauz, Σ, similar(Σ), similar(Σ), similar(Σ), similar(Σ), similar(tauz, Complex{T}))
+    jd = JosephsonDensity(g, kBT´, contact, tauz, phases´,
+        traces, Σ, similar(Σ), similar(Σ), similar(Σ), similar(Σ), similar(tauz, Complex{T}))
+    integrator = iszero(kBT) ?
+        Integrator(traces, jd, (-ωmax, 0); imshift, slope = 1, post = real, opts...) :
+        Integrator(traces, jd, (-ωmax, 0, ωmax); imshift, slope = 1, post = real, opts...)
+    return integrator
 end
 
-sanitize_phases_traces(::Missing, ::Type{T}) where {T} = missing, Complex{T}[]
-sanitize_phases_traces(phases::Vector, ::Type{T}) where {T} =
-    phases, similar(phases, Complex{T})
+sanitize_phases_traces(::Missing, ::Type{T}) where {T} = missing, missing
 sanitize_phases_traces(phases::Integer, ::Type{T}) where {T} =
-    sanitize_phases_traces(range(T(0), T(π), length = phases), T)
-sanitize_phases_traces(phases, T) = sanitize_phases_traces(Vector(phases), T)
+    sanitize_phases_traces(range(0, π, length = phases), T)
+
+function sanitize_phases_traces(phases, ::Type{T}) where {T}
+    phases´ = Complex{T}.(phases)
+    traces = similar(phases´)
+    return phases´, traces
+end
 
 #endregion
 
 #region ## API ##
 
-temperature(J::Josephson) = J.kBT
+temperature(J::JosephsonDensity) = J.kBT
 
-maxenergy(J::Josephson) = J.ωmax
+contact(J::JosephsonDensity) = J.contactind
 
-contact(J::Josephson) = J.contactind
+phaseshifts(I::Integrator{<:JosephsonDensity}) = phaseshifts(integrand(I))
+phaseshifts(J::JosephsonDensity) = real.(J.phaseshifts)
 
-options(J::Josephson) = J.opts
-
-phaseshifts(J::Josephson) = J.phaseshifts
-
-function (J::Josephson{T,Missing})(; params...) where {T}
-    ωmax = J.ωmax
-    imshift = J.imshift
-    fω = ω -> josephson_integrand(ω, J; params...)
-    Iᵢ = iszero(J.kBT) ?
-        integrate(fω, -ωmax, zero(ωmax); atol = sqrt(eps(T)), imshift, J.opts...) :
-        integrate(fω, -ωmax, zero(ωmax), ωmax; atol = sqrt(eps(T)), imshift, J.opts...)
-    return real(Iᵢ)
-end
-
-function (J::Josephson{T,<:AbstractVector})(; params...) where {T}
-    ωmax = J.ωmax
-    imshift = J.imshift
-    result = zero(J.traces)
-    fω! = (integrand, ω) -> (integrand .= josephson_integrand(ω, J; params...))
-    Iᵢ = iszero(J.kBT) ?
-        integrate!(fω!, result, -ωmax, zero(ωmax); atol = sqrt(eps(T)), imshift, J.opts...) :
-        integrate!(fω!, result, -ωmax, zero(ωmax), ωmax; atol = sqrt(eps(T)), imshift, J.opts...)
-    return real(Iᵢ)
-end
-
-function josephson_integrand(ω, J; params...)
+function call!(J::JosephsonDensity, ω; params...)
     gω = call!(J.g, ω; params...)
     f = fermi(ω, J.kBT)
     traces = josephson_traces(J, gω, f)
@@ -243,7 +256,7 @@ function josephson_traces(J, gω, f)
     return josephson_traces!(J, gr, Σi, f)
 end
 
-josephson_traces!(J::Josephson{<:Any,Missing}, gr, Σi) = josephson_one_trace!(J, gr, Σi, f)
+josephson_traces!(J::JosephsonDensity{<:Any,Missing}, gr, Σi, f) = josephson_one_trace!(J, gr, Σi, f)
 
 function josephson_traces!(J, gr, Σi, f)
     for (i, phaseshift) in enumerate(J.phaseshifts)
@@ -281,4 +294,21 @@ function apply_phaseshift!(J, gr, Σi, phaseshift)
 end
 
 #endregion
+#endregion
+
+############################################################################################
+# density
+#region
+
+struct Density{K,G<:Union{GreenFunctionSlice, GreenSolution}}
+    g::G
+    kernel::K
+end
+
+#region ## Constructors ##
+
+# density(g; kernel = tr)
+
+#endregion
+
 #endregion
