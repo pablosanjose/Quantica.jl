@@ -105,18 +105,20 @@ apply(m::ParametricModel, lat) = ParametricModel(apply.(terms(m), Ref(lat)))
 
 function apply(m::OnsiteModifier, h::Hamiltonian)
     f = parametric_function(m)
-    asel = apply(selector(m), lattice(h))
+    sel = selector(m)
+    asel = apply(sel, lattice(h))
     ptrs = pointers(h, asel)
     B = blocktype(h)
-    return AppliedOnsiteModifier(B, f, ptrs)
+    return AppliedOnsiteModifier(sel, B, f, ptrs)
 end
 
 function apply(m::HoppingModifier, h::Hamiltonian)
     f = parametric_function(m)
-    asel = apply(selector(m), lattice(h))
+    sel = selector(m)
+    asel = apply(sel, lattice(h))
     ptrs = pointers(h, asel)
     B = blocktype(h)
-    return AppliedHoppingModifier(B, f, ptrs)
+    return AppliedHoppingModifier(sel, B, f, ptrs)
 end
 
 function pointers(h::Hamiltonian{T,E}, s::AppliedSiteSelector{T,E}) where {T,E}

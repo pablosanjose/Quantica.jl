@@ -73,6 +73,7 @@ minimal_callsafe_copy(s::Contacts) =
 #region
 
 Base.getindex(g::GreenFunction, i, j = i) = GreenFunctionSlice(g, i, j)
+Base.getindex(g::GreenFunction; kw...) = g[siteselector(; kw...)]
 
 Base.getindex(g::GreenSolution; kw...) = g[getindex(lattice(g); kw...)]
 

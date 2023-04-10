@@ -242,6 +242,11 @@ Base.adjoint(s::SiteSelector) = s
 
 Base.adjoint(s::HopSelector) = HopSelector(s.region, s.sublats, s.dcells, s.range, !s.adjoint)
 
+Base.NamedTuple(s::SiteSelector) =
+    (; region = s.region, sublats = s.sublats, cells = s.cells)
+Base.NamedTuple(s::HopSelector) =
+    (; region = s.region, sublats = s.sublats, dcells = s.dcells, range = s.range)
+
 #endregion
 #endregion
 
@@ -549,7 +554,8 @@ struct OnsiteModifier{N,S<:SiteSelector,F<:ParametricFunction{N}} <: AbstractMod
     selector::S
 end
 
-struct AppliedOnsiteModifier{B,N,R<:SVector,F<:ParametricFunction{N}} <: AbstractModifier
+struct AppliedOnsiteModifier{B,N,R<:SVector,F<:ParametricFunction{N},S<:SiteSelector} <: AbstractModifier
+    parentselector::S        # unapplied selector, needed to grow a ParametricHamiltonian
     blocktype::Type{B}  # These are needed to cast the modification to the sublat block type
     f::F
     ptrs::Vector{Tuple{Int,R,Int}}
@@ -561,7 +567,8 @@ struct HoppingModifier{N,S<:HopSelector,F<:ParametricFunction{N}} <: AbstractMod
     selector::S
 end
 
-struct AppliedHoppingModifier{B,N,R<:SVector,F<:ParametricFunction{N}} <: AbstractModifier
+struct AppliedHoppingModifier{B,N,R<:SVector,F<:ParametricFunction{N},S<:HopSelector} <: AbstractModifier
+    parentselector::S        # unapplied selector, needed to grow a ParametricHamiltonian
     blocktype::Type{B}  # These are needed to cast the modification to the sublat block type
     f::F
     ptrs::Vector{Vector{Tuple{Int,R,R,Tuple{Int,Int}}}}
@@ -574,6 +581,7 @@ const AppliedModifier = Union{AppliedOnsiteModifier,AppliedHoppingModifier}
 #region ## API ##
 
 selector(m::Modifier) = m.selector
+selector(m::AppliedModifier) = m.parentselector
 
 parameters(m::AbstractModifier) = m.f.params
 
@@ -594,6 +602,9 @@ blocktype(m::AppliedModifier) = m.blocktype
     mask_block(B, m.f.f(t, r, dr; kw...), orborb)
 
 Base.similar(m::A) where {A <: AppliedModifier} = A(m.blocktype, m.f, similar(m.ptrs, 0))
+
+Base.parent(m::AppliedOnsiteModifier) = OnsiteModifier(m.f, m.parentselector)
+Base.parent(m::AppliedHoppingModifier) = HoppingModifier(m.f, m.parentselector)
 
 function emptyptrs!(m::AppliedHoppingModifier{<:Any,<:Any,R}, n) where {R}
     resize!(m.ptrs, 0)

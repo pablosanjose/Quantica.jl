@@ -295,7 +295,7 @@ $i  Bias contact     : $(biascontact(G))")
 end
 
 Base.summary(::Conductance{T}) where {T} =
-    "Conductance{$T}: Zero-temperature conductance observable"
+    "Conductance{$T}: Zero-temperature conductance dIᵢ/dVⱼ from contacts i,j, in units of e^2/h"
 
 #endregion
 

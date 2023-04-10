@@ -293,8 +293,11 @@ end
 # supercell(::ParametricHamiltonian, ...)
 #region
 
-## TODO
-supercell(p::ParametricHamiltonian, args...; kw...) =
-    argerror("supercell(::ParametricHamiltonian, ...) is not yet implemented. In the meantime, call supercell on the parent Hamiltonian or Lattice")
+function supercell(p::ParametricHamiltonian, args...; kw...)
+    h´ = supercell(parent(p), args...; kw...)
+    ms = parent.(modifiers(p))          # extract unapplied modifiers to reapply them to h´
+    p´ = hamiltonian(h´, ms...)
+    return p´
+end
 
 #endregion
