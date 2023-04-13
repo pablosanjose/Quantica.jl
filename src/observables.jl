@@ -315,9 +315,9 @@ end
 
 #region ## Constructors ##
 
-ldos(gω::GreenSolution; kernel = g -> -imag(tr(g))/π) = LocalSpectralDensitySolution(gω, kernel)
+ldos(gω::GreenSolution; kernel = I) = LocalSpectralDensitySolution(gω, kernel)
 
-function ldos(gs::GreenFunctionSlice{T}; kernel = g -> -imag(tr(g))/π) where {T}
+function ldos(gs::GreenFunctionSlice{T}; kernel = I) where {T}
     slicerows(gs) === slicecols(gs) ||
         argerror("Cannot take ldos of a GreenFunctionSlice with rows !== cols")
     g = parent(gs)
@@ -360,7 +360,8 @@ function append_ldos!(v, sc, gω, kernel)
     for i in siteindices(sc)
         rng = flatrange(hamiltonian(gω), i)
         gi = view(gcell, rng, rng)
-        push!(v, kernel(gi))
+        ldos = kernel === I ? -imag(tr(gi))/π : -imag(tr(gi * kernel))/π
+        push!(v, ldos)
     end
     return v
 end
@@ -369,12 +370,11 @@ end
 #endregion
 
 ############################################################################################
-# current: current density
+# current: current density Jᵢⱼ(ω) in units of e/h
 #   d = current(::GreenSolution; kernel)      -> d[sites...]::SparseMatrixCSC{SVector{E,T}}
 #   d = current(::GreenFunctionSlice; kernel) -> d(ω; params...)::SparseMatrixCSC{SVector{E,T}}
 #   Computes the zero-temperature equilibrium current density matrix Jᵢⱼ from site j to site i
-#       Jᵢⱼ = 2 (e/h) rᵢⱼ Im Tr(gʳᵢⱼHᵢⱼτ)    (for i≠j)
-#       Jᵢᵢ = ∑ⱼJᵢⱼ                          (for i==j)
+#       Jᵢⱼ(ω) = 2 (e/h) rᵢⱼ Im Tr(gʳⱼᵢHᵢⱼτ)
 #   Here kernel = τ, where τ is usually I (τz) for normal (Nambu) systems
 #region
 
