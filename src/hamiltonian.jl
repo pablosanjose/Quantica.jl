@@ -251,7 +251,7 @@ end
 
 call!(h::Hamiltonian; params...) = h  # mimic partial call!(p::ParametricHamiltonian; params...)
 call!(h::Hamiltonian, φs; params...) = flat_bloch!(h, sanitize_SVector(φs))
-call!(h::Hamiltonian{<:Any,<:Any,0}, ::Tuple{}; params...) = flat(h[])
+call!(h::Hamiltonian{<:Any,<:Any,0}, ::Tuple{}; params...) = flat(h[()])
 
 # returns a flat sparse matrix
 function flat_bloch!(h::Hamiltonian{T}, φs::SVector, axis = missing) where {T}
@@ -291,7 +291,7 @@ end
 
 # ouput of a call!(h, ϕs)
 call!_output(h::Hamiltonian) = flat(bloch(h))
-call!_output(h::Hamiltonian{<:Any,<:Any,0}) = flat(h[])
+call!_output(h::Hamiltonian{<:Any,<:Any,0}) = flat(h[()])
 
 #endregion
 
@@ -380,10 +380,10 @@ call!_output(p::ParametricHamiltonian) = call!_output(hamiltonian(p))
 #endregion
 
 ############################################################################################
-# indexing into AbstractHamiltonian
+# indexing into AbstractHamiltonian (harmonic extraction) - see also slices.jl
 #region
 
-Base.getindex(h::AbstractHamiltonian{<:Any,<:Any,L}) where {L} = h[zero(SVector{L,Int})]
+Base.getindex(h::AbstractHamiltonian{<:Any,<:Any,L}, ::Tuple{}) where {L} = h[zero(SVector{L,Int})]
 Base.getindex(h::AbstractHamiltonian, dn::Union{Integer,Tuple}) = getindex(h, SVector(dn))
 
 function Base.getindex(h::AbstractHamiltonian{<:Any,<:Any,L}, dn::SVector{L,Int}) where {L}
@@ -391,6 +391,8 @@ function Base.getindex(h::AbstractHamiltonian{<:Any,<:Any,L}, dn::SVector{L,Int}
         dn == dcell(har) && return matrix(har)
     end
     @boundscheck(boundserror(harmonics(h), dn))
+    # this is unreachable, but allows to have zero allocations by having non-Union return type
+    return h[()]
 end
 
 Base.isassigned(h::AbstractHamiltonian, dn::Tuple) = isassigned(h, SVector(dn))
@@ -416,7 +418,7 @@ function nhoppings(h::AbstractHamiltonian)
     return count
 end
 
-nonsites(h::AbstractHamiltonian) = nnzdiag(h[])
+nonsites(h::AbstractHamiltonian) = nnzdiag(h[()])
 
 coordination(h::AbstractHamiltonian) = iszero(nhoppings(h)) ? 0.0 : round(nhoppings(h) / nsites(lattice(h)), digits = 5)
 

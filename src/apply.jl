@@ -69,6 +69,17 @@ function recursive_push!(v::Vector{Pair{T,T}}, (xs, ys)::Pair) where {T}
     return v
 end
 
+# for cells = function
+function recursive_push!(v::Vector{SVector{L,Int}}, f::Function) where {L}
+    iter = BoxIterator(zero(SVector{L,Int}))
+    for cell in iter
+        f(cell) || continue
+        acceptcell!(iter, cell)
+        push!(v, cell)
+    end
+    return v
+end
+
 #endregion
 
 ############################################################################################

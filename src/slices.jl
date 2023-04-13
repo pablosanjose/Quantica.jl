@@ -1,6 +1,6 @@
 
 ############################################################################################
-# indexing Lattice and LatticeSlice - returns a LatticeSlice
+# slice of Lattice and LatticeSlice - returns a LatticeSlice
 #region
 
 Base.getindex(lat::Lattice; kw...) = lat[siteselector(; kw...)]
@@ -74,6 +74,49 @@ end
 #endregion
 
 ############################################################################################
+# slice of Hamiltonian h[latslice] - returns a SparseMatrix{B,Int}
+#   Elements::B can be transformed by `post(hij, (ci, cj))` using h[latslice; post]
+#   Here ci and cj are single-site CellSites for h
+#   ParametricHamiltonian deliberately not supported, as the output is not updatable
+#region
+
+Base.getindex(h::Hamiltonian; post = (hij, cij) -> hij, kw...) = h[getindex(lattice(h); kw...), post]
+
+function Base.getindex(h::Hamiltonian, ls::LatticeSlice, post = (hij, cij) -> hij)
+    cszero = zerocellsites(h, 1)
+    B = typeof(post(zero(blocktype(h)), (cszero, cszero)))
+    ncols = nrows = length(ls)
+    builder = CSC{B}(ncols)
+    hars = harmonics(h)
+    for colcs in cellsites(ls)
+        colcell = cell(colcs)
+        colsite = siteindices(colcs)
+        for har in hars
+            rowcell = colcell + dcell(har)
+            s = findsubcell(rowcell, ls)
+            s === nothing && continue
+            (ind, rowoffset) = s
+            rowsubcell = subcells(ls, ind)
+            rowsubcellinds = siteindices(rowsubcell)
+            hmat = unflat(matrix(har))
+            hrows = rowvals(hmat)
+            for ptr in nzrange(hmat, colsite)
+                hrow = hrows[ptr]
+                if hrow in rowsubcellinds
+                    rowcs = cellsites(rowcell, hrow)
+                    hij, cij = nonzeros(hmat)[ptr], (rowcs, colcs)
+                    pushtocolumn!(builder, rowoffset + hrow, post(hij, cij))
+                end
+            end
+        end
+        finalizecolumn!(builder)
+    end
+    return sparse(builder, nrows, ncols)
+end
+
+#endregion
+
+############################################################################################
 # indexing OrbitalSlice
 #region
 
@@ -114,13 +157,12 @@ end
 findsubcell(c, l::LatticeSlice{<:Any,<:Any,L}) where {L} =
     findsubcell(SVector{L,Int}(c), l)
 
-# returns (subcell, siteoffset), or nothing if not found
+# returns (subcellindex, siteoffset), or nothing if not found
 function findsubcell(cell´::SVector, l::LatticeSlice)
     offset = 0
-    for sc in subcells(l)
+    for (i, sc) in enumerate(subcells(l))
         if cell´ == cell(sc)
-            return sc, offset
-            return nothing  # since cells are unique
+            return i, offset  # since cells are unique
         else
             offset += nsites(sc)
         end
@@ -133,7 +175,7 @@ findsite(i::Integer, s::CellSites) = findfirst(==(i), siteindices(s))
 function Base.in((i, dn)::Tuple{Int,SVector}, ls::LatticeSlice)
     s = findsubcell(dn, ls)
     s === nothing && return false
-    j = findsite(i, first(s))
+    j = findsite(i, subcells(ls, first(s)))
     j === nothing && return false
     return true
 end
@@ -228,7 +270,7 @@ function grow(ls::LatticeSlice, h::AbstractHamiltonian)
                 sc´ = CellSites(c´)
                 push!(subcells(ls´), sc´)
             else
-                sc´ = first(s)
+                sc´ = subcells(ls´, first(s))
             end
             for col in siteindices(sc), ptr in nzrange(mat, col)
                 row = rowvals(mat)[ptr]
@@ -248,7 +290,7 @@ function Base.setdiff!(ls::LatticeSlice, ls0::LatticeSlice)
     for sc in subcells(ls)
         s = findsubcell(cell(sc), ls0)
         s === nothing && continue
-        sc0 = first(s)
+        sc0 = subcells(ls0, first(s))
         setdiff!(siteindices(sc), siteindices(sc0))
     end
     deleteif!(isempty, subcells(ls))

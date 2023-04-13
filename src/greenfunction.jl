@@ -272,7 +272,8 @@ function contact_indices(lsall::LatticeSlice, siteoffsets, ls::LatticeSlice)
         so = findsubcell(cell(scell´), lsall)
         so === nothing && continue
         # here offset is the number of sites in lsall before scell
-        (scell, offset) = so
+        (ind, offset) = so
+        scell = subcells(lsall, ind)
         for i´ in siteindices(scell´), (n, i) in enumerate(siteindices(scell))
             n´ = offset + n
             i == i´ && append!(contactinds, siteoffsets[n´]+1:siteoffsets[n´+1])
@@ -375,5 +376,33 @@ minimal_callsafe_copy(s::TMatrixSlicer) = TMatrixSlicer(minimal_callsafe_copy(s.
     s.tmatrix, s.gcontacts, s.blockstruct)
 
 #endregion
+#endregion
+
+############################################################################################
+# GreenColumnCache
+#   Cache that memoizes columns of GreenSolution on columns of cellsites
+#region
+
+struct GreenColumnCache{T,L,G<:GreenSolution{T,<:Any,L}}
+    gω::G
+    cache::Dict{Tuple{SVector{L,Int},SVector{L,Int},Int},Matrix{Complex{T}}}
+end
+
+GreenColumnCache(gω::GreenSolution{T,<:Any,L}) where {T,L} =
+    GreenColumnCache(gω, Dict{Tuple{SVector{L,Int},SVector{L,Int},Int},Matrix{Complex{T}}}())
+
+function Base.getindex(c::GreenColumnCache{<:Any,L}, ci::CellSites{L,Int}, cj::CellSites{L,Int}) where {L}
+    ni, i = cell(ci), siteindices(ci)
+    nj, j = cell(cj), siteindices(cj)
+    if haskey(c.cache, (ni, nj, j))
+        gs = c.cache[(ni, nj, j)]
+    else
+        gs = c.gω[cellsites(ni,:), cj]
+        push!(c.cache, (ni, nj, j) => gs)
+    end
+    h = hamiltonian(c.gω)
+    rows = flatrange(h, i)
+    return view(gs, rows, :)
+end
 
 #endregion

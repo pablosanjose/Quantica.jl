@@ -157,6 +157,7 @@ numbertype(::Sublat{T}) where {T} = T
 numbertype(::Lattice{T}) where {T} = T
 
 zerocell(::Lattice{<:Any,<:Any,L}) where {L} = zero(SVector{L,Int})
+zerocellsites(l::Lattice, i) = cellsites(zerocell(l), i)
 
 Base.copy(l::Lattice) = deepcopy(l)
 
@@ -751,6 +752,12 @@ unflatindex(::OrbitalBlockStructure{<:Number}, iflat::Integer) = (iflat, 1)
 Base.copy(b::OrbitalBlockStructure{B}) where {B} =
     OrbitalBlockStructure{B}(copy(blocksizes(b)), copy(subsizes(b)))
 
+Base.parent(s::SMatrixView) = s.s
+
+Base.view(s::SMatrixView, i...) = view(s.s, i...)
+
+Base.zero(::Type{SMatrixView{N,M,T,NM}}) where {N,M,T,NM} = SMatrixView(zero(SMatrix{N,M,T,NM}))
+
 #endregion
 #endregion
 
@@ -1115,6 +1122,9 @@ flatrange(h::AbstractHamiltonian, iunflat::Integer) = flatrange(blockstructure(h
 flatrange(h::AbstractHamiltonian, name::Symbol) =
     sublatorbrange(blockstructure(h), sublatindex(lattice(h), name))
 
+zerocell(h::AbstractHamiltonian) = zerocell(lattice(h))
+zerocellsites(h::AbstractHamiltonian, i) = zerocellsites(lattice(h), i)
+
 ## Hamiltonian
 
 Hamiltonian(l::Lattice{T,E,L}, b::OrbitalBlockStructure{B}, h::Vector{Harmonic{T,L,B}}, bl) where {T,E,L,B} =
@@ -1175,6 +1185,7 @@ end
 
 #region ## API ##
 
+# Note: this gives the *modified* hamiltonian, not parent
 hamiltonian(h::ParametricHamiltonian) = h.h
 
 bloch(h::ParametricHamiltonian) = h.h.bloch
@@ -1676,8 +1687,8 @@ end
 
 #region ## API ##
 
-hamiltonian(g::GreenFunction) = g.parent
-hamiltonian(g::GreenSolution) = g.parent
+hamiltonian(g::GreenFunction) = hamiltonian(g.parent)
+hamiltonian(g::GreenSolution) = hamiltonian(g.parent)
 
 lattice(g::GreenFunction) = lattice(g.parent)
 lattice(g::GreenSolution) = lattice(g.parent)
