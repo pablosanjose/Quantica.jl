@@ -199,15 +199,6 @@ function merged_mul!(C::SparseMatrixCSC{<:Number}, bs::OrbitalBlockStructure{B},
     return C
 end
 
-# symmetrize!/antisymmetrize! without changing sparse structure
-function symmetrize!(s::SparseMatrixCSC, factor = 1)
-    for col in axes(s, 2), ptr in nzrange(s, col)
-        row = rowvals(s)[ptr]
-        nonzeros(s)[ptr] += factor * s[col, row]
-    end
-    return s
-end
-
 #endregion
 
 ############################################################################################

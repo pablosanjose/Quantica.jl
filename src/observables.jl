@@ -103,7 +103,7 @@ end
 ############################################################################################
 # josephson
 #   The equilibrium (static) Josephson current given by
-#       I = Re ∫dω J(ω; params...), where J(ω; params...) = (e/h) × 2f(ω)Tr[(GʳΣʳᵢ-ΣʳᵢGʳ)τz]
+#       I = Re ∫dω J(ω; params...), where J(ω; params...) = (e/h) × 2f(ω)Tr[(ΣʳᵢGʳ - GʳΣʳᵢ)τz]
 #   J = JosephsonDensity(g::GreenFunction; contact = i, kBT = 0, phases)
 #   J(ω; params...) -> scalar or vector [J(ϕⱼ) for ϕⱼ in phases] if `phases` is an
 #       integer (num phases from 0 to π) or a collection of ϕ's
@@ -121,7 +121,7 @@ struct JosephsonDensity{T<:AbstractFloat,P<:Union{Missing,AbstractArray},G<:Gree
     phaseshifts::P              # missing or collection of phase shifts to apply
     traces::P                   # preallocated workspace
     Σ::Matrix{Complex{T}}       # preallocated workspace
-    gΣΣg::Matrix{Complex{T}}    # preallocated workspace
+    ΣggΣ::Matrix{Complex{T}}    # preallocated workspace
     Σ´::Matrix{Complex{T}}      # preallocated workspace
     g´::Matrix{Complex{T}}      # preallocated workspace
     den::Matrix{Complex{T}}     # preallocated workspace
@@ -188,12 +188,12 @@ function josephson_traces!(J, gr, Σi, f)
     return J.traces
 end
 
-# 2 f(ω) Tr[(gr * Σi - Σi * gr) * τz]
+# 2 f(ω) Tr[(Σi * gr - gr * Σi) * τz]
 function josephson_one_trace!(J, gr, Σi, f)
-    gΣΣg = J.gΣΣg
-    mul!(gΣΣg, gr, Σi)
-    mul!(gΣΣg, Σi, gr, -1, 1)
-    trace = 2 * f * trace_tau(gΣΣg, J.tauz)
+    ΣggΣ = J.ΣggΣ
+    mul!(ΣggΣ, Σi, gr)
+    mul!(ΣggΣ, gr, Σi, -1, 1)
+    trace = 2 * f * trace_tau(ΣggΣ, J.tauz)
     return trace
 end
 
@@ -202,8 +202,8 @@ function apply_phaseshift!(J, gr, Σi, phaseshift)
     Σi´ = J.Σ´
     U = J.cisτz
     phasehalf = phaseshift/2
-    @. U = cis(phasehalf * J.tauz)
-    @. Σi´ = U * Σi * U'       # Σi´ = U Σi U'
+    @. U = cis(-phasehalf * J.tauz)
+    @. Σi´ = U * Σi * U'
 
     den = J.den
     one!(den)
@@ -374,7 +374,7 @@ end
 #   d = current(::GreenSolution; kernel)      -> d[sites...]::SparseMatrixCSC{SVector{E,T}}
 #   d = current(::GreenFunctionSlice; kernel) -> d(ω; params...)::SparseMatrixCSC{SVector{E,T}}
 #   Computes the zero-temperature equilibrium current density matrix Jᵢⱼ from site j to site i
-#       Jᵢⱼ(ω) = 2 (e/h) rᵢⱼ Im Tr(gʳⱼᵢHᵢⱼτ)
+#       Jᵢⱼ(ω) = 2 (e/h) rᵢⱼ Re Tr[(Hᵢⱼgʳⱼᵢ - gʳᵢⱼHⱼᵢ)τ]
 #   Here kernel = τ, where τ is usually I (τz) for normal (Nambu) systems
 #region
 
@@ -424,7 +424,6 @@ end
 function current_matrix(gω, ls, d)
     h = hamiltonian(parent(gω))
     current = h[ls, (hij, cij) -> apply_kernel_current(hij, cij, d)]
-    symmetrize!(current, -1)
     return current
 end
 
@@ -432,9 +431,10 @@ function apply_kernel_current(hij::B, (ci, cj), d::CurrentDensitySolution{T,E}) 
     ni, i = cell(ci), siteindex(ci)
     nj, j = cell(cj), siteindex(cj)
     ni == nj && i == j && return zero(SVector{E,T})
-    gs = d.cache[cj, ci]
-    gji = mask_block(B, gs)
-    trij = 2 * imag(tr((gji * hij) * d.kernel))
+    gji = mask_block(B, d.cache[cj, ci])
+    gij = mask_block(B, d.cache[ci, cj])
+    hji = hij'
+    trij = 2 * real(tr((hij * gji - gij * hji) * d.kernel))
     lat = lattice(hamiltonian(d.gω))
     ri = site(lat, i, ni)
     rj = site(lat, j, nj)
