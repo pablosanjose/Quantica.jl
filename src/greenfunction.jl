@@ -70,6 +70,7 @@ minimal_callsafe_copy(s::Contacts) =
 
 ############################################################################################
 # GreenSolution indexing
+#   We convert any index down to cellorbs to pass to slicer, except contacts (Int, Colon)
 #region
 
 Base.getindex(g::GreenFunction, i, j = i) = GreenFunctionSlice(g, i, j)
@@ -83,31 +84,31 @@ Base.getindex(g::GreenSolution, i::Integer, j::Integer = i) = copy(view(g, i, j)
 Base.getindex(g::GreenSolution, ::Colon, ::Colon = :) = copy(view(g, :, :))
 
 function Base.getindex(g::GreenSolution, i)
-    ai = ind_to_slice(i, g)
+    ai = ind_to_orbslice(i, g)
     return getindex(g, ai, ai)
 end
 
-Base.getindex(g::GreenSolution, i, j) = getindex(g, ind_to_slice(i, g), ind_to_slice(j, g))
+Base.getindex(g::GreenSolution, i, j) = getindex(g, ind_to_orbslice(i, g), ind_to_orbslice(j, g))
 
 # fallback for cases where i and j are not *both* contact indices -> convert to OrbitalSlice
-function ind_to_slice(c::Integer, g)
+function ind_to_orbslice(c::Integer, g)
     contactbs = blockstructure(g)
     cinds = contactinds(contactbs, c)
     os = orbslice(contactbs)[cinds]
     return os
 end
 
-ind_to_slice(c::CellSites, g) = orbslice(c, hamiltonian(g))
-ind_to_slice(l::LatticeSlice, g) = orbslice(l, hamiltonian(g))
-ind_to_slice(s::SiteSelector, g) = ind_to_slice(lattice(g)[s], g)
-ind_to_slice(kw::NamedTuple, g) = ind_to_slice(getindex(lattice(g); kw...), g)
-ind_to_slice(cell::Union{SVector,Tuple}, g::GreenSolution{<:Any,<:Any,L}) where {L} =
-    ind_to_slice(cellsites(sanitize_SVector(SVector{L,Int}, cell), :), g)
-ind_to_slice(c::CellSites{<:Any,Colon}, g) = cellorbs(cell(c), 1:flatsize(parent(g)))
-ind_to_slice(c::CellSites{<:Any,Symbol}, g) =
+ind_to_orbslice(c::CellSites, g) = orbslice(c, hamiltonian(g))
+ind_to_orbslice(l::LatticeSlice, g) = orbslice(l, hamiltonian(g))
+ind_to_orbslice(s::SiteSelector, g) = ind_to_orbslice(lattice(g)[s], g)
+ind_to_orbslice(kw::NamedTuple, g) = ind_to_orbslice(getindex(lattice(g); kw...), g)
+ind_to_orbslice(cell::Union{SVector,Tuple}, g::GreenSolution{<:Any,<:Any,L}) where {L} =
+    ind_to_orbslice(cellsites(sanitize_SVector(SVector{L,Int}, cell), :), g)
+ind_to_orbslice(c::CellSites{<:Any,Colon}, g) = cellorbs(cell(c), 1:flatsize(parent(g)))
+ind_to_orbslice(c::CellSites{<:Any,Symbol}, g) =
     # uses a UnitRange instead of a Vector
     cellorbs(cell(c), flatrange(hamiltonian(g), siteindices(c)))
-ind_to_slice(c::CellOrbitals, g) = c
+ind_to_orbslice(c::CellOrbitals, g) = c
 
 Base.getindex(g::GreenSolution, i::OrbitalSlice, j::OrbitalSlice) =
     mortar([g[si, sj] for si in subcells(i), sj in subcells(j)])
@@ -379,25 +380,26 @@ minimal_callsafe_copy(s::TMatrixSlicer) = TMatrixSlicer(minimal_callsafe_copy(s.
 #endregion
 
 ############################################################################################
-# GreenColumnCache
-#   Cache that memoizes columns of GreenSolution on columns of cellsites
+# GreenSolutionCache
+#   Cache that memoizes columns of GreenSolution[ci,cj] on columns of single CellSite{L}
+#   It does not support more general indices
 #region
 
-struct GreenColumnCache{T,L,G<:GreenSolution{T,<:Any,L}}
+struct GreenSolutionCache{T,L,G<:GreenSolution{T,<:Any,L}}
     gω::G
     cache::Dict{Tuple{SVector{L,Int},SVector{L,Int},Int},Matrix{Complex{T}}}
 end
 
-GreenColumnCache(gω::GreenSolution{T,<:Any,L}) where {T,L} =
-    GreenColumnCache(gω, Dict{Tuple{SVector{L,Int},SVector{L,Int},Int},Matrix{Complex{T}}}())
+GreenSolutionCache(gω::GreenSolution{T,<:Any,L}) where {T,L} =
+    GreenSolutionCache(gω, Dict{Tuple{SVector{L,Int},SVector{L,Int},Int},Matrix{Complex{T}}}())
 
-function Base.getindex(c::GreenColumnCache{<:Any,L}, ci::CellSites{L,Int}, cj::CellSites{L,Int}) where {L}
-    ni, i = cell(ci), siteindices(ci)
-    nj, j = cell(cj), siteindices(cj)
+function Base.getindex(c::GreenSolutionCache{<:Any,L}, ci::CellSite{L}, cj::CellSite{L}) where {L}
+    ni, i = cell(ci), siteindex(ci)
+    nj, j = cell(cj), siteindex(cj)
     if haskey(c.cache, (ni, nj, j))
         gs = c.cache[(ni, nj, j)]
     else
-        gs = c.gω[cellsites(ni,:), cj]
+        gs = c.gω[cellsites(ni, :), cj]
         push!(c.cache, (ni, nj, j) => gs)
     end
     h = hamiltonian(c.gω)

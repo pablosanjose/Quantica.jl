@@ -220,11 +220,11 @@ end
 
 ############################################################################################
 # conductance(gs::GreenFunctionSlice; nambu -> false) -> G(ω; params...)::Real
-#   For gs = g[i::Int, j::Int = i] -> we get a Conductance:
-#       Zero temperature Gᵢⱼ = dIᵢ/dVⱼ in units of e^2/h for normal contacts i, j
-#           Gᵢⱼ =  e^2/h × Tr{[δᵢⱼi(Gʳ-Gᵃ)Γⁱ-GʳΓⁱGᵃΓʲ]}         (nambu = false)
-#           Gᵢⱼ =  e^2/h × Tr{[δᵢⱼi(Gʳ-Gᵃ)Γⁱτₑ-GʳΓⁱτzGᵃΓʲτₑ]}   (nambu = true)
-#       where τₑ = [1 0; 0 0] and τz = [1 0; 0 -1] in Nambu space, and ω = eV.
+#   For gs = g[i::Int, j::Int = i] -> we get zero temperature Gᵢⱼ = dIᵢ/dVⱼ in units of e^2/h 
+#   where i, j are contact indices
+#       Gᵢⱼ =  e^2/h × Tr{[δᵢⱼi(Gʳ-Gᵃ)Γⁱ-GʳΓⁱGᵃΓʲ]}         (nambu = false)
+#       Gᵢⱼ =  e^2/h × Tr{[δᵢⱼi(Gʳ-Gᵃ)Γⁱτₑ-GʳΓⁱτzGᵃΓʲτₑ]}   (nambu = true)
+#   and where τₑ = [1 0; 0 0] and τz = [1 0; 0 -1] in Nambu space, and ω = eV.
 #region
 
 struct Conductance{T,E,L,C,G<:GreenFunction{T,E,L}} <: Observable
@@ -381,7 +381,7 @@ end
 struct CurrentDensitySolution{T,E,L,G<:GreenSolution{T,E,L},K}
     gω::G
     kernel::K                      # should return a float when applied to gʳᵢⱼHᵢⱼ
-    cache::GreenColumnCache{T,L,G}
+    cache::GreenSolutionCache{T,L,G}
 end
 
 struct CurrentDensitySlice{T,E,L,G<:GreenFunction{T,E,L},K}
@@ -393,7 +393,7 @@ end
 #region ## Constructors ##
 
 current(gω::GreenSolution; kernel = I) =
-    CurrentDensitySolution(gω, kernel, GreenColumnCache(gω))
+    CurrentDensitySolution(gω, kernel, GreenSolutionCache(gω))
 
 function current(gs::GreenFunctionSlice; kernel = I)
     slicerows(gs) === slicecols(gs) ||
@@ -429,15 +429,15 @@ function current_matrix(gω, ls, d)
 end
 
 function apply_kernel_current(hij::B, (ci, cj), d::CurrentDensitySolution{T,E}) where {T,E,B}
-    ni, i = siteindices(ci), cell(ci)
-    nj, j = siteindices(cj), cell(cj)
+    ni, i = cell(ci), siteindex(ci)
+    nj, j = cell(cj), siteindex(cj)
     ni == nj && i == j && return zero(SVector{E,T})
     gs = d.cache[cj, ci]
     gji = mask_block(B, gs)
     trij = 2 * imag(tr((gji * hij) * d.kernel))
     lat = lattice(hamiltonian(d.gω))
-    ri = site(lat, ni, i)
-    rj = site(lat, nj, j)
+    ri = site(lat, i, ni)
+    rj = site(lat, j, nj)
     return (ri - rj) * trij
 end
 

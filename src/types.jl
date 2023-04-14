@@ -278,6 +278,9 @@ struct OrbitalSlice{L}
     subcells::Vector{CellOrbitals{L,Vector{Int}}}     # indices here correpond to orbitals, not sites
 end
 
+const CellSite{L} = CellSites{L,Int}
+const CellOrbital{L} = CellOrbitals{L,Int}
+
 #region ## Constructors ##
 
 CellSites(cell) = CellSites(cell, Int[])
@@ -292,12 +295,18 @@ OrbitalSlice{L}() where {L} = OrbitalSlice(CellOrbitals{L,Vector{Int}}[])
 cellsites(cell, x) = CellSites(sanitize_SVector(Int, cell), x)      # exported
 cellorbs(cell, x) = CellOrbitals(sanitize_SVector(Int, cell), x)    # unexported
 
+cellsite(cell, x::Integer) = cellsites(cell, x)
+cellorb(cell, x::Integer) = cellorbs(cell, x)
+
 #endregion
 
 #region ## API ##
 
 siteindices(s::CellSites) = s.inds
 orbindices(s::CellOrbitals) = s.inds
+
+siteindex(s::CellSite) = s.inds
+orbindex(s::CellOrbital) = s.inds
 
 cell(s::AbstractCellElements) = s.cell
 

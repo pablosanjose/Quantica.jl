@@ -28,7 +28,8 @@ function Base.getindex(lat::Lattice, as::AppliedSiteSelector)
     return latslice
 end
 
-Base.getindex(l::Lattice, c::CellSites) = LatticeSlice(l, [c])
+Base.getindex(l::Lattice, c::CellSites{L}) where {L} =
+    LatticeSlice(l, [CellSites{L,Vector{Int}}(c)])
 
 Base.getindex(ls::LatticeSlice; kw...) = getindex(ls, siteselector(; kw...))
 
@@ -76,7 +77,7 @@ end
 ############################################################################################
 # slice of Hamiltonian h[latslice] - returns a SparseMatrix{B,Int}
 #   Elements::B can be transformed by `post(hij, (ci, cj))` using h[latslice; post]
-#   Here ci and cj are single-site CellSites for h
+#   Here ci and cj are single-site CellSite for h
 #   ParametricHamiltonian deliberately not supported, as the output is not updatable
 #region
 
@@ -103,7 +104,7 @@ function Base.getindex(h::Hamiltonian, ls::LatticeSlice, post = (hij, cij) -> hi
             for ptr in nzrange(hmat, colsite)
                 hrow = hrows[ptr]
                 if hrow in rowsubcellinds
-                    rowcs = cellsites(rowcell, hrow)
+                    rowcs = cellsite(rowcell, hrow)
                     hij, cij = nonzeros(hmat)[ptr], (rowcs, colcs)
                     pushtocolumn!(builder, rowoffset + hrow, post(hij, cij))
                 end

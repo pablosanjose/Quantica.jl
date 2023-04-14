@@ -9,9 +9,16 @@ Base.convert(::Type{T}, l::SMatrixView) where T<:SMatrixView = T(parent(l))
 Base.convert(::Type{T}, l::T) where T<:Sublat = l
 Base.convert(::Type{T}, l::Sublat) where T<:Sublat = T(l)
 
+Base.convert(::Type{T}, l::T) where T<:CellSites = l
+Base.convert(::Type{T}, l::CellSites) where T<:CellSites = T(l)
+
 # Constructors for conversion
 Sublat{T,E}(s::Sublat, name = s.name) where {T<:AbstractFloat,E} =
     Sublat{T,E}([sanitize_SVector(SVector{E,T}, site) for site in sites(s)], name)
+
+CellSites{L,V}(c::CellSites) where {L,V} =
+    CellSites{L,V}(convert(SVector{L,Int}, cell(c)), convert(V, siteindices(c)))
+
 
 # We need this to promote different sublats into common dimensionality and type to combine
 # into a lattice
