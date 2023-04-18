@@ -102,7 +102,7 @@ end
 
 ############################################################################################
 # josephson
-#   The equilibrium (static) Josephson current given by
+#   The equilibrium (static) Josephson current in units of e/h, given by
 #       I = Re ∫dω J(ω; params...), where J(ω; params...) = (e/h) × 2f(ω)Tr[(ΣʳᵢGʳ - GʳΣʳᵢ)τz]
 #   J = JosephsonDensity(g::GreenFunction; contact = i, kBT = 0, phases)
 #   J(ω; params...) -> scalar or vector [J(ϕⱼ) for ϕⱼ in phases] if `phases` is an
@@ -220,7 +220,7 @@ end
 
 ############################################################################################
 # conductance(gs::GreenFunctionSlice; nambu -> false) -> G(ω; params...)::Real
-#   For gs = g[i::Int, j::Int = i] -> we get zero temperature Gᵢⱼ = dIᵢ/dVⱼ in units of e^2/h 
+#   For gs = g[i::Int, j::Int = i] -> we get zero temperature Gᵢⱼ = dIᵢ/dVⱼ in units of e^2/h
 #   where i, j are contact indices
 #       Gᵢⱼ =  e^2/h × Tr{[δᵢⱼi(Gʳ-Gᵃ)Γⁱ-GʳΓⁱGᵃΓʲ]}         (nambu = false)
 #       Gᵢⱼ =  e^2/h × Tr{[δᵢⱼi(Gʳ-Gᵃ)Γⁱτₑ-GʳΓⁱτzGᵃΓʲτₑ]}   (nambu = true)
@@ -297,34 +297,34 @@ end
 
 ############################################################################################
 # ldos: local spectral density
-#   d = ldos(::GreenSolution; kernel)      -> d[sites...]::Vector
-#   d = ldos(::GreenFunctionSlice; kernel) -> d(ω; params...)::Vector
+#   d = ldos(::GreenSolution; charge)      -> d[sites...]::Vector
+#   d = ldos(::GreenFunctionSlice; charge) -> d(ω; params...)::Vector
 #region
 
 struct LocalSpectralDensitySolution{T,E,L,G<:GreenSolution{T,E,L},K}
     gω::G
-    kernel::K                      # should return a float when applied to gω[cellsite(n,i)]
+    charge::K                      # should return a float when applied to gω[cellsite(n,i)]
 end
 
 struct LocalSpectralDensitySlice{T,E,L,G<:GreenFunction{T,E,L},K}
     g::G
-    kernel::K                      # should return a float when applied to gω[cellsite(n,i)]
+    charge::K                      # should return a float when applied to gω[cellsite(n,i)]
     latslice::LatticeSlice{T,E,L}
     diagonal::Vector{T}
 end
 
 #region ## Constructors ##
 
-ldos(gω::GreenSolution; kernel = I) = LocalSpectralDensitySolution(gω, kernel)
+ldos(gω::GreenSolution; charge = I) = LocalSpectralDensitySolution(gω, charge)
 
-function ldos(gs::GreenFunctionSlice{T}; kernel = I) where {T}
+function ldos(gs::GreenFunctionSlice{T}; charge = I) where {T}
     slicerows(gs) === slicecols(gs) ||
         argerror("Cannot take ldos of a GreenFunctionSlice with rows !== cols")
     g = parent(gs)
     lat = lattice(g)
     latslice = lat[slicerows(gs)]
     diagonal = Vector{T}(undef, length(latslice))
-    return LocalSpectralDensitySlice(g, kernel, latslice, diagonal)
+    return LocalSpectralDensitySlice(g, charge, latslice, diagonal)
 end
 
 #endregion
@@ -337,30 +337,30 @@ Base.getindex(d::LocalSpectralDensitySolution; kw...) = d[getindex(lattice(d.gω
 
 function Base.getindex(d::LocalSpectralDensitySolution{T}, l::LatticeSlice) where {T}
     v = T[]
-    foreach(scell -> append_ldos!(v, scell, d.gω, d.kernel), subcells(l))
+    foreach(scell -> append_ldos!(v, scell, d.gω, d.charge), subcells(l))
     return v
 end
 
 Base.getindex(d::LocalSpectralDensitySolution{T}, scell::CellSites) where {T} =
-    append_ldos!(T[], scell, d.gω, d.kernel)
+    append_ldos!(T[], scell, d.gω, d.charge)
 
 function call!(d::LocalSpectralDensitySlice, ω; params...)
     gω = call!(greenfunction(d), ω; params...)
     empty!(d.diagonal)
     for sc in subcells(d.latslice)
-        append_ldos!(d.diagonal, sc, gω, d.kernel)
+        append_ldos!(d.diagonal, sc, gω, d.charge)
     end
     return d.diagonal
 end
 
 (d::LocalSpectralDensitySlice)(ω; params...) = copy(call!(d, ω; params...))
 
-function append_ldos!(v, sc, gω, kernel)
+function append_ldos!(v, sc, gω, charge)
     gcell = gω[sc]
     for i in siteindices(sc)
         rng = flatrange(hamiltonian(gω), i)
         gi = view(gcell, rng, rng)
-        ldos = kernel === I ? -imag(tr(gi))/π : -imag(tr(gi * kernel))/π
+        ldos = charge === I ? -imag(tr(gi))/π : -imag(tr(gi * charge))/π
         push!(v, ldos)
     end
     return v
@@ -370,37 +370,37 @@ end
 #endregion
 
 ############################################################################################
-# current: current density Jᵢⱼ(ω) in units of e/h
-#   d = current(::GreenSolution; kernel)      -> d[sites...]::SparseMatrixCSC{SVector{E,T}}
-#   d = current(::GreenFunctionSlice; kernel) -> d(ω; params...)::SparseMatrixCSC{SVector{E,T}}
+# current: current density Jᵢⱼ(ω) as a function of a charge operator
+#   d = current(::GreenSolution; charge)      -> d[sites...]::SparseMatrixCSC{SVector{E,T}}
+#   d = current(::GreenFunctionSlice; charge) -> d(ω; params...)::SparseMatrixCSC{SVector{E,T}}
 #   Computes the zero-temperature equilibrium current density matrix Jᵢⱼ from site j to site i
 #       Jᵢⱼ(ω) = 2 (e/h) rᵢⱼ Re Tr[(Hᵢⱼgʳⱼᵢ - gʳᵢⱼHⱼᵢ)τ]
-#   Here kernel = τ, where τ is usually I (τz) for normal (Nambu) systems
+#   Here charge = τ, where τ is usually I (τz) for normal (Nambu) systems
 #region
 
 struct CurrentDensitySolution{T,E,L,G<:GreenSolution{T,E,L},K}
     gω::G
-    kernel::K                      # should return a float when applied to gʳᵢⱼHᵢⱼ
+    charge::K                      # should return a float when applied to gʳᵢⱼHᵢⱼ
     cache::GreenSolutionCache{T,L,G}
 end
 
 struct CurrentDensitySlice{T,E,L,G<:GreenFunction{T,E,L},K}
     g::G
-    kernel::K                      # should return a float when applied to gʳᵢⱼHᵢⱼ
+    charge::K                      # should return a float when applied to gʳᵢⱼHᵢⱼ
     latslice::LatticeSlice{T,E,L}
 end
 
 #region ## Constructors ##
 
-current(gω::GreenSolution; kernel = I) =
-    CurrentDensitySolution(gω, kernel, GreenSolutionCache(gω))
+current(gω::GreenSolution; charge = I) =
+    CurrentDensitySolution(gω, charge, GreenSolutionCache(gω))
 
-function current(gs::GreenFunctionSlice; kernel = I)
+function current(gs::GreenFunctionSlice; charge = I)
     slicerows(gs) === slicecols(gs) ||
         argerror("Cannot currently take ldos of a GreenFunctionSlice with rows !== cols")
     g = parent(gs)
     latslice = lattice(g)[slicerows(gs)]
-    return CurrentDensitySlice(g, kernel, latslice)
+    return CurrentDensitySlice(g, charge, latslice)
 end
 
 #endregion
@@ -417,28 +417,29 @@ Base.getindex(d::CurrentDensitySolution, scell::CellSites) = d[lattice(hamiltoni
 function (d::CurrentDensitySlice)(ω; params...)
     gω = call!(d.g, ω; params...)
     ls = d.latslice
-    cu = current(gω; kernel = d.kernel)
+    cu = current(gω; charge = d.charge)
     return cu[ls]
 end
 
 function current_matrix(gω, ls, d)
     h = hamiltonian(parent(gω))
-    current = h[ls, (hij, cij) -> apply_kernel_current(hij, cij, d)]
+    current = h[ls, (hij, cij) -> apply_charge_current(hij, cij, d)]
     return current
 end
 
-function apply_kernel_current(hij::B, (ci, cj), d::CurrentDensitySolution{T,E}) where {T,E,B}
+function apply_charge_current(hij::B, (ci, cj), d::CurrentDensitySolution{T,E}) where {T,E,B}
     ni, i = cell(ci), siteindex(ci)
     nj, j = cell(cj), siteindex(cj)
     ni == nj && i == j && return zero(SVector{E,T})
     gji = mask_block(B, d.cache[cj, ci])
     gij = mask_block(B, d.cache[ci, cj])
     hji = hij'
-    trij = 2 * real(tr((hij * gji - gij * hji) * d.kernel))
-    lat = lattice(hamiltonian(d.gω))
+    Iij = 2 * real(tr((hij * gji - gij * hji) * d.charge))
+    lat = lattice(d.gω)
     ri = site(lat, i, ni)
     rj = site(lat, j, nj)
-    return (ri - rj) * trij
+    Jij = (ri - rj) * Iij
+    return Jij
 end
 
 #endregion
