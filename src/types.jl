@@ -765,6 +765,8 @@ Base.parent(s::SMatrixView) = s.s
 
 Base.view(s::SMatrixView, i...) = view(s.s, i...)
 
+Base.getindex(s::SMatrixView, i...) = getindex(s.s, i...)
+
 Base.zero(::Type{SMatrixView{N,M,T,NM}}) where {N,M,T,NM} = SMatrixView(zero(SMatrix{N,M,T,NM}))
 
 #endregion

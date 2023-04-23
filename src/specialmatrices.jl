@@ -182,6 +182,9 @@ checkstored(mat, i, j) = i in view(rowvals(mat), nzrange(mat, j)) ||
 # HybridSparseBlochMatrix syncing
 #region
 
+checkinitialized(s) =
+    needs_initialization(s) && internalerror("sync!: Tried to sync uninitialized matrix")
+
 # Uniform case
 function flat_sync!(s::HybridSparseBlochMatrix{<:Any,S}) where {N,S<:SMatrix{N,N}}
     checkinitialized(s)
@@ -200,12 +203,34 @@ function flat_sync!(s::HybridSparseBlochMatrix{<:Any,S}) where {N,S<:SMatrix{N,N
     return s
 end
 
-checkinitialized(s) =
-    needs_initialization(s) && internalerror("sync!: Tried to sync uninitialized matrix")
-
-## TODO
-flat_sync!(s::HybridSparseBlochMatrix{<:Any,S}) where {S<:SMatrixView} =
-    internalerror("flat_sync!: not yet implemented method for non-uniform orbitals")
+# Non-uniform case
+function flat_sync!(s::HybridSparseBlochMatrix{<:Any,S}) where {N,S<:SMatrixView{N,N}}
+    checkinitialized(s)
+    flat, unflat = flat_unsafe(s), unflat_unsafe(s)
+    cols, rows, rowsflat = axes(unflat, 2), rowvals(unflat), rowvals(flat)
+    nzflat, nzunflat = nonzeros(flat), nonzeros(unflat)
+    bs = blockstructure(s)
+    for col in cols
+        colrng = flatrange(bs, col)
+        for (j, colflat) in enumerate(colrng)
+            ptrsflat = nzrange(flat, colflat)
+            ptrflat = first(ptrsflat)
+            for ptr in nzrange(unflat, col)
+                row = rows[ptr]
+                val = nzunflat[ptr]
+                rowrng = flatrange(bs, row)
+                for (i, rowflat) in enumerate(rowrng)
+                    rowsflat[ptrflat] == rowflat && ptrflat in ptrsflat ||
+                        internalerror("flat_sync!: unexpected structural mismatch")
+                    nzflat[ptrflat] = val[i,j]
+                    ptrflat += 1
+                end
+            end
+        end
+    end
+    needs_no_sync!(s)
+    return s
+end
 
 ## TODO
 unflat_sync!(s) = internalerror("unflat_sync!: method not yet implemented")
@@ -392,11 +417,26 @@ dense_addblocks!(mat) = mat
 
 # inverse_green from 0D AbstractHamiltonian + contacts
 function inverse_green(h::AbstractHamiltonian{T,<:Any,0}, contacts) where {T}
-    Σs = selfenergies(contacts)
     hdim = flatsize(h)
     haxis = 1:hdim
     ωblock = MatrixBlock((zero(Complex{T}) * I)(hdim), haxis, haxis)
     hblock = MatrixBlock(call!_output(h), haxis, haxis)
+    mat, unitcinds, unitcindsall = inverse_green_mat((ωblock, -hblock), hdim, contacts)
+    source = zeros(Complex{T}, size(mat, 2), length(unitcindsall))
+    nonextrng = 1:flatsize(h)
+    return InverseGreenBlockSparse(mat, nonextrng, unitcinds, unitcindsall, source)
+end
+
+# case without contacts
+function inverse_green_mat(blocks, _, ::Contacts{<:Any,0})
+    mat = BlockSparseMatrix(blocks...)
+    unitcinds = Vector{Int}[]
+    unitcindsall = Int[]
+    return mat, unitcinds, unitcindsall
+end
+
+function inverse_green_mat(blocks, hdim, contacts)
+    Σs = selfenergies(contacts)
     extoffset = hdim
     # these are indices of contact orbitals within the merged orbital slice
     unitcinds = unit_contact_inds(contacts)
@@ -404,12 +444,10 @@ function inverse_green(h::AbstractHamiltonian{T,<:Any,0}, contacts) where {T}
     unitcindsall = unique!(sort!(reduce(vcat, unitcinds)))
     checkcontactindices(unitcindsall, hdim)
     solvers = solver.(Σs)
-    blocks = selfenergyblocks(extoffset, unitcinds, 1, (ωblock, -hblock), solvers...)
+    blocks´ = selfenergyblocks(extoffset, unitcinds, 1, blocks, solvers...)
     # we need to flatten extended blocks, that come as NTuple{3}'s
-    mat = BlockSparseMatrix(tupleflatten(blocks...)...)
-    source = zeros(Complex{T}, size(mat, 2), length(unitcindsall))
-    nonextrng = 1:flatsize(h)
-    return InverseGreenBlockSparse(mat, nonextrng, unitcinds, unitcindsall, source)
+    mat = BlockSparseMatrix(tupleflatten(blocks´...)...)
+    return mat, unitcinds, unitcindsall
 end
 
 # switch from contactinds (relative to merged contact orbslice) to unitcinds (relative
