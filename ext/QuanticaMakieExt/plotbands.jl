@@ -185,7 +185,7 @@ primitive_size(normr, size, maxsize) = maxsize * normr
 #endregion
 
 ############################################################################################
-# PlotBands for 2D Bands
+# PlotBands for 1D and 2D Bands (2D and 3D embedding space)
 #region
 
 function Makie.plot!(plot::PlotBands{Tuple{S}}) where {S<:BandOrSubbandsOrMeshes}
@@ -193,6 +193,9 @@ function Makie.plot!(plot::PlotBands{Tuple{S}}) where {S<:BandOrSubbandsOrMeshes
     mp = meshprimitives(meshes, plot)
     return plotmeshes!(plot, mp)
 end
+
+plotmeshes!(plot, mp::MeshPrimitives{<:Any,E}) where {E} =
+    Quantica.argerror("Can only plot 1D and 2D bands, got $(E-1)D")
 
 function plotmeshes!(plot, mp::MeshPrimitives{<:Any,2})
     verts = mp.verts[mp.simps]

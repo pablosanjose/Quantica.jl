@@ -419,6 +419,7 @@ end
 
 ############################################################################################
 # Subband slicing and indexing
+#   Example: in a 2D lattice, subband[kx,ky,:] is a vertical slice at fixed momentum kx, ky
 #region
 
 Base.getindex(b::Bands, xs...) = [s[xs...] for s in subbands(b)]
