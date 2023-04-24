@@ -62,15 +62,16 @@ end
 function Quantica.qplot(g::GreenFunction; fancyaxis = true, axis = (;), figure = (;), inspector = false, children = missing, plotkw...)
     fig, ax = empty_fig_axis(g; fancyaxis, axis, figure)
     Σkws = Iterators.cycle(parse_children(children))
-    for (Σ, childkw) in zip(Quantica.selfenergies(Quantica.contacts(g)), Σkws)
+    Σs = Quantica.selfenergies(Quantica.contacts(g))
+    for (Σ, childkw) in zip(Σs, Σkws)
         primitives = selfenergy_plottable(Quantica.solver(Σ), Quantica.plottables(Σ)...; childkw...)
         for (prim, primkw) in primitives
             plotlattice!(ax, prim; plotkw..., childkw..., primkw...)
         end
     end
-    # Makie BUG: To allow inspector to show topmost tooltip, it must be transparent
+    # Makie BUG: To allow inspector to show topmost tooltip, it should be transparent
     # if other layers (here the leads) are transparent
-    plotlattice!(ax, parent(g); plotkw..., force_transparency = inspector)
+    plotlattice!(ax, parent(g); plotkw..., force_transparency = inspector && !isempty(Σs))
     inspector && DataInspector()
     return fig
 end
