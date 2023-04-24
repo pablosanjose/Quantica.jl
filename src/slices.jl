@@ -180,13 +180,15 @@ end
 
 findsite(i::Integer, s::CellSites) = findfirst(==(i), siteindices(s))
 
-function Base.in((i, dn)::Tuple{Int,SVector}, ls::LatticeSlice)
+function findsite((i, dn)::Tuple{Int,SVector}, ls::LatticeSlice)
     s = findsubcell(dn, ls)
-    s === nothing && return false
+    s === nothing && return nothing
     j = findsite(i, subcells(ls, first(s)))
-    j === nothing && return false
-    return true
+    j === nothing && return nothing
+    return last(s) + j
 end
+
+Base.in(idn::Tuple{Int,SVector}, ls::LatticeSlice) = findsite(idn, ls) !== nothing
 
 #endregion
 

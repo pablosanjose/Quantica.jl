@@ -2,7 +2,7 @@
 # Observables - common tools
 #region
 
-abstract type Observable end
+abstract type IndexableObservable end  # any type that can be sliced into (current and ldos)
 
 fermi(ω::C, kBT = 0) where {C} =
     iszero(kBT) ? ifelse(real(ω) <= 0, C(1), C(0)) : C(1/(exp(ω/kBT) + 1))
@@ -42,7 +42,7 @@ taue_diag(i, normalsize) = ifelse(iseven(fld1(i, normalsize)), 0, 1)
 #   The path is piecewise linear in the form of a sawtooth with a given ± slope
 #region
 
-struct Integrator{I,T,P,O<:NamedTuple,F} <: Observable
+struct Integrator{I,T,P,O<:NamedTuple,F}
     integrand::I    # call!(integrand, ω::Complex; params...)::Union{Number,Array{Number}}
     points::P       # a tuple of complex points that form the sawtooth integration path
     result::T       # can be missing (for scalar integrand) or a mutable type (nonscalar)
@@ -113,7 +113,7 @@ end
 #   Keywords opts are passed to quadgk for the integral
 #region
 
-struct JosephsonDensity{T<:AbstractFloat,P<:Union{Missing,AbstractArray},G<:GreenFunction{T}} <: Observable
+struct JosephsonDensity{T<:AbstractFloat,P<:Union{Missing,AbstractArray},G<:GreenFunction{T}}
     g::G
     kBT::T
     contactind::Int             # contact index
@@ -227,7 +227,7 @@ end
 #   and where τₑ = [1 0; 0 0] and τz = [1 0; 0 -1] in Nambu space, and ω = eV.
 #region
 
-struct Conductance{T,E,L,C,G<:GreenFunction{T,E,L}} <: Observable
+struct Conductance{T,E,L,C,G<:GreenFunction{T,E,L}}
     g::G
     i::Int                        # contact index for Iᵢ
     j::Int                        # contact index for Vⱼ
@@ -302,7 +302,7 @@ end
 #   Here ldos is given as Tr(ρᵢᵢ * kernel) where ρᵢᵢ is the spectral function at site i
 #region
 
-struct LocalSpectralDensitySolution{T,E,L,G<:GreenSolution{T,E,L},K}
+struct LocalSpectralDensitySolution{T,E,L,G<:GreenSolution{T,E,L},K} <: IndexableObservable
     gω::G
     kernel::K                      # should return a float when applied to gω[cellsite(n,i)]
 end
@@ -334,6 +334,8 @@ end
 
 greenfunction(d::LocalSpectralDensitySlice) = d.g
 
+kernel(d::Union{LocalSpectralDensitySolution,LocalSpectralDensitySlice}) = d.kernel
+
 Base.getindex(d::LocalSpectralDensitySolution; kw...) = d[getindex(lattice(d.gω); kw...)]
 
 function Base.getindex(d::LocalSpectralDensitySolution{T}, l::LatticeSlice) where {T}
@@ -358,8 +360,13 @@ end
 
 function append_ldos!(v, sc, gω, kernel)
     gcell = gω[sc]
+    bs = blockstructure(hamiltonian(gω))
+    offset = 0
     for i in siteindices(sc)
-        rng = flatrange(hamiltonian(gω), i)
+        # need to translate site indices to orbital indices in corresponding gcell orbslice
+        bsize = blocksize(bs, i)
+        rng = offset+1:offset+bsize
+        offset += bsize
         gi = view(gcell, rng, rng)
         ldos = kernel === I ? -imag(tr(gi))/π : -imag(tr(gi * kernel))/π
         push!(v, ldos)
@@ -367,20 +374,32 @@ function append_ldos!(v, sc, gω, kernel)
     return v
 end
 
+# # Simpler but slower: this allocates an orbslice for each site
+# function append_ldos!(v, sc, gω, kernel)
+#     for i in siteindices(sc)
+#         sc´ = CellSites(cell(sc), i)
+#         gi = gω[sc´]
+#         ldos = kernel === I ? -imag(tr(gi))/π : -imag(tr(gi * kernel))/π
+#         push!(v, ldos)
+#     end
+#     return v
+# end
+
 #endregion
 #endregion
 
 ############################################################################################
 # current: current density Jᵢⱼ(ω) as a function of a charge operator
-#   d = current(::GreenSolution; charge)      -> d[sites...]::SparseMatrixCSC{SVector{E,T}}
-#   d = current(::GreenFunctionSlice; charge) -> d(ω; params...)::SparseMatrixCSC{SVector{E,T}}
+#   d = current(::GreenSolution[, dir]; charge)      -> d[sites...]::SparseMatrixCSC{SVector{E,T}}
+#   d = current(::GreenFunctionSlice[, dir]; charge) -> d(ω; params...)::SparseMatrixCSC{SVector{E,T}}
 #   Computes the zero-temperature equilibrium current density matrix Jᵢⱼ from site j to site i
 #       Jᵢⱼ(ω) = (2/h) rᵢⱼ Re Tr[(Hᵢⱼgʳⱼᵢ - gʳᵢⱼHⱼᵢ)Q]
 #   Here charge = Q, where Q is usually qe*I for normal, and qe*τz/2 for Nambu systems
+#   `dir` projects Jᵢⱼ along a certain direction, or takes the norm if missing
 #   We use a default charge = -I, corresponding to normal currents densities in units of e/h
 #region
 
-struct CurrentDensitySolution{T,E,L,G<:GreenSolution{T,E,L},K,V<:Union{Missing,SVector}}
+struct CurrentDensitySolution{T,E,L,G<:GreenSolution{T,E,L},K,V<:Union{Missing,SVector}} <: IndexableObservable
     gω::G
     charge::K                               # should return a float when traced with gʳᵢⱼHᵢⱼ
     cache::GreenSolutionCache{T,L,G}

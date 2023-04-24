@@ -145,7 +145,8 @@ HoppingPrimitives{E}() where {E} =
 
 function siteprimitives(ls, h, plot, opacityflag)   # function barrier
     opts = (plot[:sitecolor][], plot[:siteopacity][], plot[:shellopacity][], plot[:siteradius][])
-    return _siteprimitives(ls, h, opts, opacityflag)
+    opts´ = maybe_evaluate_observable.(opts, Ref(ls))
+    return _siteprimitives(ls, h, opts´, opacityflag)
 end
 
 
@@ -153,50 +154,62 @@ function _siteprimitives(ls::LatticeSlice{<:Any,E}, h, opts, opacityflag) where 
     sp = SitePrimitives{E}()
     mat = Quantica.matrix(first(harmonics(h)))
     lat = parent(ls)
-    for sc in Quantica.subcells(ls)
-        ni = Quantica.cell(sc)
-        for i in Quantica.siteindices(sc)
-            push_siteprimitive!(sp, opts, lat, i, ni, mat[i, i], opacityflag)
-        end
+    for (i´, cs) in enumerate(Quantica.cellsites(ls))
+        ni = Quantica.cell(cs)
+        i = Quantica.siteindex(cs)
+        # in case opts contains some array over latslice (from an observable)
+        opts´ = maybe_getindex.(opts, i´)
+        push_siteprimitive!(sp, opts´, lat, i, ni, mat[i, i], opacityflag)
     end
     return sp
 end
 
-function hoppingprimitives(ls, selector, h, radii, plot)   # function barrier
+function hoppingprimitives(ls, h, siteradii, plot)   # function barrier
     opts = (plot[:hopcolor][], plot[:hopopacity][], plot[:shellopacity][], plot[:hopradius][])
-    return _hoppingprimitives(ls, selector, h, radii, opts)
+    opts´ = maybe_evaluate_observable.(opts, Ref(ls))
+    return _hoppingprimitives(ls, h, opts´, siteradii)
 end
 
-function _hoppingprimitives(ls::LatticeSlice{<:Any,E}, selector, h, radii, opts) where {E}
+function _hoppingprimitives(ls::LatticeSlice{<:Any,E}, h, opts, siteradii) where {E}
     hp = HoppingPrimitives{E}()
     hp´ = HoppingPrimitives{E}()
     lat = parent(ls)
-    counter = 0
-    for sc in Quantica.subcells(ls)
-        nj = Quantica.cell(sc)
-        for j in Quantica.siteindices(sc)
-            counter += 1
-            radius = isempty(radii) ? Float32(0) : radii[counter]
-            for har in harmonics(h)
-                dn = Quantica.dcell(har)
-                ni = nj + dn
-                mat = Quantica.matrix(har)
-                rows = rowvals(mat)
-                for ptr in nzrange(mat, j)
-                    i = rows[ptr]
-                    Quantica.isonsite((i, j), dn) && continue
-                    ri = Quantica.site(lat, i, ni)
-                    if (i, ri, ni) in selector
-                        push_hopprimitive!(hp, opts, lat, (i, j), (ni, nj), radius, mat[i, j], true)
-                    else
-                        push_hopprimitive!(hp´, opts, lat, (i, j), (ni, nj), radius, mat[i, j], false)
-                    end
+    for (j´, cs) in enumerate(Quantica.cellsites(ls))
+        nj = Quantica.cell(cs)
+        j = Quantica.siteindex(cs)
+        siteradius = isempty(siteradii) ? Float32(0) : siteradii[j´]
+        for har in harmonics(h)
+            dn = Quantica.dcell(har)
+            ni = nj + dn
+            mat = Quantica.matrix(har)
+            rows = rowvals(mat)
+            for ptr in nzrange(mat, j)
+                i = rows[ptr]
+                Quantica.isonsite((i, j), dn) && continue
+                i´ = Quantica.findsite((i, ni), ls)
+                if i´ === nothing
+                    opts´ = maybe_getindex.(opts, j´)
+                    push_hopprimitive!(hp´, opts´, lat, (i, j), (ni, nj), siteradius, mat[i, j], false)
+                else
+                    opts´ = maybe_getindex.(opts, i´, j´)
+                    push_hopprimitive!(hp, opts´, lat, (i, j), (ni, nj), siteradius, mat[i, j], true)
                 end
             end
         end
     end
     return hp, hp´
 end
+
+maybe_evaluate_observable(o::Quantica.IndexableObservable, ls) = o[ls]
+maybe_evaluate_observable(x, ls) = x
+
+maybe_getindex(v::AbstractVector, i) = v[i]
+maybe_getindex(m::AbstractMatrix, i) = sum(view(m, :, i))
+maybe_getindex(m::Quantica.AbstractSparseMatrixCSC, i) = sum(view(nonzeros(m), nzrange(m, i)))
+maybe_getindex(v, i) = v
+maybe_getindex(v::AbstractVector, i, j) = 0.5*(v[i] + v[j])
+maybe_getindex(m::AbstractMatrix, i, j) = m[i, j]
+maybe_getindex(v, i, j) = v
 
 ## push! ##
 
@@ -401,8 +414,7 @@ function Makie.plot!(plot::PlotLattice{Tuple{H}}) where {E,L,H<:Hamiltonian{<:An
     h = to_value(plot[1])
     lat = Quantica.lattice(h)
     sel = sanitize_selector(plot[:selector][], lat)
-    asel = Quantica.apply(sel, lat)
-    latslice = lat[asel]
+    latslice = lat[sel]
     latslice´ = Quantica.growdiff(latslice, h)
 
     hidesites = ishidden((:sites, :all), plot)
@@ -430,7 +442,7 @@ function Makie.plot!(plot::PlotLattice{Tuple{H}}) where {E,L,H<:Hamiltonian{<:An
     # collect hops
     if !hidehops
         radii = hidesites ? () : sp.radii
-        hp, hp´ = hoppingprimitives(latslice, asel, h, radii, plot)
+        hp, hp´ = hoppingprimitives(latslice, h, radii, plot)
         if hideshell
             update_colors!(hp, plot)
             update_radii!(hp, plot)
@@ -600,6 +612,8 @@ function matrixstring(s::SMatrix)
     pos = findfirst(isequal('\n'), ss)
     return pos === nothing ? ss : ss[pos:end]
 end
+
+matrixstring(s::Quantica.SMatrixView) = matrixstring(Quantica.unblock(s))
 
 numberstring(x) = isreal(x) ? string(" ", real(x)) : isimag(x) ? string(" ", imag(x), "im") : string(" ", x)
 
