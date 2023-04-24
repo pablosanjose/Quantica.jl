@@ -456,8 +456,9 @@ function apply_charge_current(hij_block::B, (ci, cj), d::CurrentDensitySolution{
     gij = unblock(mask_block(B, d.cache[ci, cj]))
     hij = unblock(hij_block)
     hji = hij'
-    hgghQ = (hij * gji - gij * hji) * d.charge.λ
-    Iij = hgghQ isa UniformScaling ? 2 * real(hgghQ.λ) : 2 * real(tr(hgghQ))
+    hgghQ = (hij * gji - gij * hji) * d.charge
+    # safeguard in case (hij * gji - gij * hji) isa Number and d.charge isa UniformScaling
+    Iij = 2 * real(maybe_trace(hgghQ))
     lat = lattice(d.gω)
     ri = site(lat, i, ni)
     rj = site(lat, j, nj)
@@ -467,6 +468,9 @@ end
 
 maybe_project(J, ::Missing) = norm(J)
 maybe_project(J, dir) = dot(dir, J)
+
+maybe_trace(m::UniformScaling) = m.λ
+maybe_trace(m) = tr(m)
 
 #endregion
 
