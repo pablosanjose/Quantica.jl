@@ -380,34 +380,53 @@ end
 #   We use a default charge = -I, corresponding to normal currents densities in units of e/h
 #region
 
-struct CurrentDensitySolution{T,E,L,G<:GreenSolution{T,E,L},K}
+struct CurrentDensitySolution{T,E,L,G<:GreenSolution{T,E,L},K,V<:Union{Missing,SVector}}
     gω::G
-    charge::K                      # should return a float when applied to gʳᵢⱼHᵢⱼ
+    charge::K                               # should return a float when traced with gʳᵢⱼHᵢⱼ
     cache::GreenSolutionCache{T,L,G}
+    direction::V
 end
 
-struct CurrentDensitySlice{T,E,L,G<:GreenFunction{T,E,L},K}
+struct CurrentDensitySlice{T,E,L,G<:GreenFunction{T,E,L},K,V<:Union{Missing,SVector}}
     g::G
-    charge::K                      # should return a float when applied to gʳᵢⱼHᵢⱼ
+    charge::K                               # should return a float when traced with gʳᵢⱼHᵢⱼ
     latslice::LatticeSlice{T,E,L}
+    direction::V
 end
 
 #region ## Constructors ##
 
-current(gω::GreenSolution; charge = -I) =
-    CurrentDensitySolution(gω, charge, GreenSolutionCache(gω))
+current(gω::GreenSolution, dir = missing; charge = -I) =
+    CurrentDensitySolution(gω, charge, GreenSolutionCache(gω), sanitize_direction(dir, gω))
 
-function current(gs::GreenFunctionSlice; charge = -I)
+function current(gs::GreenFunctionSlice, dir = missing; charge = -I)
     slicerows(gs) === slicecols(gs) ||
         argerror("Cannot currently take ldos of a GreenFunctionSlice with rows !== cols")
     g = parent(gs)
-    latslice = lattice(g)[slicerows(gs)]
-    return CurrentDensitySlice(g, charge, latslice)
+    latslice = sanitize_latslice(slicerows(gs), g)
+    return CurrentDensitySlice(g, charge, latslice, sanitize_direction(dir, g))
 end
+
+sanitize_direction(dir, ::GreenSolution{<:Any,E}) where {E} = _sanitize_direction(dir, Val(E))
+sanitize_direction(dir, ::GreenFunction{<:Any,E}) where {E} = _sanitize_direction(dir, Val(E))
+_sanitize_direction(::Missing, ::Val) = missing
+_sanitize_direction(dir::Integer, ::Val{E}) where {E} = unitvector(dir, NTuple{E,Int})
+_sanitize_direction(dir::SVector{E}, ::Val{E}) where {E} = dir
+_sanitize_direction(dir::NTuple{E}, ::Val{E}) where {E} = SVector(dir)
+_sanitize_direction(_, ::Val{E}) where {E} =
+    argerror("Current direction should be an Integer or a NTuple/SVector of embedding dimension $E")
+
+# if inds isa Integer, select contact cellsites
+sanitize_latslice(i::Integer, g) = latslice(selfenergies(contacts(g), i))
+sanitize_latslice(inds, g) = lattice(g)[inds]
 
 #endregion
 
 #region ## API ##
+
+charge(d::Union{CurrentDensitySolution,CurrentDensitySlice}) = d.charge
+
+direction(d::Union{CurrentDensitySolution,CurrentDensitySlice}) = d.direction
 
 Base.getindex(d::CurrentDensitySolution; kw...) = d[getindex(lattice(d.gω); kw...)]
 
@@ -425,24 +444,29 @@ end
 
 function current_matrix(gω, ls, d)
     h = hamiltonian(parent(gω))
-    current = h[ls, (hij, cij) -> apply_charge_current(hij, cij, d)]
+    current = h[ls, (hij, cij) -> maybe_project(apply_charge_current(hij, cij, d), d.direction)]
     return current
 end
 
-function apply_charge_current(hij::B, (ci, cj), d::CurrentDensitySolution{T,E}) where {T,E,B}
+function apply_charge_current(hij_block::B, (ci, cj), d::CurrentDensitySolution{T,E}) where {T,E,B}
     ni, i = cell(ci), siteindex(ci)
     nj, j = cell(cj), siteindex(cj)
     ni == nj && i == j && return zero(SVector{E,T})
-    gji = mask_block(B, d.cache[cj, ci])
-    gij = mask_block(B, d.cache[ci, cj])
+    gji = unblock(mask_block(B, d.cache[cj, ci]))
+    gij = unblock(mask_block(B, d.cache[ci, cj]))
+    hij = unblock(hij_block)
     hji = hij'
-    Iij = 2 * real(tr((hij * gji - gij * hji) * d.charge))
+    hgghQ = (hij * gji - gij * hji) * d.charge.λ
+    Iij = hgghQ isa UniformScaling ? 2 * real(hgghQ.λ) : 2 * real(tr(hgghQ))
     lat = lattice(d.gω)
     ri = site(lat, i, ni)
     rj = site(lat, j, nj)
     Jij = (ri - rj) * Iij
     return Jij
 end
+
+maybe_project(J, ::Missing) = norm(J)
+maybe_project(J, dir) = dot(dir, J)
 
 #endregion
 

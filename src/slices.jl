@@ -99,14 +99,21 @@ function Base.getindex(h::Hamiltonian, ls::LatticeSlice, post = (hij, cij) -> hi
             (ind, rowoffset) = s
             rowsubcell = subcells(ls, ind)
             rowsubcellinds = siteindices(rowsubcell)
+            # rowsubcellinds are the site indices in original unitcell for subcell = rowcell
+            # rowoffset is the latslice site offset for the rowsubcellinds sites
             hmat = unflat(matrix(har))
             hrows = rowvals(hmat)
             for ptr in nzrange(hmat, colsite)
                 hrow = hrows[ptr]
-                if hrow in rowsubcellinds
-                    rowcs = cellsite(rowcell, hrow)
-                    hij, cij = nonzeros(hmat)[ptr], (rowcs, colcs)
-                    pushtocolumn!(builder, rowoffset + hrow, post(hij, cij))
+                for (irow, rowsubcellind) in enumerate(rowsubcellinds)
+                    if hrow == rowsubcellind
+                        rowcs = cellsite(rowcell, hrow)
+                        hij, cij = nonzeros(hmat)[ptr], (rowcs, colcs)
+                        # hrow is the original unitcell site index for row.
+                        # We need the latslice site index lsrow
+                        lsrow = rowoffset + irow
+                        pushtocolumn!(builder, lsrow, post(hij, cij))
+                    end
                 end
             end
         end

@@ -114,7 +114,7 @@ function finalizecolumn!(s::CSC, sortcol::Bool = true)
     if sortcol
         s.cosorter.offset = s.colptr[s.colcounter] - 1
         sort!(s.cosorter)
-        isgrowing(s.cosorter) || throw(error("Internal error: repeated rows"))
+        isgrowing(s.cosorter) || internalerror("finalizecolumn!: repeated rows")
     end
     s.colcounter += 1
     push!(s.colptr, s.rowvalcounter + 1)
@@ -135,7 +135,8 @@ end
 function SparseArrays.sparse(s::CSC, m::Integer, n::Integer)
     completecolptr!(s.colptr, n, s.rowvalcounter)
     rows, cols = isempty(s.rowval) ? 0 : maximum(s.rowval), length(s.colptr) - 1
-    rows <= m && cols == n || throw(error("Internal error: matrix size $((rows, cols)) is inconsistent with lattice size $dim"))
+    rows <= m && cols == n ||
+        internalerror("sparse: matrix size $((rows, cols)) is inconsistent with lattice size $((m, n))")
     return SparseMatrixCSC(m, n, s.colptr, s.rowval, s.nzval)
 end
 

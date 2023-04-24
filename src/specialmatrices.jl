@@ -157,7 +157,7 @@ end
 
 @inline mask_block(::Type{B}, val) where {N,B<:SMatrix{N,N}} = B(val)
 
-@inline mask_block(::Type{B}, val::Number) where {B<:Complex} = convert(B, val)
+@inline mask_block(::Type{B}, val) where {B<:Complex} = convert(B, only(val))
 
 @inline mask_block(::Type{B}, val::SMatrix{R,C}) where {R,C,N,T,B<:SMatrixView{N,N,T}} =
     SMatrixView(SMatrix{N,R}(I) * val * SMatrix{C,N}(I))

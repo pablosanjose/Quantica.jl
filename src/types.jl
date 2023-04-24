@@ -761,6 +761,9 @@ unflatindex(::OrbitalBlockStructure{<:Number}, iflat::Integer) = (iflat, 1)
 Base.copy(b::OrbitalBlockStructure{B}) where {B} =
     OrbitalBlockStructure{B}(copy(blocksizes(b)), copy(subsizes(b)))
 
+unblock(s::SMatrixView) = s.s
+unblock(s) = s
+
 Base.parent(s::SMatrixView) = s.s
 
 Base.view(s::SMatrixView, i...) = view(s.s, i...)
@@ -768,6 +771,8 @@ Base.view(s::SMatrixView, i...) = view(s.s, i...)
 Base.getindex(s::SMatrixView, i...) = getindex(s.s, i...)
 
 Base.zero(::Type{SMatrixView{N,M,T,NM}}) where {N,M,T,NM} = SMatrixView(zero(SMatrix{N,M,T,NM}))
+
+Base.adjoint(s::SMatrixView) = SMatrixView(s.s')
 
 #endregion
 #endregion
@@ -1627,6 +1632,8 @@ function subcellindex(c::ContactBlockStructure, cell::SVector)
 end
 
 selfenergies(c::Contacts) = c.selfenergies
+selfenergies(c::Contacts, i) = 1 <= i <= length(c) ? c.selfenergies[i] :
+    argerror("Cannot get contact $i, there are $(length(c)) contacts")
 
 blockstructure(c::Contacts) = c.blockstruct
 
@@ -1636,6 +1643,8 @@ contactinds(c::ContactBlockStructure, i) = 1 <= i <= length(c.contactinds) ? c.c
     argerror("Cannot access contact $i, there are $(length(c.contactinds)) contacts")
 
 Base.isempty(c::Contacts) = isempty(selfenergies(c))
+
+Base.length(c::Contacts) = length(selfenergies(c))
 
 #endregion
 

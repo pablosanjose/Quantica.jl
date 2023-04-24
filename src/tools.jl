@@ -28,6 +28,9 @@ padtuple(t, x, N) = ntuple(i -> i <= length(t) ? t[i] : x, N)
 @noinline checkmatrixsize(val, s) = (size(val, 1), size(val, 2)) == s ||
     throw(ArgumentError("Expected an block or matrix of size $s, got size $((size(val, 1), size(val, 2)))"))
 
+unitvector(i, ::Type{NTuple{L,T}}) where {L,T} =
+    SVector(ntuple(j -> j == i ? one(T) : zero(T), Val(L)))
+
 function boundingbox(positions)
     isempty(positions) && argerror("Cannot find bounding box of an empty collection")
     posmin = posmax = first(positions)

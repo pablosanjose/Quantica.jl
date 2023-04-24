@@ -336,3 +336,40 @@ Base.summary(::JosephsonDensity{T}) where {T} =
     "JosephsonDensity{$T} : Equilibrium (dc) Josephson current observable before integration over energy"
 
 #endregion
+
+############################################################################################
+# ldos
+#region
+
+function Base.show(io::IO, D::Union{LocalSpectralDensitySolution, LocalSpectralDensitySlice})
+    i = get(io, :indent, "")
+    print(io, i, summary(D), "\n",
+"$i  kernel   : $(kernel(D))")
+end
+
+Base.summary(::LocalSpectralDensitySolution{T}) where {T} =
+    "LocalSpectralDensitySolution{$T} : local density of states at fixed energy and arbitrary location"
+
+Base.summary(::LocalSpectralDensitySlice{T}) where {T} =
+    "LocalSpectralDensitySlice{$T} : local density of states at fixed location and arbitrary energy"
+
+#endregion
+
+############################################################################################
+# current
+#region
+
+function Base.show(io::IO, J::Union{CurrentDensitySolution, CurrentDensitySlice})
+    i = get(io, :indent, "")
+    print(io, i, summary(J), "\n",
+"$i  charge      : $(charge(J))
+$i  direction   : $(direction(J))")
+end
+
+Base.summary(::CurrentDensitySolution{T}) where {T} =
+    "CurrentDensitySolution{$T} : current density at fixed energy and arbitrary location"
+
+Base.summary(::CurrentDensitySlice{T}) where {T} =
+    "CurrentDensitySlice{$T} : current density at fixed location and arbitrary energy"
+
+#endregion
