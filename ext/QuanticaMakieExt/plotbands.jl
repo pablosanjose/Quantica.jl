@@ -202,7 +202,7 @@ function plotmeshes!(plot, mp::MeshPrimitives{<:Any,2})
     color = mp.colors[mp.simps]
     linewidth = mp.sizes[mp.simps]
     linesegments!(plot, verts; color, linewidth, inspectable = false)
-    if !ishidden((:nodes), plot)
+    if !ishidden((:nodes, :points, :vertices), plot)
         inspector_label = (self, i, r) -> mp.tooltips[i]
         markersize = mp.sizes .* plot[:nodesizefactor][]
         color´ = darken.(mp.colors, plot[:nodedarken][])
@@ -223,7 +223,7 @@ function plotmeshes!(plot, mp::MeshPrimitives{<:Any,3})
         backlight = plot[:backlight][],
         fxaa = plot[:fxaa][])
     mesh!(plot, verts, simps; color, inspectable = false, transparency, opts...)
-    if !ishidden((:nodes), plot)
+    if !ishidden((:nodes, :points, :vertices), plot)
         inspector_label = (self, i, r) -> mp.tooltips[i]
         markersize = mp.sizes .* plot[:nodesizefactor][]
         color´ = darken.(color, plot[:nodedarken][])
