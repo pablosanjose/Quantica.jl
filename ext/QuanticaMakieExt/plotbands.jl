@@ -195,7 +195,7 @@ function Makie.plot!(plot::PlotBands{Tuple{S}}) where {S<:BandOrSubbandsOrMeshes
 end
 
 plotmeshes!(plot, mp::MeshPrimitives{<:Any,E}) where {E} =
-    Quantica.argerror("Can only plot 1D and 2D bands, got $(E-1)D")
+    Quantica.argerror("Can only plot 1D and 2D bands, got $(E-1)D bands")
 
 function plotmeshes!(plot, mp::MeshPrimitives{<:Any,2})
     verts = mp.verts[mp.simps]
