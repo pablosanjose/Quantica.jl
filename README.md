@@ -57,7 +57,3 @@ julia> qplot(b, hide = :nodes)
     <img height="400" alt="Kane-Mele Hamiltonian" src="docs/src/assets/latticeKM.png">
     <img height="400" alt="Kane-Mele bandstructure" src="docs/src/assets/bandsKM.png">
 </p>
-
-## Funding
-
-This work has been partly funded by the Spanish Ministry of Economy and Competitiveness under Grant No. PID2021-122769NB-I00
