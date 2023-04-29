@@ -425,9 +425,9 @@ const AppliedParametricTerm{N} = Union{ParametricOnsiteTerm{N,<:AppliedSiteSelec
 
 ## BlockModels ##
 
-struct InterblockModel{M<:AbstractModel}
+struct InterblockModel{M<:AbstractModel,N}
     model::M
-    block::Tuple{UnitRange{Int},UnitRange{Int}}
+    block::NTuple{N,UnitRange{Int}}  # May be two or more ranges
 end
 
 struct IntrablockModel{M<:AbstractModel}
@@ -672,9 +672,11 @@ SMatrixView{N,M}(s) where {N,M} = SMatrixView(SMatrix{N,M}(s))
     return OrbitalBlockStructure{B}(blocksizes, subsizes)
 end
 
-blocktype(T::Type, norbs) = SMatrixView(blocktype(T, val_maximum(norbs)))
 blocktype(::Type{T}, m::Val{1}) where {T} = Complex{T}
 blocktype(::Type{T}, m::Val{N}) where {T,N} = SMatrix{N,N,Complex{T},N*N}
+blocktype(T::Type, norbs) = maybe_SMatrixView(blocktype(T, val_maximum(norbs)))
+maybe_SMatrixView(C::Type{<:Complex}) = C
+maybe_SMatrixView(S::Type{<:SMatrix}) = SMatrixView(S)
 # blocktype(::Type{T}, N::Int) where {T} = blocktype(T, Val(N))
 
 val_maximum(n::Int) = Val(n)
@@ -1209,6 +1211,7 @@ bloch(h::ParametricHamiltonian) = h.h.bloch
 parameters(h::ParametricHamiltonian) = h.allparams
 
 modifiers(h::ParametricHamiltonian) = h.modifiers
+modifiers(h::Hamiltonian) = ()
 
 pointers(h::ParametricHamiltonian) = h.allptrs
 

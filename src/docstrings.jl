@@ -3,7 +3,7 @@
 #######################################################################
 """
 `LatticePresets` is a Quantica submodule containing severeal pre-defined lattices. The
-alias `LP` can be used in place of `LatticePresets`. Supported lattices are
+alias `LP` can be used in place of `LatticePresets`. Currently supported lattices are
 
     LP.linear(; a0 = 1, kw...)      # linear lattice in 1D
     LP.square(; a0 = 1, kw...)      # square lattice in 2D
@@ -41,6 +41,26 @@ Lattice{Float64,3,2} : 2D lattice in 3D space
 LatticePresets
 
 """
+`HamiltonianPresets` is a Quantica submodule containing severeal pre-defined Hamiltonians.
+The alias `HP` can be used in place of `LatticePresets`. Currently supported hamiltonians
+are
+
+    HP.graphene(; kw...)
+    HP.twisted_bilayer_graphene(; kw...)
+
+For details on the keyword arguments `kw` see the corresponding docstring
+
+```jldoctest
+julia> HamiltonianPresets.twisted_bilayer_graphene(twistindices = (30, 1))
+```
+
+# See also
+    `LatticePresets`, `RegionPresets`
+
+"""
+HamiltonianPresets
+
+"""
 `RegionPresets` is a Quantica submodule containing several pre-defined regions of type
 `Region{E}`, where `E` is the space dimension. The alias `RP` can be used in place of
 `RegionPresets`. Supported regions are
@@ -54,11 +74,13 @@ LatticePresets
     RP.cube(side = 10, center = (0, 0, 0))                          # 3D
     RP.cuboid((sx, sy, sz) = (10, 15, 20), center = (0, 0, 0))      # 3D
 
-
-Calling a `f::Region{E}` object on a `r::Tuple` or `r::SVector` as in `f(r)` or `f(r...)`
+Calling a `f::Region{E}` object on a `r::Tuple` or `r::SVector` with `f(r)` or `f(r...)`
 returns `true` or `false` if `r` is inside the region or not. Note that only the first `E`
 coordinates of `r` will be checked. Arbitrary boolean functions can also be wrapped in
-`Region{E}`, e.g. `f = Region{2}(r -> r[1]^2 < r[2])`.
+`Region{E}` to create custom regions, e.g. `f = Region{2}(r -> r[1]^2 < r[2])`.
+
+Boolean combinations of `Regions` are supported using `&`, `|`, `xor` and `!` operators,
+such as `annulus = RP.circle(10) & !RP.circle(5)`.
 
 # Examples
 

@@ -18,9 +18,6 @@ Region{E}(f::F) where {E,F<:Function} = Region{E,F}(f)
 (region::Region{E})(r) where {E} = region.f(sanitize_SVector(SVector{E,Float64}, r))
 (region::Region{E})(r::Number...) where {E} = region(r)
 
-Base.show(io::IO, ::Region{E}) where {E} =
-    print(io, "Region{$E} : region in $(E)D space")
-
 Base.:&(r1::Region{E}, r2::Region{E}) where {E} = Region{E}(r -> r1.f(r) && r2.f(r))
 Base.:|(r1::Region{E}, r2::Region{E}) where {E}  = Region{E}(r -> r1.f(r) || r2.f(r))
 Base.xor(r1::Region{E}, r2::Region{E}) where {E}  = Region{E}(r -> xor(r1.f(r), r2.f(r)))
@@ -68,6 +65,19 @@ function _region_cuboid((lx, ly, lz), (cx, cy, cz) = (0, 0, 0))
                 abs(2*(r[2]-cy)) <= ly * (1 + extended_eps()) &&
                 abs(2*(r[3]-cy)) <= lz * (1 + extended_eps())
 end
+
+#endregion
+
+############################################################################################
+# show
+#region
+
+Base.summary(::Region{E}) where {E} =
+    "Region{$E} : boolean region function in $E-dimensional space"
+
+Base.show(io::IO, ::MIME"text/plain", r::Region) = print(io, summary(r))
+
+#end
 
 end # module
 

@@ -15,9 +15,9 @@ hopping(t, sel::HopSelector) = TightbindingModel(HoppingTerm(t, sel, 1))
 ## filtering models, and modifying their selectors
 
 onsite(m::AbstractModel; kw...) =
-    reduce(+, (_onsite(t; kw...) for t in allterms(m) if t isa Union{OnsiteTerm,ParametricOnsiteTerm}))
+    reduce(+, (_onsite(t; kw...) for t in allterms(m) if t isa Union{OnsiteTerm,ParametricOnsiteTerm}); init = TightbindingModel())
 hopping(m::AbstractModel; kw...) =
-    reduce(+, (_hopping(t; kw...) for t in allterms(m) if t isa Union{HoppingTerm,ParametricHoppingTerm}))
+    reduce(+, (_hopping(t; kw...) for t in allterms(m) if t isa Union{HoppingTerm,ParametricHoppingTerm}); init = TightbindingModel())
 
 _onsite(o::OnsiteTerm; kw...) =
     TightbindingModel(OnsiteTerm(functor(o), siteselector(selector(o); kw...), coefficient(o)))
@@ -169,10 +169,24 @@ end
 # interblock and intrablock
 #region
 
-interblock(m::AbstractModel, inds, inds´) = isempty(intersect(inds, inds´)) ?
-    InterblockModel(hopping(m), (inds, inds´)) :
-    InterblockModel(m, (inds, inds´))
+interblock(m::AbstractModel, hams::AbstractHamiltonian...) =
+    interblock(m, blockindices(hams)...)
+
+interblock(m::AbstractModel, inds...) = isempty(intersect(inds...)) ?
+    InterblockModel(hopping(m), inds) :
+    InterblockModel(m, inds)                 # if blocks overlap, don't exclude onsite terms
 
 intrablock(m::AbstractModel, inds) = IntrablockModel(m, inds)
+
+function blockindices(hams::NTuple{N,<:Any}) where {N}
+    offset = 0
+    inds = ntuple(Val(N)) do i
+        ns = nsites(lattice(hams[i]))
+        rng = offset + 1:offset + ns
+        offset += ns
+        rng
+    end
+    return inds
+end
 
 #endregion

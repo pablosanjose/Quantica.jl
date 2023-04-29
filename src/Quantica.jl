@@ -25,13 +25,13 @@ export sublat, lattice, supercell, bravais_matrix,
        hopping, onsite, @onsite, @hopping, @onsite!, @hopping!, neighbors,
        siteselector, hopselector,
        hamiltonian, call!,
-       flat, unflat, wrap, transform, transform!, translate, translate!,
+       flat, unflat, wrap, transform, transform!, translate, translate!, combine,
        spectrum, energies, states, bands, subbands, slice,
        greenfunction, selfenergy, attach, contact, cellsites,
        plotlattice, plotlattice!, plotbands, plotbands!, qplot, qplot!,
        conductance, josephson, ldos, current
 
-export LatticePresets, LP, RegionPresets, RP  #, HamiltonianPresets, HP
+export LatticePresets, LP, RegionPresets, RP, HamiltonianPresets, HP
 export EigenSolvers, ES, GreenSolvers, GS
 export @SMatrix, @SVector, SMatrix, SVector, SA
 export ishermitian, tr, I
@@ -70,9 +70,9 @@ include("solvers/eigensolvers.jl")
 include("solvers/greensolvers.jl")
 
 # Presets
-include("presets/lattices.jl")
 include("presets/regions.jl")
-# include("presets/hamiltonians.jl")
+include("presets/lattices.jl")
+include("presets/hamiltonians.jl")
 
 # include("precompile.jl")
 

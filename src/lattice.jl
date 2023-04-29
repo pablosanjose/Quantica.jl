@@ -89,7 +89,7 @@ end
 
 function combine(lats::Lattice{T,E,L}...) where {T,E,L}
     isapprox_modulo_shuffle(bravais_matrix.(lats)...) ||
-        throw(ArgumentError("To combine lattices they must all share the same Bravais matrix"))
+        throw(ArgumentError("To combine lattices they must all share the same Bravais matrix. They read $(bravais_matrix.(lats))"))
     bravais´ = bravais(first(lats))
     unitcell´ = combine(unitcell.(lats)...)
     return Lattice(bravais´, unitcell´)

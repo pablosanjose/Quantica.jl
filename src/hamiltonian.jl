@@ -31,15 +31,41 @@ end
 
 ## Constructors ##
 
-function IJVBuilder(lat::Lattice{T,E,L}, blockstruct::OrbitalBlockStructure{B}) where {E,L,T,B}
+function CSCBuilder(lat::Lattice{<:Any,<:Any,L}, blockstruct::OrbitalBlockStructure{B}) where {L,B}
+    harmonics = CSCHarmonic{L,B}[]
+    return CSCBuilder(lat, blockstruct, harmonics)
+end
+
+function IJVBuilder(lat::Lattice{T,E,L}, blockstruct::OrbitalBlockStructure{B}) where {E,T,L,B}
     harmonics = IJVHarmonic{L,B}[]
     kdtrees = Vector{KDTree{SVector{E,T},Euclidean,T}}(undef, nsublats(lat))
     return IJVBuilder(lat, blockstruct, harmonics, kdtrees)
 end
 
-function CSCBuilder(lat::Lattice{<:Any,<:Any,L}, blockstruct::OrbitalBlockStructure{B}) where {L,B}
-    harmonics = CSCHarmonic{L,B}[]
-    return CSCBuilder(lat, blockstruct, harmonics)
+function IJVBuilder(lat::Lattice{T}, hams::AbstractHamiltonian...) where {T}
+    orbs = vcat(norbitals.(hams)...)
+    bs = OrbitalBlockStructure(T, orbs, sublatlengths(lat))
+    builder = IJVBuilder(lat, bs)
+    push_ijvharmonics!(builder, hams...)
+    return builder
+end
+
+push_ijvharmonics!(builder, ::OrbitalBlockStructure) = builder
+push_ijvharmonics!(builder) = builder
+
+function push_ijvharmonics!(builder::IJVBuilder, hs::AbstractHamiltonian...)
+    bharmonics = builder.harmonics
+    offset = 0
+    for h in hs
+        for har in harmonics(h)
+            ijv = builder[dcell(har)]
+            hmat = unflat(matrix(har))
+            I,J,V = findnz(hmat)
+            append!(ijv, (I .+ offset, J .+ offset, V))
+        end
+        offset += nsites(lattice(h))
+    end
+    return builder
 end
 
 empty_harmonic(b::CSCBuilder{<:Any,<:Any,L,B}, dn) where {L,B} =
@@ -168,10 +194,19 @@ function applyterm!(builder, block, term::AppliedHoppingTerm)
     return nothing
 end
 
-# block is Missing some index collections, see Inter/IntrablockModel
+# If block is not Missing, restrict to ranges
+# Interblock
 isinblock(i, j, ::Missing) = true
-isinblock(i, j, (rng, rng´)::Tuple) =
-    (isinblock(i, rng) && isinblock(j, rng´)) || (isinblock(j, rng) && isinblock(i, rng´))
+
+function isinblock(i, j, rngs::Tuple)
+    for (jr, rng´) in enumerate(rngs), (ir, rng) in enumerate(rngs)
+        jr == ir && continue
+        isinblock(i, rng) && isinblock(j, rng´) && return true
+    end
+    return false
+end
+
+# Intrablock
 isinblock(i, j, rng) = isinblock(i, rng) && isinblock(j, rng)
 isinblock(i, ::Missing) = true
 isinblock(i, rng) = i in rng
@@ -441,6 +476,26 @@ unitcell_hamiltonian(ph::ParametricHamiltonian) = unitcell_hamiltonian(hamiltoni
 
 #endregion
 
+
+############################################################################################
+# combine
+#region
+
+function combine(hams::AbstractHamiltonian{T}...; coupling = TightbindingModel()) where {T}
+    lat = combine(lattice.(hams)...)
+    builder = IJVBuilder(lat, hams...)
+    blockstruct = blockstructure(builder)
+    interblockmodel = interblock(coupling, hams...)
+    model´, blocks´ = parent(interblockmodel), block(interblockmodel)
+    apmod = apply(model´, (lat, blockstruct))
+    applyterm!.(Ref(builder), Ref(blocks´), terms(apmod))
+    hars = sparse(builder)
+    ham = Hamiltonian(lat, blockstruct, hars)
+    ms = tupleflatten(modifiers.(hams)...)
+    return hamiltonian(ham, ms...)
+end
+
+#endregion
 
 # ############################################################################################
 # # store_onsites - AbstractHamiltonian with onsites as structural SparseMatrix elements
