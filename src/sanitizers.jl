@@ -75,7 +75,8 @@ end
 
 function sanitize_Matrix(::Type{T}, E, m::AbstractMatrix) where {T}
     m´ = zeros(T, E, size(m, 2))
-    m´[axes(m)...] .= convert.(T, m)
+    axs = intersect.(axes(m), axes(m´))
+    m´[axs...] .= convert.(T, view(m, axs...))
     return m´
 end
 

@@ -159,9 +159,9 @@ coordinates, and `dim = E` is the spatial embedding dimension.
 
 Creates a new lattice by applying any non-missing keywords to `lat`.
 
-    lattice(h::AbstractHamiltonian)
+    lattice(x)
 
-Returns the lattice of `h`
+Returns the parent lattice of object `x`, of type e.g. `LatticeSlice`, `Hamiltonian`, etc.
 
 ## Keywords
 
@@ -187,13 +187,12 @@ Lattice{Float32,3,1} : 1D lattice in 3D space
     Names         : (:up, :down)
     Sites         : (1, 1) --> 2 total per unit cell
 
-julia> lattice(lat; type = Float64, names = (:A, :B))
-Lattice{Float64,3,1} : 1D lattice in 3D space
-  Bravais vectors : [[1.0, 0.0, 0.0]]
+julia> lattice(lat; type = Float64, names = (:A, :B), dim = 2)
+Lattice{Float64,2,1} : 1D lattice in 2D space
+  Bravais vectors : [[1.0, 0.0]]
   Sublattices     : 2
     Names         : (:A, :B)
     Sites         : (1, 1) --> 2 total per unit cell
-
 ```
 
 # See also
@@ -211,7 +210,7 @@ returned.
     sites(ls::LatticeSlice)
 
 Returns a collection of positions of a LatticeSlice, generally obtained by indexing a
-lattice `lat[; sel...]` with some `siteselector` keywords `sel`. See also `lattice`.
+lattice `lat[sel...]` with some `siteselector` keywords `sel`. See also `lattice`.
 
     Note: the returned collections can be of different types (vectors, generators, views...)
 
@@ -268,7 +267,7 @@ Curried syntax, equivalent to `supercell(lat_or_h, v...; kw...)`
 # Examples
 
 ```jldoctest
-julia> LatticePresets.square() |> supercell((1, 1), region = r -> 0 < r[1] < 5) 
+julia> LatticePresets.square() |> supercell((1, 1), region = r -> 0 < r[1] < 5)
 Lattice{Float64,2,1} : 1D lattice in 2D space
   Bravais vectors : [[1.0, 1.0]]
   Sublattices     : 1
@@ -289,39 +288,56 @@ Lattice{Float64,2,2} : 2D lattice in 2D space
 supercell
 
 """
-    transform(lat::Lattice, f::Function)
+    transform(lat_or_h::Union{Lattice,AbstractHamiltonian}, f::Function)
 
-Build a new lattice transforming each site positions `r` into `f(r)`.
+Build a new lattice or hamiltonian transforming each site positions `r` into `f(r)`.
 
-    transform(h::Hamiltonian, ms::Modifier...)
-
-Build a new Hamiltonian by applying `Modifier`s `ms` onto `h`, see `@onsite!`, `@hopping!`
-for details on building `Modifier`s.
+## Currying
 
     x |> transform(f::Function)
 
 Curried version of `transform`, equivalent to `transform(f, x)`
 
-Note: `Quantica.transform!` is also available for in-place transforms. Use with care, as
-aliasing (i.e. several objects sharing the modified one) can produce unexpected results.
+    Note: Unexported `Quantica.transform!` is also available for in-place transforms. Use with care, as aliasing (i.e. several objects sharing the modified one) can produce unexpected results.
+
+# Examples
+
+```jldoctest
+julia> LatticePresets.square() |> transform(r -> 3r)
+Lattice{Float64,2,2} : 2D lattice in 2D space
+  Bravais vectors : [[3.0, 0.0], [0.0, 3.0]]
+  Sublattices     : 1
+    Names         : (:A,)
+    Sites         : (1,) --> 1 total per unit cell
+```
 
 # See also
     `translate`
-
 """
 transform
 
 """
     translate(lat::Lattice, δr)
 
-Build a new lattice translating each site positions from `r` to `r + δr`.
+Build a new lattice translating each site positions from `r` to `r + δr`, where `δr` can be
+a `NTuple` or an `SVector` in embedding space.
+
+## Currying
 
     x |> translate(δr)
 
 Curried version of `translate`, equivalent to `translate(x, δr)`
 
-Note: `Quantica.translate!` is also available for in-place translations. Use with care, as
-aliasing (i.e. several objects sharing the modified one) can produce unexpected results.
+    Note: Unexported `Quantica.translate!` is also available for in-place translations. Use with care, as aliasing (i.e. several objects sharing the modified one) can produce unexpected results.
+
+# Examples
+
+```jldoctest
+julia> LatticePresets.square() |> translate((3,3)) |> sites
+1-element Vector{SVector{2, Float64}}:
+ [3.0, 3.0]
+
+```
 
 # See also
     `transform`
@@ -329,33 +345,47 @@ aliasing (i.e. several objects sharing the modified one) can produce unexpected 
 """
 translate
 
-# """
-#     combine(lats::Lattice...)
+"""
+    combine(lats::Lattice...)
 
-# If all `lats` have compatible Bravais vectors, combine them into a single lattice.
-# Sublattice names are renamed to be unique if necessary.
-# """
-# combine
+If all `lats` have compatible Bravais vectors, combines them into a single lattice.
+Sublattice names are renamed to be unique if necessary.
+
+    combine(hams::AbstractHamiltonians...; )
+"""
+combine
 
 
 """
-    siteselector(; region = missing, sublats = missing)
+    siteselector(; region = missing, sublats = missing, cells = missing)
 
-Return a `SiteSelector` object that can be used to select sites in a lattice contained
-within the specified region and sublattices. Sites at position `r` and belonging to a
-sublattice with name `s::Symbol` will be selected only if
+Return a `SiteSelector` object that can be used to select a finite set of sites in a lattice
+that are contained within the specified region, sublattices and cells. Sites at position `r`
+in cell of index `n` and belonging to a sublattice with name `s::Symbol` will be selected
+only if
 
-    `region(r) && s in sublats`
+    `region(r) && s in sublats && n in cells`
 
-Any missing `region`, `sublat` or `indices` will not be used to constraint the selection.
+Any missing `region`, `sublat` or `cells` will not be used to constraint the selection.
 
-The constructor `siteselector(; kw...)` is not meant to be called by the end user. Instead,
-the kwargs `kw` are input into different functions that allow filtering sites, which
-themselves call `siteselector` internally as needed. Some of these functions are
+## Generalization
 
-    - getindex(l::Lattice; kw...) : return site indices and positions filtered by `kw` (also `l[kw...]`)
-    - onsite(...; kw...)          : onsite model term to be applied to sites specified by `kw`
-    - @onsite!(...; kw...)        : onsite modifier to be applied to sites specified by `kw`
+While `sublats` and `cells` are usually collections of `Symbol`s and `SVector`s, respectively, they admit other possibilities.
+- If `sublat` is a collection of `Integer`s, they will refer to sublattice number.
+- If `cells` is a collection of `NTuple`s, they will be converted to `SVector`s.
+- If either `cells` or `sublats` are a single cell or sublattice, they will be treated as single-element collections
+- If either `cells` or `sublats` are boolean functions, they will be called to check if they return `true`
+
+## Usage
+
+Although the constructor `siteselector(; kw...)` is exported, the end user does not need to
+use it. Instead, the keywords `kw` are input into different functions that allow filtering
+sites, which themselves call `siteselector` internally as needed. Some of these functions
+are
+
+- getindex(lat::Lattice; kw...) : return a LatticeSlice of selected sites (also `lat[kw...]`)
+- onsite(...; kw...) : onsite model term to be applied to sites specified by `kw`
+- @onsite!(...; kw...) : onsite modifier to be applied to sites specified by `kw`
 
 # Examples
 

@@ -2,11 +2,11 @@
 # Currying and non-mutating methods
 #region
 
-transform(f...; kw...) = x -> transform(x, f...; kw...)
+transform(f::Function) = x -> transform(x, f)
 
-transform!(f...; kw...) = x -> transform!(x, f...; kw...)
+transform!(f::Function) = x -> transform!(x, f)
 
-transform(x, f...) = transform!(copy(x), f...)
+transform(x, f::Function) = transform!(copy(x), f)
 
 translate(δr) = x -> translate(x, δr)
 
@@ -20,8 +20,8 @@ translate(x, δr) = translate!(copy(x), δr)
 # Lattice transform!
 #region
 
-function transform!(l::Lattice, f::Function, keepnranges = false)
-    return keepnranges ?
+function transform!(l::Lattice, f::Function, keepranges = false)
+    return keepranges ?
         Lattice(transform!(bravais(l), f), transform!(unitcell(l), f), nranges(l)) :
         Lattice(transform!(bravais(l), f), transform!(unitcell(l), f))
 end
