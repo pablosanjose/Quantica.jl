@@ -14,7 +14,7 @@ struct SupercellData{T,E,L,L´,LL´}
     proj_invsm´_detsm´::SMatrix{L´,L,Int,LL´}
 end
 
-function supercell_data(lat::Lattice{<:Any,<:Any,L}, vs...; kw...) where {L}
+function supercell_data(lat::Lattice{<:Any,<:Any,L}, vs...; seed = missing, kw...) where {L}
     smat = sanitize_supercell(Val(L), vs)
     selector = siteselector(; kw...)
     applied_selector = apply(selector, lat)
@@ -22,7 +22,7 @@ function supercell_data(lat::Lattice{<:Any,<:Any,L}, vs...; kw...) where {L}
     # and no cell list, supercell is infinite. In this case: stop at a single perp unit cell
     only_one_perp = size(smat, 2) < size(smat, 1) && region(selector) === missing && cells(selector) === missing
     # cellseed currently not exposed to the user
-    cellseed = zero(SVector{L,Int})
+    cellseed = seed === missing ? zero(SVector{L,Int}) : sanitize_SVector(SVector{L,Int}, seed)
     return supercell_data(lat, smat, cellseed, applied_selector, only_one_perp)
 end
 

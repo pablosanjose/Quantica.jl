@@ -1126,6 +1126,8 @@ end
 
 ## AbstractHamiltonian
 
+bravais_matrix(h::AbstractHamiltonian) = bravais_matrix(lattice(h))
+
 norbitals(h::AbstractHamiltonian) = blocksizes(blockstructure(h))
 
 blockeltype(::AbstractHamiltonian) = blockeltype(blockstructure(h))

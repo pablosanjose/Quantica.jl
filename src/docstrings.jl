@@ -29,10 +29,10 @@ Lattice{Float64,2,2} : 2D lattice in 2D space
 
 julia> LatticePresets.cubic(bravais = ((1, 0), (0, 2)))
 Lattice{Float64,3,2} : 2D lattice in 3D space
-  Bravais vectors : [[1.0, 0.0, 1.0], [0.0, 2.0, 1.0]]
+  Bravais vectors : [[1.0, 0.0, 0.0], [0.0, 2.0, 0.0]]
   Sublattices     : 1
-    Names         : (:A)
-    Sites         : (1) --> 1 total per unit cell
+    Names         : (:A,)
+    Sites         : (1,) --> 1 total per unit cell
 ```
 
 # See also
@@ -52,6 +52,14 @@ For details on the keyword arguments `kw` see the corresponding docstring
 
 ```jldoctest
 julia> HamiltonianPresets.twisted_bilayer_graphene(twistindices = (30, 1))
+Hamiltonian{Float64,3,2}: Hamiltonian on a 2D Lattice in 3D space
+  Bloch harmonics  : 7
+  Harmonic size    : 11164 × 11164
+  Orbitals         : [1, 1, 1, 1]
+  Element type     : scalar (ComplexF64)
+  Onsites          : 0
+  Hoppings         : 315684
+  Coordination     : 28.27696
 ```
 
 # See also
@@ -98,8 +106,8 @@ true
 RegionPresets
 
 """
-    sublat(sites...; name::Symbol)
-    sublat(sites::Vector; name::Symbol)
+    sublat(sites...; name::Symbol = :A)
+    sublat(sites::AbstractVector; name::Symbol = :A)
 
 Create a `Sublat{E,T}` that adds a sublattice, of name `name`, with sites at positions
 `sites` in `E` dimensional space. Sites positions can be entered as tuples or `SVectors`.
@@ -117,9 +125,10 @@ sublat
 
 """
     bravais_matrix(lat::Lattice)
-    bravais_matrix(h::Hamiltonian)
+    bravais_matrix(h::AbstractHamiltonian)
 
-Obtain the Bravais matrix of lattice `lat` or Hamiltonian `h`
+Obtain the Bravais matrix of lattice `lat` or AbstractHamiltonian `h`, with Bravais vectors
+as its columns.
 
 # Examples
 
@@ -140,29 +149,33 @@ bravais_matrix
 
 """
     lattice(sublats::Sublat...; bravais = (), dim, type, names)
+    lattice(sublats::AbstractVector{<:Sublat}; bravais = (), dim, type, names)
 
-Create a `Lattice{T,E,L}` from sublattices `sublats`, where `L` is the number of Bravais
-vectors `bravais`, `T = type` is the `AbstractFloat` type of spatial site coordinates, and
-`E = dim` is the spatial embedding dimension.
-
-The keyword `bravais` indicates one or more Bravais vectors in the form of tuples or other
-iterables. It can also be an `AbstractMatrix` of dimension `E×L`. The default `bravais = ()`
-corresponds to a bounded lattice with no Bravais vectors.
-
-A keyword `names` can be used to rename `sublats`. Given `sublats` names will be replaced if
-necessary by `:A`, `:B` etc. to ensure that all sublattice names are unique.
+Creates a `Lattice{T,E,L}` from sublattices `sublats`, where `L` is the number of Bravais
+vectors given by `bravais`, `T = type` is the `AbstractFloat` type of spatial site
+coordinates, and `dim = E` is the spatial embedding dimension.
 
     lattice(lat::Lattice; bravais = missing, dim = missing, type = missing, names = missing)
 
-Create a new lattice by applying any non-missing `kw` to `lat`.
+Creates a new lattice by applying any non-missing keywords to `lat`.
+
+    lattice(h::AbstractHamiltonian)
+
+Returns the lattice of `h`
+
+## Keywords
+
+- `bravais`: a collection of one or more Bravais vectors of type NTuple{E} or SVector{E}. It can also be an `AbstractMatrix` of dimension `E×L`. The default `bravais = ()` corresponds to a bounded lattice with no Bravais vectors.
+
+- `names`: a collection of Symbols. Can be used to rename `sublats`. Any repeated names will be replaced if necessary by `:A`, `:B` etc. to ensure that all sublattice names are unique.
+
+## Indexing
 
     lat[kw...]
 
-Indexing into a lattice `lat` with keywords returns a generator of `(i, r)`, the index `i`
-and positions `r` of sites in `lat`, filtered by `siteselector(; kw...)`. See `siteselector`
-for details on possible `kw`.
-
-See also `LatticePresets` for built-in lattices.
+Indexing into a lattice `lat` with keywords returns `LatticeSlice` representing a finite
+collection of sites selected by `siteselector(; kw...)`. See `siteselector` for details on
+possible `kw`, and `sites` to obtain site positions.
 
 # Examples
 
@@ -184,41 +197,96 @@ Lattice{Float64,3,1} : 1D lattice in 3D space
 ```
 
 # See also
-    `LatticePresets`, `bravais`, `sublat`, `supercell`, `siteindices`, `sitepositions`
+    `LatticePresets`, `sublat`, `sites`, `supercell`
 """
 lattice
 
 """
-    sitepositions(l::Lattice; kw...)
+    sites(lat::Lattice[, sublat])
 
-Returns a vector with site positions in lattice `l`, filtered by `siteselector(; kw...)`.
-Equivalent to `last.(l[kw...])`. See `siteselector` for details on possible `kw`.
+Returns a collection of site positions in the unit cell of lattice `lat`. If a
+`sublat::Symbol` or `sublat::Int` is specified, only sites for the specified sublattice are
+returned.
+
+    sites(ls::LatticeSlice)
+
+Returns a collection of positions of a LatticeSlice, generally obtained by indexing a
+lattice `lat[; sel...]` with some `siteselector` keywords `sel`. See also `lattice`.
+
+    Note: the returned collections can be of different types (vectors, generators, views...)
 
 # Examples
 ```jldoctest
-julia> sitepositions(LatticePresets.honeycomb(); sublats = :A)
-1-element Vector{SVector{2, Float64}}:
+julia> sites(LatticePresets.honeycomb(), :A)
+1-element view(::Vector{SVector{2, Float64}}, 1:1) with eltype SVector{2, Float64}:
  [0.0, -0.2886751345948129]
 ```
 
+# See also
+    `lattice`, `siteselector`
 """
-sitepositions
+sites
 
 """
-    siteindices(l::Lattice; kw...)
+    supercell(lat::Lattice{E,L}, v::NTuple{L,Integer}...; seed = missing, kw...)
+    supercell(lat::Lattice{E,L}, uc::SMatrix{L,L´,Int}; seed = missing, kw...)
 
-Returns a vector with site indices in lattice `l`, filtered by `siteselector(; kw...)`.
-Equivalent to `first.(l[kw...])`. See `siteselector` for details on possible `kw`.
+Generates a new `Lattice` from an `L`-dimensional lattice `lat` with a larger unit cell, such
+that its Bravais vectors are `br´= br * uc`. Here `uc::SMatrix{L,L´,Int}` is the integer
+supercell matrix, with the `L´` vectors `v`s as its columns. If no `v` are given, the new
+lattice will have no Bravais vectors (i.e. it will be bounded, with its shape determined by
+keywords `kw...`). Likewise, if `L´ < L`, the resulting lattice will be bounded along `L´ -
+L` directions, as dictated by `kw...`.
+
+Only sites selected by `siteselector(; kw...)` will be included in the supercell (see
+`siteselector` for details on the available keywords `kw`). If no
+keyword `region` is given in `kw`, a single Bravais unit cell perpendicular to the `v` axes
+will be selected along the `L-L´` bounded directions.
+
+    supercell(lattice::Lattice{E,L}, factors::Integer...; seed = missing, kw...)
+
+Calls `supercell` with different scaling along each Bravais vector, so that supercell matrix
+`uc` is `Diagonal(factors)`. If a single `factor` is given, `uc = SMatrix{L,L}(factor * I)`
+
+    supercell(h::Hamiltonian, v...; mincoordination = 0, seed = missing, kw...)
+
+Transforms the `Lattice` of `h` to have a larger unit cell, while expanding the Hamiltonian
+accordingly.
+
+## Keywords
+
+- `seed::NTuple{L,Integer}`: starting cell index to perform search of included sites. By default `seed = missing`, which makes search start from the zero-th cell.
+
+- `mincoordination::Integer`: minimum number of nonzero hopping neighbors required for sites to be included in the supercell. Sites with less coordination will be removed recursively, until all remaining sites satisfy `mincoordination`.
+
+## Currying
+
+    lat_or_h |> supercell(v...; kw...)
+
+Curried syntax, equivalent to `supercell(lat_or_h, v...; kw...)`
 
 # Examples
+
 ```jldoctest
-julia> siteindices(LatticePresets.honeycomb(); sublats = :B)
-1-element Vector{Int64}:
- 2
+julia> LatticePresets.square() |> supercell((1, 1), region = r -> 0 < r[1] < 5) 
+Lattice{Float64,2,1} : 1D lattice in 2D space
+  Bravais vectors : [[1.0, 1.0]]
+  Sublattices     : 1
+    Names         : (:A,)
+    Sites         : (8,) --> 8 total per unit cell
+
+julia> LatticePresets.honeycomb() |> supercell(3)
+Lattice{Float64,2,2} : 2D lattice in 2D space
+  Bravais vectors : [[1.5, 2.598076], [-1.5, 2.598076]]
+  Sublattices     : 2
+    Names         : (:A, :B)
+    Sites         : (9, 9) --> 18 total per unit cell
 ```
 
+# See also
+    `supercell`, `siteselector`
 """
-siteindices
+supercell
 
 """
     transform(lat::Lattice, f::Function)
@@ -269,81 +337,6 @@ translate
 # """
 # combine
 
-"""
-    supercell(lat::Lattice{E,L}, v::NTuple{L,Integer}...; seed = missing, kw...)
-    supercell(lat::Lattice{E,L}, uc::SMatrix{L,L´,Int}; seed = missing, kw...)
-
-Generates a `Lattice` from an `L`-dimensional lattice `lat` with a larger unit cell, such
-that its Bravais vectors are `br´= br * uc`. Here `uc::SMatrix{L,L´,Int}` is the integer
-supercell matrix, with the `L´` vectors `v`s as its columns. If no `v` are given, the new
-lattice will have no Bravais vectors (i.e. it will be bounded, with its shape determined by
-keywords `kw...`). Likewise, if `L´ < L`, the resulting lattice will be bounded along `L´ -
-L` directions, as dictated by `kw...`.
-
-Only sites selected by `siteselector(; kw...)` will be included in the supercell (see
-`siteselector` for details on the available keywords `kw`). The search for included sites
-will start from point `seed::Union{Tuple,SVector}`, or the origin if `seed = missing`. If no
-keyword `region` is given in `kw`, a single Bravais unit cell perpendicular to the `v` axes
-will be selected along the `L-L´` bounded directions.
-
-    supercell(lattice::Lattice{E,L}, factor::Integer; kw...)
-
-Calls `supercell` with a uniformly scaled `uc = SMatrix{L,L}(factor * I)`
-
-    supercell(lattice::Lattice{E,L}, factors::Integer...; kw...)
-
-Calls `supercell` with different scaling along each Bravais vector (diagonal supercell `uc`
-with `factors` along the diagonal)
-
-    supercell(h::Hamiltonian, v...; mincoordination = 0, kw...)
-
-Transforms the `Lattice` of `h` to have a larger unit cell, while expanding the Hamiltonian
-accordingly.
-
-A nonzero `mincoordination` indicates a minimum number of nonzero hopping neighbors required
-for sites to be included in the resulting unit cell. Sites with less coordination will be
-removed recursively, until all remaining sites satisfy `mincoordination`.
-
-    lat_or_h |> supercell(v...; kw...)
-
-Curried syntax, equivalent to `supercell(lat_or_h, v...; kw...)`
-
-# Examples
-
-```jldoctest
-julia> supercell(LatticePresets.honeycomb(), region = RegionPresets.circle(300))
-Lattice{2,0,Float64} : 0D lattice in 2D space
-  Bravais vectors : ()
-  Sublattices     : 2
-    Names         : (:A, :B)
-    Sites         : (326483, 326483) --> 652966 total per unit cell
-
-julia> supercell(LatticePresets.triangular(), (1,1), (1, -1))
-Lattice{2,2,Float64} : 2D lattice in 2D space
-  Bravais vectors : ((0.0, 1.732051), (1.0, 0.0))
-  Sublattices     : 1
-    Names         : (:A)
-    Sites         : (2) --> 2 total per unit cell
-
-julia> LatticePresets.square() |> supercell(3)
-Lattice{2,2,Float64} : 2D lattice in 2D space
-  Bravais vectors : ((3.0, 0.0), (0.0, 3.0))
-  Sublattices     : 1
-    Names         : (:A)
-    Sites         : (9) --> 9 total per unit cell
-
-julia> supercell(LatticePresets.square(), 3) |> supercell
-Lattice{2,2,Float64} : 2D lattice in 2D space
-  Bravais vectors : ((3.0, 0.0), (0.0, 3.0))
-  Sublattices     : 1
-    Names         : (:A)
-    Sites         : (9) --> 9 total per unit cell
-```
-
-# See also
-    `supercell`, `siteselector`
-"""
-supercell
 
 """
     siteselector(; region = missing, sublats = missing)

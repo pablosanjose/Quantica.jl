@@ -5,7 +5,7 @@
 sublat(sites...; name = :A) =
     Sublat(sanitize_Vector_of_float_SVectors(sites), Symbol(name))
 
-sublat(sites::Vector; name = :A) =
+sublat(sites::AbstractVector; name = :A) =
     Sublat(sanitize_Vector_of_float_SVectors(sites), Symbol(name))
 
 #endregion

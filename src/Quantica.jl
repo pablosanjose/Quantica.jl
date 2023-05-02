@@ -21,7 +21,7 @@ using QuadGK
 
 using Infiltrator # debugging
 
-export sublat, lattice, supercell, bravais_matrix,
+export sublat, bravais_matrix, lattice, sites, supercell,
        hopping, onsite, @onsite, @hopping, @onsite!, @hopping!, neighbors,
        siteselector, hopselector,
        hamiltonian, call!,
@@ -44,6 +44,7 @@ include("types.jl")
 include("iterators.jl")
 include("builders.jl")
 include("tools.jl")
+include("docstrings.jl")
 
 # API
 include("specialmatrices.jl")
