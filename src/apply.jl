@@ -10,8 +10,9 @@
 #region
 
 function apply(s::SiteSelector, lat::Lattice{T,E,L}) where {T,E,L}
-    region = r -> region_apply(r, s.region)
-    sublats = recursive_push!(Symbol[], s.sublats)
+    region = r -> applied_region(r, s.region)
+    sublatnames = recursive_push!(Symbol[], s.sublats)
+    sublats = Int[sublatindex(lat, name) for name in sublatnames]
     cells = recursive_push!(SVector{L,Int}[], sanitize_cells(s.cells, Val(L)))
     return AppliedSiteSelector{T,E,L}(lat, region, sublats, cells)
 end
@@ -21,8 +22,10 @@ function apply(s::HopSelector, lat::Lattice{T,E,L}) where {T,E,L}
     L > 0 && s.dcells === missing && rmax === missing &&
         throw(ErrorException("Tried to apply an infinite-range HopSelector on an unbounded lattice"))
     sign = ifelse(s.adjoint, -1, 1)
-    region = (r, dr) -> region_apply((r, sign*dr), s.region)
-    sublats = recursive_push!(Pair{Symbol,Symbol}[], s.sublats)
+    region = (r, dr) -> applied_region((r, sign*dr), s.region)
+    sublatnames = recursive_push!(Pair{Symbol,Symbol}[], s.sublats)
+    sublats = Pair{Int,Int}[sublatindex(lat, namei) => sublatindex(lat, namej)
+        for (namei, namej) in sublatnames]
     dcells = recursive_push!(SVector{L,Int}[], s.dcells)
     if s.adjoint
         sublats .= reverse.(sublats)
@@ -45,9 +48,9 @@ applyrange(r::Real, lat) = r
 
 padrange(r::Real, m) = isfinite(r) ? float(r) + m * sqrt(eps(float(r))) : float(r)
 
-region_apply(r, ::Missing) = true
-region_apply((r, dr)::Tuple{SVector,SVector}, region::Function) = ifelse(region(r, dr), true, false)
-region_apply(r::SVector, region::Function) = ifelse(region(r), true, false)
+applied_region(r, ::Missing) = true
+applied_region((r, dr)::Tuple{SVector,SVector}, region::Function) = ifelse(region(r, dr), true, false)
+applied_region(r::SVector, region::Function) = ifelse(region(r), true, false)
 
 recursive_push!(v::Vector, ::Missing) = v
 recursive_push!(v::Vector{T}, x::T) where {T} = push!(v, x)

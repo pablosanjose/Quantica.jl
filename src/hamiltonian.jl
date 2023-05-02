@@ -480,7 +480,7 @@ unitcell_hamiltonian(ph::ParametricHamiltonian) = unitcell_hamiltonian(hamiltoni
 ############################################################################################
 # combine
 #region
-
+AppliedHoppingTerm
 function combine(hams::AbstractHamiltonian{T}...; coupling = TightbindingModel()) where {T}
     lat = combine(lattice.(hams)...)
     builder = IJVBuilder(lat, hams...)

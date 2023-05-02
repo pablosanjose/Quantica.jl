@@ -81,9 +81,11 @@ end
 #   ParametricHamiltonian deliberately not supported, as the output is not updatable
 #region
 
-Base.getindex(h::Hamiltonian; post = (hij, cij) -> hij, kw...) = h[getindex(lattice(h); kw...), post]
+## disabled this method because h[] is too similar to h[()], and becomes confusing
+# Base.getindex(h::Hamiltonian; post = (hij, cij) -> hij, kw...) = h[getindex(lattice(h); kw...), post]
 
 function Base.getindex(h::Hamiltonian, ls::LatticeSlice, post = (hij, cij) -> hij)
+    @assert lattice(h) === lattice(ls)
     cszero = zerocellsites(h, 1)
     B = typeof(post(zero(blocktype(h)), (cszero, cszero)))
     ncols = nrows = length(ls)

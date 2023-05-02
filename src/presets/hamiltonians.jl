@@ -6,16 +6,17 @@ module HamiltonianPresets
 
 using Quantica, LinearAlgebra
 
-function graphene(; a0 = 0.246, range = a0/sqrt(3), t0 = 2.7, β = 3, kw...)
-    lat = LatticePresets.honeycomb(a0 = a0)
+function graphene(; a0 = 0.246, dim = 2, range = a0/sqrt(3), t0 = 2.7, β = 3, kw...)
+    lat = LatticePresets.honeycomb(; a0, dim)
     h = hamiltonian(lat, hopping((r, dr) -> t0 * exp(-β*(norm(dr)/a0 - 1)) * I, range = range); kw...)
     return h
 end
 
 function twisted_bilayer_graphene(;
-    twistindex = 1, twistindices = (twistindex, 1), a0 = 0.246, interlayerdistance = 1.36a0,
-    rangeintralayer = a0/sqrt(3), rangeinterlayer = 4a0/sqrt(3), hopintra = 2.70,
-    hopinter = 0.48, modelintra = hopping(hopintra, range = rangeintralayer), kw...)
+    twistindex = 1, twistindices = (twistindex, 1), dim = 2, a0 = 0.246,
+    interlayerdistance = 1.36a0, rangeintralayer = a0/sqrt(3), rangeinterlayer = 4a0/sqrt(3),
+    hopintra = 2.70, hopinter = 0.48, modelintra = hopping(hopintra, range = rangeintralayer),
+    kw...)
 
     (m, r) = twistindices
     θ = acos((3m^2 + 3m*r +r^2/2)/(3m^2 + 3m*r + r^2))
@@ -35,8 +36,8 @@ function twisted_bilayer_graphene(;
         sctop = SA[m+2r÷3 r÷3; -r÷3 m+r÷3] * SA[1 0; -1 1]
     end
 
-    latbot = lattice(sAbot, sBbot; bravais = brbot)
-    lattop = lattice(sAtop, sBtop; bravais = brtop)
+    latbot = lattice(sAbot, sBbot; bravais = brbot, dim)
+    lattop = lattice(sAtop, sBtop; bravais = brtop, dim)
     htop = hamiltonian(lattop, modelintra; kw...) |> supercell(sctop)
     hbot = hamiltonian(latbot, modelintra; kw...) |> supercell(scbot)
     let R = SA[cos(θ/2) -sin(θ/2) 0; sin(θ/2) cos(θ/2) 0; 0 0 1]

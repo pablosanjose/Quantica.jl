@@ -179,7 +179,7 @@ const UnboundedSiteSelector = SiteSelector{Missing,Missing,Missing}
 struct AppliedSiteSelector{T,E,L}
     lat::Lattice{T,E,L}
     region::FunctionWrapper{Bool,Tuple{SVector{E,T}}}
-    sublats::Vector{Symbol}
+    sublats::Vector{Int}
     cells::Vector{SVector{L,Int}}
 end
 
@@ -194,7 +194,7 @@ end
 struct AppliedHopSelector{T,E,L}
     lat::Lattice{T,E,L}
     region::FunctionWrapper{Bool,Tuple{SVector{E,T},SVector{E,T}}}
-    sublats::Vector{Pair{Symbol,Symbol}}
+    sublats::Vector{Pair{Int,Int}}
     dcells::Vector{SVector{L,Int}}
     range::Tuple{T,T}
 end

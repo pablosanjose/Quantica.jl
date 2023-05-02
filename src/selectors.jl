@@ -10,7 +10,7 @@ siteselector(s::SiteSelector; region = s.region, sublats = s.sublats, cells = s.
 hopselector(; region = missing, sublats = missing, dcells = missing, range = neighbors(1)) =
     HopSelector(region, sublats, dcells, range)
 hopselector(s::HopSelector; region = s.region, sublats = s.sublats, dcells = s.dcells, range = s.range) =
-    HopSelector(region, sublats, dcells, range)
+    HopSelector(region, sublats, dcells, range, s.adjoint)
 
 neighbors(n::Int) = Neighbors(n)
 neighbors(n::Int, lat::Lattice) = nrange(n, lat)
@@ -21,19 +21,17 @@ neighbors(n::Int, lat::Lattice) = nrange(n, lat)
 # Base.in constructors
 #region
 
-function Base.in((i, r)::Tuple{Int,SVector{E,T}}, sel::AppliedSiteSelector{T,E}) where {T,E}
+function Base.in((s, r)::Tuple{Int,SVector{E,T}}, sel::AppliedSiteSelector{T,E}) where {T,E}
     lat = lattice(sel)
-    name = sitesublatname(lat, i)
     return inregion(r, sel) &&
-           insublats(name, sel)
+           insublats(s, sel)
 end
 
-function Base.in((i, r, cell)::Tuple{Int,SVector{E,T},SVector{L,Int}}, sel::AppliedSiteSelector{T,E,L}) where {T,E,L}
+function Base.in((s, r, cell)::Tuple{Int,SVector{E,T},SVector{L,Int}}, sel::AppliedSiteSelector{T,E,L}) where {T,E,L}
     lat = lattice(sel)
-    name = sitesublatname(lat, i)
     return incells(cell, sel) &&
            inregion(r, sel) &&
-           insublats(name, sel)
+           insublats(s, sel)
 end
 
 ## Cannot add this, as it is ambiguous for L == E
@@ -52,12 +50,11 @@ end
 #     return ((j, i), (r, dr), dcell) in sel
 # end
 
-function Base.in(((j, i), (r, dr), dcell)::Tuple{Pair,Tuple,SVector}, sel::AppliedHopSelector)
+function Base.in(((sj, si), (r, dr), dcell)::Tuple{Pair,Tuple,SVector}, sel::AppliedHopSelector)
     lat = lattice(sel)
-    namei, namej = sitesublatname(lat, i), sitesublatname(lat, j)
     return !isonsite((j, i), dcell) &&
             indcells(dcell, sel) &&
-            insublats(namej => namei, sel) &&
+            insublats(sj => si, sel) &&
             iswithinrange(dr, sel) &&
             inregion((r, dr), sel)
 end
@@ -96,7 +93,8 @@ function foreach_cell(f, sel::AppliedHopSelector)
     if isempty(dcells_list) # no dcells specified
         iter = BoxIterator(zerocell(lat))
         for dn in iter
-            f(dn) && acceptcell!(iter, dn)
+            found = f(dn)
+            found && acceptcell!(iter, dn)
         end
     else
         for dn in dcells_list
@@ -109,7 +107,7 @@ end
 function foreach_site(f, sel::AppliedSiteSelector, cell::SVector)
     lat = lattice(sel)
     for s in sublats(lat)
-        insublats(sublatname(lat, s), sel) || continue
+        insublats(s, sel) || continue
         is = siterange(lat, s)
         for i in is
             r = site(lat, i, cell)
@@ -126,7 +124,7 @@ function foreach_hop(f, sel::AppliedHopSelector, kdtrees::Vector{<:KDTree}, ni::
     nj = zero(ni)
     found = false
     for si in sublats(lat), sj in sublats(lat)
-        insublats(sublatname(lat, sj) => sublatname(lat, si), sel) || continue
+        insublats(sj => si, sel) || continue
         js = siterange(lat, sj)
         for j in js
             is = inrange_targets(site(lat, j, nj - ni), lat, si, rmax, kdtrees)

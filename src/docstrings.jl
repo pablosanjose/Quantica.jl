@@ -127,7 +127,7 @@ sublat
     bravais_matrix(lat::Lattice)
     bravais_matrix(h::AbstractHamiltonian)
 
-Obtain the Bravais matrix of lattice `lat` or AbstractHamiltonian `h`, with Bravais vectors
+Return the Bravais matrix of lattice `lat` or AbstractHamiltonian `h`, with Bravais vectors
 as its columns.
 
 # Examples
@@ -151,17 +151,17 @@ bravais_matrix
     lattice(sublats::Sublat...; bravais = (), dim, type, names)
     lattice(sublats::AbstractVector{<:Sublat}; bravais = (), dim, type, names)
 
-Creates a `Lattice{T,E,L}` from sublattices `sublats`, where `L` is the number of Bravais
+Create a `Lattice{T,E,L}` from sublattices `sublats`, where `L` is the number of Bravais
 vectors given by `bravais`, `T = type` is the `AbstractFloat` type of spatial site
 coordinates, and `dim = E` is the spatial embedding dimension.
 
     lattice(lat::Lattice; bravais = missing, dim = missing, type = missing, names = missing)
 
-Creates a new lattice by applying any non-missing keywords to `lat`.
+Create a new lattice by applying any non-missing keywords to `lat`.
 
     lattice(x)
 
-Returns the parent lattice of object `x`, of type e.g. `LatticeSlice`, `Hamiltonian`, etc.
+Return the parent lattice of object `x`, of type e.g. `LatticeSlice`, `Hamiltonian`, etc.
 
 ## Keywords
 
@@ -176,6 +176,11 @@ Returns the parent lattice of object `x`, of type e.g. `LatticeSlice`, `Hamilton
 Indexing into a lattice `lat` with keywords returns `LatticeSlice` representing a finite
 collection of sites selected by `siteselector(; kw...)`. See `siteselector` for details on
 possible `kw`, and `sites` to obtain site positions.
+
+    lat[]
+
+Special case equivalent to `lat[cells = (0,...)]` that returns a `LatticeSlice` of the
+zero-th unitcell
 
 # Examples
 
@@ -203,13 +208,13 @@ lattice
 """
     sites(lat::Lattice[, sublat])
 
-Returns a collection of site positions in the unit cell of lattice `lat`. If a
+Return a collection of site positions in the unit cell of lattice `lat`. If a
 `sublat::Symbol` or `sublat::Int` is specified, only sites for the specified sublattice are
 returned.
 
     sites(ls::LatticeSlice)
 
-Returns a collection of positions of a LatticeSlice, generally obtained by indexing a
+Return a collection of positions of a LatticeSlice, generally obtained by indexing a
 lattice `lat[sel...]` with some `siteselector` keywords `sel`. See also `lattice`.
 
     Note: the returned collections can be of different types (vectors, generators, views...)
@@ -230,7 +235,7 @@ sites
     supercell(lat::Lattice{E,L}, v::NTuple{L,Integer}...; seed = missing, kw...)
     supercell(lat::Lattice{E,L}, uc::SMatrix{L,L´,Int}; seed = missing, kw...)
 
-Generates a new `Lattice` from an `L`-dimensional lattice `lat` with a larger unit cell, such
+Generate a new `Lattice` from an `L`-dimensional lattice `lat` with a larger unit cell, such
 that its Bravais vectors are `br´= br * uc`. Here `uc::SMatrix{L,L´,Int}` is the integer
 supercell matrix, with the `L´` vectors `v`s as its columns. If no `v` are given, the new
 lattice will have no Bravais vectors (i.e. it will be bounded, with its shape determined by
@@ -244,12 +249,12 @@ will be selected along the `L-L´` bounded directions.
 
     supercell(lattice::Lattice{E,L}, factors::Integer...; seed = missing, kw...)
 
-Calls `supercell` with different scaling along each Bravais vector, so that supercell matrix
+Call `supercell` with different scaling along each Bravais vector, so that supercell matrix
 `uc` is `Diagonal(factors)`. If a single `factor` is given, `uc = SMatrix{L,L}(factor * I)`
 
     supercell(h::Hamiltonian, v...; mincoordination = 0, seed = missing, kw...)
 
-Transforms the `Lattice` of `h` to have a larger unit cell, while expanding the Hamiltonian
+Transform the `Lattice` of `h` to have a larger unit cell, while expanding the Hamiltonian
 accordingly.
 
 ## Keywords
@@ -348,10 +353,40 @@ translate
 """
     combine(lats::Lattice...)
 
-If all `lats` have compatible Bravais vectors, combines them into a single lattice.
-Sublattice names are renamed to be unique if necessary.
+If all `lats` have compatible Bravais vectors, combine them into a single lattice.
+If necessary, sublattice names are renamed to remain unique.
 
-    combine(hams::AbstractHamiltonians...; )
+    combine(hams::AbstractHamiltonians...; coupling = TighbindingModel())
+
+Combine a collection `hams` of hamiltonians into one by combining their corresponding
+lattices, and optionally by adding a coupling between them, given by the hopping terms in
+`coupling`.
+
+    Note that the `coupling` model will be applied to the combined lattice (which may have renamed sublattices to avoid name collissions). However, only hopping terms between different `hams` blocks will be applied. 
+
+# Examples
+```jldoctest
+julia> # Building Bernal-stacked bilayer graphene
+
+julia> hbot = HP.graphene(a0 = 1, dim = 3); htop = translate(hbot, (0, 1/√3, 1/√3));
+
+julia> h2 = combine(hbot, htop; coupling = hopping(1, sublats = :B => :C, plusadjoint = true))
+┌ Warning: Renamed repeated sublattice :A to :C
+└ @ Quantica ~/.julia/dev/Quantica/src/types.jl:60
+┌ Warning: Renamed repeated sublattice :B to :D
+└ @ Quantica ~/.julia/dev/Quantica/src/types.jl:60
+Hamiltonian{Float64,3,2}: Hamiltonian on a 2D Lattice in 3D space
+  Bloch harmonics  : 5
+  Harmonic size    : 4 × 4
+  Orbitals         : [1, 1, 1, 1]
+  Element type     : scalar (ComplexF64)
+  Onsites          : 0
+  Hoppings         : 14
+  Coordination     : 3.5
+```
+
+# See also
+    `hopping`
 """
 combine
 
@@ -360,9 +395,9 @@ combine
     siteselector(; region = missing, sublats = missing, cells = missing)
 
 Return a `SiteSelector` object that can be used to select a finite set of sites in a lattice
-that are contained within the specified region, sublattices and cells. Sites at position `r`
-in cell of index `n` and belonging to a sublattice with name `s::Symbol` will be selected
-only if
+that are contained within the specified region, sublattices and cells. Sites at position
+`r::SVector{E}`, in a lattice cell of index `n::SVector{L,Int}` and belonging to a
+sublattice of name `s::Symbol` will be selected only if
 
     `region(r) && s in sublats && n in cells`
 
@@ -370,42 +405,29 @@ Any missing `region`, `sublat` or `cells` will not be used to constraint the sel
 
 ## Generalization
 
-While `sublats` and `cells` are usually collections of `Symbol`s and `SVector`s, respectively, they admit other possibilities.
-- If `sublat` is a collection of `Integer`s, they will refer to sublattice number.
-- If `cells` is a collection of `NTuple`s, they will be converted to `SVector`s.
+While `sublats` and `cells` are usually collections of `Symbol`s and `SVector`s,
+respectively, they also admit other possibilities:
+
 - If either `cells` or `sublats` are a single cell or sublattice, they will be treated as single-element collections
-- If either `cells` or `sublats` are boolean functions, they will be called to check if they return `true`
+- If `sublat` is a collection of `Integer`s, it will refer to sublattice numbers.
+- If `cells` is a collection of `NTuple`s, they will be converted to `SVector`s.
+- If `cells` is a boolean function, `n in cells` will be the result of `cells(n)`
+- If `cells` is an `Integer`, it will include all cells with `n[i] in 0:cells-1`
 
 ## Usage
 
-Although the constructor `siteselector(; kw...)` is exported, the end user does not need to
-use it. Instead, the keywords `kw` are input into different functions that allow filtering
-sites, which themselves call `siteselector` internally as needed. Some of these functions
-are
+Although the constructor `siteselector(; kw...)` is exported, the end user does not usually
+need to call it directly. Instead, the keywords `kw` are input into different functions that
+allow filtering sites, which themselves call `siteselector` internally as needed. Some of
+these functions are
 
-- getindex(lat::Lattice; kw...) : return a LatticeSlice of selected sites (also `lat[kw...]`)
+- getindex(lat::Lattice; kw...) : return a LatticeSlice with sites specified by `kw` (also `lat[kw...]`)
+- supercell(lat::Lattice; kw...) : returns a bounded lattice with the sites specified by `kw`
 - onsite(...; kw...) : onsite model term to be applied to sites specified by `kw`
 - @onsite!(...; kw...) : onsite modifier to be applied to sites specified by `kw`
 
-# Examples
-
-```jldoctest
-julia> lat = LP.honeycomb() |> supercell(region = RegionPresets.circle(100))
-Lattice{Float64,2,0} : 0D lattice in 2D space
-  Bravais vectors : []
-  Sublattices     : 2
-    Names         : (:A, :B)
-    Sites         : (36281, 36281) --> 72562 total per unit cell
-
-julia> lat[] == sites(lat)
-true
-
-julia> lat[sublats = :A, region = RP.circle(50)] |> length
-9062
-```
-
 # See also
-    `hopselector`, `lattice`, `onsite`, `@onsite!`
+    `hopselector`, `lattice`, `supercell`, `onsite`, `@onsite`, `@onsite!`
 """
 siteselector
 
