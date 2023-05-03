@@ -597,3 +597,10 @@ julia> h(0,0)
     `lattice`, `onsite`, `hopping`, `@onsite`, `@hopping`, `@onsite!`, `@hopping!`
 """
 hamiltonian
+
+"""
+
+    wrap(h::AbstractHamiltonian, (ϕ₁, ϕ₂,...))
+
+"""
+wrap

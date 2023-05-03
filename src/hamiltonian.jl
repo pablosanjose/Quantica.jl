@@ -527,17 +527,31 @@ function wrap_harmonics(hars, phases, wa::NTuple{W}, ua::NTuple{U}) where {W,U}
     return hars´
 end
 
-function summed_harmonic(inds, hars, phases_w, dcells_u, dcells_w)
-    mat0 = zero(unflat(matrix(hars[first(inds)])))
-    mat = foldl(inds; init = mat0) do mat, i
+function summed_harmonic(inds, hars::Vector{<:Harmonic{<:Any,<:Any,B}}, phases_w, dcells_u, dcells_w) where {B}
+    I,J,V = Int[], Int[], B[]
+    for i in inds
+        I´, J´, V´ = findnz(unflat(matrix(hars[i])))
         dn_w = dcells_w[i]
         e⁻ⁱᵠᵈⁿ = cis(-dot(phases_w, dn_w))
-        mat += e⁻ⁱᵠᵈⁿ .* unflat(matrix(hars[i]))
+        V´ .*= e⁻ⁱᵠᵈⁿ
+        append!(I, I´)
+        append!(J, J´)
+        append!(V, V´)
     end
     dn_u = dcells_u[first(inds)]
     bs = blockstructure(matrix(hars[first(inds)]))
+    n = unflatsize(bs)
+    mat = sparse(I, J, V, n, n)
     return Harmonic(dn_u, HybridSparseMatrix(bs, mat))
 end
+
+function wrap(p::ParametricHamiltonian, phases)
+    h´ = wrap(parent(p), phases)
+    ms = parent.(modifiers(p))
+    p´ = hamiltonian(h´, ms...)
+    return p´
+end
+
 
 #endregion
 
