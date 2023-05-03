@@ -537,13 +537,27 @@ terms in model can be parametrically modified through the provided `modifiers` (
 
 ## Keywords
 
-- orbitals: number of orbitals per sublattice. If an `Integer` (or a `Val{Integer}`), all sublattices will have the same number of orbitals. A collection of `Integers` indicates the orbitals on each sublattice.
+- `orbitals`: number of orbitals per sublattice. If an `Integer` (or a `Val{Integer}`), all sublattices will have the same number of orbitals. A collection of `Integers` indicates the orbitals on each sublattice.
 
 ## Currying
 
     lat |> hamiltonian(model[, modifiers...]; kw...)
 
 Curried form of `hamiltonian` equivalent to `hamiltonian(lat, model, modifiers...; kw...)`.
+
+## Indexing
+
+    h[dn::SVector{L,Int}]
+    h[dn::NTuple{L,Int}]
+
+Return the Bloch harmonic of an `h::AbstractHamiltonian` in the form of a
+`HybridSparseMatrix`. This special matrix type contains both an `unflat` sparse
+representation of the harmonic with one site per element, and a `flat` representation with
+one orbital per element. To obtain each of these, use `unflat(h[dn])` and `flat(h[dn])`.
+
+    h[()]
+
+Special syntax equivalent to `h[(0...)]`, which access the fundamental Bloch harmonic.
 
 ## Call syntax
 
@@ -552,19 +566,11 @@ Curried form of `hamiltonian` equivalent to `hamiltonian(lat, model, modifiers..
 Return a `h::Hamiltonian` from a `ph::ParametricHamiltonian` by applying specific values to
 its parameters `params`. If `ph` is a non-parametric `Hamiltonian` instead, this is a no-op.
 
-## Indexing
+    h(ϕ...; params...)
 
-    h[dn::SVector{L,Int}]
-    h[dn::NTuple{L,Int}]
-
-Return the Bloch harmonic of an `h::AbstractHamiltonian` in the form of a
-`HybridSparseMatrix` that contains both an `unflat` sparse representation with one site per
-element and a `flat` representation with one orbital per element. To obtain each of these,
-use `unflat(h[dn])` and `flat(h[dn])`, respectively.
-
-    h[()]
-
-Special syntax equivalent to `h[(0...)]`, which access the fundamental Bloch harmonic.
+Return the flat, sparse Bloch matrix of `h::AbstractHamiltonian` at Bloch phases `ϕ` (with
+applied parameters `params` if `h` is a `ParametricHamiltonian`), defined as `H = ∑_dn
+e⁻ⁱᵠᵈⁿ H_dn`, where `H_dn = flat(h[dn])` is the `dn` flat Bloch harmonic of `h`
 
 # Examples
 
@@ -578,6 +584,13 @@ Hamiltonian{Float64,2,2}: Hamiltonian on a 2D Lattice in 2D space
   Onsites          : 0
   Hoppings         : 6
   Coordination     : 3.0
+
+julia> h(0,0)
+4×4 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 8 stored entries:
+     ⋅          ⋅      0.0+0.0im  3.0+0.0im
+     ⋅          ⋅      3.0+0.0im  0.0+0.0im
+ 0.0+0.0im  3.0+0.0im      ⋅          ⋅    
+ 3.0+0.0im  0.0+0.0im      ⋅          ⋅    
 ```
 
 # See also

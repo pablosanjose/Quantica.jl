@@ -773,8 +773,14 @@ Base.view(s::SMatrixView, i...) = view(s.s, i...)
 Base.getindex(s::SMatrixView, i...) = getindex(s.s, i...)
 
 Base.zero(::Type{SMatrixView{N,M,T,NM}}) where {N,M,T,NM} = SMatrixView(zero(SMatrix{N,M,T,NM}))
+Base.zero(::S) where {S<:SMatrixView} = zero(S)
 
 Base.adjoint(s::SMatrixView) = SMatrixView(s.s')
+
+Base.:+(s::SMatrixView...) = SMatrixView(+(parent.(s)...))
+Base.:-(s::SMatrixView) = SMatrixView(-parent.(s))
+Base.:*(s::SMatrixView, x::Number) = SMatrixView(parent(s) * x)
+Base.:*(x::Number, s::SMatrixView) = SMatrixView(x * parent(s))
 
 #endregion
 #endregion

@@ -1,23 +1,19 @@
 ############################################################################################
-# Currying and non-mutating methods
+# Currying
 #region
 
 transform(f::Function) = x -> transform(x, f)
 
 transform!(f::Function) = x -> transform!(x, f)
 
-transform(x, f::Function) = transform!(copy(x), f)
-
 translate(δr) = x -> translate(x, δr)
 
 translate!(δr) = x -> translate!(x, δr)
 
-translate(x, δr) = translate!(copy(x), δr)
-
 #endregion
 
 ############################################################################################
-# Lattice transform!
+# Lattice transform/translate
 #region
 
 function transform!(l::Lattice, f::Function, keepranges = false)
@@ -36,26 +32,21 @@ function transform!(b::Bravais{<:Any,E}, f::Function) where {E}
 end
 
 transform!(u::Unitcell, f::Function) = (map!(f, sites(u), sites(u)); u)
-
-#endregion
-
-############################################################################################
-# Lattice translate
-#region
-
-translate!(lat::Lattice{T,E}, δr) where {T,E} = translate!(lat, sanitize_SVector(SVector{E,T}, δr))
+transform(l::Lattice, f::Function) = transform!(copy(l), f)
 
 # translate! does not change neighbor ranges, keep whichever have already been computed
 translate!(lat::Lattice{T,E}, δr::SVector{E,T}) where {T,E} = transform!(lat, r -> r + δr, true)
+translate!(lat::Lattice{T,E}, δr) where {T,E} = translate!(lat, sanitize_SVector(SVector{E,T}, δr))
+translate(l::Lattice, δr) = translate!(copy(l), δr)
 
 #endregion
 
 ############################################################################################
-# Hamiltonian transform
+# Hamiltonian transform/translate
 #region
 
-transform(h::AbstractHamiltonian, f) = transform!(copy_lattice(h), f)
-transform!(h::AbstractHamiltonian, f) = (transform!(lattice(h), f); h)
+transform(h::AbstractHamiltonian, f::Function) = transform!(copy_lattice(h), f)
+transform!(h::AbstractHamiltonian, f::Function) = (transform!(lattice(h), f); h)
 
 translate(h::AbstractHamiltonian, δr) = translate!(copy_lattice(h), δr)
 translate!(h::AbstractHamiltonian, δr) = (translate!(lattice(h), δr); h)

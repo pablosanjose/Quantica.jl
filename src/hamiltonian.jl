@@ -466,7 +466,7 @@ coordination(h::AbstractHamiltonian) = iszero(nhoppings(h)) ? 0.0 : round(nhoppi
 #region
 
 function unitcell_hamiltonian(h::Hamiltonian)
-    lat = lattice(lattice(h), bravais = ())
+    lat = lattice(lattice(h); bravais = ())
     bs = blockstructure(h)
     hars = [Harmonic(SVector{0,Int}(), matrix(first(harmonics(h))))]
     return Hamiltonian(lat, bs, hars)
@@ -480,7 +480,7 @@ unitcell_hamiltonian(ph::ParametricHamiltonian) = unitcell_hamiltonian(hamiltoni
 ############################################################################################
 # combine
 #region
-AppliedHoppingTerm
+
 function combine(hams::AbstractHamiltonian{T}...; coupling = TightbindingModel()) where {T}
     lat = combine(lattice.(hams)...)
     builder = IJVBuilder(lat, hams...)
@@ -497,130 +497,47 @@ end
 
 #endregion
 
-# ############################################################################################
-# # store_onsites - AbstractHamiltonian with onsites as structural SparseMatrix elements
-# #    Note: if hasdiagonal, then no-op
-# #region
+############################################################################################
+# wrap
+#region
 
-# # if newptrs::Vector{Int} it will be filled with the list of inserted pointers
-# function store_onsites(h::Hamiltonian, newptrs = nothing)
-#     hasdiagonal(h[]) && return h
-#     hh´ = harmonics(h)[2:end]
-#     h0 = first(harmonics(h))
-#     h0´ = Harmonic(dcell(h0), store_diagonal(matrix(h0), newptrs)) 
-#     pushfirst!(hh´, h0´)
-#     return Hamiltonian(lattice(h), orbitalstructure(h), hh´)
-# end
+function wrap(h::Hamiltonian{<:Any,<:Any,L}, phases::NTuple{L,Any}) where {L}
+    wa, ua = split_axes(phases)  # indices for wrapped and unwrapped axes
+    lat = lattice(h)
+    b´ = bravais_matrix(lat)[:, SVector(ua)]
+    lat´ = lattice(lat; bravais = b´)
+    bs´ = blockstructure(h)
+    bloch´ = copy_matrices(bloch(h))
+    hars´ = wrap_harmonics(harmonics(h), phases, wa, ua)
+    return Hamiltonian(lat´, bs´, hars´, bloch´)
+end
 
-# function store_onsites(p::ParametricHamiltonian)
-#     newptrs = Int[]
-#     hasdiagonal(parent(p)[]) && return p
-#     h´ = store_onsites(parent(p), newptrs)
-#     mods = modifiers(p)
-#     mods´ = sync_ptrs.(mods, Ref(newptrs))
-#     return parametric(h´, mods´...)
-# end
+split_axes(phases) = split_axes((), (), 1, phases...)
+split_axes(wa, ua, n, x::Colon, xs...) = split_axes(wa, (ua..., n), n+1, xs...)
+split_axes(wa, ua, n, x, xs...) = split_axes((wa..., n), ua, n+1, xs...)
+split_axes(wa, ua, n) = wa, ua
 
-# sync_ptrs(m::AppliedOnsiteModifier, newptrs) =
-#     AppliedOnsiteModifier(blocktype(m), parametric_function(m), sync_ptrs(pointers(m), newptrs))
+function wrap_harmonics(hars, phases, wa::NTuple{W}, ua::NTuple{U}) where {W,U}
+    phases_w = SVector(phases)[SVector(wa)]
+    dcells_u = SVector{U,Int}[dcell(har)[SVector(ua)] for har in hars]
+    dcells_w = SVector{W,Int}[dcell(har)[SVector(wa)] for har in hars]
+    unique_dcells_u = unique!(sort(dcells_u, by = norm))
+    groups = [findall(==(dcell), dcells_u) for dcell in unique_dcells_u]
+    hars´ = [summed_harmonic(inds, hars, phases_w, dcells_u, dcells_w) for inds in groups]
+    return hars´
+end
 
-# function sync_ptrs(m::AppliedHoppingModifier, newptrs)
-#     ptrs´ = pointers(m)[2:end]
-#     ptrs0´ = sync_ptrs(first(pointers(m)), newptrs)
-#     pushfirst!(ptrs´, ptrs0´)
-#     return AppliedHoppingModifier(blocktype(m), parametric_function(m), ptrs´)
-# end
+function summed_harmonic(inds, hars, phases_w, dcells_u, dcells_w)
+    mat0 = zero(unflat(matrix(hars[first(inds)])))
+    mat = foldl(inds; init = mat0) do mat, i
+        dn_w = dcells_w[i]
+        e⁻ⁱᵠᵈⁿ = cis(-dot(phases_w, dn_w))
+        mat += e⁻ⁱᵠᵈⁿ .* unflat(matrix(hars[i]))
+    end
+    dn_u = dcells_u[first(inds)]
+    bs = blockstructure(matrix(hars[first(inds)]))
+    return Harmonic(dn_u, HybridSparseMatrix(bs, mat))
+end
 
-# # race across ptrs and newptrs, injecting shifts
-# function sync_ptrs(ptrs::Vector{<:Tuple}, newptrs)
-#     ptrs´ = copy(ptrs)
-#     i = i´ = 1
-#     while i <= length(ptrs)
-#         (ptr, rest...) = ptrs[i]
-#         if i´ > length(newptrs) || ptr + i´ - 1 < newptrs[i´]
-#             ptrs´[i] = (ptr + i´ - 1, rest...)
-#             i += 1
-#         else
-#             i´ += 1
-#         end
-#     end
-#     return ptrs´
-# end
+#endregion
 
-# ## Tools
-
-# # insert structural zeros in sparse square matrix diagonal if not present
-# function store_diagonal(m::SparseMatrixCSC{B}, newptrs = nothing) where {B}
-#     size(m, 1) == size(m, 2) || throw(ArgumentError("Expect square matrix"))
-#     rows = rowvals(m)
-#     vals = nonzeros(m)
-#     builder = CSC{B}(size(m, 2), nnz(m))
-#     for col in axes(m, 2)
-#         hasdiagonal = false
-#         for ptr in nzrange(m, col)
-#             row, val = rows[ptr], vals[ptr]
-#             row == col && (hasdiagonal = true)
-#             pushtocolumn!(builder, row, val)
-#         end
-#         hasdiagonal || pushtocolumn!(builder, col, zero(B))
-#         finalizecolumn!(builder)
-#         hasdiagonal || record!(newptrs, row_col_ptr(builder, col, col))
-#     end
-#     return sparse(builder, size(m, 1))
-# end
-
-# record!(ptrs::Vector{Int}, ptr) = push!(ptrs, ptr)
-# record!(_, ptr) = nothing
-
-# function hasdiagonal(m::SparseMatrixCSC)
-#     rows = rowvals(m)
-#     for col in axes(m, 2)
-#         found = false
-#         for ptr in nzrange(m, col)
-#             rows[ptr] == col && (found = true; break)
-#         end
-#         found || return false
-#     end
-#     return true
-# end
-
-# # appends pointers to diagonal elements of m in cols range
-# function diagonal_pointers!(ptrs, m::SparseMatrixCSC, cols = 1:min(size(m)...))
-#     rows = rowvals(m)
-#     for col in cols
-#         for ptr in nzrange(m, col)
-#             if rows[ptr] == col
-#                 push!(ptrs, ptr)
-#                 break
-#             end
-#         end
-#     end
-#     return ptrs
-# end
-
-# function add_diagonal!(A::Matrix, x, cols = 1:size(A,2))
-#     checkbounds(A, cols, cols)
-#     @inbounds for col in cols
-#         A[col, col] += x
-#     end
-#     return A
-# end
-
-# function add_diagonal!(A::SparseMatrixCSC, x, cols = 1:size(A,2))
-#     rows = rowvals(m)
-#     vals = nonzeros(m)
-#     for col in cols
-#         found = false
-#         for ptr in nzrange(m, col)
-#             if rows[ptr] == col
-#                 found = true
-#                 vals[ptr] += x
-#                 break
-#             end
-#         end
-#         found || internalerror("add_diagonal!: not enough structural elements")
-#     end
-# end
-
-
-# #endregion

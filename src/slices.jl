@@ -161,7 +161,7 @@ end
 #endregion
 
 ############################################################################################
-# findsubcell(c, ::LatticeSlice), findsite(i, ::CellSites) and Base.in
+# findsubcell(c, ::LatticeSlice) and Base.in
 #region
 
 findsubcell(c, l::LatticeSlice{<:Any,<:Any,L}) where {L} =
@@ -180,15 +180,15 @@ function findsubcell(cell´::SVector, l::LatticeSlice)
     return nothing
 end
 
-findsite(i::Integer, s::CellSites) = findfirst(==(i), siteindices(s))
-
-function findsite((i, dn)::Tuple{Int,SVector}, ls::LatticeSlice)
-    s = findsubcell(dn, ls)
-    s === nothing && return nothing
-    j = findsite(i, subcells(ls, first(s)))
-    j === nothing && return nothing
-    return last(s) + j
-end
+## Unused
+# findsite(i::Integer, s::CellSites) = findfirst(==(i), siteindices(s))
+# function findsite((i, dn)::Tuple{Int,SVector}, ls::LatticeSlice)
+#     s = findsubcell(dn, ls)
+#     s === nothing && return nothing
+#     j = findsite(i, subcells(ls, first(s)))
+#     j === nothing && return nothing
+#     return last(s) + j
+# end
 
 Base.in(idn::Tuple{Int,SVector}, ls::LatticeSlice) = findsite(idn, ls) !== nothing
 
