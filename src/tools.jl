@@ -135,7 +135,7 @@ function merge_sparse(mats, ::Type{B} = eltype(first(mats))) where {B}
     return matrix
 end
 
-function merged_mul!(C::SparseMatrixCSC{<:Number}, A::HybridSparseBlochMatrix, b::Number, α = 1, β = 0)
+function merged_mul!(C::SparseMatrixCSC{<:Number}, A::HybridSparseMatrix, b::Number, α = 1, β = 0)
     bs = blockstructure(A)
     if needs_flat_sync(A)
         merged_mul!(C, bs, unflat(A), b, α, β)

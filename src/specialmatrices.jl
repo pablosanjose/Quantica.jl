@@ -3,41 +3,41 @@
 ############################################################################################
 
 ############################################################################################
-## HybridSparseBlochMatrix
+## HybridSparseMatrix
 #region
 
 ############################################################################################
-# HybridSparseBlochMatrix - flat/unflat
+# HybridSparseMatrix - flat/unflat
 #region
 
-function unflat(s::HybridSparseBlochMatrix)
+function unflat(s::HybridSparseMatrix)
     needs_unflat_sync(s) && unflat_sync!(s)
     return unflat_unsafe(s)
 end
 
-function flat(s::HybridSparseBlochMatrix)
+function flat(s::HybridSparseMatrix)
     needs_flat_sync(s) && flat_sync!(s)
     return flat_unsafe(s)
 end
 
 # Sync states
-needs_no_sync!(s::HybridSparseBlochMatrix)     = (syncstate(s)[] = 0)
-needs_flat_sync!(s::HybridSparseBlochMatrix)   = (syncstate(s)[] = 1)
-needs_unflat_sync!(s::HybridSparseBlochMatrix) = (syncstate(s)[] = -1)
-needs_initialization!(s::HybridSparseBlochMatrix) = (syncstate(s)[] = 2)
+needs_no_sync!(s::HybridSparseMatrix)     = (syncstate(s)[] = 0)
+needs_flat_sync!(s::HybridSparseMatrix)   = (syncstate(s)[] = 1)
+needs_unflat_sync!(s::HybridSparseMatrix) = (syncstate(s)[] = -1)
+needs_initialization!(s::HybridSparseMatrix) = (syncstate(s)[] = 2)
 
-needs_no_sync(s::HybridSparseBlochMatrix)      = (syncstate(s)[] == 0)
-needs_flat_sync(s::HybridSparseBlochMatrix)    = (syncstate(s)[] == 1)
-needs_unflat_sync(s::HybridSparseBlochMatrix)  = (syncstate(s)[] == -1)
-needs_initialization(s::HybridSparseBlochMatrix) = (syncstate(s)[] == 2)
+needs_no_sync(s::HybridSparseMatrix)      = (syncstate(s)[] == 0)
+needs_flat_sync(s::HybridSparseMatrix)    = (syncstate(s)[] == 1)
+needs_unflat_sync(s::HybridSparseMatrix)  = (syncstate(s)[] == -1)
+needs_initialization(s::HybridSparseMatrix) = (syncstate(s)[] == 2)
 
-needs_no_sync!(s::HybridSparseBlochMatrix{<:Any,<:Complex})     = (syncstate(s)[] = 0)
-needs_flat_sync!(s::HybridSparseBlochMatrix{<:Any,<:Complex})   = (syncstate(s)[] = 0)
-needs_unflat_sync!(s::HybridSparseBlochMatrix{<:Any,<:Complex}) = (syncstate(s)[] = 0)
+needs_no_sync!(s::HybridSparseMatrix{<:Any,<:Complex})     = (syncstate(s)[] = 0)
+needs_flat_sync!(s::HybridSparseMatrix{<:Any,<:Complex})   = (syncstate(s)[] = 0)
+needs_unflat_sync!(s::HybridSparseMatrix{<:Any,<:Complex}) = (syncstate(s)[] = 0)
 
-needs_no_sync(s::HybridSparseBlochMatrix{<:Any,<:Complex})      = true
-needs_flat_sync(s::HybridSparseBlochMatrix{<:Any,<:Complex})    = false
-needs_unflat_sync(s::HybridSparseBlochMatrix{<:Any,<:Complex})  = false
+needs_no_sync(s::HybridSparseMatrix{<:Any,<:Complex})      = true
+needs_flat_sync(s::HybridSparseMatrix{<:Any,<:Complex})    = false
+needs_unflat_sync(s::HybridSparseMatrix{<:Any,<:Complex})  = false
 
 # flat/unflat conversion
 function flat(b::OrbitalBlockStructure{B}, unflat::SparseMatrixCSC{B´}) where {N,T,B<:MatrixElementNonscalarType{T,N},B´<:MatrixElementNonscalarType{T,N}}
@@ -90,10 +90,10 @@ checkblocks(b, flat) = nothing ## TODO: must check that all structural elements 
 #endregion
 
 ############################################################################################
-# HybridSparseBlochMatrix - copying
+# HybridSparseMatrix - copying
 #region
 
-function Base.copy!(h::HybridSparseBlochMatrix{T,B}, h´::HybridSparseBlochMatrix{T,B}) where {T,B}
+function Base.copy!(h::HybridSparseMatrix{T,B}, h´::HybridSparseMatrix{T,B}) where {T,B}
     copy!(blockstructure(h), blockstructure(h´))
     copy!(unflat_unsafe(h), unflat_unsafe(h´))
     isaliased(h´) || copy!(flat_unsafe(h), flat_unsafe(h´))
@@ -101,35 +101,35 @@ function Base.copy!(h::HybridSparseBlochMatrix{T,B}, h´::HybridSparseBlochMatri
     return h
 end
 
-function Base.copy(h::HybridSparseBlochMatrix)
+function Base.copy(h::HybridSparseMatrix)
     b = copy(blockstructure(h))
     u = copy(unflat_unsafe(h))
     f = isaliased(h) ? u : copy(flat_unsafe(h))
     s = Ref(syncstate(h)[])
-    return HybridSparseBlochMatrix(b, u, f, s)
+    return HybridSparseMatrix(b, u, f, s)
 end
 
-function copy_matrices(h::HybridSparseBlochMatrix)
+function copy_matrices(h::HybridSparseMatrix)
     b = blockstructure(h)
     u = copy(unflat_unsafe(h))
     f = isaliased(h) ? u : copy(flat_unsafe(h))
     s = Ref(syncstate(h)[])
-    return HybridSparseBlochMatrix(b, u, f, s)
+    return HybridSparseMatrix(b, u, f, s)
 end
 
 #endregion
 
 ############################################################################################
-# HybridSparseBlochMatrix indexing
+# HybridSparseMatrix indexing
 #region
 
-Base.getindex(b::HybridSparseBlochMatrix{<:Any,<:SMatrixView}, i::Integer, j::Integer) =
+Base.getindex(b::HybridSparseMatrix{<:Any,<:SMatrixView}, i::Integer, j::Integer) =
     view(parent(unflat(b)[i, j]), flatrange(b, i), flatrange(b, j))
 
-Base.getindex(b::HybridSparseBlochMatrix, i::Integer, j::Integer) = unflat(b)[i, j]
+Base.getindex(b::HybridSparseMatrix, i::Integer, j::Integer) = unflat(b)[i, j]
 
 # only allowed for elements that are already stored
-function Base.setindex!(b::HybridSparseBlochMatrix{<:Any,B}, val::AbstractVecOrMat, i::Integer, j::Integer) where {B<:SMatrixView}
+function Base.setindex!(b::HybridSparseMatrix{<:Any,B}, val::AbstractVecOrMat, i::Integer, j::Integer) where {B<:SMatrixView}
     @boundscheck(checkstored(unflat(b), i, j))
     val´ = mask_block(B, val, blocksize(blockstructure(b), i, j))
     unflat(b)[i, j] = val´
@@ -137,7 +137,7 @@ function Base.setindex!(b::HybridSparseBlochMatrix{<:Any,B}, val::AbstractVecOrM
     return val´
 end
 
-function Base.setindex!(b::HybridSparseBlochMatrix, val::AbstractVecOrMat, i::Integer, j::Integer)
+function Base.setindex!(b::HybridSparseMatrix, val::AbstractVecOrMat, i::Integer, j::Integer)
     @boundscheck(checkstored(unflat(b), i, j))
     unflat(b)[i, j] = val
     needs_flat_sync!(b)
@@ -179,14 +179,14 @@ checkstored(mat, i, j) = i in view(rowvals(mat), nzrange(mat, j)) ||
 #endregion
 
 ############################################################################################
-# HybridSparseBlochMatrix syncing
+# HybridSparseMatrix syncing
 #region
 
 checkinitialized(s) =
     needs_initialization(s) && internalerror("sync!: Tried to sync uninitialized matrix")
 
 # Uniform case
-function flat_sync!(s::HybridSparseBlochMatrix{<:Any,S}) where {N,S<:SMatrix{N,N}}
+function flat_sync!(s::HybridSparseMatrix{<:Any,S}) where {N,S<:SMatrix{N,N}}
     checkinitialized(s)
     flat, unflat = flat_unsafe(s), unflat_unsafe(s)
     cols = axes(unflat, 2)
@@ -204,7 +204,7 @@ function flat_sync!(s::HybridSparseBlochMatrix{<:Any,S}) where {N,S<:SMatrix{N,N
 end
 
 # Non-uniform case
-function flat_sync!(s::HybridSparseBlochMatrix{<:Any,S}) where {N,S<:SMatrixView{N,N}}
+function flat_sync!(s::HybridSparseMatrix{<:Any,S}) where {N,S<:SMatrixView{N,N}}
     checkinitialized(s)
     flat, unflat = flat_unsafe(s), unflat_unsafe(s)
     cols, rows, rowsflat = axes(unflat, 2), rowvals(unflat), rowvals(flat)

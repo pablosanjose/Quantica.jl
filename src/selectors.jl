@@ -52,7 +52,7 @@ end
 
 function Base.in(((sj, si), (r, dr), dcell)::Tuple{Pair,Tuple,SVector}, sel::AppliedHopSelector)
     lat = lattice(sel)
-    return !isonsite((j, i), dcell) &&
+    return !isonsite((sj, si), dcell) &&
             indcells(dcell, sel) &&
             insublats(sj => si, sel) &&
             iswithinrange(dr, sel) &&

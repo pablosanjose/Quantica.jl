@@ -394,10 +394,9 @@ combine
 """
     siteselector(; region = missing, sublats = missing, cells = missing)
 
-Return a `SiteSelector` object that can be used to select a finite set of sites in a lattice
-that are contained within the specified region, sublattices and cells. Sites at position
-`r::SVector{E}`, in a lattice cell of index `n::SVector{L,Int}` and belonging to a
-sublattice of name `s::Symbol` will be selected only if
+Return a `SiteSelector` object that can be used to select a finite set of sites in a
+lattice. Sites at position `r::SVector{E}`, belonging to a cell of index `n::SVector{L,Int}`
+and to a sublattice with name `s::Symbol` will be selected only if
 
     `region(r) && s in sublats && n in cells`
 
@@ -434,27 +433,20 @@ siteselector
 """
     hopselector(; range = neighbors(1), dcells = missing, sublats = missing, region = missing)
 
-Return a `HopSelector` object that can be used to select hops between two sites in a
-lattice. Hops between two sites at positions `r₁ = r - dr/2` and `r₂ = r + dr`, belonging to
-unit cells at integer distance `dcell` and to sublattices with names `s₁::Symbol` and
-`s₂::Symbol` will be selected if:
+
+Return a `HopSelector` object that can be used to select a finite set of hops between sites
+in a lattice. Hops between two sites at positions `r₁ = r - dr/2` and `r₂ = r + dr`,
+belonging to unit cells with a cell distance `dn::SVector{L,Int}` and to a sublattices with
+names `s₁::Symbol` and `s₂::Symbol` will be selected only if
 
     `region(r, dr) && (s₁ => s₂ in sublats) && (dcell in dcells) && (norm(dr) <= range)`
 
 If any of these is `missing` it will not be used to constraint the selection.
 
-The keyword `range` admits the following possibilities
+## Generalization
 
-    max_range                   # i.e. `norm(dr) <= max_range`
-    (min_range, max_range)      # i.e. `min_range <= norm(dr) <= max_range`
-
-Both `max_range` and `min_range` can be a `Real` or a `Neighbors` object created with
-`neighbors(n)`. The latter represents the distance of the `n`-th nearest neighbors in
-lattice `lat` (see `neighbors`).
-
-The keyword `dcells` can be a `Tuple`/`SVector` of `Int`s, or a collection of them.
-
-The keyword `sublats` allows various forms, including:
+While `range` is usually a `Real`, and `sublats` and `dcells` are usually collections of
+`Pair{Symbol}`s and `SVector`s, respectively, they also admit other possibilities:
 
     sublats = :A                          # Hops from :A to :A
     sublats = :A => :B                    # Hops from :A to :B sublattices, but not from :B to :A
@@ -462,19 +454,32 @@ The keyword `sublats` allows various forms, including:
     sublats = (:A => :B, :C => :D)        # Hopping from :A to :B or :C to :D
     sublats = (:A, :C) .=> (:B, :D)       # Broadcasted pairs, same as above
     sublats = (:A, :C) => (:B, :D)        # Direct product, (:A=>:B, :A=:D, :C=>:B, :C=>D)
+    sublats = 1 => 2                      # Hops from first to second sublat. Similarly, all above patterns using Integers.
     sublats = (spec₁, spec₂, ...)         # Hops matching any of the `spec`'s with any form as above
 
-The constructor `hopselector(; kw...)` is not meant to be called by the end user. Instead,
-the kwargs `kw` are input into different functions that allow filtering pairs of sites,
-which themselves call `hopselector` internally as needed. Some of these functions are
+    dcells  = dn::SVector{L,Integer}      # Hops between cells at distance `dn`
+    dcells  = dn::NTuple{L,Integer}       # Hops between cells at distance `SVector(dn)`
+    dcells  = f::Function                 # Hops between cells at distance `dn` such that `f(dn) == true`
+
+    range   = neighbors(n)                # Hops within the `n`-th nearest neighbor distance in the lattice
+    range   = (min_range, max_range)      # Hops at distance inside the `[min_range, max_range]` closed interval (bounds can also be `neighbors(n)`)
+
+
+## Usage
+
+Although the constructor `hopselector(; kw...)` is exported, the end user does not usually
+need to call it directly. Instead, the keywords `kw` are input into different functions that
+allow filtering hops, which themselves call `hopselector` internally as needed. Some of
+these functions are
 
     - hopping(...; kw...)   : hopping model term to be applied to site pairs specified by `kw`
-    - @onsite!(...; kw...)  : hopping modifier to be applied to site pairs specified by `kw`
+    - @hopping(...; kw...)  : parametric hopping model term to be applied to site pairs specified by `kw`
+    - @hopping!(...; kw...) : hopping modifier to be applied to site pairs specified by `kw`
 
 # Examples
 
 ```jldoctest
-julia> lat = LP.honeycomb() |> hamiltonian(hopping(1, range = neighbors(2), sublats = (:A, :B) .=> (:A, :B)))
+julia> h = LP.honeycomb() |> hamiltonian(hopping(1, range = neighbors(2), sublats = (:A, :B) .=> (:A, :B)))
 Hamiltonian{Float64,2,2}: Hamiltonian on a 2D Lattice in 2D space
   Bloch harmonics  : 7
   Harmonic size    : 2 × 2
@@ -484,9 +489,9 @@ Hamiltonian{Float64,2,2}: Hamiltonian on a 2D Lattice in 2D space
   Hoppings         : 12
   Coordination     : 6.0
 
-julia> lat = LP.honeycomb() |> hamiltonian(hopping(1, range = neighbors(2), sublats = (:A, :B) => (:A, :B)))
+julia> h = LP.honeycomb() |> hamiltonian(hopping(1, range = (neighbors(2), neighbors(3)), sublats = (:A, :B) => (:A, :B)))
 Hamiltonian{Float64,2,2}: Hamiltonian on a 2D Lattice in 2D space
-  Bloch harmonics  : 7
+  Bloch harmonics  : 9
   Harmonic size    : 2 × 2
   Orbitals         : [1, 1]
   Element type     : scalar (ComplexF64)
@@ -496,7 +501,7 @@ Hamiltonian{Float64,2,2}: Hamiltonian on a 2D Lattice in 2D space
 ```
 
 # See also
-    `siteselector`, `hopping`, `@hopping!`
+    `siteselector`, `lattice`, `hopping`, `@hopping`, `@hopping!`
 
 """
 hopselector
@@ -518,43 +523,53 @@ Obtain the actual nth-nearest-neighbot distance between sites in lattice `lat`.
 neighbors
 
 """
-    hamiltonian(lat::Lattice{T}, model; orbitals = 1, type = T)
+    hamiltonian(lat::Lattice{T}, model; orbitals = 1)
 
-Create a `Hamiltonian` with a given number of `orbitals` per sublattice of type
-`Complex{type}` by applying `model::TighbindingModel` to the lattice `lat` (see `hopping`
-and `onsite` for details on building tightbinding models).
+Create a `Hamiltonian` or `ParametricHamiltonian` by applying `model` to the lattice `lat`
+(see `onsite`, `@onsite`, `hopping` and `@hopping` for details on building tight-binding
+models).
 
-    lat |> hamiltonian(model; kw...)
+    hamiltonian(lat::Lattice{T}, model, modifiers...; orbitals = 1)
 
-Curried form of `hamiltonian` equivalent to `hamiltonian(lat, model; kw...)`.
+Same as above, but returning always a `ParametricHamiltonian` where all onsite and hopping
+terms in model can be parametrically modified through the provided `modifiers` (see
+`@onsite!` and `@hopping!` for details on defining modifiers).
 
-# Orbitals
+## Keywords
 
-Each matrix element in the Hamiltonian corresponds to a pair of sites, each of which may
-have one or more orbitals. Sites in the same sublattice have an equal number of orbitals
-given by `orbitals`. If `orbitals = (n₁, n₂, ...)` is a collection of integers, one per
-sublattice, sites in each sublattice will contain the corresponding number `nᵢ` of orbitals.
-For type stability, the matrix elements of Hamiltonians are stored as blocks of equal size
-`N = max(orbitals)`. If `N = 1` (all sublattices with one orbital) the Hamiltonian matrix
-element type is `Complex{type}`. Otherwise it is `SMatrix{N,N,Complex{type}}`, with each
-block padded with the necessary zeros as required. Keyword `type` is `T` by default, where
-`T <: AbstractFloat` is the number type of `lat`.
+- orbitals: number of orbitals per sublattice. If an `Integer` (or a `Val{Integer}`), all sublattices will have the same number of orbitals. A collection of `Integers` indicates the orbitals on each sublattice.
 
-# Indexing
+## Currying
 
-Indexing into a Hamiltonian `h` works as follows. Access the `Harmonic` matrix at a given
-unit cell distance `dn::NTuple{L,Int}` with `h[dn]`. The special `h[]` syntax stands for
-`h[(0...)]` for the zero-harmonic. Assign `v` into element `(i,j)` of said matrix with
-`h[dn][i,j] = v`. Broadcasting with vectors of indices `is` and `js` is supported,
-`h[dn][is, js] .= v_matrix`.
+    lat |> hamiltonian(model[, modifiers...]; kw...)
 
-To add an empty harmonic with a given `dn::NTuple{L,Int}`, do `push!(h, dn)`. To delete it,
-do `deleteat!(h, dn)`.
+Curried form of `hamiltonian` equivalent to `hamiltonian(lat, model, modifiers...; kw...)`.
+
+## Call syntax
+
+    ph(; params...)
+
+Return a `h::Hamiltonian` from a `ph::ParametricHamiltonian` by applying specific values to
+its parameters `params`. If `ph` is a non-parametric `Hamiltonian` instead, this is a no-op.
+
+## Indexing
+
+    h[dn::SVector{L,Int}]
+    h[dn::NTuple{L,Int}]
+
+Return the Bloch harmonic of an `h::AbstractHamiltonian` in the form of a
+`HybridSparseMatrix` that contains both an `unflat` sparse representation with one site per
+element and a `flat` representation with one orbital per element. To obtain each of these,
+use `unflat(h[dn])` and `flat(h[dn])`, respectively.
+
+    h[()]
+
+Special syntax equivalent to `h[(0...)]`, which access the fundamental Bloch harmonic.
 
 # Examples
 
 ```jldoctest
-julia> h = hamiltonian(LatticePresets.honeycomb(), hopping(SA[1 2; 2 4], range = 1/√3), orbitals = 2)
+julia> h = hamiltonian(LP.honeycomb(), hopping(SA[0 1; 1 0], range = 1/√3), orbitals = 2)
 Hamiltonian{Float64,2,2}: Hamiltonian on a 2D Lattice in 2D space
   Bloch harmonics  : 5
   Harmonic size    : 2 × 2
@@ -563,35 +578,9 @@ Hamiltonian{Float64,2,2}: Hamiltonian on a 2D Lattice in 2D space
   Onsites          : 0
   Hoppings         : 6
   Coordination     : 3.0
-
-julia> push!(h, (3,3)) # Adding a new Hamiltonian harmonic (if not already present)
-Hamiltonian{Float64,2,2}: Hamiltonian on a 2D Lattice in 2D space
-  Bloch harmonics  : 6
-  Harmonic size    : 2 × 2
-  Orbitals         : [2, 2]
-  Element type     : 2 × 2 blocks (ComplexF64)
-  Onsites          : 0
-  Hoppings         : 6
-  Coordination     : 3.0
-
-julia> h[(3,3)][1,1] = @SMatrix[1 2; 2 1]; h[(3,3)] # element assignment
-2×2 SparseMatrixCSC{SMatrix{2, 2, ComplexF64, 4}, Int64} with 1 stored entry:
- [1.0+0.0im 2.0+0.0im; 2.0+0.0im 1.0+0.0im]                      ⋅                     
-                     ⋅                                           ⋅                     
-
-julia> h[(3,3)][[1,2],[1,2]] .= Ref(SA[1 2; 2 1])  # multiple element assignment
-2×2 SparseMatrixCSC{SMatrix{2, 2, ComplexF64, 4}, Int64} with 4 stored entries:
- [1.0+0.0im 2.0+0.0im; 2.0+0.0im 1.0+0.0im]  [1.0+0.0im 2.0+0.0im; 2.0+0.0im 1.0+0.0im]
- [1.0+0.0im 2.0+0.0im; 2.0+0.0im 1.0+0.0im]  [1.0+0.0im 2.0+0.0im; 2.0+0.0im 1.0+0.0im]
-
-julia> h[]                                        # inspect matrix of zero harmonic
-2×2 SparseMatrixCSC{SMatrix{2, 2, ComplexF64, 4}, Int64} with 2 stored entries:
-                     ⋅                       [1.0+0.0im 2.0+0.0im; 2.0+0.0im 4.0+0.0im]
- [1.0+0.0im 2.0+0.0im; 2.0+0.0im 4.0+0.0im]                      ⋅                     
-
 ```
 
 # See also
-    `onsite`, `hopping`, `bloch`, `bloch!`
+    `lattice`, `onsite`, `hopping`, `@onsite`, `@hopping`, `@onsite!`, `@hopping!`
 """
 hamiltonian

@@ -11,8 +11,8 @@
 
 function apply(s::SiteSelector, lat::Lattice{T,E,L}) where {T,E,L}
     region = r -> applied_region(r, s.region)
-    sublatnames = recursive_push!(Symbol[], s.sublats)
-    sublats = Int[sublatindex(lat, name) for name in sublatnames]
+    intsublats = recursive_apply(name -> sublatindex_or_zero(lat, name), s.sublats)
+    sublats = recursive_push!(Int[], intsublats)
     cells = recursive_push!(SVector{L,Int}[], sanitize_cells(s.cells, Val(L)))
     return AppliedSiteSelector{T,E,L}(lat, region, sublats, cells)
 end
@@ -23,15 +23,22 @@ function apply(s::HopSelector, lat::Lattice{T,E,L}) where {T,E,L}
         throw(ErrorException("Tried to apply an infinite-range HopSelector on an unbounded lattice"))
     sign = ifelse(s.adjoint, -1, 1)
     region = (r, dr) -> applied_region((r, sign*dr), s.region)
-    sublatnames = recursive_push!(Pair{Symbol,Symbol}[], s.sublats)
-    sublats = Pair{Int,Int}[sublatindex(lat, namei) => sublatindex(lat, namej)
-        for (namei, namej) in sublatnames]
+    intsublats = recursive_apply(names -> sublatindex_or_zero(lat, names), s.sublats)
+    sublats = recursive_push!(Pair{Int,Int}[], intsublats)
     dcells = recursive_push!(SVector{L,Int}[], s.dcells)
     if s.adjoint
         sublats .= reverse.(sublats)
         dcells .*= -1
     end
     return AppliedHopSelector{T,E,L}(lat, region, sublats, dcells, (rmin, rmax))
+end
+
+sublatindex_or_zero(lat, ::Missing) = missing
+sublatindex_or_zero(lat, i::Integer) = ifelse(1 <= i <= nsublats(lat), Int(i), 0)
+
+function sublatindex_or_zero(lat, name::Symbol)
+    i = sublatindex(lat, name)
+    return ifelse(i === nothing, 0, Int(i))
 end
 
 sanitize_minmaxrange(r, lat) = sanitize_minmaxrange((zero(numbertype(lat)), r), lat)
@@ -52,10 +59,14 @@ applied_region(r, ::Missing) = true
 applied_region((r, dr)::Tuple{SVector,SVector}, region::Function) = ifelse(region(r, dr), true, false)
 applied_region(r::SVector, region::Function) = ifelse(region(r), true, false)
 
+recursive_apply(f, t::Tuple) = recursive_apply.(f, t)
+recursive_apply(f, (a,b)::Pair) = recursive_apply(f, a) => recursive_apply(f, b)
+recursive_apply(f, x) = f(x)
+
 recursive_push!(v::Vector, ::Missing) = v
 recursive_push!(v::Vector{T}, x::T) where {T} = push!(v, x)
-recursive_push!(v::Vector{S}, x::NTuple{<:Any,Int}) where {S<:SVector} = push!(v, S(x))
-recursive_push!(v::Vector{S}, x::Number) where {S<:SVector{1}}= push!(v, S(x))
+recursive_push!(v::Vector{S}, x::NTuple{<:Any,Integer}) where {S<:SVector} = push!(v, S(x))
+recursive_push!(v::Vector{S}, x::Number) where {S<:SVector{1}} = push!(v, S(x))
 recursive_push!(v::Vector{Pair{T,T}}, x::T) where {T} = push!(v, x => x)
 recursive_push!(v::Vector{Pair{T,T}}, (x, y)::Tuple{T,T}) where {T} = push!(v, x => y)
 recursive_push!(v::Vector{Pair{T,T}}, x::Pair{T,T}) where {T} = push!(v, x)
@@ -73,10 +84,10 @@ function recursive_push!(v::Vector{Pair{T,T}}, (xs, ys)::Pair) where {T}
 end
 
 # for cells = function
-function recursive_push!(v::Vector{SVector{L,Int}}, f::Function) where {L}
+function recursive_push!(v::Vector{SVector{L,Int}}, fcell::Function) where {L}
     iter = BoxIterator(zero(SVector{L,Int}))
     for cell in iter
-        f(cell) || continue
+        fcell(cell) || continue
         acceptcell!(iter, cell)
         push!(v, cell)
     end

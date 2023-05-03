@@ -784,12 +784,12 @@ Base.adjoint(s::SMatrixView) = SMatrixView(s.s')
 #region
 
   ############################################################################################
-  # HybridSparseBlochMatrix
+  # HybridSparseMatrix
   #    Internal Matrix type for Bloch harmonics in Hamiltonians
   #    Wraps site-block + flat versions of the same SparseMatrixCSC
   #region
 
-struct HybridSparseBlochMatrix{T,B<:MatrixElementType{T}} <: SparseArrays.AbstractSparseMatrixCSC{B,Int}
+struct HybridSparseMatrix{T,B<:MatrixElementType{T}} <: SparseArrays.AbstractSparseMatrixCSC{B,Int}
     blockstruct::OrbitalBlockStructure{B}
     unflat::SparseMatrixCSC{B,Int}
     flat::SparseMatrixCSC{Complex{T},Int}
@@ -798,17 +798,17 @@ end
 
 #region ## Constructors ##
 
-HybridSparseBlochMatrix(b::OrbitalBlockStructure{Complex{T}}, flat::SparseMatrixCSC{Complex{T},Int}) where {T} =
-    HybridSparseBlochMatrix(b, flat, flat, Ref(0))  # aliasing
+HybridSparseMatrix(b::OrbitalBlockStructure{Complex{T}}, flat::SparseMatrixCSC{Complex{T},Int}) where {T} =
+    HybridSparseMatrix(b, flat, flat, Ref(0))  # aliasing
 
-function HybridSparseBlochMatrix(b::OrbitalBlockStructure{B}, unflat::SparseMatrixCSC{B,Int}) where {T,B<:MatrixElementNonscalarType{T}}
-    m = HybridSparseBlochMatrix(b, unflat, flat(b, unflat), Ref(0))
+function HybridSparseMatrix(b::OrbitalBlockStructure{B}, unflat::SparseMatrixCSC{B,Int}) where {T,B<:MatrixElementNonscalarType{T}}
+    m = HybridSparseMatrix(b, unflat, flat(b, unflat), Ref(0))
     needs_flat_sync!(m)
     return m
 end
 
-function HybridSparseBlochMatrix(b::OrbitalBlockStructure{B}, flat::SparseMatrixCSC{Complex{T},Int}) where {T,B<:MatrixElementNonscalarType{T}}
-    m = HybridSparseBlochMatrix(b, unflat(b, flat), flat, Ref(0))
+function HybridSparseMatrix(b::OrbitalBlockStructure{B}, flat::SparseMatrixCSC{Complex{T},Int}) where {T,B<:MatrixElementNonscalarType{T}}
+    m = HybridSparseMatrix(b, unflat(b, flat), flat, Ref(0))
     needs_unflat_sync!(m)
     return m
 end
@@ -817,21 +817,21 @@ end
 
 #region ## API ##
 
-blockstructure(s::HybridSparseBlochMatrix) = s.blockstruct
+blockstructure(s::HybridSparseMatrix) = s.blockstruct
 
-unflat_unsafe(s::HybridSparseBlochMatrix) = s.unflat
+unflat_unsafe(s::HybridSparseMatrix) = s.unflat
 
-flat_unsafe(s::HybridSparseBlochMatrix) = s.flat
+flat_unsafe(s::HybridSparseMatrix) = s.flat
 
-syncstate(s::HybridSparseBlochMatrix) = s.sync_state
+syncstate(s::HybridSparseMatrix) = s.sync_state
 
 # are flat === unflat? Only for scalar eltype
-isaliased(::HybridSparseBlochMatrix{<:Any,<:Complex}) = true
-isaliased(::HybridSparseBlochMatrix) = false
+isaliased(::HybridSparseMatrix{<:Any,<:Complex}) = true
+isaliased(::HybridSparseMatrix) = false
 
-SparseArrays.nnz(b::HybridSparseBlochMatrix) = nnz(unflat(b))
+SparseArrays.nnz(b::HybridSparseMatrix) = nnz(unflat(b))
 
-function nnzdiag(m::HybridSparseBlochMatrix)
+function nnzdiag(m::HybridSparseMatrix)
     b = unflat(m)
     count = 0
     rowptrs = rowvals(b)
@@ -843,13 +843,13 @@ function nnzdiag(m::HybridSparseBlochMatrix)
     return count
 end
 
-Base.size(h::HybridSparseBlochMatrix, i::Integer...) = size(unflat_unsafe(h), i...)
+Base.size(h::HybridSparseMatrix, i::Integer...) = size(unflat_unsafe(h), i...)
 
-flatsize(h::HybridSparseBlochMatrix) = flatsize(blockstructure(h))
+flatsize(h::HybridSparseMatrix) = flatsize(blockstructure(h))
 
-SparseArrays.getcolptr(s::HybridSparseBlochMatrix) = getcolptr(s.unflat)
-SparseArrays.rowvals(s::HybridSparseBlochMatrix) = rowvals(s.unflat)
-SparseArrays.nonzeros(s::HybridSparseBlochMatrix) = nonzeros(s.unflat)
+SparseArrays.getcolptr(s::HybridSparseMatrix) = getcolptr(s.unflat)
+SparseArrays.rowvals(s::HybridSparseMatrix) = rowvals(s.unflat)
+SparseArrays.nonzeros(s::HybridSparseMatrix) = nonzeros(s.unflat)
 
 #endregion
 #endregion
@@ -1068,7 +1068,7 @@ minimal_callsafe_copy(s::InverseGreenBlockSparse) =
 
 struct Harmonic{T,L,B}
     dn::SVector{L,Int}
-    h::HybridSparseBlochMatrix{T,B}
+    h::HybridSparseMatrix{T,B}
 end
 
 #region ## API ##
@@ -1109,7 +1109,7 @@ struct Hamiltonian{T,E,L,B} <: AbstractHamiltonian{T,E,L,B}
     lattice::Lattice{T,E,L}
     blockstruct::OrbitalBlockStructure{B}
     harmonics::Vector{Harmonic{T,L,B}}
-    bloch::HybridSparseBlochMatrix{T,B}
+    bloch::HybridSparseMatrix{T,B}
     # Enforce sorted-dns-starting-from-zero invariant onto harmonics
     function Hamiltonian{T,E,L,B}(lattice, blockstruct, harmonics, bloch) where {T,E,L,B}
         n = nsites(lattice)
@@ -1117,7 +1117,7 @@ struct Hamiltonian{T,E,L,B} <: AbstractHamiltonian{T,E,L,B}
             throw(DimensionMismatch("Harmonic $(size.(matrix.(harmonics), 1)) sizes don't match number of sites $n"))
         sort!(harmonics)
         (isempty(harmonics) || !iszero(dcell(first(harmonics)))) && pushfirst!(harmonics,
-            Harmonic(zero(SVector{L,Int}), HybridSparseBlochMatrix(blockstruct, spzeros(B, n, n))))
+            Harmonic(zero(SVector{L,Int}), HybridSparseMatrix(blockstruct, spzeros(B, n, n))))
         return new(lattice, blockstruct, harmonics, bloch)
     end
 end
@@ -1152,7 +1152,7 @@ Hamiltonian(l::Lattice{T,E,L}, b::OrbitalBlockStructure{B}, h::Vector{Harmonic{T
 
 function Hamiltonian(l, b::OrbitalBlockStructure{B}, h) where {B}
     n = nsites(l)
-    bloch = HybridSparseBlochMatrix(b, spzeros(B, n, n))
+    bloch = HybridSparseMatrix(b, spzeros(B, n, n))
     needs_initialization!(bloch)
     return Hamiltonian(l, b, h, bloch)
 end

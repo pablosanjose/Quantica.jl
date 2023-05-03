@@ -25,9 +25,9 @@ end
 
 struct SchurFactorsSolver{T,B}
     shift::T                                          # called Ω in the scattering.pdf notes
-    hm::HybridSparseBlochMatrix{T,B}
-    h0::HybridSparseBlochMatrix{T,B}
-    hp::HybridSparseBlochMatrix{T,B}
+    hm::HybridSparseMatrix{T,B}
+    h0::HybridSparseMatrix{T,B}
+    hp::HybridSparseMatrix{T,B}
     l_leq_r::Bool                                     # whether l <= r (left and right surface dims)
     iG::SparseMatrixCSC{Complex{T},Int}               # to store iG = ω - h0 - Σₐᵤₓ
     ptrs::Tuple{Vector{Int},Vector{Int},Vector{Int}}  # iG ptrs for h0 nzvals, diagonal and Σₐᵤₓ surface

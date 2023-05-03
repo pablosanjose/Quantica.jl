@@ -117,7 +117,7 @@ end
 
 function SparseArrays.sparse(b::OrbitalBlockStructure{B}, har::AbstractBuilderHarmonic{L,B}, m::Integer, n::Integer) where {L,B}
     s = sparse(collector(har), m, n)
-    return Harmonic(dcell(har), HybridSparseBlochMatrix(b, s))
+    return Harmonic(dcell(har), HybridSparseMatrix(b, s))
 end
 
 #endregion
