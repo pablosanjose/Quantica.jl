@@ -2,7 +2,7 @@
 # Lattice
 #######################################################################
 """
-`LatticePresets` is a Quantica submodule containing severeal pre-defined lattices. The
+`LatticePresets` is a Quantica submodule containing several pre-defined lattices. The
 alias `LP` can be used in place of `LatticePresets`. Currently supported lattices are
 
     LP.linear(; a0 = 1, kw...)      # linear lattice in 1D
@@ -41,7 +41,7 @@ Lattice{Float64,3,2} : 2D lattice in 3D space
 LatticePresets
 
 """
-`HamiltonianPresets` is a Quantica submodule containing severeal pre-defined Hamiltonians.
+`HamiltonianPresets` is a Quantica submodule containing several pre-defined Hamiltonians.
 The alias `HP` can be used in place of `LatticePresets`. Currently supported hamiltonians
 are
 
@@ -602,5 +602,157 @@ hamiltonian
 
     wrap(h::AbstractHamiltonian, (ϕ₁, ϕ₂,...))
 
+For an `h` of lattice dimension `L` and a set of `L` Bloch phases `ϕ = (ϕ₁, ϕ₂,...)`,
+contruct a new zero-dimensional `h´::AbstractHamiltonian` for all Bravais vectors have been
+eliminated by wrapping the lattice onto itself along the corresponding Bravais vector.
+Intercell hoppings along wrapped directions will pick up a Bloch phase `exp(-iϕ⋅dn)`.
+
+If a number `L´` of phases `ϕᵢ` are `:` instead of numbers, the corresponding Bravais
+vectors will not be wrapped, and the resulting `h´` will have a finite lattice dimension
+`L´`.
+
+# Examples
+
+```jldoctest
+julia> h2D = HP.graphene(); h1D = wrap(h2D, (:, 0.2))
+Hamiltonian{Float64,2,1}: Hamiltonian on a 1D Lattice in 2D space
+  Bloch harmonics  : 3
+  Harmonic size    : 2 × 2
+  Orbitals         : [1, 1]
+  Element type     : scalar (ComplexF64)
+  Onsites          : 0
+  Hoppings         : 4
+  Coordination     : 2.0
+
+julia> h2D(0.3, 0.2) ≈ h1D(0.3)
+true
+```
+
+# See also
+    `hamiltonian`, `supercell`
 """
 wrap
+
+"""
+    flat(m::HybridSparseMatrix)
+
+Return a flat sparse version of `m`, with each element corresponding to a single orbital.
+The argument `m` is a Bloch harmonic of an `h::AbstractHamiltonian`, obtained with the
+syntax `h[dn]`, see `hamiltonian`.
+
+# Examples
+
+```jldoctest
+julia> h = HP.graphene(orbitals = 2); flat(h[(0,0)])
+4×4 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 8 stored entries:
+     ⋅          ⋅      2.7+0.0im  0.0+0.0im
+     ⋅          ⋅      0.0+0.0im  2.7+0.0im
+ 2.7+0.0im  0.0+0.0im      ⋅          ⋅    
+ 0.0+0.0im  2.7+0.0im      ⋅          ⋅    
+```
+"""
+flat
+
+"""
+    unflat(m::HybridSparseMatrix)
+
+Return an unflat sparse version of `m`, with each element corresponding to a single site.
+The argument `m` is a Bloch harmonic of an `h::AbstractHamiltonian`, obtained with the
+syntax `h[dn]`, see `hamiltonian`.
+
+# Examples
+
+```jldoctest
+julia> h = HP.graphene(orbitals = 2); unflat(h[(0,0)])
+2×2 SparseArrays.SparseMatrixCSC{SMatrix{2, 2, ComplexF64, 4}, Int64} with 2 stored entries:
+                     ⋅                       [2.7+0.0im 0.0+0.0im; 0.0+0.0im 2.7+0.0im]
+ [2.7+0.0im 0.0+0.0im; 0.0+0.0im 2.7+0.0im]                      ⋅                     
+```
+"""
+unflat
+
+"""
+    spectrum(h::AbstractHamiltonian, ϕs[, solver = EigenSolvers.LinearAlgebra()]; params...)
+
+Computes the eigenspectrum of the Bloch matrix `h(ϕs; params...)` using the specified
+eigensolver. See `EigenSolvers` for available solvers and their options.
+
+## Indexing and destructuring
+
+Eigenenergies `ϵs::Tuple` and eigenstates `ψs::Matrix` can be extracted from a spectrum `sp`
+using either of the following
+
+    ϵs, ψs = sp
+    ϵs = first(sp)
+    ϵs = energies(sp)
+    ψs = last(sp)
+    ψs = states(sp)
+
+In addition, one can extract the `n` eigenpairs closest to a given energy `ϵ₀` with
+
+    ϵs, ψs = sp[1:n, around = ϵ₀]
+
+More generally, `sp[inds, around = ϵ₀]` will take the eigenpairs at position given by `inds`
+after sorting by increasing distance to `ϵ₀`. If `around` is omitted, the ordering in `sp`
+is used.
+
+# Examples
+
+```jldoctest
+julia> h = HP.graphene(t0 = 1); spectrum(h, (0,0))
+Spectrum{Float64,ComplexF64} :
+Energies:
+2-element Vector{ComplexF64}:
+ -2.9999999999999982 + 0.0im
+  2.9999999999999982 + 0.0im
+States:
+2×2 Matrix{ComplexF64}:
+ -0.707107+0.0im  0.707107+0.0im
+  0.707107+0.0im  0.707107+0.0im
+```
+
+# See also
+    `EigenSolvers`, `bands`
+"""
+spectrum
+
+"""
+`EigenSolvers` is a Quantica submodule containing several pre-defined eigensolvers. The
+alias `ES` can be used in place of `EigenSolvers`. Currently supported solvers are
+
+    ES.LinearAlgebra(; kw...)       # Uses `eigen(mat; kw...)` from the `LinearAlgebra` package
+    ES.Arpack(; kw...)              # Uses `eigs(mat; kw...)` from the `Arpack` package
+    ES.KrylovKit(params...; kw...)  # Uses `eigsolve(mat, params...; kw...)` from the `KrylovKit` package
+    ES.ArnoldiMethod(; kw...)       # Uses `partialschur(mat; kw...)` from the `ArnoldiMethod` package
+
+Additionally, to compute interior eigenvalues, we can use a shift-invert method around
+energy `ϵ0` (uses `LinearMaps` and a `LinearSolve.lu` factorization), combined with any
+solver `s` from the list above:
+
+    ES.ShiftInvert(s, ϵ0)           # Perform a lu-based shift-invert with solver `s`
+
+If the required packages are not already available, they will be automatically loaded when
+calling these solvers.
+
+# Examples
+
+```jldoctest
+julia> h = HP.graphene(t0 = 1) |> supercell(10);
+
+julia> spectrum(h, (0,0), ES.ShiftInvert(ES.ArnoldiMethod(nev = 4), 0.0)) |> energies
+4-element Vector{ComplexF64}:
+ -0.38196601125010465 + 3.686368662666227e-16im
+  -0.6180339887498938 + 6.015655020129746e-17im
+   0.6180339887498927 + 2.6478518218421853e-16im
+  0.38196601125010476 - 1.741261108320361e-16im
+```
+
+# See also
+    `spectrum`, `bands`
+"""
+EigenSolvers
+
+"""
+    bands(h::AbstractHamiltonian, ϕs::AbstractRange...; kw...)
+"""
+bands

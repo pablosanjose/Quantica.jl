@@ -94,19 +94,20 @@ function (solver::ArnoldiMethod)(mat)
     return sanitize_eigen(ε, Ψ)
 end
 
-#### ShiftInvertSparse ####
+#### ShiftInvert ####
 
-struct ShiftInvertSparse{T,E<:AbstractEigenSolver} <: AbstractEigenSolver
-    origin::T
+struct ShiftInvert{T,E<:AbstractEigenSolver} <: AbstractEigenSolver
     eigensolver::E
+    origin::T
+    function ShiftInvert{T,E}(eigensolver, origin) where {T,E<:AbstractEigenSolver}
+        ensureloaded(:LinearMaps)
+        return new(eigensolver, origin)
+    end
 end
 
-function ShiftInvertSparse(e::AbstractEigenSolver, origin)
-    ensureloaded(:LinearMaps)
-    return ShiftInvertSparse(origin, e)
-end
+ShiftInvert(eigensolver::E, origin::T) where {E,T} = ShiftInvert{T,E}(eigensolver, origin)
 
-function (solver::ShiftInvertSparse)(mat::AbstractSparseMatrix{T}) where {T<:Number}
+function (solver::ShiftInvert)(mat::AbstractSparseMatrix{T}) where {T<:Number}
     mat´ = mat - I * solver.origin
     F = lu(mat´)
     lmap = Quantica.LinearMaps.LinearMap{T}((x, y) -> ldiv!(x, F, y), size(mat)...;

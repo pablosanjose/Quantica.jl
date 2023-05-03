@@ -8,7 +8,8 @@ using Quantica, LinearAlgebra
 
 function graphene(; a0 = 0.246, dim = 2, range = a0/sqrt(3), t0 = 2.7, β = 3, kw...)
     lat = LatticePresets.honeycomb(; a0, dim)
-    h = hamiltonian(lat, hopping((r, dr) -> t0 * exp(-β*(norm(dr)/a0 - 1)) * I, range = range); kw...)
+    h = hamiltonian(lat,
+        hopping((r, dr) -> t0 * exp(-β*(sqrt(3) * norm(dr)/a0 - 1)) * I,range = range); kw...)
     return h
 end
 

@@ -215,6 +215,25 @@ Base.summary(::SpectrumSolver{T,L}) where {T,L} =
 #endregion
 
 ############################################################################################
+# Spectrum
+#region
+
+function Base.show(io::IO, s::Spectrum)
+    i = get(io, :indent, "")
+    ioindent = IOContext(io, :indent => "  ")
+    print(io, i, summary(s))
+    println(ioindent, "\nEnergies:")
+    show(ioindent, MIME("text/plain"), energies(s))
+    println(ioindent, "\nStates:")
+    show(ioindent, MIME("text/plain"), states(s))
+end
+
+Base.summary(::Spectrum{T,B}) where {T,B} =
+    "Spectrum{$T,$B} :"
+
+#endregion
+
+############################################################################################
 # AbstractMesh
 #region
 

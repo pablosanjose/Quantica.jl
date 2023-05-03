@@ -2,22 +2,19 @@
 # spectrum
 #region
 
-# We avoid call! so that spectrum produces no side effects or race conditions
-spectrum(h::AbstractHamiltonian, xs...; kw...) = Spectrum(solver(h(xs...; kw...)), h)
-
 function SpectrumSolver(h::AbstractHamiltonian{T,<:Any,L}, S = SVector{L,T};
-                        solver = ES.LinearAlgebra(), mapping = missing, transform = missing) where {L,T}
+                        solver::AbstractEigenSolver = ES.LinearAlgebra(), mapping = missing,
+                        transform = missing) where {L,T}
     solver´ = apply(solver, h, S, mapping, transform)
     return SpectrumSolver(solver´)
 end
 
-spectrum(h::AbstractHamiltonian, φ, φs...; kw...) = SpectrumSolver(h; kw...)((φ, φs...))
-spectrum(h::AbstractHamiltonian; kw...) = SpectrumSolver(h; kw...)
-
-spectrum(h::Hamiltonian{<:Any,<:Any,0}; kw...) = SpectrumSolver(h; kw...)()
+spectrum(h::AbstractHamiltonian, φs, solver = ES.LinearAlgebra(); kw...) =
+    SpectrumSolver(call!(h; kw...); solver)(φs)
+spectrum(h::AbstractHamiltonian{<:Any,<:Any,0}, solver = ES.LinearAlgebra(); kw...) =
+    SpectrumSolver(call!(h; kw...); solver)()
 
 #endregion
-
 
 ############################################################################################
 # Spectrum indexing
@@ -43,8 +40,6 @@ function get_around((es, ss), ε0::Number, which)
 end
 
 #endregion
-
-
 
 ############################################################################################
 # bands

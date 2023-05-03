@@ -287,6 +287,7 @@ end
 call!(h::Hamiltonian; params...) = h  # mimic partial call!(p::ParametricHamiltonian; params...)
 call!(h::Hamiltonian, φs; params...) = flat_bloch!(h, sanitize_SVector(φs))
 call!(h::Hamiltonian{<:Any,<:Any,0}, ::Tuple{}; params...) = flat(h[()])
+call!(h::Hamiltonian, ft::FrankenTuple) = call!(h, Tuple(ft))
 
 # returns a flat sparse matrix
 function flat_bloch!(h::Hamiltonian{T}, φs::SVector, axis = missing) where {T}

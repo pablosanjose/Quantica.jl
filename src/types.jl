@@ -1320,6 +1320,8 @@ end
 
 #region ## API ##
 
+eigenspectrum(s::Spectrum) = s.eigen
+
 energies(s::Spectrum) = s.eigen.values
 
 states(s::Spectrum) = s.eigen.vectors
@@ -1339,7 +1341,7 @@ end
 
 #region ## API ##
 
-(s::SpectrumSolver{T,L})(φ, φs::Vararg{<:Any,L}) where {T,L} = s.solver(sanitize_SVector(SVector{L,T}, (φ, φs...)))
+(s::SpectrumSolver{T,0})() where {T} = s.solver(SVector{0,T}())
 (s::SpectrumSolver{T,L})(φs::SVector{L}) where {T,L} = s.solver(sanitize_SVector(SVector{L,T}, φs))
 (s::SpectrumSolver{T,L})(φs::NTuple{L,Any}) where {T,L} = s.solver(sanitize_SVector(SVector{L,T}, φs))
 (s::SpectrumSolver{T,L})(φs...) where {T,L} =
