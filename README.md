@@ -44,13 +44,13 @@ Hamiltonian{Float64,2,2}: Hamiltonian on a 2D Lattice in 2D space
 julia> qplot(h, inspector = true)
 
 julia> b = bands(h, range(0, 2pi, length=100), range(0, 2pi, length=100))
-Bands{Float64,3,2}: 3D Bandstructure over a 2-dimensional parameter space of type Float64
+Bands{Float64,3,2}: 3D Bands over a 2-dimensional parameter space of type Float64
   Subbands  : 2
   Vertices  : 20000
   Edges     : 59202
   Simplices : 39204
 
-julia> qplot(b, hide = :nodes)
+julia> qplot(b)
 ```
 
 <p float="left">

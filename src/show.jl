@@ -269,7 +269,7 @@ $i  Simplices : $(sum(s->length(simplices(s)), subbands(b)))")
 end
 
 Base.summary(::Bands{T,E,L}) where {T,E,L} =
-    "Bands{$T,$E,$L}: $(E)D Bandstructure over a $L-dimensional parameter space of type $T"
+    "Bands{$T,$E,$L}: $(E)D Bands over a $L-dimensional parameter space of type $T"
 
 #endregion
 

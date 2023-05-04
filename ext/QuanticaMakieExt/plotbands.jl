@@ -16,7 +16,7 @@
         maxsize = 6,
         nodesizefactor = 4,
         nodedarken = 0.8,
-        hide = ()
+        hide = (:nodes,)
     )
 end
 
@@ -29,7 +29,7 @@ end
 #region
 
 const BandOrSubbandsOrMeshes =
-    Union{Quantica.Bands,AbstractVector{<:Quantica.Subband},AbstractVector{<:Quantica.Mesh}}
+    Union{Quantica.Bands,Quantica.Subband,AbstractVector{<:Quantica.Subband},AbstractVector{<:Quantica.Mesh}}
 
 function Quantica.qplot(b::BandOrSubbandsOrMeshes; fancyaxis = true, axis = (;), figure = (;), inspector = false, plotkw...)
     meshes = collect(Quantica.meshes(b))
@@ -195,7 +195,7 @@ function Makie.plot!(plot::PlotBands{Tuple{S}}) where {S<:BandOrSubbandsOrMeshes
 end
 
 plotmeshes!(plot, mp::MeshPrimitives{<:Any,E}) where {E} =
-    Quantica.argerror("Can only plot 1D and 2D bands, got $(E-1)D bands")
+    Quantica.argerror("Can only plot meshes in 2D and 3D space, got an $(E)D mesh")
 
 function plotmeshes!(plot, mp::MeshPrimitives{<:Any,2})
     verts = mp.verts[mp.simps]

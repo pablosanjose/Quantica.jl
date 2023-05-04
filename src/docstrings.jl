@@ -672,6 +672,42 @@ julia> h = HP.graphene(orbitals = 2); unflat(h[(0,0)])
 unflat
 
 """
+`EigenSolvers` is a Quantica submodule containing several pre-defined eigensolvers. The
+alias `ES` can be used in place of `EigenSolvers`. Currently supported solvers are
+
+    ES.LinearAlgebra(; kw...)       # Uses `eigen(mat; kw...)` from the `LinearAlgebra` package
+    ES.Arpack(; kw...)              # Uses `eigs(mat; kw...)` from the `Arpack` package
+    ES.KrylovKit(params...; kw...)  # Uses `eigsolve(mat, params...; kw...)` from the `KrylovKit` package
+    ES.ArnoldiMethod(; kw...)       # Uses `partialschur(mat; kw...)` from the `ArnoldiMethod` package
+
+Additionally, to compute interior eigenvalues, we can use a shift-invert method around
+energy `ϵ0` (uses `LinearMaps` and a `LinearSolve.lu` factorization), combined with any
+solver `s` from the list above:
+
+    ES.ShiftInvert(s, ϵ0)           # Perform a lu-based shift-invert with solver `s`
+
+If the required packages are not already available, they will be automatically loaded when
+calling these solvers.
+
+# Examples
+
+```jldoctest
+julia> h = HP.graphene(t0 = 1) |> supercell(10);
+
+julia> spectrum(h, (0,0), ES.ShiftInvert(ES.ArnoldiMethod(nev = 4), 0.0)) |> energies
+4-element Vector{ComplexF64}:
+ -0.38196601125010465 + 3.686368662666227e-16im
+  -0.6180339887498938 + 6.015655020129746e-17im
+   0.6180339887498927 + 2.6478518218421853e-16im
+  0.38196601125010476 - 1.741261108320361e-16im
+```
+
+# See also
+    `spectrum`, `bands`
+"""
+EigenSolvers
+
+"""
     spectrum(h::AbstractHamiltonian, ϕs[, solver = EigenSolvers.LinearAlgebra()]; params...)
 
 Computes the eigenspectrum of the Bloch matrix `h(ϕs; params...)` using the specified
@@ -717,42 +753,82 @@ States:
 spectrum
 
 """
-`EigenSolvers` is a Quantica submodule containing several pre-defined eigensolvers. The
-alias `ES` can be used in place of `EigenSolvers`. Currently supported solvers are
+    energies(sp::Spectrum)
 
-    ES.LinearAlgebra(; kw...)       # Uses `eigen(mat; kw...)` from the `LinearAlgebra` package
-    ES.Arpack(; kw...)              # Uses `eigs(mat; kw...)` from the `Arpack` package
-    ES.KrylovKit(params...; kw...)  # Uses `eigsolve(mat, params...; kw...)` from the `KrylovKit` package
-    ES.ArnoldiMethod(; kw...)       # Uses `partialschur(mat; kw...)` from the `ArnoldiMethod` package
-
-Additionally, to compute interior eigenvalues, we can use a shift-invert method around
-energy `ϵ0` (uses `LinearMaps` and a `LinearSolve.lu` factorization), combined with any
-solver `s` from the list above:
-
-    ES.ShiftInvert(s, ϵ0)           # Perform a lu-based shift-invert with solver `s`
-
-If the required packages are not already available, they will be automatically loaded when
-calling these solvers.
-
-# Examples
-
-```jldoctest
-julia> h = HP.graphene(t0 = 1) |> supercell(10);
-
-julia> spectrum(h, (0,0), ES.ShiftInvert(ES.ArnoldiMethod(nev = 4), 0.0)) |> energies
-4-element Vector{ComplexF64}:
- -0.38196601125010465 + 3.686368662666227e-16im
-  -0.6180339887498938 + 6.015655020129746e-17im
-   0.6180339887498927 + 2.6478518218421853e-16im
-  0.38196601125010476 - 1.741261108320361e-16im
-```
+Returns the energies in `sp` as a vector of Numbers (not necessarily real). Equivalent to `first(sp)`.
 
 # See also
     `spectrum`, `bands`
 """
-EigenSolvers
+energies
 
 """
-    bands(h::AbstractHamiltonian, ϕs::AbstractRange...; kw...)
+    states(sp::Spectrum)
+
+Returns the eigenstates in `sp` as columns of a matrix. Equivalent to `last(sp)`.
+
+# See also
+    `spectrum`, `bands`
+"""
+states
+
+"""
+    bands(h::AbstractHamiltonian, ranges::AbstractRange...; kw...)
+
+Construct the bands of `h` by diagonalizing the matrix `h(ϕs; params...)` on an
+`M`-dimensional mesh of points defined by the `M` collection of points `ranges`, and
+connecting them into continuous bands. The mapping between points in the mesh and values of
+`(ϕs; params...)` is defined by keyword `mapping`, see Keywords. Diagonalization is
+multithreaded and will use all available Julia threads (start with `julia -t N` to have `N`
+threads).
+
+## Keywords
+
+- `solver`: eigensolver to use for each diagonalization (see `Eigensolvers`). Default: `ES.LinearAlgebra()`
+- `mapping`: a function of the form `(x, y, ...) -> ϕs` or `(x, y, ...) -> ftuple(ϕs...; params...)` that translates points `(x, y, ...)` in the mesh to Bloch phases `ϕs` or phase+parameter FrankenTuples `(ϕs; params...)`. Default: `identity`
+- `transform`: function to apply to each eigenvalue after diagonalization. Default: `identity`
+- `degtol::Real`: maximum distance between to nearby eigenvalue so that they are classified as degenerate. Default: `sqrt(eps)`
+- `split::Bool`: whether to split bands into disconnected subbands. Default: `true`
+- `defects`: a collection of extra points to add to the mesh, typically the location of topological band defects such as Dirac points, so that interpolation avoids creating dislocation defects in the bands.
+- `patches::Integer`: (experimental) if a dislocation is encountered, attempt to patch it by searching for the defect recursively to a given order. Default: `0`
+- `warn::Bool`: whether to emit warning when band dislocations are encountered
+- `showprogress::Bool`: whether to show or not a progress bar. Default: `true`
+
+## Indexing
+
+    b[i]
+
+Extract `i`-th subband from `b::Bands`. `i` can also be a `Vector`, an `AbstractRange` or
+any other argument accepted by `getindex(subbands::Vector, i)`
+
+    b[slice::Tuple]
+
+Compute a section of `b::Bands` with a "plane" defined by `slice = (ϕ₁, ϕ₂,..., ϕₗ, ϵ)`,
+where each `ϕᵢ` or `ϵ` can be a real number (representing a fixed momentum or energy) or a
+`:` (unconstrained along that dimension). For bands of an `L`-dimensional lattice, `slice`
+must be a tuple of length `L+1`. The result is a collection of of sliced `Subband`s.
+
+# Examples
+
+```jldoctest
+julia> phis = range(0, 2pi, length = 50); h = LP.honeycomb() |> hamiltonian(@hopping((; t = 1) -> t));
+
+julia> bands(h(t = 1), phis, phis)
+Bands{Float64,3,2}: 3D Bands over a 2-dimensional parameter space of type Float64
+  Subbands  : 1
+  Vertices  : 5000
+  Edges     : 14602
+  Simplices : 9588
+
+julia> bands(h, phis, phis; mapping = (x, y) -> ftuple(0, x; t = y/2π))
+Bands{Float64,3,2}: 3D Bands over a 2-dimensional parameter space of type Float64
+  Subbands  : 1
+  Vertices  : 4950
+  Edges     : 14553
+  Simplices : 9604
+```
+
+# See also
+    `spectrum`
 """
 bands

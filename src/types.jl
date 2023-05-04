@@ -1447,6 +1447,7 @@ mesh(s::Subband) = s.mesh
 mesh(m::Mesh) = m
 
 meshes(b::Bands) = (mesh(s) for s in subbands(b))
+meshes(s::Subband) = (mesh(s),)
 meshes(xs) = (mesh(x) for x in xs)
 
 subbands(b::Bands) = b.subbands

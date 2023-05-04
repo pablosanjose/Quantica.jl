@@ -112,7 +112,7 @@ function bands_diagonalize!(data)
         data.spectra[i] = solver(vert)
         data.showprogress && ProgressMeter.next!(meter)
     end
-    # Collect bands vertices and store column offsets
+    # Collect band vertices and store column offsets
     for (basevert, spectrum) in zip(baseverts, data.spectra)
         append_bands_column!(data, basevert, spectrum)
     end
@@ -414,24 +414,26 @@ end
 
 ############################################################################################
 # Subband slicing and indexing
-#   Example: in a 2D lattice, subband[kx,ky,:] is a vertical slice at fixed momentum kx, ky
+#   Example: in a 2D lattice, subband[(kx,ky,:)] is a vertical slice at fixed momentum kx, ky
 #region
 
-Base.getindex(b::Bands, xs...) = [s[xs...] for s in subbands(b)]
-Base.getindex(s::Subband, xs...) = Subband(slice(s, xs, Val(true)))
+Base.getindex(b::Bands, i) = subbands(b, i)
+Base.getindex(b::Bands, xs::Tuple) = [s[xs] for s in subbands(b)]
+Base.getindex(s::Subband, xs::Tuple) = Subband(slice(s, xs, Val(true)))
 
-slice(b::Bands, xs...) = [slice(s, xs...) for s in subbands(b)]
+slice(b::Bands, xs) = [slice(s, xs) for s in subbands(b)]
+slice(s::Subband, xs::Tuple) = slice(s, xs, Val(false))
 
-slice(s::Subband, xs::Union{Colon,Number}...) = slice(s, xs)
-# default: slice -> mesh with same embedding dimension as subband and smaller simplex length
-slice(s::Subband, xs::Tuple) = slice(s, xs::Tuple, Val(false))
-# optional: slice -> mesh with reduced embedding dimension = simplex length + 1
+# getindex default (Val{true}): mesh with reduced embedding dimension = simplex length + 1
 slice(s::Subband, xs::Tuple, ::Val{true}) = slice(s, perp_axes(s, xs...), slice_axes(s, xs...))
+# slice default (Val{false}): mesh with same embedding dimension as subband and smaller simplex length
 slice(s::Subband, xs::Tuple, ::Val{false}) = slice(s, perp_axes(s, xs...), all_axes(s))
 
 function slice(subband::Subband{<:Any,E}, paxes::NTuple{N}, saxes::Tuple) where {E,N}
+    isempty(saxes) && argerror("The slice must have at least one unconstrained axis")
+    isempty(paxes) && return mesh(subband)
     maximum(first, paxes) <= embdim(subband) && maximum(saxes) <= embdim(subband) ||
-        throw(ArgumentError("Cannot slice subband along more than $(embdim(subband)) axes"))
+        argerror("Cannot slice subband along more than $(embdim(subband)) axes")
     V = slice_vertex_type(subband, saxes)
     S = slice_skey_type(paxes)
     verts = V[]
