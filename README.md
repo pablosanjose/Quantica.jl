@@ -22,35 +22,36 @@ Some of this functionality, particularly visualization, requires loading some pl
 
 # Example
 
-A step-by-step construction and visualization of a Kane-Mele model with Gaussian onsite disorder, including interactive tooltips to examine each. We then compute its bandstructure and visualize it.
+A step-by-step construction and visualization of a Kane-Mele model (parametrized by spin orbit strength α)and of its bandstructure, encoding the pseudospin orientation in the color of the subbands.
 
 ```julia
 julia> using Quantica, GLMakie
 
 julia> SOC(dr) = ifelse(iseven(round(Int, atan(dr[2], dr[1])/(pi/3))), im, -im); # Kane-Mele spin-orbit coupling
 
-julia> model = hopping(1, range = 1/√3) + 0.02 * hopping((r, dr) -> SOC(dr), sublats = :A => :A, range = 1) - 0.02 * hopping((r, dr) -> SOC(dr), sublats = :B => :B, range = 1) + onsite(r -> 0.1 * randn());
+julia> model = hopping(1, range = 1/√3) + @hopping((r, dr; α = 0) -> α * SOC(dr); sublats = :A => :A, range = 1) - @hopping((r, dr; α = 0) -> α * SOC(dr); sublats = :B => :B, range = 1);
 
 julia> h = LatticePresets.honeycomb(a0 = 1) |> hamiltonian(model)
-Hamiltonian{Float64,2,2}: Hamiltonian on a 2D Lattice in 2D space
+ParametricHamiltonian{Float64,2,2}: Parametric Hamiltonian on a 2D Lattice in 2D space
   Bloch harmonics  : 7
   Harmonic size    : 2 × 2
   Orbitals         : [1, 1]
   Element type     : scalar (ComplexF64)
-  Onsites          : 2
+  Onsites          : 0
   Hoppings         : 18
   Coordination     : 9.0
+  Parameters       : [:α]
 
-julia> qplot(h, inspector = true)
+julia> qplot(h(0.02), inspector = true)
 
-julia> b = bands(h, range(0, 2pi, length=100), range(0, 2pi, length=100))
+julia> b = bands(h(α = 0.05), range(0, 2pi, length=60), range(0, 2pi, length = 60))
 Bands{Float64,3,2}: 3D Bands over a 2-dimensional parameter space of type Float64
   Subbands  : 2
-  Vertices  : 20000
-  Edges     : 59202
-  Simplices : 39204
+  Vertices  : 7200
+  Edges     : 21122
+  Simplices : 13924
 
-julia> qplot(b)
+julia> qplot(b, color = (psi, e, k) -> angle(psi[1] / psi[2]), colormap = :cyclic_mrybm_35_75_c68_n256)
 ```
 
 <p float="left">
