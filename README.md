@@ -42,7 +42,7 @@ ParametricHamiltonian{Float64,2,2}: Parametric Hamiltonian on a 2D Lattice in 2D
   Coordination     : 9.0
   Parameters       : [:α]
 
-julia> qplot(h(0.02), inspector = true)
+julia> qplot(h(α = 0.02), inspector = true)
 
 julia> b = bands(h(α = 0.05), range(0, 2pi, length=60), range(0, 2pi, length = 60))
 Bands{Float64,3,2}: 3D Bands over a 2-dimensional parameter space of type Float64
