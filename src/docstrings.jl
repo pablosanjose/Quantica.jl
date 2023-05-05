@@ -110,7 +110,7 @@ RegionPresets
     sublat(sites::AbstractVector; name::Symbol = :A)
 
 Create a `Sublat{E,T}` that adds a sublattice, of name `name`, with sites at positions
-`sites` in `E` dimensional space. Sites positions can be entered as tuples or `SVectors`.
+`sites` in `E` dimensional space. Sites positions can be entered as `Tuple`s or `SVector`s.
 
 # Examples
 
@@ -166,7 +166,6 @@ Return the parent lattice of object `x`, of type e.g. `LatticeSlice`, `Hamiltoni
 ## Keywords
 
 - `bravais`: a collection of one or more Bravais vectors of type NTuple{E} or SVector{E}. It can also be an `AbstractMatrix` of dimension `E×L`. The default `bravais = ()` corresponds to a bounded lattice with no Bravais vectors.
-
 - `names`: a collection of Symbols. Can be used to rename `sublats`. Any repeated names will be replaced if necessary by `:A`, `:B` etc. to ensure that all sublattice names are unique.
 
 ## Indexing
@@ -260,7 +259,6 @@ accordingly.
 ## Keywords
 
 - `seed::NTuple{L,Integer}`: starting cell index to perform search of included sites. By default `seed = missing`, which makes search start from the zero-th cell.
-
 - `mincoordination::Integer`: minimum number of nonzero hopping neighbors required for sites to be included in the supercell. Sites with less coordination will be removed recursively, until all remaining sites satisfy `mincoordination`.
 
 ## Currying
@@ -390,7 +388,6 @@ Hamiltonian{Float64,3,2}: Hamiltonian on a 2D Lattice in 3D space
 """
 combine
 
-
 """
     siteselector(; region = missing, sublats = missing, cells = missing)
 
@@ -448,22 +445,21 @@ If any of these is `missing` it will not be used to constraint the selection.
 While `range` is usually a `Real`, and `sublats` and `dcells` are usually collections of
 `Pair{Symbol}`s and `SVector`s, respectively, they also admit other possibilities:
 
-    sublats = :A                          # Hops from :A to :A
-    sublats = :A => :B                    # Hops from :A to :B sublattices, but not from :B to :A
-    sublats = (:A => :B,)                 # Same as above
-    sublats = (:A => :B, :C => :D)        # Hopping from :A to :B or :C to :D
-    sublats = (:A, :C) .=> (:B, :D)       # Broadcasted pairs, same as above
-    sublats = (:A, :C) => (:B, :D)        # Direct product, (:A=>:B, :A=:D, :C=>:B, :C=>D)
-    sublats = 1 => 2                      # Hops from first to second sublat. Similarly, all above patterns using Integers.
-    sublats = (spec₁, spec₂, ...)         # Hops matching any of the `spec`'s with any form as above
+    sublats = :A                       # Hops from :A to :A
+    sublats = :A => :B                 # Hops from :A to :B sublattices, but not from :B to :A
+    sublats = (:A => :B,)              # Same as above
+    sublats = (:A => :B, :C => :D)     # Hopping from :A to :B or :C to :D
+    sublats = (:A, :C) .=> (:B, :D)    # Broadcasted pairs, same as above
+    sublats = (:A, :C) => (:B, :D)     # Direct product, (:A=>:B, :A=>:D, :C=>:B, :C=>D)
+    sublats = 1 => 2                   # Hops from 1st to 2nd sublat. All the above patterns also admit Ints
+    sublats = (spec₁, spec₂, ...)      # Hops matching any of the specs with any of the above forms
 
-    dcells  = dn::SVector{L,Integer}      # Hops between cells at distance `dn`
-    dcells  = dn::NTuple{L,Integer}       # Hops between cells at distance `SVector(dn)`
-    dcells  = f::Function                 # Hops between cells at distance `dn` such that `f(dn) == true`
+    dcells  = dn::SVector{L,Integer}   # Hops between cells separated by `dn`
+    dcells  = dn::NTuple{L,Integer}    # Hops between cells separated by `SVector(dn)`
+    dcells  = f::Function              # Hops between cells separated by `dn` such that `f(dn) == true`
 
-    range   = neighbors(n)                # Hops within the `n`-th nearest neighbor distance in the lattice
-    range   = (min_range, max_range)      # Hops at distance inside the `[min_range, max_range]` closed interval (bounds can also be `neighbors(n)`)
-
+    range   = neighbors(n)             # Hops within the `n`-th nearest neighbor distance in the lattice
+    range   = (min, max)               # Hops at distance inside the `[min, max]` closed interval (bounds can also be `neighbors(n)`)
 
 ## Usage
 
@@ -523,17 +519,18 @@ Obtain the actual nth-nearest-neighbot distance between sites in lattice `lat`.
 neighbors
 
 """
-    hamiltonian(lat::Lattice{T}, model; orbitals = 1)
+    hamiltonian(lat::Lattice, model; orbitals = 1)
 
 Create a `Hamiltonian` or `ParametricHamiltonian` by applying `model` to the lattice `lat`
 (see `onsite`, `@onsite`, `hopping` and `@hopping` for details on building tight-binding
 models).
 
-    hamiltonian(lat::Lattice{T}, model, modifiers...; orbitals = 1)
+    hamiltonian(lat::Lattice, model, modifiers...; orbitals = 1)
+    hamiltonian(h::AbstractHamiltonian, modifiers...; orbitals = 1)
 
-Same as above, but returning always a `ParametricHamiltonian` where all onsite and hopping
-terms in model can be parametrically modified through the provided `modifiers` (see
-`@onsite!` and `@hopping!` for details on defining modifiers).
+Create a `ParametricHamiltonian` where all onsite and hopping terms in `model` can be
+parametrically modified through the provided `modifiers` (see `@onsite!` and `@hopping!` for
+details on defining modifiers).
 
 ## Keywords
 
@@ -594,9 +591,336 @@ julia> h(0,0)
 ```
 
 # See also
-    `lattice`, `onsite`, `hopping`, `@onsite`, `@hopping`, `@onsite!`, `@hopping!`
+    `lattice`, `onsite`, `hopping`, `@onsite`, `@hopping`, `@onsite!`, `@hopping!`, `ishermitian`
 """
 hamiltonian
+
+"""
+    ishermitian(h::Hamiltonian)
+
+Check whether `h` is Hermitian. This is not supported for `h::ParametricHamiltonian`, as the
+result can depend of the specific values of its parameters.
+
+"""
+ishermitian
+
+"""
+    onsite(o; sites...)
+    onsite(r -> o(r); sites...)
+
+Build a tight-binding model representing a uniform or a position-dependent onsite
+potential, respectively, on sites selected by `siteselector(; sites...)` (see `siteselector`
+for details).
+
+Site positions are `r::SVector{E}`, where `E` is the embedding dimension of the lattice. The
+onsite potential `o` can be a `Number` (for single-orbital sites), a `UniformScaling` (e.g.
+`2I`) or an `AbstractMatrix` (use `SMatrix` for performance) of dimensions matching the
+number of orbitals in the selected sites. Models may be applied to a lattice `lat` to
+produce a `Hamiltonian` with `hamiltonian(lat, model; ...)`, see `hamiltonian`. Position
+dependent models are forced to preserve the periodicity of the lattice.
+
+Models can be combined using `+`, `-` and `*`, e.g. `onsite(1) - 2 * hopping(1)`.
+
+# Examples
+```jldoctest
+julia> model = onsite(r -> norm(r) * SA[0 1; 1 0]; sublats = :A) - hopping(I; range = 2)
+TightbindingModel: model with 2 terms
+  OnsiteTerm{Function}:
+    Region            : any
+    Sublattices       : A
+    Cells             : any
+    Coefficient       : 1
+  HoppingTerm{LinearAlgebra.UniformScaling{Bool}}:
+    Region            : any
+    Sublattice pairs  : any
+    Cell distances    : any
+    Hopping range     : 2.0
+    Reverse hops      : false
+    Coefficient       : -1
+
+julia> LP.cubic() |> supercell(4) |> hamiltonian(model, orbitals = 2)
+Hamiltonian{Float64,3,3}: Hamiltonian on a 3D Lattice in 3D space
+  Bloch harmonics  : 27
+  Harmonic size    : 64 × 64
+  Orbitals         : [2]
+  Element type     : 2 × 2 blocks (ComplexF64)
+  Onsites          : 64
+  Hoppings         : 2048
+  Coordination     : 32.0
+```
+
+# See also
+    `hopping`, `@onsite`, `@hopping`, `@onsite!`, `@hopping!`, `hamiltonian`
+"""
+onsite
+
+"""
+    hopping(t; plusadjoint = false, hops...)
+    hopping((r, dr) -> t(r, dr); plusadjoint = false, hops...)
+
+Build a tight-binding model representing a uniform or a position-dependent hopping
+amplitude, respectively, on hops selected by `hopselector(; hops...)` (see `hopselector` for
+details). If `plusadjoint = true`, the adjoint hopping term is added on the reverse `hops`.
+
+Hops from a site at position `r₁` to another at `r₂` are described using the hop center `r =
+(r₁ + r₂)/2` and the hop vector `dr = r₂ - r₁`. Hopping amplitudes `t` can be a `Number`
+(for hops between single-orbital sites), a `UniformScaling` (e.g. `2I`) or an
+`AbstractMatrix` (use `SMatrix` for performance) of dimensions matching the number of
+orbitals in the selected sites. Models may be applied to a lattice `lat` to produce an
+`Hamiltonian` with `hamiltonian(lat, model; ...)`, see `hamiltonian`. Position dependent
+models are forced to preserve the periodicity of the lattice.
+
+Models can be combined using `+`, `-` and `*`, e.g. `onsite(1) - 2 * hopping(1)`.
+
+# Examples
+```jldoctest
+julia> model = hopping((r, dr) -> cis(dot(SA[r[2], -r[1]], dr)); dcells = (0,0)) + onsite(r -> rand())
+TightbindingModel: model with 2 terms
+  HoppingTerm{Function}:
+    Region            : any
+    Sublattice pairs  : any
+    Cell distances    : (0, 0)
+    Hopping range     : Neighbors(1)
+    Reverse hops      : false
+    Coefficient       : 1
+  OnsiteTerm{Function}:
+    Region            : any
+    Sublattices       : any
+    Cells             : any
+    Coefficient       : 1
+
+julia> LP.honeycomb() |> supercell(2) |> hamiltonian(model)
+Hamiltonian{Float64,2,2}: Hamiltonian on a 2D Lattice in 2D space
+  Bloch harmonics  : 1
+  Harmonic size    : 8 × 8
+  Orbitals         : [1, 1]
+  Element type     : scalar (ComplexF64)
+  Onsites          : 8
+  Hoppings         : 16
+  Coordination     : 2.0
+```
+
+# See also
+    `onsite`, `@onsite`, `@hopping`, `@onsite!`, `@hopping!`, `hamiltonian`
+"""
+hopping
+
+"""
+    @onsite((; params...) -> o(; params...); sites...)
+    @onsite((r; params...) -> o(r; params...); sites...)
+
+Build a parametric tight-binding model representing a uniform or a position-dependent
+onsite potential, respectively, on sites selected by `siteselector(; sites...)` (see
+`siteselector` for details).
+
+Site positions are `r::SVector{E}`, where `E` is the embedding dimension of the lattice. The
+onsite potential `o` can be a `Number` (for single-orbital sites), a `UniformScaling` (e.g.
+`2I`) or an `AbstractMatrix` (use `SMatrix` for performance) of dimensions matching the
+number of orbitals in the selected sites. Parametric models may be applied to a lattice
+`lat` to produce a `ParametricHamiltonian` with `hamiltonian(lat, model; ...)`, see
+`hamiltonian`. Position dependent models are forced to preserve the periodicity of the
+lattice.
+
+The difference between regular and parametric tight-binding models (see `onsite` and
+`hopping`) is that parametric models may depend on arbitrary parameters, specified by the
+`params` keyword arguments. These are inherited by `h::ParametricHamiltonian`, which can
+then be evaluated very efficiently for different parameter values by callling `h(;
+params...)`, to obtain a regular `Hamiltonian` without reconstructing it from scratch.
+
+Parametric models can be combined with other regular or parametric models using `+`, `-` and
+`*`, e.g. `onsite(1) - 2 * hopping(1)`. The combined parametric models can share parameters.
+
+    @onsite((ω; params...) -> Σᵢᵢ(ω; params...); sites...)
+    @onsite((ω, r; params...) -> Σᵢᵢ(ω, r; params...); sites...)
+
+Special form of a parametric onsite potential meant to model a self-energy (see `attach`).
+
+# Examples
+```jldoctest
+julia> model = @onsite((r; dμ = 0) -> (r[1] + dμ) * I; sublats = :A) + @onsite((; dμ = 0) -> - dμ * I; sublats = :B)
+ParametricModel: model with 2 terms
+  ParametricOnsiteTerm{ParametricFunction{1}}
+    Region            : any
+    Sublattices       : A
+    Cells             : any
+    Coefficient       : 1
+    Parameters        : [:dμ]
+  ParametricOnsiteTerm{ParametricFunction{0}}
+    Region            : any
+    Sublattices       : B
+    Cells             : any
+    Coefficient       : 1
+    Parameters        : [:dμ]
+
+julia> LP.honeycomb() |> supercell(2) |> hamiltonian(model, orbitals = 2)
+ParametricHamiltonian{Float64,2,2}: Parametric Hamiltonian on a 2D Lattice in 2D space
+  Bloch harmonics  : 1
+  Harmonic size    : 8 × 8
+  Orbitals         : [2, 2]
+  Element type     : 2 × 2 blocks (ComplexF64)
+  Onsites          : 8
+  Hoppings         : 0
+  Coordination     : 0.0
+  Parameters       : [:dμ]
+```
+
+# See also
+    `onsite`, `hopping`, `@hopping`, `@onsite!`, `@hopping!`, `attach`, `hamiltonian`
+"""
+macro onsite end
+
+"""
+    @hopping((; params...) -> t(; params...); hops...)
+    @hopping((r, dr; params...) -> t(r; params...); hops...)
+
+Build a parametric tight-binding model representing a uniform or a position-dependent
+hopping amplitude, respectively, on hops selected by `hopselector(; hops...)` (see
+`hopselector` for details).
+
+Hops from a site at position `r₁` to another at `r₂` are described using the hop center `r =
+(r₁ + r₂)/2` and the hop vector `dr = r₂ - r₁`. Hopping amplitudes `t` can be a `Number`
+(for hops between single-orbital sites), a `UniformScaling` (e.g. `2I`) or an
+`AbstractMatrix` (use `SMatrix` for performance) of dimensions matching the number of site
+orbitals in the selected sites. Parametric models may be applied to a lattice `lat` to
+produce a `ParametricHamiltonian` with `hamiltonian(lat, model; ...)`, see `hamiltonian`.
+Position dependent models are forced to preserve the periodicity of the lattice.
+
+The difference between regular and parametric tight-binding models (see `onsite` and
+`hopping`) is that parametric models may depend on arbitrary parameters, specified by the
+`params` keyword arguments. These are inherited by `h::ParametricHamiltonian`, which can
+then be evaluated very efficiently for different parameter values by callling `h(;
+params...)`, to obtain a regular `Hamiltonian` without reconstructing it from scratch.
+
+Parametric models can be combined with other regular or parametric models using `+`, `-` and
+`*`, e.g. `onsite(1) - 2 * hopping(1)`. The combined parametric models can share parameters.
+
+    @hopping((ω; params...) -> Σᵢⱼ(ω; params...); hops...)
+    @hopping((ω, r, dr; params...) -> Σᵢⱼ(ω, r, dr; params...); hops...)
+
+Special form of a parametric hopping amplitude meant to model a self-energy (see `attach`).
+
+# Examples
+```jldoctest
+julia> model = @hopping((r, dr; t = 1, A = Returns(SA[0,0])) -> t * cis(-dr' * A(r)))
+ParametricModel: model with 1 term
+  ParametricHoppingTerm{ParametricFunction{2}}
+    Region            : any
+    Sublattice pairs  : any
+    Cell distances    : any
+    Hopping range     : Neighbors(1)
+    Reverse hops      : false
+    Coefficient       : 1
+    Parameters        : [:t, :A]
+
+julia> LP.honeycomb() |> supercell(2) |> hamiltonian(model)
+ParametricHamiltonian{Float64,2,2}: Parametric Hamiltonian on a 2D Lattice in 2D space
+  Bloch harmonics  : 5
+  Harmonic size    : 8 × 8
+  Orbitals         : [1, 1]
+  Element type     : scalar (ComplexF64)
+  Onsites          : 0
+  Hoppings         : 24
+  Coordination     : 3.0
+  Parameters       : [:A, :t]
+```
+
+# See also
+    `onsite`, `hopping`, `@onsite`, `@onsite!`, `@hopping!`, `attach`, `hamiltonian`
+"""
+macro hopping end
+
+"""
+    @onsite!((o; params...) -> o´(o; params...); sites...)
+    @onsite!((o, r; params...) -> o´(o, r; params...); sites...)
+
+Build a uniform or position-dependent onsite term modifier, respectively, acting on sites
+selected by `siteselector(; sites...)` (see `siteselector` for details).
+
+Site positions are `r::SVector{E}`, where `E` is the embedding dimension of the lattice. The
+original onsite potential is `o`, and the modified potential is `o´`, which is a function of
+`o` and possibly `r`. It may optionally also depend on parameters, enconded in `params`.
+
+Modifiers are meant to be applied to an `h:AbstractHamiltonian` to obtain a
+`ParametricHamiltonian` (with `hamiltonian(h, modifiers...)` or `hamiltonian(lat, model,
+modifiers...)`, see `hamiltonian`). Modifiers will affect only pre-existing model terms. In
+particular, if no onsite model has been applied to a specific site, its onsite potential
+will be zero, and will not be modified by any `@onsite!` modifier. Conversely, if an onsite
+model has been applied, `@onsite!` may modify the onsite potential even if it is zero. The
+same applies to `@hopping!`.
+
+# Examples
+```jldoctest
+julia> model = onsite(0); disorder = @onsite!((o; W = 0) -> o + W * rand())
+OnsiteModifier{ParametricFunction{1}}:
+  Region            : any
+  Sublattices       : any
+  Cells             : any
+  Parameters        : [:W]
+
+julia> LP.honeycomb() |> hamiltonian(model) |> supercell(10) |> hamiltonian(disorder)
+ParametricHamiltonian{Float64,2,2}: Parametric Hamiltonian on a 2D Lattice in 2D space
+  Bloch harmonics  : 1
+  Harmonic size    : 200 × 200
+  Orbitals         : [1, 1]
+  Element type     : scalar (ComplexF64)
+  Onsites          : 200
+  Hoppings         : 0
+  Coordination     : 0.0
+  Parameters       : [:W]
+```
+
+# See also
+    `onsite`, `hopping`, `@onsite`, `@hopping`, `@hopping!`, `hamiltonian`
+"""
+macro onsite! end
+
+"""
+    @hopping!((t; params...) -> t´(t; params...); hops...)
+    @hopping!((t, r, dr; params...) -> t´(t, r, dr; params...); hops...)
+
+Build a uniform or position-dependent hopping term modifier, respectively, acting on hops
+selected by `hopselector(; hops...)` (see `hopselector` for details).
+
+Hops from a site at position `r₁` to another at `r₂` are described using the hop center `r =
+(r₁ + r₂)/2` and the hop vector `dr = r₂ - r₁`. The original hopping amplitude is `t`, and
+the modified hopping is `t´`, which is a function of `t` and possibly `r, dr`. It may
+optionally also depend on parameters, enconded in `params`.
+
+Modifiers are meant to be applied to an `h:AbstractHamiltonian` to obtain a
+`ParametricHamiltonian` (with `hamiltonian(h, modifiers...)` or `hamiltonian(lat, model,
+modifiers...)`, see `hamiltonian`). Modifiers will affect only pre-existing model terms. In
+particular, if no onsite model has been applied to a specific site, its onsite potential
+will be zero, and will not be modified by any `@onsite!` modifier. Conversely, if an onsite
+model has been applied, `@onsite!` may modify the onsite potential even if it is zero. The
+same applies to `@hopping!`.
+
+# Examples
+```jldoctest
+julia> model = hopping(1); peierls = @hopping!((t, r, dr; A = r -> SA[0,0]) -> t * cis(-dr' * A(r)))
+OnsiteModifier{ParametricFunction{3}}:
+  Region            : any
+  Sublattice pairs  : any
+  Cell distances    : any
+  Hopping range     : Neighbors(1)
+  Reverse hops      : false
+  Parameters        : [:A]
+
+julia> LP.honeycomb() |> hamiltonian(model) |> supercell(10) |> hamiltonian(peierls)
+ParametricHamiltonian{Float64,2,2}: Parametric Hamiltonian on a 2D Lattice in 2D space
+  Bloch harmonics  : 5
+  Harmonic size    : 200 × 200
+  Orbitals         : [1, 1]
+  Element type     : scalar (ComplexF64)
+  Onsites          : 0
+  Hoppings         : 600
+  Coordination     : 3.0
+  Parameters       : [:A]
+```
+
+# See also
+    `onsite`, `hopping`, `@onsite`, `@hopping`, `@onsite!`, `hamiltonian`
+"""
+macro hopping! end
 
 """
 
@@ -773,14 +1097,14 @@ Returns the eigenstates in `sp` as columns of a matrix. Equivalent to `last(sp)`
 states
 
 """
-    bands(h::AbstractHamiltonian, ranges::AbstractRange...; kw...)
+    bands(h::AbstractHamiltonian, xᵢs...; kw...)
 
-Construct the bands of `h` by diagonalizing the matrix `h(ϕs; params...)` on an
-`M`-dimensional mesh of points defined by the `M` collection of points `ranges`, and
-connecting them into continuous bands. The mapping between points in the mesh and values of
-`(ϕs; params...)` is defined by keyword `mapping`, see Keywords. Diagonalization is
-multithreaded and will use all available Julia threads (start with `julia -t N` to have `N`
-threads).
+Construct continuously connected bands of `h` by diagonalizing the matrix `h(ϕs; params...)`
+on an `M`-dimensional mesh of points `(x₁, x₂, ..., xₘ)` where each `xᵢ` takes values in the
+collection `xᵢs`. The mapping between points in the mesh points and values of `(ϕs;
+params...)` is defined by keyword `mapping` (`identity` by default, see Keywords).
+Diagonalization is multithreaded and will use all available Julia threads (start session
+with `julia -t N` to have `N` threads).
 
 ## Keywords
 
@@ -832,3 +1156,20 @@ Bands{Float64,3,2}: 3D Bands over a 2-dimensional parameter space of type Float6
     `spectrum`
 """
 bands
+
+"""
+    attach(h::AbstractHamiltonian, args..; sites...)
+    attach(h::OpenHamiltonian, args...; sites...)
+
+Build an `OpenHamiltonian` by attaching a `Σ::SelfEnergy` to sites in `h` specified by
+`siteselector(; sites...)`. The different forms of `args` and `kw` yield different types of
+self-energies `Σ`. Currently supported forms are:
+
+    attach(h, model::ParametricModel; sites...)    # self-energy model
+
+Self-energy `Σᵢⱼ(ω)` defined by a `model` composed of parametric terms (`@onsite` and
+`@hopping`) with `ω` as first argument, as in e.g. `@onsite((ω, r) -> Σᵢᵢ(ω, r))`.
+
+
+"""
+attach

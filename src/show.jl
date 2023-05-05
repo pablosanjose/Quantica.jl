@@ -8,7 +8,15 @@ display_as_tuple(v, prefix = "") = isempty(v) ? "()" :
 display_rounded_vectors(vs) = isempty(vs) ? "[]" : display_rounded_vector.(vs)
 display_rounded_vector(v) = round.(v, digits = 6)
 
-pluraltext(m, sing) = ifelse(length(terms(m)) == 1, "1 $sing", "$(length(terms(m))) $(sing)s")
+pluraltext(m, sing) = ifelse(length(m) == 1, "1 $sing", "$(length(m)) $(sing)s")
+
+displayparameter(::Type{<:Function}) = "Function"
+displayparameter(::Type{T}) where {T} = "$T"
+
+displayrange(r::Real) = round(r, digits = 6)
+displayrange(::Missing) = "any"
+displayrange(nr::Neighbors) = "Neighbors($(Int(nr)))"
+displayrange(rs::Tuple) = "($(displayrange(first(rs))), $(displayrange(last(rs))))"
 
 #endregion
 
@@ -61,73 +69,82 @@ end
 #endregion
 
 ############################################################################################
-# Model
+# Selectors
+#region
+
+function Base.show(io::IO, s::Union{SiteSelector,HopSelector})
+    i = get(io, :indent, "")
+    ioindent = IOContext(io, :indent => i * "  ")
+    print(io, i, summary(s), "\n")
+    print_selector(io, s)
+end
+
+Base.summary(m::SiteSelector) =
+    "SiteSelector: a rule that defines a finite collection of sites in a lattice"
+
+Base.summary(m::HopSelector) =
+    "HopSelector: a rule that defines a finite collection of hops between sites in a lattice"
+
+function print_selector(io::IO, s::SiteSelector)
+    i = get(io, :indent, "")
+    print(io,
+"$(i)  Region            : $(s.region === missing ? "any" : "Function")
+$(i)  Sublattices       : $(s.sublats === missing ? "any" : s.sublats)
+$(i)  Cells             : $(s.cells === missing ? "any" : s.cells)")
+end
+
+function print_selector(io::IO, s::HopSelector)
+    i = get(io, :indent, "")
+    print(io,
+"$(i)  Region            : $(s.region === missing ? "any" : "Function")
+$(i)  Sublattice pairs  : $(s.sublats === missing ? "any" : s.sublats)
+$(i)  Cell distances    : $(s.dcells === missing ? "any" : s.dcells)
+$(i)  Hopping range     : $(displayrange(s.range))
+$(i)  Reverse hops      : $(s.adjoint)")
+end
+
+#endregion
+
+############################################################################################
+# Models and Modifiers
 #region
 
 function Base.show(io::IO, m::TightbindingModel)
-    ioindent = IOContext(io, :indent =>"  ")
-    print(io, "TightbindingModel: model with $(pluraltext(m, "term"))", "\n")
-    foreach(t -> print(ioindent, t, "\n"), m.terms)
+    i = get(io, :indent, "")
+    ioindent = IOContext(io, :indent => i * "  ")
+    print(io, i, summary(m))
+    foreach(t -> print(ioindent, "\n", t), terms(m))
 end
 
 function Base.show(io::IO, m::ParametricModel)
-    ioindent = IOContext(io, :indent => "  ")
-    print(io, "ParametricModel: model with $(pluraltext(m, "term"))", "\n")
-    foreach(t -> print(ioindent, t, "\n"), m.terms)
-    if !isempty(terms(nonparametric(m)))
-        show(ioindent, nonparametric(m))
+    i = get(io, :indent, "")
+    ioindent = IOContext(io, :indent => i * "  ")
+    print(io, i, summary(m))
+    foreach(t -> print(ioindent, "\n", t), terms(m))
+    foreach(t -> print(ioindent, "\n", t), terms(nonparametric(m)))
+end
+
+function Base.show(io::IO, t::Union{AbstractModelTerm,Modifier})
+    i = get(io, :indent, "")
+    ioindent = IOContext(io, :indent => i * "  ")
+    print(io, i, summary(t), "\n")
+    print_selector(io, t.selector)
+    if !(t isa Modifier)
+        print(io, "\n", "$(i)  Coefficient       : $(t.coefficient)")
+    end
+    if t isa AbstractParametricTerm || t isa Modifier
+        print(io, "\n", "$(i)  Parameters        : $(parameters(t))")
     end
 end
 
-function Base.show(io::IO, o::OnsiteTerm{F,<:SiteSelector}) where {F}
-    i = get(io, :indent, "")
-    print(io,
-"$(i)OnsiteTerm{$(displayparameter(F))}:
-$(i)  Sublattices       : $(o.selector.sublats === missing ? "any" : o.selector.sublats)
-$(i)  Coefficient       : $(o.coefficient)")
-end
-
-function Base.show(io::IO, h::HoppingTerm{F,<:HopSelector}) where {F}
-    i = get(io, :indent, "")
-    print(io,
-"$(i)HoppingTerm{$(displayparameter(F))}:
-$(i)  Sublattice pairs  : $(h.selector.sublats === missing ? "any" : h.selector.sublats)
-$(i)  dn cell distance  : $(h.selector.dcells === missing ? "any" : h.selector.dcells)
-$(i)  Hopping range     : $(displayrange(h.selector.range))
-$(i)  Coefficient       : $(h.coefficient)
-$(i)  Reverse hops      : $(h.selector.adjoint)")
-end
-
-function Base.show(io::IO, o::ParametricOnsiteTerm{N}) where {N}
-    i = get(io, :indent, "")
-    print(io,
-"$(i)ParametricOnsiteTerm{$N}:
-$(i)  Functor arguments : $N
-$(i)  Sublattices       : $(o.selector.sublats === missing ? "any" : o.selector.sublats)
-$(i)  Coefficient       : $(o.coefficient)
-$(i)  Parameters        : $(parameters(o))")
-end
-
-function Base.show(io::IO, h::ParametricHoppingTerm{N}) where {N}
-    i = get(io, :indent, "")
-    print(io,
-"$(i)ParametricHoppingTerm{$N}:
-$(i)  Functor arguments : $N
-$(i)  Sublattice pairs  : $(h.selector.sublats === missing ? "any" : h.selector.sublats)
-$(i)  dn cell distance  : $(h.selector.dcells === missing ? "any" : h.selector.dcells)
-$(i)  Hopping range     : $(displayrange(h.selector.range))
-$(i)  Coefficient       : $(h.coefficient)
-$(i)  Reverse hops      : $(h.selector.adjoint)
-$(i)  Parameters        : $(parameters(h))")
-end
-
-displayparameter(::Type{<:Function}) = "Function"
-displayparameter(::Type{T}) where {T} = "$T"
-
-displayrange(r::Real) = round(r, digits = 6)
-displayrange(::Missing) = "any"
-displayrange(nr::Neighbors) = "Neighbors($(Int(nr)))"
-displayrange(rs::Tuple) = "($(displayrange(first(rs))), $(displayrange(last(rs))))"
+Base.summary(m::TightbindingModel) = "TightbindingModel: model with $(pluraltext(terms(m), "term"))"
+Base.summary(m::ParametricModel) = "ParametricModel: model with $(pluraltext(terms(m), "term"))"
+Base.summary(::OnsiteTerm{F}) where {F} = "OnsiteTerm{$(displayparameter(F))}:"
+Base.summary(::HoppingTerm{F}) where {F} = "HoppingTerm{$(displayparameter(F))}:"
+Base.summary(::ParametricOnsiteTerm{N}) where {N} = "ParametricOnsiteTerm{ParametricFunction{$N}}"
+Base.summary(::ParametricHoppingTerm{N}) where {N} = "ParametricHoppingTerm{ParametricFunction{$N}}"
+Base.summary(::OnsiteModifier{N}) where {N} = "OnsiteModifier{ParametricFunction{$N}}:"
+Base.summary(::HoppingModifier{N}) where {N} = "OnsiteModifier{ParametricFunction{$N}}:"
 
 #endregion
 
@@ -175,7 +192,7 @@ function Base.show(io::IO, oh::OpenHamiltonian)
     print(io, i, summary(oh), "\n",
 "$i  Number of contacts : $(length(selfenergies(oh)))
 $i  Contact solvers    : $(solvernames(oh))", "\n")
-    ioindent = IOContext(io, :indent => "  ")
+    ioindent = IOContext(io, :indent => i * "  ")
     show(ioindent, hamiltonian(oh))
 end
 
@@ -205,7 +222,7 @@ Base.summary(s::AbstractEigenSolver) =
 
 function Base.show(io::IO, s::SpectrumSolver)
     i = get(io, :indent, "")
-    ioindent = IOContext(io, :indent => "  ")
+    ioindent = IOContext(io, :indent => i * "  ")
     print(io, i, summary(s), "\n")
 end
 
@@ -220,7 +237,7 @@ Base.summary(::SpectrumSolver{T,L}) where {T,L} =
 
 function Base.show(io::IO, s::Spectrum)
     i = get(io, :indent, "")
-    ioindent = IOContext(io, :indent => "  ")
+    ioindent = IOContext(io, :indent => i * "  ")
     print(io, i, summary(s))
     println(ioindent, "\nEnergies:")
     show(ioindent, MIME("text/plain"), energies(s))
@@ -285,7 +302,7 @@ function Base.show(io::IO, g::GreenFunction)
 $i  Contacts        : $(length(Σs))
 $i  Contact solvers : $(display_as_tuple(typename.(solver.(Σs))))
 $i  Contact sizes   : $(display_as_tuple(nsites.(latslice.(Σs))))", "\n")
-    ioindent = IOContext(io, :indent => "  ")
+    ioindent = IOContext(io, :indent => i * "  ")
     show(ioindent, parent(g))
 end
 
@@ -328,7 +345,7 @@ function Base.show(io::IO, I::Integrator)
 "$i  Integration path    : $(points(I))
 $i  Integration options : $(display_namedtuple(options(I)))
 $i  integrand           :\n")
-    ioindent = IOContext(io, :indent => "  ")
+    ioindent = IOContext(io, :indent => i * "  ")
     show(ioindent, integrand(I))
 end
 

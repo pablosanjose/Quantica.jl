@@ -1242,6 +1242,9 @@ Base.size(h::ParametricHamiltonian, i...) = size(parent(h), i...)
 Base.copy(p::ParametricHamiltonian) = ParametricHamiltonian(
     copy(p.hparent), copy(p.h), p.modifiers, copy.(p.allptrs), copy(p.allparams))
 
+LinearAlgebra.ishermitian(h::ParametricHamiltonian) =
+    argerror("`ishermitian(::ParametricHamiltonian)` not supported, as the result can depend on the values of parameters.")
+
 copy_lattice(p::ParametricHamiltonian) = ParametricHamiltonian(
     copy_lattice(p.hparent), p.h, p.modifiers, p.allptrs, p.allparams)
 

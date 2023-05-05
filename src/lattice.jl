@@ -2,11 +2,11 @@
 # sublat
 #region
 
-sublat(sites...; name = :A) =
-    Sublat(sanitize_Vector_of_float_SVectors(sites), Symbol(name))
+sublat(sites::Union{Number,Tuple,SVector,AbstractVector}...; name = :A) =
+    Sublat([float.(sanitize_SVector.(sites))...], Symbol(name))
 
 sublat(sites::AbstractVector; name = :A) =
-    Sublat(sanitize_Vector_of_float_SVectors(sites), Symbol(name))
+    Sublat(float.(sanitize_SVector.(sites)), Symbol(name))
 
 #endregion
 
