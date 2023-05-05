@@ -6,11 +6,18 @@ specialized plot recipes:
 
 - `object::Lattice`             -> `plotlattice` (supports also `LatticeSlice`s)
 - `object::Hamiltonian`         -> `plotlattice` (supports also `ParametricHamiltonian`)
+- `object::GreenFunction`       -> `plotlattice` (see below)
 - `object::Bands`               -> `plotbands`   (supports also slices of `Bands`)
 - `object::Subband`             -> `plotbands`   (supports also collections of `Subbands`)
 
 Supported `Makie` backends include `GLMakie`, `CairoMakie`, `WGLMakie`, etc. Instead of
 `using Makie`, load a specific backend directly, e.g. `using GLMakie`.
+
+    qplot(g::GreenFunction; children = (plotkw₁::NamedTuple, plotkw₂::NamedTuple, ...), kw...)
+
+Render the parent Hamiltonian of `g`, along with a representation of each of `g`'s
+self-energies. Specific `plotkwᵢ` keywords for each self-energy can be given in `children`,
+cycling over them if necessary.
 
 ## Keywords
 
@@ -19,8 +26,19 @@ Supported `Makie` backends include `GLMakie`, `CairoMakie`, `WGLMakie`, etc. Ins
 - `fancyaxis::Bool`: for 3D plots, whether to use `Makie.LScene` (supports zoom+pan) instead of `Makie.Axis3`
 - `inspector::Bool`: whether to enable interactive tooltips of plot elements
 - `plotkw`: additional keywords to pass on to `plotlattice` or `plotbands`, see their docstring for details.
+
 """
 qplot
+
+"""
+    qplot!(object; plotkw...)
+
+Render `object` on the currently active scene using either `plotlattice!` (for lattice-based
+objects) or `plotbands!` (for bands-based object), and passing `plotkw` keywords along. See
+their respective docstrings for possible keywords.
+
+"""
+qplot!
 
 """
     plotlattice(lat::Lattice; kw...)
