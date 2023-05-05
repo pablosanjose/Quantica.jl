@@ -1,6 +1,3 @@
-#######################################################################
-# Lattice
-#######################################################################
 """
 `LatticePresets` is a Quantica submodule containing several pre-defined lattices. The
 alias `LP` can be used in place of `LatticePresets`. Currently supported lattices are
