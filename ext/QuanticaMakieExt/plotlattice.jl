@@ -5,36 +5,29 @@
 
 @recipe(PlotLattice) do scene
     Theme(
-        ssao = true,
-        fxaa = true,
-        ambient = Vec3f(0.7),
-        diffuse = Vec3f(0.5),
-        backlight = 0.8f0,
-        shading = false,
+        flat = true,
         force_transparency = false,
         shellopacity = 0.07,
         cellopacity = 0.03,
         cellcolor = RGBAf(0,0,1),
         sitecolor = missing,         # accepts (i, r) -> float, IndexableObservable
         siteopacity = missing,       # accepts (i, r) -> float, IndexableObservable
-        maxsiteradius = 0.5,
+        minmaxsiteradius = (0.0, 0.5),
         siteradius = 0.25,           # accepts (i, r) -> float, IndexableObservable
-        siteborder = 2,
-        siteborderdarken = 0.6,
+        siteoutline = 2,
+        siteoutlinedarken = 0.6,
         sitedarken = 0.0,
         sitecolormap = :Spectral_9,
         hopcolor = missing,          # accepts ((i,j), (r,dr)) -> float, IndexableObservable
         hopopacity = missing,        # accepts ((i,j), (r,dr)) -> float, IndexableObservable
-        maxhopradius = 0.1,
+        minmaxhopradius = (0.0, 0.1),
         hopradius = 0.03,            # accepts ((i,j), (r,dr)) -> float, IndexableObservable
-        hopoffset = 1.0,
         hopdarken = 0.85,
         hopcolormap = :Spectral_9,
-        pixelscale = 6,
+        pixelscalehops = 6,
+        pixelscalesites = 2√2,
         selector = missing,
-        flatsizefactor = 2√2,
-        boundaries = missing,
-        hide = :cell, # :hops, :sites, :bravais, :cell, :axes...
+        hide = :cell, # :hops, :sites, :bravais, :cell, :axes, :shell, :all
     )
 end
 
@@ -44,15 +37,17 @@ end
 # qplot
 #region
 
-function Quantica.qplot(h::Union{Lattice{<:Any,3},AbstractHamiltonian{<:Any,3}}; fancyaxis = true, axis = (;), figure = (;), inspector = false, plotkw...)
+const PlotLatticeArgumentType{E} = Union{Lattice{<:Any,E},LatticeSlice{<:Any,E},AbstractHamiltonian{<:Any,E}}
+
+function Quantica.qplot(h::PlotLatticeArgumentType{3}; fancyaxis = true, axis = (;), figure = (;), inspector = false, plotkw...)
     fig, ax = empty_fig_axis_3D(plotlat_default_3D...; fancyaxis, axis, figure)
     fancyaxis ? plotlattice!(ax, h; plotkw...) :
-                plotlattice!(ax, h; flatsizefactor = 1, plotkw...)  # Makie BUG workaround?
+                plotlattice!(ax, h; pixelscalesites = 1, plotkw...)  # Makie BUG workaround?
     inspector && DataInspector()
     return fig
 end
 
-function Quantica.qplot(h::Union{Lattice,AbstractHamiltonian}; axis = (;), figure = (;), inspector = false, plotkw...)
+function Quantica.qplot(h::PlotLatticeArgumentType; axis = (;), figure = (;), inspector = false, plotkw...)
     fig, ax = empty_fig_axis_2D(plotlat_default_2D...; axis, figure)
     plotlattice!(ax, h; plotkw...)
     inspector && DataInspector()
@@ -76,7 +71,7 @@ function Quantica.qplot(g::GreenFunction; fancyaxis = true, axis = (;), figure =
     return fig
 end
 
-Quantica.qplot!(x::Union{Lattice,AbstractHamiltonian,GreenFunction}; kw...) =
+Quantica.qplot!(x::Union{PlotLatticeArgumentType,GreenFunction}; kw...) =
     plotlattice!(x; kw...)
 
 parse_children(::Missing) = (NamedTuple(),)
@@ -149,7 +144,6 @@ function siteprimitives(ls, h, plot, opacityflag)   # function barrier
     opts´ = maybe_evaluate_observable.(opts, Ref(ls))
     return _siteprimitives(ls, h, opts´, opacityflag)
 end
-
 
 function _siteprimitives(ls::LatticeSlice{<:Any,E}, h, opts, opacityflag) where {E}
     sp = SitePrimitives{E}()
@@ -333,40 +327,42 @@ update_radii!(p, plot) = update_radii!(p, plot, safeextrema(p.radii))
 
 function update_radii!(p::SitePrimitives, plot, extremarads)
     siteradius = plot[:siteradius][]
-    maxsiteradius = plot[:maxsiteradius][]
-    return update_radii!(p, extremarads, siteradius, maxsiteradius)
+    minmaxsiteradius = plot[:minmaxsiteradius][]
+    return update_radii!(p, extremarads, siteradius, minmaxsiteradius)
 end
 
 function update_radii!(p::HoppingPrimitives, plot, extremarads)
     hopradius = plot[:hopradius][]
-    maxhopradius = plot[:maxhopradius][]
-    return update_radii!(p, extremarads, hopradius, maxhopradius)
+    minmaxhopradius = plot[:minmaxhopradius][]
+    return update_radii!(p, extremarads, hopradius, minmaxhopradius)
 end
 
-function update_radii!(p, extremarads, radius, maxradius)
+function update_radii!(p, extremarads, radius, minmaxradius)
     for (i, r) in enumerate(p.radii)
-        p.radii[i] = primitive_radius(normalize_range(r, extremarads), radius, maxradius)
+        p.radii[i] = primitive_radius(normalize_range(r, extremarads), radius, minmaxradius)
     end
     return p
 end
 
-primitive_radius(normr, radius::Number, maxradius) = radius
-primitive_radius(normr, radius, maxradius) = maxradius * normr
+primitive_radius(normr, radius::Number, minmaxradius) = radius
+primitive_radius(normr, radius, (minr, maxr)) = minr + (maxr - minr) * normr
 
 ## primitive_scales ##
 
 function primitive_scales(p::HoppingPrimitives, plot)
     hopradius = plot[:hopradius][]
-    maxhopradius = plot[:maxhopradius][]
+    minmaxhopradius = plot[:minmaxhopradius][]
     scales = Vec3f[]
     for (r, v) in zip(p.radii, p.vectors)
-        push!(scales, primitive_scale(r, v, hopradius, maxhopradius))
+        push!(scales, primitive_scale(r, v, hopradius, minmaxhopradius))
     end
     return scales
 end
 
-primitive_scale(normr, v, hopradius::Number, maxhopradius) = Vec3f(hopradius, hopradius, norm(v)/2)
-primitive_scale(normr, v, hopradius, maxhopradius) = Vec3f(normr * maxhopradius, normr * maxhopradius, norm(v)/2)
+primitive_scale(normr, v, hopradius::Number, minmaxhopradius) =
+    Vec3f(hopradius, hopradius, norm(v)/2)
+primitive_scale(normr, v, hopradius, (minr, maxr)) =
+    Vec3f(normr * maxhopradius, minr + (maxr - minr) * normr, norm(v)/2)
 
 ## primitive_segments ##
 
@@ -382,18 +378,18 @@ end
 ## primitive_linewidths ##
 
 function primitive_linewidths(p::HoppingPrimitives{E}, plot) where {E}
-    pixelscale = plot[:pixelscale][]
+    pixelscalehops = plot[:pixelscalehops][]
     hopradius = plot[:hopradius][]
     linewidths = Float32[]
     for r in p.radii
-        linewidth = primitive_linewidth(r, hopradius, pixelscale)
+        linewidth = primitive_linewidth(r, hopradius, pixelscalehops)
         append!(linewidths, (linewidth, linewidth))
     end
     return linewidths
 end
 
-primitive_linewidth(normr, hopradius::Number, pixelscale) = pixelscale
-primitive_linewidth(normr, hopradius, pixelscale) = pixelscale * normr
+primitive_linewidth(normr, hopradius::Number, pixelscalehops) = pixelscalehops
+primitive_linewidth(normr, hopradius, pixelscalehops) = pixelscalehops * normr
 
 #endregion
 
@@ -405,8 +401,15 @@ primitive_linewidth(normr, hopradius, pixelscale) = pixelscale * normr
 
 function Makie.plot!(plot::PlotLattice{Tuple{L}}) where {L<:Lattice}
     lat = to_value(plot[1])
-    h = hamiltonian(lat)
+    h = Quantica.hamiltonian(lat)
     return plotlattice!(plot, h; plot.attributes...)
+end
+
+function Makie.plot!(plot::PlotLattice{Tuple{L}}) where {L<:LatticeSlice}
+    ls = to_value(plot[1])
+    lat = Quantica.parent(ls)
+    h = Quantica.hamiltonian(lat)
+    return plotlattice!(plot, h, ls; plot.attributes...)
 end
 
 function Makie.plot!(plot::PlotLattice{Tuple{L}}) where {L<:ParametricHamiltonian}
@@ -420,6 +423,13 @@ function Makie.plot!(plot::PlotLattice{Tuple{H}}) where {E,L,H<:Hamiltonian{<:An
     lat = Quantica.lattice(h)
     sel = sanitize_selector(plot[:selector][], lat)
     latslice = lat[sel]
+    return plotlattice!(plot, h, latslice; plot.attributes...)
+end
+
+function Makie.plot!(plot::PlotLattice{Tuple{H,S}}) where {E,L,H<:Hamiltonian{<:Any,E,L},S<:LatticeSlice}
+    h = to_value(plot[1])
+    latslice = to_value(plot[2])
+    lat = Quantica.lattice(h)
     latslice´ = Quantica.growdiff(latslice, h)
 
     hidesites = ishidden((:sites, :all), plot)
@@ -460,7 +470,7 @@ function Makie.plot!(plot::PlotLattice{Tuple{H}}) where {E,L,H<:Hamiltonian{<:An
     if !hidehops
         hopopacity = plot[:hopopacity][]
         transparency = plot[:force_transparency][] || has_transparencies(hopopacity)
-        if E == 3 && plot[:shading][]
+        if E == 3 && !plot[:flat][]
             plothops_shaded!(plot, hp, transparency)
             hideshell || plothops_shaded!(plot, hp´, true)
         else
@@ -473,7 +483,7 @@ function Makie.plot!(plot::PlotLattice{Tuple{H}}) where {E,L,H<:Hamiltonian{<:An
     if !hidesites
         siteopacity = plot[:siteopacity][]
         transparency = plot[:force_transparency][] || has_transparencies(siteopacity)
-        if E == 3 && plot[:shading][]
+        if E == 3 && !plot[:flat][]
             plotsites_shaded!(plot, sp, transparency)
             hideshell || plotsites_shaded!(plot, sp´, true)
         else
@@ -503,11 +513,6 @@ function plotsites_shaded!(plot::PlotLattice, sp::SitePrimitives, transparency)
     inspector_label = (self, i, r) -> sp.tooltips[i]
     meshscatter!(plot, sp.centers; color = sp.colors, markersize = sp.radii,
             markerspace = :data,
-            ssao = plot[:ssao][],
-            ambient = plot[:ambient][],
-            diffuse = plot[:diffuse][],
-            backlight = plot[:backlight][],
-            fxaa = plot[:fxaa][],
             transparency,
             inspector_label)
     return plot
@@ -515,16 +520,12 @@ end
 
 function plotsites_flat!(plot::PlotLattice, sp::SitePrimitives, transparency)
     inspector_label = (self, i, r) -> sp.tooltips[i]
-    factor = plot[:flatsizefactor][]
-    markersize = factor ≈ 1 ? sp.radii : factor * sp.radii
+    scalefactor = plot[:pixelscalesites][]
+    markersize = scalefactor ≈ 1 ? sp.radii : scalefactor * sp.radii
     scatter!(plot, sp.centers; color = sp.colors, markersize,
             markerspace = :data,
-            strokewidth = plot[:siteborder][],
-            strokecolor = darken.(sp.colors, Ref(plot[:siteborderdarken][])),
-            ambient = plot[:ambient][],
-            diffuse = plot[:diffuse][],
-            backlight = plot[:backlight][],
-            fxaa = plot[:fxaa][],
+            strokewidth = plot[:siteoutline][],
+            strokecolor = darken.(sp.colors, Ref(plot[:siteoutlinedarken][])),
             transparency,
             inspector_label)
     return plot
@@ -536,11 +537,6 @@ function plothops_shaded!(plot::PlotLattice, hp::HoppingPrimitives, transparency
     cyl = Cylinder(Point3f(0., 0., -1.0), Point3f(0., 0, 1.0), Float32(1))
     meshscatter!(plot, hp.centers; color = hp.colors,
         rotations = hp.vectors, markersize = scales, marker = cyl,
-        ssao = plot[:ssao][],
-        ambient = plot[:ambient][],
-        diffuse = plot[:diffuse][],
-        backlight = plot[:backlight][],
-        fxaa = plot[:fxaa][],
         transparency,
         inspector_label)
     return plot
@@ -552,8 +548,6 @@ function plothops_flat!(plot::PlotLattice, hp::HoppingPrimitives, transparency)
     segments = primitive_segments(hp, plot)
     linewidths = primitive_linewidths(hp, plot)
     linesegments!(plot, segments; color = colors, linewidth = linewidths,
-        backlight = plot[:backlight][],
-        fxaa = plot[:fxaa][],
         transparency,
         inspector_label)
     return plot
@@ -673,7 +667,6 @@ Makie.convert_arguments(::PointBased, lat::Lattice, sublat = missing) =
     (Point.(Quantica.sites(lat, sublat)),)
 Makie.convert_arguments(p::PointBased, h::Union{AbstractHamiltonian,GreenFunction,GreenSolution}, sublat = missing) =
     Makie.convert_arguments(p, Quantica.lattice(h), sublat)
-
 Makie.convert_arguments(p::Type{<:LineSegments}, g::Union{GreenFunction,GreenSolution}, sublat = missing) =
     Makie.convert_arguments(p, Quantica.hamiltonian(g), sublat)
 

@@ -176,7 +176,7 @@ possible `kw`, and `sites` to obtain site positions.
     lat[]
 
 Special case equivalent to `lat[cells = (0,...)]` that returns a `LatticeSlice` of the
-zero-th unitcell
+zero-th unitcell.
 
 # Examples
 

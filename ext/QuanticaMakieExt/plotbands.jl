@@ -4,19 +4,14 @@
 
 @recipe(PlotBands) do scene
     Theme(
-        ssao = true,
-        fxaa = true,
-        ambient = Vec3f(0.7),
-        diffuse = Vec3f(0.5),
-        backlight = 0.8f0,
         colormap = :Spectral_9,
         color = missing,
         opacity = 1.0,
         size = 3,
-        maxsize = 6,
+        minmaxsize = (0,6),
         nodesizefactor = 4,
-        nodedarken = 0.8,
-        hide = (:nodes,)
+        nodedarken = 0.0,
+        hide = ()   # :nodes, :bands
     )
 end
 
@@ -28,10 +23,10 @@ end
 #   slice(b, ...)::Vector{Mesh}
 #region
 
-const BandOrSubbandsOrMeshes =
+const PlotBandsArgumentType =
     Union{Quantica.Bands,Quantica.Subband,AbstractVector{<:Quantica.Subband},AbstractVector{<:Quantica.Mesh}}
 
-function Quantica.qplot(b::BandOrSubbandsOrMeshes; fancyaxis = true, axis = (;), figure = (;), inspector = false, plotkw...)
+function Quantica.qplot(b::PlotBandsArgumentType; fancyaxis = true, axis = (;), figure = (;), inspector = false, plotkw...)
     meshes = collect(Quantica.meshes(b))
     E = Quantica.embdim(first(meshes))
     fig, ax = if E < 3
@@ -46,7 +41,7 @@ function Quantica.qplot(b::BandOrSubbandsOrMeshes; fancyaxis = true, axis = (;),
     return fig
 end
 
-Quantica.qplot!(b::BandOrSubbandsOrMeshes; kw...) = plotbands!(b; kw...)
+Quantica.qplot!(b::PlotBandsArgumentType; kw...) = plotbands!(b; kw...)
 
 const plotbands_default_figure = (; resolution = (1200, 1200), fontsize = 40)
 
@@ -166,20 +161,20 @@ end
 function update_sizes!(p::MeshPrimitives, plot)
     extremasizes = safeextrema(p.sizes)
     size = plot[:size][]
-    maxsize = plot[:maxsize][]
-    return update_sizes!(p, extremasizes, size, maxsize) # function barrier
+    minmaxsize = plot[:minmaxsize][]
+    return update_sizes!(p, extremasizes, size, minmaxsize) # function barrier
 end
 
 # almost identical to update_radii! from plotlattice.jl
-function update_sizes!(p, extremasizes, size, maxsize)
+function update_sizes!(p, extremasizes, size, minmaxsize)
     for (i, r) in enumerate(p.sizes)
-        p.sizes[i] = primitive_size(normalize_range(r, extremasizes), size, maxsize)
+        p.sizes[i] = primitive_size(normalize_range(r, extremasizes), size, minmaxsize)
     end
     return p
 end
 
-primitive_size(normr, size::Number, maxsize) = size
-primitive_size(normr, size, maxsize) = maxsize * normr
+primitive_size(normr, size::Number, minmaxsize) = size
+primitive_size(normr, size, (mins, maxs)) = mins + (maxs - mins) * normr
 
 #endregion
 #endregion
@@ -188,7 +183,7 @@ primitive_size(normr, size, maxsize) = maxsize * normr
 # PlotBands for 1D and 2D Bands (2D and 3D embedding space)
 #region
 
-function Makie.plot!(plot::PlotBands{Tuple{S}}) where {S<:BandOrSubbandsOrMeshes}
+function Makie.plot!(plot::PlotBands{Tuple{S}}) where {S<:PlotBandsArgumentType}
     meshes = Quantica.meshes(to_value(plot[1]))
     mp = meshprimitives(meshes, plot)
     return plotmeshes!(plot, mp)
@@ -198,10 +193,12 @@ plotmeshes!(plot, mp::MeshPrimitives{<:Any,E}) where {E} =
     Quantica.argerror("Can only plot meshes in 2D and 3D space, got an $(E)D mesh")
 
 function plotmeshes!(plot, mp::MeshPrimitives{<:Any,2})
-    verts = mp.verts[mp.simps]
-    color = mp.colors[mp.simps]
-    linewidth = mp.sizes[mp.simps]
-    linesegments!(plot, verts; color, linewidth, inspectable = false)
+    if !ishidden((:bands, :subbands), plot)
+        verts = mp.verts[mp.simps]
+        color = mp.colors[mp.simps]
+        linewidth = mp.sizes[mp.simps]
+        linesegments!(plot, verts; color, linewidth, inspectable = false)
+    end
     if !ishidden((:nodes, :points, :vertices), plot)
         inspector_label = (self, i, r) -> mp.tooltips[i]
         markersize = mp.sizes .* plot[:nodesizefactor][]
@@ -212,23 +209,16 @@ function plotmeshes!(plot, mp::MeshPrimitives{<:Any,2})
 end
 
 function plotmeshes!(plot, mp::MeshPrimitives{<:Any,3})
-    verts = mp.verts
-    color = mp.colors
-    simps = simplices_matrix(mp)
     transparency = has_transparencies(plot[:opacity][])
-    opts = (;
-        ssao = plot[:ssao][],
-        ambient = plot[:ambient][],
-        diffuse = plot[:diffuse][],
-        backlight = plot[:backlight][],
-        fxaa = plot[:fxaa][])
-    mesh!(plot, verts, simps; color, inspectable = false, transparency, opts...)
+    if !ishidden((:bands, :subbands), plot)
+        simps = simplices_matrix(mp)
+        mesh!(plot, mp.verts, simps; color = mp.colors, inspectable = false, transparency)
+    end
     if !ishidden((:nodes, :points, :vertices), plot)
         inspector_label = (self, i, r) -> mp.tooltips[i]
         markersize = mp.sizes .* plot[:nodesizefactor][]
-        color´ = darken.(color, plot[:nodedarken][])
-        scatter!(plot, verts; color = color´, markersize, transparency, inspector_label,
-            opts...)
+        color´ = darken.(mp.colors, plot[:nodedarken][])
+        scatter!(plot, mp.verts; color = color´, markersize, transparency, inspector_label)
     end
     return plot
 end

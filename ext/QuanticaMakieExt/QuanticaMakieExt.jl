@@ -14,5 +14,6 @@ import Quantica: plotlattice, plotlattice!, plotbands, plotbands!, qplot, qplot!
 include("plotlattice.jl")
 include("plotbands.jl")
 include("tools.jl")
+include("docstrings.jl")
 
 end # module
