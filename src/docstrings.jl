@@ -1103,11 +1103,11 @@ params...)` is defined by keyword `mapping` (`identity` by default, see Keywords
 Diagonalization is multithreaded and will use all available Julia threads (start session
 with `julia -t N` to have `N` threads).
 
-    bandstructure(h::AbstractHamiltonian, nodes...; points = 73, kw...)
+    bands(h::AbstractHamiltonian, nodes...; points = 73, kw...)
 
-Create a linecut of a bandstructure of `h` along a polygonal line connecting two or more
-`nodes`. Each node is either a `Tuple` or `SVector` of Bloch phases, or a symbolic name for
-a Brillouin zone point (`:Γ`,`:K`, `:K´`, `:M`, `:X`, `:Y` or `:Z`). Each segment in the
+Create a linecut of the bands of `h` along a polygonal line connecting two or more `nodes`.
+Each node is either a `Tuple` or `SVector` of Bloch phases, or a symbolic name for a
+Brillouin zone point (`:Γ`,`:K`, `:K´`, `:M`, `:X`, `:Y` or `:Z`). Each segment in the
 polygon has the specified number of `points`.
 
 ## Keywords
