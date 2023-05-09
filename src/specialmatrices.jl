@@ -438,8 +438,9 @@ end
 function inverse_green_mat(blocks, hdim, contacts)
     Σs = selfenergies(contacts)
     extoffset = hdim
-    # these are indices of contact orbitals within the merged orbital slice
-    unitcinds = unit_contact_inds(contacts)
+    # we need to switch from contactinds(contacts) (relative to merged contact orbslice)
+    # to unitcinds (relative to parent unitcell)
+    unitcinds = contact_orbinds_to_unitcell(contacts)   # see types.jl
     # holds all non-extended orbital indices
     unitcindsall = unique!(sort!(reduce(vcat, unitcinds)))
     checkcontactindices(unitcindsall, hdim)
@@ -448,14 +449,6 @@ function inverse_green_mat(blocks, hdim, contacts)
     # we need to flatten extended blocks, that come as NTuple{3}'s
     mat = BlockSparseMatrix(tupleflatten(blocks´...)...)
     return mat, unitcinds, unitcindsall
-end
-
-# switch from contactinds (relative to merged contact orbslice) to unitcinds (relative
-# to parent unitcell)
-function unit_contact_inds(contacts)
-    orbindsall = orbindices(only(subcells(orbslice(contacts))))
-    unitcinds = [orbindsall[cinds] for cinds in contactinds(contacts)]
-    return unitcinds
 end
 
 checkcontactindices(allcontactinds, hdim) = maximum(allcontactinds) <= hdim ||

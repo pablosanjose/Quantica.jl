@@ -1165,7 +1165,8 @@ self-energies `Σ`. Currently supported forms are:
     attach(h, model::ParametricModel; sites...)    # self-energy model
 
 Self-energy `Σᵢⱼ(ω)` defined by a `model` composed of parametric terms (`@onsite` and
-`@hopping`) with `ω` as first argument, as in e.g. `@onsite((ω, r) -> Σᵢᵢ(ω, r))`.
+`@hopping`) with `ω` as first argument, as in e.g. `@onsite((ω, r) -> Σᵢᵢ(ω, r))` and
+`@hopping((ω, r, dr) -> Σᵢⱼ(ω, r, dr))`
 
 
 """

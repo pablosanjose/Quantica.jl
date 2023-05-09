@@ -31,13 +31,30 @@ SparseLUSlicer(fact::Factorization{C}, nonextrng, unitcinds, unitcindsall, sourc
 
 inverse_green(s::AppliedSparseLUGreenSolver) = s.invgreen
 
+unitcellinds_contacts(s::SparseLUSlicer) = s.unitcinds
+unitcellinds_contacts_merged(s::SparseLUSlicer) = s.unitcindsall
+
+minimal_callsafe_copy(s::AppliedSparseLUGreenSolver) =
+    AppliedSparseLUGreenSolver(minimal_callsafe_copy(s.invgreen))
+
+minimal_callsafe_copy(s::SparseLUSlicer) =
+    SparseLUSlicer(s.fact, s.nonextrng, s.unitcinds, s.unitcindsall, copy(s.source))
+
+#endregion
+
+#region ## apply ##
+
 function apply(::GS.SparseLU, h::AbstractHamiltonian0D, cs::Contacts)
     invgreen = inverse_green(h, cs)
     return AppliedSparseLUGreenSolver(invgreen)
 end
 
-apply(::GS.SparseLU, ::OpenHamiltonian) =
+apply(::GS.SparseLU, h::AbstractHamiltonian, cs::Contacts) = 
     argerror("Can only use SparseLU with bounded Hamiltonians")
+
+#endregion
+
+#region ## call ##
 
 # Σblocks and contactblockstruct are not used here, because they are already inside invgreen
 function (s::AppliedSparseLUGreenSolver{C})(ω, Σblocks, contactblockstruct) where {C}
@@ -60,14 +77,7 @@ function (s::AppliedSparseLUGreenSolver{C})(ω, Σblocks, contactblockstruct) wh
     return so
 end
 
-unitcellinds_contacts(s::SparseLUSlicer) = s.unitcinds
-unitcellinds_contacts_merged(s::SparseLUSlicer) = s.unitcindsall
-
-minimal_callsafe_copy(s::AppliedSparseLUGreenSolver) =
-    AppliedSparseLUGreenSolver(minimal_callsafe_copy(s.invgreen))
-
-minimal_callsafe_copy(s::SparseLUSlicer) =
-    SparseLUSlicer(s.fact, s.nonextrng, s.unitcinds, s.unitcindsall, copy(s.source))
+#endregion
 
 #endregion
 

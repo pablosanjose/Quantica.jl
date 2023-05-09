@@ -301,6 +301,33 @@ end
 #endregion
 
 ############################################################################################
+# contact_orbinds_to_unitcell and contactbasis
+#  switch from contactinds(contacts) (orbinds relative to merged contact orbslice)
+#  to unitcinds (relative to parent unitcell). Only valid for single-sublcell contacts
+#region
+
+function contact_orbinds_to_unitcell(contacts)
+    orbindsall = orbindices(only(subcells(orbslice(contacts))))
+    unitcinds = [orbindsall[cinds] for cinds in contactinds(contacts)]
+    return unitcinds
+end
+
+# Orbital indices in merged contacts when they all belong to a single subcell
+merged_contact_orbinds_to_unitcell(contacts) =
+    unique!(sort!(reduce(vcat, contact_orbinds_to_unitcell(contacts))))
+
+function contact_basis(h::AbstractHamiltonian{T}, contacts) where {T}
+    n = flatsize(h)
+    corbinds = merged_contact_orbinds_to_unitcell(contacts)
+    basis = zeros(Complex{T}, n, length(corbinds))
+    one!(basis, corbinds)
+    return basis
+end
+
+
+#endregion
+
+############################################################################################
 # TMatrixSlicer <: GreenSlicer
 #    Given a slicer that works without any contacts, implement slicing with contacts through
 #    a T-Matrix equation g(i, j) = g0(i, j) + g0(i, k)T(k,k')g0(k', j), and T = (1-Σ*g0)⁻¹*Σ

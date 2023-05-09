@@ -1,7 +1,7 @@
 ############################################################################################
 # Green solvers
-#   All new S::AbstractGreenSolver must live in the GreenSolvers module, and must implement
-#     - apply(s, h::AbstractHamiltonian, c::Contacts) -> AppliedGreenSolver
+#   All new solver::AbstractGreenSolver must live in the GreenSolvers module, and must implement
+#     - apply(solver, h::AbstractHamiltonian, c::Contacts) -> AppliedGreenSolver
 #   All new s::AppliedGreenSolver must implement
 #      - s(ω, Σblocks, ::ContactBlockStructure) -> AbstractGreenSlicer
 #      - minimal_callsafe_copy(gs)
@@ -47,7 +47,7 @@
 
 module GreenSolvers
 
-using Quantica: AbstractGreenSolver
+using Quantica: Quantica, AbstractGreenSolver, ensureloaded
 
 struct SparseLU <:AbstractGreenSolver end
 
@@ -58,6 +58,37 @@ end
 
 Schur(; shift = 1.0, boundary = Inf) = Schur(shift, float(boundary))
 
+struct KPM{B<:Union{Missing,NTuple{2}}} <: AbstractGreenSolver
+    order::Int
+    bandrange::B
+end
+
+# KPM(; order = 100, bandrange = missing) = KPM(order, bandrange)
+function KPM(; order = 100, bandrange = missing)
+    ensureloaded(:Arpack)
+    return KPM(order, bandrange)
+end
+
+
+function bandrange_arnoldi(h::AbstractMatrix{T}) where {T}
+    # ensureloaded(:ArnoldiMethod)
+    R = real(T)
+    decompl, _ = Quantica.ArnoldiMethod.partialschur(h, nev=1, tol=1e-4, which = Main.ArnoldiMethod.LR());
+    decomps, _ = Quantica.ArnoldiMethod.partialschur(h, nev=1, tol=1e-4, which = Main.ArnoldiMethod.SR());
+    ϵmax = R(real(decompl.eigenvalues[1]))
+    ϵmin = R(real(decomps.eigenvalues[1]))
+    return (ϵmin, ϵmax)
+end
+
+function bandrange_arpack(h::AbstractMatrix{T}) where {T}
+    R = real(T)
+    ϵL, _ = Quantica.Arpack.eigs(h, nev=1, tol=1e-4, which = :LR);
+    ϵR, _ = Quantica.Arpack.eigs(h, nev=1, tol=1e-4, which = :SR);
+    ϵmax = R(real(ϵL[1]))
+    ϵmin = R(real(ϵR[1]))
+    return (ϵmin, ϵmax)
+end
+
 end # module
 
 const GS = GreenSolvers
@@ -65,5 +96,6 @@ const GS = GreenSolvers
 include("greensolvers/selfenergymodel.jl")
 include("greensolvers/sparselu.jl")
 include("greensolvers/schur.jl")
+include("greensolvers/kpm.jl")
 # include("greensolvers/bands.jl")
 

@@ -279,10 +279,11 @@ end
 #   call!(::AbstractHamiltonian; params...) returns a Hamiltonian with params applied
 #   call!(::AbstractHamiltonian, ϕs; params...) returns a HybridSparseMatrix with Bloch phases
 #     ϕs and params applied
-#   h(ϕs...; params...) is a copy decoupled from future call!'s
+#   h(...; ...) is a copy decoupled from future call!'s
 #region
 
-(h::Hamiltonian)(phi...; params...) = copy(call!(h, phi; params...))
+(h::Hamiltonian)(; params...) = copy(call!(h; params...))
+(h::Hamiltonian)(phi; params...) = copy(call!(h, phi; params...))
 
 call!(h::Hamiltonian; params...) = h  # mimic partial call!(p::ParametricHamiltonian; params...)
 call!(h::Hamiltonian, φs; params...) = flat_bloch!(h, sanitize_SVector(φs))
