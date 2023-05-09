@@ -99,6 +99,55 @@ end
 #endregion
 
 ############################################################################################
+# Nodes in Brillouin zone
+#region
+
+function bands(h::AbstractHamiltonian{<:Any,<:Any,L}, node1, node2, nodes...; points = 73, kw...) where {L}
+    allnodes = (node1, node2, nodes...)
+    nnodes = length(allnodes)
+    m = mesh(range(0, nnodes, length = nnodes * points + 1))
+    mapping = piecewise_mapping(allnodes, Val(L))
+    return bands(h, m; kw..., mapping)
+end
+
+piecewise_mapping(nodes, ::Val{N}) where {N} = piecewise_mapping(parsenode.(nodes, Val(N)))
+
+function piecewise_mapping(pts)
+    N = length(pts) # could be a Tuple or a different container
+    mapping = x -> begin
+        x´ = clamp(only(x), 0, N-1)
+        i = min(floor(Int, x´), N-2) + 1
+        p = pts[i] + (x´ - i + 1) * (pts[i+1] - pts[i])
+        return p
+    end
+    return mapping
+end
+
+parsenode(pt::SVector, ::Val{L}) where {L} = padright(pt, Val(L))
+parsenode(pt::Tuple, val) = parsenode(SVector(float.(pt)), val)
+
+function parsenode(node::Symbol, val)
+    pt = get(BZpoints, node, missing)
+    pt === missing && throw(ArgumentError("Unknown Brillouin zone point $pt, use one of $(keys(BZpoints))"))
+    pt´ = parsenode(pt, val)
+    return pt´
+end
+
+padright(pt::SVector{L´,T}, ::Val{L}) where {L´,L,T} = SVector(ntuple(i -> i > L´ ? zero(T) : pt[i], Val(L)))
+
+const BZpoints =
+    ( Γ  = (0,)
+    , X  = (pi,)
+    , Y  = (0, pi)
+    , Z  = (0, 0, pi)
+    , K  = (2pi/3, -2pi/3)
+    , K´ = (4pi/3, 2pi/3)
+    , M  = (pi, 0)
+    )
+
+#endregion
+
+############################################################################################
 # bands_diagonalize!
 #region
 

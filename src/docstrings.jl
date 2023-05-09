@@ -1094,14 +1094,21 @@ Returns the eigenstates in `sp` as columns of a matrix. Equivalent to `last(sp)`
 states
 
 """
-    bands(h::AbstractHamiltonian, xᵢs...; kw...)
+    bands(h::AbstractHamiltonian, xcolᵢ...; kw...)
 
 Construct continuously connected bands of `h` by diagonalizing the matrix `h(ϕs; params...)`
 on an `M`-dimensional mesh of points `(x₁, x₂, ..., xₘ)` where each `xᵢ` takes values in the
-collection `xᵢs`. The mapping between points in the mesh points and values of `(ϕs;
+collection `xcolᵢ`. The mapping between points in the mesh points and values of `(ϕs;
 params...)` is defined by keyword `mapping` (`identity` by default, see Keywords).
 Diagonalization is multithreaded and will use all available Julia threads (start session
 with `julia -t N` to have `N` threads).
+
+    bandstructure(h::AbstractHamiltonian, nodes...; points = 73, kw...)
+
+Create a linecut of a bandstructure of `h` along a polygonal line connecting two or more
+`nodes`. Each node is either a `Tuple` or `SVector` of Bloch phases, or a symbolic name for
+a Brillouin zone point (`:Γ`,`:K`, `:K´`, `:M`, `:X`, `:Y` or `:Z`). Each segment in the
+polygon has the specified number of `points`.
 
 ## Keywords
 
