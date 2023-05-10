@@ -45,16 +45,26 @@ end
 # bands
 #region
 
-bands(h::AbstractHamiltonian, rngs::AbstractRange...; kw...) = bands(h, mesh(rngs...); kw...)
+bands(h::AbstractHamiltonian, rng, rngs...; kw...) = bands(h, mesh(rng, rngs...); kw...)
 
-function bands(h::AbstractHamiltonian, basemesh::Mesh{SVector{L,T}}; solver = ES.LinearAlgebra(),
+function bands(h::AbstractHamiltonian{<:Any,<:Any,L´}, basemesh::Mesh{SVector{L,T}}; solver = ES.LinearAlgebra(),
               transform = missing, mapping = missing, showprogress = true, defects = (), patches = 0,
-              degtol = missing, split = true, warn = true) where {T,L}
-    solvers = [SpectrumSolver(h, SVector{L,T}; solver, mapping, transform) for _ in 1:Threads.nthreads()]
+              degtol = missing, split = true, warn = true) where {T,L,L´}
+    mapping´ = sanitize_mapping(mapping, Val(L´))
+    solvers = [SpectrumSolver(h, SVector{L,T}; solver, mapping = mapping´, transform) for _ in 1:Threads.nthreads()]
     defects´ = sanitize_Vector_of_SVectors(SVector{L,T}, defects)
     degtol´ = degtol isa Number ? degtol : sqrt(eps(real(T)))
     return bands_precompilable(solvers, basemesh, showprogress, defects´, patches, degtol´, split, warn)
 end
+
+sanitize_mapping(::Missing, ::Val) = missing
+sanitize_mapping(f::Function, ::Val) = f
+sanitize_mapping(pts::NTuple{N,Symbol}, ::Val{L}) where {N,L} =
+    sanitize_mapping(ntuple(i -> i-1, Val(N)) => parsenode.(pts, Val(L)), Val(L))
+sanitize_mapping((xs, nodes)::Pair, ::Val{L}) where {L} =
+    sanitize_mapping(xs => parsenode.(nodes, Val(L)), Val(L))
+sanitize_mapping((xs, nodes)::Pair{X,S}, ::Val{L}) where {N,L,T,X<:NTuple{N,Real},S<:NTuple{N,SVector{L,T}}} =
+    polygonpath(xs, nodes)
 
 function bands_precompilable(solvers::Vector{A}, basemesh::Mesh{SVector{L,T}},
     showprogress, defects, patches, degtol, split, warn) where {T,L,B,A<:SpectrumSolver{T,L,B}}
@@ -99,29 +109,8 @@ end
 #endregion
 
 ############################################################################################
-# Nodes in Brillouin zone
+# parsenode
 #region
-
-function bands(h::AbstractHamiltonian{<:Any,<:Any,L}, node1, node2, nodes...; points = 73, kw...) where {L}
-    allnodes = (node1, node2, nodes...)
-    nnodes = length(allnodes)
-    m = mesh(range(0, nnodes, length = nnodes * points + 1))
-    mapping = piecewise_mapping(allnodes, Val(L))
-    return bands(h, m; kw..., mapping)
-end
-
-piecewise_mapping(nodes, ::Val{N}) where {N} = piecewise_mapping(parsenode.(nodes, Val(N)))
-
-function piecewise_mapping(pts)
-    N = length(pts) # could be a Tuple or a different container
-    mapping = x -> begin
-        x´ = clamp(only(x), 0, N-1)
-        i = min(floor(Int, x´), N-2) + 1
-        p = pts[i] + (x´ - i + 1) * (pts[i+1] - pts[i])
-        return p
-    end
-    return mapping
-end
 
 parsenode(pt::SVector, ::Val{L}) where {L} = padright(pt, Val(L))
 parsenode(pt::Tuple, val) = parsenode(SVector(float.(pt)), val)
@@ -144,6 +133,56 @@ const BZpoints =
     , K´ = (4pi/3, 2pi/3)
     , M  = (pi, 0)
     )
+
+#endregion
+
+############################################################################################
+# polygonpath
+#region
+
+polygonpath(xs, nodes) = polygonpath(sanitize_polygonpath(xs), sanitize_polygonpath(nodes))
+
+function polygonpath(xs::AbstractVector, nodes::AbstractVector)
+    sanitize_polygonpath!(xs, nodes)
+    minx, maxx = extrema(xs)
+    mapping = x -> begin
+        x´ = clamp(only(x), minx, maxx)
+        i = argmin(i -> ifelse(x´ <= xs[i], Inf, x´ - xs[i]), eachindex(xs))
+        p = nodes[i] + (nodes[i+1] - nodes[i]) * (x´ - xs[i]) / (xs[i+1] - xs[i])
+        return p
+    end
+    return mapping
+end
+
+sanitize_polygonpath(xs::AbstractVector) = xs
+sanitize_polygonpath(xs::Tuple) = collect(xs)
+
+function sanitize_polygonpath!(xs, nodes)
+    if !issorted(xs)
+        p = sortperm(xs)
+        permute!(xs, p)
+        permute!(nodes, p)
+    end
+    return nothing
+end
+
+#endregion
+
+############################################################################################
+# polypath
+#region
+
+polypath(nodes, pts::Integer) = polypath(nodes, [pts for _ in 1:length(nodes)-1])
+
+polypath(x1, x2, pts) = collect(range(x1, x2, length = pts))
+
+function polypath(nodes, pts)
+    length(pts) == length(nodes) - 1 ||
+        argerror("`polypath(nodes, pts)` requires `length(pts) == length(nodes) - 1` or pts::Integer")
+    rng = [x for (n, pt) in enumerate(pts) for x in range(nodes[n], nodes[n+1], length = pt) if x != nodes[n+1]]
+    push!(rng, last(nodes))
+    return rng
+end
 
 #endregion
 

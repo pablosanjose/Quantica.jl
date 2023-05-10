@@ -1103,17 +1103,10 @@ params...)` is defined by keyword `mapping` (`identity` by default, see Keywords
 Diagonalization is multithreaded and will use all available Julia threads (start session
 with `julia -t N` to have `N` threads).
 
-    bands(h::AbstractHamiltonian, nodes...; points = 73, kw...)
-
-Create a linecut of the bands of `h` along a polygonal line connecting two or more `nodes`.
-Each node is either a `Tuple` or `SVector` of Bloch phases, or a symbolic name for a
-Brillouin zone point (`:Γ`,`:K`, `:K´`, `:M`, `:X`, `:Y` or `:Z`). Each segment in the
-polygon has the specified number of `points`.
-
 ## Keywords
 
 - `solver`: eigensolver to use for each diagonalization (see `Eigensolvers`). Default: `ES.LinearAlgebra()`
-- `mapping`: a function of the form `(x, y, ...) -> ϕs` or `(x, y, ...) -> ftuple(ϕs...; params...)` that translates points `(x, y, ...)` in the mesh to Bloch phases `ϕs` or phase+parameter FrankenTuples `(ϕs; params...)`. Default: `identity`
+- `mapping`: a function of the form `(x, y, ...) -> ϕs` or `(x, y, ...) -> ftuple(ϕs...; params...)` that translates points `(x, y, ...)` in the mesh to Bloch phases `ϕs` or phase+parameter FrankenTuples `(ϕs; params...)`. See also linecuts below. Default: `identity`
 - `transform`: function to apply to each eigenvalue after diagonalization. Default: `identity`
 - `degtol::Real`: maximum distance between to nearby eigenvalue so that they are classified as degenerate. Default: `sqrt(eps)`
 - `split::Bool`: whether to split bands into disconnected subbands. Default: `true`
@@ -1121,6 +1114,18 @@ polygon has the specified number of `points`.
 - `patches::Integer`: (experimental) if a dislocation is encountered, attempt to patch it by searching for the defect recursively to a given order. Default: `0`
 - `warn::Bool`: whether to emit warning when band dislocations are encountered
 - `showprogress::Bool`: whether to show or not a progress bar. Default: `true`
+
+## Band linecuts
+
+To do a linecut of a bandstructure along a polygonal path in the `L`-dimensional Brillouin
+zone, mapping a set of 1D points `xs` to a set of `nodes`, with `pts` interpolation points
+in each segment, one can use the following convenient syntax
+
+    bands(h, polypath(xs, pts); mapping = (xs => nodes))
+
+Here `nodes` can be a collection of `SVector{L}` or of named Brillouin zone points from the
+list (`:Γ`,`:K`, `:K´`, `:M`, `:X`, `:Y`, `:Z`). If `mapping = nodes`, then `xs` defaults to
+`0:length(nodes)-1`. See also `polypath` for its alternative methods.
 
 ## Indexing
 
@@ -1154,12 +1159,35 @@ Bands{Float64,3,2}: 3D Bands over a 2-dimensional parameter space of type Float6
   Vertices  : 4950
   Edges     : 14553
   Simplices : 9604
+
+julia> bands(h(t = 1), polypath((0, 2, 3), (20, 30)); mapping = (0, 2, 3) => (:Γ, :M, :K))
+Bands{Float64,2,1}: 2D Bands over a 1-dimensional parameter space of type Float64
+  Subbands  : 1
+  Vertices  : 97
+  Edges     : 96
+  Simplices : 96
 ```
 
 # See also
-    `spectrum`
+    `spectrum`, `polypath`
 """
 bands
+
+"""
+    polypath((x₁, x₂, ..., xₙ), (p₁, p₂, ..., pₙ₋₁))
+
+Build a vector of values between `x₁` and `xₙ` containing all `xᵢ` such that in each
+interval `[xᵢ, xᵢ₊₁)` there are `pᵢ` equally space values.
+
+    polypath((x₁, x₂, ..., xₙ), p)
+
+Same as above with all `pᵢ = p`
+
+    polypath(x₁, x₂, p)
+
+Equivalent to `polypath((x₁, x₂), p) == range(x₁, x₂, length = p)`
+"""
+polypath
 
 """
     attach(h::AbstractHamiltonian, args..; sites...)
