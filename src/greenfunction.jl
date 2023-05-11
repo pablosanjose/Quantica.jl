@@ -151,9 +151,9 @@ function selfenergy(g::GreenSolution, cind::Int, cinds::Int...; kw...)
     return Σv
 end
 
-function similar_contactΣ(g::Union{GreenFunction{T},GreenSolution{T}}) where {T}
+function similar_contactΣ(g::Union{GreenFunction{T},GreenSolution{T}}, contactidx...) where {T}
     contactbs = blockstructure(g)  # ContactBlockStructure
-    n = flatsize(contactbs)
+    n = flatsize(contactbs, contactidx...)
     Σ = zeros(Complex{T}, n, n)
     return Σ
 end

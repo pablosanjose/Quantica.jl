@@ -344,7 +344,7 @@ function Base.show(io::IO, I::Integrator)
     print(io, i, summary(I), "\n",
 "$i  Integration path    : $(points(I))
 $i  Integration options : $(display_namedtuple(options(I)))
-$i  integrand           :\n")
+$i  Integrand:          :\n")
     ioindent = IOContext(io, :indent => i * "  ")
     show(ioindent, integrand(I))
 end

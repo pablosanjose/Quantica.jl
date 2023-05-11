@@ -132,7 +132,7 @@ end
 
 function josephson(g::GreenFunction{T}, ωmax; contact = 1, kBT = 0.0, phases = missing, imshift = missing, opts...) where {T}
     kBT´ = T(kBT)
-    Σ = similar_contactΣ(g)
+    Σ = similar_contactΣ(g, contact)
     normalsize = normal_size(hamiltonian(g))
     tauz = tauz_diag.(axes(Σ, 1), normalsize)
     phases´, traces = sanitize_phases_traces(phases, T)
