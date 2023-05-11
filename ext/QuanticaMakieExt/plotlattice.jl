@@ -624,13 +624,14 @@ isimag(x) = all(o -> real(o) ≈ 0, x)
 
 ############################################################################################
 # selfenergy_plottable
-#   Build plottable objects for each type of SelfEnergy (identified by its solver)
+#   Build plottable objects pi for each type of SelfEnergy (identified by its solver), and
+#   associated qplot keywords
 #region
 
 selfenergy_plottable(::Quantica.AbstractSelfEnergySolver; kw...) = ()
 
-function selfenergy_plottable(solver::Quantica.SelfEnergyModelSolver; kw...)
-    p1, k1 = solver.ph, (;)
+function selfenergy_plottable(solver::Quantica.SelfEnergyModelSolver, ph; kw...)
+    p1, k1 = ph, (; siteoutline = 7)
     return ((p1, k1),)
 end
 
