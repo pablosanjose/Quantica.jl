@@ -128,6 +128,31 @@ end
 #endregion
 
 ############################################################################################
+# KPM observables
+#   h = rescaled(H) = (H - ω0)/β
+#   G_H(ω) = 1/(ω-H) = 1/(ω - β*h - ω0*I) = β⁻¹/((ω - ω0)/β - h) = β⁻¹ G_h((ω-ω0)/β)
+#region
+
+function KPMgreen(momenta::Vector{<:Matrix}, ω, (ω0, β) = (0, 1))
+    β⁻¹ = 1/β
+    ω´ =  (ω - ω0) * β⁻¹
+    g0 = zero(first(momenta))
+    for (n, μn) in enumerate(momenta)
+        g0n = β⁻¹ * KPMgreen_coefficient(n, ω´)
+        g0 .+= g0n .* μn
+    end
+    return g0
+end
+
+function KPMgreen_coefficient(n, ω)
+    σ = ifelse(imag(ω) < 0, -1, 1)
+    g0n = -2 * im * σ * cis(-n * σ * acos(ω)) / (ifelse(iszero(n), 2, 1) * sqrt(1 - ω^2))
+    return g0n
+end
+
+#endregion
+
+############################################################################################
 # AppliedKPMGreenSolver
 #region
 
@@ -155,7 +180,7 @@ end
 apply(::GS.KPM, h::AbstractHamiltonian, cs::Contacts) =
     argerror("Can only use KPM with bounded non-parametric Hamiltonians")
 
-band_ceter_halfwifth(_, (ϵmin, ϵmax)) = 0.5 * (emin + emax), 0.5 * (emax - emin)
+band_ceter_halfwifth(_, (emin, emax)) = 0.5 * (emin + emax), 0.5 * (emax - emin)
 
 function band_ceter_halfwifth(h, ::Missing)
     @warn "Computing spectrum bounds... Consider using the `bandrange` option for faster performance."
@@ -168,4 +193,15 @@ end
 
 #endregion
 
-#endregion top
+#region ## call ##
+
+# Σblocks and contactblockstruct are not used here, because they are already inside invgreen
+function (s::AppliedKPMGreenSolver{T})(ω, Σblocks, cblockstruct) where {T}
+    g0contacts = KPMgreen(s.momenta, ω, s.bandCH)
+    gslicer = TMatrixSlicer(g0contacts, Σblocks, cblockstruct)
+    return gslicer
+end
+
+#endregion
+
+#endregion

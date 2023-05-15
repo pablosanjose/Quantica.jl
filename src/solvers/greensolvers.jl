@@ -3,14 +3,10 @@
 #   All new solver::AbstractGreenSolver must live in the GreenSolvers module, and must implement
 #     - apply(solver, h::AbstractHamiltonian, c::Contacts) -> AppliedGreenSolver
 #   All new s::AppliedGreenSolver must implement
-#      - s(ω, Σblocks, ::ContactBlockStructure) -> AbstractGreenSlicer
+#      - s(ω, Σblocks, ::ContactBlockStructure) -> GreenSlicer
 #      - minimal_callsafe_copy(gs)
-#   This GreenSolution provides in particular:
-#      - GreenSlicer to compute e.g. G[gi, gi´]::AbstractMatrix for indices gi, see below
-#      - Selfenergy for each contact
-#      - LatticeSlice for merged contacts
-#      - bs::ContactBlockStructure for contacts LatticeSlice
-#   All gs::GreenSlicer's must implement
+#   A gs::GreenSlicer's allows to compute G[gi, gi´]::AbstractMatrix for indices gi
+#   To do this, it must implement
 #      - view(gs, ::Int, ::Int) -> g(ω; kw...) between specific contacts
 #      - view(gs, ::Colon, ::Colon) -> g(ω; kw...) between all contacts
 #      - gs[i::CellOrbitals, j::CellOrbitals] -> must return a Matrix for type stability

@@ -340,12 +340,42 @@ struct TMatrixSlicer{C,L,V<:AbstractArray{C},S} <: GreenSlicer{C}
     blockstruct::ContactBlockStructure{L}
 end
 
+struct DummySlicer{C} <: GreenSlicer{C}
+end
+
 #region ## Constructors ##
 
+# Uses getindex(g0slicer) to construct g0contacts
 function TMatrixSlicer(g0slicer::GreenSlicer{C}, Σblocks, blockstruct) where {C}
     if isempty(Σblocks)
-        zeromat = view(zeros(C, 0, 0), 1:0, 1:0)
-        return TMatrixSlicer(g0slicer, zeromat, zeromat, blockstruct)
+        tmatrix = gcontacts = view(zeros(C, 0, 0), 1:0, 1:0)
+    else
+        os = orbslice(blockstruct)
+        nreg = norbs(os)
+        g0contacts = zeros(C, nreg, nreg)
+        off = offsets(os)
+        for (j, sj) in enumerate(subcells(os)), (i, si) in enumerate(subcells(os))
+            irng = off[i]+1:off[i+1]
+            jrng = off[j]+1:off[j+1]
+            g0view = view(g0contacts, irng, jrng)
+            copy!(g0view, g0slicer[si, sj])
+        end
+        tmatrix, gcontacts = t_g_matrices(g0contacts, Σblocks, blockstruct)
+    end
+    return TMatrixSlicer(g0slicer, tmatrix, gcontacts, blockstruct)
+end
+
+# Takes a precomputed g0contacts (for dummy g0slicer that doesn't implement indexing)
+function TMatrixSlicer(g0contacts::AbstractMatrix{C}, Σblocks, blockstruct) where {C}
+    tmatrix, gcontacts = t_g_matrices(g0contacts, Σblocks, blockstruct)
+    g0slicer = DummySlicer{C}()
+    return TMatrixSlicer(g0slicer, tmatrix, gcontacts, blockstruct)
+end
+
+
+function t_g_matrices(g0contacts::AbstractMatrix{C}, Σblocks, blockstruct) where {C}
+    if isempty(Σblocks)
+        tmatrix = gcontacts = view(zeros(C, 0, 0), 1:0, 1:0)
     else
         Σblocks´ = tupleflatten(Σblocks...)
         os = orbslice(blockstruct)
@@ -354,14 +384,6 @@ function TMatrixSlicer(g0slicer::GreenSlicer{C}, Σblocks, blockstruct) where {C
         Σmatext = Matrix{C}(undef, n, n)
         Σbm = BlockMatrix(Σmatext, Σblocks´)
         update!(Σbm)                                            # updates Σmat with Σblocks´
-        g0mat = zeros(C, nreg, nreg)
-        off = offsets(os)
-        for (j, sj) in enumerate(subcells(os)), (i, si) in enumerate(subcells(os))
-            irng = off[i]+1:off[i+1]
-            jrng = off[j]+1:off[j+1]
-            g0view = view(g0mat, irng, jrng)
-            copy!(g0view, g0slicer[si, sj])
-        end
         Σmatᵣᵣ = view(Σmatext, 1:nreg, 1:nreg)
         Σmatₑᵣ = view(Σmatext, nreg+1:n, 1:nreg)
         Σmatᵣₑ = view(Σmatext, 1:nreg, nreg+1:n)
@@ -370,13 +392,12 @@ function TMatrixSlicer(g0slicer::GreenSlicer{C}, Σblocks, blockstruct) where {C
         Σmat´ = ldiv!(lu!(Σmatₑₑ), Σmatₑᵣ)
         mul!(Σmat, Σmatᵣₑ, Σmat´, 1, 1)              # Σmat = Σmatᵣᵣ + ΣmatᵣₑΣmatₑₑ⁻¹ Σmatₑᵣ
         den = Matrix{C}(I, nreg, nreg)
-        mul!(den, Σmat, g0mat, -1, 1)                          # den = 1-Σ*g0
+        mul!(den, Σmat, g0contacts, -1, 1)                          # den = 1-Σ*g0
         luden = lu!(den)
         tmatrix = ldiv!(luden, Σmat)                           # tmatrix = (1 - Σ*g0)⁻¹Σ
-        gcontacts = rdiv!(g0mat, luden)                        # gcontacts = g0*(1 - Σ*g0)⁻¹
-
-        return TMatrixSlicer(g0slicer, tmatrix, gcontacts, blockstruct)
+        gcontacts = rdiv!(g0contacts, luden)                        # gcontacts = g0*(1 - Σ*g0)⁻¹
     end
+    return tmatrix, gcontacts
 end
 
 #endregion
@@ -402,6 +423,13 @@ end
 
 minimal_callsafe_copy(s::TMatrixSlicer) = TMatrixSlicer(minimal_callsafe_copy(s.g0slicer),
     s.tmatrix, s.gcontacts, s.blockstruct)
+
+Base.view(::DummySlicer, i::Union{Integer,Colon}...) =
+    internalerror("view(::DummySlicer): unreachable reached")
+
+Base.getindex(::DummySlicer, i::CellOrbitals...) = argerror("Slicer does not support generic indexing")
+
+minimal_callsafe_copy(s::DummySlicer) = s
 
 #endregion
 #endregion
