@@ -137,9 +137,9 @@ function KPMgreen(momenta::Vector{<:Matrix}, ω, (ω0, β) = (0, 1))
     β⁻¹ = 1/β
     ω´ =  (ω - ω0) * β⁻¹
     g0 = zero(first(momenta))
-    for (n, μn) in enumerate(momenta)
-        g0n = β⁻¹ * KPMgreen_coefficient(n, ω´)
-        g0 .+= g0n .* μn
+    for (i, μi) in enumerate(momenta)
+        g0n = β⁻¹ * KPMgreen_coefficient(i - 1, ω´)
+        g0 .+= g0n .* μi
     end
     return g0
 end
