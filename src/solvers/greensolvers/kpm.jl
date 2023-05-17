@@ -24,9 +24,9 @@ empty_mulist(::Vector{C}, order) where {C<:Complex} =
 empty_mulist(ket::Matrix{C}, order) where {C<:Complex} =
     [zeros(C, size(ket, 2), size(ket, 2)) for _ in 1:(order + 1)]
 
-function momentaKPM(h, ket, bandCH; order = 10, kernel = I)
+function momentaKPM(h, ket, (center, halfwidth); order = 10, kernel = I, padfactor = 1.01)
     pmeter = Progress(order, "Computing moments: ")
-    builder = KPMBuilder(h, kernel, ket, bandCH, order)
+    builder = KPMBuilder(h, kernel, ket, (center, padfactor * halfwidth), order)
     mulist = addmomentaKPM!(builder, pmeter)
     jackson!(mulist)
     return mulist
