@@ -22,7 +22,7 @@ function SelfEnergyModelSolver(h::AbstractHamiltonian, model::AbstractModel, lat
     # this build siteoffsets for all h orbitals over latslice
     cbs = contact_blockstructure(h, latslice)
     # translation from lat0 to latslice orbital indices
-    # i.e. orbital index on latslice for each orbital in lat0
+    # i.e. orbital index on latslice for each orbital in lat0 (this is just a reordering!)
     parentinds = contact_sites_to_orbitals(siteinds, cbs)
     return SelfEnergyModelSolver(ph, parentinds)
 end

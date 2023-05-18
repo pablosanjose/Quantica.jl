@@ -360,43 +360,56 @@ function TMatrixSlicer(g0slicer::GreenSlicer{C}, Σblocks, blockstruct) where {C
             g0view = view(g0contacts, irng, jrng)
             copy!(g0view, g0slicer[si, sj])
         end
-        tmatrix, gcontacts = t_g_matrices(g0contacts, Σblocks, blockstruct)
+        Σblocks´ = tupleflatten(Σblocks...)
+        tmatrix, gcontacts = t_g_matrices(g0contacts, blockstruct, Σblocks´...)
     end
     return TMatrixSlicer(g0slicer, tmatrix, gcontacts, blockstruct)
 end
 
 # Takes a precomputed g0contacts (for dummy g0slicer that doesn't implement indexing)
 function TMatrixSlicer(g0contacts::AbstractMatrix{C}, Σblocks, blockstruct) where {C}
-    tmatrix, gcontacts = t_g_matrices(g0contacts, Σblocks, blockstruct)
+    tmatrix, gcontacts = t_g_matrices(g0contacts, blockstruct, Σblocks...)
     g0slicer = DummySlicer{C}()
     return TMatrixSlicer(g0slicer, tmatrix, gcontacts, blockstruct)
 end
 
+# empty Σblocks
+function t_g_matrices(g0contacts::AbstractMatrix{C}, blockstruct) where {C}
+    tmatrix = gcontacts = view(zeros(C, 0, 0), 1:0, 1:0)
+    return tmatrix, gcontacts
+end
 
-function t_g_matrices(g0contacts::AbstractMatrix{C}, Σblocks, blockstruct) where {C}
-    if isempty(Σblocks)
-        tmatrix = gcontacts = view(zeros(C, 0, 0), 1:0, 1:0)
+# Check whether Σblocks are all spzeros, and if not, compute G and T
+function t_g_matrices(g0contacts::AbstractMatrix{C}, blockstruct, Σblocks::MatrixBlock...) where {C}
+    if isspzeros(Σblocks)
+        gcontacts = g0contacts
+        tmatrix = zero(g0contacts)
     else
-        Σblocks´ = tupleflatten(Σblocks...)
-        os = orbslice(blockstruct)
-        nreg = norbs(os)                                        # number of regular orbitals
-        n = max(nreg, maxrows(Σblocks´), maxcols(Σblocks´))     # includes extended orbitals
-        Σmatext = Matrix{C}(undef, n, n)
-        Σbm = BlockMatrix(Σmatext, Σblocks´)
-        update!(Σbm)                                            # updates Σmat with Σblocks´
-        Σmatᵣᵣ = view(Σmatext, 1:nreg, 1:nreg)
-        Σmatₑᵣ = view(Σmatext, nreg+1:n, 1:nreg)
-        Σmatᵣₑ = view(Σmatext, 1:nreg, nreg+1:n)
-        Σmatₑₑ = view(Σmatext, nreg+1:n, nreg+1:n)
-        Σmat = copy(Σmatᵣᵣ)
-        Σmat´ = ldiv!(lu!(Σmatₑₑ), Σmatₑᵣ)
-        mul!(Σmat, Σmatᵣₑ, Σmat´, 1, 1)              # Σmat = Σmatᵣᵣ + ΣmatᵣₑΣmatₑₑ⁻¹ Σmatₑᵣ
-        den = Matrix{C}(I, nreg, nreg)
-        mul!(den, Σmat, g0contacts, -1, 1)                          # den = 1-Σ*g0
-        luden = lu!(den)
-        tmatrix = ldiv!(luden, Σmat)                           # tmatrix = (1 - Σ*g0)⁻¹Σ
-        gcontacts = rdiv!(g0contacts, luden)                        # gcontacts = g0*(1 - Σ*g0)⁻¹
+        tmatrix, gcontacts = t_g_matrices!(copy(g0contacts), blockstruct, Σblocks...)
     end
+    return tmatrix, gcontacts
+end
+
+# rewrites g0contacts
+function t_g_matrices!(g0contacts::AbstractMatrix{C}, blockstruct, Σblocks::MatrixBlock...) where {C}
+    os = orbslice(blockstruct)
+    nreg = norbs(os)                                            # number of regular orbitals
+    n = max(nreg, maxrows(Σblocks), maxcols(Σblocks))           # includes extended orbitals
+    Σmatext = Matrix{C}(undef, n, n)
+    Σbm = BlockMatrix(Σmatext, Σblocks)
+    update!(Σbm)                                                # updates Σmat with Σblocks
+    Σmatᵣᵣ = view(Σmatext, 1:nreg, 1:nreg)
+    Σmatₑᵣ = view(Σmatext, nreg+1:n, 1:nreg)
+    Σmatᵣₑ = view(Σmatext, 1:nreg, nreg+1:n)
+    Σmatₑₑ = view(Σmatext, nreg+1:n, nreg+1:n)
+    Σmat = copy(Σmatᵣᵣ)
+    Σmat´ = ldiv!(lu!(Σmatₑₑ), Σmatₑᵣ)
+    mul!(Σmat, Σmatᵣₑ, Σmat´, 1, 1)                  # Σmat = Σmatᵣᵣ + ΣmatᵣₑΣmatₑₑ⁻¹ Σmatₑᵣ
+    den = Matrix{C}(I, nreg, nreg)
+    mul!(den, Σmat, g0contacts, -1, 1)                          # den = 1-Σ*g0
+    luden = lu!(den)
+    tmatrix = ldiv!(luden, Σmat)                                # tmatrix = (1 - Σ*g0)⁻¹Σ
+    gcontacts = rdiv!(g0contacts, luden)
     return tmatrix, gcontacts
 end
 
@@ -432,6 +445,31 @@ Base.getindex(::DummySlicer, i::CellOrbitals...) = argerror("Slicer does not sup
 minimal_callsafe_copy(s::DummySlicer) = s
 
 #endregion
+#endregion
+
+############################################################################################
+# Selfenergy(h, nothing; siteselection...)
+#    Empty self energy at selectors
+#region
+
+struct SelfEnergyEmptySolver{C} <: RegularSelfEnergySolver
+    emptymat::SparseMatrixCSC{C,Int}
+end
+
+function SelfEnergy(h::AbstractHamiltonian{T}, ::Nothing; kw...) where {T}
+    sel = siteselector(; kw...)
+    latslice = lattice(h)[sel]
+    plottables = ()
+    norbs = flatsize(h, latslice)
+    emptyΣ = spzeros(Complex{T}, norbs, norbs)
+    solver = SelfEnergyEmptySolver(emptyΣ)
+    return SelfEnergy(solver, latslice, plottables)
+end
+
+call!(s::SelfEnergyEmptySolver, ω; params...) = s.emptymat
+
+call!_output(s::SelfEnergyEmptySolver) = s.emptymat
+
 #endregion
 
 ############################################################################################

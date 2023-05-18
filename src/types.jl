@@ -159,6 +159,8 @@ numbertype(::Lattice{T}) where {T} = T
 zerocell(::Lattice{<:Any,<:Any,L}) where {L} = zero(SVector{L,Int})
 zerocellsites(l::Lattice, i) = cellsites(zerocell(l), i)
 
+Base.length(l::Lattice) = nsites(l)
+
 Base.copy(l::Lattice) = deepcopy(l)
 
 #endregion
@@ -698,6 +700,10 @@ blocksizes(b::OrbitalBlockStructure) = b.blocksizes
 subsizes(b::OrbitalBlockStructure) = b.subsizes
 
 flatsize(b::OrbitalBlockStructure) = blocksizes(b)' * subsizes(b)
+flatsize(b::OrbitalBlockStructure{B}, ls::LatticeSlice) where {B<:Union{Complex,SMatrix}} =
+    length(ls) * blocksize(b)
+flatsize(b::OrbitalBlockStructure, ls::LatticeSlice) = sum(cs -> flatsize(b, cs), cellsites(ls); init = 0)
+flatsize(b::OrbitalBlockStructure, cs::CellSite) = blocksize(b, siteindex(cs))
 
 unflatsize(b::OrbitalBlockStructure) = sum(subsizes(b))
 
@@ -705,9 +711,9 @@ blocksize(b::OrbitalBlockStructure, iunflat, junflat) = (blocksize(b, iunflat), 
 
 blocksize(b::OrbitalBlockStructure{<:SMatrixView}, iunflat) = length(flatrange(b, iunflat))
 
-blocksize(b::OrbitalBlockStructure{B}, iunflat) where {N,B<:SMatrix{N}} = N
+blocksize(b::OrbitalBlockStructure{B}, iunflat...) where {N,B<:SMatrix{N}} = N
 
-blocksize(b::OrbitalBlockStructure{B}, iunflat) where {B<:Number} = 1
+blocksize(b::OrbitalBlockStructure{B}, iunflat...) where {B<:Number} = 1
 
 function sublatorbrange(b::OrbitalBlockStructure, sind::Integer)
     bss = blocksizes(b)
@@ -851,7 +857,7 @@ end
 
 Base.size(h::HybridSparseMatrix, i::Integer...) = size(unflat_unsafe(h), i...)
 
-flatsize(h::HybridSparseMatrix) = flatsize(blockstructure(h))
+flatsize(h::HybridSparseMatrix, args...) = flatsize(blockstructure(h), args...)
 
 SparseArrays.getcolptr(s::HybridSparseMatrix) = getcolptr(s.unflat)
 SparseArrays.rowvals(s::HybridSparseMatrix) = rowvals(s.unflat)
@@ -1017,6 +1023,12 @@ Base.:-(b::MatrixBlock) =
     return nothing
 end
 
+isspzeros(b::MatrixBlock) = isspzeros(b.block)
+isspzeros(b::SubArray) = isspzeros(parent(b))
+isspzeros(b::SparseMatrixCSC) = iszero(nnz(b))
+isspzeros(b::Tuple) = all(isspzeros, b)
+isspzeros(b) = false
+
 minimal_callsafe_copy(s::BlockSparseMatrix) = BlockSparseMatrix(copy(s.mat), minimal_callsafe_copy.(s.blocks), s.ptrs)
 
 minimal_callsafe_copy(s::BlockMatrix) = BlockMatrix(copy(s.mat), minimal_callsafe_copy.(s.blocks))
@@ -1140,7 +1152,7 @@ blockeltype(::AbstractHamiltonian) = blockeltype(blockstructure(h))
 
 blocktype(h::AbstractHamiltonian) = blocktype(blockstructure(h))
 
-flatsize(h::AbstractHamiltonian) = flatsize(blockstructure(h))
+flatsize(h::AbstractHamiltonian, args...) = flatsize(blockstructure(h), args...)
 
 # see specialmatrices.jl
 flatrange(h::AbstractHamiltonian, iunflat::Integer) = flatrange(blockstructure(h), iunflat)

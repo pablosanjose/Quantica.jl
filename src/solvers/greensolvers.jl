@@ -2,7 +2,7 @@
 # Green solvers
 #   All new solver::AbstractGreenSolver must live in the GreenSolvers module, and must implement
 #     - apply(solver, h::AbstractHamiltonian, c::Contacts) -> AppliedGreenSolver
-#   All new s::AppliedGreenSolver must implement
+#   All new s::AppliedGreenSolver must implement (with Σblock a [possibly nested] tuple of MatrixBlock's)
 #      - s(ω, Σblocks, ::ContactBlockStructure) -> GreenSlicer
 #      - minimal_callsafe_copy(gs)
 #   A gs::GreenSlicer's allows to compute G[gi, gi´]::AbstractMatrix for indices gi

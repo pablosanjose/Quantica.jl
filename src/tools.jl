@@ -209,7 +209,7 @@ end
 ############################################################################################
 # Dynamic package loader
 #   This is in global Quantica scope to avoid name collisions
-#   We also `import` instead of `using` to avoid collisions between several backends
+#   We also `import` instead of `using` to avoid collisions between different backends
 #region
 
 function ensureloaded(package::Symbol)
