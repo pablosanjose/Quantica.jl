@@ -1193,16 +1193,45 @@ polypath
     attach(h::AbstractHamiltonian, args..; sites...)
     attach(h::OpenHamiltonian, args...; sites...)
 
-Build an `OpenHamiltonian` by attaching a `Σ::SelfEnergy` to sites in `h` specified by
-`siteselector(; sites...)`. The different forms of `args` and `kw` yield different types of
-self-energies `Σ`. Currently supported forms are:
+Build an `h´::OpenHamiltonian` by attaching a `Σ::SelfEnergy` to sites in `h` specified by
+`siteselector(; sites...)`. This also adds a contact, defined by said sites, that can be
+referred to when slicing Green functions later. Self-energies are taken into account when
+building the Green function `g(ω) = (ω - h´ - Σ(ω))⁻¹` of the resulting `h´`, see
+`greenfunction`.
 
-    attach(h, model::ParametricModel; sites...)    # self-energy model
+## Self-energy forms
 
-Self-energy `Σᵢⱼ(ω)` defined by a `model` composed of parametric terms (`@onsite` and
+The different forms of `args` yield different types of self-energies `Σ`. Currently
+supported forms are:
+
+    attach(h, model::ParametricModel; sites...)
+
+Add self-energy `Σᵢⱼ(ω)` defined by a `model` composed of parametric terms (`@onsite` and
 `@hopping`) with `ω` as first argument, as in e.g. `@onsite((ω, r) -> Σᵢᵢ(ω, r))` and
 `@hopping((ω, r, dr) -> Σᵢⱼ(ω, r, dr))`
 
+    attach(h, nothing; sites...)
+
+Add null self-energy `Σᵢⱼ(ω) = 0` on selected sites, which in effect simply amounts to
+defining a contact on said sites, but does not lead to any dressing the Green function. This
+is useful for some `GreenFunction` solvers such as `GS.KPM` (see `greenfunction`), which
+need to know the sites of interest beforehand (the contact sites in this case).
+
+    attach(h, g1D::GreenFunction; negative = false, sites...)
+
+Add a self-energy `Σ(ω) = h₋₁⋅g1D(ω)[surface]⋅h₁` corresponding to a 1D lead with
+nearest-cell couplings `h₁` and `h₋₁`, and Green function `g1D`. The `g1D(ω)` is taken at
+the suface unitcell for leads with a `boundary` (see `greenfunction`), either adjacent to
+the `boundary` on its positive side (if `negative = false`) or on its negative side (if
+`negative = true`). For leads without a finite `boundary`, the unit cell at `surface = (;
+cells = SA[0])` is chosen. The selected `sites` in `h` must match, geometrically, those of
+the lead unit cell.
+
+    attach(h, g1D::GreenFunction, model::AbstractModel; negative = false, sites...)
+
+Add a self-energy `Σ(ω) = V'⋅g1D(ω)[surface]⋅V` corresponding to a 1D lead, as above, but
+with a coupling `V` to the lead defined by `model`. In this case, the `surface` is defined
+by the sites in the lead that get coupled to `h` by the `model`.
 
 """
 attach
