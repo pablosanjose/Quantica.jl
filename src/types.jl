@@ -1614,6 +1614,8 @@ struct Contacts{L,N,S<:NTuple{N,SelfEnergy}}
     blockstruct::ContactBlockStructure{L} # needed to extract site/subcell/contact blocks
 end
 
+const EmptyContacts{L} = Contacts{L,0,Tuple{}}
+
 #region ## Constructors ##
 
 ContactBlockStructure{L}() where {L} =
