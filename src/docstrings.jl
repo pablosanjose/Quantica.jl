@@ -1227,17 +1227,16 @@ the `boundary` on its positive side (if `negative = false`) or on its negative s
 cells = SA[0])` is chosen. The selected `sites` in `h` must match, geometrically, those of
 the lead unit cell.
 
-The obtained self-energy is in fact an `ExtendedSelfEnergy`, which is numerically more
-stable than a naive implementation of `RegularSelfEnergy`'s, since `g1D(ω)[surface]` is
-never actually computed. This "inverse-free" method has the limitation that `g1D` cannot
-itself have self-energies.
+Advanced: If the `g1D` does not have any self-energies, the produced self-energy is in fact
+an `ExtendedSelfEnergy`, which is numerically more stable than a naive implementation of
+`RegularSelfEnergy`'s, since `g1D(ω)[surface]` is never actually computed. Conversely, if
+`g1D` has self-energies attached, a `RegularSelfEnergy` is produced.
 
     attach(h, g1D::GreenFunction, model::AbstractModel; negative = false, sites...)
 
 Add a self-energy `Σ(ω) = V'⋅g1D(ω)[surface]⋅V` corresponding to a 1D lead, as above, but
 with a coupling `V` to the lead defined by `model`. In this case, the `surface` is defined
-by the sites in the lead that get coupled to `h` by the `model`. It also uses the
-"inverse-free" approach.
+by the sites in the lead that get coupled to `h` by the `model`.
 
 """
 attach
