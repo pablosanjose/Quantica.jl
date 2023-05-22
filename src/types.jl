@@ -1483,7 +1483,7 @@ dims(m::AbstractMesh) = (embdim(m), meshdim(m))
 #endregion
 
 ############################################################################################
-# SelfEnergy solvers - see selfenergy.jl for self-energy solvers
+# SelfEnergy solvers - see solvers/selfenergy.jl for self-energy solvers
 #region
 
 abstract type AbstractSelfEnergySolver end
@@ -1514,7 +1514,7 @@ call!(s::WrappedExtendedSelfEnergySolver; params...) = s
 #endregion
 
 ############################################################################################
-# SelfEnergy - see selfenergy.jl
+# SelfEnergy - see solvers/selfenergy.jl
 #   Wraps an AbstractSelfEnergySolver and a LatticeSlice
 #     -It produces Σs(ω)::AbstractMatrix defined over a LatticeSlice
 #     -If solver::ExtendedSelfEnergySolver -> 3 AbstractMatrix blocks over latslice+extended
@@ -1598,7 +1598,7 @@ Base.size(h::OpenHamiltonian, i...) = size(h.h, i...)
 #endregion
 
 ############################################################################################
-# Contacts - see selfenergy.jl
+# Contacts - see greenfunction.jl
 #    Collection of selfenergies supplemented with a ContactBlockStructure
 #    ContactBlockStructure includes orbslice = flat merged Σlatslices + block info
 #    Supports call!(c, ω; params...) -> (Σs::MatrixBlock...) over orbslice
@@ -1649,7 +1649,7 @@ siteoffsets(c::ContactBlockStructure, i) = c.siteoffsets[i]
 subcelloffsets(c::ContactBlockStructure) = c.subcelloffsets
 subcelloffsets(c::ContactBlockStructure, i) = c.subcelloffsets[i]
 
-siterange(c::ContactBlockStructure, iunflat::Integer) =
+flatrange(c::ContactBlockStructure, iunflat::Integer) =
     siteoffsets(c, iunflat)+1:siteoffsets(c, iunflat+1)
 
 subcellrange(c::ContactBlockStructure, si::Integer) =
@@ -1701,7 +1701,7 @@ abstract type GreenSlicer{C<:Complex} end   # C is the eltype of the slice
 #endregion
 
 ############################################################################################
-# Green - see greenfunction.jl
+# Green - see greenfunction.jl and solvers/green
 #  General strategy:
 #  -Contacts: Σs::Tuple(Selfenergy...) + contactBS -> call! produces MatrixBlocks for Σs
 #      -SelfEnergy: latslice + solver -> call! produces flat matrices (one or three)

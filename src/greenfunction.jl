@@ -290,10 +290,10 @@ end
 #  convert a list of sites in a ContactBlockStructure to a list of orbitals
 #region
 
-function contact_sites_to_orbitals(siteinds, bs::ContactBlockStructure)
+function contact_sites_to_orbitals(siteinds, bs::Union{ContactBlockStructure,OrbitalBlockStructure})
     finds = Int[]
     for iunflat in siteinds
-        append!(finds, siterange(bs, iunflat))
+        append!(finds, flatrange(bs, iunflat))
     end
     return finds
 end

@@ -1,8 +1,9 @@
 
-const GreenFunctionSchurLead{T,E} = GreenFunction{T,E,1,<:AppliedSchurGreenSolver,<:Any,<:EmptyContacts}
+const GreenFunctionSchurEmptyLead{T,E} = GreenFunction{T,E,1,<:AppliedSchurGreenSolver,<:Any,<:EmptyContacts}
+const GreenFunctionSchurLead{T,E} = GreenFunction{T,E,1,<:AppliedSchurGreenSolver,<:Any,<:Any}
 
 ############################################################################################
-# SelfEnergy(h, glead_without_contacts::GreenFunctionSchurLead; kw...)
+# SelfEnergy(h, glead::GreenFunctionSchurEmptyLead; kw...)
 #   Extended self energy solver for deflated ΣL or ΣR Schur factors of lead unitcell
 #region
 
@@ -38,11 +39,13 @@ end
 # semi-infinite lead (possibly by first transforming the lead lattice with `transform`)
 # and if so, builds the extended Self Energy directly, using the same intercell coupling of
 # the lead, but using the correct site order of hparent
-function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead; negative = false, transform = missing, kw...)
+function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurEmptyLead; negative = false, transform = missing, kw...)
     sel = siteselector(; kw...)
     lsparent = lattice(hparent)[sel]
     schursolver = solver(glead)
     fsolver = schurfactorsolver(schursolver)
+    isfinite(schursolver.boundary) ||
+        argerror("The form attach(h, glead; sites...) assumes a semi-infinite lead, but received `boundary = Inf`")
     # we obtain latslice of open surface in gL/gR
     gunit = negative ? schursolver.gL : schursolver.gR
     blocksizes(blockstructure(hamiltonian(gunit))) == blocksizes(blockstructure(hparent)) ||
@@ -51,7 +54,7 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead;
     Σlead = only(selfenergies(contacts(gunit)))
     lslead = latslice(Σlead)
     # find lead site index in lslead for each site in lsparent
-    leadsites, displacement = lead_siteids_foreach_parent_siteids(lsparent, lslead, transform)
+    leadsites, displacement = lead_siteind_foreach_parent_siteind(lsparent, lslead, transform)
     # convert lead site indices to lead orbital indices using lead's ContactBlockStructure
     leadcbs = blockstructure(contacts(gunit))
     leadorbs = contact_sites_to_orbitals(leadsites, leadcbs)
@@ -64,7 +67,7 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead;
 end
 
 # find ordering of lslead sites that match lsparent sites, modulo a displacement
-function lead_siteids_foreach_parent_siteids(lsparent, lslead, transform)
+function lead_siteind_foreach_parent_siteind(lsparent, lslead, transform)
     np, nl = nsites(lsparent), nsites(lslead)
     np == nl || argerror("The contact surface has $np sites, which doesn't match the $nl sites in the lead surface")
     sp = collect(sites(lsparent))
@@ -111,7 +114,7 @@ minimal_callsafe_copy(s::SelfEnergySchurSolver) =
 #endregion
 
 ############################################################################################
-# SelfEnergy(h, glead_without_contacts::GreenFunctionSchurLead, model::AbstractModel; kw...)
+# SelfEnergy(h, glead::GreenFunctionSchurEmptyLead, model::AbstractModel; kw...)
 #   Extended self energy solver with g⁻¹ = h0 + ExtendedSchurΣ, plus arbitrary couplings
 #       to parent Hamiltonian.
 #   V and V´ are SparseMatrixView because they span only the coupled parent <-> unitcell
@@ -128,6 +131,8 @@ end
 
 #region ## Constructors ##
 
+# This is similar to SelfEnergyGenericSolver in generic.jl, but <: ExtendedSelfEnergySolver
+# It relies on gunit having a AppliedSparseLUGreenSolver, so a sparse g⁻¹ can be extracted
 function SelfEnergyCouplingSchurSolver(gunit::GreenFunction{T}, hcoupling::AbstractHamiltonian{T}, nparent) where {T}
     hmatrix = call!_output(hcoupling)
     invgreen = inverse_green(solver(gunit))       # the solver is AppliedSparseLUGreenSolver
@@ -149,7 +154,7 @@ end
 # through the model coupling. The lead is transformed with `transform` to align it to
 # hparent. Then we apply the model to the 0D lattice of hparent's selected surface plus the
 # lead unit cell, and then build an extended self energy
-function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead, model::AbstractModel;
+function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurEmptyLead, model::AbstractModel;
                     negative = false, transform = missing, kw...)
     schursolver = solver(glead)
     gunit = copy_lattice(negative ? schursolver.gL : schursolver.gR)
@@ -188,7 +193,7 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead,
 end
 
 function call!(s::SelfEnergyCouplingSchurSolver, ω; params...)
-    call!(s.hcoupling, (); params...)
+    call!(s.hcoupling; params...)
     call!(s.gunit, ω; params...)
     update!(s.V)
     update!(s.V´)
@@ -210,10 +215,38 @@ minimal_callsafe_copy(s::SelfEnergyCouplingSchurSolver) =
 #endregion
 
 ############################################################################################
-# TODO: implement regular lead self-energy, redirecting to generic
+# SelfEnergy(h, glead::GreenFunctionSchurLead; kw...)
+#   Regular (Generic) self energy, since Extended is not possible for lead with contacts
+#   Otherwise equivalent to SelfEnergy(h, glead::GreenFunctionSchurEmptyLead; kw...)
 #region
 
-SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunction{<:Any,<:Any,1,<:AppliedSchurGreenSolver}; negative = false, transform = missing, kw...) =
-    argerror("Tried to attach a lead with $(length(selfenergies(contacts(glead)))) contacts. \nA lead with contacts cannot be contacted to another system using the `attach(x, glead, ...; ...)` syntax. Use `attach(x, glead[...], model; ...)` instead")
+function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead; negative = false, transform = missing, sites...)
+    blocksizes(blockstructure(hamiltonian(glead))) == blocksizes(blockstructure(hparent)) ||
+        argerror("The orbital structure of parent and lead Hamiltonians do not match")
+    # find boundary ± 1
+    schursolver = solver(glead)
+    boundary = schursolver.boundary
+    isfinite(boundary) ||
+        argerror("The form attach(h, glead; sites...) assumes a semi-infinite lead, but received `boundary = Inf`")
+    xunit = boundary + ifelse(negative, -1, 1)
+    gslice = glead[cells = SA[xunit]]
+    # lattice slices for parent and lead unit cell
+    lsparent = getindex(lattice(hparent); sites...)
+    lslead = lattice(glead)[cells = SA[xunit]]
+    # find lead site index in lslead for each site in lsparent
+    leadsites, displacement = lead_siteind_foreach_parent_siteind(lsparent, lslead, transform)
+    # convert lead site indices to lead orbital indices using lead's ContactBlockStructure
+    leadbs = blockstructure(glead)                              # This is a BlockStructure
+    leadorbs = contact_sites_to_orbitals(leadsites, leadbs)
+    # build V and V´ as a leadorbs reordering of inter-cell harmonics of hlead
+    hlead = hamiltonian(glead)  # careful, not parent, which could be a ParametricHamiltonian
+    h₊₁, h₋₁ = flat(hlead[SA[1]]), flat(hlead[SA[-1]])
+    V  = SparseMatrixView(view(h₊₁, :, leadorbs))
+    V´ = SparseMatrixView(view(h₋₁, leadorbs, :))
+    solver´ = SelfEnergyGenericSolver(gslice, hlead, V´, V)
+    plottables = (hlead,)
+    return SelfEnergy(solver´, lsparent, plottables)
+end
+
 
 #endregion

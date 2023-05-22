@@ -15,12 +15,16 @@ end
 #region ## Constructors ##
 
 # nparent is the number of sites in gs, to know how to split hcoupling into (parent, bath) blocks
-function SelfEnergyGenericSolver(gslice::GreenFunctionSlice{T}, hcoupling::AbstractHamiltonian, nparent) where {T}
-    hmatrix = call!_output(hcoupling)
+function SelfEnergyGenericSolver(gslice::GreenFunctionSlice, hcoupling::AbstractHamiltonian, nparent::Integer)
     lastflatparent = last(flatrange(hcoupling, nparent))
-    parentrng, bathrng = 1:lastflatparent, lastflatparent+1:size(hmatrix, 1)
-    V = SparseMatrixView(view(hmatrix, bathrng, parentrng))
-    V´ = SparseMatrixView(view(hmatrix, parentrng, bathrng))
+    parentinds, bathinds = 1:lastflatparent, lastflatparent+1:flatsize(hcoupling)
+    hmatrix = call!_output(hcoupling)
+    V = SparseMatrixView(view(hmatrix, bathinds, parentinds))
+    V´ = SparseMatrixView(view(hmatrix, parentinds, bathinds))
+    return SelfEnergyGenericSolver(gslice, hcoupling, V´, V)
+end
+
+function SelfEnergyGenericSolver(gslice::GreenFunctionSlice{T}, hcoupling::AbstractHamiltonian, V´::SparseMatrixView, V::SparseMatrixView) where {T}
     V´g = Matrix{Complex{T}}(undef, size(V´, 1), size(V, 1))
     Σ = Matrix{Complex{T}}(undef, size(V´, 1), size(V, 2))
     return SelfEnergyGenericSolver(hcoupling, V´, gslice, V, V´g, Σ)
@@ -51,7 +55,7 @@ end
 
 function call!(s::SelfEnergyGenericSolver, ω; params...)
     gω = call!(s.gslice, ω; params...)
-    call!(s.hcoupling, (); params...)
+    call!(s.hcoupling; params...)
     V = matrix(update!(s.V))
     V´ = matrix(update!(s.V´))
     mul!(s.V´g, V´, gω)

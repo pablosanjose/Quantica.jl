@@ -34,7 +34,7 @@ export sublat, bravais_matrix, lattice, sites, supercell,
 export LatticePresets, LP, RegionPresets, RP, HamiltonianPresets, HP
 export EigenSolvers, ES, GreenSolvers, GS
 export @SMatrix, @SVector, SMatrix, SVector, SA
-export ishermitian, tr, I, norm, dot
+export ishermitian, tr, I, norm, dot, diag
 export ftuple
 
 # Types
