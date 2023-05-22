@@ -36,7 +36,7 @@ function SelfEnergy(hparent::AbstractHamiltonian, gslice::GreenFunctionSlice, mo
 
     lsbath = latslice(parent(gslice), slicerows(gslice))
     lat0bath = lattice0D(lsbath)
-    lsparent = lattice(hparent)[sites...]
+    lsparent = getindex(lattice(hparent); sites...)
     lat0parent = lattice0D(lsparent)
     lat0 = combine(lat0parent, lat0bath)
     nparent, ntotal = nsites(lat0parent), nsites(lat0)

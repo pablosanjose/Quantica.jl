@@ -12,7 +12,7 @@ mutable struct SparseLUSlicer{C} <:GreenSlicer{C}
     unitcinds::Vector{Vector{Int}}               # non-extended fact indices per contact
     unitcindsall::Vector{Int}                    # merged and uniqued unitcinds
     source::Matrix{C}                            # preallocation for ldiv! source @ contacts
-    unitg::Matrix{C}                             # lazy storage of a full ldiv! solve
+    unitg::Matrix{C}                             # lazy storage of a full ldiv! solve of all (nonextrng) sites
     function SparseLUSlicer{C}(fact, nonextrng, unitcinds, unitcindsall, source) where {C}
         s = new()
         s.fact = fact
@@ -95,27 +95,29 @@ end
 Base.view(s::SparseLUSlicer, ::Colon, ::Colon) =
     compute_or_retrieve_green(s, s.unitcindsall, s.unitcindsall, s.source)
 
-function compute_or_retrieve_green(s::SparseLUSlicer{C}, dstinds, srcinds, source) where {C}
-    if isdefined(s, :unitg)
-        g = view(s.unitg, dstinds, srcinds)
-    else
-        fact = s.fact
-        one!(source, srcinds)
-        gext = ldiv!(fact, source)
-        dstinds´ = ifelse(dstinds === Colon(), s.nonextrng, dstinds)
-        g = view(gext, dstinds´, :)
-        if srcinds === Colon()
-            s.unitg = copy(view(gext, s.nonextrng, s.nonextrng))
-        end
-    end
-    return g
-end
-
 function Base.view(s::SparseLUSlicer, i::CellOrbitals, j::CellOrbitals)
     # cannot use s.source, because it has only ncols = number of orbitals in contacts
     source = similar_source(s, j)
     v = compute_or_retrieve_green(s, orbindices(i), orbindices(j), source)
     return v
+end
+
+# Implements cache for full ldiv! solve (unitg)
+function compute_or_retrieve_green(s::SparseLUSlicer{C}, dstinds, srcinds, source) where {C}
+    if isdefined(s, :unitg)
+        g = view(s.unitg, dstinds, srcinds)
+    else
+        fact = s.fact
+        allinds = 1:size(fact, 1)
+        one!(source, srcinds)
+        gext = ldiv!(fact, source)
+        dstinds´ = ifelse(dstinds === allinds, s.nonextrng, dstinds)
+        g = view(gext, dstinds´, :)
+        if srcinds === allinds
+            s.unitg = copy(view(gext, s.nonextrng, s.nonextrng))
+        end
+    end
+    return g
 end
 
 similar_source(s::SparseLUSlicer, ::CellOrbitals{<:Any,Colon}) =
