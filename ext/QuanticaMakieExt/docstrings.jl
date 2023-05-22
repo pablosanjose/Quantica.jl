@@ -72,11 +72,11 @@ inter-site links.
 - `hopcolor = missing`: color of hops, as a index in `hopcolormap`, a named color, a `Makie.Colorant`, or as a hop shader (see below).If `missing`, cycle through `sitecolormap`.
 - `hopcolormap = :Spectral_9`: colormap to use for `hopcolor` (see options in https://tinyurl.com/cschemes)
 - `hopopacity = missing`: opacity of hops, as a real between 0 and 1, or as a hop shader (see below)
-- `hopradius = 0.03`: radius of hops as a real in units of lattice dimensions, or as a hop shader (see below)
+- `hopradius = 0.03`: radius of hops as a real number in units of lattice dimensions, or as a hop shader (see below)
+- `hoppixels = 6`: if `flat = true` fixed hop linewidth in pixels, or maximum pixel linewidth if `hopradius` is a shader.
 - `minmaxhopradius = (0, 0.1)`: if `hopdradius` is a shader, minimum and maximum hop radius.
 - `hopdarken = 0.85`: darkening factor for hops
 - `selector = missing`: an optional `siteselector(; sites...)` to filter which sites are shown (see `siteselector`)
-- `pixelscalehops = 6`: for `flat = true`, conversion factor between `minmaxhopradius` (in lattice space) and actual hop radius (in pixel space)
 - `pixelscalesites = 2√2`: for `flat = true`, conversion factor between `minmaxsiteradius` (in lattice space) and actual site radius (in pixel space)
 - `hide = (:cell,)`: collection of elements to hide, to choose from `(:hops, :sites, :hops, :bravais, :cell, :axes, :shell, :all)`
 

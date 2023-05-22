@@ -24,7 +24,7 @@
         hopradius = 0.03,            # accepts ((i,j), (r,dr)) -> float, IndexableObservable
         hopdarken = 0.85,
         hopcolormap = :Spectral_9,
-        pixelscalehops = 6,
+        hoppixels = 6,
         pixelscalesites = 2√2,
         selector = missing,
         hide = :cell, # :hops, :sites, :bravais, :cell, :axes, :shell, :all
@@ -361,8 +361,11 @@ end
 
 primitive_scale(normr, v, hopradius::Number, minmaxhopradius) =
     Vec3f(hopradius, hopradius, norm(v)/2)
-primitive_scale(normr, v, hopradius, (minr, maxr)) =
-    Vec3f(normr * maxhopradius, minr + (maxr - minr) * normr, norm(v)/2)
+
+function primitive_scale(normr, v, hopradius, (minr, maxr))
+    hopradius´ = minr + (maxr - minr) * normr
+    return Vec3f(hopradius´, hopradius´, norm(v)/2)
+end
 
 ## primitive_segments ##
 
@@ -378,18 +381,18 @@ end
 ## primitive_linewidths ##
 
 function primitive_linewidths(p::HoppingPrimitives{E}, plot) where {E}
-    pixelscalehops = plot[:pixelscalehops][]
+    hoppixels = plot[:hoppixels][]
     hopradius = plot[:hopradius][]
     linewidths = Float32[]
     for r in p.radii
-        linewidth = primitive_linewidth(r, hopradius, pixelscalehops)
+        linewidth = primitive_linewidth(r, hopradius, hoppixels)
         append!(linewidths, (linewidth, linewidth))
     end
     return linewidths
 end
 
-primitive_linewidth(normr, hopradius::Number, pixelscalehops) = pixelscalehops
-primitive_linewidth(normr, hopradius, pixelscalehops) = pixelscalehops * normr
+primitive_linewidth(normr, hopradius::Number, hoppixels) = hoppixels
+primitive_linewidth(normr, hopradius, hoppixels) = hoppixels * normr
 
 #endregion
 
@@ -512,7 +515,7 @@ end
 function plotsites_shaded!(plot::PlotLattice, sp::SitePrimitives, transparency)
     inspector_label = (self, i, r) -> sp.tooltips[i]
     meshscatter!(plot, sp.centers; color = sp.colors, markersize = sp.radii,
-            markerspace = :data,
+            space = :data,
             transparency,
             inspector_label)
     return plot
@@ -547,7 +550,10 @@ function plothops_flat!(plot::PlotLattice, hp::HoppingPrimitives, transparency)
     colors = hp.colors
     segments = primitive_segments(hp, plot)
     linewidths = primitive_linewidths(hp, plot)
-    linesegments!(plot, segments; color = colors, linewidth = linewidths,
+    linesegments!(plot, segments;
+        space = :data,
+        color = colors,
+        linewidth = linewidths,
         transparency,
         inspector_label)
     return plot
