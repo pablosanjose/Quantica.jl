@@ -1,5 +1,5 @@
 ############################################################################################
-# SelfEnergyModelSolver <: RegularSelfEnergySolver <: AbstractSelfEnergySolver
+# SelfEnergy(h, model::AbstractModel; sites...)
 #   A SelfEnergy solver that implements an AbstractModel on a selection of sites
 #region
 
@@ -29,7 +29,7 @@ end
 
 #endregion
 
-#region ## SelfEnergy (attach) API ##
+#region ## API ##
 
 function SelfEnergy(h::AbstractHamiltonian, model::AbstractModel; kw...)
     sel = siteselector(; kw...)
@@ -38,10 +38,6 @@ function SelfEnergy(h::AbstractHamiltonian, model::AbstractModel; kw...)
     plottables = (solver.ph,)
     return SelfEnergy(solver, latslice, plottables)
 end
-
-#endregion
-
-#region ## API ##
 
 function call!(s::SelfEnergyModelSolver, ω; params...)
     m = call!(s.ph, (); ω_internal = ω, params...)

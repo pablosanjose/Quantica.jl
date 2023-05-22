@@ -891,13 +891,13 @@ function SparseMatrixView(matview::SubArray{C,<:Any,<:SparseMatrixCSC}, dims = m
     if dims === missing || dims == size(matview)
         mat = sparse(matview)
     else
-        nr, mc = dims
-        nrv, mcv = size(matview)
-        nr >= nrv && mc >= mcv ||
-            argerror("SparseMatrixView dims cannot be smaller than size(view) = $((nrv, mcv))")
+        nr, nc = dims
+        nrv, ncv = size(matview)
+        nr >= nrv && nc >= ncv ||
+            argerror("SparseMatrixView dims cannot be smaller than size(view) = $((nrv, ncv))")
         # it's important to preserve structural zeros in mat, which sparse(matview) does
-        mat = [sparse(matview) spzeros(C, nrv, mc - mcv);
-               spzeros(C, nr - nrv, mcv) spzeros(C, nr - nrv, mc - mcv)]
+        mat = [sparse(matview) spzeros(C, nrv, nc - ncv);
+               spzeros(C, nr - nrv, ncv) spzeros(C, nr - nrv, nc - ncv)]
     end
     return SparseMatrixView(matview, mat, ptrs)
 end
@@ -916,6 +916,8 @@ function update!(s::SparseMatrixView)
     end
     return s
 end
+
+Base.size(s::SparseMatrixView, i...) = size(s.mat, i...)
 
 minimal_callsafe_copy(s::SparseMatrixView) =
     SparseMatrixView(view(copy(parent(s.matview)), s.matview.indices...), copy(s.mat), s.ptrs)
@@ -1744,6 +1746,9 @@ hamiltonian(g::GreenSolution) = hamiltonian(g.parent)
 lattice(g::GreenFunction) = lattice(g.parent)
 lattice(g::GreenSolution) = lattice(g.parent)
 
+latslice(g::GreenFunction, i::Integer) = latslice(selfenergies(g.contacts, i))
+latslice(g::GreenFunction, is::SiteSelector) = lattice(g)[is]
+
 solver(g::GreenFunction) = g.solver
 
 contacts(g::GreenFunction) = g.contacts
@@ -1754,6 +1759,9 @@ selfenergies(g::GreenSolution) = g.contactΣs
 
 blockstructure(g::GreenFunction) = blockstructure(g.contacts)
 blockstructure(g::GreenSolution) = g.contactbs
+
+norbitals(g::GreenFunction) = norbitals(g.parent)
+norbitals(g::GreenFunctionSlice) = norbitals(g.parent.parent)
 
 contactinds(g::GreenFunction, i...) = contactinds(contacts(g), i...)
 contactinds(g::GreenSolution, i...) = contactinds(blockstructure(g), i...)

@@ -67,8 +67,9 @@ include("sanitizers.jl")
 
 
 # Solvers
-include("solvers/eigensolvers.jl")
-include("solvers/greensolvers.jl")
+include("solvers/eigen.jl")
+include("solvers/green.jl")
+include("solvers/selfenergy.jl")
 
 # Presets
 include("presets/regions.jl")

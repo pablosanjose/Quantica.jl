@@ -1,12 +1,4 @@
 ############################################################################################
-# SelfEnergy
-#region
-
-## TODO: SelfEnergy(h, GreenFunction{SparseLU}, contacts)
-
-#endregion
-
-############################################################################################
 # SparseLU - for 0D AbstractHamiltonians
 #region
 

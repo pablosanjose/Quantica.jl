@@ -300,6 +300,8 @@ end
 #   d = ldos(::GreenSolution; kernel = I)      -> d[sites...]::Vector
 #   d = ldos(::GreenFunctionSlice; kernel = I) -> d(ω; params...)::Vector
 #   Here ldos is given as Tr(ρᵢᵢ * kernel) where ρᵢᵢ is the spectral function at site i
+#   Here is the generic fallback that uses G. Any more specialized methods need to be added
+#   to each GreenSolver
 #region
 
 struct LocalSpectralDensitySolution{T,E,L,G<:GreenSolution{T,E,L},K} <: IndexableObservable
