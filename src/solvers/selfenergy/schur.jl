@@ -45,11 +45,11 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurEmpty
     schursolver = solver(glead)
     fsolver = schurfactorsolver(schursolver)
     isfinite(schursolver.boundary) ||
-        argerror("The form attach(h, glead; sites...) assumes a semi-infinite lead, but received `boundary = Inf`")
+        argerror("The form attach(h, glead; sites...) assumes a semi-infinite lead, but got `boundary = Inf`")
     # we obtain latslice of open surface in gL/gR
     gunit = reverse ? schursolver.gL : schursolver.gR
     blocksizes(blockstructure(hamiltonian(gunit))) == blocksizes(blockstructure(hparent)) ||
-        argerror("The orbital structure of parent and lead Hamiltonians do not match")
+        argerror("The orbital structure of parent and lead Hamiltonians do not match. Maybe you meant to use `attach(h, g1D, coupling; sites...)`?")
     # This is a SelfEnergy for a lead unit cell with a SelfEnergySchurSolver
     Σlead = only(selfenergies(contacts(gunit)))
     lslead = latslice(Σlead)
@@ -239,7 +239,7 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead;
     schursolver = solver(glead)
     boundary = schursolver.boundary
     isfinite(boundary) ||
-        argerror("The form attach(h, glead; sites...) assumes a semi-infinite lead, but received `boundary = Inf`")
+        argerror("The form attach(h, glead; sites...) assumes a semi-infinite lead, but got `boundary = Inf`")
     xunit = boundary + ifelse(reverse, -1, 1)
     gslice = glead[cells = SA[xunit]]
     # lattice slices for parent and lead unit cell

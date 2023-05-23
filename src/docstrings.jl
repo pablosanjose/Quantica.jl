@@ -1232,16 +1232,16 @@ an `ExtendedSelfEnergy`, which is numerically more stable than a naive implement
 `RegularSelfEnergy`'s, since `g1D(ω)[surface]` is never actually computed. Conversely, if
 `g1D` has self-energies attached, a `RegularSelfEnergy` is produced.
 
-    attach(h, g1D::GreenFunction, model::AbstractModel; reverse = false, transform = identity,  sites...)
+    attach(h, g1D::GreenFunction, coupling::AbstractModel; reverse = false, transform = identity,  sites...)
 
 Add a self-energy `Σ(ω) = V´⋅g1D(ω)[surface]⋅V` corresponding to a 1D lead (not necessarily
-semi-infinite in this case), but with coupling `V` and `V´`, defined by `model`, between
+semi-infinite in this case), but with couplings `V` and `V´`, defined by `coupling`, between
 `sites` and the `surface` lead unitcell. See also Advanced note above.
 
-    attach(h, gs::GreenFunctionSlice, model::AbstractModel; sites...)
+    attach(h, gs::GreenFunctionSlice, coupling::AbstractModel; sites...)
 
 Adds a generic self-energy `Σ(ω) = V´⋅gs(ω)⋅V` on `h`'s `sites`, where `V` and `V´` are
-couplings, given by `model`, between said `sites` and the LatticeSlice in `gs`. Allowed
+couplings, given by `coupling`, between said `sites` and the LatticeSlice in `gs`. Allowed
 forms of `gs` include both `g[sites...]` and `g[contactind::Integer]`m where `g` is any
 `GreenFunction` (i.e. off-diagonal slices such as `g[1,2]` are not allowed).
 
