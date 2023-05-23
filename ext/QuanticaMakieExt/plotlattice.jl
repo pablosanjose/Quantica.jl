@@ -648,14 +648,7 @@ function selfenergy_plottable(s::Quantica.SelfEnergySchurSolver,
 end
 
 function selfenergy_plottable(s::Quantica.SelfEnergyCouplingSchurSolver,
-    hlead, hcoupling, negative; numcells = 1, kw...)
-    p1 = hcoupling
-    k1 = (; selector = siteselector())
-    (p2, k2) = _selfenergy_plottable_hlead(hlead, negative, numcells)
-    return ((p1, k1), (p2, k2))
-end
-
-function selfenergy_plottable(s::Quantica.SelfEnergyGenericSolver, hcoupling; kw...)
+    hcoupling;  kw...)
     p1 = hcoupling
     k1 = (; selector = siteselector())
     return ((p1, k1),)
@@ -669,6 +662,14 @@ function _selfenergy_plottable_hlead(hlead, negative, numcells)
     k = (; selector = siteselector(; cells = cellrng))
     return (p, k)
 end
+
+function selfenergy_plottable(s::Quantica.SelfEnergyGenericSolver, hcoupling; kw...)
+    p1 = hcoupling
+    k1 = (; selector = siteselector())
+    return ((p1, k1),)
+end
+
+
 
 #endregion
 

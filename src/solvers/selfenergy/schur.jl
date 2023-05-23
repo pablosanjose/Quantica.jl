@@ -114,11 +114,12 @@ minimal_callsafe_copy(s::SelfEnergySchurSolver) =
 #endregion
 
 ############################################################################################
-# SelfEnergy(h, glead::GreenFunctionSchurEmptyLead, model::AbstractModel; kw...)
-#   Extended self energy solver with g⁻¹ = h0 + ExtendedSchurΣ, plus arbitrary couplings
-#       to parent Hamiltonian.
+# SelfEnergy(h, glead, model::AbstractModel; kw...)
+#   Depending on whether glead has zero contacts or not, it yields an Extended or Generic
+#       self-energy. Model gives arbitrary couplings to parent Hamiltonian.
+#   For the Extended self energy, is uses g⁻¹ = h0 + ExtendedSchurΣ  (adds extended sites)
 #   V and V´ are SparseMatrixView because they span only the coupled parent <-> unitcell
-#       sites, but they need to be padded with zeros over the extended sites in unitcell
+#       sites, but for Extended they need to be padded with zeros over the extended sites
 #region
 
 struct SelfEnergyCouplingSchurSolver{C,G,H,S<:SparseMatrixView,S´<:SparseMatrixView} <: ExtendedSelfEnergySolver
@@ -154,7 +155,7 @@ end
 # through the model coupling. The lead is transformed with `transform` to align it to
 # hparent. Then we apply the model to the 0D lattice of hparent's selected surface plus the
 # lead unit cell, and then build an extended self energy
-function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurEmptyLead, model::AbstractModel;
+function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead, model::AbstractModel;
                     negative = false, transform = missing, kw...)
     schursolver = solver(glead)
     gunit = copy_lattice(negative ? schursolver.gL : schursolver.gR)
@@ -165,6 +166,7 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurEmpty
     boundary = schursolver.boundary
     xunit = isfinite(boundary) ? boundary + ifelse(negative, -1, 1) : zero(boundary)
     if !iszero(xunit)
+        bm = bravais_matrix(hlead)
         translate!(hlead, bm * SA[xunit])
         translate!(lat0lead, bm * SA[xunit])
     end
@@ -187,10 +189,20 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurEmpty
     hcoupling = hamiltonian(lat0, interblockmodel;
         orbitals = vcat(norbitals(hparent), norbitals(hlead)))
 
-    solver´ = SelfEnergyCouplingSchurSolver(gunit, hcoupling, nparent)
-    plottables = (hlead, hcoupling, negative)
+    gslice = glead[cells = SA[xunit]]
+    Σs = selfenergies(contacts(glead))
+    solver´ = extended_or_regular_solver(Σs, gslice, gunit, hcoupling, nparent)
+    plottables = (hcoupling,)
     return SelfEnergy(solver´, lsparent, plottables)
 end
+
+# No contacts -> Extended solver
+extended_or_regular_solver(::Tuple{}, gslice, gunit, hcoupling, nparent) =
+    SelfEnergyCouplingSchurSolver(gunit, hcoupling, nparent)
+
+# With contacts -> Regular Generic solver - see generic.jl
+extended_or_regular_solver(::Tuple, gslice, gunit, hcoupling, nparent) =
+    SelfEnergyGenericSolver(gslice, hcoupling, nparent)
 
 function call!(s::SelfEnergyCouplingSchurSolver, ω; params...)
     call!(s.hcoupling; params...)
@@ -247,6 +259,5 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead;
     plottables = (hlead,)
     return SelfEnergy(solver´, lsparent, plottables)
 end
-
 
 #endregion

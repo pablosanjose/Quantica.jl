@@ -212,7 +212,7 @@ function combine!(ls0::S, lss::S...) where {L,S<:LatticeSlice{<:Any,<:Any,L}}
     lat = parent(ls0)
     all(l -> l === lat, parent.(lss)) ||
         argerror("Cannot combine LatticeBlocks of different lattices")
-    isempty(lss) || combine_subcells!(subcells(ls0), subcells.(lss)...)
+    isempty(lss) || all(isempty, lss) || combine_subcells!(subcells(ls0), subcells.(lss)...)
     return ls0
 end
 

@@ -1527,6 +1527,10 @@ struct SelfEnergy{T,E,L,S<:AbstractSelfEnergySolver,P<:Tuple}
     solver::S                                # returns AbstractMatrix block(s) over latslice
     latslice::LatticeSlice{T,E,L}            # sites on each unitcell with a selfenergy
     plottables::P                            # objects to be plotted to visualize SelfEnergy
+    function SelfEnergy{T,E,L,S,P}(solver, latslice, plottables) where {T,E,L,S<:AbstractSelfEnergySolver,P<:Tuple}
+        isempty(latslice) && argerror("Cannot create a self-energy over an empty LatticeSlice")
+        return new(solver, latslice, plottables)
+    end
 end
 
 
@@ -1535,6 +1539,9 @@ end
 #fallback
 SelfEnergy(solver::AbstractSelfEnergySolver, latslice::LatticeSlice) =
     SelfEnergy(solver, latslice, ())
+
+SelfEnergy(solver::S, latslice::LatticeSlice{T,E,L}, plottables::P) where {T,E,L,S<:AbstractSelfEnergySolver,P<:Tuple} =
+    SelfEnergy{T,E,L,S,P}(solver, latslice, plottables)
 
 #endregion
 
@@ -1627,7 +1634,7 @@ function Contacts(oh::OpenHamiltonian)
     Σs = selfenergies(oh)
     Σlatslices = latslice.(Σs)
     h = hamiltonian(oh)
-    bs = contact_blockstructure(h, Σlatslices...)  # see selfenergy.jl
+    bs = contact_blockstructure(h, Σlatslices...)  # see greenfunction.jl
     return Contacts(Σs, bs)
 end
 

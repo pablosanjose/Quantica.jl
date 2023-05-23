@@ -1217,26 +1217,26 @@ defining a contact on said sites, but does not lead to any dressing the Green fu
 is useful for some `GreenFunction` solvers such as `GS.KPM` (see `greenfunction`), which
 need to know the sites of interest beforehand (the contact sites in this case).
 
-    attach(h, g1D::GreenFunction; negative = false, sites...)
+    attach(h, g1D::GreenFunction; negative = false, transform = identity, sites...)
 
-Add a self-energy `Σ(ω) = h₋₁⋅g1D(ω)[surface]⋅h₁` corresponding to a 1D lead with
-nearest-cell couplings `h₁` and `h₋₁`, and Green function `g1D`. The `g1D(ω)` is taken at
-the suface unitcell for leads with a `boundary` (see `greenfunction`), either adjacent to
-the `boundary` on its positive side (if `negative = false`) or on its negative side (if
-`negative = true`). For leads without a finite `boundary`, the unit cell at `surface = (;
-cells = SA[0])` is chosen. The selected `sites` in `h` must match, geometrically, those of
-the lead unit cell.
+Add a self-energy `Σ(ω) = h₋₁⋅g1D(ω)[surface]⋅h₁` corresponding to a semi-infinite 1D lead
+(i.e. with a finite `boundary`, see `greenfunction`), where `h₁` and `h₋₁` are intercell
+couplings, and `g1D` is the lead `GreenFunction`. The `g1D(ω)` is taken at the `suface`
+unitcell, either adjacent to the `boundary` on its positive side (if `negative = false`) or
+on its negative side (if `negative = true`). The selected `sites` in `h` must match,
+geometrically, those of the lead unit cell after applying `transform` to the latter. If they
+don't, use the `attach` syntax below.
 
 Advanced: If the `g1D` does not have any self-energies, the produced self-energy is in fact
 an `ExtendedSelfEnergy`, which is numerically more stable than a naive implementation of
 `RegularSelfEnergy`'s, since `g1D(ω)[surface]` is never actually computed. Conversely, if
 `g1D` has self-energies attached, a `RegularSelfEnergy` is produced.
 
-    attach(h, g1D::GreenFunction, model::AbstractModel; negative = false, sites...)
+    attach(h, g1D::GreenFunction, model::AbstractModel; negative = false, transform = identity,  sites...)
 
-Add a self-energy `Σ(ω) = V'⋅g1D(ω)[surface]⋅V` corresponding to a 1D lead, as above, but
-with a coupling `V` to the lead defined by `model`. In this case, the `surface` is defined
-by the sites in the lead that get coupled to `h` by the `model`.
+Add a self-energy `Σ(ω) = V'⋅g1D(ω)[surface]⋅V` corresponding to a 1D lead (not necessarily
+semi-infinite in this case), but with coupling `V` and `V´`, defined by `model`, between
+`sites` and the `surface` lead unitcell. See also Advanced note above.
 
 """
 attach
