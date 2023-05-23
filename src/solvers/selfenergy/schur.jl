@@ -39,7 +39,7 @@ end
 # semi-infinite lead (possibly by first transforming the lead lattice with `transform`)
 # and if so, builds the extended Self Energy directly, using the same intercell coupling of
 # the lead, but using the correct site order of hparent
-function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurEmptyLead; negative = false, transform = missing, kw...)
+function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurEmptyLead; reverse = false, transform = missing, kw...)
     sel = siteselector(; kw...)
     lsparent = lattice(hparent)[sel]
     schursolver = solver(glead)
@@ -47,7 +47,7 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurEmpty
     isfinite(schursolver.boundary) ||
         argerror("The form attach(h, glead; sites...) assumes a semi-infinite lead, but received `boundary = Inf`")
     # we obtain latslice of open surface in gL/gR
-    gunit = negative ? schursolver.gL : schursolver.gR
+    gunit = reverse ? schursolver.gL : schursolver.gR
     blocksizes(blockstructure(hamiltonian(gunit))) == blocksizes(blockstructure(hparent)) ||
         argerror("The orbital structure of parent and lead Hamiltonians do not match")
     # This is a SelfEnergy for a lead unit cell with a SelfEnergySchurSolver
@@ -61,8 +61,8 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurEmpty
     # translate glead unitcell by displacement, so it overlaps sel sites (modulo transform)
     hlead = copy_lattice(parent(glead))
     translate!(hlead, displacement)
-    solver´ = SelfEnergySchurSolver(fsolver, hlead, negative, leadorbs)
-    plottables = (hlead, negative)
+    solver´ = SelfEnergySchurSolver(fsolver, hlead, reverse, leadorbs)
+    plottables = (hlead, reverse)
     return SelfEnergy(solver´, lsparent, plottables)
 end
 
@@ -156,15 +156,15 @@ end
 # hparent. Then we apply the model to the 0D lattice of hparent's selected surface plus the
 # lead unit cell, and then build an extended self energy
 function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead, model::AbstractModel;
-                    negative = false, transform = missing, kw...)
+                    reverse = false, transform = missing, kw...)
     schursolver = solver(glead)
-    gunit = copy_lattice(negative ? schursolver.gL : schursolver.gR)
+    gunit = copy_lattice(reverse ? schursolver.gL : schursolver.gR)
     lat0lead = lattice(gunit)            # lat0lead is the zero cell of parent(glead)
     hlead = copy_lattice(parent(glead))  # hlead is used only for plottables
 
     # move hlead and lat0lead to the left or right of boundary (if boundary is finite)
     boundary = schursolver.boundary
-    xunit = isfinite(boundary) ? boundary + ifelse(negative, -1, 1) : zero(boundary)
+    xunit = isfinite(boundary) ? boundary + ifelse(reverse, -1, 1) : zero(boundary)
     if !iszero(xunit)
         bm = bravais_matrix(hlead)
         translate!(hlead, bm * SA[xunit])
@@ -232,7 +232,7 @@ minimal_callsafe_copy(s::SelfEnergyCouplingSchurSolver) =
 #   Otherwise equivalent to SelfEnergy(h, glead::GreenFunctionSchurEmptyLead; kw...)
 #region
 
-function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead; negative = false, transform = missing, sites...)
+function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead; reverse = false, transform = missing, sites...)
     blocksizes(blockstructure(hamiltonian(glead))) == blocksizes(blockstructure(hparent)) ||
         argerror("The orbital structure of parent and lead Hamiltonians do not match")
     # find boundary ± 1
@@ -240,7 +240,7 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead;
     boundary = schursolver.boundary
     isfinite(boundary) ||
         argerror("The form attach(h, glead; sites...) assumes a semi-infinite lead, but received `boundary = Inf`")
-    xunit = boundary + ifelse(negative, -1, 1)
+    xunit = boundary + ifelse(reverse, -1, 1)
     gslice = glead[cells = SA[xunit]]
     # lattice slices for parent and lead unit cell
     lsparent = getindex(lattice(hparent); sites...)

@@ -1217,13 +1217,13 @@ defining a contact on said sites, but does not lead to any dressing the Green fu
 is useful for some `GreenFunction` solvers such as `GS.KPM` (see `greenfunction`), which
 need to know the sites of interest beforehand (the contact sites in this case).
 
-    attach(h, g1D::GreenFunction; negative = false, transform = identity, sites...)
+    attach(h, g1D::GreenFunction; reverse = false, transform = identity, sites...)
 
 Add a self-energy `Σ(ω) = h₋₁⋅g1D(ω)[surface]⋅h₁` corresponding to a semi-infinite 1D lead
 (i.e. with a finite `boundary`, see `greenfunction`), where `h₁` and `h₋₁` are intercell
 couplings, and `g1D` is the lead `GreenFunction`. The `g1D(ω)` is taken at the `suface`
-unitcell, either adjacent to the `boundary` on its positive side (if `negative = false`) or
-on its negative side (if `negative = true`). The selected `sites` in `h` must match,
+unitcell, either adjacent to the `boundary` on its positive side (if `reverse = false`) or
+on its negative side (if `reverse = true`). The selected `sites` in `h` must match,
 geometrically, those of the lead unit cell after applying `transform` to the latter. If they
 don't, use the `attach` syntax below.
 
@@ -1232,11 +1232,40 @@ an `ExtendedSelfEnergy`, which is numerically more stable than a naive implement
 `RegularSelfEnergy`'s, since `g1D(ω)[surface]` is never actually computed. Conversely, if
 `g1D` has self-energies attached, a `RegularSelfEnergy` is produced.
 
-    attach(h, g1D::GreenFunction, model::AbstractModel; negative = false, transform = identity,  sites...)
+    attach(h, g1D::GreenFunction, model::AbstractModel; reverse = false, transform = identity,  sites...)
 
-Add a self-energy `Σ(ω) = V'⋅g1D(ω)[surface]⋅V` corresponding to a 1D lead (not necessarily
+Add a self-energy `Σ(ω) = V´⋅g1D(ω)[surface]⋅V` corresponding to a 1D lead (not necessarily
 semi-infinite in this case), but with coupling `V` and `V´`, defined by `model`, between
 `sites` and the `surface` lead unitcell. See also Advanced note above.
+
+    attach(h, gs::GreenFunctionSlice, model::AbstractModel; sites...)
+
+Adds a generic self-energy `Σ(ω) = V´⋅gs(ω)⋅V` on `h`'s `sites`, where `V` and `V´` are
+couplings, given by `model`, between said `sites` and the LatticeSlice in `gs`. Allowed
+forms of `gs` include both `g[sites...]` and `g[contactind::Integer]`m where `g` is any
+`GreenFunction` (i.e. off-diagonal slices such as `g[1,2]` are not allowed).
+
+## Currying
+
+    h |> attach(args...; sites...)
+
+Curried form equivalent to `attach(h, args...; sites...)`.
+
+# Examples
+
+```jldoctest
+julia> # A graphene flake with two out-of-plane cubic-lattice leads
+
+julia> g1D = LP.cubic() |> hamiltonian(hopping(1)) |> supercell((0,0,1), region = RP.square(4)) |> greenfunction(GS.Schur(boundary = 0));
+
+julia> coupling = hopping(1, range = 2);
+
+julia> gdisk = HP.graphene(a0 = 1, dim = 3) |> supercell(region = RP.circle(10)) |> attach(g1D, coupling; region = RP.square(4)) |> attach(g1D, coupling; region = RP.square(4), reverse = true) |> greenfunction;
+
+```
+
+# See also
+    `greenfunction`, `GreenSolvers`
 
 """
 attach

@@ -642,8 +642,8 @@ function selfenergy_plottable(solver::Quantica.SelfEnergyModelSolver, ph; kw...)
 end
 
 function selfenergy_plottable(s::Quantica.SelfEnergySchurSolver,
-    hlead, negative; numcells = 1, kw...)
-    p1, k2 = _selfenergy_plottable_hlead(hlead, negative, numcells)
+    hlead, reverse; numcells = 1, kw...)
+    p1, k2 = _selfenergy_plottable_hlead(hlead, reverse, numcells)
     return ((p1, k2),)
 end
 
@@ -654,10 +654,10 @@ function selfenergy_plottable(s::Quantica.SelfEnergyCouplingSchurSolver,
     return ((p1, k1),)
 end
 
-function _selfenergy_plottable_hlead(hlead, negative, numcells)
+function _selfenergy_plottable_hlead(hlead, reverse, numcells)
     # hlead[0] is first unit cell of semi-infinite lead
     n = max(1, numcells)
-    cellrng = negative ? (-n+1:0) : (0:n-1)
+    cellrng = reverse ? (-n+1:0) : (0:n-1)
     p = hlead
     k = (; selector = siteselector(; cells = cellrng))
     return (p, k)
