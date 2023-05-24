@@ -165,6 +165,8 @@ end
 
 moments(s::AppliedKPMGreenSolver) = s.moments
 
+minimal_callsafe_copy(s::AppliedKPMGreenSolver) = AppliedKPMGreenSolver(copy(s.momenta), s.bandCH)
+
 #endregion
 
 #region ## apply ##
