@@ -304,6 +304,8 @@ cellorb(cell, x::Integer) = cellorbs(cell, x)
 
 #region ## API ##
 
+lattice(ls::LatticeSlice) = ls.lat
+
 siteindices(s::CellSites) = s.inds
 orbindices(s::CellOrbitals) = s.inds
 

@@ -1426,7 +1426,7 @@ GreenFunction{Float64,2,0}: Green function of a Hamiltonian{Float64,2,0}
     Hoppings         : 8522
     Coordination     : 2.94065
 
-julia> ldos(g(0.2))[1]
+julia> ldos(g(0.2))[1]  # The KPM solver doesn't need an imag(ω) broadening
 6-element Vector{Float64}:
  0.037505015417307
  0.03583857530882366
