@@ -26,7 +26,7 @@ export sublat, bravais_matrix, lattice, sites, supercell,
        siteselector, hopselector,
        hamiltonian,
        flat, unflat, wrap, transform, translate, combine,
-       spectrum, energies, states, bands, polypath,
+       spectrum, energies, states, bands, subdiv,
        greenfunction, selfenergy, attach, contact, cellsites,
        plotlattice, plotlattice!, plotbands, plotbands!, qplot, qplot!,
        conductance, josephson, ldos, current

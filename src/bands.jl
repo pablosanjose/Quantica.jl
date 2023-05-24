@@ -169,16 +169,16 @@ end
 #endregion
 
 ############################################################################################
-# polypath
+# subdiv
 #region
 
-polypath(nodes, pts::Integer) = polypath(nodes, [pts for _ in 1:length(nodes)-1])
+subdiv(nodes, pts::Integer) = subdiv(nodes, [pts for _ in 1:length(nodes)-1])
 
-polypath(x1, x2, pts) = collect(range(x1, x2, length = pts))
+subdiv(x1, x2, pts) = collect(range(x1, x2, length = pts))
 
-function polypath(nodes, pts)
+function subdiv(nodes, pts)
     length(pts) == length(nodes) - 1 ||
-        argerror("`polypath(nodes, pts)` requires `length(pts) == length(nodes) - 1` or pts::Integer")
+        argerror("`subdiv(nodes, pts)` requires `length(pts) == length(nodes) - 1` or pts::Integer")
     rng = [x for (n, pt) in enumerate(pts) for x in range(nodes[n], nodes[n+1], length = pt) if x != nodes[n+1]]
     push!(rng, last(nodes))
     return rng

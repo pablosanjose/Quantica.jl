@@ -1121,11 +1121,11 @@ To do a linecut of a bandstructure along a polygonal path in the `L`-dimensional
 zone, mapping a set of 1D points `xs` to a set of `nodes`, with `pts` interpolation points
 in each segment, one can use the following convenient syntax
 
-    bands(h, polypath(xs, pts); mapping = (xs => nodes))
+    bands(h, subdiv(xs, pts); mapping = (xs => nodes))
 
 Here `nodes` can be a collection of `SVector{L}` or of named Brillouin zone points from the
 list (`:Γ`,`:K`, `:K´`, `:M`, `:X`, `:Y`, `:Z`). If `mapping = nodes`, then `xs` defaults to
-`0:length(nodes)-1`. See also `polypath` for its alternative methods.
+`0:length(nodes)-1`. See also `subdiv` for its alternative methods.
 
 ## Indexing
 
@@ -1160,7 +1160,7 @@ Bands{Float64,3,2}: 3D Bands over a 2-dimensional parameter space of type Float6
   Edges     : 14553
   Simplices : 9604
 
-julia> bands(h(t = 1), polypath((0, 2, 3), (20, 30)); mapping = (0, 2, 3) => (:Γ, :M, :K))
+julia> bands(h(t = 1), subdiv((0, 2, 3), (20, 30)); mapping = (0, 2, 3) => (:Γ, :M, :K))
 Bands{Float64,2,1}: 2D Bands over a 1-dimensional parameter space of type Float64
   Subbands  : 1
   Vertices  : 97
@@ -1169,25 +1169,25 @@ Bands{Float64,2,1}: 2D Bands over a 1-dimensional parameter space of type Float6
 ```
 
 # See also
-    `spectrum`, `polypath`
+    `spectrum`, `subdiv`
 """
 bands
 
 """
-    polypath((x₁, x₂, ..., xₙ), (p₁, p₂, ..., pₙ₋₁))
+    subdiv((x₁, x₂, ..., xₙ), (p₁, p₂, ..., pₙ₋₁))
 
 Build a vector of values between `x₁` and `xₙ` containing all `xᵢ` such that in each
-interval `[xᵢ, xᵢ₊₁)` there are `pᵢ` equally space values.
+interval `[xᵢ, xᵢ₊₁]` there are `pᵢ` equally space values.
 
-    polypath((x₁, x₂, ..., xₙ), p)
+    subdiv((x₁, x₂, ..., xₙ), p)
 
 Same as above with all `pᵢ = p`
 
-    polypath(x₁, x₂, p)
+    subdiv(x₁, x₂, p)
 
-Equivalent to `polypath((x₁, x₂), p) == range(x₁, x₂, length = p)`
+Equivalent to `subdiv((x₁, x₂), p) == collect(range(x₁, x₂, length = p))`
 """
-polypath
+subdiv
 
 """
     attach(h::AbstractHamiltonian, args..; sites...)
@@ -1203,6 +1203,13 @@ building the Green function `g(ω) = (ω - h´ - Σ(ω))⁻¹` of the resulting 
 
 The different forms of `args` yield different types of self-energies `Σ`. Currently
 supported forms are:
+
+    attach(h, gs::GreenFunctionSlice, coupling::AbstractModel; sites...)
+
+Adds a generic self-energy `Σ(ω) = V´⋅gs(ω)⋅V` on `h`'s `sites`, where `V` and `V´` are
+couplings, given by `coupling`, between said `sites` and the `LatticeSlice` in `gs`. Allowed
+forms of `gs` include both `g[bath_sites...]` and `g[contactind::Integer]`m where `g` is any
+`GreenFunction`.
 
     attach(h, model::ParametricModel; sites...)
 
@@ -1237,13 +1244,6 @@ an `ExtendedSelfEnergy`, which is numerically more stable than a naive implement
 Add a self-energy `Σ(ω) = V´⋅g1D(ω)[surface]⋅V` corresponding to a 1D lead (not necessarily
 semi-infinite in this case), but with couplings `V` and `V´`, defined by `coupling`, between
 `sites` and the `surface` lead unitcell. See also Advanced note above.
-
-    attach(h, gs::GreenFunctionSlice, coupling::AbstractModel; sites...)
-
-Adds a generic self-energy `Σ(ω) = V´⋅gs(ω)⋅V` on `h`'s `sites`, where `V` and `V´` are
-couplings, given by `coupling`, between said `sites` and the LatticeSlice in `gs`. Allowed
-forms of `gs` include both `g[sites...]` and `g[contactind::Integer]`m where `g` is any
-`GreenFunction` (i.e. off-diagonal slices such as `g[1,2]` are not allowed).
 
 ## Currying
 
