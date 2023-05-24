@@ -1621,9 +1621,10 @@ struct ContactBlockStructure{L}
     subcelloffsets::Vector{Int}          # block offsets for each subcell in orbslice
 end
 
-struct Contacts{L,N,S<:NTuple{N,SelfEnergy}}
+struct Contacts{L,N,S<:NTuple{N,SelfEnergy},LS<:LatticeSlice}
     selfenergies::S                       # used to produce flat AbstractMatrices
     blockstruct::ContactBlockStructure{L} # needed to extract site/subcell/contact blocks
+    latslice::LS                          # combined latslice of all contacts
 end
 
 const EmptyContacts{L} = Contacts{L,0,Tuple{}}
@@ -1637,8 +1638,8 @@ function Contacts(oh::OpenHamiltonian)
     Σs = selfenergies(oh)
     Σlatslices = latslice.(Σs)
     h = hamiltonian(oh)
-    bs = contact_blockstructure(h, Σlatslices...)  # see greenfunction.jl
-    return Contacts(Σs, bs)
+    bs, ls = contact_blockstructure_latslice(h, Σlatslices...)  # see greenfunction.jl
+    return Contacts(Σs, bs, ls)
 end
 
 #endregion
@@ -1675,10 +1676,13 @@ function subcellindex(c::ContactBlockStructure, cell::SVector)
 end
 
 selfenergies(c::Contacts) = c.selfenergies
-selfenergies(c::Contacts, i) = 1 <= i <= length(c) ? c.selfenergies[i] :
+selfenergies(c::Contacts, i::Integer) = 1 <= i <= length(c) ? c.selfenergies[i] :
     argerror("Cannot get contact $i, there are $(length(c)) contacts")
 
 blockstructure(c::Contacts) = c.blockstruct
+
+latslice(c::Contacts, i::Integer) = latslice(selfenergies(c, i))
+latslice(c::Contacts, ::Colon) = c.latslice
 
 contactinds(c::Contacts, i...) = contactinds(c.blockstruct, i...)
 contactinds(c::ContactBlockStructure) = c.contactinds
@@ -1696,7 +1700,7 @@ Base.isempty(c::Contacts) = isempty(selfenergies(c))
 Base.length(c::Contacts) = length(selfenergies(c))
 
 minimal_callsafe_copy(s::Contacts) =
-    Contacts(minimal_callsafe_copy.(s.selfenergies), s.blockstruct)
+    Contacts(minimal_callsafe_copy.(s.selfenergies), s.blockstruct, s.latslice)
 
 #endregion
 
@@ -1741,8 +1745,8 @@ end
 # Allows gω[contact(i), contact(j)] for i,j integer Σs indices ("contacts")
 # Allows gω[cell, cell´] using T-matrix, with cell::Union{SVector,CellSites}
 # Allows also view(gω, ...)
-struct GreenSolution{T,E,L,S<:GreenSlicer,H<:AbstractHamiltonian{T,E,L},Σ}
-    parent::H
+struct GreenSolution{T,E,L,S<:GreenSlicer,G<:GreenFunction{T,E,L},Σ}
+    parent::G
     slicer::S       # gives G(ω; p...)[i,j] for i,j::AppliedGreenIndex
     contactΣs::Σ    # selfenergy Σ(ω)::MatrixBlock or NTuple{3,MatrixBlock} for each contact
     contactbs::ContactBlockStructure{L}
@@ -1765,8 +1769,9 @@ hamiltonian(g::GreenSolution) = hamiltonian(g.parent)
 lattice(g::GreenFunction) = lattice(g.parent)
 lattice(g::GreenSolution) = lattice(g.parent)
 
-latslice(g::GreenFunction, i::Integer) = latslice(selfenergies(g.contacts, i))
+latslice(g::GreenFunction, i) = latslice(g.contacts, i)
 latslice(g::GreenFunction, is::SiteSelector) = lattice(g)[is]
+latslice(g::GreenFunction; kw...) = latslice(g, siteselector(; kw...))
 
 solver(g::GreenFunction) = g.solver
 

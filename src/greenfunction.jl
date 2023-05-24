@@ -38,7 +38,7 @@ function call!(g::GreenFunction, ω; params...)
     Σblocks = call!(contacts´, ω; params...)
     cbs = blockstructure(contacts´)
     slicer = solver(g)(ω, Σblocks, cbs)
-    return GreenSolution(h, slicer, Σblocks, cbs)
+    return GreenSolution(g, slicer, Σblocks, cbs)
 end
 
 call!(g::GreenSlice; params...) =
@@ -101,7 +101,7 @@ ind_to_orbslice(s::SiteSelector, g) = ind_to_orbslice(lattice(g)[s], g)
 ind_to_orbslice(kw::NamedTuple, g) = ind_to_orbslice(getindex(lattice(g); kw...), g)
 ind_to_orbslice(cell::Union{SVector,Tuple}, g::GreenSolution{<:Any,<:Any,L}) where {L} =
     ind_to_orbslice(cellsites(sanitize_SVector(SVector{L,Int}, cell), :), g)
-ind_to_orbslice(c::CellSites{<:Any,Colon}, g) = cellorbs(cell(c), 1:flatsize(parent(g)))
+ind_to_orbslice(c::CellSites{<:Any,Colon}, g) = cellorbs(cell(c), 1:flatsize(hamiltonian(g)))
 ind_to_orbslice(c::CellSites{<:Any,Symbol}, g) =
     # uses a UnitRange instead of a Vector
     cellorbs(cell(c), flatrange(hamiltonian(g), siteindices(c)))
@@ -248,13 +248,13 @@ end
 #   Build a ContactBlockStructure from a Hamiltonian and a set of latslices
 #region
 
-contact_blockstructure(h::AbstractHamiltonian{<:Any,<:Any,L}) where {L} =
+contact_blockstructure_latslice(h::AbstractHamiltonian{<:Any,<:Any,L}) where {L} =
     ContactBlockStructure{L}()
 
-contact_blockstructure(h::AbstractHamiltonian, ls, lss...) =
-    contact_blockstructure(blockstructure(h), ls, lss...)
+contact_blockstructure_latslice(h::AbstractHamiltonian, ls, lss...) =
+    contact_blockstructure_latslice(blockstructure(h), ls, lss...)
 
-function contact_blockstructure(bs::OrbitalBlockStructure, lss...)
+function contact_blockstructure_latslice(bs::OrbitalBlockStructure, lss...)
     lsall = combine(lss...)
     subcelloffsets = Int[]
     siteoffsets = Int[]
@@ -267,8 +267,8 @@ function contact_blockstructure(bs::OrbitalBlockStructure, lss...)
         push!(contactinds, i)
         push!(contactrngs, r)
     end
-
-    return ContactBlockStructure(osall, contactinds, contactrngs, siteoffsets, subcelloffsets)
+    bs = ContactBlockStructure(osall, contactinds, contactrngs, siteoffsets, subcelloffsets)
+    return bs, lsall
 end
 
 # computes the orbital indices of ls sites inside the combined lsall
@@ -481,7 +481,8 @@ minimal_callsafe_copy(s::DummySlicer) = s
 ############################################################################################
 # GreenSolutionCache
 #   Cache that memoizes columns of GreenSolution[ci,cj] on columns of single CellSite{L}
-#   It does not support more general indices
+#   It does not support more general indices, but upon creation, the cache includes the data
+#   already computed for the intra-contacts Green function (with noncontact sites as undefs)
 #region
 
 struct GreenSolutionCache{T,L,G<:GreenSolution{T,<:Any,L}}
@@ -489,8 +490,37 @@ struct GreenSolutionCache{T,L,G<:GreenSolution{T,<:Any,L}}
     cache::Dict{Tuple{SVector{L,Int},SVector{L,Int},Int},Matrix{Complex{T}}}
 end
 
-GreenSolutionCache(gω::GreenSolution{T,<:Any,L}) where {T,L} =
-    GreenSolutionCache(gω, Dict{Tuple{SVector{L,Int},SVector{L,Int},Int},Matrix{Complex{T}}}())
+function GreenSolutionCache(gω::GreenSolution{T,<:Any,L}) where {T,L}
+    cache = Dict{Tuple{SVector{L,Int},SVector{L,Int},Int},Matrix{Complex{T}}}()
+    g = parent(gω)
+    h = hamiltonian(g)
+    bs = blockstructure(h)
+    cbs = blockstructure(g)
+    cls = latslice(g, :)
+    nrows = flatsize(h)
+    gmat = gω[:]
+    j = 0
+    for colsc in subcells(cls)
+        nj = cell(colsc)
+        for j´ in siteindices(colsc)
+            j += 1
+            jrng = flatrange(cbs, j)
+            i = 0
+            for rowsc in subcells(cls)
+                ni = cell(rowsc)
+                undefs = Matrix{Complex{T}}(undef, nrows, length(jrng))
+                for i´ in siteindices(rowsc)
+                    i += 1
+                    irng = flatrange(cbs, i)
+                    irng´ = flatrange(bs, i´)
+                    copy!(view(undefs, irng´, :), view(gmat, irng, jrng))
+                end
+                push!(cache, (ni, nj, j´) => undefs)
+            end
+        end
+    end
+    return GreenSolutionCache(gω, cache)
+end
 
 function Base.getindex(c::GreenSolutionCache{<:Any,L}, ci::CellSite{L}, cj::CellSite{L}) where {L}
     ni, i = cell(ci), siteindex(ci)

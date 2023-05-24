@@ -441,10 +441,9 @@ charge(d::Union{CurrentDensitySolution,CurrentDensitySlice}) = d.charge
 direction(d::Union{CurrentDensitySolution,CurrentDensitySlice}) = d.direction
 
 Base.getindex(d::CurrentDensitySolution; kw...) = d[getindex(lattice(d.gω); kw...)]
-
 Base.getindex(d::CurrentDensitySolution, ls::LatticeSlice) = current_matrix(d.gω, ls, d)
-
 Base.getindex(d::CurrentDensitySolution, scell::CellSites) = d[lattice(hamiltonian(d.gω))[scell]]
+Base.getindex(d::CurrentDensitySolution, i::Union{Integer,Colon}) = d[latslice(parent(d.gω), i)]
 
 # no call! support here
 function (d::CurrentDensitySlice)(ω; params...)
