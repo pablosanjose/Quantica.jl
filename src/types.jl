@@ -1686,6 +1686,9 @@ Base.isempty(c::Contacts) = isempty(selfenergies(c))
 
 Base.length(c::Contacts) = length(selfenergies(c))
 
+minimal_callsafe_copy(s::Contacts) =
+    Contacts(minimal_callsafe_copy.(s.selfenergies), s.blockstruct)
+
 #endregion
 
 #endregion

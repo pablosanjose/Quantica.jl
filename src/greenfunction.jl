@@ -63,9 +63,6 @@ end
 
 call!_output(c::Contacts) = selfenergyblocks(c)
 
-minimal_callsafe_copy(s::Contacts) =
-    Contacts(minimal_callsafe_copy.(s.selfenergies), s.blockstruct)
-
 #endregion
 
 ############################################################################################
