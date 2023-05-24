@@ -364,7 +364,7 @@ function apply(s::GS.Schur, h::AbstractHamiltonian1D, contacts::Contacts)
 end
 
 const GFUnit{T,E,H,N,S} =
-    GreenFunction{T,E,0,AppliedSparseLUGreenSolver{Complex{T}},H,Contacts{0,N,S}}
+    GreenFunction{T,E,0,AppliedSparseLUGreenSolver{Complex{T}},H,Contacts{0,N,S,LatticeSlice{T,E,0}}}
 
 green_type(::H,::S) where {T,E,H<:AbstractHamiltonian{T,E},S} =
     GFUnit{T,E,H,1,Tuple{S}}

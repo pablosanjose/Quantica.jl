@@ -249,7 +249,7 @@ end
 #region
 
 contact_blockstructure_latslice(h::AbstractHamiltonian{<:Any,<:Any,L}) where {L} =
-    ContactBlockStructure{L}()
+    ContactBlockStructure{L}(), LatticeSlice(lattice(h))
 
 contact_blockstructure_latslice(h::AbstractHamiltonian, ls, lss...) =
     contact_blockstructure_latslice(blockstructure(h), ls, lss...)
