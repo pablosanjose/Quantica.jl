@@ -35,6 +35,10 @@ mul_tau!(tau::Vector, g) = (g .*= tau)
 tauz_diag(i, normalsize) = ifelse(iseven(fld1(i, normalsize)), -1, 1)
 taue_diag(i, normalsize) = ifelse(iseven(fld1(i, normalsize)), 0, 1)
 
+# if inds isa Integer, select contact cellsites
+sanitize_latslice(i::Integer, g::GreenFunction) = latslice(selfenergies(contacts(g), i))
+sanitize_latslice(sites, g) = lattice(g)[sites]
+
 #endregion
 
 ############################################################################################
@@ -309,11 +313,9 @@ struct LocalSpectralDensitySolution{T,E,L,G<:GreenSolution{T,E,L},K} <: Indexabl
     kernel::K                      # should return a float when applied to gω[cellsite(n,i)]
 end
 
-struct LocalSpectralDensitySlice{T,E,L,G<:GreenFunction{T,E,L},K}
-    g::G
+struct LocalSpectralDensitySlice{T,E,L,G<:GreenSlice{T,E,L},K}
+    gs::G
     kernel::K                      # should return a float when applied to gω[cellsite(n,i)]
-    latslice::LatticeSlice{T,E,L}
-    diagonal::Vector{T}
 end
 
 #region ## Constructors ##
@@ -323,11 +325,7 @@ ldos(gω::GreenSolution; kernel = I) = LocalSpectralDensitySolution(gω, kernel)
 function ldos(gs::GreenSlice{T}; kernel = I) where {T}
     slicerows(gs) === slicecols(gs) ||
         argerror("Cannot take ldos of a GreenSlice with rows !== cols")
-    g = parent(gs)
-    lat = lattice(g)
-    latslice = lat[slicerows(gs)]
-    diagonal = Vector{T}(undef, length(latslice))
-    return LocalSpectralDensitySlice(g, kernel, latslice, diagonal)
+    return LocalSpectralDensitySlice(gs, kernel)
 end
 
 #endregion
@@ -349,19 +347,16 @@ end
 Base.getindex(d::LocalSpectralDensitySolution{T}, sites::Union{CellSites,Colon,Integer}) where {T} =
     append_ldos!(T[], sites, d.gω, d.kernel)
 
-function call!(d::LocalSpectralDensitySlice, ω; params...)
-    gω = call!(greenfunction(d), ω; params...)
-    empty!(d.diagonal)
-    for sc in subcells(d.latslice)
-        append_ldos!(d.diagonal, sc, gω, d.kernel)
-    end
-    return d.diagonal
+function call!(d::LocalSpectralDensitySlice{T}, ω; params...) where {T}
+    sites = slicerows(d.gs)
+    gω = call!(parent(d.gs), ω; params...)
+    return append_ldos!(T[], sites, gω, d.kernel)
 end
 
 (d::LocalSpectralDensitySlice)(ω; params...) = copy(call!(d, ω; params...))
 
 function append_ldos!(v, cs::CellSites, gω, kernel)
-    gcell = gω[sites]
+    gcell = gω[cs]
     bs = blockstructure(hamiltonian(gω))
     blocks = block_ranges(cs, bs)
     for rng in blocks
@@ -436,10 +431,6 @@ _sanitize_direction(dir::SVector{E}, ::Val{E}) where {E} = dir
 _sanitize_direction(dir::NTuple{E}, ::Val{E}) where {E} = SVector(dir)
 _sanitize_direction(_, ::Val{E}) where {E} =
     argerror("Current direction should be an Integer or a NTuple/SVector of embedding dimension $E")
-
-# if inds isa Integer, select contact cellsites
-sanitize_latslice(i::Integer, g) = latslice(selfenergies(contacts(g), i))
-sanitize_latslice(inds, g) = lattice(g)[inds]
 
 #endregion
 

@@ -40,7 +40,7 @@ end
 
 # KPM(; order = 100, bandrange = missing) = KPM(order, bandrange)
 function KPM(; order = 100, bandrange = missing)
-    ensureloaded(:Arpack)
+    bandrange === missing && ensureloaded(:Arpack)
     return KPM(order, bandrange)
 end
 
