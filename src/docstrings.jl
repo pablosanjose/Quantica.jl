@@ -1193,18 +1193,18 @@ subdiv
     attach(h::AbstractHamiltonian, args..; sites...)
     attach(h::OpenHamiltonian, args...; sites...)
 
-Build an `h´::OpenHamiltonian` by attaching a `Σ::SelfEnergy` to sites in `h` specified by
-`siteselector(; sites...)`. This also adds a contact, defined by said sites, that can be
-referred to when slicing Green functions later. Self-energies are taken into account when
-building the Green function `g(ω) = (ω - h´ - Σ(ω))⁻¹` of the resulting `h´`, see
-`greenfunction`.
+Build an `h´::OpenHamiltonian` by attaching (adding) a `Σ::SelfEnergy` to a finite number of
+sites in `h` specified by `siteselector(; sites...)`. This also defines a "contact" on said
+sites that can be referred to (with index `i::Integer` for the i-th attached contact) when
+slicing Green functions later. Self-energies are taken into account when building the Green
+function `g(ω) = (ω - h´ - Σ(ω))⁻¹` of the resulting `h´`, see `greenfunction`.
 
 ## Self-energy forms
 
 The different forms of `args` yield different types of self-energies `Σ`. Currently
 supported forms are:
 
-    attach(h, gs::GreenFunctionSlice, coupling::AbstractModel; sites...)
+    attach(h, gs::GreenSlice, coupling::AbstractModel; sites...)
 
 Adds a generic self-energy `Σ(ω) = V´⋅gs(ω)⋅V` on `h`'s `sites`, where `V` and `V´` are
 couplings, given by `coupling`, between said `sites` and the `LatticeSlice` in `gs`. Allowed
@@ -1269,3 +1269,166 @@ julia> gdisk = HP.graphene(a0 = 1, dim = 3) |> supercell(region = RP.circle(10))
 
 """
 attach
+
+"""
+    greenfunction(h::Union{AbstractHamiltonian,OpenHamiltonian}, solver::GreenSolver)
+
+Build a `g::GreenFunction` of Hamiltonian `h` using `solver`. See `GreenSolvers` for
+available solvers. If `solver` is not provided, a default solver is chosen automatically
+based on the type of `h`.
+
+## Currying
+
+    h |> greenfunction(solver)
+
+Curried form equivalent to `greenfunction(h, solver)`.
+
+## Partial evaluation
+
+`GreenFunction`s allow independent, partial evaluation of their positions (producing a
+`GreenSlice`) and energy/parameters (producing a `GreenSolution`). Depending on the solver,
+this may avoid repeating calculations unnecesarily when sweeping over either of these with
+the other fixed.
+
+    g[sites...]
+    g[siteselector(; sites...)]
+
+Build a `gs::GreenSlice` that represents a Green function at arbitrary energy and parameter
+values, but at specific sites on the lattice defined by `siteselector(; sites...)`
+
+    g[contact_index::Integer]
+
+Build a `GreenSlice` equivalent to `g[contact_sites...]`, where `contact_sites...`
+correspond to sites in contact number `contact_index` (must have `1<= contact_index <=
+number_of_contacts`). See `attach` for details on attaching contacts to a Hamiltonian.
+
+    g[:]
+
+Build a `GreenSlice` over all contacts.
+
+    g[dst, src]
+
+Build a `gs::GreenSlice` between sites specified by `src` and `dst`, which can take any of
+the forms above. Therefore, all the previous slice forms correspond to a diagonal block
+`g[i, i]`.
+
+    g(ω; params...)
+
+Build a `gω::GreenSolution` that represents a Green function at arbitrary points on the
+lattice, but at fixed energy `ω` and system parameter values `param`. For most solvers, it
+is required to add to `ω` with a small imaginary part, either positive (for the retarded) or
+negative (for the advanced Green function).
+
+    gω[i]
+    gω[i, j]
+    gs(ω; params...)
+
+For any `gω::GreenSolution` or `gs::GreenSlice`, build the Green function matrix fully
+evaluated at fixed energy, parameters and positions. The matrix is dense and has scalar
+elements, so that any orbital structure on each site is flattened.
+
+# Example
+```jldoctest
+julia> g = LP.honeycomb() |> hamiltonian(@hopping((; t = 1) -> t)) |> supercell(region = RP.circle(10)) |> greenfunction(GS.SparseLU())
+GreenFunction{Float64,2,0}: Green function of a Hamiltonian{Float64,2,0}
+  Solver          : AppliedSparseLUGreenSolver
+  Contacts        : 0
+  Contact solvers : ()
+  Contact sizes   : ()
+  ParametricHamiltonian{Float64,2,0}: Parametric Hamiltonian on a 0D Lattice in 2D space
+    Bloch harmonics  : 1
+    Harmonic size    : 726 × 726
+    Orbitals         : [1, 1]
+    Element type     : scalar (ComplexF64)
+    Onsites          : 0
+    Hoppings         : 2098
+    Coordination     : 2.88981
+    Parameters       : [:t]
+
+julia> gω = g(0.1 + 0.0001im; t = 2)
+GreenSolution{Float64,2,0}: Green function at arbitrary positions, but at fixed energy
+
+julia> gs = g[region = RP.circle(2), sublats = :B]
+GreenSlice{Float64,2,0}: Green function at arbitrary energy, but at fixed lattice positions
+
+julia> gω[region = RP.circle(2), sublats = :B] == gs(0.1 + 0.0001im; t = 2)
+true
+```
+
+# See also
+    `GreenSolvers`, `ldos`, `conductance`, `current`, `josephson`
+"""
+
+"""
+
+`GreenSolvers` is a Quantica submodule containing several pre-defined Green function
+solvers. The alias `GS` can be used in place of `GS`. Currently supported solvers and their
+possible keyword arguments are
+
+- `GS.SparseLU()` : Direct inversion solver for 0D Hamiltonians using a `SparseArrays.lu(hmat; kw...)` factorization
+- `GS.Schur(; boundary = Inf)` : Solver for 1D Hamiltonians based on a deflated, generalized Schur factorization
+    - `boundary` : 1D cell index of a boundary cell, or `Inf` for no boundaries. Equivalent to removing that specific cell from the lattice when computing the Green function.
+- `GS.KPM(; order = 100, bandrange = missing)` : Kernel polynomial method solver for 0D Hamiltonians
+    - `order` : order of the Chebyshev expansion (lowest is zero)
+    - `bandrange` : a `(min_energy, max_energy)::Tuple` interval that encompasses the full band of the Hamiltonian. If `missing`, it is computed automatically.
+    - This solver does not allow arbitrary indexing of the resulting `g::GreenFunction`, only on contacts `g[contact_ind::Integer]`. If the system has none, we can add a dummy contact using `attach(h, nothing; sites...)`, see `attach`.
+
+## TODO
+
+Still in the TODO list is a bandstructure/spectrum-based solver, valid for Hamiltonians of any dimension with and without boundaries
+
+"""
+GreenSolvers
+
+"""
+    ldos(gs::GreenSlice; kernel = I)
+
+Build `ρs::LocalSpectralDensitySlice`, a partially evaluated object representing the local
+density of states `ρᵢ(ω)` at specific sites `i` but at arbitrary energy `ω`.
+
+    ldos(gω::GreenSolution; kernel = I)
+
+Build `ρω::LocalSpectralDensitySolution`, as above, but for `ρᵢ(ω)` at fixed `ω` and
+arbitrary sites `i`.
+
+The local density of states is defined here as `ρᵢ(ω) = -Tr(gᵢᵢ(ω))/π`, where `gᵢᵢ(ω)` is
+the retarded Green function at a given site `i`. Therefore a small imaginary part should be
+added to `ω` to obtain a correct result. See also `greenfunction` for details on building a
+`GreenSlice` and `GreenSolution`.
+
+## Keywords
+
+- `kernel` : for multiorbital sites, `kernel` allows to compute a generalized `ldos` `ρᵢ(ω) = -Tr(gᵢᵢ(ω) * kernel)/π`, where `gᵢᵢ(ω)` is the retarded Green function at site `i` and energy `ω`.
+
+## Full evaluation
+
+    ρω[sites...]
+    ρs(ω; params...)
+
+Given a partially evaluated `ρω::LocalSpectralDensitySolution` or
+`ρs::LocalSpectralDensitySlice`, build a vector `[ρ₁(ω), ρ₂(ω)...]` of fully evaluated local
+densities of states.
+
+# Example
+```jldoctest
+julia> g = HP.graphene(a0 = 1, t0 = 1) |> supercell(region = RP.circle(20)) |> attach(nothing, region = RP.circle(1)) |> greenfunction(GS.KPM(order = 300, bandrange = (-3.1, 3.1)))
+GreenFunction{Float64,2,0}: Green function of a Hamiltonian{Float64,2,0}
+  Solver          : AppliedKPMGreenSolver
+  Contacts        : 1
+  Contact solvers : (SelfEnergyEmptySolver,)
+  Contact sizes   : (6,)
+  Hamiltonian{Float64,2,0}: Hamiltonian on a 0D Lattice in 2D space
+    Bloch harmonics  : 1
+    Harmonic size    : 2898 × 2898
+    Orbitals         : [1, 1]
+    Element type     : scalar (ComplexF64)
+    Onsites          : 0
+    Hoppings         : 8522
+    Coordination     : 2.94065
+
+julia> ldos(g(0.2))[1]
+0.21836433206990818
+```
+
+"""
+ldos

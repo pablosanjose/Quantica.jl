@@ -1,12 +1,12 @@
 ############################################################################################
-# SelfEnergy(h, gs::GreenFunctionSlice, model::AbstractModel; sites...)
+# SelfEnergy(h, gs::GreenSlice, model::AbstractModel; sites...)
 #   A RegularSelfEnergy -> Σ(ω) = V' gs(ω) V, where V = model coupling from sites to slice
 #region
 
-struct SelfEnergyGenericSolver{C,G<:GreenFunctionSlice,S,S´,H<:AbstractHamiltonian} <: RegularSelfEnergySolver
+struct SelfEnergyGenericSolver{C,G<:GreenSlice,S,S´,H<:AbstractHamiltonian} <: RegularSelfEnergySolver
     hcoupling::H
     V´::S´                              # parent <- bath block view of call!_output(hcoupling)
-    gslice::G                           # bath GreenFunctionSlice, allows gslice(ω)
+    gslice::G                           # bath GreenSlice, allows gslice(ω)
     V::S                                # bath <- parent block view of call!_output(hcoupling)
     V´g::Matrix{C}                      # prealloc matrix
     Σ::Matrix{C}                        # prealloc matrix
@@ -15,7 +15,7 @@ end
 #region ## Constructors ##
 
 # nparent is the number of sites in gs, to know how to split hcoupling into (parent, bath) blocks
-function SelfEnergyGenericSolver(gslice::GreenFunctionSlice, hcoupling::AbstractHamiltonian, nparent::Integer)
+function SelfEnergyGenericSolver(gslice::GreenSlice, hcoupling::AbstractHamiltonian, nparent::Integer)
     lastflatparent = last(flatrange(hcoupling, nparent))
     parentinds, bathinds = 1:lastflatparent, lastflatparent+1:flatsize(hcoupling)
     hmatrix = call!_output(hcoupling)
@@ -24,7 +24,7 @@ function SelfEnergyGenericSolver(gslice::GreenFunctionSlice, hcoupling::Abstract
     return SelfEnergyGenericSolver(gslice, hcoupling, V´, V)
 end
 
-function SelfEnergyGenericSolver(gslice::GreenFunctionSlice{T}, hcoupling::AbstractHamiltonian, V´::SparseMatrixView, V::SparseMatrixView) where {T}
+function SelfEnergyGenericSolver(gslice::GreenSlice{T}, hcoupling::AbstractHamiltonian, V´::SparseMatrixView, V::SparseMatrixView) where {T}
     V´g = Matrix{Complex{T}}(undef, size(V´, 1), size(V, 1))
     Σ = Matrix{Complex{T}}(undef, size(V´, 1), size(V, 2))
     return SelfEnergyGenericSolver(hcoupling, V´, gslice, V, V´g, Σ)
@@ -34,7 +34,7 @@ end
 
 #region ## API ##
 
-function SelfEnergy(hparent::AbstractHamiltonian, gslice::GreenFunctionSlice, model::AbstractModel; sites...)
+function SelfEnergy(hparent::AbstractHamiltonian, gslice::GreenSlice, model::AbstractModel; sites...)
     slicerows(gslice) === slicecols(gslice) ||
         argerror("To attach a Greenfunction with `attach(h, g[cols, rows], coupling; ...)`, we must have `cols == rows`")
 

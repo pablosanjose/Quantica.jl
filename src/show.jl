@@ -291,7 +291,7 @@ Base.summary(::Bands{T,E,L}) where {T,E,L} =
 #endregion
 
 ############################################################################################
-# GreenFunction and GreenSolution
+# GreenFunction, GreenSolution and GreenSlice
 #region
 
 function Base.show(io::IO, g::GreenFunction)
@@ -315,7 +315,15 @@ function Base.show(io::IO, g::GreenSolution)
 end
 
 Base.summary(g::GreenSolution{T,E,L,S}) where {T,E,L,S} =
-    "GreenSolution{$T,$E,$L}: Green matrix evaluator using $(nameof(S))"
+    "GreenSolution{$T,$E,$L}: Green function at arbitrary positions, but at fixed energy"
+
+function Base.show(io::IO, g::GreenSlice)
+    i = get(io, :indent, "")
+    print(io, i, summary(g))
+end
+
+Base.summary(g::GreenSlice{T,E,L}) where {T,E,L} =
+    "GreenSlice{$T,$E,$L}: Green function at arbitrary energy, but at fixed lattice positions"
 
 #endregion
 

@@ -170,6 +170,7 @@ moments(s::AppliedKPMGreenSolver) = s.moments
 #region ## apply ##
 
 function apply(s::GS.KPM,  h::Hamiltonian{<:Any,<:Any,0}, cs::Contacts)
+    isempty(cs) && argerror("The KPM solver requires at least one contact to be added that defiens where the Green function will be computed. A dummy contact can be created with `attach(nothing; sites...)`.")
     hmat = h(())
     bandCH = band_ceter_halfwifth(hmat, s.bandrange)
     ket = contact_basis(h, cs)

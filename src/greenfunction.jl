@@ -28,8 +28,8 @@ default_green_solver(::AbstractHamiltonian1D) = GS.Schur()
 ## TODO: test copy(g) for aliasing problems
 (g::GreenFunction)(; params...) = minimal_callsafe_copy(call!(g; params...))
 (g::GreenFunction)(ω; params...) = minimal_callsafe_copy(call!(g, ω; params...))
-(g::GreenFunctionSlice)(; params...) = minimal_callsafe_copy(call!(g; params...))
-(g::GreenFunctionSlice)(ω; params...) = copy(call!(g, ω; params...))
+(g::GreenSlice)(; params...) = minimal_callsafe_copy(call!(g; params...))
+(g::GreenSlice)(ω; params...) = copy(call!(g, ω; params...))
 
 function call!(g::GreenFunction, ω; params...)
     h = parent(g)
@@ -41,10 +41,10 @@ function call!(g::GreenFunction, ω; params...)
     return GreenSolution(h, slicer, Σblocks, cbs)
 end
 
-call!(g::GreenFunctionSlice; params...) =
-    GreenFunctionSlice(call!(greenfunction(g); params...), slicerows(g), slicecols(g))
+call!(g::GreenSlice; params...) =
+    GreenSlice(call!(greenfunction(g); params...), slicerows(g), slicecols(g))
 
-call!(g::GreenFunctionSlice, ω; params...) =
+call!(g::GreenSlice, ω; params...) =
     call!(greenfunction(g), ω; params...)[slicerows(g), slicecols(g)]
 
 #endregion
@@ -73,7 +73,7 @@ minimal_callsafe_copy(s::Contacts) =
 #   We convert any index down to cellorbs to pass to slicer, except contacts (Int, Colon)
 #region
 
-Base.getindex(g::GreenFunction, i, j = i) = GreenFunctionSlice(g, i, j)
+Base.getindex(g::GreenFunction, i, j = i) = GreenSlice(g, i, j)
 Base.getindex(g::GreenFunction; kw...) = g[siteselector(; kw...)]
 
 Base.getindex(g::GreenSolution; kw...) = g[getindex(lattice(g); kw...)]

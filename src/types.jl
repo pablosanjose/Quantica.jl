@@ -1739,7 +1739,7 @@ end
 # Obtained with gs = g[; siteselection...]
 # Alows call!(gs, ω; params...) or gs(ω; params...)
 #   required to do e.g. h |> attach(g´[sites´], couplingmodel; sites...)
-struct GreenFunctionSlice{T,E,L,G<:GreenFunction{T,E,L},R,C}
+struct GreenSlice{T,E,L,G<:GreenFunction{T,E,L},R,C}
     parent::G
     rows::R
     cols::C
@@ -1768,20 +1768,20 @@ blockstructure(g::GreenFunction) = blockstructure(g.contacts)
 blockstructure(g::GreenSolution) = g.contactbs
 
 norbitals(g::GreenFunction) = norbitals(g.parent)
-norbitals(g::GreenFunctionSlice) = norbitals(g.parent.parent)
+norbitals(g::GreenSlice) = norbitals(g.parent.parent)
 
 contactinds(g::GreenFunction, i...) = contactinds(contacts(g), i...)
 contactinds(g::GreenSolution, i...) = contactinds(blockstructure(g), i...)
 
-greenfunction(g::GreenFunctionSlice) = g.parent
+greenfunction(g::GreenSlice) = g.parent
 
-slicerows(g::GreenFunctionSlice) = g.rows
+slicerows(g::GreenSlice) = g.rows
 
-slicecols(g::GreenFunctionSlice) = g.cols
+slicecols(g::GreenSlice) = g.cols
 
 Base.parent(g::GreenFunction) = g.parent
 Base.parent(g::GreenSolution) = g.parent
-Base.parent(g::GreenFunctionSlice) = g.parent
+Base.parent(g::GreenSlice) = g.parent
 
 Base.size(g::GreenFunction, i...) = size(g.parent, i...)
 Base.size(g::GreenSolution, i...) = size(g.parent, i...)
@@ -1789,7 +1789,7 @@ Base.size(g::GreenSolution, i...) = size(g.parent, i...)
 copy_lattice(g::GreenFunction) = GreenFunction(copy_lattice(g.parent), g.solver, g.contacts)
 copy_lattice(g::GreenSolution) = GreenSolution(
     copy_lattice(g.parent), g.slicer, g.contactΣs, g.contactbs)
-copy_lattice(g::GreenFunctionSlice) = GreenFunctionSlice(
+copy_lattice(g::GreenSlice) = GreenSlice(
     copy_lattice(g.parent), g.rows, g.cols)
 
 minimal_callsafe_copy(g::GreenFunction) =
@@ -1798,8 +1798,8 @@ minimal_callsafe_copy(g::GreenFunction) =
 minimal_callsafe_copy(g::GreenSolution) =
     GreenSolution(minimal_callsafe_copy(g.parent), minimal_callsafe_copy(g.slicer), g.contactΣs, g.contactbs)
 
-minimal_callsafe_copy(g::GreenFunctionSlice) =
-    GreenFunctionSlice(minimal_callsafe_copy(g.parent), g.rows, g.cols)
+minimal_callsafe_copy(g::GreenSlice) =
+    GreenSlice(minimal_callsafe_copy(g.parent), g.rows, g.cols)
 
 #endregion
 #endregion

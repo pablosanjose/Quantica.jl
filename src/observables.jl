@@ -219,7 +219,7 @@ end
 #endregion
 
 ############################################################################################
-# conductance(gs::GreenFunctionSlice; nambu -> false) -> G(ω; params...)::Real
+# conductance(gs::GreenSlice; nambu -> false) -> G(ω; params...)::Real
 #   For gs = g[i::Int, j::Int = i] -> we get zero temperature Gᵢⱼ = dIᵢ/dVⱼ in units of e^2/h
 #   where i, j are contact indices
 #       Gᵢⱼ =  e^2/h × Tr{[δᵢⱼi(Gʳ-Gᵃ)Γⁱ-GʳΓⁱGᵃΓʲ]}         (nambu = false)
@@ -240,7 +240,7 @@ end
 
 #region ## Constructors ##
 
-function conductance(gs::GreenFunctionSlice{T}; nambu = false) where {T}
+function conductance(gs::GreenSlice{T}; nambu = false) where {T}
     i = slicerows(gs)
     j = slicecols(gs)
     g = parent(gs)
@@ -298,7 +298,7 @@ end
 ############################################################################################
 # ldos: local spectral density
 #   d = ldos(::GreenSolution; kernel = I)      -> d[sites...]::Vector
-#   d = ldos(::GreenFunctionSlice; kernel = I) -> d(ω; params...)::Vector
+#   d = ldos(::GreenSlice; kernel = I) -> d(ω; params...)::Vector
 #   Here ldos is given as Tr(ρᵢᵢ * kernel) where ρᵢᵢ is the spectral function at site i
 #   Here is the generic fallback that uses G. Any more specialized methods need to be added
 #   to each GreenSolver
@@ -320,9 +320,9 @@ end
 
 ldos(gω::GreenSolution; kernel = I) = LocalSpectralDensitySolution(gω, kernel)
 
-function ldos(gs::GreenFunctionSlice{T}; kernel = I) where {T}
+function ldos(gs::GreenSlice{T}; kernel = I) where {T}
     slicerows(gs) === slicecols(gs) ||
-        argerror("Cannot take ldos of a GreenFunctionSlice with rows !== cols")
+        argerror("Cannot take ldos of a GreenSlice with rows !== cols")
     g = parent(gs)
     lat = lattice(g)
     latslice = lat[slicerows(gs)]
@@ -349,6 +349,9 @@ end
 Base.getindex(d::LocalSpectralDensitySolution{T}, scell::CellSites) where {T} =
     append_ldos!(T[], scell, d.gω, d.kernel)
 
+Base.getindex(d::LocalSpectralDensitySolution{T}, cind::Union{Colon,Integer}) where {T} =
+    ldos_kernel(d.gω[cind], d.kernel)
+
 function call!(d::LocalSpectralDensitySlice, ω; params...)
     gω = call!(greenfunction(d), ω; params...)
     empty!(d.diagonal)
@@ -370,11 +373,14 @@ function append_ldos!(v, sc, gω, kernel)
         rng = offset+1:offset+bsize
         offset += bsize
         gi = view(gcell, rng, rng)
-        ldos = kernel === I ? -imag(tr(gi))/π : -imag(tr(gi * kernel))/π
+        ldos = ldos_kernel(gi, kernel)
         push!(v, ldos)
     end
     return v
 end
+
+ldos_kernel(g, kernel::UniformScaling) = - kernel.λ * imag(tr(g)) / π
+ldos_kernel(g, kernel) = -imag(tr(g * kernel)) / π
 
 # # Simpler but slower: this allocates an orbslice for each site
 # function append_ldos!(v, sc, gω, kernel)
@@ -393,7 +399,7 @@ end
 ############################################################################################
 # current: current density Jᵢⱼ(ω) as a function of a charge operator
 #   d = current(::GreenSolution[, dir]; charge)      -> d[sites...]::SparseMatrixCSC{SVector{E,T}}
-#   d = current(::GreenFunctionSlice[, dir]; charge) -> d(ω; params...)::SparseMatrixCSC{SVector{E,T}}
+#   d = current(::GreenSlice[, dir]; charge) -> d(ω; params...)::SparseMatrixCSC{SVector{E,T}}
 #   Computes the zero-temperature equilibrium current density matrix Jᵢⱼ from site j to site i
 #       Jᵢⱼ(ω) = (2/h) rᵢⱼ Re Tr[(Hᵢⱼgʳⱼᵢ - gʳᵢⱼHⱼᵢ)Q]
 #   Here charge = Q, where Q is usually qe*I for normal, and qe*τz/2 for Nambu systems
@@ -420,9 +426,9 @@ end
 current(gω::GreenSolution, dir = missing; charge = -I) =
     CurrentDensitySolution(gω, charge, GreenSolutionCache(gω), sanitize_direction(dir, gω))
 
-function current(gs::GreenFunctionSlice, dir = missing; charge = -I)
+function current(gs::GreenSlice, dir = missing; charge = -I)
     slicerows(gs) === slicecols(gs) ||
-        argerror("Cannot currently take ldos of a GreenFunctionSlice with rows !== cols")
+        argerror("Cannot currently take ldos of a GreenSlice with rows !== cols")
     g = parent(gs)
     latslice = sanitize_latslice(slicerows(gs), g)
     return CurrentDensitySlice(g, charge, latslice, sanitize_direction(dir, g))
