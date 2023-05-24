@@ -346,11 +346,8 @@ function Base.getindex(d::LocalSpectralDensitySolution{T}, l::LatticeSlice) wher
     return v
 end
 
-Base.getindex(d::LocalSpectralDensitySolution{T}, scell::CellSites) where {T} =
-    append_ldos!(T[], scell, d.gω, d.kernel)
-
-Base.getindex(d::LocalSpectralDensitySolution{T}, cind::Union{Colon,Integer}) where {T} =
-    ldos_kernel(d.gω[cind], d.kernel)
+Base.getindex(d::LocalSpectralDensitySolution{T}, sites::Union{CellSites,Colon,Integer}) where {T} =
+    append_ldos!(T[], sites, d.gω, d.kernel)
 
 function call!(d::LocalSpectralDensitySlice, ω; params...)
     gω = call!(greenfunction(d), ω; params...)
@@ -363,17 +360,25 @@ end
 
 (d::LocalSpectralDensitySlice)(ω; params...) = copy(call!(d, ω; params...))
 
-function append_ldos!(v, sc, gω, kernel)
-    gcell = gω[sc]
+function append_ldos!(v, cs::CellSites, gω, kernel)
+    gcell = gω[sites]
     bs = blockstructure(hamiltonian(gω))
-    offset = 0
-    for i in siteindices(sc)
-        # need to translate site indices to orbital indices in corresponding gcell orbslice
-        bsize = blocksize(bs, i)
-        rng = offset+1:offset+bsize
-        offset += bsize
-        gi = view(gcell, rng, rng)
-        ldos = ldos_kernel(gi, kernel)
+    blocks = block_ranges(cs, bs)
+    for rng in blocks
+        gblock = view(gcell, rng, rng)
+        ldos = ldos_kernel(gblock, kernel)
+        push!(v, ldos)
+    end
+    return v
+end
+
+function append_ldos!(v, cind::Union{Colon,Integer}, gω, kernel)
+    gcontact = view(gω, :, :)
+    cbs = blockstructure(gω)
+    blocks = block_ranges(cind, cbs)
+    for rng in blocks
+        gblock = view(gcontact, rng, rng)
+        ldos = ldos_kernel(gblock, kernel)
         push!(v, ldos)
     end
     return v
@@ -381,17 +386,6 @@ end
 
 ldos_kernel(g, kernel::UniformScaling) = - kernel.λ * imag(tr(g)) / π
 ldos_kernel(g, kernel) = -imag(tr(g * kernel)) / π
-
-# # Simpler but slower: this allocates an orbslice for each site
-# function append_ldos!(v, sc, gω, kernel)
-#     for i in siteindices(sc)
-#         sc´ = CellSites(cell(sc), i)
-#         gi = gω[sc´]
-#         ldos = kernel === I ? -imag(tr(gi))/π : -imag(tr(gi * kernel))/π
-#         push!(v, ldos)
-#     end
-#     return v
-# end
 
 #endregion
 #endregion

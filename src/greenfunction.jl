@@ -258,14 +258,23 @@ function contact_blockstructure(bs::OrbitalBlockStructure, lss...)
     lsall = combine(lss...)
     subcelloffsets = Int[]
     siteoffsets = Int[]
-    osall = orbslice(lsall, bs, siteoffsets, subcelloffsets)
-    contactinds = [contact_indices(lsall, siteoffsets, ls) for ls in lss]
-    return ContactBlockStructure(osall, contactinds, siteoffsets, subcelloffsets)
+    store = (siteoffsets, subcelloffsets)
+    osall = orbslice(lsall, bs, store...)
+    contactinds = Vector{Int}[]
+    contactrngs = Vector{UnitRange{Int}}[]
+    for ls in lss
+        i, r = contact_indices_ranges(lsall, siteoffsets, ls)
+        push!(contactinds, i)
+        push!(contactrngs, r)
+    end
+
+    return ContactBlockStructure(osall, contactinds, contactrngs, siteoffsets, subcelloffsets)
 end
 
 # computes the orbital indices of ls sites inside the combined lsall
-function contact_indices(lsall::LatticeSlice, siteoffsets, ls::LatticeSlice)
+function contact_indices_ranges(lsall::LatticeSlice, siteoffsets, ls::LatticeSlice)
     contactinds = Int[]
+    contactrngs = UnitRange{Int}[]
     for scell´ in subcells(ls)
         so = findsubcell(cell(scell´), lsall)
         so === nothing && continue
@@ -274,17 +283,21 @@ function contact_indices(lsall::LatticeSlice, siteoffsets, ls::LatticeSlice)
         scell = subcells(lsall, ind)
         for i´ in siteindices(scell´), (n, i) in enumerate(siteindices(scell))
             n´ = offset + n
-            i == i´ && append!(contactinds, siteoffsets[n´]+1:siteoffsets[n´+1])
+            if i == i´
+                rng = siteoffsets[n´]+1:siteoffsets[n´+1]
+                append!(contactinds, rng)
+                push!(contactrngs, rng)
+            end
         end
     end
-    return contactinds
+    return contactinds, contactrngs
 end
 
 #endregion
 
 ############################################################################################
 # contact_sites_to_orbitals
-#  convert a list of sites in a ContactBlockStructure to a list of orbitals
+#  convert a list of contact site indices in a ContactBlockStructure to a list of orbitals
 #region
 
 function contact_sites_to_orbitals(siteinds, bs::Union{ContactBlockStructure,OrbitalBlockStructure})
@@ -294,6 +307,27 @@ function contact_sites_to_orbitals(siteinds, bs::Union{ContactBlockStructure,Orb
     end
     return finds
 end
+
+#endregion
+
+############################################################################################
+# block_ranges
+#  compute the flat index ranges for each site in LatticeSlice or contact
+#region
+
+function block_ranges(s, bs::OrbitalBlockStructure)
+    rngs = UnitRange{Int}[]
+    block_ranges!(rngs, s, bs)
+    return rngs
+end
+
+block_ranges!(rngs, ls::LatticeSlice, bs::OrbitalBlockStructure) =
+    foreach!(sc -> block_ranges!(rngs, sc, bs), subcells(ls))
+
+block_ranges!(rngs, cs::CellSites, bs::OrbitalBlockStructure) =
+    foreach!(i -> push!(rngs, flatrange(bs, i)), siteindices(cs))
+
+block_ranges(cind::Union{Integer,Colon}, bs::ContactBlockStructure) = contactrngs(bs, cind)
 
 #endregion
 

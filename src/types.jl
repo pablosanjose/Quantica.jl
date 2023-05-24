@@ -1614,6 +1614,7 @@ Base.size(h::OpenHamiltonian, i...) = size(h.h, i...)
 struct ContactBlockStructure{L}
     orbslice::OrbitalSlice{L}            # non-extended orbital indices for all contacts
     contactinds::Vector{Vector{Int}}     # orbital indices in orbslice for each contact
+    contactrngs::Vector{Vector{UnitRange{Int}}} # orbital ranges of sites for each contact
     siteoffsets::Vector{Int}             # block offsets for each site in orbslice
     subcelloffsets::Vector{Int}          # block offsets for each subcell in orbslice
 end
@@ -1628,7 +1629,7 @@ const EmptyContacts{L} = Contacts{L,0,Tuple{}}
 #region ## Constructors ##
 
 ContactBlockStructure{L}() where {L} =
-    ContactBlockStructure(OrbitalSlice{L}(), Vector{Int}[], [0], [0])
+    ContactBlockStructure(OrbitalSlice{L}(), Vector{Int}[], Vector{UnitRange{Int}}[], [0], [0])
 
 function Contacts(oh::OpenHamiltonian)
     Σs = selfenergies(oh)
@@ -1679,8 +1680,14 @@ blockstructure(c::Contacts) = c.blockstruct
 
 contactinds(c::Contacts, i...) = contactinds(c.blockstruct, i...)
 contactinds(c::ContactBlockStructure) = c.contactinds
-contactinds(c::ContactBlockStructure, i) = 1 <= i <= length(c.contactinds) ? c.contactinds[i] :
+contactinds(c::ContactBlockStructure, i::Integer) = 1 <= i <= length(c.contactinds) ? c.contactinds[i] :
     argerror("Cannot access contact $i, there are $(length(c.contactinds)) contacts")
+
+contactrngs(c::Contacts, i...) = contactrngs(c.blockstruct, i...)
+contactrngs(c::ContactBlockStructure) = c.contactrngs
+contactrngs(c::ContactBlockStructure, i::Integer) = 1 <= i <= length(c.contactrngs) ? c.contactrngs[i] :
+    argerror("Cannot access contact $i, there are $(length(c.contactrngs)) contacts")
+contactrngs(c::ContactBlockStructure, ::Colon) = [flatrange(c, i) for i in 1:unflatsize(c)]
 
 Base.isempty(c::Contacts) = isempty(selfenergies(c))
 
