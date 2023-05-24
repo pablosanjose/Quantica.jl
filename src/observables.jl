@@ -399,7 +399,7 @@ ldos_kernel(g, kernel) = -imag(tr(g * kernel)) / π
 struct CurrentDensitySolution{T,E,L,G<:GreenSolution{T,E,L},K,V<:Union{Missing,SVector}} <: IndexableObservable
     gω::G
     charge::K                               # should return a float when traced with gʳᵢⱼHᵢⱼ
-    cache::GreenSolutionCache{T,L,G}
+    cache::GreenSolutionCache{T,L,G}        # memoizes g[sites]
     direction::V
 end
 
