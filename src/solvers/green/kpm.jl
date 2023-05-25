@@ -24,9 +24,9 @@ empty_mulist(::Vector{C}, order) where {C<:Complex} =
 empty_mulist(ket::Matrix{C}, order) where {C<:Complex} =
     [zeros(C, size(ket, 2), size(ket, 2)) for _ in 1:(order + 1)]
 
-function momentaKPM(h, ket, (center, halfwidth); order = 10, kernel = I, padfactor = 1.01)
+function momentaKPM(h, ket, (center, halfwidth); order = 10, kernel = I)
     pmeter = Progress(order, "Computing moments: ")
-    builder = KPMBuilder(h, kernel, ket, (center, padfactor * halfwidth), order)
+    builder = KPMBuilder(h, kernel, ket, (center, halfwidth), order)
     mulist = addmomentaKPM!(builder, pmeter)
     jackson!(mulist)
     return mulist
@@ -146,7 +146,8 @@ end
 
 function KPMgreen_coefficient(n, ω)
     σ = ifelse(imag(ω) < 0, -1, 1)
-    g0n = -2 * im * σ * cis(-n * σ * acos(ω)) / (ifelse(iszero(n), 2, 1) * sqrt(1 - ω^2))
+    ωc = complex(ω)
+    g0n = -2 * im * σ * cis(-n * σ * acos(ωc)) / (ifelse(iszero(n), 2, 1) * sqrt(1 - ωc^2))
     return g0n
 end
 
@@ -174,7 +175,7 @@ minimal_callsafe_copy(s::AppliedKPMGreenSolver) = AppliedKPMGreenSolver(copy(s.m
 function apply(s::GS.KPM,  h::Hamiltonian{<:Any,<:Any,0}, cs::Contacts)
     isempty(cs) && argerror("The KPM solver requires at least one contact to be added that defiens where the Green function will be computed. A dummy contact can be created with `attach(nothing; sites...)`.")
     hmat = h(())
-    bandCH = band_ceter_halfwifth(hmat, s.bandrange)
+    bandCH = band_ceter_halfwidth(hmat, s.bandrange, s.padfactor)
     ket = contact_basis(h, cs)
     momenta = momentaKPM(hmat, ket, bandCH; order = s.order)
     return AppliedKPMGreenSolver(momenta, bandCH)
@@ -183,14 +184,14 @@ end
 apply(::GS.KPM, h::AbstractHamiltonian, cs::Contacts) =
     argerror("Can only use KPM with bounded non-parametric Hamiltonians")
 
-band_ceter_halfwifth(_, (emin, emax)) = 0.5 * (emin + emax), 0.5 * (emax - emin)
+band_ceter_halfwidth(_, (emin, emax), padfactor) = 0.5 * (emin + emax), 0.5 * (emax - emin)
 
-function band_ceter_halfwifth(h, ::Missing)
+function band_ceter_halfwidth(h, ::Missing, padfactor)
     @warn "Computing spectrum bounds... Consider using the `bandrange` option for faster performance."
     # (ϵmin, ϵmax) = GS.bandrange_arnoldi(h)
     (emin, emax) = GS.bandrange_arpack(h)
     @warn  "Computed real bandrange = ($emin, $emax)"
-    bandCH = 0.5 * (emin + emax), 0.5 * (emax - emin)
+    bandCH = 0.5 * (emin + emax), 0.5 * (emax - emin) * padfactor
     return bandCH
 end
 

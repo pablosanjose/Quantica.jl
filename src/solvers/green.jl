@@ -36,12 +36,12 @@ Schur(; shift = 1.0, boundary = Inf) = Schur(shift, float(boundary))
 struct KPM{B<:Union{Missing,NTuple{2}}} <: AbstractGreenSolver
     order::Int
     bandrange::B
+    padfactor::Float64  # for automatically computed bandrange
 end
 
-# KPM(; order = 100, bandrange = missing) = KPM(order, bandrange)
-function KPM(; order = 100, bandrange = missing)
+function KPM(; order = 100, bandrange = missing, padfactor = 1.01)
     bandrange === missing && ensureloaded(:Arpack)
-    return KPM(order, bandrange)
+    return KPM(order, bandrange, padfactor)
 end
 
 
