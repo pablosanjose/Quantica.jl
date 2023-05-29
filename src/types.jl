@@ -1745,10 +1745,10 @@ end
 # Allows gω[contact(i), contact(j)] for i,j integer Σs indices ("contacts")
 # Allows gω[cell, cell´] using T-matrix, with cell::Union{SVector,CellSites}
 # Allows also view(gω, ...)
-struct GreenSolution{T,E,L,S<:GreenSlicer,G<:GreenFunction{T,E,L},Σ}
+struct GreenSolution{T,E,L,S<:GreenSlicer,G<:GreenFunction{T,E,L},Σs}
     parent::G
     slicer::S       # gives G(ω; p...)[i,j] for i,j::AppliedGreenIndex
-    contactΣs::Σ    # selfenergy Σ(ω)::MatrixBlock or NTuple{3,MatrixBlock} for each contact
+    contactΣs::Σs   # Tuple of selfenergies Σ(ω)::MatrixBlock or NTuple{3,MatrixBlock}, one per contact
     contactbs::ContactBlockStructure{L}
 end
 

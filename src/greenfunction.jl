@@ -125,52 +125,47 @@ Base.getindex(s::GreenSlicer, ::CellOrbitals, ::CellOrbitals) =
 #endregion
 
 ############################################################################################
-# selfenergy(::GreenSolution[, contactinds::Int...]; onlyΓ = false)
+# selfenergy(::GreenSolution, contactinds::Int...; onlyΓ = false)
 #   if no contactinds are provided, all are returned. Otherwise, a view of Σ over contacts.
-#   Note that a smaller, contact-specific similar_contactΣ(g, contact) cannot be used here,
-#   since selfenergies are MatrixBlock's over the complete similar_contactΣ(g)
+# selfenergy!(Σ::AbstractMatrix, ::GreenSolution, cinds...)
+#   add blocks from cinds selfenergies to Σ (or all), and return a view over them
+# similar_contactΣ(g)
+#   Matrix to hold MatrixBlocks of any self-energy
+# similar_contactΣ(g, cind)
+#   Matrix that can hold a view of one self-energy
 #region
 
-function selfenergy(g::GreenSolution; kw...)
-    Σ = similar_contactΣ(g)
-    selfenergy!(Σ, g; kw...)
-    return Σ
-end
+selfenergy(g::GreenSolution, cinds::Int...; kw...) =
+    selfenergy!(similar_contactΣ(g), g, cinds...; kw...)
 
-function selfenergy(g::GreenSolution, cind::Int, cinds::Int...; kw...)
-    Σ = similar_contactΣ(g)
-    selfenergy!(Σ, g, cind, cinds...; kw...)
-    # view over selected contacts
-    inds = copy(contactinds(g, cind))
-    foreach(i -> append!(inds, contactinds(g, i)), cinds)
-    unique!(sort!(inds))
-    Σv = view(Σ, inds, inds)
-    return Σv
-end
-
-function similar_contactΣ(g::Union{GreenFunction{T},GreenSolution{T}}, contactidx...) where {T}
+# we support also the case for one contact, but it is only used elsewhere
+function similar_contactΣ(g::Union{GreenFunction{T},GreenSolution{T}}, cind...) where {T}
     contactbs = blockstructure(g)  # ContactBlockStructure
-    n = flatsize(contactbs, contactidx...)
+    n = flatsize(contactbs, cind...)
     Σ = zeros(Complex{T}, n, n)
     return Σ
 end
 
-function selfenergy!(Σ::AbstractMatrix{T}, g::GreenSolution; onlyΓ = false) where {T}
-    fill!(Σ, zero(T))
-    addselfenergy!.(Ref(Σ), selfenergies(g))
-    onlyΓ && extractΓ!(Σ)
-    return Σ
+function maybe_selfenergy_view(Σ, g, cind, cinds...)
+    inds = copy(contactinds(g, cind))
+    foreach(i -> append!(inds, contactinds(g, i)), cinds)
+    isempty(cinds) || unique!(sort!(inds))
+    Σv = view(Σ, inds, inds)
+    return Σv
 end
 
-function selfenergy!(Σ::AbstractMatrix{T}, g::GreenSolution, is...; onlyΓ = false) where {T}
+maybe_selfenergy_view(Σ, g) = Σ
+
+function selfenergy!(Σ::AbstractMatrix{T}, g::GreenSolution, cinds...; onlyΓ = false) where {T}
     fill!(Σ, zero(T))
-    addselfenergy!(Σ, g, is...)
-    onlyΓ && extractΓ!(Σ)
-    return Σ
+    addselfenergy!(Σ, g, cinds...)
+    onlyΓ && extractΓ!(Σ)   # faster to do this on Σ than on Σv
+    Σv = maybe_selfenergy_view(Σ, g, cinds...)
+    return Σv
 end
 
-addselfenergy!(Σ, g::GreenSolution, i::Int, is...) =
-    addselfenergy!(addselfenergy!(Σ, selfenergies(g)[i]), g, is...)
+addselfenergy!(Σ, g::GreenSolution, cind::Int, cinds...) =
+    addselfenergy!(addselfenergy!(Σ, selfenergies(g)[cind]), g, cinds...)
 addselfenergy!(Σ, ::GreenSolution) = Σ
 
 # RegularSelfEnergy case

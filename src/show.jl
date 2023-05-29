@@ -328,18 +328,18 @@ Base.summary(g::GreenSlice{T,E,L}) where {T,E,L} =
 #endregion
 
 ############################################################################################
-# Conductance
+# ConductanceSlice
 #region
 
-function Base.show(io::IO, G::Conductance)
+function Base.show(io::IO, G::ConductanceSlice)
     i = get(io, :indent, "")
     print(io, i, summary(G), "\n",
 "$i  Current contact  : $(currentcontact(G))
 $i  Bias contact     : $(biascontact(G))")
 end
 
-Base.summary(::Conductance{T}) where {T} =
-    "Conductance{$T}: Zero-temperature conductance dIᵢ/dVⱼ from contacts i,j, in units of e^2/h"
+Base.summary(::ConductanceSlice{T}) where {T} =
+    "ConductanceSlice{$T}: Zero-temperature conductance dIᵢ/dVⱼ from contacts i,j, in units of e^2/h"
 
 #endregion
 

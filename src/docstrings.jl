@@ -1241,9 +1241,10 @@ an `ExtendedSelfEnergy`, which is numerically more stable than a naive implement
 
     attach(h, g1D::GreenFunction, coupling::AbstractModel; reverse = false, transform = identity,  sites...)
 
-Add a self-energy `Σ(ω) = V´⋅g1D(ω)[surface]⋅V` corresponding to a 1D lead (not necessarily
-semi-infinite in this case), but with couplings `V` and `V´`, defined by `coupling`, between
-`sites` and the `surface` lead unitcell. See also Advanced note above.
+Add a self-energy `Σ(ω) = V´⋅g1D(ω)[surface]⋅V` corresponding to a 1D lead (semi-infinite or
+infinite), but with couplings `V` and `V´`, defined by `coupling`, between `sites` and the
+`surface` lead unitcell (or the one with index zero if there is no boundary) . See also
+Advanced note above.
 
 ## Currying
 
@@ -1389,12 +1390,13 @@ density of states `ρᵢ(ω)` at specific sites `i` but at arbitrary energy `ω`
     ldos(gω::GreenSolution; kernel = I)
 
 Build `ρω::LocalSpectralDensitySolution`, as above, but for `ρᵢ(ω)` at fixed `ω` and
-arbitrary sites `i`.
+arbitrary sites `i`. See also `greenfunction` for details on building a `GreenSlice` and
+`GreenSolution`.
 
-The local density of states is defined here as `ρᵢ(ω) = -Tr(gᵢᵢ(ω))/π`, where `gᵢᵢ(ω)` is
+The local density of states is defined here as ``ρᵢ(ω) = -Tr(gᵢᵢ(ω))/π``, where `gᵢᵢ(ω)` is
 the retarded Green function at a given site `i`. Therefore a small imaginary part should be
-added to `ω` to obtain a correct result. See also `greenfunction` for details on building a
-`GreenSlice` and `GreenSolution`.
+added to `ω` when using a `gω::GreenSolution` to obtain a correct retarded result with most
+Green solvers.
 
 ## Keywords
 
@@ -1407,7 +1409,8 @@ added to `ω` to obtain a correct result. See also `greenfunction` for details o
 
 Given a partially evaluated `ρω::LocalSpectralDensitySolution` or
 `ρs::LocalSpectralDensitySlice`, build a vector `[ρ₁(ω), ρ₂(ω)...]` of fully evaluated local
-densities of states.
+densities of states. If `ω` above is real, a small positive imaginary part will be added
+internally for the evaluation.
 
 # Example
 ```jldoctest
@@ -1438,3 +1441,115 @@ julia> ldos(g(0.2))[1]  # The KPM solver doesn't require an imag(ω) > 0 broaden
 
 """
 ldos
+
+"""
+    conductance(gs::GreenSlice; nambu = false)
+
+Given a slice `gs = g[i::Integer, j::Integer]` of a `g::GreenFunction`, build a partially
+evaluated object `G::ConductanceSlice` representing the zero-temperature linear differential
+conductance `Gᵢⱼ = dIᵢ/dVⱼ` between contacts `i` and `j` at arbitrary bias `ω = eV` in units
+of `e^2/h`. `Gᵢⱼ` is given by
+
+      ``Gᵢⱼ =  e^2/h × Tr{[δᵢⱼi(gʳ-gᵃ)Γⁱ-gʳΓⁱgᵃΓʲ]}``         (nambu = false)
+      ``Gᵢⱼ =  e^2/h × Tr{[δᵢⱼi(gʳ-gᵃ)Γⁱτₑ-gʳΓⁱτzgᵃΓʲτₑ]}``   (nambu = true)
+
+Here `gʳ = g(ω)` and `gᵃ = (gʳ)' = g(ω')` are the retarded and advanced Green function of
+the system, and `Γⁱ = (Σⁱ - Σⁱ')/im` is the decay rate at contact `i`. For Nambu systems
+(`nambu = true`), the matrices `τₑ=[I 0; 0 0]` and `τz = [I 0; 0 -I]` ensure that charge
+reversal in Andreev reflections is properly taken into account. For normal systems (`nambu =
+false`), the total current at finite temperature and contact bias is given by ``Iᵢ = e/h × ∫
+dω ∑ⱼ (f(ω-eVᵢ) - f(ω-eVⱼ)) Gᵢⱼ(ω)``.
+
+## Keywords
+
+- `nambu` : whether to consider the Hamiltonian of the system is written in a Nambu basis, each site containing `N` electron orbitals followed by `N` hole orbitals.
+
+## Full evaluation
+
+    G(ω; params...)
+
+Compute the conductance between the specified contacts. If `ω` is real, a small positive
+imaginary part will be added internally for the evaluation.
+
+```jldoctest
+julia> # A central system g0 with two 1D leads and transparent contacts
+
+julia> gl = LP.square() |> hamiltonian(hopping(1)) |> supercell((1,0), region = r->-2<r[2]<2) |> greenfunction(GS.Schur(boundary = 0));
+
+julia> g0 = LP.square() |> hamiltonian(hopping(1)) |> supercell(region = r->-2<r[2]<2 && r[1]≈0) |> attach(gl, reverse = true) |> attach(gl) |> greenfunction;
+
+julia> G = conductance(g0[1])
+ConductanceSlice{Float64}: Zero-temperature conductance dIᵢ/dVⱼ from contacts i,j, in units of e^2/h
+  Current contact  : 1
+  Bias contact     : 1
+
+julia> G(0.2)
+2.999999999999999
+```
+
+# See also
+    `greenfunction`, `ldos`, `current`, `josephson`
+
+"""
+conductance
+
+"""
+    current(gs::GreenSlice; charge = -I, direction = missing)
+
+Build `Js::CurrentDensitySlice`, a partially evaluated object representing the equilibrium
+local current density `Jᵢⱼ(ω)` at arbitrary energy `ω` from site `j` to site `i`, both taken
+from a specific lattice slice. The current is computed along a given `direction` (see
+Keywords).
+
+    current(gω::GreenSolution; charge = -I, direction = missing)
+
+Build `Jω::CurrentDensitySolution`, as above, but for `Jᵢⱼ(ω)` at fixed `ω` and arbitrary
+sites `i, j`. See also `greenfunction` for details on building a `GreenSlice` and
+`GreenSolution`.
+
+The local current density is defined here as ``Jᵢⱼ(ω) = (2/h) rᵢⱼ Re Tr[(Hᵢⱼgⱼᵢ(ω) -
+gᵢⱼ(ω)Hⱼᵢ) * charge]``, with the integrated local current given by ``Jᵢⱼ = ∫ f(ω) Jᵢⱼ(ω)
+dω``. Here `Hᵢⱼ` is the hopping from site `j` at `rⱼ` to `i` at `rᵢ`, `rᵢⱼ = rᵢ - rⱼ`,
+`charge` is the charge of carriers in orbital space (see Keywords), and `gᵢⱼ(ω)` is the
+retarded Green function between said sites. Therefore a small imaginary part should be added
+to `ω` when using a `gω::GreenSolution` to obtain a correct retarded result with most Green
+solvers.
+
+## Keywords
+
+- `charge` : for multiorbital sites, `charge` can be a general matrix, which allows to compute arbitrary currents, such as spin currents.
+- `direction`: as defined above, `Jᵢⱼ(ω)` is a vector. If `direction` is `missing` the norm `|Jᵢⱼ(ω)|` is returned. If it is an `u::Union{SVector,Tuple}`, `u⋅Jᵢⱼ(ω)` is returned. If an `n::Integer`, `Jᵢⱼ(ω)[n]` is returned.
+
+## Full evaluation
+
+    Jω[sites...]
+    Js(ω; params...)
+
+Given a partially evaluated `Jω::CurrentDensitySolution` or `ρs::CurrentDensitySlice`, build
+a sparse matrix `Jᵢⱼ(ω)` along the specified `direction` of fully evaluated local current
+densities. If `ω` above is real, a small positive imaginary part will be added internally
+for the evaluation.
+
+# Example
+
+```jldoctest
+julia> # A semi-infinite 1D lead with a magnetic field `B`
+
+julia> g = LP.square() |> hamiltonian(@hopping((r, dr; B = 0.1) -> cis(B * dr' * SA[r[2],-r[1]]))) |> supercell((1,0), region = r->-2<r[2]<2) |> greenfunction(GS.Schur(boundary = 0));
+
+julia> J = current(g[cells = SA[1]]); J(0.2; B = 0.1)
+3×3 SparseArrays.SparseMatrixCSC{Float64, Int64} with 4 stored entries:
+  ⋅         0.0290138   ⋅
+ 0.0290138   ⋅         0.0290138
+  ⋅         0.0290138   ⋅
+
+julia> J(0.2; B = 0.0)
+3×3 SparseArrays.SparseMatrixCSC{Float64, Int64} with 4 stored entries:
+  ⋅           7.77156e-16   ⋅
+ 7.77156e-16   ⋅           5.55112e-16
+  ⋅           5.55112e-16   ⋅
+
+```
+
+"""
+current

@@ -222,82 +222,6 @@ end
 #endregion
 #endregion
 
-############################################################################################
-# conductance(gs::GreenSlice; nambu -> false) -> G(ω; params...)::Real
-#   For gs = g[i::Int, j::Int = i] -> we get zero temperature Gᵢⱼ = dIᵢ/dVⱼ in units of e^2/h
-#   where i, j are contact indices
-#       Gᵢⱼ =  e^2/h × Tr{[δᵢⱼi(Gʳ-Gᵃ)Γⁱ-GʳΓⁱGᵃΓʲ]}         (nambu = false)
-#       Gᵢⱼ =  e^2/h × Tr{[δᵢⱼi(Gʳ-Gᵃ)Γⁱτₑ-GʳΓⁱτzGᵃΓʲτₑ]}   (nambu = true)
-#   and where τₑ = [1 0; 0 0] and τz = [1 0; 0 -1] in Nambu space, and ω = eV.
-#region
-
-struct Conductance{T,E,L,C,G<:GreenFunction{T,E,L}}
-    g::G
-    i::Int                        # contact index for Iᵢ
-    j::Int                        # contact index for Vⱼ
-    τezdiag::Tuple{C,C}           # diagonal of τₑ and τz, or (missing, missing)
-    Γ::Matrix{Complex{T}}         # prealloc workspace for selfenergy! (over all contacts)
-    GrΓi::Matrix{Complex{T}}      # prealloc workspace GʳⱼᵢΓⁱ
-    GaΓj::Matrix{Complex{T}}      # prealloc workspace GᵃᵢⱼΓʲ
-    GΓGΓ::Matrix{Complex{T}}      # prealloc workspace GʳⱼᵢΓⁱGᵃᵢⱼΓʲ
-end
-
-#region ## Constructors ##
-
-function conductance(gs::GreenSlice{T}; nambu = false) where {T}
-    i = slicerows(gs)
-    j = slicecols(gs)
-    g = parent(gs)
-    ni = flatsize(blockstructure(g), i)
-    nj = flatsize(blockstructure(g), j)
-    Γ = similar_contactΣ(g)
-    if nambu
-        nsize = normal_size(hamiltonian(g))
-        τezdiag = (taue_diag.(1:nj, nsize), tauz_diag.(1:ni, nsize))
-    else
-        τezdiag = (missing, missing)
-    end
-    GrΓi = Matrix{Complex{T}}(undef, nj, ni)
-    GaΓj = Matrix{Complex{T}}(undef, ni, nj)
-    GΓGΓ = Matrix{Complex{T}}(undef, nj, nj)
-    return Conductance(g, i, j, τezdiag, Γ, GrΓi, GaΓj, GΓGΓ)
-end
-
-#endregion
-
-#region ## API ##
-
-currentcontact(G) = G.i
-
-biascontact(G) = G.j
-
-(G::Conductance{T})(ω::Real; params...) where {T} = G(ω + im*sqrt(eps(T)); params...)
-
-function (G::Conductance)(ω::Complex; params...)
-    τe, τz = G.τezdiag
-    gω = call!(G.g, ω; params...)
-    gʳⱼᵢ = gω[G.j, G.i]
-    gᵃᵢⱼ = gʳⱼᵢ'
-    Γi = selfenergy!(G.Γ, gω, G.i; onlyΓ = true)
-    mul!(G.GrΓi, gʳⱼᵢ, Γi)
-    Γj = G.i == G.j ? Γi : selfenergy!(G.Γ, gω, G.j; onlyΓ = true)
-    mul!(G.GaΓj, gᵃᵢⱼ, Γj)
-    mul_tau!(G.GrΓi, τz)                        # no-op if τz is missing
-    mul!(G.GΓGΓ, G.GrΓi, G.GaΓj)
-    # the -Tr{GʳΓⁱτzGᵃΓʲτₑ} term
-    cond = - real(trace_tau(G.GΓGΓ, τe))        # simple trace if τe is missing
-    if G.i == G.j
-        # add the Tr(i(Gʳ-Gᵃ)Γⁱτₑ) term
-        gmg = gʳⱼᵢ
-        gmg .-= gᵃᵢⱼ
-        iGmGΓ = mul!(G.GΓGΓ, gmg, Γi, im, 0)
-        cond += real(trace_tau(iGmGΓ, τe))      # simple trace if τe is missing
-    end
-    return cond
-end
-
-#endregion
-#endregion
 
 ############################################################################################
 # ldos: local spectral density
@@ -353,7 +277,9 @@ function call!(d::LocalSpectralDensitySlice{T}, ω; params...) where {T}
     return append_ldos!(T[], sites, gω, d.kernel)
 end
 
-(d::LocalSpectralDensitySlice)(ω; params...) = copy(call!(d, ω; params...))
+(d::LocalSpectralDensitySlice{T})(ω::Real; params...) where {T} = d(ω + im*sqrt(eps(T)); params...)
+
+(d::LocalSpectralDensitySlice)(ω::Complex; params...) = copy(call!(d, ω; params...))
 
 function append_ldos!(v, cs::CellSites, gω, kernel)
     gcell = gω[cs]
@@ -386,10 +312,92 @@ ldos_kernel(g, kernel) = -imag(tr(g * kernel)) / π
 #endregion
 
 ############################################################################################
+# conductance(gs::GreenSlice; nambu = false) -> G(ω; params...)::Real
+#   For gs = g[i::Int, j::Int = i] -> we get zero temperature Gᵢⱼ = dIᵢ/dVⱼ in units of e^2/h
+#   where i, j are contact indices
+#       Gᵢⱼ =  e^2/h × Tr{[δᵢⱼi(Gʳ-Gᵃ)Γⁱ-GʳΓⁱGᵃΓʲ]}         (nambu = false)
+#       Gᵢⱼ =  e^2/h × Tr{[δᵢⱼi(Gʳ-Gᵃ)Γⁱτₑ-GʳΓⁱτzGᵃΓʲτₑ]}   (nambu = true)
+#   and where τₑ = [1 0; 0 0] and τz = [1 0; 0 -1] in Nambu space, and ω = eV.
+#region
+
+struct ConductanceSlice{T,E,L,C,G<:GreenFunction{T,E,L}}
+    g::G
+    i::Int                        # contact index for Iᵢ
+    j::Int                        # contact index for Vⱼ
+    τezdiag::Tuple{C,C}           # diagonal of τₑ and τz, or (missing, missing)
+    Γ::Matrix{Complex{T}}         # prealloc workspace for selfenergy! (over all contacts)
+    GrΓi::Matrix{Complex{T}}      # prealloc workspace GʳⱼᵢΓⁱ
+    GaΓj::Matrix{Complex{T}}      # prealloc workspace GᵃᵢⱼΓʲ
+    GΓGΓ::Matrix{Complex{T}}      # prealloc workspace GʳⱼᵢΓⁱGᵃᵢⱼΓʲ
+end
+
+#region ## Constructors ##
+
+function conductance(gs::GreenSlice{T}; nambu = false) where {T}
+    i = slicerows(gs)
+    j = slicecols(gs)
+    check_contact_slice(i)
+    check_contact_slice(j)
+    g = parent(gs)
+    ni = flatsize(blockstructure(g), i)
+    nj = flatsize(blockstructure(g), j)
+    Γ = similar_contactΣ(g)
+    if nambu
+        nsize = normal_size(hamiltonian(g))
+        τezdiag = (taue_diag.(1:nj, nsize), tauz_diag.(1:ni, nsize))
+    else
+        τezdiag = (missing, missing)
+    end
+    GrΓi = Matrix{Complex{T}}(undef, nj, ni)
+    GaΓj = Matrix{Complex{T}}(undef, ni, nj)
+    GΓGΓ = Matrix{Complex{T}}(undef, nj, nj)
+    return ConductanceSlice(g, i, j, τezdiag, Γ, GrΓi, GaΓj, GΓGΓ)
+end
+
+check_contact_slice(i) = i isa Integer ||
+    argerror("Please use an Integer Green slice `g[i::Integer, j::Integer = i]` to compute the conductance `dIᵢ/dVⱼ` between contacts `i,j`")
+
+#endregion
+
+#region ## API ##
+
+currentcontact(G) = G.i
+
+biascontact(G) = G.j
+
+(G::ConductanceSlice{T})(ω::Real; params...) where {T} = G(ω + im*sqrt(eps(T)); params...)
+
+function (G::ConductanceSlice)(ω::Complex; params...)
+    τe, τz = G.τezdiag
+    gω = call!(G.g, ω; params...)
+    gʳⱼᵢ = gω[G.j, G.i]
+    gᵃᵢⱼ = gʳⱼᵢ'
+    Γi = selfenergy!(G.Γ, gω, G.i; onlyΓ = true)
+    mul!(G.GrΓi, gʳⱼᵢ, Γi)
+    Γj = G.i == G.j ? Γi : selfenergy!(G.Γ, gω, G.j; onlyΓ = true)
+    mul!(G.GaΓj, gᵃᵢⱼ, Γj)
+    mul_tau!(G.GrΓi, τz)                        # no-op if τz is missing
+    mul!(G.GΓGΓ, G.GrΓi, G.GaΓj)
+    # the -Tr{GʳΓⁱτzGᵃΓʲτₑ} term
+    cond = - real(trace_tau(G.GΓGΓ, τe))        # simple trace if τe is missing
+    if G.i == G.j
+        # add the Tr(i(Gʳ-Gᵃ)Γⁱτₑ) term
+        gmg = gʳⱼᵢ
+        gmg .-= gᵃᵢⱼ
+        iGmGΓ = mul!(G.GΓGΓ, gmg, Γi, im, 0)
+        cond += real(trace_tau(iGmGΓ, τe))      # simple trace if τe is missing
+    end
+    return cond
+end
+
+#endregion
+#endregion
+
+############################################################################################
 # current: current density Jᵢⱼ(ω) as a function of a charge operator
 #   d = current(::GreenSolution[, dir]; charge)      -> d[sites...]::SparseMatrixCSC{SVector{E,T}}
 #   d = current(::GreenSlice[, dir]; charge) -> d(ω; params...)::SparseMatrixCSC{SVector{E,T}}
-#   Computes the zero-temperature equilibrium current density matrix Jᵢⱼ from site j to site i
+#   Computes the zero-temperature equilibrium current density Jᵢⱼ from site j to site i
 #       Jᵢⱼ(ω) = (2/h) rᵢⱼ Re Tr[(Hᵢⱼgʳⱼᵢ - gʳᵢⱼHⱼᵢ)Q]
 #   Here charge = Q, where Q is usually qe*I for normal, and qe*τz/2 for Nambu systems
 #   `dir` projects Jᵢⱼ along a certain direction, or takes the norm if missing
@@ -412,15 +420,15 @@ end
 
 #region ## Constructors ##
 
-current(gω::GreenSolution, dir = missing; charge = -I) =
-    CurrentDensitySolution(gω, charge, GreenSolutionCache(gω), sanitize_direction(dir, gω))
+current(gω::GreenSolution; direction = missing, charge = -I) =
+    CurrentDensitySolution(gω, charge, GreenSolutionCache(gω), sanitize_direction(direction, gω))
 
-function current(gs::GreenSlice, dir = missing; charge = -I)
+function current(gs::GreenSlice; direction = missing, charge = -I)
     slicerows(gs) === slicecols(gs) ||
         argerror("Cannot currently take ldos of a GreenSlice with rows !== cols")
     g = parent(gs)
     latslice = sanitize_latslice(slicerows(gs), g)
-    return CurrentDensitySlice(g, charge, latslice, sanitize_direction(dir, g))
+    return CurrentDensitySlice(g, charge, latslice, sanitize_direction(direction, g))
 end
 
 sanitize_direction(dir, ::GreenSolution{<:Any,E}) where {E} = _sanitize_direction(dir, Val(E))
@@ -445,8 +453,11 @@ Base.getindex(d::CurrentDensitySolution, ls::LatticeSlice) = current_matrix(d.g�
 Base.getindex(d::CurrentDensitySolution, scell::CellSites) = d[lattice(hamiltonian(d.gω))[scell]]
 Base.getindex(d::CurrentDensitySolution, i::Union{Integer,Colon}) = d[latslice(parent(d.gω), i)]
 
+
+(d::CurrentDensitySlice{T})(ω::Real; params...) where {T} = d(ω + im*sqrt(eps(T)); params...)
+
 # no call! support here
-function (d::CurrentDensitySlice)(ω; params...)
+function (d::CurrentDensitySlice)(ω::Complex; params...)
     gω = call!(d.g, ω; params...)
     ls = d.latslice
     cu = current(gω; charge = d.charge)
