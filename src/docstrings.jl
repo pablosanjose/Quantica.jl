@@ -1446,19 +1446,19 @@ ldos
     conductance(gs::GreenSlice; nambu = false)
 
 Given a slice `gs = g[i::Integer, j::Integer]` of a `g::GreenFunction`, build a partially
-evaluated object `G::ConductanceSlice` representing the zero-temperature linear differential
-conductance `Gᵢⱼ = dIᵢ/dVⱼ` between contacts `i` and `j` at arbitrary bias `ω = eV` in units
-of `e^2/h`. `Gᵢⱼ` is given by
+evaluated object `G::ConductanceSlice` representing the zero-temperature, linear,
+differential conductance `Gᵢⱼ = dIᵢ/dVⱼ` between contacts `i` and `j` at arbitrary bias `ω =
+eV` in units of `e^2/h`. `Gᵢⱼ` is given by
 
       ``Gᵢⱼ =  e^2/h × Tr{[δᵢⱼi(gʳ-gᵃ)Γⁱ-gʳΓⁱgᵃΓʲ]}``         (nambu = false)
-      ``Gᵢⱼ =  e^2/h × Tr{[δᵢⱼi(gʳ-gᵃ)Γⁱτₑ-gʳΓⁱτzgᵃΓʲτₑ]}``   (nambu = true)
+      ``Gᵢⱼ =  e^2/h × Tr{[δᵢⱼi(gʳ-gᵃ)Γⁱτₑ-gʳΓⁱτ₃gᵃΓʲτₑ]}``   (nambu = true)
 
 Here `gʳ = g(ω)` and `gᵃ = (gʳ)' = g(ω')` are the retarded and advanced Green function of
-the system, and `Γⁱ = (Σⁱ - Σⁱ')/im` is the decay rate at contact `i`. For Nambu systems
-(`nambu = true`), the matrices `τₑ=[I 0; 0 0]` and `τz = [I 0; 0 -I]` ensure that charge
+the system, and `Γⁱ = (Σⁱ - Σⁱ') * im` is the decay rate at contact `i`. For Nambu systems
+(`nambu = true`), the matrices `τₑ=[I 0; 0 0]` and `τ₃ = [I 0; 0 -I]` ensure that charge
 reversal in Andreev reflections is properly taken into account. For normal systems (`nambu =
-false`), the total current at finite temperature and contact bias is given by ``Iᵢ = e/h × ∫
-dω ∑ⱼ (f(ω-eVᵢ) - f(ω-eVⱼ)) Gᵢⱼ(ω)``.
+false`), the total current at finite bias and temperatures is given by ``Iᵢ = e/h × ∫
+dω ∑ⱼ [fᵢ(ω) - fⱼ(ω)] Gᵢⱼ(ω)``, where ``fᵢ(ω)`` is the Fermi distribution in lead `i`.
 
 ## Keywords
 
