@@ -1347,10 +1347,10 @@ GreenFunction{Float64,2,0}: Green function of a Hamiltonian{Float64,2,0}
     Parameters       : [:t]
 
 julia> gω = g(0.1 + 0.0001im; t = 2)
-GreenSolution{Float64,2,0}: Green function at arbitrary positions, but at fixed energy
+GreenSolution{Float64,2,0}: Green function at arbitrary positions, but at a fixed energy
 
 julia> gs = g[region = RP.circle(2), sublats = :B]
-GreenSlice{Float64,2,0}: Green function at arbitrary energy, but at fixed lattice positions
+GreenSlice{Float64,2,0}: Green function at arbitrary energy, but at a fixed lattice positions
 
 julia> gω[region = RP.circle(2), sublats = :B] == gs(0.1 + 0.0001im; t = 2)
 true
@@ -1389,7 +1389,7 @@ density of states `ρᵢ(ω)` at specific sites `i` but at arbitrary energy `ω`
 
     ldos(gω::GreenSolution; kernel = I)
 
-Build `ρω::LocalSpectralDensitySolution`, as above, but for `ρᵢ(ω)` at fixed `ω` and
+Build `ρω::LocalSpectralDensitySolution`, as above, but for `ρᵢ(ω)` at a fixed `ω` and
 arbitrary sites `i`. See also `greenfunction` for details on building a `GreenSlice` and
 `GreenSolution`.
 
@@ -1429,7 +1429,7 @@ GreenFunction{Float64,2,0}: Green function of a Hamiltonian{Float64,2,0}
     Hoppings         : 8522
     Coordination     : 2.94065
 
-julia> ldos(g(0.2))[1]  # The KPM solver doesn't require an imag(ω) > 0 broadening
+julia> ldos(g(0.2))[1]  # The KPM solver doesn't require an imag(ω) > 0 broadening in gω
 6-element Vector{Float64}:
  0.037505015417307
  0.03583857530882366
@@ -1450,11 +1450,11 @@ evaluated object `G::ConductanceSlice` representing the zero-temperature, linear
 differential conductance `Gᵢⱼ = dIᵢ/dVⱼ` between contacts `i` and `j` at arbitrary bias `ω =
 eV` in units of `e^2/h`. `Gᵢⱼ` is given by
 
-      ``Gᵢⱼ =  e^2/h × Tr{[δᵢⱼi(gʳ-gᵃ)Γⁱ-gʳΓⁱgᵃΓʲ]}``         (nambu = false)
-      ``Gᵢⱼ =  e^2/h × Tr{[δᵢⱼi(gʳ-gᵃ)Γⁱτₑ-gʳΓⁱτ₃gᵃΓʲτₑ]}``   (nambu = true)
+      ``Gᵢⱼ =  e^2/h × Tr{[im*δᵢⱼ(gʳ-gᵃ)Γⁱ-gʳΓⁱgᵃΓʲ]}``         (nambu = false)
+      ``Gᵢⱼ =  e^2/h × Tr{[im*δᵢⱼ(gʳ-gᵃ)Γⁱτₑ-gʳΓⁱτ₃gᵃΓʲτₑ]}``   (nambu = true)
 
 Here `gʳ = g(ω)` and `gᵃ = (gʳ)' = g(ω')` are the retarded and advanced Green function of
-the system, and `Γⁱ = (Σⁱ - Σⁱ') * im` is the decay rate at contact `i`. For Nambu systems
+the system, and `Γⁱ = im * (Σⁱ - Σⁱ')` is the decay rate at contact `i`. For Nambu systems
 (`nambu = true`), the matrices `τₑ=[I 0; 0 0]` and `τ₃ = [I 0; 0 -I]` ensure that charge
 reversal in Andreev reflections is properly taken into account. For normal systems (`nambu =
 false`), the total current at finite bias and temperatures is given by ``Iᵢ = e/h × ∫
@@ -1503,7 +1503,7 @@ Keywords).
 
     current(gω::GreenSolution; charge = -I, direction = missing)
 
-Build `Jω::CurrentDensitySolution`, as above, but for `Jᵢⱼ(ω)` at fixed `ω` and arbitrary
+Build `Jω::CurrentDensitySolution`, as above, but for `Jᵢⱼ(ω)` at a fixed `ω` and arbitrary
 sites `i, j`. See also `greenfunction` for details on building a `GreenSlice` and
 `GreenSolution`.
 
@@ -1537,7 +1537,12 @@ julia> # A semi-infinite 1D lead with a magnetic field `B`
 
 julia> g = LP.square() |> hamiltonian(@hopping((r, dr; B = 0.1) -> cis(B * dr' * SA[r[2],-r[1]]))) |> supercell((1,0), region = r->-2<r[2]<2) |> greenfunction(GS.Schur(boundary = 0));
 
-julia> J = current(g[cells = SA[1]]); J(0.2; B = 0.1)
+julia> J = current(g[cells = SA[1]])
+CurrentDensitySlice{Float64} : current density at a fixed location and arbitrary energy
+  charge      : LinearAlgebra.UniformScaling{Int64}(-1)
+  direction   : missing
+
+julia> J(0.2; B = 0.1)
 3×3 SparseArrays.SparseMatrixCSC{Float64, Int64} with 4 stored entries:
   ⋅         0.0290138   ⋅
  0.0290138   ⋅         0.0290138

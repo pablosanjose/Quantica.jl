@@ -315,7 +315,7 @@ function Base.show(io::IO, g::GreenSolution)
 end
 
 Base.summary(g::GreenSolution{T,E,L,S}) where {T,E,L,S} =
-    "GreenSolution{$T,$E,$L}: Green function at arbitrary positions, but at fixed energy"
+    "GreenSolution{$T,$E,$L}: Green function at arbitrary positions, but at a fixed energy"
 
 function Base.show(io::IO, g::GreenSlice)
     i = get(io, :indent, "")
@@ -323,7 +323,7 @@ function Base.show(io::IO, g::GreenSlice)
 end
 
 Base.summary(g::GreenSlice{T,E,L}) where {T,E,L} =
-    "GreenSlice{$T,$E,$L}: Green function at arbitrary energy, but at fixed lattice positions"
+    "GreenSlice{$T,$E,$L}: Green function at arbitrary energy, but at a fixed lattice positions"
 
 #endregion
 
@@ -395,7 +395,7 @@ Base.summary(::LocalSpectralDensitySolution{T}) where {T} =
     "LocalSpectralDensitySolution{$T} : local density of states at fixed energy and arbitrary location"
 
 Base.summary(::LocalSpectralDensitySlice{T}) where {T} =
-    "LocalSpectralDensitySlice{$T} : local density of states at fixed location and arbitrary energy"
+    "LocalSpectralDensitySlice{$T} : local density of states at a fixed location and arbitrary energy"
 
 #endregion
 
@@ -411,9 +411,9 @@ $i  direction   : $(direction(J))")
 end
 
 Base.summary(::CurrentDensitySolution{T}) where {T} =
-    "CurrentDensitySolution{$T} : current density at fixed energy and arbitrary location"
+    "CurrentDensitySolution{$T} : current density at a fixed energy and arbitrary location"
 
 Base.summary(::CurrentDensitySlice{T}) where {T} =
-    "CurrentDensitySlice{$T} : current density at fixed location and arbitrary energy"
+    "CurrentDensitySlice{$T} : current density at a fixed location and arbitrary energy"
 
 #endregion
