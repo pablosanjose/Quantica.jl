@@ -325,10 +325,10 @@ function block_ranges(s, bs::OrbitalBlockStructure)
 end
 
 block_ranges!(rngs, ls::LatticeSlice, bs::OrbitalBlockStructure) =
-    foreach!(sc -> block_ranges!(rngs, sc, bs), subcells(ls))
+    foreach(sc -> block_ranges!(rngs, sc, bs), subcells(ls))
 
 block_ranges!(rngs, cs::CellSites, bs::OrbitalBlockStructure) =
-    foreach!(i -> push!(rngs, flatrange(bs, i)), siteindices(cs))
+    foreach(i -> push!(rngs, flatrange(bs, i)), siteindices(cs))
 
 block_ranges(cind::Union{Integer,Colon}, bs::ContactBlockStructure) = contactrngs(bs, cind)
 

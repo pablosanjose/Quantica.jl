@@ -473,7 +473,7 @@ function Makie.plot!(plot::PlotLattice{Tuple{H,S}}) where {E,L,H<:Hamiltonian{<:
     if !hidehops
         hopopacity = plot[:hopopacity][]
         transparency = plot[:force_transparency][] || has_transparencies(hopopacity)
-        if E == 3 && !plot[:flat][]
+        if !plot[:flat][]
             plothops_shaded!(plot, hp, transparency)
             hideshell || plothops_shaded!(plot, hp´, true)
         else
@@ -486,7 +486,7 @@ function Makie.plot!(plot::PlotLattice{Tuple{H,S}}) where {E,L,H<:Hamiltonian{<:
     if !hidesites
         siteopacity = plot[:siteopacity][]
         transparency = plot[:force_transparency][] || has_transparencies(siteopacity)
-        if E == 3 && !plot[:flat][]
+        if !plot[:flat][]
             plotsites_shaded!(plot, sp, transparency)
             hideshell || plotsites_shaded!(plot, sp´, true)
         else
