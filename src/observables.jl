@@ -39,6 +39,15 @@ taue_diag(i, normalsize) = ifelse(iseven(fld1(i, normalsize)), 0, 1)
 sanitize_latslice(i::Integer, g::GreenFunction) = latslice(selfenergies(contacts(g), i))
 sanitize_latslice(sites, g) = lattice(g)[sites]
 
+check_contact_slice(gs) = (slicerows(gs) isa Integer && slicecols(gs) isa Integer) ||
+    argerror("Please use a Green slice of the form `g[i::Integer, j::Integer]` or `g[i::Integer]`")
+
+check_same_contact_slice(gs) = (slicerows(gs) isa Integer && slicecols(gs) === slicerows(gs)) ||
+    argerror("Please use a Green slice of the form `g[i::Integer]`")
+
+check_different_contact_slice(gs) = (slicerows(gs) isa Integer && slicecols(gs) != slicerows(gs)) ||
+    argerror("Please use a Green slice of the form `g[i::Integer, j::Integer] with `i ≠ j`")
+
 #endregion
 
 ############################################################################################
@@ -103,125 +112,6 @@ end
 
 #endregion
 #endregion
-
-############################################################################################
-# josephson
-#   The equilibrium (static) Josephson current, in units of qe/h, *from* lead i is given by
-#       Iᵢ = Re ∫dω J(ω; params...), where J(ω; params...) = (qe/h) × 2f(ω)Tr[(ΣʳᵢGʳ - GʳΣʳᵢ)τz]
-#   J = JosephsonDensity(g::GreenFunction; contact = i, kBT = 0, phases)
-#   J(ω; params...) -> scalar or vector [J(ϕⱼ) for ϕⱼ in phases] if `phases` is an
-#       integer (num phases from 0 to π) or a collection of ϕ's
-#   A phase ϕ can be applied by gauging it away from the lead and into its coupling:
-#       Σʳᵢ(ϕ) = UᵩΣʳᵢUᵩ' and Gʳ(ϕ) = [1+Gʳ(Σʳᵢ-Σʳᵢ(ϕ))]⁻¹Gʳ, where Uᵩ = exp(iϕτz/2).
-#   I = josephson(Integrator(J, (-ωmax, 0, ωmax); post = real, opts...)
-#   Keywords opts are passed to quadgk for the integral
-#region
-
-struct JosephsonDensity{T<:AbstractFloat,P<:Union{Missing,AbstractArray},G<:GreenFunction{T}}
-    g::G
-    kBT::T
-    contactind::Int             # contact index
-    tauz::Vector{Int}           # precomputed diagonal of tauz
-    phaseshifts::P              # missing or collection of phase shifts to apply
-    traces::P                   # preallocated workspace
-    Σ::Matrix{Complex{T}}       # preallocated workspace
-    ΣggΣ::Matrix{Complex{T}}    # preallocated workspace
-    Σ´::Matrix{Complex{T}}      # preallocated workspace
-    g´::Matrix{Complex{T}}      # preallocated workspace
-    den::Matrix{Complex{T}}     # preallocated workspace
-    cisτz::Vector{Complex{T}}   # preallocated workspace
-end
-
-#region ## Constructors ##
-
-function josephson(g::GreenFunction{T}, ωmax; contact = 1, kBT = 0.0, phases = missing, imshift = missing, opts...) where {T}
-    kBT´ = T(kBT)
-    Σ = similar_contactΣ(g, contact)
-    normalsize = normal_size(hamiltonian(g))
-    tauz = tauz_diag.(axes(Σ, 1), normalsize)
-    phases´, traces = sanitize_phases_traces(phases, T)
-    jd = JosephsonDensity(g, kBT´, contact, tauz, phases´,
-        traces, Σ, similar(Σ), similar(Σ), similar(Σ), similar(Σ), similar(tauz, Complex{T}))
-    integrator = iszero(kBT) ?
-        Integrator(traces, jd, (-ωmax, 0); imshift, slope = 1, post = real, opts...) :
-        Integrator(traces, jd, (-ωmax, 0, ωmax); imshift, slope = 1, post = real, opts...)
-    return integrator
-end
-
-sanitize_phases_traces(::Missing, ::Type{T}) where {T} = missing, missing
-sanitize_phases_traces(phases::Integer, ::Type{T}) where {T} =
-    sanitize_phases_traces(range(0, π, length = phases), T)
-
-function sanitize_phases_traces(phases, ::Type{T}) where {T}
-    phases´ = Complex{T}.(phases)
-    traces = similar(phases´)
-    return phases´, traces
-end
-
-#endregion
-
-#region ## API ##
-
-temperature(J::JosephsonDensity) = J.kBT
-
-contact(J::JosephsonDensity) = J.contactind
-
-phaseshifts(I::Integrator{<:JosephsonDensity}) = phaseshifts(integrand(I))
-phaseshifts(J::JosephsonDensity) = real.(J.phaseshifts)
-
-function call!(J::JosephsonDensity, ω; params...)
-    gω = call!(J.g, ω; params...)
-    f = fermi(ω, J.kBT)
-    traces = josephson_traces(J, gω, f)
-    return traces
-end
-
-function josephson_traces(J, gω, f)
-    gr = gω[J.contactind, J.contactind]
-    Σi = selfenergy!(J.Σ, gω, J.contactind)
-    return josephson_traces!(J, gr, Σi, f)
-end
-
-josephson_traces!(J::JosephsonDensity{<:Any,Missing}, gr, Σi, f) = josephson_one_trace!(J, gr, Σi, f)
-
-function josephson_traces!(J, gr, Σi, f)
-    for (i, phaseshift) in enumerate(J.phaseshifts)
-        gr´, Σi´ = apply_phaseshift!(J, gr, Σi, phaseshift)
-        J.traces[i] = josephson_one_trace!(J, gr´, Σi´, f)
-    end
-    return J.traces
-end
-
-# 2 f(ω) Tr[(Σi * gr - gr * Σi) * τz]
-function josephson_one_trace!(J, gr, Σi, f)
-    ΣggΣ = J.ΣggΣ
-    mul!(ΣggΣ, Σi, gr)
-    mul!(ΣggΣ, gr, Σi, -1, 1)
-    trace = 2 * f * trace_tau(ΣggΣ, J.tauz)
-    return trace
-end
-
-# Σi´ = U Σi U' and gr´ = (gr₀⁻¹ - Σi´)⁻¹ = (1+gr*(Σi-Σi´))⁻¹gr
-function apply_phaseshift!(J, gr, Σi, phaseshift)
-    Σi´ = J.Σ´
-    U = J.cisτz
-    phasehalf = phaseshift/2
-    @. U = cis(-phasehalf * J.tauz)
-    @. Σi´ = U * Σi * U'
-
-    den = J.den
-    one!(den)
-    tmp = J.g´
-    @. tmp = Σi - Σi´
-    mul!(den, gr, tmp, 1, 1)            # den = 1-gr * (Σi - Σi´)
-    gr´ = ldiv!(J.g´, lu!(den), gr)     # gr´ = (1+gr*(Σi-Σi´))⁻¹gr
-
-    return gr´, Σi´
-end
-
-#endregion
-#endregion
-
 
 ############################################################################################
 # ldos: local spectral density
@@ -305,86 +195,6 @@ end
 
 ldos_kernel(g, kernel::UniformScaling) = - kernel.λ * imag(tr(g)) / π
 ldos_kernel(g, kernel) = -imag(tr(g * kernel)) / π
-
-#endregion
-#endregion
-
-############################################################################################
-# conductance(gs::GreenSlice; nambu = false) -> G(ω; params...)::Real
-#   For gs = g[i::Int, j::Int = i] -> we get zero temperature Gᵢⱼ = dIᵢ/dVⱼ in units of e^2/h
-#   where i, j are contact indices
-#       Gᵢⱼ =  e^2/h × Tr{[δᵢⱼi(Gʳ-Gᵃ)Γⁱ-GʳΓⁱGᵃΓʲ]}         (nambu = false)
-#       Gᵢⱼ =  e^2/h × Tr{[δᵢⱼi(Gʳ-Gᵃ)Γⁱτₑ-GʳΓⁱτzGᵃΓʲτₑ]}   (nambu = true)
-#   and where τₑ = [1 0; 0 0] and τz = [1 0; 0 -1] in Nambu space, and ω = eV.
-#region
-
-struct ConductanceSlice{T,E,L,C,G<:GreenFunction{T,E,L}}
-    g::G
-    i::Int                        # contact index for Iᵢ
-    j::Int                        # contact index for Vⱼ
-    τezdiag::Tuple{C,C}           # diagonal of τₑ and τz, or (missing, missing)
-    Γ::Matrix{Complex{T}}         # prealloc workspace for selfenergy! (over all contacts)
-    GrΓi::Matrix{Complex{T}}      # prealloc workspace GʳⱼᵢΓⁱ
-    GaΓj::Matrix{Complex{T}}      # prealloc workspace GᵃᵢⱼΓʲ
-    GΓGΓ::Matrix{Complex{T}}      # prealloc workspace GʳⱼᵢΓⁱGᵃᵢⱼΓʲ
-end
-
-#region ## Constructors ##
-
-function conductance(gs::GreenSlice{T}; nambu = false) where {T}
-    i = slicerows(gs)
-    j = slicecols(gs)
-    check_contact_slice(i)
-    check_contact_slice(j)
-    g = parent(gs)
-    ni = flatsize(blockstructure(g), i)
-    nj = flatsize(blockstructure(g), j)
-    Γ = similar_contactΣ(g)
-    if nambu
-        nsize = normal_size(hamiltonian(g))
-        τezdiag = (taue_diag.(1:nj, nsize), tauz_diag.(1:ni, nsize))
-    else
-        τezdiag = (missing, missing)
-    end
-    GrΓi = Matrix{Complex{T}}(undef, nj, ni)
-    GaΓj = Matrix{Complex{T}}(undef, ni, nj)
-    GΓGΓ = Matrix{Complex{T}}(undef, nj, nj)
-    return ConductanceSlice(g, i, j, τezdiag, Γ, GrΓi, GaΓj, GΓGΓ)
-end
-
-check_contact_slice(i) = i isa Integer ||
-    argerror("Please use an Integer Green slice `g[i::Integer, j::Integer = i]` to compute the conductance `dIᵢ/dVⱼ` between contacts `i,j`")
-
-#endregion
-
-#region ## API ##
-
-currentcontact(G) = G.i
-
-biascontact(G) = G.j
-
-function (G::ConductanceSlice)(ω; params...)
-    τe, τz = G.τezdiag
-    gω = call!(G.g, ω; params...)
-    gʳⱼᵢ = gω[G.j, G.i]
-    gᵃᵢⱼ = gʳⱼᵢ'
-    Γi = selfenergy!(G.Γ, gω, G.i; onlyΓ = true)
-    mul!(G.GrΓi, gʳⱼᵢ, Γi)
-    Γj = G.i == G.j ? Γi : selfenergy!(G.Γ, gω, G.j; onlyΓ = true)
-    mul!(G.GaΓj, gᵃᵢⱼ, Γj)
-    mul_tau!(G.GrΓi, τz)                        # no-op if τz is missing
-    mul!(G.GΓGΓ, G.GrΓi, G.GaΓj)
-    # the -Tr{GʳΓⁱτzGᵃΓʲτₑ} term
-    cond = - real(trace_tau(G.GΓGΓ, τe))        # simple trace if τe is missing
-    if G.i == G.j
-        # add the Tr(i(Gʳ-Gᵃ)Γⁱτₑ) term
-        gmg = gʳⱼᵢ
-        gmg .-= gᵃᵢⱼ
-        iGmGΓ = mul!(G.GΓGΓ, gmg, Γi, im, 0)
-        cond += real(trace_tau(iGmGΓ, τe))      # simple trace if τe is missing
-    end
-    return cond
-end
 
 #endregion
 #endregion
@@ -487,5 +297,247 @@ maybe_project(J, dir) = dot(dir, J)
 maybe_trace(m::UniformScaling) = m.λ
 maybe_trace(m) = tr(m)
 
+#endregion
+#endregion
+
+############################################################################################
+# conductance(gs::GreenSlice; nambu = false) -> G(ω; params...)::Real
+#   For gs = g[i::Int, j::Int = i] -> we get zero temperature Gᵢⱼ = dIᵢ/dVⱼ in units of e^2/h
+#   where i, j are contact indices
+#       Gᵢⱼ =  e^2/h × Tr{[δᵢⱼi(Gʳ-Gᵃ)Γⁱ-GʳΓⁱGᵃΓʲ]}         (nambu = false)
+#       Gᵢⱼ =  e^2/h × Tr{[δᵢⱼi(Gʳ-Gᵃ)Γⁱτₑ-GʳΓⁱτzGᵃΓʲτₑ]}   (nambu = true)
+#   and where τₑ = [1 0; 0 0] and τz = [1 0; 0 -1] in Nambu space, and ω = eV.
+#region
+
+struct Conductance{T,E,L,C,G<:GreenFunction{T,E,L}}
+    g::G
+    i::Int                        # contact index for Iᵢ
+    j::Int                        # contact index for Vⱼ
+    τezdiag::Tuple{C,C}           # diagonal of τₑ and τz, or (missing, missing)
+    Γ::Matrix{Complex{T}}         # prealloc workspace for selfenergy! (over all contacts)
+    GrΓi::Matrix{Complex{T}}      # prealloc workspace GʳⱼᵢΓⁱ
+    GaΓj::Matrix{Complex{T}}      # prealloc workspace GᵃᵢⱼΓʲ
+    GΓGΓ::Matrix{Complex{T}}      # prealloc workspace GʳⱼᵢΓⁱGᵃᵢⱼΓʲ
+end
+
+#region ## Constructors ##
+
+function conductance(gs::GreenSlice{T}; nambu = false) where {T}
+    check_contact_slice(gs)
+    i = slicerows(gs)
+    j = slicecols(gs)
+    g = parent(gs)
+    ni = flatsize(blockstructure(g), i)
+    nj = flatsize(blockstructure(g), j)
+    Γ = similar_contactΣ(g)
+    if nambu
+        nsize = normal_size(hamiltonian(g))
+        τezdiag = (taue_diag.(1:nj, nsize), tauz_diag.(1:ni, nsize))
+    else
+        τezdiag = (missing, missing)
+    end
+    GrΓi = Matrix{Complex{T}}(undef, nj, ni)
+    GaΓj = Matrix{Complex{T}}(undef, ni, nj)
+    GΓGΓ = Matrix{Complex{T}}(undef, nj, nj)
+    return Conductance(g, i, j, τezdiag, Γ, GrΓi, GaΓj, GΓGΓ)
+end
+
+#endregion
+
+#region ## API ##
+
+currentcontact(G) = G.i
+
+biascontact(G) = G.j
+
+function (G::Conductance)(ω; params...)
+    τe, τz = G.τezdiag
+    gω = call!(G.g, ω; params...)
+    gʳⱼᵢ = gω[G.j, G.i]
+    gᵃᵢⱼ = gʳⱼᵢ'
+    Γi = selfenergy!(G.Γ, gω, G.i; onlyΓ = true)
+    mul!(G.GrΓi, gʳⱼᵢ, Γi)
+    Γj = G.i == G.j ? Γi : selfenergy!(G.Γ, gω, G.j; onlyΓ = true)
+    mul!(G.GaΓj, gᵃᵢⱼ, Γj)
+    mul_tau!(G.GrΓi, τz)                        # no-op if τz is missing
+    mul!(G.GΓGΓ, G.GrΓi, G.GaΓj)
+    # the -Tr{GʳΓⁱτzGᵃΓʲτₑ} term
+    cond = - real(trace_tau(G.GΓGΓ, τe))        # simple trace if τe is missing
+    if G.i == G.j
+        # add the Tr(i(Gʳ-Gᵃ)Γⁱτₑ) term
+        gmg = gʳⱼᵢ
+        gmg .-= gᵃᵢⱼ
+        iGmGΓ = mul!(G.GΓGΓ, gmg, Γi, im, 0)
+        cond += real(trace_tau(iGmGΓ, τe))      # simple trace if τe is missing
+    end
+    return cond
+end
+
+#endregion
+#endregion
+
+############################################################################################
+# tramsission(gs::GreenSlice) -> normal Tᵢⱼ = Tr{GʳΓⁱGᵃΓʲ} from contact j to i ≠ j
+#region
+
+struct Transmission{G<:Conductance}
+    conductance::G
+end
+
+#region ## Constructors ##
+
+function transmission(gs::GreenSlice)
+    check_different_contact_slice(gs)
+    return Transmission(conductance(gs; nambu = false))
+end
+
+#endregion
+
+#region ## API ##
+
+Base.parent(t::Transmission) = t.conductance
+
+function (T::Transmission)(ω; params...)
+    G = T.conductance
+    gω = call!(G.g, ω; params...)
+    gʳⱼᵢ = gω[G.j, G.i]
+    gᵃᵢⱼ = gʳⱼᵢ'
+    Γi = selfenergy!(G.Γ, gω, G.i; onlyΓ = true)
+    mul!(G.GrΓi, gʳⱼᵢ, Γi)
+    Γj = G.i == G.j ? Γi : selfenergy!(G.Γ, gω, G.j; onlyΓ = true)
+    mul!(G.GaΓj, gᵃᵢⱼ, Γj)
+    mul!(G.GΓGΓ, G.GrΓi, G.GaΓj)
+    t = real(tr(G.GΓGΓ))
+    return t
+end
+
+#endregion
+#endregion
+
+
+############################################################################################
+# josephson
+#   The equilibrium (static) Josephson current, in units of qe/h, *from* lead i is given by
+#       Iᵢ = Re ∫dω J(ω; params...), where J(ω; params...) = (qe/h) × 2f(ω)Tr[(ΣʳᵢGʳ - GʳΣʳᵢ)τz]
+#   J = josephson(g::GreenSlice, ωmax; contact = i, kBT = 0, phases)
+#   J(ω; params...) -> scalar or vector [J(ϕⱼ) for ϕⱼ in phases] if `phases` is an
+#       integer (num phases from 0 to π) or a collection of ϕ's
+#   A phase ϕ can be applied by gauging it away from the lead and into its coupling:
+#       Σʳᵢ(ϕ) = UᵩΣʳᵢUᵩ' and Gʳ(ϕ) = [1+Gʳ(Σʳᵢ-Σʳᵢ(ϕ))]⁻¹Gʳ, where Uᵩ = exp(iϕτz/2).
+#   I = josephson(Integrator(J, (-ωmax, 0, ωmax); post = real, opts...)
+#   Keywords opts are passed to quadgk for the integral
+#region
+
+struct JosephsonDensity{T<:AbstractFloat,P<:Union{Missing,AbstractArray},G<:GreenFunction{T}}
+    g::G
+    kBT::T
+    contactind::Int             # contact index
+    tauz::Vector{Int}           # precomputed diagonal of tauz
+    phaseshifts::P              # missing or collection of phase shifts to apply
+    traces::P                   # preallocated workspace
+    Σ::Matrix{Complex{T}}       # preallocated workspace, full self-energy
+    ΣggΣ::Matrix{Complex{T}}    # preallocated workspace
+    Σ´::Matrix{Complex{T}}      # preallocated workspace
+    g´::Matrix{Complex{T}}      # preallocated workspace
+    den::Matrix{Complex{T}}     # preallocated workspace
+    cisτz::Vector{Complex{T}}   # preallocated workspace
+end
+
+#region ## Constructors ##
+
+function josephson(gs::GreenSlice{T}, ωmax; kBT = 0.0, phases = missing, imshift = missing, opts...) where {T}
+    check_same_contact_slice(gs)
+    contact = slicerows(gs)
+    g = parent(gs)
+    kBT´ = T(kBT)
+    Σfull = similar_contactΣ(g)
+    Σ = similar_contactΣ(g, contact)
+    normalsize = normal_size(hamiltonian(g))
+    tauz = tauz_diag.(axes(Σ, 1), normalsize)
+    phases´, traces = sanitize_phases_traces(phases, T)
+    jd = JosephsonDensity(g, kBT´, contact, tauz, phases´,
+        traces, Σfull, Σ, similar(Σ), similar(Σ), similar(Σ), similar(tauz, Complex{T}))
+    integrator = iszero(kBT) ?
+        Integrator(traces, jd, (-ωmax, 0); imshift, slope = 1, post = real, opts...) :
+        Integrator(traces, jd, (-ωmax, 0, ωmax); imshift, slope = 1, post = real, opts...)
+    return integrator
+end
+
+sanitize_phases_traces(::Missing, ::Type{T}) where {T} = missing, missing
+sanitize_phases_traces(phases::Integer, ::Type{T}) where {T} =
+    sanitize_phases_traces(range(0, π, length = phases), T)
+
+function sanitize_phases_traces(phases, ::Type{T}) where {T}
+    phases´ = Complex{T}.(phases)
+    traces = similar(phases´)
+    return phases´, traces
+end
+
+#endregion
+
+#region ## API ##
+
+temperature(J::JosephsonDensity) = J.kBT
+
+contact(J::JosephsonDensity) = J.contactind
+
+phaseshifts(I::Integrator{<:JosephsonDensity}) = phaseshifts(integrand(I))
+phaseshifts(J::JosephsonDensity) = real.(J.phaseshifts)
+
+numphaseshifts(J::JosephsonDensity) = numphaseshifts(J.phaseshifts)
+numphaseshifts(::Missing) = 0
+numphaseshifts(phaseshifts) = length(phaseshifts)
+
+function call!(J::JosephsonDensity, ω; params...)
+    gω = call!(J.g, ω; params...)
+    f = fermi(ω, J.kBT)
+    traces = josephson_traces(J, gω, f)
+    return traces
+end
+
+function josephson_traces(J, gω, f)
+    gr = gω[J.contactind, J.contactind]
+    Σi = selfenergy!(J.Σ, gω, J.contactind)
+    return josephson_traces!(J, gr, Σi, f)
+end
+
+josephson_traces!(J::JosephsonDensity{<:Any,Missing}, gr, Σi, f) = josephson_one_trace!(J, gr, Σi, f)
+
+function josephson_traces!(J, gr, Σi, f)
+    for (i, phaseshift) in enumerate(J.phaseshifts)
+        gr´, Σi´ = apply_phaseshift!(J, gr, Σi, phaseshift)
+        J.traces[i] = josephson_one_trace!(J, gr´, Σi´, f)
+    end
+    return J.traces
+end
+
+# 2 f(ω) Tr[(Σi * gr - gr * Σi) * τz]
+function josephson_one_trace!(J, gr, Σi, f)
+    ΣggΣ = J.ΣggΣ
+    mul!(ΣggΣ, Σi, gr)
+    mul!(ΣggΣ, gr, Σi, -1, 1)
+    trace = 2 * f * trace_tau(ΣggΣ, J.tauz)
+    return trace
+end
+
+# Σi´ = U Σi U' and gr´ = (gr₀⁻¹ - Σi´)⁻¹ = (1+gr*(Σi-Σi´))⁻¹gr
+function apply_phaseshift!(J, gr, Σi, phaseshift)
+    Σi´ = J.Σ´
+    U = J.cisτz
+    phasehalf = phaseshift/2
+    @. U = cis(-phasehalf * J.tauz)
+    @. Σi´ = U * Σi * U'
+
+    den = J.den
+    one!(den)
+    tmp = J.g´
+    @. tmp = Σi - Σi´
+    mul!(den, gr, tmp, 1, 1)            # den = 1-gr * (Σi - Σi´)
+    gr´ = ldiv!(J.g´, lu!(den), gr)     # gr´ = (1+gr*(Σi-Σi´))⁻¹gr
+
+    return gr´, Σi´
+end
+
+#endregion
 #endregion
 

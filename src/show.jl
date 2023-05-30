@@ -328,18 +328,34 @@ Base.summary(g::GreenSlice{T,E,L}) where {T,E,L} =
 #endregion
 
 ############################################################################################
-# ConductanceSlice
+# Conductance
 #region
 
-function Base.show(io::IO, G::ConductanceSlice)
+function Base.show(io::IO, G::Conductance)
     i = get(io, :indent, "")
     print(io, i, summary(G), "\n",
 "$i  Current contact  : $(currentcontact(G))
 $i  Bias contact     : $(biascontact(G))")
 end
 
-Base.summary(::ConductanceSlice{T}) where {T} =
-    "ConductanceSlice{$T}: Zero-temperature conductance dIᵢ/dVⱼ from contacts i,j, in units of e^2/h"
+Base.summary(::Conductance{T}) where {T} =
+    "Conductance{$T}: Zero-temperature conductance dIᵢ/dVⱼ from contacts i,j, in units of e^2/h"
+
+#endregion
+
+############################################################################################
+# Transmission
+#region
+
+function Base.show(io::IO, T::Transmission)
+    i = get(io, :indent, "")
+    print(io, i, summary(T), "\n",
+"$i  From contact  : $(biascontact(parent(T)))
+$i  To contact    : $(currentcontact(parent(T)))")
+end
+
+Base.summary(::Transmission) =
+    "Transmission: total transmission probability between two different contacts"
 
 #endregion
 
@@ -373,7 +389,7 @@ function Base.show(io::IO, J::JosephsonDensity)
     print(io, i, summary(J), "\n",
 "$i  kBT                     : $(temperature(J))
 $i  Contact                 : $(contact(J))
-$i  Number of phase shifts  : $(length(phaseshifts(J)))")
+$i  Number of phase shifts  : $(numphaseshifts(J))")
 end
 
 Base.summary(::JosephsonDensity{T}) where {T} =

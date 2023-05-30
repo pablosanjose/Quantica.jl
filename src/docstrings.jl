@@ -1438,58 +1438,11 @@ julia> ldos(g(0.2))[1]
  0.036802204179317045
 ```
 
+# See also
+    `greenfunction`, `current`, `conductance`, `josephson`, `transmission`
+
 """
 ldos
-
-"""
-    conductance(gs::GreenSlice; nambu = false)
-
-Given a slice `gs = g[i::Integer, j::Integer]` of a `g::GreenFunction`, build a partially
-evaluated object `G::ConductanceSlice` representing the zero-temperature, linear,
-differential conductance `Gᵢⱼ = dIᵢ/dVⱼ` between contacts `i` and `j` at arbitrary bias `ω =
-eV` in units of `e^2/h`. `Gᵢⱼ` is given by
-
-      ``Gᵢⱼ =  e^2/h × Tr{[im*δᵢⱼ(gʳ-gᵃ)Γⁱ-gʳΓⁱgᵃΓʲ]}``         (nambu = false)
-      ``Gᵢⱼ =  e^2/h × Tr{[im*δᵢⱼ(gʳ-gᵃ)Γⁱτₑ-gʳΓⁱτ₃gᵃΓʲτₑ]}``   (nambu = true)
-
-Here `gʳ = g(ω)` and `gᵃ = (gʳ)' = g(ω')` are the retarded and advanced Green function of
-the system, and `Γⁱ = im * (Σⁱ - Σⁱ')` is the decay rate at contact `i`. For Nambu systems
-(`nambu = true`), the matrices `τₑ=[I 0; 0 0]` and `τ₃ = [I 0; 0 -I]` ensure that charge
-reversal in Andreev reflections is properly taken into account. For normal systems (`nambu =
-false`), the total current at finite bias and temperatures is given by ``Iᵢ = e/h × ∫
-dω ∑ⱼ [fᵢ(ω) - fⱼ(ω)] Gᵢⱼ(ω)``, where ``fᵢ(ω)`` is the Fermi distribution in lead `i`.
-
-## Keywords
-
-- `nambu` : whether to consider the Hamiltonian of the system is written in a Nambu basis, each site containing `N` electron orbitals followed by `N` hole orbitals.
-
-## Full evaluation
-
-    G(ω; params...)
-
-Compute the conductance at the specified contacts.
-
-```jldoctest
-julia> # A central system g0 with two 1D leads and transparent contacts
-
-julia> gl = LP.square() |> hamiltonian(hopping(1)) |> supercell((1,0), region = r->-2<r[2]<2) |> greenfunction(GS.Schur(boundary = 0));
-
-julia> g0 = LP.square() |> hamiltonian(hopping(1)) |> supercell(region = r->-2<r[2]<2 && r[1]≈0) |> attach(gl, reverse = true) |> attach(gl) |> greenfunction;
-
-julia> G = conductance(g0[1])
-ConductanceSlice{Float64}: Zero-temperature conductance dIᵢ/dVⱼ from contacts i,j, in units of e^2/h
-  Current contact  : 1
-  Bias contact     : 1
-
-julia> G(0.2)
-2.999999999999999
-```
-
-# See also
-    `greenfunction`, `ldos`, `current`, `josephson`
-
-"""
-conductance
 
 """
     current(gs::GreenSlice; charge = -I, direction = missing)
@@ -1551,5 +1504,164 @@ julia> J(0.2; B = 0.0)
 
 ```
 
+# See also
+    `greenfunction`, `ldos`, `conductance`, `josephson`, `transmission`
+
 """
 current
+
+"""
+    conductance(gs::GreenSlice; nambu = false)
+
+Given a slice `gs = g[i::Integer, j::Integer]` of a `g::GreenFunction`, build a partially
+evaluated object `G::Conductance` representing the zero-temperature, linear,
+differential conductance `Gᵢⱼ = dIᵢ/dVⱼ` between contacts `i` and `j` at arbitrary bias `ω =
+eV` in units of `e^2/h`. `Gᵢⱼ` is given by
+
+      ``Gᵢⱼ =  e^2/h × Tr{[im*δᵢⱼ(gʳ-gᵃ)Γⁱ-gʳΓⁱgᵃΓʲ]}``         (nambu = false)
+      ``Gᵢⱼ =  e^2/h × Tr{[im*δᵢⱼ(gʳ-gᵃ)Γⁱτₑ-gʳΓⁱτ₃gᵃΓʲτₑ]}``   (nambu = true)
+
+Here `gʳ = g(ω)` and `gᵃ = (gʳ)' = g(ω')` are the retarded and advanced Green function of
+the system, and `Γⁱ = im * (Σⁱ - Σⁱ')` is the decay rate at contact `i`. For Nambu systems
+(`nambu = true`), the matrices `τₑ=[I 0; 0 0]` and `τ₃ = [I 0; 0 -I]` ensure that charge
+reversal in Andreev reflections is properly taken into account. For normal systems (`nambu =
+false`), the total current at finite bias and temperatures is given by ``Iᵢ = e/h × ∫
+dω ∑ⱼ [fᵢ(ω) - fⱼ(ω)] Gᵢⱼ(ω)``, where ``fᵢ(ω)`` is the Fermi distribution in lead `i`.
+
+## Keywords
+
+- `nambu` : whether to consider the Hamiltonian of the system is written in a Nambu basis, each site containing `N` electron orbitals followed by `N` hole orbitals.
+
+## Full evaluation
+
+    G(ω; params...)
+
+Compute the conductance at the specified contacts.
+
+```jldoctest
+julia> # A central system g0 with two 1D leads and transparent contacts
+
+julia> glead = LP.square() |> hamiltonian(hopping(1)) |> supercell((1,0), region = r->-2<r[2]<2) |> greenfunction(GS.Schur(boundary = 0));
+
+julia> g0 = LP.square() |> hamiltonian(hopping(1)) |> supercell(region = r->-2<r[2]<2 && r[1]≈0) |> attach(glead, reverse = true) |> attach(glead) |> greenfunction;
+
+julia> G = conductance(g0[1])
+Conductance{Float64}: Zero-temperature conductance dIᵢ/dVⱼ from contacts i,j, in units of e^2/h
+  Current contact  : 1
+  Bias contact     : 1
+
+julia> G(0.2)
+2.999999999999999
+```
+
+# See also
+    `greenfunction`, `ldos`, `current`, `josephson`, `transmission`
+
+"""
+conductance
+
+"""
+    transmission(gs::GreenSlice)
+
+Given a slice `gs = g[i::Integer, j::Integer]` of a `g::GreenFunction`, build a partially
+evaluated object `T::Transmission` representing the normal transmission probability `Tᵢⱼ(ω)`
+from contact `j` to `i` at energy `ω`. It can be written as
+
+    ``Tᵢⱼ = Tr{gʳΓⁱgᵃΓʲ}``
+
+Here `gʳ = g(ω)` and `gᵃ = (gʳ)' = g(ω')` are the retarded and advanced Green function of
+the system, and `Γⁱ = im * (Σⁱ - Σⁱ')` is the decay rate at contact `i`
+
+## Full evaluation
+
+    T(ω; params...)
+
+Compute the transmission `Tᵢⱼ(ω)` at a given `ω` and for the specified `params` of `g`.
+
+# Examples
+
+```jldoctest
+julia> # A central system g0 with two 1D leads and transparent contacts
+
+julia> glead = LP.honecycomb() |> hamiltonian(hopping(1)) |> supercell((1,-1), region = r->-2<r[2]<2) |> greenfunction(GS.Schur(boundary = 0));
+
+julia> g0 = LP.honecycomb() |> hamiltonian(hopping(1)) |> supercell(region = r->-2<r[2]<2 && r[1]≈0) |> attach(glead, reverse = true) |> attach(glead) |> greenfunction;
+
+julia> T = transmission(g0[2, 1])
+Transmission: total transmission probability between two different contacts
+  From contact  : 1
+  To contact    : 2
+
+julia> T(0.2)   # The difference from 3 is due to the automatic `im*sqrt(eps(Float64))` added to `ω`
+2.9999999410323537
+
+julia> T(0.2 + 0.00000000000001im)
+2.999999999999961
+```
+
+# See also
+    `greenfunction`, `conductance`, `ldos`, `current`, `josephson`
+
+"""
+transmission
+
+"""
+    josephson(gs::GreenSlice, ωmax; kBT = 0.0, phases = missing, imshift = missing, slope = 1, post = real, quadgk_opts...)
+
+For a `gs = g[i::Integer]` slice of the `g::GreenFunction` of a hybrid junction, build a
+partially evaluated object `J::Integrator` representing the equilibrium (static) Josephson
+current `I_J` flowing into `g` through contact `i`, integrated from `-ωmax` to `ωmax` (or
+from `-ωmax` to `0` at zero temperature `kBT = 0`). The result of `I_J` is given in units of
+`qe/h` (`q` is the dimensionless carrier charge). `I_J` can be written as ``I_J = Re ∫ dω
+f(ω) j(ω)``, where ``j(ω) = (qe/h) × 2Tr[(ΣʳᵢGʳ - GʳΣʳᵢ)τz]``.
+
+## Full evaluation
+
+    J(; params...)
+
+Evaluate the Josephson current `I_J` for the given `g` parameters `params`, if any.
+
+## Keywords
+
+- `kBT` : temperature in same energy units as the Hamiltonian
+- `phases` : collection of superconducting phase biases to apply to the contact, so as to efficiently compute the full current-phase relation `[I_J(ϕ) for ϕ in phases]`. Note that each phase bias `ϕ` is applied by a `[cis(-ϕ/2) 0; 0 cis(ϕ/2)]` rotation to the self energy, which is almost free. If `missing`, a single `I_J` is returned.
+- `imshift`: if `missing` the initial and final integration points `± ωmax` are shifted by `im * sqrt(eps(ωmax))`, to avoid the real axis. Otherwise a shift `im*imshift` is applied (may be zero if `ωmax` is greater than the bandwidth).
+- `slope`: if non-zero, the integration will be performed along a piecewise-linear path in the complex plane `(-ωmax, -ωmax/2 * (1+slope*im), 0, ωmax/2 * (1+slope*im), ωmax)`, taking advantage of the holomorphic integrand `f(ω) j(ω)` and the Cauchy Integral Theorem for faster convergence.
+- `post`: function to apply to the result of `∫ dω f(ω) j(ω)` to obtain the result, `post = real` by default.
+- `quadgk_opts` : extra keyword arguments to pass on to the function `QuadGK.quadgk` that is used for the integration.
+
+# Examples
+
+```jldoctest
+julia> glead = LP.square() |> hamiltonian(onsite(0.0005 * SA[0 1; 1 0]) + hopping(SA[1 0; 0 -1]), orbitals = 2) |> supercell((1,0), region = r->-2<r[2]<2) |> greenfunction(GS.Schur(boundary = 0));
+
+julia> g0 = LP.square() |> hamiltonian(hopping(SA[1 0; 0 -1]), orbitals = 2) |> supercell(region = r->-2<r[2]<2 && r[1]≈0) |> attach(glead, reverse = true) |> attach(glead) |> greenfunction;
+
+julia> J = josephson(g0[1], 4; phases = subdiv(0, pi, 10))
+Integrator: Complex-plane integrator
+  Integration path    : (-4.0 + 1.4901161193847656e-8im, -2.0 + 2.000000014901161im, 0.0 + 1.4901161193847656e-8im)
+  Integration options : ()
+  Integrand:          :
+  JosephsonDensity{Float64} : Equilibrium (dc) Josephson current observable before integration over energy
+    kBT                     : 0.0
+    Contact                 : 1
+    Number of phase shifts  : 10
+
+julia> J()
+10-element Vector{Float64}:
+ -6.751348391359149e-16
+  0.0016315088241546964
+  0.003213820056117238
+  0.004699191781510955
+  0.0060427526322931946
+  0.0072038354411029185
+  0.008147188939639644
+  0.008844017741703502
+  0.009272686515034255
+ -1.7744618723033526e-12
+```
+
+# See also
+    `greenfunction`,`ldos`, `current`, `conductance`, `transmission`
+"""
+josephson
