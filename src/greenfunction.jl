@@ -31,7 +31,9 @@ default_green_solver(::AbstractHamiltonian1D) = GS.Schur()
 (g::GreenSlice)(; params...) = minimal_callsafe_copy(call!(g; params...))
 (g::GreenSlice)(ω; params...) = copy(call!(g, ω; params...))
 
-function call!(g::GreenFunction, ω; params...)
+call!(g::GreenFunction, ω::Real; params...) = call!(g, retarded_omega(ω, solver(g)); params...)
+
+function call!(g::GreenFunction, ω::Complex; params...)
     h = parent(g)
     contacts´ = contacts(g)
     call!(h; params...)
@@ -46,6 +48,12 @@ call!(g::GreenSlice; params...) =
 
 call!(g::GreenSlice, ω; params...) =
     call!(greenfunction(g), ω; params...)[slicerows(g), slicecols(g)]
+
+retarded_omega(ω::T, s::AppliedGreenSolver) where {T<:Real} =
+    ω + im * sqrt(eps(T)) * needs_omega_shift(s)
+
+# fallback, may be overridden
+needs_omega_shift(s::AppliedGreenSolver) = true
 
 #endregion
 

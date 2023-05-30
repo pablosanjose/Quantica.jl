@@ -168,6 +168,8 @@ moments(s::AppliedKPMGreenSolver) = s.moments
 
 minimal_callsafe_copy(s::AppliedKPMGreenSolver) = AppliedKPMGreenSolver(copy(s.momenta), s.bandCH)
 
+needs_omega_shift(s::AppliedKPMGreenSolver) = false
+
 #endregion
 
 #region ## apply ##

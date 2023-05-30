@@ -5,6 +5,7 @@
 #   All new s::AppliedGreenSolver must implement (with Σblock a [possibly nested] tuple of MatrixBlock's)
 #      - s(ω, Σblocks, ::ContactBlockStructure) -> GreenSlicer
 #      - minimal_callsafe_copy(gs)
+#      - optional: needs_omega_shift(s) (with a true fallback)
 #   A gs::GreenSlicer's allows to compute G[gi, gi´]::AbstractMatrix for indices gi
 #   To do this, it must implement
 #      - view(gs, ::Int, ::Int) -> g(ω; kw...) between specific contacts

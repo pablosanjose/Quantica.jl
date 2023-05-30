@@ -1315,10 +1315,11 @@ the forms above. Therefore, all the previous slice forms correspond to a diagona
 
     g(ω; params...)
 
-Build a `gω::GreenSolution` that represents a Green function at arbitrary points on the
-lattice, but at fixed energy `ω` and system parameter values `param`. For most solvers, it
-is required to add to `ω` with a small imaginary part, either positive (for the retarded) or
-negative (for the advanced Green function).
+Build a `gω::GreenSolution` that represents a retarded Green function at arbitrary points on
+the lattice, but at fixed energy `ω` and system parameter values `param`. If `ω` is complex,
+the retarded or advanced Green function is returned, depending on `sign(imag(ω))`. If `ω` is
+`Real`, a small, positive imaginary part is automatically added internally to produce the
+retarded `g`.
 
     gω[i]
     gω[i, j]
@@ -1346,19 +1347,20 @@ GreenFunction{Float64,2,0}: Green function of a Hamiltonian{Float64,2,0}
     Coordination     : 2.88981
     Parameters       : [:t]
 
-julia> gω = g(0.1 + 0.0001im; t = 2)
+julia> gω = g(0.1; t = 2)
 GreenSolution{Float64,2,0}: Green function at arbitrary positions, but at a fixed energy
 
 julia> gs = g[region = RP.circle(2), sublats = :B]
 GreenSlice{Float64,2,0}: Green function at arbitrary energy, but at a fixed lattice positions
 
-julia> gω[region = RP.circle(2), sublats = :B] == gs(0.1 + 0.0001im; t = 2)
+julia> gω[region = RP.circle(2), sublats = :B] == gs(0.1; t = 2)
 true
 ```
 
 # See also
     `GreenSolvers`, `ldos`, `conductance`, `current`, `josephson`
 """
+greenfunction
 
 """
 
@@ -1394,9 +1396,7 @@ arbitrary sites `i`. See also `greenfunction` for details on building a `GreenSl
 `GreenSolution`.
 
 The local density of states is defined here as ``ρᵢ(ω) = -Tr(gᵢᵢ(ω))/π``, where `gᵢᵢ(ω)` is
-the retarded Green function at a given site `i`. Therefore a small imaginary part should be
-added to `ω` when using a `gω::GreenSolution` to obtain a correct retarded result with most
-Green solvers.
+the retarded Green function at a given site `i`.
 
 ## Keywords
 
@@ -1409,8 +1409,7 @@ Green solvers.
 
 Given a partially evaluated `ρω::LocalSpectralDensitySolution` or
 `ρs::LocalSpectralDensitySlice`, build a vector `[ρ₁(ω), ρ₂(ω)...]` of fully evaluated local
-densities of states. If `ω` above is real, a small positive imaginary part will be added
-internally for the evaluation.
+densities of states.
 
 # Example
 ```jldoctest
@@ -1429,14 +1428,14 @@ GreenFunction{Float64,2,0}: Green function of a Hamiltonian{Float64,2,0}
     Hoppings         : 8522
     Coordination     : 2.94065
 
-julia> ldos(g(0.2))[1]  # The KPM solver doesn't require an imag(ω) > 0 broadening in gω
+julia> ldos(g(0.2))[1]
 6-element Vector{Float64}:
- 0.037505015417307
- 0.03583857530882366
- 0.03583857530882353
- 0.035838575308823506
- 0.03583857530882361
- 0.037505015417306886
+ 0.036802204179316955
+ 0.034933055722650375
+ 0.03493305572265026
+ 0.03493305572265034
+ 0.03493305572265045
+ 0.036802204179317045
 ```
 
 """
@@ -1468,8 +1467,7 @@ dω ∑ⱼ [fᵢ(ω) - fⱼ(ω)] Gᵢⱼ(ω)``, where ``fᵢ(ω)`` is the Fermi 
 
     G(ω; params...)
 
-Compute the conductance between the specified contacts. If `ω` is real, a small positive
-imaginary part will be added internally for the evaluation.
+Compute the conductance at the specified contacts.
 
 ```jldoctest
 julia> # A central system g0 with two 1D leads and transparent contacts
@@ -1511,9 +1509,7 @@ The local current density is defined here as ``Jᵢⱼ(ω) = (2/h) rᵢⱼ Re Tr
 gᵢⱼ(ω)Hⱼᵢ) * charge]``, with the integrated local current given by ``Jᵢⱼ = ∫ f(ω) Jᵢⱼ(ω)
 dω``. Here `Hᵢⱼ` is the hopping from site `j` at `rⱼ` to `i` at `rᵢ`, `rᵢⱼ = rᵢ - rⱼ`,
 `charge` is the charge of carriers in orbital space (see Keywords), and `gᵢⱼ(ω)` is the
-retarded Green function between said sites. Therefore a small imaginary part should be added
-to `ω` when using a `gω::GreenSolution` to obtain a correct retarded result with most Green
-solvers.
+retarded Green function between said sites.
 
 ## Keywords
 
@@ -1527,8 +1523,7 @@ solvers.
 
 Given a partially evaluated `Jω::CurrentDensitySolution` or `ρs::CurrentDensitySlice`, build
 a sparse matrix `Jᵢⱼ(ω)` along the specified `direction` of fully evaluated local current
-densities. If `ω` above is real, a small positive imaginary part will be added internally
-for the evaluation.
+densities.
 
 # Example
 

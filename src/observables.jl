@@ -277,9 +277,7 @@ function call!(d::LocalSpectralDensitySlice{T}, ω; params...) where {T}
     return append_ldos!(T[], sites, gω, d.kernel)
 end
 
-(d::LocalSpectralDensitySlice{T})(ω::Real; params...) where {T} = d(ω + im*sqrt(eps(T)); params...)
-
-(d::LocalSpectralDensitySlice)(ω::Complex; params...) = copy(call!(d, ω; params...))
+(d::LocalSpectralDensitySlice)(ω; params...) = copy(call!(d, ω; params...))
 
 function append_ldos!(v, cs::CellSites, gω, kernel)
     gcell = gω[cs]
@@ -365,9 +363,7 @@ currentcontact(G) = G.i
 
 biascontact(G) = G.j
 
-(G::ConductanceSlice{T})(ω::Real; params...) where {T} = G(ω + im*sqrt(eps(T)); params...)
-
-function (G::ConductanceSlice)(ω::Complex; params...)
+function (G::ConductanceSlice)(ω; params...)
     τe, τz = G.τezdiag
     gω = call!(G.g, ω; params...)
     gʳⱼᵢ = gω[G.j, G.i]
@@ -453,11 +449,8 @@ Base.getindex(d::CurrentDensitySolution, ls::LatticeSlice) = current_matrix(d.g�
 Base.getindex(d::CurrentDensitySolution, scell::CellSites) = d[lattice(hamiltonian(d.gω))[scell]]
 Base.getindex(d::CurrentDensitySolution, i::Union{Integer,Colon}) = d[latslice(parent(d.gω), i)]
 
-
-(d::CurrentDensitySlice{T})(ω::Real; params...) where {T} = d(ω + im*sqrt(eps(T)); params...)
-
 # no call! support here
-function (d::CurrentDensitySlice)(ω::Complex; params...)
+function (d::CurrentDensitySlice)(ω; params...)
     gω = call!(d.g, ω; params...)
     ls = d.latslice
     cu = current(gω; charge = d.charge)
