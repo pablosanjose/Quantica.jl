@@ -2,11 +2,13 @@
 # sublat
 #region
 
-sublat(sites::Union{Number,Tuple,SVector,AbstractVector}...; name = :A) =
-    Sublat([float.(sanitize_SVector.(sites))...], Symbol(name))
+sublat(sites::Union{Number,Tuple,SVector,AbstractVector{<:Number}}...; name = :A) =
+    Sublat([float.(promote(sanitize_SVector.(sites)...))...], Symbol(name))
 
-sublat(sites::AbstractVector; name = :A) =
-    Sublat(float.(sanitize_SVector.(sites)), Symbol(name))
+function sublat(sites::AbstractVector; name = :A)
+    T = foldl((x, y) -> promote_type(x, eltype(sanitize_SVector(y))), sites; init = Bool)
+    return Sublat(sanitize_SVector.(float(T), sites), Symbol(name))
+end
 
 #endregion
 

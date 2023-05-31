@@ -5,6 +5,10 @@
 struct Sublat{T<:AbstractFloat,E}
     sites::Vector{SVector{E,T}}
     name::Symbol
+    function Sublat{T,E}(sites, name) where {T<:AbstractFloat,E}
+        isempty(sites) && argerror("Sublattices cannot be empty")
+        return new(sites, name)
+    end
 end
 
 struct Unitcell{T<:AbstractFloat,E}
@@ -34,6 +38,8 @@ struct Lattice{T<:AbstractFloat,E,L}
 end
 
 #region ## Constructors ##
+
+Sublat(sites::Vector{SVector{E,T}}, name::Symbol) where {T,E} = Sublat{T,E}(sites, name)
 
 Bravais(::Type{T}, E, m) where {T} = Bravais(T, Val(E), m)
 Bravais(::Type{T}, ::Val{E}, m::Tuple{}) where {T,E} =
