@@ -65,11 +65,15 @@ function unitcell(sublats, names, postype::Type{S}) where {S<:SVector}
     return Unitcell(sites´, names, offsets´)
 end
 
-function unitcell(u::Unitcell, names, postype::Type{S}) where {S<:SVector}
+function unitcell(u::Unitcell{T´,E´}, names, postype::Type{S}) where {T´,E´,S<:SVector}
     sites´ = sanitize_SVector.(S, sites(u))
     offsets´ = offsets(u)
     Unitcell(sites´, names, offsets´)
 end
+
+# with simple rename, don't copy sites
+unitcell(u::Unitcell{T,E}, names, postype::Type{S})  where {T,E,S<:SVector{E,T}} =
+    Unitcell(sites(u), names, offsets(u))
 
 #endregion
 

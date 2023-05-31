@@ -1,4 +1,4 @@
-using Quantica: Sublat
+using Quantica: Sublat, Lattice
 using Random
 
 @testset "sublat input" begin
@@ -13,29 +13,39 @@ using Random
     @test_throws ArgumentError sublat(SVector{3,Float64}[])
 end
 
-# @testset "lattice" begin
-#     s = sublat((1, 2))
-#     for t in (Float32, Float64), e in 1:4, l = 1:4
-#         br = SMatrix{l,l,Float64}(I)
-#         @test lattice(s; bravais = br, type = t, dim = Val(e)) isa Lattice{e,min(l,e),t}
-#         @test lattice(s; bravais = br, type = t, dim = e) isa Lattice{e,min(l,e),t}
-#     end
-#     lat = lattice(sublat((0,0,0)), sublat((1,1,1f0)); bravais = SMatrix{3,3}(I))
-#     lat2 = lattice(lat, bravais = ())
-#     @test lat2 isa Lattice{3,0}
-#     @test allsitepositions(lat) === allsitepositions(lat2)
-#     lat2 = lattice(lat, bravais = (), names = :A)
-#     @test lat2 isa Lattice{3,0}
-#     @test allsitepositions(lat) === allsitepositions(lat2)
-#     lat2 = lattice(lat, dim = Val(2))
-#     @test lat2 isa Lattice{2,2} # must be L <= E
-#     @test allsitepositions(lat) !== allsitepositions(lat2)
-#     lat2 = lattice(lat, type = Float64)
-#     @test lat2 isa Lattice{3,3}
-#     @test allsitepositions(lat) !== allsitepositions(lat2)
-#     lat2 = lattice(lat, dim = Val(2), bravais = SA[1 2; 3 4])
-#     @test bravais(lat2) == SA[1 2; 3 4]
-# end
+@testset "lattice construction" begin
+    s = sublat((1, 2))
+    for t in (Float32, Float64), e in 1:4, l = 1:4
+        br = SMatrix{e,l,Float64}(I)
+        if l > e
+            @test_throws DimensionMismatch lattice(s; bravais = br, type = t, dim = Val(e))
+            @test_throws DimensionMismatch lattice(s; bravais = br, type = t, dim = e)
+        else
+            @test lattice(s; bravais = br, type = t, dim = Val(e)) isa Lattice{t,e,l}
+            @test lattice(s; bravais = br, type = t, dim = e) isa Lattice{t,e,l}
+        end
+        if l > 2
+            @test_throws DimensionMismatch lattice(s; bravais = br, type = t)
+        else
+            @test lattice(s; bravais = br, type = t) isa Lattice{t,2,l}
+        end
+    end
+    lat = lattice(sublat((0,0,0)); names = :A)
+    @test lat isa Lattice{Float64,3,0}
+    lat = lattice(sublat((0,0,0f0)), sublat((1,1,1f0)); bravais = SMatrix{3,3}(I))
+    lat2 = lattice(lat, bravais = ())
+    @test lat2 isa Lattice{Float32,3,0}
+    @test sites(lat) === sites(lat2)
+    lat2 = lattice(lat, bravais = (), names = (:A,:B))
+    @test lat2 isa Lattice{Float32,3,0}
+    @test sites(lat) === sites(lat2)
+    @test_throws ArgumentError lattice(lat, names = (:A,:B,:C))
+    lat2 = lattice(lat, type = Float64)
+    @test lat2 isa Lattice{Float64,3,3}
+    @test sites(lat) !== sites(lat2)
+    lat2 = lattice(lat, dim = Val(2), bravais = SA[1 2; 3 4])
+    @test bravais_matrix(lat2) == SA[1 2; 3 4]
+end
 
 # @testset "lattice presets" begin
 #     a0s = (1, 2)
@@ -120,7 +130,7 @@ end
 #     @test nsites(lat) == 320
 #     lat = unitcell(LP.honeycomb(), region = xor(RP.circle(20), RP.square(10)))
 #     lat´ = unitcell(LP.honeycomb(), region = RP.circle(20) & !RP.square(10))
-#     @test allsitepositions(lat) == allsitepositions(lat´)
+#     @test sites(lat) == sites(lat´)
 #     lat = unitcell(LP.honeycomb(), region = RP.circle(5, (5,0)) | RP.circle(5, (15,0)) | RP.circle(5, (25,0)))
 #     lat´ = unitcell(LP.honeycomb(), region = RP.circle(5, (5,0)))
 #     @test nsites(lat) == 3 * nsites(lat´)

@@ -17,6 +17,8 @@ struct Unitcell{T<:AbstractFloat,E}
     offsets::Vector{Int}        # Linear site number offsets for each sublat
     function Unitcell{T,E}(sites, names, offsets) where {T<:AbstractFloat,E}
         names´ = uniquenames!(sanitize_Vector_of_Symbols(names))
+        length(names´) == length(offsets) - 1 ||
+            argerror("Incorrect number of sublattice names, got $(length(names´)), expected $(length(offsets) - 1)")
         return new(sites, names´, offsets)
     end
 end
@@ -26,7 +28,7 @@ struct Bravais{T,E,L}
     function Bravais{T,E,L}(matrix) where {T,E,L}
         (E, L) == size(matrix) || internalerror("Bravais: unexpected matrix size $((E,L)) != $(size(matrix))")
         L > E &&
-            throw(DimensionMismatch("Number $L of Bravais vectors cannot be greater than embedding dimension $E"))
+            throw(DimensionMismatch("Number of Bravais vectors ($L) cannot be greater than embedding dimension $E"))
         return new(matrix)
     end
 end

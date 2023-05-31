@@ -2,6 +2,7 @@
 # Non-numerical sanitizers
 #region
 
+sanitize_Vector_of_Symbols(name::Symbol) = [name]
 sanitize_Vector_of_Symbols(names) = Symbol[convert(Symbol, name) for name in names]
 
 sanitize_orbitals(o::Val) = o
