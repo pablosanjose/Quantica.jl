@@ -30,34 +30,35 @@ end
             @test lattice(s; bravais = br, type = t) isa Lattice{t,2,l}
         end
     end
-    lat = lattice(sublat((0,0,0)); names = :A)
+    lat = lattice(sublat((0,0,0)); names = :A)      # scalar `names`
     @test lat isa Lattice{Float64,3,0}
     lat = lattice(sublat((0,0,0f0)), sublat((1,1,1f0)); bravais = SMatrix{3,3}(I))
     lat2 = lattice(lat, bravais = ())
     @test lat2 isa Lattice{Float32,3,0}
-    @test sites(lat) === sites(lat2)
+    @test sites(lat) === sites(lat2)                # site aliasing
     lat2 = lattice(lat, bravais = (), names = (:A,:B))
     @test lat2 isa Lattice{Float32,3,0}
-    @test sites(lat) === sites(lat2)
-    @test_throws ArgumentError lattice(lat, names = (:A,:B,:C))
+    @test sites(lat) === sites(lat2)                # site aliasing
+    @test_throws ArgumentError lattice(lat, names = (:A,:B,:C)) # too many `names`
     lat2 = lattice(lat, type = Float64)
     @test lat2 isa Lattice{Float64,3,3}
-    @test sites(lat) !== sites(lat2)
+    @test sites(lat) !== sites(lat2)                # no site aliasing
     lat2 = lattice(lat, dim = Val(2), bravais = SA[1 2; 3 4])
+    @test lat2 isa Lattice{Float32,2,2}             # dimension cropping
     @test bravais_matrix(lat2) == SA[1 2; 3 4]
 end
 
-# @testset "lattice presets" begin
-#     a0s = (1, 2)
-#     presets = (LatticePresets.linear, LatticePresets.square, LatticePresets.triangular,
-#                LatticePresets.honeycomb, LatticePresets.cubic, LatticePresets.fcc,
-#                LatticePresets.bcc, LatticePresets.hcp)
-#     for a0 in a0s, t in (Float32, Float64), e in 1:4, preset in presets
-#         @test preset(; a0 = a0, type = t, dim = e) isa Lattice{e,<:Any,t}
-#     end
-#     @test LatticePresets.cubic(bravais = (1,0)) isa Lattice{3,1}
-#     @test LatticePresets.cubic(bravais = ((1,0), (0,1)), dim = Val(2)) isa Lattice{2,2}
-# end
+@testset "lattice presets" begin
+    a0s = (1, 2)
+    presets = (LatticePresets.linear, LatticePresets.square, LatticePresets.triangular,
+               LatticePresets.honeycomb, LatticePresets.cubic, LatticePresets.fcc,
+               LatticePresets.bcc, LatticePresets.hcp)
+    for a0 in a0s, t in (Float32, Float64), preset in presets
+        @test preset(; a0 = a0, type = t) isa Lattice{t}
+    end
+    @test LatticePresets.cubic(bravais = (1,0)) isa Lattice{Float64,3,1}
+    @test LatticePresets.cubic(bravais = ((1,0), (0,1)), dim = Val(2)) isa Lattice{Float64,2,2}
+end
 
 # @testset "siteindices/sitepositions" begin
 #     lat = LatticePresets.honeycomb() |> unitcell(region = RegionPresets.circle(10))
@@ -74,64 +75,65 @@ end
 #     @test collect(siteindices(lat; indices = (1, 10))) == [1]
 # end
 
-# @testset "lattice combine" begin
-#     lat0 = transform!(r -> SA[r[2], -r[1]], LatticePresets.honeycomb()) |> unitcell((1,1), (-1,1))
-#     br = bravais(lat0)
-#     cell_1 = lat0 |>
-#         unitcell(region = r -> -1.01/√3 <= r[1] <= 4/√3 && 0 <= r[2] <= 3.5)
-#     cell_2 = transform!(r -> r + br * SA[2.2, -1], copy(cell_1))
-#     cell_p = lattice(sublat(br * SA[1.6,0.73], br * SA[1.6,1.27]))
-#     cells = combine(cell_1, cell_2, cell_p)
-#     @test Quantica.nsites.(Ref(cells), 1:5) == [14, 14, 14, 14, 2]
-# end
+@testset "lattice combine" begin
+    lat0 = transform!(LatticePresets.honeycomb(), r -> SA[r[2], -r[1]]) |> supercell((1,1), (-1,1))
+    br = bravais_matrix(lat0)
+    cell_1 = lat0 |>
+        supercell(region = r -> -1.01/√3 <= r[1] <= 4/√3 && 0 <= r[2] <= 3.5)
+    cell_2 = transform!(copy(cell_1), r -> r + br * SA[2.2, -1])
+    cell_p = lattice(sublat(br * SA[1.6,0.73], br * SA[1.6,1.27]))
+    cells = combine(cell_1, cell_2, cell_p)
+    @test length.(sites.(Ref(cells), 1:5)) == [14, 14, 14, 14, 2]
+    @test_throws ArgumentError combine(LatticePresets.honeycomb(), LatticePresets.square())
+    lat1 = transform(LatticePresets.honeycomb(type = Float32), r -> SA[r[2], -r[1]]) |> supercell((-1,1), (1,1))
+    lat2 = combine(lat0, lat1)
+    @test lat2 isa typeof(lat0)
+    @test allunique(Quantica.sublatnames(lat2))
+    lat1 = transform(LatticePresets.honeycomb(type = Float32), r -> SA[r[2], -r[1]]) |> supercell((-3,3), (1,1))
+    @test_throws ArgumentError combine(lat0, lat1)
+end
 
-# @testset "lattice unitcell" begin
-#     presets = (LatticePresets.linear, LatticePresets.square, LatticePresets.triangular,
-#                LatticePresets.honeycomb, LatticePresets.cubic, LatticePresets.fcc,
-#                LatticePresets.bcc, LatticePresets.hcp)
-#     for preset in presets
-#         lat = preset()
-#         E, L = dims(lat)
-#         for l in 1:L
-#             # some ramdon but deterministic svecs
-#             svecs = ntuple(i -> ntuple(j -> i*round(Int, cos(2j)) + j*round(Int, sin(2i)) , Val(E)), L-l)
-#             @test unitcell(lat, svecs...) isa Lattice{E,L-l}
-#             @test unitcell(lat, l) isa Lattice{E,L}
-#         end
-#     end
-#     @test unitcell(LatticePresets.honeycomb(), region = RegionPresets.circle(10, (10,0))) isa Lattice{2,0}
-#     @test unitcell(LatticePresets.honeycomb(), (2,1), region = RegionPresets.circle(10)) isa Lattice{2,1}
-#     @test unitcell(LatticePresets.bcc(), (2,1,0), region = RegionPresets.circle(10)) isa Lattice{3,1}
-#     @test unitcell(LatticePresets.cubic(), (2,1,0), region = RegionPresets.sphere(10, (10,2,1))) isa Lattice{3,1}
-# end
+@testset "lattice nrange" begin
+    lat = LP.honeycomb(a0 = 1)
+    @test Quantica.nrange(1, lat) ≈ 1/√3
+    @test Quantica.nrange(2, lat) ≈ 1
+    @test Quantica.nrange(3, lat) ≈ 2/√3
+end
 
-# @testset "lattice supercell" begin
-#     presets = (LatticePresets.linear, LatticePresets.square, LatticePresets.triangular,
-#                LatticePresets.honeycomb, LatticePresets.cubic, LatticePresets.fcc,
-#                LatticePresets.bcc, LatticePresets.hcp)
-#     for preset in presets
-#         lat = preset()
-#         E, L = dims(lat)
-#         for l in 1:L
-#             # some ramdon but deterministic svecs
-#             svecs = ntuple(i -> ntuple(j -> i*round(Int, cos(2j)) + j*round(Int, sin(2i)) , Val(E)), L-l)
-#             @test supercell(lat, svecs...) isa Superlattice{E,<:Any,<:Any,L-l}
-#             @test supercell(lat, l) isa Superlattice{E,<:Any,<:Any,L}
-#         end
-#     end
-#     @test supercell(LatticePresets.honeycomb(), region = RegionPresets.circle(10, (0,2))) isa Superlattice{2,2}
-#     @test supercell(LatticePresets.honeycomb(), (2,1), region = RegionPresets.circle(10)) isa Superlattice{2,2}
-#     @test supercell(LatticePresets.bcc(), (2,1,0), region = RegionPresets.circle(10, (1,0))) isa Superlattice{3,3}
-#     @test supercell(LatticePresets.cubic(), (2,1,0), region = RegionPresets.sphere(10)) isa Superlattice{3,3}
-# end
+@testset "lattice supercell" begin
+    presets = (LatticePresets.linear, LatticePresets.square, LatticePresets.triangular,
+               LatticePresets.honeycomb, LatticePresets.cubic, LatticePresets.fcc,
+               LatticePresets.bcc, LatticePresets.hcp)
+    for preset in presets
+        lat = preset()
+        E, L = Quantica.embdim(lat), Quantica.latdim(lat)
+        for l in 1:L
+            # some ramdon but deterministic svecs
+            svecs = ntuple(i -> ntuple(j -> i*round(Int, cos(2j)) + j*round(Int, sin(2i)) , Val(E)), L-l)
+            @test supercell(lat, svecs...) isa Lattice{Float64,E,L-l}
+            @test supercell(lat, l) isa Lattice{Float64,E,L}
+        end
+    end
+    @test supercell(LatticePresets.honeycomb(), region = RegionPresets.circle(10, (10,0))) isa Lattice{Float64,2,0}
+    @test supercell(LatticePresets.honeycomb(), (2,1), region = RegionPresets.circle(10)) isa Lattice{Float64,2,1}
+    @test supercell(LatticePresets.bcc(), (2,1,0), region = RegionPresets.circle(10)) isa Lattice{Float64,3,1}
+    @test supercell(LatticePresets.cubic(), (2,1,0), region = RegionPresets.sphere(10, (10,2,1))) isa Lattice{Float64,3,1}
+end
 
-# @testset "boolean regions" begin
-#     lat = unitcell(LP.square(), region = xor(RP.square(10), RP.square(20)))
-#     @test nsites(lat) == 320
-#     lat = unitcell(LP.honeycomb(), region = xor(RP.circle(20), RP.square(10)))
-#     lat´ = unitcell(LP.honeycomb(), region = RP.circle(20) & !RP.square(10))
-#     @test sites(lat) == sites(lat´)
-#     lat = unitcell(LP.honeycomb(), region = RP.circle(5, (5,0)) | RP.circle(5, (15,0)) | RP.circle(5, (25,0)))
-#     lat´ = unitcell(LP.honeycomb(), region = RP.circle(5, (5,0)))
-#     @test nsites(lat) == 3 * nsites(lat´)
-# end
+@testset "boolean regions" begin
+    lat = supercell(LP.square(), region = xor(RP.square(10), RP.square(20)), seed = SA[20,0])
+    @test length(sites(lat)) == 320
+    lat = supercell(LP.honeycomb(), region = xor(RP.circle(20), RP.square(10)))
+    lat´ = supercell(LP.honeycomb(), region = RP.circle(20) & !RP.square(10))
+    @test sites(lat) == sites(lat´)
+    lat = supercell(LP.honeycomb(), region = RP.circle(5, (5,0)) | RP.circle(5, (15,0)) | RP.circle(5, (25,0)))
+    lat´ = supercell(LP.honeycomb(), region = RP.circle(5, (5,0)))
+    @test length(sites(lat)) == 3 * length(sites(lat´))
+end
+
+@testset "siteselectors" begin
+    lat = LP.honeycomb()
+    for r in (RP.circle(10), missing), s in (:A, 1, (:A, :B), [1, :B], missing), c in (SA[0,1], (0,1), [0,1]), cs in (c, (c, 2 .* c), [c, 2 .* c], missing)
+        @test supercell(lat, region = r, sublats = s, cells = cs) isa Lattice
+    end
+end

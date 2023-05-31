@@ -21,7 +21,6 @@ function supercell_data(lat::Lattice{<:Any,<:Any,L}, vs...; seed = missing, kw..
     # IMPORTANT BEHAVIOR: if lattice dimensions are reduced and there is no bounding region
     # and no cell list, supercell is infinite. In this case: stop at a single perp unit cell
     only_one_perp = size(smat, 2) < size(smat, 1) && region(selector) === missing && cells(selector) === missing
-    # cellseed currently not exposed to the user
     cellseed = seed === missing ? zero(SVector{L,Int}) : sanitize_SVector(SVector{L,Int}, seed)
     return supercell_data(lat, smat, cellseed, applied_selector, only_one_perp)
 end
@@ -63,7 +62,7 @@ end
 makefull(m::SMatrix{<:Any,<:Any,Int}) = round.(Int, makefull(float(m)))
 
 # build masklist = [(sublatindex, cell, siteindex)] for all sites
-# in full supercell defined by smatfull
+# in full supercell defined by makefull(smat)
 function supercell_masklist_full(smat´⁻¹N::SMatrix{L,L,Int}, N, cellseed::SVector{L,Int}, lat) where {L}
     supercell_nsites = nsites(lat) * N
     masklist = Vector{Tuple{Int,SVector{L,Int},Int}}(undef, supercell_nsites)
@@ -86,28 +85,30 @@ end
 # build sitelist = [sitepositions...] and masklist´ = [(sublat, cell´, siteidx)...]
 # where cell´ varies along axes smatperp not in smat, filtered by selector
 function supercell_sitelist!!(sitelist, masklist, smatperp, seedperp, lat, applied_selector, only_one_perp)
-    masklist0 = copy(masklist)
+    masklist´ = copy(masklist)
     empty!(masklist)
     empty!(sitelist)
     cs = cells(applied_selector)
     csbool = zeros(Bool, length(cs))
     iter = BoxIterator(seedperp)
     for n in iter
-        for (s, cell, i) in masklist0
+        keepgoing = isempty(sitelist)   # if none have been found, ensure we don't stop
+        for (s, cell, i) in masklist´
             cell´ = cell + smatperp * n
             r = site(lat, i, cell´)
             if (i, r, cell´) in applied_selector
                 push!(masklist, (s, cell´, i))
                 push!(sitelist, r)
-                acceptcell!(iter, n)
                 foundcell!(csbool, cs, cell´)
+                keepgoing = true
             end
         end
         only_one_perp && break
         # If we haven't found all selector cells, accept supercell n so we keep searching
-        # note that if isempty(csbool) then all(csbool) is true
+        # note that if isempty(csbool) then all(csbool) is true and we stop accepting
         foundall = all(csbool)
-        foundall || acceptcell!(iter, n)
+        keepgoing = keepgoing || !foundall
+        keepgoing && acceptcell!(iter, n)
     end
     return nothing
 end

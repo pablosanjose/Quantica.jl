@@ -48,7 +48,13 @@ sanitize_minmaxrange((rmin, rmax)::Tuple{Any,Any}, lat) =
 sanitize_cells(cells::Integer, ::Val{L}) where {L} = cells > 0 ?
     Tuple.(CartesianIndices(ntuple(Returns(0:cells-1), Val(L)))) :
     Tuple.(CartesianIndices(ntuple(Returns(cells+1:0), Val(L))))
-sanitize_cells(cells, _) = cells
+sanitize_cells(cell::AbstractVector{<:Number}, ::Val{L}) where {L} =
+    (sanitize_SVector(SVector{L,Int}, cell),)
+sanitize_cells(cell::Union{NTuple{L,<:Number},SVector{L,<:Number}}, ::Val{L}) where {L} =
+    (sanitize_SVector(SVector{L,Int}, cell),)
+sanitize_cells(cells, ::Val{L}) where {L} =
+    sanitize_SVector.(SVector{L,Int}, cells)
+sanitize_cells(::Missing, ::Val{L}) where {L} = missing
 
 applyrange(r::Neighbors, lat) = nrange(Int(r), lat)
 applyrange(r::Real, lat) = r
@@ -60,6 +66,7 @@ applied_region((r, dr)::Tuple{SVector,SVector}, region::Function) = ifelse(regio
 applied_region(r::SVector, region::Function) = ifelse(region(r), true, false)
 
 recursive_apply(f, t::Tuple) = recursive_apply.(f, t)
+recursive_apply(f, t::AbstractVector) = recursive_apply.(f, t)
 recursive_apply(f, (a,b)::Pair) = recursive_apply(f, a) => recursive_apply(f, b)
 recursive_apply(f, x) = f(x)
 
