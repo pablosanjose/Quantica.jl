@@ -22,7 +22,7 @@ using QuadGK
 using Infiltrator # debugging
 
 export sublat, bravais_matrix, lattice, sites, supercell,
-       hopping, onsite, @onsite, @hopping, @onsite!, @hopping!, neighbors,
+       hopping, onsite, @onsite, @hopping, @onsite!, @hopping!, plusadjoint, neighbors,
        siteselector, hopselector,
        hamiltonian,
        flat, unflat, wrap, transform, translate, transform!, translate!, combine,

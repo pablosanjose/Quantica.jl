@@ -51,7 +51,7 @@ using Arpack
 end
 
 @testset "functional bandstructures" begin
-    hc = LatticePresets.honeycomb() |> hamiltonian(hopping(-1, sublats = :A=>:B, plusadjoint = true))
+    hc = LatticePresets.honeycomb() |> hamiltonian(hopping(-1, sublats = :A=>:B) |> plusadjoint)
     matrix = similarmatrix(hc, LinearAlgebraPackage())
     hf((x,)) = bloch!(matrix, hc, (x, -x))
     m = cuboid((0, 1))

@@ -26,7 +26,7 @@ using Quantica: Hamiltonian, ParametricHamiltonian, sites, nsites, nonsites, nho
     h = LatticePresets.honeycomb() |> hamiltonian(onsite(1.0, sublats = :A) + hopping(I, range = 2/√3), orbitals = (Val(1), Val(2)))
     @test Quantica.nonsites(h) == 1
     @test Quantica.nhoppings(h) == 24
-    h = LatticePresets.square() |> supercell(3) |> hamiltonian(hopping(1, range = 3, plusadjoint = true))
+    h = LatticePresets.square() |> supercell(3) |> hamiltonian(hopping(1, range = 3) |> plusadjoint)
     @test Quantica.nhoppings(h) == 252
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = (1, 1)))
     @test Quantica.nhoppings(h) == 12
@@ -42,8 +42,11 @@ end
 
 @testset "hamiltonian orbitals" begin
     lat = LP.honeycomb()
-    h = hamiltonian(lat, hopping(SA[1 0], sublats = :A => :B, plusadjoint = true) + onsite(1, sublats = 2), orbitals = (2, Val(1)))
+    hop = hopping(SA[1 0], sublats = :A => :B)
+    h = hamiltonian(lat, plusadjoint(hopping(hop)) + onsite(1, sublats = 2), orbitals = (2, Val(1)))
+    h´ = hamiltonian(lat, hop + hop' + onsite(1, sublats = 2), orbitals = (2, Val(1)))
     @test h isa Hamiltonian
+    @test h == h´
     @test_throws ArgumentError hamiltonian(lat, hopping(SA[1 0]), orbitals = (2, Val(1)))
     h = hamiltonian(lat, hopping(I) + onsite(SA[1 0; 0 1], sublats = :A), orbitals = (2, Val(1)))
     @test h isa Hamiltonian
@@ -55,7 +58,7 @@ end
     @test iszero(h((1,2)))
     h = hamiltonian(lat, hopping(1, sublats = :A => :B))
     @test h((0,0)) == SA[0 0; 3 0]
-    h = hamiltonian(lat, hopping(1, sublats = :A => :B, plusadjoint = true))
+    h = hamiltonian(lat, hopping(1, sublats = :A => :B) |> plusadjoint)
     @test h((0,0)) == SA[0 3; 3 0]
     h = hamiltonian(lat, hopping(1, sublats = (:A,:B) .=> (:B, :A), range = neighbors(2)))
     @test h((0,0)) == SA[0 3; 3 0]
@@ -300,7 +303,7 @@ end
     ht = LP.honeycomb(dim = Val(3), names = (:At, :Bt)) |> hamiltonian(hopping(1)) |> transform!(r -> r + SA[0,1/√3,1])
     hb = LP.honeycomb(dim = Val(3), names = (:Ab, :Bb)) |> hamiltonian(hopping(1)) |> transform!(r -> r + SA[0,1/√3,-1])
     h = combine(hb, h0, ht; coupling = hopping((r,dr) -> exp(-norm(dr)), range = 2,
-        sublats = ((:A,:B) => (:At, :Bt), (:A,:B) => (:Ab, :Bb)),  plusadjoint = true))
+        sublats = ((:A,:B) => (:At, :Bt), (:A,:B) => (:Ab, :Bb))) |>  plusadjoint)
     @test iszero(h((0,0))[1:2, 5:6])
     h = combine(hb, h0, ht; coupling = hopping((r,dr) -> exp(-norm(dr)), range = 2))
     @test !iszero(h((0,0))[1:2, 5:6])

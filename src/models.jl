@@ -5,12 +5,10 @@
 onsite(o; kw...) = onsite(o, siteselector(; kw...))
 onsite(o, sel::SiteSelector) = TightbindingModel(OnsiteTerm(o, sel, 1))
 
-function hopping(t; plusadjoint = false, kw...)
-    hop = hopping(t, hopselector(; kw...))
-    return plusadjoint ? hop + hop' : hop
-end
-
+hopping(t; kw...) = hopping(t, hopselector(; kw...))
 hopping(t, sel::HopSelector) = TightbindingModel(HoppingTerm(t, sel, 1))
+
+plusadjoint(t) = t + t'
 
 ## filtering models, and modifying their selectors
 
@@ -57,7 +55,6 @@ macro onsite(f)
 end
 
 # version with hop selector kwargs
-## TODO: this doesn't accept plusadjoint like hopping(...; ...) does
 macro hopping(kw, f)
     f, N, params = get_f_N_params(f, "Only @hopping(args -> body; kw...) syntax supported. Mind the `;`.")
     return esc(:(Quantica.ParametricModel(Quantica.ParametricHoppingTerm(

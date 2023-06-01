@@ -365,7 +365,7 @@ julia> # Building Bernal-stacked bilayer graphene
 
 julia> hbot = HP.graphene(a0 = 1, dim = 3); htop = translate(hbot, (0, 1/√3, 1/√3));
 
-julia> h2 = combine(hbot, htop; coupling = hopping(1, sublats = :B => :C, plusadjoint = true))
+julia> h2 = combine(hbot, htop; coupling = hopping(1, sublats = :B => :C) |> plusadjoint))
 ┌ Warning: Renamed repeated sublattice :A to :C
 └ @ Quantica ~/.julia/dev/Quantica/src/types.jl:60
 ┌ Warning: Renamed repeated sublattice :B to :D
@@ -653,12 +653,12 @@ Hamiltonian{Float64,3,3}: Hamiltonian on a 3D Lattice in 3D space
 onsite
 
 """
-    hopping(t; plusadjoint = false, hops...)
-    hopping((r, dr) -> t(r, dr); plusadjoint = false, hops...)
+    hopping(t; hops...)
+    hopping((r, dr) -> t(r, dr); hops...)
 
 Build a tight-binding model representing a uniform or a position-dependent hopping
 amplitude, respectively, on hops selected by `hopselector(; hops...)` (see `hopselector` for
-details). If `plusadjoint = true`, the adjoint hopping term is added on the reverse `hops`.
+details).
 
 Hops from a site at position `r₁` to another at `r₂` are described using the hop center `r =
 (r₁ + r₂)/2` and the hop vector `dr = r₂ - r₁`. Hopping amplitudes `t` can be a `Number`
@@ -699,7 +699,7 @@ Hamiltonian{Float64,2,2}: Hamiltonian on a 2D Lattice in 2D space
 ```
 
 # See also
-    `onsite`, `@onsite`, `@hopping`, `@onsite!`, `@hopping!`, `hamiltonian`
+    `onsite`, `@onsite`, `@hopping`, `@onsite!`, `@hopping!`, `hamiltonian`, `plusadjoint`
 """
 hopping
 
@@ -919,6 +919,49 @@ ParametricHamiltonian{Float64,2,2}: Parametric Hamiltonian on a 2D Lattice in 2D
     `onsite`, `hopping`, `@onsite`, `@hopping`, `@onsite!`, `hamiltonian`
 """
 macro hopping! end
+
+"""
+    plusadjoint(t::Model)
+
+Return a model `t + t'`
+
+# Example
+```jldoctest
+julia> model = hopping(im, sublats = :A => :B) |> plusadjoint
+TightbindingModel: model with 2 terms
+  HoppingTerm{Complex{Bool}}:
+    Region            : any
+    Sublattice pairs  : :A => :B
+    Cell distances    : any
+    Hopping range     : Neighbors(1)
+    Reverse hops      : false
+    Coefficient       : 1
+  HoppingTerm{Complex{Int64}}:
+    Region            : any
+    Sublattice pairs  : :A => :B
+    Cell distances    : any
+    Hopping range     : Neighbors(1)
+    Reverse hops      : true
+    Coefficient       : 1
+
+julia> h = hamiltonian(LP.honeycomb(), model)
+Hamiltonian{Float64,2,2}: Hamiltonian on a 2D Lattice in 2D space
+  Bloch harmonics  : 5
+  Harmonic size    : 2 × 2
+  Orbitals         : [1, 1]
+  Element type     : scalar (ComplexF64)
+  Onsites          : 0
+  Hoppings         : 6
+  Coordination     : 3.0
+
+julia> h((0,0))
+2×2 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 2 stored entries:
+     ⋅      0.0-3.0im
+ 0.0+3.0im      ⋅
+```
+
+"""
+plusadjoint
 
 """
 
