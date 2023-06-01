@@ -80,14 +80,15 @@ macro onsite!(f)
     return esc(:(Quantica.OnsiteModifier(Quantica.ParametricFunction{$N}($f, $(params)), Quantica.siteselector())))
 end
 
+# Since the default hopping range is neighbors(1), we need change the default to Inf for @hopping!
 macro hopping!(kw, f)
     f, N, params = get_f_N_params(f, "Only @hopping!(args -> body; kw...) syntax supported. Mind the `;`.")
-    return esc(:(Quantica.HoppingModifier(Quantica.ParametricFunction{$N}($f, $(params)), Quantica.hopselector_unbounded($kw))))
+    return esc(:(Quantica.HoppingModifier(Quantica.ParametricFunction{$N}($f, $(params)), Quantica.hopselector_infrange($kw))))
 end
 
 macro hopping!(f)
     f, N, params = get_f_N_params(f, "Only @hopping!(args -> body; kw...) syntax supported. Mind the `;`.")
-    return esc(:(Quantica.HoppingModifier(Quantica.ParametricFunction{$N}($f, $(params)), Quantica.hopselector_unbounded())))
+    return esc(:(Quantica.HoppingModifier(Quantica.ParametricFunction{$N}($f, $(params)), Quantica.hopselector_infrange())))
 end
 
 # Extracts normalized f, number of arguments and kwarg names from an anonymous function f
@@ -114,6 +115,8 @@ end
 
 get_kwname(x::Symbol) = x
 get_kwname(x::Expr) = x.head === :kw ? x.args[1] : x.head  # x.head == :...
+
+hopselector_infrange(; kw...) = hopselector(; range = Inf, kw...)
 
 #endregion
 

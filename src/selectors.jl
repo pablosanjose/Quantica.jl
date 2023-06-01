@@ -12,8 +12,6 @@ hopselector(; region = missing, sublats = missing, dcells = missing, range = nei
 hopselector(s::HopSelector; region = s.region, sublats = s.sublats, dcells = s.dcells, range = s.range) =
     HopSelector(region, sublats, dcells, range, s.adjoint)
 
-hopselector_unbounded(; kw...) = hopselector(; range = Inf, kw...)
-
 neighbors(n::Int) = Neighbors(n)
 neighbors(n::Int, lat::Lattice) = nrange(n, lat)
 

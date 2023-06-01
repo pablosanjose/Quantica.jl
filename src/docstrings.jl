@@ -618,7 +618,7 @@ produce a `Hamiltonian` with `hamiltonian(lat, model; ...)`, see `hamiltonian`. 
 dependent models are forced to preserve the periodicity of the lattice.
 
 Models can be combined using `+`, `-` and `*`, e.g. `onsite(1) - 2 * hopping(1)`. One can
-also take the adjoint of a model `m` with `m'`.
+also take the adjoint of a model (i.e. its Hermitian conjugate) `m` with `m'`.
 
 # Examples
 ```jldoctest
@@ -670,7 +670,7 @@ orbitals in the selected sites. Models may be applied to a lattice `lat` to prod
 models are forced to preserve the periodicity of the lattice.
 
 Models can be combined using `+`, `-` and `*`, e.g. `onsite(1) - 2 * hopping(1)`. One can
-also take the adjoint of a model `m` with `m'`.
+also take the adjoint of a model (i.e. its Hermitian conjugate) `m` with `m'`.
 
 # Examples
 ```jldoctest
