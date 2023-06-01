@@ -2,10 +2,6 @@
 
 [Quantica.jl](https://github.com/pablosanjose/Quantica.jl/actions) is a Julia package for building generic tight-binding models and computing various spectral and transport properties.
 
-!!! note "Important information"
-
-    This package supersedes [Elsa.jl](https://github.com/pablosanjose/Elsa.jl/), which will soon be deprecated.
-
 ## Manual
 
 ```@contents
@@ -31,9 +27,4 @@ Depth = 1
 
 - Compute the band structure or spectrum of a Hamiltonian, using advanced meshing and co-diagonalization techniques to resolve degeneracies and extract subbands
 
-- Use Order-N Kernel polynomial methods to compute spectral and transport properties efficiently
-
-!!! tip "Funding"
-
-    This work has been partly funded by the Spanish Ministry of Economy and Competitiveness under Grant Nos. FIS2015-65706-P, PCI2018-093026, and the CSIC Intramural Project 201760I086.
-
+- ...
