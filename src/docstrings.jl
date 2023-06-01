@@ -427,7 +427,6 @@ siteselector
 """
     hopselector(; range = neighbors(1), dcells = missing, sublats = missing, region = missing)
 
-
 Return a `HopSelector` object that can be used to select a finite set of hops between sites
 in a lattice. Hops between two sites at positions `r₁ = r - dr/2` and `r₂ = r + dr`,
 belonging to unit cells with a cell distance `dn::SVector{L,Int}` and to a sublattices with
@@ -531,7 +530,7 @@ details on defining modifiers).
 
 ## Keywords
 
-- `orbitals`: number of orbitals per sublattice. If an `Integer` (or a `Val{Integer}`), all sublattices will have the same number of orbitals. A collection of `Integers` indicates the orbitals on each sublattice.
+- `orbitals`: number of orbitals per sublattice. If an `Integer` (or a `Val{<:Integer}` for type-stability), all sublattices will have the same number of orbitals. A collection of values indicates the orbitals on each sublattice.
 
 ## Currying
 

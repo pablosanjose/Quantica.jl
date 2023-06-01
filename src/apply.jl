@@ -25,7 +25,7 @@ function apply(s::HopSelector, lat::Lattice{T,E,L}) where {T,E,L}
     region = (r, dr) -> applied_region((r, sign*dr), s.region)
     intsublats = recursive_apply(names -> sublatindex_or_zero(lat, names), s.sublats)
     sublats = recursive_push!(Pair{Int,Int}[], intsublats)
-    dcells = recursive_push!(SVector{L,Int}[], s.dcells)
+    dcells = recursive_push!(SVector{L,Int}[], sanitize_cells(s.dcells, Val(L)))
     if s.adjoint
         sublats .= reverse.(sublats)
         dcells .*= -1

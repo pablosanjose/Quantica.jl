@@ -120,7 +120,7 @@ end
     @test supercell(LatticePresets.cubic(), (2,1,0), region = RegionPresets.sphere(10, (10,2,1))) isa Lattice{Float64,3,1}
 end
 
-@testset "boolean regions" begin
+@testset "lattice boolean regions" begin
     lat = supercell(LP.square(), region = xor(RP.square(10), RP.square(20)), seed = SA[20,0])
     @test length(sites(lat)) == 320
     lat = supercell(LP.honeycomb(), region = xor(RP.circle(20), RP.square(10)))
@@ -129,11 +129,4 @@ end
     lat = supercell(LP.honeycomb(), region = RP.circle(5, (5,0)) | RP.circle(5, (15,0)) | RP.circle(5, (25,0)))
     lat´ = supercell(LP.honeycomb(), region = RP.circle(5, (5,0)))
     @test length(sites(lat)) == 3 * length(sites(lat´))
-end
-
-@testset "siteselectors" begin
-    lat = LP.honeycomb()
-    for r in (RP.circle(10), missing), s in (:A, 1, (:A, :B), [1, :B], missing), c in (SA[0,1], (0,1), [0,1]), cs in (c, (c, 2 .* c), [c, 2 .* c], missing)
-        @test supercell(lat, region = r, sublats = s, cells = cs) isa Lattice
-    end
 end

@@ -171,6 +171,11 @@ Base.length(l::Lattice) = nsites(l)
 
 Base.copy(l::Lattice) = deepcopy(l)
 
+(==)(l::Lattice, l´::Lattice) = l.bravais == l´.bravais && l.unitcell == l´.unitcell
+(==)(b::Bravais, b´::Bravais) = b.matrix == b´.matrix
+# we do not demand equal names for unitcells to be equal
+(==)(u::Unitcell, u´::Unitcell) = u.sites == u´.sites && u.offsets == u´.offsets
+
 #endregion
 #endregion
 
@@ -798,6 +803,9 @@ Base.:-(s::SMatrixView) = SMatrixView(-parent.(s))
 Base.:*(s::SMatrixView, x::Number) = SMatrixView(parent(s) * x)
 Base.:*(x::Number, s::SMatrixView) = SMatrixView(x * parent(s))
 
+(==)(b::OrbitalBlockStructure{B}, b´::OrbitalBlockStructure{B}) where {B} =
+    b.blocksizes == b´.blocksizes && b.subsizes == b´.subsizes
+
 #endregion
 #endregion
 
@@ -1123,6 +1131,8 @@ Base.zero(h::Harmonic{<:Any,<:Any,B}) where B = Harmonic(zero(dcell(h)), zero(ma
 
 Base.copy(h::Harmonic) = Harmonic(dcell(h), copy(matrix(h)))
 
+(==)(h::Harmonic, h´::Harmonic) = h.dn == h´.dn && unflat(h.h) == unflat(h´.h)
+
 #endregion
 #endregion
 
@@ -1163,6 +1173,8 @@ norbitals(h::AbstractHamiltonian) = blocksizes(blockstructure(h))
 blockeltype(::AbstractHamiltonian) = blockeltype(blockstructure(h))
 
 blocktype(h::AbstractHamiltonian) = blocktype(blockstructure(h))
+
+nsites(h::AbstractHamiltonian) = nsites(lattice(h))
 
 flatsize(h::AbstractHamiltonian, args...) = flatsize(blockstructure(h), args...)
 
@@ -1215,6 +1227,13 @@ function LinearAlgebra.ishermitian(h::Hamiltonian)
         hh.h ≈ h[-hh.dn]' || return false
     end
     return true
+end
+
+function (==)(h::Hamiltonian, h´::Hamiltonian)
+    hs = sort(h.harmonics, by = har -> har.dn)
+    hs´ = sort(h.harmonics, by = har -> har.dn)
+    equalharmonics = length(hs) == length(hs´) && all(splat(==), zip(hs, hs´))
+    return h.lattice == h´.lattice && h.blockstruct == h´.blockstruct && equalharmonics
 end
 
 #endregion
@@ -1825,6 +1844,10 @@ minimal_callsafe_copy(g::GreenSolution) =
 
 minimal_callsafe_copy(g::GreenSlice) =
     GreenSlice(minimal_callsafe_copy(g.parent), g.rows, g.cols)
+
+(==)(g::GreenFunction, g´::GreenFunction) = function_not_defined("==")
+(==)(g::GreenSolution, g´::GreenSolution) = function_not_defined("==")
+(==)(g::GreenSlice, g´::GreenSlice) = function_not_defined("==")
 
 #endregion
 #endregion

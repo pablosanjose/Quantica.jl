@@ -28,6 +28,8 @@ padtuple(t, x, N) = ntuple(i -> i <= length(t) ? t[i] : x, N)
 @noinline checkmatrixsize(val, s) = (size(val, 1), size(val, 2)) == s ||
     throw(ArgumentError("Expected an block or matrix of size $s, got size $((size(val, 1), size(val, 2)))"))
 
+@noinline function_not_defined(name) = argerror("Function $name not defined for the requested types")
+
 unitvector(i, ::Type{NTuple{L,T}}) where {L,T} =
     SVector(ntuple(j -> j == i ? one(T) : zero(T), Val(L)))
 

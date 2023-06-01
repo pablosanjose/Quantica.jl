@@ -505,6 +505,7 @@ end
 
 function wrap(h::Hamiltonian{<:Any,<:Any,L}, phases::NTuple{L,Any}) where {L}
     wa, ua = split_axes(phases)  # indices for wrapped and unwrapped axes
+    iszero(length(wa)) && return minimal_callsafe_copy(h)
     lat = lattice(h)
     b´ = bravais_matrix(lat)[:, SVector(ua)]
     lat´ = lattice(lat; bravais = b´)

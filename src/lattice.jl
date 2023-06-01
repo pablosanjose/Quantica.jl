@@ -126,6 +126,7 @@ combined_offsets(offsets...) = lengths_to_offsets(Iterators.flatten(diff.(offset
 
 ############################################################################################
 # neighbors
+#   TODO: may be simplified/optimized
 #region
 
 function nrange(n, lat)
