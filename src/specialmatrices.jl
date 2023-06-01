@@ -163,7 +163,7 @@ end
     SMatrixView(SMatrix{N,R}(I) * val * SMatrix{C,N}(I))
 
 function mask_block(::Type{B}, val) where {N,T,B<:SMatrixView{N,N,T}}
-    (nrows, ncols) = size(val)
+    (nrows, ncols) = size_or_1x1(val)
     s = ntuple(Val(N*N)) do i
         n, m = mod1(i, N), fld1(i, N)
         @inbounds n > nrows || m > ncols ? zero(T) : T(val[n,m])
@@ -172,6 +172,9 @@ function mask_block(::Type{B}, val) where {N,T,B<:SMatrixView{N,N,T}}
 end
 
 mask_block(t, val) = throw(ArgumentError("Unexpected block size"))
+
+size_or_1x1(::Number) = (1, 1)
+size_or_1x1(val) = size(val)
 
 checkstored(mat, i, j) = i in view(rowvals(mat), nzrange(mat, j)) ||
     throw(ArgumentError("Adding new structural elements is not allowed"))

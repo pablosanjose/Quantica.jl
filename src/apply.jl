@@ -187,6 +187,7 @@ function pointers(h::Hamiltonian{T,E}, s::AppliedHopSelector{T,E}) where {T,E}
             row = rows[p]
             dn = dcell(har)
             r, dr = rdr(site(lat, col, dn0) => site(lat, row, dn))
+            # @show (col => row, (r, dr), dn) in s
             if (col => row, (r, dr), dn) in s
                 ncol = norbs[scol]
                 nrow = blocksize(bs, row)

@@ -148,8 +148,7 @@ hamiltonian(lat::Lattice, m::AbstractBlockModel{<:ParametricModel}; kw...) = par
 
 # Base.@constprop :aggressive may be needed for type-stable non-Val orbitals?
 function hamiltonian(lat::Lattice{T}, m::TightbindingModel = TightbindingModel(), block = missing; orbitals = Val(1)) where {T}
-    orbitals´ = sanitize_orbitals(orbitals)
-    blockstruct = OrbitalBlockStructure(T, orbitals´, sublatlengths(lat))
+    blockstruct = OrbitalBlockStructure(T, orbitals, sublatlengths(lat))
     builder = IJVBuilder(lat, blockstruct)
     apmod = apply(m, (lat, blockstruct))
     # using foreach here foils precompilation of applyterm! for some reason
@@ -282,11 +281,12 @@ end
 #   h(...; ...) is a copy decoupled from future call!'s
 #region
 
-(h::Hamiltonian)(; params...) = copy(call!(h; params...))
-(h::Hamiltonian)(phi; params...) = copy(call!(h, phi; params...))
+(h::Hamiltonian)(phi...; params...) = copy(call!(h, phi...; params...))
 
 call!(h::Hamiltonian; params...) = h  # mimic partial call!(p::ParametricHamiltonian; params...)
-call!(h::Hamiltonian, φs; params...) = flat_bloch!(h, sanitize_SVector(φs))
+call!(h::Hamiltonian, φ1::Number, φ2::Number, φs::Number...; params...) =
+    argerror("To obtain the (flat) Bloch matrix of `h` use `h(ϕs)`, where `ϕs` is a collection of `L=$(latdim(lattice(h)))` Bloch phases")
+call!(h::Hamiltonian{T}, φs; params...) where {T} = flat_bloch!(h, sanitize_SVector(T, φs))
 call!(h::Hamiltonian{<:Any,<:Any,0}, ::Tuple{}; params...) = flat(h[()])
 call!(h::Hamiltonian, ft::FrankenTuple) = call!(h, Tuple(ft))
 
@@ -337,7 +337,7 @@ call!_output(h::Hamiltonian{<:Any,<:Any,0}) = flat(h[()])
 #region
 
 (p::ParametricHamiltonian)(; kw...) = copy(call!(p; kw...))
-(p::ParametricHamiltonian)(phi, phis...; kw...) = copy(call!(call!(p; kw...), (phi, phis...)))
+(p::ParametricHamiltonian)(phis; kw...) = copy(call!(call!(p; kw...), phis))
 
 call!(p::ParametricHamiltonian, phi; kw...) = call!(call!(p; kw...), phi)
 call!(p::ParametricHamiltonian, ft::FrankenTuple) = call!(p, Tuple(ft); NamedTuple(ft)...)
@@ -503,7 +503,8 @@ end
 # wrap
 #region
 
-function wrap(h::Hamiltonian{<:Any,<:Any,L}, phases::NTuple{L,Any}) where {L}
+function wrap(h::Hamiltonian{<:Any,<:Any,L}, phases) where {L}
+    check_wrap_phases(phases, L)
     wa, ua = split_axes(phases)  # indices for wrapped and unwrapped axes
     iszero(length(wa)) && return minimal_callsafe_copy(h)
     lat = lattice(h)
@@ -514,6 +515,9 @@ function wrap(h::Hamiltonian{<:Any,<:Any,L}, phases::NTuple{L,Any}) where {L}
     hars´ = wrap_harmonics(harmonics(h), phases, wa, ua)
     return Hamiltonian(lat´, bs´, hars´, bloch´)
 end
+
+check_wrap_phases(phases, L) = length(phases) == L ||
+    argerror("Expected $L `wrap` phases, got $(length(phases))")
 
 split_axes(phases) = split_axes((), (), 1, phases...)
 split_axes(wa, ua, n, x::Colon, xs...) = split_axes(wa, (ua..., n), n+1, xs...)

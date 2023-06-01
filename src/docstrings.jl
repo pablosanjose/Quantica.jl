@@ -559,11 +559,13 @@ Special syntax equivalent to `h[(0...)]`, which access the fundamental Bloch har
 Return a `h::Hamiltonian` from a `ph::ParametricHamiltonian` by applying specific values to
 its parameters `params`. If `ph` is a non-parametric `Hamiltonian` instead, this is a no-op.
 
-    h(ϕ...; params...)
+    h(φs; params...)
 
-Return the flat, sparse Bloch matrix of `h::AbstractHamiltonian` at Bloch phases `ϕ` (with
-applied parameters `params` if `h` is a `ParametricHamiltonian`), defined as `H = ∑_dn
-e⁻ⁱᵠᵈⁿ H_dn`, where `H_dn = flat(h[dn])` is the `dn` flat Bloch harmonic of `h`
+Return the flat, sparse Bloch matrix of `h::AbstractHamiltonian` at Bloch phases `φs`, with
+applied parameters `params` if `h` is a `ParametricHamiltonian`. The Bloch matrix is defined
+as `H = ∑_dn exp(-im φs⋅dn) H_dn`, where `H_dn = flat(h[dn])` is the `dn` flat Bloch
+harmonic of `h`, and `φs[i] = k⋅aᵢ` in terms of the wavevector `k` and the
+Bravais vectors `aᵢ`.
 
 # Examples
 
@@ -578,7 +580,7 @@ Hamiltonian{Float64,2,2}: Hamiltonian on a 2D Lattice in 2D space
   Hoppings         : 6
   Coordination     : 3.0
 
-julia> h(0,0)
+julia> h((0,0))
 4×4 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 8 stored entries:
      ⋅          ⋅      0.0+0.0im  3.0+0.0im
      ⋅          ⋅      3.0+0.0im  0.0+0.0im
@@ -944,7 +946,7 @@ Hamiltonian{Float64,2,1}: Hamiltonian on a 1D Lattice in 2D space
   Hoppings         : 4
   Coordination     : 2.0
 
-julia> h2D(0.3, 0.2) ≈ h1D(0.3)
+julia> h2D((0.3, 0.2)) ≈ h1D(0.3)
 true
 ```
 

@@ -12,6 +12,8 @@ hopselector(; region = missing, sublats = missing, dcells = missing, range = nei
 hopselector(s::HopSelector; region = s.region, sublats = s.sublats, dcells = s.dcells, range = s.range) =
     HopSelector(region, sublats, dcells, range, s.adjoint)
 
+hopselector_unbounded(; kw...) = hopselector(; range = Inf, kw...)
+
 neighbors(n::Int) = Neighbors(n)
 neighbors(n::Int, lat::Lattice) = nrange(n, lat)
 
@@ -22,13 +24,11 @@ neighbors(n::Int, lat::Lattice) = nrange(n, lat)
 #region
 
 function Base.in((s, r)::Tuple{Int,SVector{E,T}}, sel::AppliedSiteSelector{T,E}) where {T,E}
-    lat = lattice(sel)
     return inregion(r, sel) &&
            insublats(s, sel)
 end
 
 function Base.in((s, r, cell)::Tuple{Int,SVector{E,T},SVector{L,Int}}, sel::AppliedSiteSelector{T,E,L}) where {T,E,L}
-    lat = lattice(sel)
     return incells(cell, sel) &&
            inregion(r, sel) &&
            insublats(s, sel)
@@ -51,7 +51,6 @@ end
 # end
 
 function Base.in(((sj, si), (r, dr), dcell)::Tuple{Pair,Tuple,SVector}, sel::AppliedHopSelector)
-    lat = lattice(sel)
     return !isonsite((sj, si), dcell) &&
             indcells(dcell, sel) &&
             insublats(sj => si, sel) &&

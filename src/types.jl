@@ -171,10 +171,10 @@ Base.length(l::Lattice) = nsites(l)
 
 Base.copy(l::Lattice) = deepcopy(l)
 
-(==)(l::Lattice, l´::Lattice) = l.bravais == l´.bravais && l.unitcell == l´.unitcell
-(==)(b::Bravais, b´::Bravais) = b.matrix == b´.matrix
+Base.:(==)(l::Lattice, l´::Lattice) = l.bravais == l´.bravais && l.unitcell == l´.unitcell
+Base.:(==)(b::Bravais, b´::Bravais) = b.matrix == b´.matrix
 # we do not demand equal names for unitcells to be equal
-(==)(u::Unitcell, u´::Unitcell) = u.sites == u´.sites && u.offsets == u´.offsets
+Base.:(==)(u::Unitcell, u´::Unitcell) = u.sites == u´.sites && u.offsets == u´.offsets
 
 #endregion
 #endregion
@@ -684,17 +684,17 @@ SMatrixView(::Type{<:SMatrix{N,M,T,NM}}) where {N,M,T,NM} = SMatrixView{N,M,T,NM
 
 SMatrixView{N,M}(s) where {N,M} = SMatrixView(SMatrix{N,M}(s))
 
-@inline function OrbitalBlockStructure(T, blocksizes, subsizes)
-    B = blocktype(T, blocksizes)
-    return OrbitalBlockStructure{B}(blocksizes, subsizes)
+@inline function OrbitalBlockStructure(T, orbitals, subsizes)
+    orbitals´ = sanitize_orbitals(orbitals) # <:Union{Val,distinct_collection}
+    B = blocktype(T, orbitals´)
+    return OrbitalBlockStructure{B}(orbitals´, subsizes)
 end
 
 blocktype(::Type{T}, m::Val{1}) where {T} = Complex{T}
 blocktype(::Type{T}, m::Val{N}) where {T,N} = SMatrix{N,N,Complex{T},N*N}
-blocktype(T::Type, norbs) = maybe_SMatrixView(blocktype(T, val_maximum(norbs)))
+blocktype(T::Type, distinct_norbs) = maybe_SMatrixView(blocktype(T, val_maximum(distinct_norbs)))
 maybe_SMatrixView(C::Type{<:Complex}) = C
 maybe_SMatrixView(S::Type{<:SMatrix}) = SMatrixView(S)
-# blocktype(::Type{T}, N::Int) where {T} = blocktype(T, Val(N))
 
 val_maximum(n::Int) = Val(n)
 val_maximum(ns) = Val(maximum(argval.(ns)))
@@ -803,7 +803,9 @@ Base.:-(s::SMatrixView) = SMatrixView(-parent.(s))
 Base.:*(s::SMatrixView, x::Number) = SMatrixView(parent(s) * x)
 Base.:*(x::Number, s::SMatrixView) = SMatrixView(x * parent(s))
 
-(==)(b::OrbitalBlockStructure{B}, b´::OrbitalBlockStructure{B}) where {B} =
+Base.:(==)(s::SMatrixView, s´::SMatrixView) = parent(s) == parent(s´)
+
+Base.:(==)(b::OrbitalBlockStructure{B}, b´::OrbitalBlockStructure{B}) where {B} =
     b.blocksizes == b´.blocksizes && b.subsizes == b´.subsizes
 
 #endregion
@@ -1131,7 +1133,7 @@ Base.zero(h::Harmonic{<:Any,<:Any,B}) where B = Harmonic(zero(dcell(h)), zero(ma
 
 Base.copy(h::Harmonic) = Harmonic(dcell(h), copy(matrix(h)))
 
-(==)(h::Harmonic, h´::Harmonic) = h.dn == h´.dn && unflat(h.h) == unflat(h´.h)
+Base.:(==)(h::Harmonic, h´::Harmonic) = h.dn == h´.dn && unflat(h.h) == unflat(h´.h)
 
 #endregion
 #endregion
@@ -1229,7 +1231,7 @@ function LinearAlgebra.ishermitian(h::Hamiltonian)
     return true
 end
 
-function (==)(h::Hamiltonian, h´::Hamiltonian)
+function Base.:(==)(h::Hamiltonian, h´::Hamiltonian)
     hs = sort(h.harmonics, by = har -> har.dn)
     hs´ = sort(h.harmonics, by = har -> har.dn)
     equalharmonics = length(hs) == length(hs´) && all(splat(==), zip(hs, hs´))
@@ -1845,9 +1847,9 @@ minimal_callsafe_copy(g::GreenSolution) =
 minimal_callsafe_copy(g::GreenSlice) =
     GreenSlice(minimal_callsafe_copy(g.parent), g.rows, g.cols)
 
-(==)(g::GreenFunction, g´::GreenFunction) = function_not_defined("==")
-(==)(g::GreenSolution, g´::GreenSolution) = function_not_defined("==")
-(==)(g::GreenSlice, g´::GreenSlice) = function_not_defined("==")
+Base.:(==)(g::GreenFunction, g´::GreenFunction) = function_not_defined("==")
+Base.:(==)(g::GreenSolution, g´::GreenSolution) = function_not_defined("==")
+Base.:(==)(g::GreenSlice, g´::GreenSlice) = function_not_defined("==")
 
 #endregion
 #endregion
