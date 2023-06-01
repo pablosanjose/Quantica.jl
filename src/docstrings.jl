@@ -617,7 +617,8 @@ number of orbitals in the selected sites. Models may be applied to a lattice `la
 produce a `Hamiltonian` with `hamiltonian(lat, model; ...)`, see `hamiltonian`. Position
 dependent models are forced to preserve the periodicity of the lattice.
 
-Models can be combined using `+`, `-` and `*`, e.g. `onsite(1) - 2 * hopping(1)`.
+Models can be combined using `+`, `-` and `*`, e.g. `onsite(1) - 2 * hopping(1)`. One can
+also take the adjoint of a model `m` with `m'`.
 
 # Examples
 ```jldoctest
@@ -668,7 +669,8 @@ orbitals in the selected sites. Models may be applied to a lattice `lat` to prod
 `Hamiltonian` with `hamiltonian(lat, model; ...)`, see `hamiltonian`. Position dependent
 models are forced to preserve the periodicity of the lattice.
 
-Models can be combined using `+`, `-` and `*`, e.g. `onsite(1) - 2 * hopping(1)`.
+Models can be combined using `+`, `-` and `*`, e.g. `onsite(1) - 2 * hopping(1)`. One can
+also take the adjoint of a model `m` with `m'`.
 
 # Examples
 ```jldoctest
@@ -923,7 +925,7 @@ macro hopping! end
 """
     plusadjoint(t::Model)
 
-Return a model `t + t'`
+Returns a model `t + t'`. This is a convenience function analogous to the `+ h.c.` notation.
 
 # Example
 ```jldoctest
