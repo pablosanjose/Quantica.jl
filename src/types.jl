@@ -1344,9 +1344,11 @@ Base.copy(m::Mesh) = Mesh(copy(m.verts), copy.(m.neighs), copy(m.simps))
 #endregion
 #endregion
 
+
 ############################################################################################
 # Spectrum and Bands - see solvers/eigensolvers.jl for solver backends <: AbstractEigenSolver
 #                    -  see bands.jl for methods
+# SpectrumSolver - wraps a solver vs ϕs, with a mapping and transform, into a FunctionWrapper
 #region
 
 abstract type AbstractEigenSolver end
@@ -1354,6 +1356,10 @@ abstract type AbstractEigenSolver end
 struct Spectrum{T,B}
     eigen::Eigen{Complex{T},Complex{T},Matrix{Complex{T}},Vector{Complex{T}}}
     blockstruct::OrbitalBlockStructure{B}
+end
+
+struct SpectrumSolver{T,L,B}
+    solver::FunctionWrapper{Spectrum{T,B},Tuple{SVector{L,T}}}
 end
 
 const MatrixView{C} = SubArray{C,2,Matrix{C},Tuple{Base.Slice{Base.OneTo{Int}}, UnitRange{Int}}, true}
@@ -1418,6 +1424,12 @@ shrinkright((x, y)) = (x, prevfloat(y))
 #endregion
 
 #region ## API ##
+
+(s::SpectrumSolver{T,0})() where {T} = s.solver(SVector{0,T}())
+(s::SpectrumSolver{T,L})(φs::SVector{L}) where {T,L} = s.solver(sanitize_SVector(SVector{L,T}, φs))
+(s::SpectrumSolver{T,L})(φs::NTuple{L,Any}) where {T,L} = s.solver(sanitize_SVector(SVector{L,T}, φs))
+(s::SpectrumSolver{T,L})(φs...) where {T,L} =
+    throw(ArgumentError("SpectrumSolver call requires $L parameters/Bloch phases, received $φs"))
 
 energies(s::Spectrum) = s.eigen.values
 
@@ -1504,25 +1516,6 @@ Base.:(==)(s::Spectrum, s´::Spectrum) =
 
 Base.:≈(s::Spectrum, s´::Spectrum) =
     energies(s) ≈ energies(s´) && states(s) ≈ states(s´)
-
-#endregion
-#endregion
-
-############################################################################################
-# SpectrumSolver - reuses bloch matrix when applying to many Bloch phases, see spectrum.jl
-#region
-
-struct SpectrumSolver{T,L,B}
-    solver::FunctionWrapper{Spectrum{T,B},Tuple{SVector{L,T}}}
-end
-
-#region ## API ##
-
-(s::SpectrumSolver{T,0})() where {T} = s.solver(SVector{0,T}())
-(s::SpectrumSolver{T,L})(φs::SVector{L}) where {T,L} = s.solver(sanitize_SVector(SVector{L,T}, φs))
-(s::SpectrumSolver{T,L})(φs::NTuple{L,Any}) where {T,L} = s.solver(sanitize_SVector(SVector{L,T}, φs))
-(s::SpectrumSolver{T,L})(φs...) where {T,L} =
-    throw(ArgumentError("SpectrumSolver call requires $L parameters/Bloch phases, received $φs"))
 
 #endregion
 #endregion
