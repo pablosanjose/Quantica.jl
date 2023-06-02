@@ -1077,13 +1077,21 @@ EigenSolvers
 """
     spectrum(h::AbstractHamiltonian, ϕs; solver = EigenSolvers.LinearAlgebra()], transform = missing, params...)
 
-Compute the eigenspectrum of the Bloch matrix `h(ϕs; params...)` using the specified
+Compute the `Spectrum` of the Bloch matrix `h(ϕs; params...)` using the specified
 eigensolver, with `transform` applied to the resulting eigenenergies, if not `missing`. See
 `EigenSolvers` for available solvers and their options.
 
+    spectrum(h::AbstractHamiltonian; kw...)
+
+For a 0D `h`, equivalent to `spectrum(h, (); kw...)`
+
+    spectrum(m::AbstractMatrix; solver = EigenSolvers.LinearAlgebra()], transform = missing)
+
+Compute the `Spectrum` of matrix `m` using `solver` and `transform`.
+
     spectrum(b::Bands, ϕs)
 
-Compute the eigenspectrum corresponding to slicing the bandstructure `b` at point `ϕs` of
+Compute the `Spectrum` corresponding to slicing the bandstructure `b` at point `ϕs` of
 its base mesh, see `bands` for details.
 
 ## Indexing and destructuring
@@ -1154,6 +1162,10 @@ collection `xcolᵢ`. The mapping between points in the mesh points and values o
 params...)` is defined by keyword `mapping` (`identity` by default, see Keywords).
 Diagonalization is multithreaded and will use all available Julia threads (start session
 with `julia -t N` to have `N` threads).
+
+    bands(f::Function, xcolᵢ...; kw...)
+
+Like the above using `f(ϕs)::AbstractMatrix` in place of `h(ϕs; params...)`.
 
 ## Keywords
 
