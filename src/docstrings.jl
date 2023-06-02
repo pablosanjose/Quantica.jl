@@ -1075,10 +1075,16 @@ julia> spectrum(h, (0,0), ES.ShiftInvert(ES.ArnoldiMethod(nev = 4), 0.0)) |> ene
 EigenSolvers
 
 """
-    spectrum(h::AbstractHamiltonian, ϕs[, solver = EigenSolvers.LinearAlgebra()]; params...)
+    spectrum(h::AbstractHamiltonian, ϕs; solver = EigenSolvers.LinearAlgebra()], transform = missing, params...)
 
-Computes the eigenspectrum of the Bloch matrix `h(ϕs; params...)` using the specified
-eigensolver. See `EigenSolvers` for available solvers and their options.
+Compute the eigenspectrum of the Bloch matrix `h(ϕs; params...)` using the specified
+eigensolver, with `transform` applied to the resulting eigenenergies, if not `missing`. See
+`EigenSolvers` for available solvers and their options.
+
+    spectrum(b::Bands, ϕs)
+
+Compute the eigenspectrum corresponding to slicing the bandstructure `b` at point `ϕs` of
+its base mesh, see `bands` for details.
 
 ## Indexing and destructuring
 
@@ -1152,7 +1158,7 @@ with `julia -t N` to have `N` threads).
 ## Keywords
 
 - `solver`: eigensolver to use for each diagonalization (see `Eigensolvers`). Default: `ES.LinearAlgebra()`
-- `mapping`: a function of the form `(x, y, ...) -> ϕs` or `(x, y, ...) -> ftuple(ϕs...; params...)` that translates points `(x, y, ...)` in the mesh to Bloch phases `ϕs` or phase+parameter FrankenTuples `(ϕs; params...)`. See also linecuts below. Default: `identity`
+- `mapping`: a function of the form `(x, y, ...) -> ϕs` or `(x, y, ...) -> ftuple(ϕs...; params...)` that translates points `(x, y, ...)` in the mesh to Bloch phases `ϕs` or phase+parameter FrankenTuples `ftuple(ϕs...; params...)`. See also linecuts below. Default: `identity`
 - `transform`: function to apply to each eigenvalue after diagonalization. Default: `identity`
 - `degtol::Real`: maximum distance between to nearby eigenvalue so that they are classified as degenerate. Default: `sqrt(eps)`
 - `split::Bool`: whether to split bands into disconnected subbands. Default: `true`
@@ -1182,10 +1188,11 @@ any other argument accepted by `getindex(subbands::Vector, i)`
 
     b[slice::Tuple]
 
-Compute a section of `b::Bands` with a "plane" defined by `slice = (ϕ₁, ϕ₂,..., ϕₗ, ϵ)`,
+Compute a section of `b::Bands` with a "plane" defined by `slice = (ϕ₁, ϕ₂,..., ϕₗ[, ϵ])`,
 where each `ϕᵢ` or `ϵ` can be a real number (representing a fixed momentum or energy) or a
 `:` (unconstrained along that dimension). For bands of an `L`-dimensional lattice, `slice`
-must be a tuple of length `L+1`. The result is a collection of of sliced `Subband`s.
+will be padded to an `L+1`-long tuple with `:` if necessary. The result is a collection of
+of sliced `Subband`s.
 
 # Examples
 

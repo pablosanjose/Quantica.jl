@@ -221,6 +221,31 @@ function apply(solver::AbstractEigenSolver, h::AbstractHamiltonian{T}, S::Type{<
     return FunctionWrapper{Spectrum{T,B},Tuple{S}}(sfunc)
 end
 
+# support for bands(hf::Function, ...)
+function apply(solver::AbstractEigenSolver, hf::Function, S::Type{<:SVector{L,T}}, mapping, transform) where {L,T}
+    B = Complex{T}
+    φs0 = zero(S)
+    hsize = size(hf(φs0), 1)
+    bs = OrbitalBlockStructure{B}(hsize)
+    function sfunc(φs)
+        φs´ = applymap(mapping, φs)
+        mat = hf(φs´)
+        eigen = solver(mat)
+        return Spectrum(eigen, bs, transform)
+    end
+    return FunctionWrapper{Spectrum{T,B},Tuple{S}}(sfunc)
+end
+
+# support for spectrum(m::AbstractMatrix)
+function apply(solver::AbstractEigenSolver, m::AbstractMatrix{B}, S::Type{<:SVector{0,T}}, mapping, transform) where {B,T}
+    hsize = size(m, 1)
+    bs = OrbitalBlockStructure{B}(hsize)
+    eigen = solver(m)
+    s = Spectrum(eigen, bs, transform)
+    sfunc = Returns(s)
+    return FunctionWrapper{Spectrum{T,B},Tuple{S}}(sfunc)
+end
+
 applymap(::Missing, φs) = φs
 applymap(mapping, φs) = mapping(Tuple(φs)...)
 

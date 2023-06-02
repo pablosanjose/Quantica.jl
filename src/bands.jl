@@ -2,17 +2,31 @@
 # spectrum
 #region
 
-function SpectrumSolver(h::AbstractHamiltonian{T,<:Any,L}, S = SVector{L,T};
-                        solver::AbstractEigenSolver = ES.LinearAlgebra(), mapping = missing,
+SpectrumSolver(h::AbstractHamiltonian{T,<:Any,L}; kw...) where {L,T} =
+    SpectrumSolver(h, SVector{L,T}; kw...)
+
+SpectrumSolver(m::AbstractMatrix{C}; kw...) where {C} =
+    SpectrumSolver(m, SVector{0,real(C)}; kw...)
+
+function SpectrumSolver(h, S::Type{SVector{L,T}};
+                        solver::AbstractEigenSolver = ES.LinearAlgebra(),
+                        mapping = missing,
                         transform = missing) where {L,T}
     solver´ = apply(solver, h, S, mapping, transform)
     return SpectrumSolver(solver´)
 end
 
-spectrum(h::AbstractHamiltonian, φs, solver = ES.LinearAlgebra(); kw...) =
-    SpectrumSolver(call!(h; kw...); solver)(φs)
-spectrum(h::AbstractHamiltonian{<:Any,<:Any,0}, solver = ES.LinearAlgebra(); kw...) =
-    SpectrumSolver(call!(h; kw...); solver)()
+spectrum(h::AbstractHamiltonian, φs; solver = ES.LinearAlgebra(), transform = missing, kw...) =
+    SpectrumSolver(call!(h; kw...); solver, transform)(φs)
+spectrum(h::AbstractHamiltonian{<:Any,<:Any,0}; solver = ES.LinearAlgebra(), transform = missing, kw...) =
+    SpectrumSolver(call!(h; kw...); solver, transform)()
+spectrum(m::AbstractMatrix; solver = ES.LinearAlgebra(), transform = missing) =
+    SpectrumSolver(m; solver, transform)()
+
+function spectrum(b::Bands{<:Any,<:Any,L}, φs::NTuple{L,Number}) where {L}
+    solver = first(solvers(b))
+    return solver(φs)
+end
 
 #endregion
 
@@ -33,33 +47,44 @@ get_around((es, ss), ε0::Missing, i) = (es[i], ss[:,i])
 get_around(s, ε0::Number) = get_around(s, ε0, 1)
 get_around(s, ε0::Number, i::Integer) = get_around(s, ε0, i:i)
 
-function get_around((es, ss), ε0::Number, which)
-    # Get indices of eachindex(es) such that if sorted by `by` will occupy `which` positions
-    rngs = partialsort(eachindex(es), which, by = rng -> abs(es[rng] - ε0))
-    return (es[rngs], ss[:, rngs])
+function get_around((es, ss), ε0::Number, inds)
+    # Get indices of eachindex(es) such that if sorted by `by` will occupy `inds` positions
+    if inds isa Union{Integer,OrdinalRange}
+        rngs = partialsort(eachindex(es), inds, by = rng -> abs(es[rng] - ε0))
+        return (es[rngs], ss[:, rngs])
+    else # generic inds (cannot use partialsort)
+        rngs = sort(eachindex(es), by = rng -> abs(es[rng] - ε0))
+        return (es[view(rngs, inds)], ss[:, view(rngs, inds)])
+    end
 end
 
 #endregion
 
 ############################################################################################
-# bands
+# bands(h, points...; kw...)
+#   h can be an AbstractHamiltonian or a Function(vertex) -> AbstractMatrix
 #region
 
-bands(h::AbstractHamiltonian, rng, rngs...; kw...) = bands(h, mesh(rng, rngs...); kw...)
+bands(h, rng, rngs...; kw...) = bands(h, mesh(rng, rngs...); kw...)
 
-function bands(h::AbstractHamiltonian{<:Any,<:Any,L´}, basemesh::Mesh{SVector{L,T}}; solver = ES.LinearAlgebra(),
+function bands(h, basemesh::Mesh{SVector{L,T}}; solver = ES.LinearAlgebra(),
               transform = missing, mapping = missing, showprogress = true, defects = (), patches = 0,
-              degtol = missing, split = true, warn = true) where {T,L,L´}
-    mapping´ = sanitize_mapping(mapping, Val(L´))
+              degtol = missing, split = true, warn = true) where {T,L}
+    mapping´ = sanitize_mapping(mapping, h)
     solvers = [SpectrumSolver(h, SVector{L,T}; solver, mapping = mapping´, transform) for _ in 1:Threads.nthreads()]
     defects´ = sanitize_Vector_of_SVectors(SVector{L,T}, defects)
     degtol´ = degtol isa Number ? degtol : sqrt(eps(real(T)))
     return bands_precompilable(solvers, basemesh, showprogress, defects´, patches, degtol´, split, warn)
 end
 
+sanitize_mapping(mapping, ::AbstractHamiltonian{<:Any,<:Any,L}) where {L} =
+    sanitize_mapping(mapping, Val(L))
+sanitize_mapping(mapping::Union{Missing,Function}, ::Function) = mapping
+sanitize_mapping(_, ::Function) =
+    argerror("Cannot apply this mapping with a function input")
 sanitize_mapping(::Missing, ::Val) = missing
 sanitize_mapping(f::Function, ::Val) = f
-sanitize_mapping(pts::NTuple{N,Symbol}, ::Val{L}) where {N,L} =
+sanitize_mapping(pts::NTuple{N,Any}, ::Val{L}) where {N,L} =
     sanitize_mapping(ntuple(i -> i-1, Val(N)) => parsenode.(pts, Val(L)), Val(L))
 sanitize_mapping((xs, nodes)::Pair, ::Val{L}) where {L} =
     sanitize_mapping(xs => parsenode.(nodes, Val(L)), Val(L))
@@ -194,7 +219,7 @@ function bands_diagonalize!(data)
     baseverts = vertices(data.basemesh)
     meter = Progress(length(baseverts), "Step 1 - Diagonalizing: ")
     push!(data.coloffsets, 0) # first element
-    Threads.@threads for i in eachindex(baseverts)
+    Threads.@threads :static for i in eachindex(baseverts)
         vert = baseverts[i]
         solver = data.solvers[Threads.threadid()]
         data.spectra[i] = solver(vert)

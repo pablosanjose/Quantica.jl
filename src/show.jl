@@ -258,7 +258,7 @@ Base.summary(::Mesh{V}) where {V} =
     "Mesh{$(nameof(V))}: Mesh with vertices of type $(nameof(V))"
 
 Base.summary(::Subband{T,L}) where {T,L} =
-    "Subband{$T,$L}: Subband over a $L-dimensional parameter space (like energy-momentum) of type $T"
+    "Subband{$T,$L}: Subband in a $L-dimensional space (like energy-momentum) of type $T"
 
 function Base.show(io::IO, m::AbstractMesh)
     i = get(io, :indent, "")
@@ -279,10 +279,10 @@ end
 function Base.show(io::IO, b::Bands)
     i = get(io, :indent, "")
     print(io, i, summary(b), "\n",
-"$i  Subbands  : $(length(subbands(b)))
-$i  Vertices  : $(sum(s->length(vertices(s)), subbands(b)))
-$i  Edges     : $(sum(s -> sum(length, neighbors(s)), subbands(b)) ÷ 2)
-$i  Simplices : $(sum(s->length(simplices(s)), subbands(b)))")
+"$i  Subbands  : $(nsubbands(b))
+$i  Vertices  : $(nvertices(b))
+$i  Edges     : $(nedges(b))
+$i  Simplices : $(nsimplices(b))")
 end
 
 Base.summary(::Bands{T,E,L}) where {T,E,L} =

@@ -690,6 +690,9 @@ SMatrixView{N,M}(s) where {N,M} = SMatrixView(SMatrix{N,M}(s))
     return OrbitalBlockStructure{B}(orbitals´, subsizes)
 end
 
+# Useful as a minimal constructor when no orbital information is known
+OrbitalBlockStructure{B}(hsize::Int) where {B} = OrbitalBlockStructure{B}(Val(1), [hsize])
+
 blocktype(::Type{T}, m::Val{1}) where {T} = Complex{T}
 blocktype(::Type{T}, m::Val{N}) where {T,N} = SMatrix{N,N,Complex{T},N*N}
 blocktype(T::Type, distinct_norbs) = maybe_SMatrixView(blocktype(T, val_maximum(distinct_norbs)))
@@ -1342,8 +1345,8 @@ Base.copy(m::Mesh) = Mesh(copy(m.verts), copy.(m.neighs), copy(m.simps))
 #endregion
 
 ############################################################################################
-# Spectrum  -  see solvers/eigensolvers.jl for solver backends <: AbstractEigenSolver
-#           -  see spectrum.jl for public API
+# Spectrum and Bands - see solvers/eigensolvers.jl for solver backends <: AbstractEigenSolver
+#                    -  see bands.jl for methods
 #region
 
 abstract type AbstractEigenSolver end
@@ -1352,55 +1355,6 @@ struct Spectrum{T,B}
     eigen::Eigen{Complex{T},Complex{T},Matrix{Complex{T}},Vector{Complex{T}}}
     blockstruct::OrbitalBlockStructure{B}
 end
-
-#region ## Constructors ##
-
-Spectrum(eigen::Eigen, h::AbstractHamiltonian) = Spectrum(eigen, blockstructure(h))
-Spectrum(eigen::Eigen, h, ::Missing) = Spectrum(eigen, h)
-
-function Spectrum(eigen::Eigen, h, transform)
-    s = Spectrum(eigen, h)
-    map!(transform, energies(s))
-    return s
-end
-
-#endregion
-
-#region ## API ##
-
-eigenspectrum(s::Spectrum) = s.eigen
-
-energies(s::Spectrum) = s.eigen.values
-
-states(s::Spectrum) = s.eigen.vectors
-
-Base.size(s::Spectrum, i...) = size(s.eigen.vectors, i...)
-
-#endregion
-#endregion
-
-############################################################################################
-# SpectrumSolver - reuses bloch matrix when applying to many Bloch phases, see spectrum.jl
-#region
-
-struct SpectrumSolver{T,L,B}
-    solver::FunctionWrapper{Spectrum{T,B},Tuple{SVector{L,T}}}
-end
-
-#region ## API ##
-
-(s::SpectrumSolver{T,0})() where {T} = s.solver(SVector{0,T}())
-(s::SpectrumSolver{T,L})(φs::SVector{L}) where {T,L} = s.solver(sanitize_SVector(SVector{L,T}, φs))
-(s::SpectrumSolver{T,L})(φs::NTuple{L,Any}) where {T,L} = s.solver(sanitize_SVector(SVector{L,T}, φs))
-(s::SpectrumSolver{T,L})(φs...) where {T,L} =
-    throw(ArgumentError("SpectrumSolver call requires $L parameters/Bloch phases, received $φs"))
-
-#endregion
-#endregion
-
-############################################################################################
-# Bands -  see spectrum.jl for methods
-#region
 
 const MatrixView{C} = SubArray{C,2,Matrix{C},Tuple{Base.Slice{Base.OneTo{Int}}, UnitRange{Int}}, true}
 
@@ -1422,6 +1376,22 @@ struct Bands{T,E,L,B} # E = L+1
 end
 
 #region ## Constructors ##
+
+Spectrum(eigen::Eigen, h::AbstractHamiltonian) = Spectrum(eigen, blockstructure(h))
+Spectrum(eigen::Eigen, h, ::Missing) = Spectrum(eigen, h)
+
+function Spectrum(eigen::Eigen, h, transform)
+    s = Spectrum(eigen, h)
+    ϵs = energies(s)
+    map!(transform, ϵs, ϵs)
+    return s
+end
+
+function Spectrum(ss::Vector{Subband{<:Any,1}}, bs::OrbitalBlockStructure)
+    ϵs = [energy(only(vertices(s))) for s in ss]
+    ψs = stack(hcat, (states(only(vertices(s))) for s in ss))
+    return Eigen(ϵs, ψs)
+end
 
 BandVertex(x, s::Matrix) = BandVertex(x, view(s, :, 1:size(s, 2)))
 BandVertex(m, e, s::Matrix) = BandVertex(m, e, view(s, :, 1:size(s, 2)))
@@ -1448,7 +1418,24 @@ shrinkright((x, y)) = (x, prevfloat(y))
 #endregion
 
 #region ## API ##
-# BandVertex #
+
+energies(s::Spectrum) = s.eigen.values
+
+states(s::Spectrum) = s.eigen.vectors
+
+solvers(b::Bands) = b.solvers
+
+subbands(b::Bands) = b.subbands
+
+subbands(b::Bands, i...) = getindex(b.subbands, i...)
+
+nsubbands(b::Bands) = length(subbands(b))
+
+nvertices(b::Bands) = sum(s->length(vertices(s)), subbands(b); init = 0)
+
+nedges(b::Bands) = sum(s -> sum(length, neighbors(s)), subbands(b); init = 0) ÷ 2
+
+nsimplices(b::Bands) = sum(s->length(simplices(s)), subbands(b))
 
 coordinates(s::SVector) = s
 coordinates(v::BandVertex) = v.coordinates
@@ -1489,18 +1476,12 @@ interval_in_slice!(interval, s, (dim, k), xs...) =
     interval in intersect(trees(s, dim), (k, k)) && interval_in_slice!(interval, s, xs...)
 interval_in_slice!(interval, s) = true
 
-Base.isempty(s::Subband) = isempty(simplices(s))
-
 mesh(s::Subband) = s.mesh
 mesh(m::Mesh) = m
 
 meshes(b::Bands) = (mesh(s) for s in subbands(b))
 meshes(s::Subband) = (mesh(s),)
 meshes(xs) = (mesh(x) for x in xs)
-
-subbands(b::Bands) = b.subbands
-
-subbands(b::Bands, i...) = getindex(b.subbands, i...)
 
 embdim(::AbstractMesh{<:SVector{E}}) where {E} = E
 
@@ -1509,6 +1490,39 @@ embdim(::AbstractMesh{<:BandVertex{<:Any,E}}) where {E} = E
 meshdim(::AbstractMesh{<:Any,S}) where {S} = S
 
 dims(m::AbstractMesh) = (embdim(m), meshdim(m))
+
+Base.size(s::Spectrum, i...) = size(s.eigen.vectors, i...)
+
+Base.isempty(s::Subband) = isempty(simplices(s))
+
+Base.length(b::Bands) = length(b.subbands)
+
+# blockstructure not required to be equal, since Spectrum could have a dummy blockstruct
+# like when we do spectrum(matrix; solver...)
+Base.:(==)(s::Spectrum, s´::Spectrum) =
+    energies(s) == energies(s´) && states(s) == states(s´)
+
+Base.:≈(s::Spectrum, s´::Spectrum) =
+    energies(s) ≈ energies(s´) && states(s) ≈ states(s´)
+
+#endregion
+#endregion
+
+############################################################################################
+# SpectrumSolver - reuses bloch matrix when applying to many Bloch phases, see spectrum.jl
+#region
+
+struct SpectrumSolver{T,L,B}
+    solver::FunctionWrapper{Spectrum{T,B},Tuple{SVector{L,T}}}
+end
+
+#region ## API ##
+
+(s::SpectrumSolver{T,0})() where {T} = s.solver(SVector{0,T}())
+(s::SpectrumSolver{T,L})(φs::SVector{L}) where {T,L} = s.solver(sanitize_SVector(SVector{L,T}, φs))
+(s::SpectrumSolver{T,L})(φs::NTuple{L,Any}) where {T,L} = s.solver(sanitize_SVector(SVector{L,T}, φs))
+(s::SpectrumSolver{T,L})(φs...) where {T,L} =
+    throw(ArgumentError("SpectrumSolver call requires $L parameters/Bloch phases, received $φs"))
 
 #endregion
 #endregion
