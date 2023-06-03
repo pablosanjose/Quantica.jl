@@ -1,5 +1,4 @@
 using Quantica: nsubbands, nvertices, nedges, nsimplices
-using Arpack
 
 @testset "basic bandstructures" begin
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(-1))
@@ -103,10 +102,10 @@ end
     @test length(b[(pi,)]) == length(b[(pi, :)]) == length(b[(pi, :, :)]) == 1
     s = spectrum(b, (pi, pi))
     s´ = spectrum(wrap(h, (pi, pi)))
-    s´´ = spectrum(Matrix(h((pi, pi))))
+    ϵs, ψs = ES.LinearAlgebra()(Matrix(h((pi, pi))))
     @test s isa Quantica.Spectrum
-    @test s == s´ == s´´
-    @test s[1:10, around = 0] == s´[1:10, around = 0] == s´´[1:10, around = 0]
+    @test Tuple(s) == Tuple(s´) == (ϵs, ψs)
+    @test s[1:10, around = 0] == s´[1:10, around = 0]
 end
 
 # @testset "unflatten" begin

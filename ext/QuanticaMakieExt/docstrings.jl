@@ -7,7 +7,7 @@ specialized plot recipes:
 - `object::Lattice`             -> `plotlattice` (supports also `LatticeSlice`s)
 - `object::Hamiltonian`         -> `plotlattice` (supports also `ParametricHamiltonian`)
 - `object::GreenFunction`       -> `plotlattice` (see below)
-- `object::Bands`               -> `plotbands`   (supports also slices of `Bands`)
+- `object::Bandstructure`       -> `plotbands`   (supports also slices of `Bandstructure`)
 - `object::Subband`             -> `plotbands`   (supports also collections of `Subbands`)
 
 Supported `Makie` backends include `GLMakie`, `CairoMakie`, `WGLMakie`, etc. Instead of
@@ -105,12 +105,12 @@ keywords `kw`
 plotlattice!
 
 """
-    plotbands(b::Bands; kw...)
+    plotbands(b::Bandstructure; kw...)
     plotbands(s::Subband; kw...)
     plotbands(ss::AbstractVector{<:Subbands}; kw...)
 
-Render a `Bands` object, a single subband (e.g. `s = b[1]`) or a collection of subbands or
-subband slices (e.g. `ss = b[1:4]` or `ss = b[(:,0,:)]`).
+Render a `Bandstructure` object, a single subband (e.g. `s = b[1]`) or a collection of
+subbands or subband slices (e.g. `ss = b[1:4]` or `ss = b[(:,0,:)]`).
 
 ## Keywords
 

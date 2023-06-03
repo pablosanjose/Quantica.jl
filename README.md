@@ -45,7 +45,7 @@ ParametricHamiltonian{Float64,2,2}: Parametric Hamiltonian on a 2D Lattice in 2D
 julia> qplot(h(α = 0.02), inspector = true)
 
 julia> b = bands(h(α = 0.05), range(0, 2pi, length=60), range(0, 2pi, length = 60))
-Bands{Float64,3,2}: 3D Bands over a 2-dimensional parameter space of type Float64
+Bandstructure{Float64,3,2}: 3D Bandstructure over a 2-dimensional parameter space of type Float64
   Subbands  : 2
   Vertices  : 7200
   Edges     : 21122

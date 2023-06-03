@@ -1346,23 +1346,25 @@ Base.copy(m::Mesh) = Mesh(copy(m.verts), copy.(m.neighs), copy(m.simps))
 
 
 ############################################################################################
-# Spectrum and Bands - see solvers/eigensolvers.jl for solver backends <: AbstractEigenSolver
+# Spectrum and Bandstructure - see solvers/eigensolvers.jl for solver backends <: AbstractEigenSolver
 #                    -  see bands.jl for methods
-# SpectrumSolver - wraps a solver vs ϕs, with a mapping and transform, into a FunctionWrapper
+# EigenSolver - wraps a solver vs ϕs, with a mapping and transform, into a FunctionWrapper
 #region
 
 abstract type AbstractEigenSolver end
 
+const EigenComplex{T} = Eigen{Complex{T},Complex{T},Matrix{Complex{T}},Vector{Complex{T}}}
+
+const MatrixView{C} = SubArray{C,2,Matrix{C},Tuple{Base.Slice{Base.OneTo{Int}}, UnitRange{Int}}, true}
+
 struct Spectrum{T,B}
-    eigen::Eigen{Complex{T},Complex{T},Matrix{Complex{T}},Vector{Complex{T}}}
+    eigen::EigenComplex{T}
     blockstruct::OrbitalBlockStructure{B}
 end
 
-struct SpectrumSolver{T,L,B}
-    solver::FunctionWrapper{Spectrum{T,B},Tuple{SVector{L,T}}}
+struct EigenSolver{T,L}
+    solver::FunctionWrapper{EigenComplex{T},Tuple{SVector{L,T}}}
 end
-
-const MatrixView{C} = SubArray{C,2,Matrix{C},Tuple{Base.Slice{Base.OneTo{Int}}, UnitRange{Int}}, true}
 
 struct BandVertex{T<:AbstractFloat,E}
     coordinates::SVector{E,T}       # SVector(momentum..., energy)
@@ -1376,9 +1378,10 @@ struct Subband{T,E} <: AbstractMesh{BandVertex{T,E},E}  # we restrict S == E
     trees::NTuple{E,IntervalTree{T,IntervalValue{T,Int}}}
 end
 
-struct Bands{T,E,L,B} # E = L+1
+struct Bandstructure{T,E,L,B} # E = L+1
     subbands::Vector{Subband{T,E}}
-    solvers::Vector{SpectrumSolver{T,L,B}}  # one per Julia thread
+    solvers::Vector{EigenSolver{T,L}}  # one per Julia thread
+    blockstruct::OrbitalBlockStructure{B}
 end
 
 #region ## Constructors ##
@@ -1386,22 +1389,16 @@ end
 Spectrum(eigen::Eigen, h::AbstractHamiltonian) = Spectrum(eigen, blockstructure(h))
 Spectrum(eigen::Eigen, h, ::Missing) = Spectrum(eigen, h)
 
-function Spectrum(eigen::Eigen, h, transform)
-    s = Spectrum(eigen, h)
-    ϵs = energies(s)
-    map!(transform, ϵs, ϵs)
-    return s
-end
-
-function Spectrum(ss::Vector{Subband{<:Any,1}}, bs::OrbitalBlockStructure)
+function Spectrum(ss::Vector{Subband{<:Any,1}}, os::OrbitalBlockStructure)
     ϵs = [energy(only(vertices(s))) for s in ss]
     ψs = stack(hcat, (states(only(vertices(s))) for s in ss))
-    return Eigen(ϵs, ψs)
+    eigen = Eigen(ϵs, ψs)
+    return Spectrum(eigen, os)
 end
 
-BandVertex(x, s::Matrix) = BandVertex(x, view(s, :, 1:size(s, 2)))
-BandVertex(m, e, s::Matrix) = BandVertex(m, e, view(s, :, 1:size(s, 2)))
-BandVertex(m, e, s::SubArray) = BandVertex(vcat(m, e), s)
+BandVertex(ke, s::Matrix) = BandVertex(ke, view(s, :, 1:size(s, 2)))
+BandVertex(k, e, s::Matrix) = BandVertex(k, e, view(s, :, 1:size(s, 2)))
+BandVertex(k, e, s::SubArray) = BandVertex(vcat(k, e), s)
 
 Subband(verts::Vector{<:BandVertex{<:Any,E}}, neighs) where {E} =
     Subband(Mesh{E}(verts, neighs))
@@ -1425,29 +1422,36 @@ shrinkright((x, y)) = (x, prevfloat(y))
 
 #region ## API ##
 
-(s::SpectrumSolver{T,0})() where {T} = s.solver(SVector{0,T}())
-(s::SpectrumSolver{T,L})(φs::SVector{L}) where {T,L} = s.solver(sanitize_SVector(SVector{L,T}, φs))
-(s::SpectrumSolver{T,L})(φs::NTuple{L,Any}) where {T,L} = s.solver(sanitize_SVector(SVector{L,T}, φs))
-(s::SpectrumSolver{T,L})(φs...) where {T,L} =
-    throw(ArgumentError("SpectrumSolver call requires $L parameters/Bloch phases, received $φs"))
+(s::EigenSolver{T,0})() where {T} = s.solver(SVector{0,T}())
+(s::EigenSolver{T,L})(φs::SVector{L}) where {T,L} = s.solver(sanitize_SVector(SVector{L,T}, φs))
+(s::EigenSolver{T,L})(φs::NTuple{L,Any}) where {T,L} = s.solver(sanitize_SVector(SVector{L,T}, φs))
+(s::EigenSolver{T,L})(φs...) where {T,L} =
+    throw(ArgumentError("EigenSolver call requires $L parameters/Bloch phases, received $φs"))
 
 energies(s::Spectrum) = s.eigen.values
 
 states(s::Spectrum) = s.eigen.vectors
 
-solvers(b::Bands) = b.solvers
+blockstructure(s::Spectrum) = s.blockstruct
+blockstructure(b::Bandstructure) = b.blockstruct
 
-subbands(b::Bands) = b.subbands
+solvers(b::Bandstructure) = b.solvers
 
-subbands(b::Bands, i...) = getindex(b.subbands, i...)
+subbands(b::Bandstructure) = b.subbands
 
-nsubbands(b::Bands) = length(subbands(b))
+subbands(b::Bandstructure, i...) = getindex(b.subbands, i...)
 
-nvertices(b::Bands) = sum(s->length(vertices(s)), subbands(b); init = 0)
+nsubbands(b::Bandstructure) = nsubbands(subbands(b))
+nsubbands(b::Vector{<:Subband}) = length(b)
 
-nedges(b::Bands) = sum(s -> sum(length, neighbors(s)), subbands(b); init = 0) ÷ 2
+nvertices(b::Bandstructure) = nvertices(subbands(b))
+nvertices(b::Vector{<:Subband}) = sum(s->length(vertices(s)), b; init = 0)
 
-nsimplices(b::Bands) = sum(s->length(simplices(s)), subbands(b))
+nedges(b::Bandstructure) = nedges(subbands(b))
+nedges(b::Vector{<:Subband}) = sum(s -> sum(length, neighbors(s)), b; init = 0) ÷ 2
+
+nsimplices(b::Bandstructure) = nsimplices(subbands(b))
+nsimplices(b::Vector{<:Subband}) = sum(s->length(simplices(s)), b)
 
 coordinates(s::SVector) = s
 coordinates(v::BandVertex) = v.coordinates
@@ -1491,7 +1495,7 @@ interval_in_slice!(interval, s) = true
 mesh(s::Subband) = s.mesh
 mesh(m::Mesh) = m
 
-meshes(b::Bands) = (mesh(s) for s in subbands(b))
+meshes(b::Bandstructure) = (mesh(s) for s in subbands(b))
 meshes(s::Subband) = (mesh(s),)
 meshes(xs) = (mesh(x) for x in xs)
 
@@ -1507,15 +1511,7 @@ Base.size(s::Spectrum, i...) = size(s.eigen.vectors, i...)
 
 Base.isempty(s::Subband) = isempty(simplices(s))
 
-Base.length(b::Bands) = length(b.subbands)
-
-# blockstructure not required to be equal, since Spectrum could have a dummy blockstruct
-# like when we do spectrum(matrix; solver...)
-Base.:(==)(s::Spectrum, s´::Spectrum) =
-    energies(s) == energies(s´) && states(s) == states(s´)
-
-Base.:≈(s::Spectrum, s´::Spectrum) =
-    energies(s) ≈ energies(s´) && states(s) ≈ states(s´)
+Base.length(b::Bandstructure) = length(b.subbands)
 
 #endregion
 #endregion

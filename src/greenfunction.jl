@@ -17,7 +17,7 @@ end
 
 default_green_solver(::AbstractHamiltonian0D) = GS.SparseLU()
 default_green_solver(::AbstractHamiltonian1D) = GS.Schur()
-# default_green_solver(::AbstractHamiltonian) = GS.Bands()
+# default_green_solver(::AbstractHamiltonian) = GS.Bandstructure()
 
 #endregion
 

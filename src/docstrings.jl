@@ -1089,7 +1089,7 @@ For a 0D `h`, equivalent to `spectrum(h, (); kw...)`
 
 Compute the `Spectrum` of matrix `m` using `solver` and `transform`.
 
-    spectrum(b::Bands, ϕs)
+    spectrum(b::Bandstructure, ϕs)
 
 Compute the `Spectrum` corresponding to slicing the bandstructure `b` at point `ϕs` of
 its base mesh, see `bands` for details.
@@ -1156,16 +1156,19 @@ states
 """
     bands(h::AbstractHamiltonian, xcolᵢ...; kw...)
 
-Construct continuously connected bands of `h` by diagonalizing the matrix `h(ϕs; params...)`
-on an `M`-dimensional mesh of points `(x₁, x₂, ..., xₘ)` where each `xᵢ` takes values in the
-collection `xcolᵢ`. The mapping between points in the mesh points and values of `(ϕs;
-params...)` is defined by keyword `mapping` (`identity` by default, see Keywords).
+Construct a `Bandstructure` object, which contains in particular a collection of
+continuously connected `Subband`s of `h`, obtained by diagonalizing the matrix `h(ϕs;
+params...)` on an `M`-dimensional mesh of points `(x₁, x₂, ..., xₘ)`, where each `xᵢ` takes
+values in the collection `xcolᵢ`. The mapping between points in the mesh points and values
+of `(ϕs; params...)` is defined by keyword `mapping` (`identity` by default, see Keywords).
 Diagonalization is multithreaded and will use all available Julia threads (start session
 with `julia -t N` to have `N` threads).
 
     bands(f::Function, xcolᵢ...; kw...)
 
-Like the above using `f(ϕs)::AbstractMatrix` in place of `h(ϕs; params...)`.
+Like the above using `f(ϕs)::AbstractMatrix` in place of `h(ϕs; params...)`, and returning a
+`Vector{<:Subband}` instead of a `Bandstructure` object. This is provided as a lower level
+driver without the added slicing functionality of a full `Bandstructure` object, see below.
 
 ## Keywords
 
@@ -1195,16 +1198,16 @@ list (`:Γ`,`:K`, `:K´`, `:M`, `:X`, `:Y`, `:Z`). If `mapping = nodes`, then `x
 
     b[i]
 
-Extract `i`-th subband from `b::Bands`. `i` can also be a `Vector`, an `AbstractRange` or
-any other argument accepted by `getindex(subbands::Vector, i)`
+Extract `i`-th subband from `b::Bandstructure`. `i` can also be a `Vector`, an
+`AbstractRange` or any other argument accepted by `getindex(subbands::Vector, i)`
 
     b[slice::Tuple]
 
-Compute a section of `b::Bands` with a "plane" defined by `slice = (ϕ₁, ϕ₂,..., ϕₗ[, ϵ])`,
-where each `ϕᵢ` or `ϵ` can be a real number (representing a fixed momentum or energy) or a
-`:` (unconstrained along that dimension). For bands of an `L`-dimensional lattice, `slice`
-will be padded to an `L+1`-long tuple with `:` if necessary. The result is a collection of
-of sliced `Subband`s.
+Compute a section of `b::Bandstructure` with a "plane" defined by `slice = (ϕ₁, ϕ₂,..., ϕₗ[,
+ϵ])`, where each `ϕᵢ` or `ϵ` can be a real number (representing a fixed momentum or energy)
+or a `:` (unconstrained along that dimension). For bands of an `L`-dimensional lattice,
+`slice` will be padded to an `L+1`-long tuple with `:` if necessary. The result is a
+collection of of sliced `Subband`s.
 
 # Examples
 
@@ -1212,21 +1215,21 @@ of sliced `Subband`s.
 julia> phis = range(0, 2pi, length = 50); h = LP.honeycomb() |> hamiltonian(@hopping((; t = 1) -> t));
 
 julia> bands(h(t = 1), phis, phis)
-Bands{Float64,3,2}: 3D Bands over a 2-dimensional parameter space of type Float64
+Bandstructure{Float64,3,2}: 3D Bandstructure over a 2-dimensional parameter space of type Float64
   Subbands  : 1
   Vertices  : 5000
   Edges     : 14602
   Simplices : 9588
 
 julia> bands(h, phis, phis; mapping = (x, y) -> ftuple(0, x; t = y/2π))
-Bands{Float64,3,2}: 3D Bands over a 2-dimensional parameter space of type Float64
+Bandstructure{Float64,3,2}: 3D Bandstructure over a 2-dimensional parameter space of type Float64
   Subbands  : 1
   Vertices  : 4950
   Edges     : 14553
   Simplices : 9604
 
 julia> bands(h(t = 1), subdiv((0, 2, 3), (20, 30)); mapping = (0, 2, 3) => (:Γ, :M, :K))
-Bands{Float64,2,1}: 2D Bands over a 1-dimensional parameter space of type Float64
+Bandstructure{Float64,2,1}: 2D Bandstructure over a 1-dimensional parameter space of type Float64
   Subbands  : 1
   Vertices  : 97
   Edges     : 96

@@ -205,49 +205,52 @@ end
 #region
 
 function apply(solver::AbstractEigenSolver, h::AbstractHamiltonian{T}, S::Type{<:SVector{L}}, mapping, transform) where {L,T}
-    B = blocktype(h)
     h´ = minimal_callsafe_copy(h)
     # Some solvers (e.g. ES.LinearAlgebra) only accept certain matrix types
     # so this mat´ could be an alias of the call! output, or an unaliased conversion
     mat´ = ES.input_matrix(solver, h´)
     function sfunc(φs)
-        φs´ = applymap(mapping, φs)
+        φs´ = apply_map(mapping, φs)
         mat = call!(h´, φs´)
         mat´ === mat || copy!(mat´, mat)
         # the solver always receives the matrix type declared by ES.input_matrix
         eigen = solver(mat´)
-        return Spectrum(eigen, h, transform)
+        apply_transform!(eigen, transform)
+        return eigen
     end
-    return FunctionWrapper{Spectrum{T,B},Tuple{S}}(sfunc)
+    return FunctionWrapper{EigenComplex{T},Tuple{S}}(sfunc)
 end
 
 # support for bands(hf::Function, ...)
 function apply(solver::AbstractEigenSolver, hf::Function, S::Type{<:SVector{L,T}}, mapping, transform) where {L,T}
-    B = Complex{T}
-    φs0 = zero(S)
-    hsize = size(hf(φs0), 1)
-    bs = OrbitalBlockStructure{B}(hsize)
     function sfunc(φs)
-        φs´ = applymap(mapping, φs)
+        φs´ = apply_map(mapping, φs)
         mat = hf(φs´)
         eigen = solver(mat)
-        return Spectrum(eigen, bs, transform)
+        apply_transform!(eigen, transform)
+        return eigen
     end
-    return FunctionWrapper{Spectrum{T,B},Tuple{S}}(sfunc)
+    return FunctionWrapper{EigenComplex{T},Tuple{S}}(sfunc)
 end
 
-# support for spectrum(m::AbstractMatrix)
-function apply(solver::AbstractEigenSolver, m::AbstractMatrix{B}, S::Type{<:SVector{0,T}}, mapping, transform) where {B,T}
-    hsize = size(m, 1)
-    bs = OrbitalBlockStructure{B}(hsize)
-    eigen = solver(m)
-    s = Spectrum(eigen, bs, transform)
-    sfunc = Returns(s)
-    return FunctionWrapper{Spectrum{T,B},Tuple{S}}(sfunc)
+# # support for spectrum(m::AbstractMatrix)
+# function apply(solver::AbstractEigenSolver, m::AbstractMatrix, S::Type{<:SVector{0,T}}, mapping, transform) where {T}
+#     eigen = solver(m)
+#     apply_transform!(eigen, transform)
+#     sfunc = Returns(eigen)
+#     return FunctionWrapper{EigenComplex{T},Tuple{S}}(sfunc)
+# end
+
+apply_transform!(eigen, ::Missing) = eigen
+
+function apply_transform!(eigen, transform)
+    ϵs = first(eigen)
+    map!(transform, ϵs, ϵs)
+    return eigen
 end
 
-applymap(::Missing, φs) = φs
-applymap(mapping, φs) = mapping(Tuple(φs)...)
+apply_map(::Missing, φs) = φs
+apply_map(mapping, φs) = mapping(Tuple(φs)...)
 
 #endregion
 

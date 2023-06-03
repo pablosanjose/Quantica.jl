@@ -217,17 +217,17 @@ Base.summary(s::AbstractEigenSolver) =
 #endregion
 
 ############################################################################################
-# SpectrumSolver
+# EigenSolver
 #region
 
-function Base.show(io::IO, s::SpectrumSolver)
+function Base.show(io::IO, s::EigenSolver)
     i = get(io, :indent, "")
     ioindent = IOContext(io, :indent => i * "  ")
     print(io, i, summary(s), "\n")
 end
 
-Base.summary(::SpectrumSolver{T,L}) where {T,L} =
-    "SpectrumSolver{$T,$L}: Spectrum solver over an $L-dimensional parameter manifold of type $T"
+Base.summary(::EigenSolver{T,L}) where {T,L} =
+    "EigenSolver{$T,$L}: Spectrum solver over an $L-dimensional parameter manifold of type $T"
 
 #endregion
 
@@ -273,10 +273,10 @@ end
 #endregion
 
 ############################################################################################
-# Bands
+# Bandstructure
 #region
 
-function Base.show(io::IO, b::Bands)
+function Base.show(io::IO, b::Bandstructure)
     i = get(io, :indent, "")
     print(io, i, summary(b), "\n",
 "$i  Subbands  : $(nsubbands(b))
@@ -285,8 +285,8 @@ $i  Edges     : $(nedges(b))
 $i  Simplices : $(nsimplices(b))")
 end
 
-Base.summary(::Bands{T,E,L}) where {T,E,L} =
-    "Bands{$T,$E,$L}: $(E)D Bands over a $L-dimensional parameter space of type $T"
+Base.summary(::Bandstructure{T,E,L}) where {T,E,L} =
+    "Bandstructure{$T,$E,$L}: $(E)D Bandstructure over a $L-dimensional parameter space of type $T"
 
 #endregion
 

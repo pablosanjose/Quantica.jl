@@ -19,12 +19,12 @@ end
 
 ############################################################################################
 # qplot
-#   Supports plotting b::Bands, but also b[...]::Vector{Subbands} and
+#   Supports plotting b::Bandstructure, but also b[...]::Vector{Subbands} and
 #   slice(b, ...)::Vector{Mesh}
 #region
 
 const PlotBandsArgumentType =
-    Union{Quantica.Bands,Quantica.Subband,AbstractVector{<:Quantica.Subband},AbstractVector{<:Quantica.Mesh}}
+    Union{Quantica.Bandstructure,Quantica.Subband,AbstractVector{<:Quantica.Subband},AbstractVector{<:Quantica.Mesh}}
 
 function Quantica.qplot(b::PlotBandsArgumentType; fancyaxis = true, axis = (;), figure = (;), inspector = false, plotkw...)
     meshes = collect(Quantica.meshes(b))
@@ -180,7 +180,7 @@ primitive_size(normr, size, (mins, maxs)) = mins + (maxs - mins) * normr
 #endregion
 
 ############################################################################################
-# PlotBands for 1D and 2D Bands (2D and 3D embedding space)
+# PlotBands for 1D and 2D Bandstructure (2D and 3D embedding space)
 #region
 
 function Makie.plot!(plot::PlotBands{Tuple{S}}) where {S<:PlotBandsArgumentType}

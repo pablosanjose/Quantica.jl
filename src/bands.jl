@@ -2,30 +2,36 @@
 # spectrum
 #region
 
-SpectrumSolver(h::AbstractHamiltonian{T,<:Any,L}; kw...) where {L,T} =
-    SpectrumSolver(h, SVector{L,T}; kw...)
+EigenSolver(h::AbstractHamiltonian{T,<:Any,L}; kw...) where {L,T} =
+    EigenSolver(h, SVector{L,T}; kw...)
 
-SpectrumSolver(m::AbstractMatrix{C}; kw...) where {C} =
-    SpectrumSolver(m, SVector{0,real(C)}; kw...)
+EigenSolver(m::AbstractMatrix{C}; kw...) where {C} =
+    EigenSolver(m, SVector{0,real(C)}; kw...)
 
-function SpectrumSolver(h, S::Type{SVector{L,T}};
+function EigenSolver(h, S::Type{SVector{L,T}};
                         solver::AbstractEigenSolver = ES.LinearAlgebra(),
                         mapping = missing,
                         transform = missing) where {L,T}
     solver´ = apply(solver, h, S, mapping, transform)
-    return SpectrumSolver(solver´)
+    return EigenSolver(solver´)
 end
 
-spectrum(h::AbstractHamiltonian, φs; solver = ES.LinearAlgebra(), transform = missing, kw...) =
-    SpectrumSolver(call!(h; kw...); solver, transform)(φs)
-spectrum(h::AbstractHamiltonian{<:Any,<:Any,0}; solver = ES.LinearAlgebra(), transform = missing, kw...) =
-    SpectrumSolver(call!(h; kw...); solver, transform)()
-spectrum(m::AbstractMatrix; solver = ES.LinearAlgebra(), transform = missing) =
-    SpectrumSolver(m; solver, transform)()
+function spectrum(h::AbstractHamiltonian, φs; solver = ES.LinearAlgebra(), transform = missing, kw...)
+    os = blockstructure(h)
+    mat = call!(h; kw...)
+    solver = EigenSolver(mat; solver, transform)
+    eigen = solver(φs)
+    return Spectrum(eigen, os)
+end
 
-function spectrum(b::Bands{<:Any,<:Any,L}, φs::NTuple{L,Number}) where {L}
+spectrum(h::AbstractHamiltonian{T,<:Any,0}; kw...) where {T} =
+    spectrum(h, SVector{0,T}(); kw...)
+
+function spectrum(b::Bandstructure, φs)
+    os = blockstructure(b)
     solver = first(solvers(b))
-    return solver(φs)
+    eigen = solver(φs)
+    return Spectrum(eigen, os)
 end
 
 #endregion
@@ -67,14 +73,33 @@ end
 
 bands(h, rng, rngs...; kw...) = bands(h, mesh(rng, rngs...); kw...)
 
-function bands(h, basemesh::Mesh{SVector{L,T}}; solver = ES.LinearAlgebra(),
-              transform = missing, mapping = missing, showprogress = true, defects = (), patches = 0,
-              degtol = missing, split = true, warn = true) where {T,L}
+function bands(h::AbstractHamiltonian, mesh::Mesh{SVector{L,T}};
+         solver = ES.LinearAlgebra(), transform = missing, mapping = missing, kw...) where {T,L}
+    solvers = eigensolvers_per_threads(h, SVector{L,T}, solver, mapping, transform)
+    ss = subbands(solvers, mesh; kw...)
+    os = blockstructure(h)
+    return Bandstructure(ss, solvers, os)
+end
+
+function bands(h::Function, mesh::Mesh{SVector{L,T}};
+         solver = ES.LinearAlgebra(), transform = missing, mapping = missing, kw...) where {T,L}
+    solvers = eigensolvers_per_threads(h, SVector{L,T}, solver, mapping, transform)
+    ss = subbands(solvers, mesh; kw...)
+    return ss
+end
+
+function eigensolvers_per_threads(h, S, solver, mapping, transform)
     mapping´ = sanitize_mapping(mapping, h)
-    solvers = [SpectrumSolver(h, SVector{L,T}; solver, mapping = mapping´, transform) for _ in 1:Threads.nthreads()]
+    solvers = [EigenSolver(h, S; solver, mapping = mapping´, transform) for _ in 1:Threads.nthreads()]
+    return solvers
+end
+
+function subbands(solvers, basemesh::Mesh{SVector{L,T}};
+         showprogress = true, defects = (), patches = 0, degtol = missing, split = true, warn = true) where {T,L}
     defects´ = sanitize_Vector_of_SVectors(SVector{L,T}, defects)
     degtol´ = degtol isa Number ? degtol : sqrt(eps(real(T)))
-    return bands_precompilable(solvers, basemesh, showprogress, defects´, patches, degtol´, split, warn)
+    subbands = subbands_precompilable(solvers, basemesh, showprogress, defects´, patches, degtol´, split, warn)
+    return subbands
 end
 
 sanitize_mapping(mapping, ::AbstractHamiltonian{<:Any,<:Any,L}) where {L} =
@@ -91,11 +116,11 @@ sanitize_mapping((xs, nodes)::Pair, ::Val{L}) where {L} =
 sanitize_mapping((xs, nodes)::Pair{X,S}, ::Val{L}) where {N,L,T,X<:NTuple{N,Real},S<:NTuple{N,SVector{L,T}}} =
     polygonpath(xs, nodes)
 
-function bands_precompilable(solvers::Vector{A}, basemesh::Mesh{SVector{L,T}},
-    showprogress, defects, patches, degtol, split, warn) where {T,L,B,A<:SpectrumSolver{T,L,B}}
+function subbands_precompilable(solvers::Vector{A}, basemesh::Mesh{SVector{L,T}},
+    showprogress, defects, patches, degtol, split, warn) where {T,L,A<:EigenSolver{T,L}}
 
     basemesh = copy(basemesh) # will become part of Band, possibly refined
-    spectra = Vector{Spectrum{T,B}}(undef, length(vertices(basemesh)))
+    eigens = Vector{EigenComplex{T}}(undef, length(vertices(basemesh)))
     bandverts = BandVertex{T,L+1}[]
     bandneighs = Vector{Int}[]
     bandneideg = similar(bandneighs)
@@ -103,32 +128,32 @@ function bands_precompilable(solvers::Vector{A}, basemesh::Mesh{SVector{L,T}},
     crossed = NTuple{6,Int}[]
     frustrated = similar(crossed)
     subbands = Subband{T,L+1}[]
-    data = (; basemesh, spectra, bandverts, bandneighs, bandneideg, coloffsets, solvers, L,
+    data = (; basemesh, eigens, bandverts, bandneighs, bandneideg, coloffsets, solvers, L,
               crossed, frustrated, subbands, defects, patches, showprogress, degtol, split, warn)
 
     # Step 1 - Diagonalize:
     # Uses multiple SpectrumSolvers (one per Julia thread) to diagonalize h at each
     # vertex of basemesh. Then, it collects each of the produced Spectrum (aka "columns")
     # into a bandverts::Vector{BandVertex}, recording the coloffsets for each column
-    bands_diagonalize!(data)
+    subbands_diagonalize!(data)
 
     # Step 2 - Knit seams:
     # Each base vertex holds a column of subspaces. Each subspace s of degeneracy d will
     # connect to other subspaces s´ in columns of a neighboring base vertex. Connections are
     # possible if the projector ⟨s'|s⟩ has any singular value greater than 1/2
-    bands_knit!(data)
+    subbands_knit!(data)
 
     # Step 3 - Patch seams:
     # Dirac points and other topological band defects will usually produce dislocations in
     # mesh connectivity that results in missing simplices.
     if L>1
-        bands_patch!(data)
+        subbands_patch!(data)
     end
 
     # Step 4 - Split subbands
-    bands_split!(data)
+    subbands_split!(data)
 
-    return Bands(subbands, solvers)
+    return subbands
 end
 
 #endregion
@@ -212,35 +237,35 @@ end
 #endregion
 
 ############################################################################################
-# bands_diagonalize!
+# subbands_diagonalize!
 #region
 
-function bands_diagonalize!(data)
+function subbands_diagonalize!(data)
     baseverts = vertices(data.basemesh)
     meter = Progress(length(baseverts), "Step 1 - Diagonalizing: ")
     push!(data.coloffsets, 0) # first element
     Threads.@threads :static for i in eachindex(baseverts)
         vert = baseverts[i]
         solver = data.solvers[Threads.threadid()]
-        data.spectra[i] = solver(vert)
+        data.eigens[i] = solver(vert)
         data.showprogress && ProgressMeter.next!(meter)
     end
     # Collect band vertices and store column offsets
-    for (basevert, spectrum) in zip(baseverts, data.spectra)
-        append_bands_column!(data, basevert, spectrum)
+    for (basevert, eigen) in zip(baseverts, data.eigens)
+        append_bands_column!(data, basevert, eigen)
     end
     ProgressMeter.finish!(meter)
 end
 
 
-# collect spectrum into a band column (vector of BandVertices for equal base vertex)
-function append_bands_column!(data, basevert, spectrum)
+# collect eigen into a band column (vector of BandVertices for equal base vertex)
+function append_bands_column!(data, basevert, eigen)
     T = eltype(basevert)
-    energies´ = [maybereal(ε, T) for ε in energies(spectrum)]
-    states´ = states(spectrum)
+    energies, states = eigen
+    energies´ = [maybereal(ε, T) for ε in energies]
     subs = collect(approxruns(energies´, data.degtol))
     for (i, rng) in enumerate(subs)
-        state = orthonormalize!(view(states´, :, rng))
+        state = orthonormalize!(view(states, :, rng))
         energy = mean(i -> energies´[i], rng)
         push!(data.bandverts, BandVertex(basevert, energy, state))
     end
@@ -274,12 +299,12 @@ end
 #endregion
 
 ############################################################################################
-# bands_knit!
+# subbands_knit!
 #region
 
-function bands_knit!(data)
-    meter = Progress(length(data.spectra), "Step 2 - Knitting: ")
-    for isrcbase in eachindex(data.spectra)
+function subbands_knit!(data)
+    meter = Progress(length(data.eigens), "Step 2 - Knitting: ")
+    for isrcbase in eachindex(data.eigens)
         for idstbase in neighbors_forward(data.basemesh, isrcbase)
             knit_seam!(data, isrcbase, idstbase)
         end
@@ -294,7 +319,9 @@ end
 function knit_seam!(data, ib, jb)
     srcrange = column_range(data, ib)
     dstrange = column_range(data, jb)
-    colproj  = states(data.spectra[jb])' * states(data.spectra[ib])
+    _, statesib = data.eigens[ib]
+    _, statesjb = data.eigens[jb]
+    colproj  = statesjb' * statesib
     for i in srcrange
         src = data.bandverts[i]
         for j in dstrange
@@ -341,10 +368,10 @@ column_range(data, ibase) = data.coloffsets[ibase]+1:data.coloffsets[ibase+1]
 #endregion
 
 ############################################################################################
-# bands_patch!
+# subbands_patch!
 #region
 
-function bands_patch!(data)
+function subbands_patch!(data)
     insert_defects!(data)
     data.patches > 0 || return data
     queue_frustrated!(data)
@@ -417,7 +444,7 @@ function insert_column!(data, (ib, jb), k)
     split_edge!(data.basemesh, (ib, jb), k)
     # compute spectrum at new vertex
     spectrum = solver(k)
-    push!(data.spectra, spectrum)
+    push!(data.eigens, spectrum)
     # collect spectrum into a set of new band vertices
     append_bands_column!(data, k, spectrum)
     # knit all new seams
@@ -492,10 +519,10 @@ end
 #endregion
 
 ############################################################################################
-# bands_split!
+# subbands_split!
 #region
 
-function bands_split!(data)
+function subbands_split!(data)
     if data.split
         # vsinds are the subband index of each vertex index
         # svinds is lists of band vertex indices that belong to the same subband
@@ -530,11 +557,11 @@ end
 #   Example: in a 2D lattice, subband[(kx,ky,:)] is a vertical slice at fixed momentum kx, ky
 #region
 
-Base.getindex(b::Bands, i) = subbands(b, i)
-Base.getindex(b::Bands, xs::Tuple) = [s[xs] for s in subbands(b)]
+Base.getindex(b::Bandstructure, i) = subbands(b, i)
+Base.getindex(b::Bandstructure, xs::Tuple) = [s[xs] for s in subbands(b)]
 Base.getindex(s::Subband, xs::Tuple) = Subband(slice(s, xs, Val(true)))
 
-slice(b::Bands, xs) = [slice(s, xs) for s in subbands(b)]
+slice(b::Bandstructure, xs) = [slice(s, xs) for s in subbands(b)]
 slice(s::Subband, xs::Tuple) = slice(s, xs, Val(false))
 
 # getindex default (Val{true}): mesh with reduced embedding dimension = simplex length + 1
