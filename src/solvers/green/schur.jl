@@ -83,9 +83,9 @@ function nearest_cell_harmonics(h)
     is_nearest ||
         argerror("Too many or too few harmonics. Perhaps try `supercell` to ensure strictly nearest-cell harmonics.")
 
-    hm, h0, hp = h[-1], h[0], h[1]
+    hm, h0, hp = h[hybrid(-1)], h[hybrid(0)], h[hybrid(1)]
     flat(hm) == flat(hp)' ||
-        argerror("The Hamiltonian should have h[1] = h[-1]' to use the Schur solver")
+        argerror("The Hamiltonian should have h[1] == h[-1]' to use the Schur solver")
     return hm, h0, hp
 end
 
@@ -346,8 +346,8 @@ function apply(s::GS.Schur, h::AbstractHamiltonian1D, contacts::Contacts)
     fsolver = SchurFactorsSolver(h´, s.shift)
     h0 = unitcell_hamiltonian(h)
     boundary = round(only(s.boundary))
-    rsites = stored_cols(unflat(h[1]))
-    lsites = stored_cols(unflat(h[-1]))
+    rsites = stored_cols(h[unflat(1)])
+    lsites = stored_cols(h[unflat(-1)])
     latslice_l = lattice(h0)[cellsites((), lsites)]
     latslice_r = lattice(h0)[cellsites((), rsites)]
     ΣR_solver = SelfEnergySchurSolver(fsolver, h, :R)

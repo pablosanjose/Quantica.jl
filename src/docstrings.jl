@@ -543,10 +543,11 @@ Curried form of `hamiltonian` equivalent to `hamiltonian(lat, model, modifiers..
     h[dn::SVector{L,Int}]
     h[dn::NTuple{L,Int}]
 
-Return the Bloch harmonic of an `h::AbstractHamiltonian` in the form of a
-`HybridSparseMatrix`. This special matrix type contains both an `unflat` sparse
-representation of the harmonic with one site per element, and a `flat` representation with
-one orbital per element. To obtain each of these, use `unflat(h[dn])` and `flat(h[dn])`.
+Return the Bloch harmonic of an `h::AbstractHamiltonian` in the form of a `SparseMatrixCSC`
+with complex scalar `eltype`. This matrix is "flat", in the sense that it contains matrix
+elements between indivisual orbitals, not sites. This distinction is only relevant for
+multiorbital Hamiltonians. To access the non-flattened matrix use `h[unflat(dn)]` (see
+also `unflat`).
 
     h[()]
 
@@ -563,7 +564,7 @@ its parameters `params`. If `ph` is a non-parametric `Hamiltonian` instead, this
 
 Return the flat, sparse Bloch matrix of `h::AbstractHamiltonian` at Bloch phases `φs`, with
 applied parameters `params` if `h` is a `ParametricHamiltonian`. The Bloch matrix is defined
-as `H = ∑_dn exp(-im φs⋅dn) H_dn`, where `H_dn = flat(h[dn])` is the `dn` flat Bloch
+as `H = ∑_dn exp(-im φs⋅dn) H_dn`, where `H_dn = h[dn]` is the `dn` flat Bloch
 harmonic of `h`, and `φs[i] = k⋅aᵢ` in terms of the wavevector `k` and the
 Bravais vectors `aᵢ`.
 
@@ -1001,36 +1002,23 @@ true
 wrap
 
 """
-    flat(m::HybridSparseMatrix)
+    unflat(dn)
 
-Return a flat sparse version of `m`, with each element corresponding to a single orbital.
-The argument `m` is a Bloch harmonic of an `h::AbstractHamiltonian`, obtained with the
-syntax `h[dn]`, see `hamiltonian`.
+Construct an `u::Unflat` object wrapping some indices `dn`. This object is meant to be used
+to index into a `h::AbstractHamiltonian` as `h[u]`, which returns an non-flattened version
+of the Bloch harmonic `h[dn]`. Each element in the matrix `h[u]` is an `SMatrix` block
+representing onsite or hoppings between whole sites, in contrast to `h[dn]` where they are
+scalars representing single orbitals. This is only relevant for multi-orbital Hamiltonians
+`h`.
 
-# Examples
+    unflat()
 
-```jldoctest
-julia> h = HP.graphene(orbitals = 2); flat(h[(0,0)])
-4×4 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 8 stored entries:
-     ⋅          ⋅      2.7+0.0im  0.0+0.0im
-     ⋅          ⋅      0.0+0.0im  2.7+0.0im
- 2.7+0.0im  0.0+0.0im      ⋅          ⋅    
- 0.0+0.0im  2.7+0.0im      ⋅          ⋅    
-```
-"""
-flat
-
-"""
-    unflat(m::HybridSparseMatrix)
-
-Return an unflat sparse version of `m`, with each element corresponding to a single site.
-The argument `m` is a Bloch harmonic of an `h::AbstractHamiltonian`, obtained with the
-syntax `h[dn]`, see `hamiltonian`.
+Equivalent to `unflat(())`
 
 # Examples
 
 ```jldoctest
-julia> h = HP.graphene(orbitals = 2); unflat(h[(0,0)])
+julia> h = HP.graphene(orbitals = 2); h[unflat(0,0)])
 2×2 SparseArrays.SparseMatrixCSC{SMatrix{2, 2, ComplexF64, 4}, Int64} with 2 stored entries:
                      ⋅                       [2.7+0.0im 0.0+0.0im; 0.0+0.0im 2.7+0.0im]
  [2.7+0.0im 0.0+0.0im; 0.0+0.0im 2.7+0.0im]                      ⋅                     

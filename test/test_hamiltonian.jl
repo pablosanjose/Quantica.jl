@@ -1,4 +1,4 @@
-using Quantica: Hamiltonian, ParametricHamiltonian, sites, nsites, nonsites, nhoppings, coordination
+using Quantica: Hamiltonian, ParametricHamiltonian, sites, nsites, nonsites, nhoppings, coordination, flat
 
 @testset "basic hamiltonians" begin
     presets = (LatticePresets.linear, LatticePresets.square, LatticePresets.triangular, LatticePresets.honeycomb,
@@ -15,7 +15,7 @@ using Quantica: Hamiltonian, ParametricHamiltonian, sites, nsites, nonsites, nho
         end
     end
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = 1/√3))
-    @test h[SA[0,0]] === h[()] === h.harmonics[1].h
+    @test h[SA[0,0]] === h[()] === flat(h.harmonics[1].h)
     # Inf range
     h = LatticePresets.square() |> supercell(region = RegionPresets.square(5)) |>
         hamiltonian(hopping(1, range = Inf))
@@ -26,10 +26,18 @@ using Quantica: Hamiltonian, ParametricHamiltonian, sites, nsites, nonsites, nho
     h = LatticePresets.honeycomb() |> hamiltonian(onsite(1.0, sublats = :A) + hopping(I, range = 2/√3), orbitals = (Val(1), Val(2)))
     @test Quantica.nonsites(h) == 1
     @test Quantica.nhoppings(h) == 24
+    @test ishermitian(h)
     h = LatticePresets.square() |> supercell(3) |> hamiltonian(hopping(1, range = 3) |> plusadjoint)
     @test Quantica.nhoppings(h) == 252
+    @test ishermitian(h)
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = (1, 1)))
     @test Quantica.nhoppings(h) == 12
+    h = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = (1, 2), sublats = :A => :B))
+    @test Quantica.nhoppings(h) == 9
+    @test !ishermitian(h)
+    h = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = (1, 2), sublats = :A => :B) |> plusadjoint)
+    @test Quantica.nhoppings(h) == 18
+    @test ishermitian(h)
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = (1, 2/√3)))
     @test Quantica.nhoppings(h) == 18
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = (2, 1)))
@@ -172,25 +180,25 @@ end
 @testset "hamiltonian HybridSparseMatrix" begin
     for o in (1, 2, (2, 2), (2,3))
         h = HP.graphene(orbitals = o) |> supercell(2)
-        @test h[()] == h[(0,0)]
-        s = h[(1,0)]
+        @test h[()] === h[(0,0)]
+        s = h[hybrid((1,0))]
         @test !Quantica.needs_unflat_sync(s)
         if o == 1
-            @test eltype(h[()]) === ComplexF64
+            @test eltype(h[hybrid()]) === ComplexF64
             @test !Quantica.needs_flat_sync(s)
             @test Quantica.isaliased(s)
-            @test flat(h[()]) === unflat(h[()])
+            @test h[()] === h[unflat()]
         elseif o == (2,2) || o == 2
-            @test eltype(h[()]) <: Quantica.SMatrix
+            @test eltype(h[unflat()]) <: Quantica.SMatrix
             @test Quantica.needs_flat_sync(s)
             @test !Quantica.isaliased(s)
-            flat(h[()])
+            h[()]
             @test Quantica.needs_flat_sync(s)
         else
-            @test eltype(h[()]) <: Quantica.SMatrixView
+            @test eltype(h[unflat()]) <: Quantica.SMatrixView
             @test Quantica.needs_flat_sync(s)
             @test !Quantica.isaliased(s)
-            flat(h[()])
+            h[()]
             @test Quantica.needs_flat_sync(s)
         end
         @test_throws BoundsError h[(1,1)]
@@ -206,9 +214,10 @@ end
         @test_throws ArgumentError h(())
         @test_throws ArgumentError h(1,2)
         @test h((1,2)) == h(SA[1,2])
-        @test Quantica.call!(h, (1,2)) === Quantica.call!(h, SA[2,3])
+        @test Quantica.call!(h, (1,2)) === Quantica.call!(h, SA[2,3]) === Quantica.call!_output(h)
         h = supercell(h)
-        @test h(()) == h(SA[]) == flat(h[()])
+        @test h(()) == h(SA[]) == h[()]
+        @test Quantica.call!(h, ()) === Quantica.call!(h, SA[]) === h[()] === Quantica.call!_output(h)
     end
     h = hamiltonian(LP.linear(), hopping(1))
     @test h(π) == h((π,)) == h([π]) == [-2;;]

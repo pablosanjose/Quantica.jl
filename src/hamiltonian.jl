@@ -287,8 +287,11 @@ call!(h::Hamiltonian; params...) = h  # mimic partial call!(p::ParametricHamilto
 call!(h::Hamiltonian, φ1::Number, φ2::Number, φs::Number...; params...) =
     argerror("To obtain the (flat) Bloch matrix of `h` use `h(ϕs)`, where `ϕs` is a collection of `L=$(latdim(lattice(h)))` Bloch phases")
 call!(h::Hamiltonian{T}, φs; params...) where {T} = flat_bloch!(h, sanitize_SVector(T, φs))
-call!(h::Hamiltonian{<:Any,<:Any,0}, ::Tuple{}; params...) = flat(h[()])
+call!(h::Hamiltonian{<:Any,<:Any,0}, ::Tuple{}; params...) = h[()]
 call!(h::Hamiltonian, ft::FrankenTuple) = call!(h, Tuple(ft))
+
+# shortcut (see call!_output further below)
+flat_bloch!(h::Hamiltonian{<:Any,<:Any,0}, ::SVector{0}, axis = missing) = h[()]
 
 # returns a flat sparse matrix
 function flat_bloch!(h::Hamiltonian{T}, φs::SVector, axis = missing) where {T}
@@ -328,7 +331,7 @@ end
 
 # ouput of a call!(h, ϕs)
 call!_output(h::Hamiltonian) = flat(bloch(h))
-call!_output(h::Hamiltonian{<:Any,<:Any,0}) = flat(h[()])
+call!_output(h::Hamiltonian{<:Any,<:Any,0}) = h[()]
 
 #endregion
 
@@ -420,16 +423,24 @@ call!_output(p::ParametricHamiltonian) = call!_output(hamiltonian(p))
 # indexing into AbstractHamiltonian (harmonic extraction) - see also slices.jl
 #region
 
-Base.getindex(h::AbstractHamiltonian{<:Any,<:Any,L}, ::Tuple{}) where {L} = h[zero(SVector{L,Int})]
-Base.getindex(h::AbstractHamiltonian, dn::Union{Integer,Tuple}) = getindex(h, SVector(dn))
 
-function Base.getindex(h::AbstractHamiltonian{<:Any,<:Any,L}, dn::SVector{L,Int}) where {L}
+Base.getindex(h::AbstractHamiltonian, dn) = flat(h[hybrid(dn)])
+
+Base.getindex(h::AbstractHamiltonian, dn::UnflatInds) = unflat(h[hybrid(parent(dn))])
+
+Base.getindex(h::AbstractHamiltonian, dn::HybridInds{<:Union{Integer,Tuple}}) =
+    h[hybrid(SVector(parent(dn)))]
+
+Base.getindex(h::AbstractHamiltonian{<:Any,<:Any,L}, ::HybridInds{Tuple{}}) where {L} =
+    h[hybrid(zero(SVector{L,Int}))]
+
+function Base.getindex(h::AbstractHamiltonian{<:Any,<:Any,L}, dn::HybridInds{SVector{L,Int}}) where {L}
     for har in harmonics(h)
-        dn == dcell(har) && return matrix(har)
+        parent(dn) == dcell(har) && return matrix(har)
     end
-    @boundscheck(boundserror(harmonics(h), dn))
-    # this is unreachable, but allows to have zero allocations by having non-Union return type
-    return h[()]
+    @boundscheck(boundserror(harmonics(h), parent(dn)))
+    # this is unreachable, but avoids allocations by having non-Union return type
+    return matrix(first(harmonics(h)))
 end
 
 Base.isassigned(h::AbstractHamiltonian, dn::Tuple) = isassigned(h, SVector(dn))
@@ -450,12 +461,13 @@ end
 function nhoppings(h::AbstractHamiltonian)
     count = 0
     for har in harmonics(h)
-        count += iszero(dcell(har)) ? (nnz(matrix(har)) - nnzdiag(matrix(har))) : nnz(matrix(har))
+        umat = unflat(matrix(har))
+        count += iszero(dcell(har)) ? (nnz(umat) - nnzdiag(umat)) : nnz(umat)
     end
     return count
 end
 
-nonsites(h::AbstractHamiltonian) = nnzdiag(h[()])
+nonsites(h::AbstractHamiltonian) = nnzdiag(h[unflat()])
 
 coordination(h::AbstractHamiltonian) = iszero(nhoppings(h)) ? 0.0 : round(nhoppings(h) / nsites(lattice(h)), digits = 5)
 

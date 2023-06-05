@@ -106,6 +106,17 @@ lengths_to_offsets(v) = prepend!(cumsum(v), 0)
 # all merged_* functions assume matching structure of sparse matrices
 #region
 
+function nnzdiag(b::AbstractSparseMatrixCSC)
+    count = 0
+    rowptrs = rowvals(b)
+    for col in 1:size(b, 2)
+        for ptr in nzrange(b, col)
+            rowptrs[ptr] == col && (count += 1; break)
+        end
+    end
+    return count
+end
+
 stored_rows(m::AbstractSparseMatrixCSC) = unique!(sort!(copy(rowvals(m))))
 
 function stored_cols(m::AbstractSparseMatrixCSC)

@@ -864,20 +864,6 @@ syncstate(s::HybridSparseMatrix) = s.sync_state
 isaliased(::HybridSparseMatrix{<:Any,<:Complex}) = true
 isaliased(::HybridSparseMatrix) = false
 
-SparseArrays.nnz(b::HybridSparseMatrix) = nnz(unflat(b))
-
-function nnzdiag(m::HybridSparseMatrix)
-    b = unflat(m)
-    count = 0
-    rowptrs = rowvals(b)
-    for col in 1:size(b, 2)
-        for ptr in nzrange(b, col)
-            rowptrs[ptr] == col && (count += 1; break)
-        end
-    end
-    return count
-end
-
 Base.size(h::HybridSparseMatrix, i::Integer...) = size(unflat_unsafe(h), i...)
 
 flatsize(h::HybridSparseMatrix, args...) = flatsize(blockstructure(h), args...)
@@ -1142,6 +1128,29 @@ Base.:(==)(h::Harmonic, h´::Harmonic) = h.dn == h´.dn && unflat(h.h) == unflat
 #endregion
 
 ############################################################################################
+# UnflatInds, HybridInds  - getindex(::AbstractHamiltonian), see hamiltonian.jl for methods
+#region
+
+struct UnflatInds{T}
+    inds::T
+end
+
+struct HybridInds{T}
+    inds::T
+end
+
+unflat(i) = UnflatInds(i)
+unflat() = UnflatInds(())
+
+hybrid(i) = HybridInds(i)
+hybrid() = HybridInds(())
+
+Base.parent(u::UnflatInds) = u.inds
+Base.parent(u::HybridInds) = u.inds
+
+#endregion
+
+############################################################################################
 # Hamiltonian  -  see hamiltonian.jl for methods
 #region
 
@@ -1229,7 +1238,7 @@ copy_lattice(h::Hamiltonian) = Hamiltonian(
 function LinearAlgebra.ishermitian(h::Hamiltonian)
     for hh in h.harmonics
         isassigned(h, -hh.dn) || return false
-        hh.h ≈ h[-hh.dn]' || return false
+        flat(hh.h) ≈ h[-hh.dn]' || return false
     end
     return true
 end
