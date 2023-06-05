@@ -111,9 +111,11 @@ end
     b = bands(h, subdiv(0, 2pi, 13), subdiv(0, 2pi, 15), showprogress = false)
     @test b[(:, pi)] isa Vector{Quantica.Subband{Float64,2}}
     @test length(b[(pi,)]) == length(b[(pi, :)]) == length(b[(pi, :, :)]) == 1
-    @test b[1] isa Subband
+    @test b[1] isa Quantica.Subband
     m = Quantica.slice(b, (:,1))
     @test only(m) isa Quantica.Mesh
+    m = Quantica.slice(b[1], (:,1))
+    @test m isa Quantica.Mesh
 
     s = spectrum(b, (pi, pi))
     s´ = spectrum(wrap(h, (pi, pi)))

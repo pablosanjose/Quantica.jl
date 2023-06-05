@@ -17,9 +17,9 @@ using Quantica: Hamiltonian, ParametricHamiltonian, sites, nsites, nonsites, nho
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = 1/√3))
     @test h[SA[0,0]] === h[()] === flat(h.harmonics[1].h)
     # Inf range
-    h = LatticePresets.square() |> supercell(region = RegionPresets.square(5)) |>
+    h = LatticePresets.square() |> supercell(region = RegionPresets.rectangle((5,6))) |>
         hamiltonian(hopping(1, range = Inf))
-    @test Quantica.nhoppings(h) == 600
+    @test Quantica.nhoppings(h) == 1190
     h = LatticePresets.square() |> hamiltonian(hopping(1, dcells = (10,0), range = Inf))
     @test Quantica.nhoppings(h) == 1
     @test isassigned(h, (10,0))
@@ -86,12 +86,18 @@ end
 end
 
 @testset "siteselectors/hopselectors" begin
+    lat = LatticePresets.linear()
+    @test supercell(lat, region = RP.segment(10)) isa Quantica.Lattice
+    lat = LatticePresets.bcc()
+    for r in (RP.sphere(3), RP.cube(3), RP.spheroid((3,4,5), (3,3,3)), RP.cuboid((3,4,5), (2,3,4)))
+        @test supercell(lat, region = r) isa Quantica.Lattice
+    end
     lat = LatticePresets.honeycomb()
-    r1 = RP.circle(10)
-    r2 = (r, dr) -> norm(r) + norm(dr) < 2
     for r in (RP.circle(10), missing), s in (:A, 1, (:A, :B), [1, :B], missing), c in (SA[0,1], (0,1), [0,1]), cs in (c, (c, 2 .* c), [c, 2 .* c], missing)
         @test supercell(lat, region = r, sublats = s, cells = cs) isa Quantica.Lattice
     end
+    r1 = RP.ellipse((10,15))
+    r2 = (r, dr) -> norm(r) + norm(dr) < 2
     for region in (r1, missing),
         sublats in (:A, 1, (:A, :B), missing),
         c in (SA[0,1], (0,1)), dcells in (c, (c, 2 .* c), missing),
