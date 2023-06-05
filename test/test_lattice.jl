@@ -15,6 +15,7 @@ end
 
 @testset "lattice construction" begin
     s = sublat((1, 2))
+    s´ = sublat([0,0])
     for t in (Float32, Float64), e in 1:4, l = 1:4
         br = SMatrix{e,l,Float64}(I)
         if l > e
@@ -22,7 +23,7 @@ end
             @test_throws DimensionMismatch lattice(s; bravais = br, type = t, dim = e)
         else
             @test lattice(s; bravais = br, type = t, dim = Val(e)) isa Lattice{t,e,l}
-            @test lattice(s; bravais = br, type = t, dim = e) isa Lattice{t,e,l}
+            @test lattice([s, s´]; bravais = br, type = t, dim = e) isa Lattice{t,e,l}
         end
         if l > 2
             @test_throws DimensionMismatch lattice(s; bravais = br, type = t)
@@ -85,6 +86,7 @@ end
     cells = combine(cell_1, cell_2, cell_p)
     @test length.(sites.(Ref(cells), 1:5)) == [14, 14, 14, 14, 2]
     @test_throws ArgumentError combine(LatticePresets.honeycomb(), LatticePresets.square())
+    @test_throws ArgumentError combine(LatticePresets.honeycomb(), LatticePresets.linear())
     lat1 = transform(LatticePresets.honeycomb(type = Float32), r -> SA[r[2], -r[1]]) |> supercell((-1,1), (1,1))
     lat2 = combine(lat0, lat1)
     @test lat2 isa typeof(lat0)
@@ -98,6 +100,10 @@ end
     @test Quantica.nrange(1, lat) ≈ 1/√3
     @test Quantica.nrange(2, lat) ≈ 1
     @test Quantica.nrange(3, lat) ≈ 2/√3
+    lat = LP.cubic(a0 = 1) |> supercell(10)
+    @test Quantica.nrange(1, lat) ≈ 1
+    @test Quantica.nrange(2, lat) ≈ √2
+    @test Quantica.nrange(3, lat) ≈ √3
 end
 
 @testset "lattice supercell" begin
