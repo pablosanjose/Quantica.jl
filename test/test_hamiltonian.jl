@@ -1,4 +1,4 @@
-using Quantica: Hamiltonian, ParametricHamiltonian, sites, nsites, nonsites, nhoppings, coordination, flat
+using Quantica: Hamiltonian, ParametricHamiltonian, sites, nsites, nonsites, nhoppings, coordination, flat, hybrid
 
 @testset "basic hamiltonians" begin
     presets = (LatticePresets.linear, LatticePresets.square, LatticePresets.triangular, LatticePresets.honeycomb,
