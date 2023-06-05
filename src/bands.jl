@@ -100,7 +100,7 @@ sanitize_mapping(f::Function, ::Val) = f
 sanitize_mapping(pts::NTuple{N,Any}, ::Val{L}) where {N,L} =
     sanitize_mapping(ntuple(i -> i-1, Val(N)) => parsenode.(pts, Val(L)), Val(L))
 sanitize_mapping((xs, nodes)::Pair, ::Val{L}) where {L} =
-    sanitize_mapping(xs => parsenode.(nodes, Val(L)), Val(L))
+    polygonpath(xs, parsenode.(nodes, Val(L)))
 sanitize_mapping((xs, nodes)::Pair{X,S}, ::Val{L}) where {N,L,T,X<:NTuple{N,Real},S<:NTuple{N,SVector{L,T}}} =
     polygonpath(xs, nodes)
 

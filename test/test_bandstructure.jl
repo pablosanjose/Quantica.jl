@@ -26,7 +26,7 @@ using Quantica: nsubbands, nvertices, nedges, nsimplices
     @test nsubbands(b)  == 1
     @test nvertices(b) == 73
 
-    b = bands(h, subdiv(0:4, (4,5,6,7)), mapping = (:Γ, :X, (0, π), :Z, :Γ), showprogress = false)
+    b = bands(h, subdiv(1:5, (4,5,6,7)), mapping = [1,2,3,4,5] => [:Γ, :X, (0, π), :Z, :Γ], showprogress = false)
     @test nsubbands(b) == 1
     @test nvertices(b) == 113
 
