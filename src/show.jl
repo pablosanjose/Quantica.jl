@@ -217,17 +217,17 @@ Base.summary(s::AbstractEigenSolver) =
 #endregion
 
 ############################################################################################
-# EigenSolver
+# AppliedEigenSolver
 #region
 
-function Base.show(io::IO, s::EigenSolver)
+function Base.show(io::IO, s::AppliedEigenSolver)
     i = get(io, :indent, "")
     ioindent = IOContext(io, :indent => i * "  ")
     print(io, i, summary(s), "\n")
 end
 
-Base.summary(::EigenSolver{T,L}) where {T,L} =
-    "EigenSolver{$T,$L}: Spectrum solver over an $L-dimensional parameter manifold of type $T"
+Base.summary(::AppliedEigenSolver{T,L}) where {T,L} =
+    "AppliedEigenSolver{$T,$L}: eigensolver over an $L-dimensional parameter manifold of type $T"
 
 #endregion
 

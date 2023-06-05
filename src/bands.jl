@@ -2,25 +2,13 @@
 # spectrum
 #region
 
-EigenSolver(h::AbstractHamiltonian{T,<:Any,L}; kw...) where {L,T} =
-    EigenSolver(h, SVector{L,T}; kw...)
-
-EigenSolver(m::AbstractMatrix{C}; kw...) where {C} =
-    EigenSolver(m, SVector{0,real(C)}; kw...)
-
-function EigenSolver(h, S::Type{SVector{L,T}};
-                        solver::AbstractEigenSolver = ES.LinearAlgebra(),
-                        mapping = missing,
-                        transform = missing) where {L,T}
-    solver´ = apply(solver, h, S, mapping, transform)
-    return EigenSolver(solver´)
-end
-
-function spectrum(h::AbstractHamiltonian, φs; solver = ES.LinearAlgebra(), transform = missing, kw...)
+function spectrum(h::AbstractHamiltonian{T}, φs; solver = ES.LinearAlgebra(), transform = missing, kw...) where {T}
     os = blockstructure(h)
-    mat = call!(h; kw...)
-    solver = EigenSolver(mat; solver, transform)
-    eigen = solver(φs)
+    mapping = (φ...) -> ftuple(φ...; kw...)
+    φs´ = sanitize_SVector(φs)
+    S = typeof(φs´)
+    asolver = apply(solver, h, S, mapping, transform)
+    eigen = asolver(φs´)
     return Spectrum(eigen, os)
 end
 
@@ -75,7 +63,7 @@ bands(h, rng, rngs...; kw...) = bands(h, mesh(rng, rngs...); kw...)
 
 function bands(h::AbstractHamiltonian, mesh::Mesh{SVector{L,T}};
          solver = ES.LinearAlgebra(), transform = missing, mapping = missing, kw...) where {T,L}
-    solvers = eigensolvers_per_threads(h, SVector{L,T}, solver, mapping, transform)
+    solvers = eigensolvers_per_threads(solver, h, SVector{L,T}, mapping, transform)
     ss = subbands(solvers, mesh; kw...)
     os = blockstructure(h)
     return Bandstructure(ss, solvers, os)
@@ -83,15 +71,15 @@ end
 
 function bands(h::Function, mesh::Mesh{SVector{L,T}};
          solver = ES.LinearAlgebra(), transform = missing, mapping = missing, kw...) where {T,L}
-    solvers = eigensolvers_per_threads(h, SVector{L,T}, solver, mapping, transform)
+    solvers = eigensolvers_per_threads(solver, h, SVector{L,T}, mapping, transform)
     ss = subbands(solvers, mesh; kw...)
     return ss
 end
 
-function eigensolvers_per_threads(h, S, solver, mapping, transform)
+function eigensolvers_per_threads(solver, h, S, mapping, transform)
     mapping´ = sanitize_mapping(mapping, h)
-    solvers = [EigenSolver(h, S; solver, mapping = mapping´, transform) for _ in 1:Threads.nthreads()]
-    return solvers
+    asolvers = [apply(solver, h, S, mapping´, transform) for _ in 1:Threads.nthreads()]
+    return asolvers
 end
 
 function subbands(solvers, basemesh::Mesh{SVector{L,T}};
@@ -117,7 +105,7 @@ sanitize_mapping((xs, nodes)::Pair{X,S}, ::Val{L}) where {N,L,T,X<:NTuple{N,Real
     polygonpath(xs, nodes)
 
 function subbands_precompilable(solvers::Vector{A}, basemesh::Mesh{SVector{L,T}},
-    showprogress, defects, patches, degtol, split, warn) where {T,L,A<:EigenSolver{T,L}}
+    showprogress, defects, patches, degtol, split, warn) where {T,L,A<:AppliedEigenSolver{T,L}}
 
     basemesh = copy(basemesh) # will become part of Band, possibly refined
     eigens = Vector{EigenComplex{T}}(undef, length(vertices(basemesh)))

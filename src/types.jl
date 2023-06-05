@@ -1348,7 +1348,7 @@ Base.copy(m::Mesh) = Mesh(copy(m.verts), copy.(m.neighs), copy(m.simps))
 ############################################################################################
 # Spectrum and Bandstructure - see solvers/eigensolvers.jl for solver backends <: AbstractEigenSolver
 #                    -  see bands.jl for methods
-# EigenSolver - wraps a solver vs ϕs, with a mapping and transform, into a FunctionWrapper
+# AppliedEigenSolver - wraps a solver vs ϕs, with a mapping and transform, into a FunctionWrapper
 #region
 
 abstract type AbstractEigenSolver end
@@ -1362,7 +1362,7 @@ struct Spectrum{T,B}
     blockstruct::OrbitalBlockStructure{B}
 end
 
-struct EigenSolver{T,L}
+struct AppliedEigenSolver{T,L}
     solver::FunctionWrapper{EigenComplex{T},Tuple{SVector{L,T}}}
 end
 
@@ -1380,7 +1380,7 @@ end
 
 struct Bandstructure{T,E,L,B} # E = L+1
     subbands::Vector{Subband{T,E}}
-    solvers::Vector{EigenSolver{T,L}}  # one per Julia thread
+    solvers::Vector{AppliedEigenSolver{T,L}}  # one per Julia thread
     blockstruct::OrbitalBlockStructure{B}
 end
 
@@ -1422,11 +1422,11 @@ shrinkright((x, y)) = (x, prevfloat(y))
 
 #region ## API ##
 
-(s::EigenSolver{T,0})() where {T} = s.solver(SVector{0,T}())
-(s::EigenSolver{T,L})(φs::SVector{L}) where {T,L} = s.solver(sanitize_SVector(SVector{L,T}, φs))
-(s::EigenSolver{T,L})(φs::NTuple{L,Any}) where {T,L} = s.solver(sanitize_SVector(SVector{L,T}, φs))
-(s::EigenSolver{T,L})(φs...) where {T,L} =
-    throw(ArgumentError("EigenSolver call requires $L parameters/Bloch phases, received $φs"))
+(s::AppliedEigenSolver{T,0})() where {T} = s.solver(SVector{0,T}())
+(s::AppliedEigenSolver{T,L})(φs::SVector{L}) where {T,L} = s.solver(sanitize_SVector(SVector{L,T}, φs))
+(s::AppliedEigenSolver{T,L})(φs::NTuple{L,Any}) where {T,L} = s.solver(sanitize_SVector(SVector{L,T}, φs))
+(s::AppliedEigenSolver{T,L})(φs...) where {T,L} =
+    throw(ArgumentError("AppliedEigenSolver call requires $L parameters/Bloch phases, received $φs"))
 
 energies(s::Spectrum) = s.eigen.values
 

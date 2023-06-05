@@ -210,7 +210,7 @@ function apply(solver::AbstractEigenSolver, h::AbstractHamiltonian{T}, S::Type{<
     # so this mat´ could be an alias of the call! output, or an unaliased conversion
     mat´ = ES.input_matrix(solver, h´)
     function sfunc(φs)
-        φs´ = apply_map(mapping, φs)
+        φs´ = apply_map(mapping, φs)    # this can be a FrankenTuple
         mat = call!(h´, φs´)
         mat´ === mat || copy!(mat´, mat)
         # the solver always receives the matrix type declared by ES.input_matrix
@@ -218,10 +218,10 @@ function apply(solver::AbstractEigenSolver, h::AbstractHamiltonian{T}, S::Type{<
         apply_transform!(eigen, transform)
         return eigen
     end
-    return FunctionWrapper{EigenComplex{T},Tuple{S}}(sfunc)
+    asolver = AppliedEigenSolver(FunctionWrapper{EigenComplex{T},Tuple{S}}(sfunc))
+    return asolver
 end
 
-# support for bands(hf::Function, ...)
 function apply(solver::AbstractEigenSolver, hf::Function, S::Type{<:SVector{L,T}}, mapping, transform) where {L,T}
     function sfunc(φs)
         φs´ = apply_map(mapping, φs)
@@ -230,16 +230,9 @@ function apply(solver::AbstractEigenSolver, hf::Function, S::Type{<:SVector{L,T}
         apply_transform!(eigen, transform)
         return eigen
     end
-    return FunctionWrapper{EigenComplex{T},Tuple{S}}(sfunc)
+    asolver = AppliedEigenSolver(FunctionWrapper{EigenComplex{T},Tuple{S}}(sfunc))
+    return asolver
 end
-
-# # support for spectrum(m::AbstractMatrix)
-# function apply(solver::AbstractEigenSolver, m::AbstractMatrix, S::Type{<:SVector{0,T}}, mapping, transform) where {T}
-#     eigen = solver(m)
-#     apply_transform!(eigen, transform)
-#     sfunc = Returns(eigen)
-#     return FunctionWrapper{EigenComplex{T},Tuple{S}}(sfunc)
-# end
 
 apply_transform!(eigen, ::Missing) = eigen
 
