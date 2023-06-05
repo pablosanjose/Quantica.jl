@@ -24,22 +24,6 @@ Base.push!(ijv::IJV, (i, j, v)) =
 Base.append!(ijv::IJV, (is, js, vs)) =
     (append!(ijv.i, is); append!(ijv.j, js); append!(ijv.v, vs))
 
-function Base.filter!(f::Function, ijv::IJV)
-    ind = 0
-    for (i, j, v) in zip(ijv.i, ijv.j, ijv.v)
-        if f(i, j, v)
-            ind += 1
-            ijv.i[ind] = i
-            ijv.j[ind] = j
-            ijv.v[ind] = v
-        end
-    end
-    resize!(ijv.i, ind)
-    resize!(ijv.j, ind)
-    resize!(ijv.v, ind)
-    return ijv
-end
-
 Base.isempty(h::IJV) = length(h.i) == 0
 
 SparseArrays.sparse(c::IJV, m::Integer, n::Integer) = sparse(c.i, c.j, c.v, m, n)

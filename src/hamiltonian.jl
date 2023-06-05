@@ -82,9 +82,6 @@ dcell(har::AbstractBuilderHarmonic) = har.dn
 
 kdtrees(b::IJVBuilder) = b.kdtrees
 
-Base.filter!(f::Function, b::IJVBuilder) =
-    foreach(bh -> filter!(f, bh.collector), b.harmonics)
-
 finalizecolumn!(b::CSCBuilder, x...) =
     foreach(har -> finalizecolumn!(collector(har), x...), b.harmonics)
 
