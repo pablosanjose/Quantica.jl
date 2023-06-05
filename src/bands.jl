@@ -481,7 +481,7 @@ function degeneracy_link(data, i, j)
 end
 
 function crossing(data, (ib, jb, i, i´, j, j´))
-    εi, εi´, εj, εj´ = energy.(getindex.(Ref(data.bandverts), (i, i´, j, j´)))
+    εi, εi´, εj, εj´ = real.(energy.(getindex.(Ref(data.bandverts), (i, i´, j, j´))))
     ki, kj = vertices(data.basemesh, ib), vertices(data.basemesh, jb)
     λ = (εi - εi´) / (εj´ - εi´ - εj + εi)
     k = ki + λ * (kj - ki)

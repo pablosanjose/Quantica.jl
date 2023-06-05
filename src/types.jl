@@ -1509,6 +1509,7 @@ mesh(m::Mesh) = m
 
 meshes(b::Bandstructure) = (mesh(s) for s in subbands(b))
 meshes(s::Subband) = (mesh(s),)
+meshes(s::Mesh) = (s,)
 meshes(xs) = (mesh(x) for x in xs)
 
 embdim(::AbstractMesh{<:SVector{E}}) where {E} = E

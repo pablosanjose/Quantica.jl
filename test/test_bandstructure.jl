@@ -43,6 +43,11 @@ using Quantica: nsubbands, nvertices, nedges, nsimplices
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(-1)) |> supercell(10)
     b = bands(h, subdiv(0, 1, 7); solver = ES.Arpack(sigma = 0.1im, nev = 12), mapping = (:K, :K´), showprogress = false)
     @test nsubbands(b) == 1
+
+    # defect insertion and patching
+    h = LatticePresets.honeycomb() |> hamiltonian(hopping(-1))
+    b = bands(h, subdiv(0, 2pi, 8), subdiv(0, 2pi, 8); showprogress = false, defects = ((2pi/3, 4pi/3), (4pi/3, 2pi/3)), patches = 10)
+    @test nvertices(b) == 140
 end
 
 @testset "functional bandstructures" begin
@@ -106,6 +111,10 @@ end
     b = bands(h, subdiv(0, 2pi, 13), subdiv(0, 2pi, 15), showprogress = false)
     @test b[(:, pi)] isa Vector{Quantica.Subband{Float64,2}}
     @test length(b[(pi,)]) == length(b[(pi, :)]) == length(b[(pi, :, :)]) == 1
+    @test b[1] isa Subband
+    m = Quantica.slice(b, (:,1))
+    @test only(m) isa Quantica.Mesh
+
     s = spectrum(b, (pi, pi))
     s´ = spectrum(wrap(h, (pi, pi)))
     s´´ = spectrum(h, (pi, pi))

@@ -24,7 +24,7 @@ end
 #region
 
 const PlotBandsArgumentType =
-    Union{Quantica.Bandstructure,Quantica.Subband,AbstractVector{<:Quantica.Subband},AbstractVector{<:Quantica.Mesh}}
+    Union{Quantica.Bandstructure,Quantica.Subband,AbstractVector{<:Quantica.Subband},AbstractVector{<:Quantica.Mesh},Quantica.Mesh}
 
 function Quantica.qplot(b::PlotBandsArgumentType; fancyaxis = true, axis = (;), figure = (;), inspector = false, plotkw...)
     meshes = collect(Quantica.meshes(b))
