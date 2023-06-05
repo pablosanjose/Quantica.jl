@@ -15,7 +15,7 @@ using Quantica: nsubbands, nvertices, nedges, nsimplices
     b = bands(h, subdiv(-pi, pi, 13), subdiv(-pi, pi, 15), showprogress = false)
     @test nsubbands(b)  == 2
 
-    h = LatticePresets.cubic() |> hamiltonian(hopping(1)) |> supercell(2)
+    h = LatticePresets.cubic() |> hamiltonian(hopping((r,dr)-> im*dr'SA[1,1.5,2])) |> supercell(2)
     b = bands(h, subdiv(-pi, pi, 5), subdiv(-pi, pi, 7), subdiv(-pi, pi, 5), showprogress = false)
     @test nsubbands(b)  == 1
 
@@ -24,15 +24,15 @@ using Quantica: nsubbands, nvertices, nedges, nsimplices
 
     b = bands(h, subdiv(0, 4, 13), mapping = (:Γ, :X, (0, π), :Z, :Γ), showprogress = false)
     @test nsubbands(b)  == 1
-    @test nvertices(b) == 73
+    @test nvertices(b) == 32
 
-    b = bands(h, subdiv(1:5, (4,5,6,7)), mapping = [1,2,3,4,5] => [:Γ, :X, (0, π), :Z, :Γ], showprogress = false)
+    b = bands(h, subdiv(1:5, (4,5,6,7)), mapping = [1,2,3,5,4] => (:Γ, :X, (0, π), :Z, :Γ), showprogress = false)
     @test nsubbands(b) == 1
-    @test nvertices(b) == 113
+    @test nvertices(b) == 42
 
-    b = bands(h, subdiv((1,3,4), 5), mapping = (1,3,4) => (:Γ, :X, :Γ), showprogress = false)
+    b = bands(h, subdiv((1,3,4), 5), mapping = (1,4,3) => (:Γ, :X, :Z), showprogress = false)
     @test nsubbands(b) == 1
-    @test nvertices(b) == 47
+    @test nvertices(b) == 23
 
     # complex spectra
     h = LatticePresets.honeycomb() |> hamiltonian(onsite(im) + hopping(-1)) |> supercell(2)
