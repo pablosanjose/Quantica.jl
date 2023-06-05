@@ -1078,8 +1078,9 @@ EigenSolvers
     spectrum(h::AbstractHamiltonian, ϕs; solver = EigenSolvers.LinearAlgebra()], transform = missing, params...)
 
 Compute the `Spectrum` of the Bloch matrix `h(ϕs; params...)` using the specified
-eigensolver, with `transform` applied to the resulting eigenenergies, if not `missing`. See
-`EigenSolvers` for available solvers and their options.
+eigensolver, with `transform` applied to the resulting eigenenergies, if not `missing`.
+Eigenpairs are sorted by the real part of their energy. See `EigenSolvers` for available
+solvers and their options.
 
     spectrum(h::AbstractHamiltonian; kw...)
 
@@ -1091,13 +1092,13 @@ Compute the `Spectrum` of matrix `m` using `solver` and `transform`.
 
     spectrum(b::Bandstructure, ϕs)
 
-Compute the `Spectrum` corresponding to slicing the bandstructure `b` at point `ϕs` of
-its base mesh, see `bands` for details.
+Compute the `Spectrum` corresponding to slicing the bandstructure `b` at point `ϕs` of its
+base mesh (see `bands` for details).
 
 ## Indexing and destructuring
 
 Eigenenergies `ϵs::Tuple` and eigenstates `ψs::Matrix` can be extracted from a spectrum `sp`
-using either of the following
+using any of the following
 
     ϵs, ψs = sp
     ϵs = first(sp)
@@ -1105,13 +1106,14 @@ using either of the following
     ψs = last(sp)
     ψs = states(sp)
 
-In addition, one can extract the `n` eigenpairs closest to a given energy `ϵ₀` with
+In addition, one can extract the `n` eigenpairs closest (in real energy) to a given energy
+`ϵ₀` with
 
     ϵs, ψs = sp[1:n, around = ϵ₀]
 
 More generally, `sp[inds, around = ϵ₀]` will take the eigenpairs at position given by `inds`
-after sorting by increasing distance to `ϵ₀`. If `around` is omitted, the ordering in `sp`
-is used.
+after sorting by increasing distance to `ϵ₀`, or the closest eigenpair in `inds` is missing.
+If `around` is omitted, the ordering in `sp` is used.
 
 # Examples
 

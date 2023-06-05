@@ -5,7 +5,7 @@
 function spectrum(h::AbstractHamiltonian{T}, φs; solver = ES.LinearAlgebra(), transform = missing, kw...) where {T}
     os = blockstructure(h)
     mapping = (φ...) -> ftuple(φ...; kw...)
-    φs´ = sanitize_SVector(φs)
+    φs´ = sanitize_SVector(T, φs)
     S = typeof(φs´)
     asolver = apply(solver, h, S, mapping, transform)
     eigen = asolver(φs´)
@@ -15,7 +15,7 @@ end
 spectrum(h::AbstractHamiltonian{T,<:Any,0}; kw...) where {T} =
     spectrum(h, SVector{0,T}(); kw...)
 
-function spectrum(b::Bandstructure, φs)
+function spectrum(b::Bandstructure, φs;)
     os = blockstructure(b)
     solver = first(solvers(b))
     eigen = solver(φs)
@@ -61,17 +61,17 @@ end
 
 bands(h, rng, rngs...; kw...) = bands(h, mesh(rng, rngs...); kw...)
 
-function bands(h::AbstractHamiltonian, mesh::Mesh{SVector{L,T}};
-         solver = ES.LinearAlgebra(), transform = missing, mapping = missing, kw...) where {T,L}
-    solvers = eigensolvers_per_threads(solver, h, SVector{L,T}, mapping, transform)
+function bands(h::AbstractHamiltonian, mesh::Mesh{S};
+         solver = ES.LinearAlgebra(), transform = missing, mapping = missing, kw...) where {S}
+    solvers = eigensolvers_per_threads(solver, h, S, mapping, transform)
     ss = subbands(solvers, mesh; kw...)
     os = blockstructure(h)
     return Bandstructure(ss, solvers, os)
 end
 
-function bands(h::Function, mesh::Mesh{SVector{L,T}};
-         solver = ES.LinearAlgebra(), transform = missing, mapping = missing, kw...) where {T,L}
-    solvers = eigensolvers_per_threads(solver, h, SVector{L,T}, mapping, transform)
+function bands(h::Function, mesh::Mesh{S};
+         solver = ES.LinearAlgebra(), transform = missing, mapping = missing, kw...) where {S}
+    solvers = eigensolvers_per_threads(solver, h, S, mapping, transform)
     ss = subbands(solvers, mesh; kw...)
     return ss
 end
@@ -250,11 +250,10 @@ end
 function append_bands_column!(data, basevert, eigen)
     T = eltype(basevert)
     energies, states = eigen
-    energies´ = [maybereal(ε, T) for ε in energies]
-    subs = collect(approxruns(energies´, data.degtol))
+    subs = collect(approxruns(energies, data.degtol))
     for (i, rng) in enumerate(subs)
         state = orthonormalize!(view(states, :, rng))
-        energy = mean(i -> energies´[i], rng)
+        energy = mean(i -> energies[i], rng)
         push!(data.bandverts, BandVertex(basevert, energy, state))
     end
     push!(data.coloffsets, length(data.bandverts))
@@ -262,9 +261,6 @@ function append_bands_column!(data, basevert, eigen)
     foreach(_ -> push!(data.bandneighs, Int[]), length(data.bandneighs)+1:length(data.bandverts))
     return data
 end
-
-maybereal(energy, ::Type{T}) where {T<:Real} = T(real(energy))
-maybereal(energy, ::Type{T}) where {T<:Complex} = T(energy)
 
 # Gram-Schmidt but with column normalization only when norm^2 >= threshold (otherwise zero!)
 function orthonormalize!(m::AbstractMatrix, threshold = 0)

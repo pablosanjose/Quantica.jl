@@ -1357,17 +1357,17 @@ const EigenComplex{T} = Eigen{Complex{T},Complex{T},Matrix{Complex{T}},Vector{Co
 
 const MatrixView{C} = SubArray{C,2,Matrix{C},Tuple{Base.Slice{Base.OneTo{Int}}, UnitRange{Int}}, true}
 
-struct Spectrum{T,B}
+struct Spectrum{T<:AbstractFloat,B}
     eigen::EigenComplex{T}
     blockstruct::OrbitalBlockStructure{B}
 end
 
-struct AppliedEigenSolver{T,L}
+struct AppliedEigenSolver{T<:AbstractFloat,L}
     solver::FunctionWrapper{EigenComplex{T},Tuple{SVector{L,T}}}
 end
 
 struct BandVertex{T<:AbstractFloat,E}
-    coordinates::SVector{E,T}       # SVector(momentum..., energy)
+    coordinates::SVector{E,Complex{T}}       # SVector(momentum..., energy)
     states::MatrixView{Complex{T}}
 end
 
@@ -1396,6 +1396,8 @@ function Spectrum(ss::Vector{Subband{<:Any,1}}, os::OrbitalBlockStructure)
     return Spectrum(eigen, os)
 end
 
+BandVertex(ke::SVector{N}, s::MatrixView{Complex{T}}) where {N,T} =
+    BandVertex(SVector{N,Complex{T}}(ke), s)
 BandVertex(ke, s::Matrix) = BandVertex(ke, view(s, :, 1:size(s, 2)))
 BandVertex(k, e, s::Matrix) = BandVertex(k, e, view(s, :, 1:size(s, 2)))
 BandVertex(k, e, s::SubArray) = BandVertex(vcat(k, e), s)
@@ -1453,12 +1455,13 @@ nedges(b::Vector{<:Subband}) = sum(s -> sum(length, neighbors(s)), b; init = 0) 
 nsimplices(b::Bandstructure) = nsimplices(subbands(b))
 nsimplices(b::Vector{<:Subband}) = sum(s->length(simplices(s)), b)
 
-coordinates(s::SVector) = s
-coordinates(v::BandVertex) = v.coordinates
+# vertex coordinates can be complex, interally, but always appear real through the API
+coordinates(s::SVector) = real(s)
+coordinates(v::BandVertex) = real(v.coordinates)
 
 energy(v::BandVertex) = last(v.coordinates)
 
-base_coordinates(v::BandVertex) = SVector(Base.front(Tuple(v.coordinates)))
+base_coordinates(v::BandVertex) = SVector(Base.front(Tuple(coordinates(v))))
 
 states(v::BandVertex) = v.states
 

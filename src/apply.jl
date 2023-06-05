@@ -204,7 +204,7 @@ end
 # apply AbstractEigenSolver
 #region
 
-function apply(solver::AbstractEigenSolver, h::AbstractHamiltonian{T}, S::Type{<:SVector{L}}, mapping, transform) where {L,T}
+function apply(solver::AbstractEigenSolver, h::AbstractHamiltonian, ::Type{S}, mapping, transform) where {T<:Real,S<:SVector{<:Any,T}}
     h´ = minimal_callsafe_copy(h)
     # Some solvers (e.g. ES.LinearAlgebra) only accept certain matrix types
     # so this mat´ could be an alias of the call! output, or an unaliased conversion
@@ -222,7 +222,7 @@ function apply(solver::AbstractEigenSolver, h::AbstractHamiltonian{T}, S::Type{<
     return asolver
 end
 
-function apply(solver::AbstractEigenSolver, hf::Function, S::Type{<:SVector{L,T}}, mapping, transform) where {L,T}
+function apply(solver::AbstractEigenSolver, hf::Function, ::Type{S}, mapping, transform) where {T<:Real,S<:SVector{<:Any,T}}
     function sfunc(φs)
         φs´ = apply_map(mapping, φs)
         mat = hf(φs´)
@@ -233,6 +233,9 @@ function apply(solver::AbstractEigenSolver, hf::Function, S::Type{<:SVector{L,T}
     asolver = AppliedEigenSolver(FunctionWrapper{EigenComplex{T},Tuple{S}}(sfunc))
     return asolver
 end
+
+apply(solver::AbstractEigenSolver, h, S, mapping, transform) =
+    argerror("Encountered an unexpected type as argument to an eigensolver. Are your mesh vertices real?")
 
 apply_transform!(eigen, ::Missing) = eigen
 

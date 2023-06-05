@@ -26,13 +26,17 @@ using Quantica: nsubbands, nvertices, nedges, nsimplices
     @test nsubbands(b)  == 1
     @test nvertices(b) == 73
 
-    b = bands(h, subdiv(0:4, (4,5,6,7)), mapping = (:Γ, :X, (0, π), :Z, :Γ); showprogress = false)
+    b = bands(h, subdiv(0:4, (4,5,6,7)), mapping = (:Γ, :X, (0, π), :Z, :Γ), showprogress = false)
     @test nsubbands(b) == 1
     @test nvertices(b) == 113
 
+    b = bands(h, subdiv((1,3,4), 5), mapping = (1,3,4) => (:Γ, :X, :Γ), showprogress = false)
+    @test nsubbands(b) == 1
+    @test nvertices(b) == 47
+
     # complex spectra
     h = LatticePresets.honeycomb() |> hamiltonian(onsite(im) + hopping(-1)) |> supercell(2)
-    b = bands(h, subdiv(-pi, pi, 7), subdiv(-pi,pi, 7), showprogress = false)
+    b = bands(h, subdiv(-pi, pi, 13), subdiv(-pi,pi, 13), showprogress = false)
     @test nsubbands(b)  == 1
 
     # spectrum sorting
@@ -44,8 +48,8 @@ end
 @testset "functional bandstructures" begin
     hc = LatticePresets.honeycomb() |> hamiltonian(hopping(-1, sublats = :A=>:B) |> plusadjoint) |> supercell(3)
     hf((x,)) = Matrix(Quantica.call!(hc, (x, -x)))
-    m = subdiv(0, 2pi, 4)
-    b = bands(hf, m, showprogress = false)
+    m = subdiv(0, 1, 4)
+    b = bands(hf, m, showprogress = false, mapping = x -> 2π * x)
     @test nsubbands(b) == 1
     @test nsimplices(b)  == 36
 
@@ -64,7 +68,7 @@ end
     ph = LatticePresets.linear() |> hamiltonian(onsite(0I) + hopping(-I), orbitals = Val(2)) |> supercell(2) |>
          hamiltonian(@onsite!((o; k) -> o + k*I), @hopping!((t; k = 2, p = [1,2])-> t - k*I .+ p'p))
     mesh2D = subdiv(0, 1, 15), subdiv(0, 2π, 15)
-    b = bands(ph, mesh2D..., mapping = (x, k) -> ftuple(x, ;k = k), showprogress = false)
+    b = bands(ph, mesh2D..., mapping = (x, k) -> ftuple(x; k = k), showprogress = false)
     @test nsubbands(b)  == 4
     b = bands(ph, mesh2D..., mapping = (k, φ) -> ftuple(1; k = k, p = SA[1, φ]), showprogress = false)
     @test nsubbands(b)  == 1
@@ -90,6 +94,8 @@ end
         @test length(sp´[1]) == 2
         @test size(sp´[2]) == (Quantica.flatsize(h), 2)
     end
+    @test sp[around = 0] isa Tuple
+    @test sp[2, around = 0] isa Tuple
     @test sp[[2,3,4], around = 0] == sp[2:4, around = 0]
     @test sp[[2,3,4], around = 0] !== sp[2:4, around = 0]
     @test sp[[2,4,3], around = -Inf][2] == hcat(sp[2][2], sp[4][2], sp[3][2])
@@ -102,10 +108,11 @@ end
     @test length(b[(pi,)]) == length(b[(pi, :)]) == length(b[(pi, :, :)]) == 1
     s = spectrum(b, (pi, pi))
     s´ = spectrum(wrap(h, (pi, pi)))
+    s´´ = spectrum(h, (pi, pi))
     ϵs, ψs = ES.LinearAlgebra()(Matrix(h((pi, pi))))
     @test s isa Quantica.Spectrum
-    @test Tuple(s) == Tuple(s´) == (ϵs, ψs)
-    @test s[1:10, around = 0] == s´[1:10, around = 0]
+    @test Tuple(s) == Tuple(s´) == Tuple(s´´) == (ϵs, ψs)
+    @test s[1:10, around = 0] == s´[1:10, around = 0] == s´´[1:10, around = 0]
 end
 
 # @testset "unflatten" begin
