@@ -43,10 +43,10 @@ function twisted_bilayer_graphene(;
     htop = hamiltonian(lattop, modelintra; kw...) |> supercell(sctop)
     hbot = hamiltonian(latbot, modelintra; kw...) |> supercell(scbot)
     let R = SA[cos(θ/2) -sin(θ/2) 0; sin(θ/2) cos(θ/2) 0; 0 0 1]
-        transform!(htop, r -> R * r)
+        Quantica.transform!(htop, r -> R * r)
     end
     let R = SA[cos(θ/2) sin(θ/2) 0; -sin(θ/2) cos(θ/2) 0; 0 0 1]
-        transform!(hbot, r -> R * r)
+        Quantica.transform!(hbot, r -> R * r)
     end
     modelinter = hopping((r,dr) -> (
         I * hopintra * exp(-3*(norm(dr)/a0 - 1))  *  dot(dr, SVector(1,1,0))^2/sum(abs2, dr) -

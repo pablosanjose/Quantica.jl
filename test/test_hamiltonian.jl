@@ -310,7 +310,7 @@ end
     @test hamiltonian(lat, hopping(1, range = (neighbors(20), neighbors(21)))) |> nhoppings == 30
 end
 
-@testset "transform! hamiltonians" begin
+@testset "hamiltonians transform" begin
     h = LP.honeycomb(dim = 3) |> hamiltonian(hopping(1))
     h1 = copy(h)
     h2 = transform!(h1, r -> SA[1 2 0; 2 3 0; 0 0 1] * r + SA[0,0,1])
@@ -320,9 +320,9 @@ end
     @test h((1,2)) == h3((1,2))
 end
 
-@testset "combine hamiltonians" begin
+@testset "hamiltonians combine" begin
     h1 = LP.square(dim = Val(3)) |> hamiltonian(hopping(1))
-    h2 = transform!(copy(h1), r -> r + SA[0,0,1])
+    h2 = transform(h1, r -> r + SA[0,0,1])
     h = combine(h1, h2; coupling = hopping((r,dr) -> exp(-norm(dr)), range = √2))
     @test Quantica.coordination(h) == 9
     h0 = LP.honeycomb(dim = Val(3), names = (:A, :B)) |> hamiltonian(hopping(1))
