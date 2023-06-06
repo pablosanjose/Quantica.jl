@@ -23,7 +23,7 @@
 
 module GreenSolvers
 
-using Quantica: Quantica, AbstractGreenSolver, ensureloaded
+using Quantica: Quantica, AbstractGreenSolver, ensureloaded, I
 
 struct SparseLU <:AbstractGreenSolver end
 
