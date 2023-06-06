@@ -88,7 +88,7 @@ end
 
 @testset "spectrum" begin
     h = LatticePresets.honeycomb() |> hamiltonian(onsite(2I) + hopping(I, range = 1), orbitals = (Val(2), Val(1))) |> supercell(2) |> supercell
-    for solver in (ES.LinearAlgebra(), ES.Arpack(), ES.KrylovKit(), ES.ArnoldiMethod(), ES.ShiftInvert(ES.ArnoldiMethod(), 0))
+    for solver in (ES.LinearAlgebra(), ES.Arpack(), ES.KrylovKit(), ES.ArnoldiMethod(), ES.ShiftInvert(ES.ArnoldiMethod(), 0.4))
         sp = spectrum(h; solver)
         e1, s1 = sp
         e2, s2 = first(sp), last(sp)
