@@ -475,6 +475,8 @@ ParametricHoppingTerm(t::ParametricHoppingTerm, os::HopSelector) =
 
 #region ## API ##
 
+(f::ParametricFunction)(args...; kw...) = f.f(args...; kw...)
+
 nonparametric(m::TightbindingModel) = m
 nonparametric(m::ParametricModel) = m.npmodel
 
@@ -550,8 +552,8 @@ Base.:*(x::Number, o::ParametricOnsiteTerm) =
 Base.:*(x::Number, t::ParametricHoppingTerm) =
     ParametricHoppingTerm(t.f, t.selector, x * t.coefficient)
 
-Base.adjoint(m::TightbindingModel) = TightbindingModel(adjoint.(terms(m)))
-Base.adjoint(m::ParametricModel) = ParametricModel(adjoint.(terms(m)))
+Base.adjoint(m::TightbindingModel) = TightbindingModel(adjoint.(terms(m))...)
+Base.adjoint(m::ParametricModel) = ParametricModel(adjoint.(terms(m))...)
 Base.adjoint(t::OnsiteTerm{<:Function}) = OnsiteTerm(r -> t.f(r)', t.selector, t.coefficient')
 Base.adjoint(t::OnsiteTerm) = OnsiteTerm(t.f', t.selector, t.coefficient')
 Base.adjoint(t::HoppingTerm{<:Function}) = HoppingTerm((r, dr) -> t.f(r, -dr)', t.selector', t.coefficient')
