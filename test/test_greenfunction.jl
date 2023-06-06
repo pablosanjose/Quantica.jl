@@ -88,7 +88,7 @@ end
     end
 end
 
-function testobs(g0)
+function testnormal(g0)
     G1 = conductance(g0[1])
     G2 = conductance(g0[2])
     G12 = conductance(g0[1,2])
@@ -106,6 +106,13 @@ function testobs(g0)
     end
 end
 
+function testjosephson(g0)
+    J1 = josephson(g0[1], 4; phases = subdiv(0, pi, 10))
+    J2 = josephson(g0[2], 4; phases = subdiv(0, pi, 10))
+    @test all(>=(0), Quantica.chop.(J1()))
+    @test all(((j1, j2) -> ≈(j1, j2, atol = 0.000001)).(J1(), J2()))
+end
+
 @testset "greenfunction observables" begin
     g1 = LP.square() |> hamiltonian(@hopping((r, dr; B = 0.1) -> I * cis(B * dr' * SA[r[2],-r[1]])), orbitals = 1) |> supercell((1,0), region = r->-2<r[2]<2) |> greenfunction(GS.Schur(boundary = 0));
     g2 = LP.square() |> hamiltonian(@hopping((r, dr; B = 0.1) -> I * cis(B * dr' * SA[r[2],-r[1]])), orbitals = 2) |> supercell((1,0), region = r->-2<r[2]<2) |> greenfunction(GS.Schur(boundary = 0));
@@ -118,12 +125,16 @@ end
     contact1 = r -> r[1] ≈ 5 && -1 <= r[2] <= 1
     contact2 = r -> r[2] ≈ 5 && -1 <= r[1] <= 1
     g0 = LP.square() |> hamiltonian(hopping(1)) |> supercell(region = RP.square(10)) |> attach(glead, reverse = true; region = contact2) |> attach(glead; transform = r->SA[0 1; 1 0] * r, region = contact1) |> greenfunction;
-    testobs(g0)
+    testnormal(g0)
 
     glead = LP.square() |> hamiltonian(hopping(1)) |> supercell((1,0), region = r -> -1 <= r[2] <= 1) |> greenfunction(GS.Schur(boundary = 0));
     contact1 = r -> r[1] ≈ 5 && -1 <= r[2] <= 1
     contact2 = r -> r[1] ≈ -5 && -1 <= r[2] <= 1
     g0 = LP.square() |> hamiltonian(hopping(1)) |> supercell(region = RP.square(10)) |> attach(glead, reverse = true; region = contact2) |> attach(glead; region = contact1) |> greenfunction;
-    testobs(g0)
+    testnormal(g0)
+
+    glead = LP.square() |> hamiltonian(hopping(I) + onsite(SA[0 1; 1 0]), orbitals = 2) |> supercell((1,0), region = r -> -1 <= r[2] <= 1) |> greenfunction(GS.Schur(boundary = 0));
+    g0 = LP.square() |> hamiltonian(hopping(I), orbitals = 2) |> supercell(region = RP.square(10)) |> attach(glead, reverse = true; region = contact2) |> attach(glead; region = contact1) |> greenfunction;
+    testjosephson(g0)
 end
 
