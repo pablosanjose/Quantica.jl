@@ -37,7 +37,6 @@ end
 function SelfEnergy(hparent::AbstractHamiltonian, gslice::GreenSlice, model::AbstractModel; sites...)
     slicerows(gslice) === slicecols(gslice) ||
         argerror("To attach a Greenfunction with `attach(h, g[cols, rows], coupling; ...)`, we must have `cols == rows`")
-
     lsbath = latslice(parent(gslice), slicerows(gslice))
     lat0bath = lattice0D(lsbath)
     lsparent = getindex(lattice(hparent); sites...)

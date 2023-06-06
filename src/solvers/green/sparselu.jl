@@ -32,6 +32,9 @@ SparseLUSlicer(fact::Factorization{C}, nonextrng, unitcinds, unitcindsall, sourc
 inverse_green(s::AppliedSparseLUGreenSolver) = s.invgreen
 
 unitcellinds_contacts(s::SparseLUSlicer) = s.unitcinds
+unitcellinds_contacts(s::SparseLUSlicer, i::Integer) =
+    1 <= i <= length(s.unitcinds) ? s.unitcinds[i] :
+        argerror("Cannot access contact $i, there are $(length(s.unitcinds)) contacts")
 unitcellinds_contacts_merged(s::SparseLUSlicer) = s.unitcindsall
 
 minimal_callsafe_copy(s::AppliedSparseLUGreenSolver) =
@@ -86,8 +89,8 @@ end
 #region
 
 function Base.view(s::SparseLUSlicer, i::Integer, j::Integer)
-    dstinds = s.unitcinds[i]
-    srcinds = s.unitcinds[j]
+    dstinds = unitcellinds_contacts(s, i)
+    srcinds = unitcellinds_contacts(s, j)
     source = view(s.source, :, 1:length(srcinds))
     return compute_or_retrieve_green(s, dstinds, srcinds, source)
 end

@@ -448,11 +448,17 @@ function inverse_green_mat(blocks, hdim, contacts)
     unitcindsall = unique!(sort!(reduce(vcat, unitcinds)))
     checkcontactindices(unitcindsall, hdim)
     solvers = solver.(Σs)
-    blocks´ = selfenergyblocks(extoffset, unitcinds, 1, blocks, solvers...)
+    Σblocks = selfenergyblocks(extoffset, unitcinds, 1, (), solvers...)
+    g⁻¹blocks = maybe_switch_sign.(Σblocks)
+    blocks´ = (blocks..., g⁻¹blocks...)
     # we need to flatten extended blocks, that come as NTuple{3}'s
     mat = BlockSparseMatrix(tupleflatten(blocks´...)...)
     return mat, unitcinds, unitcindsall
 end
+
+# matrix blocks of g⁻¹ have negative signs for Σreg, positive for Σext = (V', g⁻¹´, V)
+maybe_switch_sign(Σ::MatrixBlock) = -Σ
+maybe_switch_sign(Vg⁻¹V::NTuple{3,MatrixBlock}) = Vg⁻¹V
 
 checkcontactindices(allcontactinds, hdim) = maximum(allcontactinds) <= hdim ||
     internalerror("InverseGreenBlockSparse: unexpected contact indices beyond Hamiltonian dimension")

@@ -25,7 +25,7 @@ default_green_solver(::AbstractHamiltonian1D) = GS.Schur()
 # GreenFuntion call! API
 #region
 
-## TODO: test copy(g) for aliasing problems
+## TODO: test copy(g) for potential aliasing problems
 (g::GreenFunction)(; params...) = minimal_callsafe_copy(call!(g; params...))
 (g::GreenFunction)(ω; params...) = minimal_callsafe_copy(call!(g, ω; params...))
 (g::GreenSlice)(; params...) = minimal_callsafe_copy(call!(g; params...))
@@ -80,8 +80,10 @@ call!_output(c::Contacts) = selfenergyblocks(c)
 
 Base.getindex(g::GreenFunction, i, j = i) = GreenSlice(g, i, j)
 Base.getindex(g::GreenFunction; kw...) = g[siteselector(; kw...)]
+Base.getindex(g::GreenFunction, kw::NamedTuple) = g[siteselector(; kw...)]
 
 Base.getindex(g::GreenSolution; kw...) = g[getindex(lattice(g); kw...)]
+Base.getindex(g::GreenSolution, kw::NamedTuple) = g[getindex(lattice(g); kw...)]
 
 Base.view(g::GreenSolution, i::Integer, j::Integer = i) = view(slicer(g), i, j)
 Base.view(g::GreenSolution, i::Colon, j::Colon = i) = view(slicer(g), i, j)
@@ -225,7 +227,7 @@ selfenergyblocks(extoffset, contactinds, ci, blocks) = blocks
 function selfenergyblocks(extoffset, contactinds, ci, blocks, s::RegularSelfEnergySolver, ss...)
     c = contactinds[ci]
     Σblock = MatrixBlock(call!_output(s), c, c)
-    return selfenergyblocks(extoffset, contactinds, ci + 1, (blocks..., -Σblock), ss...)
+    return selfenergyblocks(extoffset, contactinds, ci + 1, (blocks..., Σblock), ss...)
 end
 
 function selfenergyblocks(extoffset, contactinds, ci, blocks, s::ExtendedSelfEnergySolver, ss...)
@@ -427,11 +429,11 @@ end
 # rewrites g0contacts
 function t_g_matrices!(g0contacts::AbstractMatrix{C}, blockstruct, Σblocks::MatrixBlock...) where {C}
     os = orbslice(blockstruct)
-    nreg = norbs(os)                                            # number of regular orbitals
-    n = max(nreg, maxrows(Σblocks), maxcols(Σblocks))           # includes extended orbitals
+    nreg = norbs(os)                                         # number of regular orbitals
+    n = max(nreg, maxrows(Σblocks), maxcols(Σblocks))        # includes extended orbitals
     Σmatext = Matrix{C}(undef, n, n)
     Σbm = BlockMatrix(Σmatext, Σblocks)
-    update!(Σbm)                                                # updates Σmat with Σblocks
+    update!(Σbm)                                             # updates Σmat with Σblocks
     Σmatᵣᵣ = view(Σmatext, 1:nreg, 1:nreg)
     Σmatₑᵣ = view(Σmatext, nreg+1:n, 1:nreg)
     Σmatᵣₑ = view(Σmatext, 1:nreg, nreg+1:n)
@@ -440,10 +442,10 @@ function t_g_matrices!(g0contacts::AbstractMatrix{C}, blockstruct, Σblocks::Mat
     Σmat´ = ldiv!(lu!(Σmatₑₑ), Σmatₑᵣ)
     mul!(Σmat, Σmatᵣₑ, Σmat´, 1, 1)                  # Σmat = Σmatᵣᵣ + ΣmatᵣₑΣmatₑₑ⁻¹ Σmatₑᵣ
     den = Matrix{C}(I, nreg, nreg)
-    mul!(den, Σmat, g0contacts, -1, 1)                          # den = 1-Σ*g0
+    mul!(den, Σmat, g0contacts, -1, 1)                       # den = 1-Σ*g0
     luden = lu!(den)
-    tmatrix = ldiv!(luden, Σmat)                                # tmatrix = (1 - Σ*g0)⁻¹Σ
-    gcontacts = rdiv!(g0contacts, luden)
+    tmatrix = ldiv!(luden, Σmat)                             # tmatrix = (1 - Σ*g0)⁻¹Σ
+    gcontacts = rdiv!(g0contacts, luden)                     # gcontacts = g0 * (1 - Σ*g0)⁻¹
     return tmatrix, gcontacts
 end
 

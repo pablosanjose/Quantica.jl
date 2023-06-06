@@ -20,7 +20,7 @@ function SelfEnergyModelSolver(h::AbstractHamiltonian, model::AbstractModel, lat
     # this is a 0D ParametricHamiltonian to build the Σ(ω) as a view over flat(ph(; ...))
     ph = hamiltonian(lat0, modelω; orbitals = norbitals(h))
     # this build siteoffsets for all h orbitals over latslice
-    cbs = contact_blockstructure(h, latslice)
+    cbs, _ = contact_blockstructure_latslice(h, latslice)
     # translation from lat0 to latslice orbital indices
     # i.e. orbital index on latslice for each orbital in lat0 (this is just a reordering!)
     parentinds = contact_sites_to_orbitals(siteinds, cbs)
@@ -47,6 +47,9 @@ end
 
 call!_output(s::SelfEnergyModelSolver) =
     view(call!_output(s.ph), s.parentinds, s.parentinds)
+
+minimal_callsafe_copy(s::SelfEnergyModelSolver) =
+    SelfEnergyModelSolver(minimal_callsafe_copy(s.ph), s.parentinds)
 
 #endregion
 

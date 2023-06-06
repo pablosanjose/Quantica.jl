@@ -1349,11 +1349,12 @@ Curried form equivalent to `greenfunction(h, solver)`.
 this may avoid repeating calculations unnecesarily when sweeping over either of these with
 the other fixed.
 
-    g[sites...]
-    g[siteselector(; sites...)]
+    g[ss]
+    g[siteselector(; ss...)]
 
 Build a `gs::GreenSlice` that represents a Green function at arbitrary energy and parameter
-values, but at specific sites on the lattice defined by `siteselector(; sites...)`
+values, but at specific sites on the lattice defined by `siteselector(; ss...)`, with
+`ss::NamedTuple` (see `siteselector`).
 
     g[contact_index::Integer]
 
@@ -1408,10 +1409,12 @@ GreenFunction{Float64,2,0}: Green function of a Hamiltonian{Float64,2,0}
 julia> gω = g(0.1; t = 2)
 GreenSolution{Float64,2,0}: Green function at arbitrary positions, but at a fixed energy
 
-julia> gs = g[region = RP.circle(2), sublats = :B]
+julia> ss = (; region = RP.circle(2), sublats = :B);
+
+julia> gs = g[ss]
 GreenSlice{Float64,2,0}: Green function at arbitrary energy, but at a fixed lattice positions
 
-julia> gω[region = RP.circle(2), sublats = :B] == gs(0.1; t = 2)
+julia> gω[ss] == gs(0.1; t = 2)
 true
 ```
 
@@ -1426,7 +1429,7 @@ greenfunction
 solvers. The alias `GS` can be used in place of `GS`. Currently supported solvers and their
 possible keyword arguments are
 
-- `GS.SparseLU()` : Direct inversion solver for 0D Hamiltonians using a `SparseArrays.lu(hmat; kw...)` factorization
+- `GS.SparseLU()` : Direct inversion solver for 0D Hamiltonians using a `SparseArrays.lu(hmat)` factorization
 - `GS.Schur(; boundary = Inf)` : Solver for 1D Hamiltonians based on a deflated, generalized Schur factorization
     - `boundary` : 1D cell index of a boundary cell, or `Inf` for no boundaries. Equivalent to removing that specific cell from the lattice when computing the Green function.
 - `GS.KPM(; order = 100, bandrange = missing)` : Kernel polynomial method solver for 0D Hamiltonians

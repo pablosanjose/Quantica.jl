@@ -1633,6 +1633,8 @@ selfenergies(oh::OpenHamiltonian) = oh.selfenergies
 
 hamiltonian(oh::OpenHamiltonian) = oh.h
 
+zerocell(h::OpenHamiltonian) = zerocell(parent(h))
+
 attach(Σ::SelfEnergy) = oh -> attach(oh, Σ)
 attach(args...; kw...) = oh -> attach(oh, args...; kw...)
 attach(oh::OpenHamiltonian, args...; kw...) = attach(oh, SelfEnergy(oh.h, args...; kw...))
@@ -1647,6 +1649,8 @@ minimal_callsafe_copy(oh::OpenHamiltonian) =
     OpenHamiltonian(minimal_callsafe_copy(oh.h), minimal_callsafe_copy.(oh.selfenergies))
 
 Base.size(h::OpenHamiltonian, i...) = size(h.h, i...)
+
+Base.parent(h::OpenHamiltonian) = h.h
 
 #endregion
 #endregion
