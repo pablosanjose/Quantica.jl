@@ -456,7 +456,7 @@ end
 Base.view(s::TMatrixSlicer, i::Integer, j::Integer) =
     view(s.gcontacts, contactinds(s.blockstruct, i), contactinds(s.blockstruct, j))
 
-Base.view(s::TMatrixSlicer, ::Colon, ::Colon) = s.gcontacts
+Base.view(s::TMatrixSlicer, ::Colon, ::Colon) = view(s.gcontacts, :, :)
 
 function Base.getindex(s::TMatrixSlicer, i::CellOrbitals, j::CellOrbitals)
     g0 = s.g0slicer

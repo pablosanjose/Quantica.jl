@@ -60,6 +60,7 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurEmpty
     leadorbs = contact_sites_to_orbitals(leadsites, leadcbs)
     # translate glead unitcell by displacement, so it overlaps sel sites (modulo transform)
     hlead = copy_lattice(parent(glead))
+    transform === missing || Quantica.transform!(hlead, transform)
     translate!(hlead, displacement)
     solver´ = SelfEnergySchurSolver(fsolver, hlead, reverse, leadorbs)
     plottables = (hlead, reverse)
