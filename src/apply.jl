@@ -52,9 +52,10 @@ sanitize_cells(cell::AbstractVector{<:Number}, ::Val{L}) where {L} =
     (sanitize_SVector(SVector{L,Int}, cell),)
 sanitize_cells(cell::Union{NTuple{L,<:Number},SVector{L,<:Number}}, ::Val{L}) where {L} =
     (sanitize_SVector(SVector{L,Int}, cell),)
+sanitize_cells(::Missing, ::Val{L}) where {L} = missing
+sanitize_cells(f::Function, ::Val{L}) where {L} = f
 sanitize_cells(cells, ::Val{L}) where {L} =
     sanitize_SVector.(SVector{L,Int}, cells)
-sanitize_cells(::Missing, ::Val{L}) where {L} = missing
 
 applyrange(r::Neighbors, lat) = nrange(Int(r), lat)
 applyrange(r::Real, lat) = r

@@ -45,17 +45,7 @@ function KPM(; order = 100, bandrange = missing, padfactor = 1.01)
     return KPM(order, bandrange, padfactor)
 end
 
-
-function bandrange_arnoldi(h::AbstractMatrix{T}) where {T}
-    # ensureloaded(:ArnoldiMethod)
-    R = real(T)
-    decompl, _ = Quantica.ArnoldiMethod.partialschur(h, nev=1, tol=1e-4, which = Main.ArnoldiMethod.LR());
-    decomps, _ = Quantica.ArnoldiMethod.partialschur(h, nev=1, tol=1e-4, which = Main.ArnoldiMethod.SR());
-    ϵmax = R(real(decompl.eigenvalues[1]))
-    ϵmin = R(real(decomps.eigenvalues[1]))
-    return (ϵmin, ϵmax)
-end
-
+# Used in kpm.jl
 function bandrange_arpack(h::AbstractMatrix{T}) where {T}
     R = real(T)
     ϵL, _ = Quantica.Arpack.eigs(h, nev=1, tol=1e-4, which = :LR);
@@ -64,6 +54,17 @@ function bandrange_arpack(h::AbstractMatrix{T}) where {T}
     ϵmin = R(real(ϵR[1]))
     return (ϵmin, ϵmax)
 end
+
+## Alternative bandrange, requires ensureloaded(:ArnoldiMethod) in KPM constructor
+# function bandrange_arnoldi(h::AbstractMatrix{T}) where {T}
+#     # ensureloaded(:ArnoldiMethod)
+#     R = real(T)
+#     decompl, _ = Quantica.ArnoldiMethod.partialschur(h, nev=1, tol=1e-4, which = Main.ArnoldiMethod.LR());
+#     decomps, _ = Quantica.ArnoldiMethod.partialschur(h, nev=1, tol=1e-4, which = Main.ArnoldiMethod.SR());
+#     ϵmax = R(real(decompl.eigenvalues[1]))
+#     ϵmin = R(real(decomps.eigenvalues[1]))
+#     return (ϵmin, ϵmax)
+# end
 
 end # module
 

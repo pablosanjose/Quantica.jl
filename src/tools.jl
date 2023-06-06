@@ -30,7 +30,7 @@ padtuple(t, x, N) = ntuple(i -> i <= length(t) ? t[i] : x, N)
 
 @noinline function_not_defined(name) = argerror("Function $name not defined for the requested types")
 
-unitvector(i, ::Type{NTuple{L,T}}) where {L,T} =
+unitvector(i, ::Type{SVector{L,T}}) where {L,T} =
     SVector(ntuple(j -> j == i ? one(T) : zero(T), Val(L)))
 
 function boundingbox(positions)

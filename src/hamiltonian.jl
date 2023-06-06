@@ -421,7 +421,8 @@ call!_output(p::ParametricHamiltonian) = call!_output(hamiltonian(p))
 #region
 
 
-Base.getindex(h::AbstractHamiltonian, dn) = flat(h[hybrid(dn)])
+Base.getindex(h::AbstractHamiltonian, dn::Union{Tuple,Integer,SVector,AbstractVector}) =
+    flat(h[hybrid(dn)])
 
 Base.getindex(h::AbstractHamiltonian, dn::UnflatInds) = unflat(h[hybrid(parent(dn))])
 

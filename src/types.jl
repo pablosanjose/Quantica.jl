@@ -1633,6 +1633,8 @@ selfenergies(oh::OpenHamiltonian) = oh.selfenergies
 
 hamiltonian(oh::OpenHamiltonian) = oh.h
 
+lattice(oh::OpenHamiltonian) = lattice(oh.h)
+
 zerocell(h::OpenHamiltonian) = zerocell(parent(h))
 
 attach(Σ::SelfEnergy) = oh -> attach(oh, Σ)
@@ -1648,9 +1650,9 @@ SelfEnergy(h::AbstractHamiltonian, args...; kw...) = argerror("Unknown attach/Se
 minimal_callsafe_copy(oh::OpenHamiltonian) =
     OpenHamiltonian(minimal_callsafe_copy(oh.h), minimal_callsafe_copy.(oh.selfenergies))
 
-Base.size(h::OpenHamiltonian, i...) = size(h.h, i...)
+Base.size(oh::OpenHamiltonian, i...) = size(oh.h, i...)
 
-Base.parent(h::OpenHamiltonian) = h.h
+Base.parent(oh::OpenHamiltonian) = oh.h
 
 #endregion
 #endregion

@@ -88,22 +88,24 @@ end
 
 @testset "spectrum" begin
     h = LatticePresets.honeycomb() |> hamiltonian(onsite(2I) + hopping(I, range = 1), orbitals = (Val(2), Val(1))) |> supercell(2) |> supercell
-    sp = spectrum(h)
-    e1, s1 = sp
-    e2, s2 = first(sp), last(sp)
-    e3, s3 = energies(sp), states(sp)
-    @test e1 === e2 === e3
-    @test s1 === s2 === s3
-    @test Tuple(sp) === (e1, s1)
-    for sp´ in (sp[[3,5]], sp[1:2], sp[[2,3], around = 0])
-        @test length(sp´[1]) == 2
-        @test size(sp´[2]) == (Quantica.flatsize(h), 2)
+    for solver in (ES.LinearAlgebra(), ES.Arpack(), ES.KrylovKit(), ES.ArnoldiMethod(), ES.ShiftInvert(ES.ArnoldiMethod(), 0))
+        sp = spectrum(h; solver)
+        e1, s1 = sp
+        e2, s2 = first(sp), last(sp)
+        e3, s3 = energies(sp), states(sp)
+        @test e1 === e2 === e3
+        @test s1 === s2 === s3
+        @test Tuple(sp) === (e1, s1)
+        for sp´ in (sp[[3,5]], sp[1:2], sp[[2,3], around = 0])
+            @test length(sp´[1]) == 2
+            @test size(sp´[2]) == (Quantica.flatsize(h), 2)
+        end
+        @test sp[around = 0] isa Tuple
+        @test sp[2, around = 0] isa Tuple
+        @test sp[[2,3,4], around = 0] == sp[2:4, around = 0]
+        @test sp[[2,3,4], around = 0] !== sp[2:4, around = 0]
+        @test sp[[2,4,3], around = -Inf][2] == hcat(sp[2][2], sp[4][2], sp[3][2])
     end
-    @test sp[around = 0] isa Tuple
-    @test sp[2, around = 0] isa Tuple
-    @test sp[[2,3,4], around = 0] == sp[2:4, around = 0]
-    @test sp[[2,3,4], around = 0] !== sp[2:4, around = 0]
-    @test sp[[2,4,3], around = -Inf][2] == hcat(sp[2][2], sp[4][2], sp[3][2])
 end
 
 @testset "bandstructures/spectrum slices" begin

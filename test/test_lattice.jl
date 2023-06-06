@@ -1,5 +1,4 @@
-using Quantica: Sublat, Lattice
-using Random
+using Quantica: Sublat, Lattice, transform!, translate!
 
 @testset "sublat input" begin
     sitelist = [(3,3), (3,3.), [3,3.], SA[3, 3], SA[3, 3f0], SA[3f0, 3.]]
@@ -81,7 +80,7 @@ end
     br = bravais_matrix(lat0)
     cell_1 = lat0 |>
         supercell(region = r -> -1.01/√3 <= r[1] <= 4/√3 && 0 <= r[2] <= 3.5)
-    cell_2 = transform!(copy(cell_1), r -> r + br * SA[2.2, -1])
+    cell_2 = translate(transform(cell_1, r -> r + br * SA[2.2, -1]), SA[1,2])
     cell_p = lattice(sublat(br * SA[1.6,0.73], br * SA[1.6,1.27]))
     cells = combine(cell_1, cell_2, cell_p)
     @test length.(sites.(Ref(cells), 1:5)) == [14, 14, 14, 14, 2]
@@ -135,4 +134,15 @@ end
     lat = supercell(LP.honeycomb(), region = RP.circle(5, (5,0)) | RP.circle(5, (15,0)) | RP.circle(5, (25,0)))
     lat´ = supercell(LP.honeycomb(), region = RP.circle(5, (5,0)))
     @test length(sites(lat)) == 3 * length(sites(lat´))
+end
+
+@testset "lattice slices" begin
+    lat = LP.honeycomb() |> supercell(2)
+    ls1 = lat[sublats = :B, region = RP.ellipse((10, 20), (0, 1/√3))]
+    ls2 = lat[sublats = :A, region = RP.ellipse((10, 20))]
+    @test length(ls1) == length(ls2)
+    ls = ls1[sublats = :B]
+    @test isempty(ls)
+    ls = lat[cells = n -> norm(n) < 4]
+    @test all(n -> norm(n) < 4, Quantica.cells(ls))
 end

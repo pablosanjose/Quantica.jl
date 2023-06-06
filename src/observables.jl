@@ -240,7 +240,7 @@ end
 sanitize_direction(dir, ::GreenSolution{<:Any,E}) where {E} = _sanitize_direction(dir, Val(E))
 sanitize_direction(dir, ::GreenFunction{<:Any,E}) where {E} = _sanitize_direction(dir, Val(E))
 _sanitize_direction(::Missing, ::Val) = missing
-_sanitize_direction(dir::Integer, ::Val{E}) where {E} = unitvector(dir, NTuple{E,Int})
+_sanitize_direction(dir::Integer, ::Val{E}) where {E} = unitvector(dir, SVector{E,Int})
 _sanitize_direction(dir::SVector{E}, ::Val{E}) where {E} = dir
 _sanitize_direction(dir::NTuple{E}, ::Val{E}) where {E} = SVector(dir)
 _sanitize_direction(_, ::Val{E}) where {E} =

@@ -56,7 +56,7 @@ function Base.getindex(latslice::LatticeSlice, as::AppliedSiteSelector)
     j = 0
     for subcell in subcells(latslice)
         dn = cell(subcell)
-        cs = CellSites(sinds, dn)
+        cs = CellSites(dn, sinds)
         for i in siteindices(subcell)
             j += 1
             r = site(lat, i, dn)

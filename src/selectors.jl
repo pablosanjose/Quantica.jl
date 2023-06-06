@@ -157,65 +157,68 @@ function inrange_targets(rsource, lat, si, rmax, kdtrees)
     return targetlist
 end
 
-function foreach_site(f, sel::AppliedSiteSelector, ls::LatticeSlice)
-    lat = parent(ls)
-    islice = 0
-    for scell in subcells(ls)
-        n = cell(scell)
-        for i in siteindices(scell)
-            r = site(lat, i, n)
-            islice += 1
-            if (i, r, n) in sel
-                f(i, r, n, islice)
-            end
-        end
-    end
-    return nothing
-end
 
-function foreach_hop(f, sel::AppliedHopSelector, ls::LatticeSlice, kdtree::KDTree)
-    lat = lattice(sel)
-    _, rmax = sel.range
-    found = false
-    isfiniterange = isfinite(rmax)
-    jslice = 0
-    for scellj in subcells(ls)
-        nj = cell(scellj)
-        for j in siteindices(scellj)
-            jslice += 1
-            rj = site(lat, j, nj)
-            if isfiniterange
-                targetlist = inrange(kdtree, rj, rmax)
-                for islice in targetlist
-                    ni, i = ls[islice]
-                    ri = site(lat, i, ni)
-                    r, dr = rdr(rj => ri)
-                    dcell = ni - nj
-                    if (j => i, (r, dr), dcell) in sel
-                        found = true
-                        f((i, j), (r, dr), (ni, nj), (islice, jslice))
-                    end
-                end
-            else
-                islice = 0
-                for scelli in subcells(ls)
-                    ni = cell(scelli)
-                    dcell = ni - nj
-                    for i in siteindices(scelli)
-                        islice += 1
-                        isonsite((j, i), dcell) && continue
-                        ri = site(lat, i, ni)
-                        r, dr = rdr(rj => ri)
-                        if (j => i, (r, dr), dcell) in sel
-                            found = true
-                            f((i, j), (r, dr), (ni, nj), (islice, jslice))
-                        end
-                    end
-                end
-            end
-        end
-    end
-    return found
-end
+## Unused
+# function foreach_site(f, sel::AppliedSiteSelector, ls::LatticeSlice)
+#     @show 1
+#     lat = parent(ls)
+#     islice = 0
+#     for scell in subcells(ls)
+#         n = cell(scell)
+#         for i in siteindices(scell)
+#             r = site(lat, i, n)
+#             islice += 1
+#             if (i, r, n) in sel
+#                 f(i, r, n, islice)
+#             end
+#         end
+#     end
+#     return nothing
+# end
+
+# function foreach_hop(f, sel::AppliedHopSelector, ls::LatticeSlice, kdtree::KDTree)
+#     lat = lattice(sel)
+#     _, rmax = sel.range
+#     found = false
+#     isfiniterange = isfinite(rmax)
+#     jslice = 0
+#     for scellj in subcells(ls)
+#         nj = cell(scellj)
+#         for j in siteindices(scellj)
+#             jslice += 1
+#             rj = site(lat, j, nj)
+#             if isfiniterange
+#                 targetlist = inrange(kdtree, rj, rmax)
+#                 for islice in targetlist
+#                     ni, i = ls[islice]
+#                     ri = site(lat, i, ni)
+#                     r, dr = rdr(rj => ri)
+#                     dcell = ni - nj
+#                     if (j => i, (r, dr), dcell) in sel
+#                         found = true
+#                         f((i, j), (r, dr), (ni, nj), (islice, jslice))
+#                     end
+#                 end
+#             else
+#                 islice = 0
+#                 for scelli in subcells(ls)
+#                     ni = cell(scelli)
+#                     dcell = ni - nj
+#                     for i in siteindices(scelli)
+#                         islice += 1
+#                         isonsite((j, i), dcell) && continue
+#                         ri = site(lat, i, ni)
+#                         r, dr = rdr(rj => ri)
+#                         if (j => i, (r, dr), dcell) in sel
+#                             found = true
+#                             f((i, j), (r, dr), (ni, nj), (islice, jslice))
+#                         end
+#                     end
+#                 end
+#             end
+#         end
+#     end
+#     return found
+# end
 
 #endregion

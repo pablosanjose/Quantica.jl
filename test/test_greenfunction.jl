@@ -6,13 +6,17 @@ function testgreen(h, s; kw...)
     @test g isa GreenFunction
     gω = g(ω; kw...)
     @test gω isa GreenSolution
-    for loc in (cellsites(zerocell(h), :), cellsites(zerocell(h), 2:3), cellsites(zerocell(h), 2))
-        gs = g[loc]
+    L = Quantica.latdim(lattice(h))
+    z = zero(SVector{L,Int})
+    o = Quantica.unitvector(1, SVector{L,Int})
+    locs = (cellsites(z, :), cellsites(z, 2:3), cellsites(z, 2), cellsites(o, :))
+    for loc in locs, loc´ in locs
+        gs = g[loc, loc´]
         @test gs isa GreenSlice
         gsω = gs(ω; kw...)
-        gωs = gω[loc]
+        gωs = gω[loc, loc´]
         @test gsω == gωs
-        @test all(x->imag(x)<0, diag(gωs))
+        loc === loc´ && @test all(x->imag(x)<0, diag(gωs))
     end
     return nothing
 end
@@ -54,7 +58,6 @@ end
         end
     end
 end
-
 
 @testset "greenfunction KPM" begin
     g = HP.graphene(a0 = 1, t0 = 1, orbitals = (2,1)) |> supercell(region = RP.circle(20)) |>

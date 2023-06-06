@@ -20,9 +20,10 @@ using Quantica: Hamiltonian, ParametricHamiltonian, sites, nsites, nonsites, nho
     h = LatticePresets.square() |> supercell(region = RegionPresets.rectangle((5,6))) |>
         hamiltonian(hopping(1, range = Inf))
     @test Quantica.nhoppings(h) == 1190
-    h = LatticePresets.square() |> hamiltonian(hopping(1, dcells = (10,0), range = Inf))
+    h = LatticePresets.square() |> hamiltonian(hopping(1, dcells = (10,0), range = Inf)) |> transform(r -> SA[0 1; 2 0] * r)
     @test Quantica.nhoppings(h) == 1
     @test isassigned(h, (10,0))
+    @test bravais_matrix(h) == SA[0 1; 2 0]
     h = LatticePresets.honeycomb() |> hamiltonian(onsite(1.0, sublats = :A) + hopping(I, range = 2/√3), orbitals = (Val(1), Val(2)))
     @test Quantica.nonsites(h) == 1
     @test Quantica.nhoppings(h) == 24
