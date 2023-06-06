@@ -66,6 +66,7 @@ end
     for ω in -3:0.1:3
         @test all(>=(0), ρs(ω))
     end
+
     ω = -0.1
     gωs = g[1](ω)
     ρflat = -imag.(diag(gωs))/pi
@@ -73,6 +74,7 @@ end
     ρ = ρs(ω)
     @test sum(ρ) ≈ sum(ρflat)
     @test (length(ρflat), length(ρ)) == (9, 6)
+
     g = HP.graphene(a0 = 1, t0 = 1, orbitals = (2,1)) |> supercell(region = RP.circle(20)) |>
         attach(nothing, region = RP.circle(1)) |> greenfunction(GS.KPM(order = 500))
     gωs = g[1](ω)
@@ -82,6 +84,7 @@ end
     @test all(<(0.01), abs.(ρflat .- ρflat´))
     @test_throws ArgumentError g[cellsites((), 3:4)](ω)
     @test g[:](ω) == g[1](ω) == g(ω)[1] == g(ω)[:]
+
     g´ = HP.graphene(a0 = 1, t0 = 1, orbitals = (2,1)) |> supercell(region = RP.circle(20)) |>
         attach(g[1], hopping((r, dr) -> I, range = 1), region = RP.circle(1)) |> attach(nothing, region = RP.circle(1, (2,2))) |>
         greenfunction(GS.KPM(order = 500))
@@ -89,23 +92,31 @@ end
     for ω in -3:0.1:3
         @test all(>=(0), ρs(ω))
     end
+
+    h = HP.graphene(a0 = 1) |> supercell(region = RP.circle(20))
+    hmat = h[()]
+    g = h |> attach(nothing, region = RP.circle(1)) |> greenfunction(GS.KPM(order = 500, kernel = hmat))
+    ρs = ldos(g[1])
+    for ω in subdiv(-3, 3, 20)
+        @test all(x -> sign(x) == sign(ω), ρs(ω))
+    end
 end
 
-function testnormal(g0)
-    G1 = conductance(g0[1])
-    G2 = conductance(g0[2])
-    G12 = conductance(g0[1,2])
+function testcond(g0; nambu = false)
+    G1 = conductance(g0[1]; nambu)
+    G2 = conductance(g0[2]; nambu)
+    G12 = conductance(g0[1,2]; nambu)
     T12 = transmission(g0[1,2])
     @test_throws ArgumentError transmission(g0[1])
     @test_throws ArgumentError transmission(g0[1, 1])
     for ω in -3:0.1:3
         ωc = ω + im*1e-10
-        @test 3.00000001 >= G1(ωc) >= 0
+        @test ifelse(nambu, 6.000001, 3.00000001) >= G1(ωc) >= 0
         @test G1(ωc) ≈ G1(-ωc) ≈ G2(ωc) ≈ G2(-ωc)
         @test T12(ωc) ≈ T12(-ωc)
-        @test G1(ωc) ≈ T12(ωc) atol = 0.000001
-        @test G12(ωc) ≈ G12(-ωc)
-        @test G1(ωc) ≈ -G12(ωc) atol = 0.000001
+        nambu || @test G1(ωc) ≈ T12(ωc) atol = 0.000001
+        @test G12(ωc) ≈ G12(-ωc) atol = 0.000001
+        nambu || @test G1(ωc) ≈ -G12(ωc) atol = 0.000001
     end
 end
 
@@ -128,16 +139,17 @@ end
     contact1 = r -> r[1] ≈ 5 && -1 <= r[2] <= 1
     contact2 = r -> r[2] ≈ 5 && -1 <= r[1] <= 1
     g0 = LP.square() |> hamiltonian(hopping(1)) |> supercell(region = RP.square(10)) |> attach(glead, reverse = true; region = contact2) |> attach(glead; transform = r->SA[0 1; 1 0] * r, region = contact1) |> greenfunction;
-    testnormal(g0)
+    testcond(g0)
 
     glead = LP.square() |> hamiltonian(hopping(1)) |> supercell((1,0), region = r -> -1 <= r[2] <= 1) |> greenfunction(GS.Schur(boundary = 0));
     contact1 = r -> r[1] ≈ 5 && -1 <= r[2] <= 1
     contact2 = r -> r[1] ≈ -5 && -1 <= r[2] <= 1
     g0 = LP.square() |> hamiltonian(hopping(1)) |> supercell(region = RP.square(10)) |> attach(glead, reverse = true; region = contact2) |> attach(glead; region = contact1) |> greenfunction;
-    testnormal(g0)
+    testcond(g0)
 
     glead = LP.square() |> hamiltonian(hopping(I) + onsite(SA[0 1; 1 0]), orbitals = 2) |> supercell((1,0), region = r -> -1 <= r[2] <= 1) |> greenfunction(GS.Schur(boundary = 0));
     g0 = LP.square() |> hamiltonian(hopping(I), orbitals = 2) |> supercell(region = RP.square(10)) |> attach(glead, reverse = true; region = contact2) |> attach(glead; region = contact1) |> greenfunction;
+    testcond(g0; nambu = true)
     testjosephson(g0)
 end
 

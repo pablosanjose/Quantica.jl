@@ -179,7 +179,7 @@ function apply(s::GS.KPM,  h::Hamiltonian{<:Any,<:Any,0}, cs::Contacts)
     hmat = h(())
     bandCH = band_ceter_halfwidth(hmat, s.bandrange, s.padfactor)
     ket = contact_basis(h, cs)
-    momenta = momentaKPM(hmat, ket, bandCH; order = s.order)
+    momenta = momentaKPM(hmat, ket, bandCH; order = s.order, kernel = s.kernel)
     return AppliedKPMGreenSolver(momenta, bandCH)
 end
 

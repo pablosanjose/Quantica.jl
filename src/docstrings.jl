@@ -1432,9 +1432,10 @@ possible keyword arguments are
 - `GS.SparseLU()` : Direct inversion solver for 0D Hamiltonians using a `SparseArrays.lu(hmat)` factorization
 - `GS.Schur(; boundary = Inf)` : Solver for 1D Hamiltonians based on a deflated, generalized Schur factorization
     - `boundary` : 1D cell index of a boundary cell, or `Inf` for no boundaries. Equivalent to removing that specific cell from the lattice when computing the Green function.
-- `GS.KPM(; order = 100, bandrange = missing)` : Kernel polynomial method solver for 0D Hamiltonians
-    - `order` : order of the Chebyshev expansion (lowest is zero)
+- `GS.KPM(; order = 100, bandrange = missing, kernel = I)` : Kernel polynomial method solver for 0D Hamiltonians
+    - `order` : order of the expansion in Chebyshev polynomials `Tₙ(h)` of the Hamiltonian `h` (lowest possible order is `n = 0`).
     - `bandrange` : a `(min_energy, max_energy)::Tuple` interval that encompasses the full band of the Hamiltonian. If `missing`, it is computed automatically.
+    - `kernel` : generalization that computes momenta as `μₙ = Tr[Tₙ(h)*kernel]`, so that the local density of states (see `ldos`) becomes the density of the `kernel` operator.
     - This solver does not allow arbitrary indexing of the resulting `g::GreenFunction`, only on contacts `g[contact_ind::Integer]`. If the system has none, we can add a dummy contact using `attach(h, nothing; sites...)`, see `attach`.
 
 ## TODO
@@ -1579,8 +1580,8 @@ evaluated object `G::Conductance` representing the zero-temperature, linear,
 differential conductance `Gᵢⱼ = dIᵢ/dVⱼ` between contacts `i` and `j` at arbitrary bias `ω =
 eV` in units of `e^2/h`. `Gᵢⱼ` is given by
 
-      ``Gᵢⱼ =  e^2/h × Tr{[im*δᵢⱼ(gʳ-gᵃ)Γⁱ-gʳΓⁱgᵃΓʲ]}``         (nambu = false)
-      ``Gᵢⱼ =  e^2/h × Tr{[im*δᵢⱼ(gʳ-gᵃ)Γⁱτₑ-gʳΓⁱτ₃gᵃΓʲτₑ]}``   (nambu = true)
+      Gᵢⱼ =  e^2/h × Tr{[im*δᵢⱼ(gʳ-gᵃ)Γⁱ-gʳΓⁱgᵃΓʲ]}         (nambu = false)
+      Gᵢⱼ =  e^2/h × Tr{[im*δᵢⱼ(gʳ-gᵃ)Γⁱτₑ-gʳΓⁱτ₃gᵃΓʲτₑ]}   (nambu = true)
 
 Here `gʳ = g(ω)` and `gᵃ = (gʳ)' = g(ω')` are the retarded and advanced Green function of
 the system, and `Γⁱ = im * (Σⁱ - Σⁱ')` is the decay rate at contact `i`. For Nambu systems
@@ -1626,12 +1627,9 @@ conductance
 
 Given a slice `gs = g[i::Integer, j::Integer]` of a `g::GreenFunction`, build a partially
 evaluated object `T::Transmission` representing the normal transmission probability `Tᵢⱼ(ω)`
-from contact `j` to `i` at energy `ω`. It can be written as
-
-    ``Tᵢⱼ = Tr{gʳΓⁱgᵃΓʲ}``
-
-Here `gʳ = g(ω)` and `gᵃ = (gʳ)' = g(ω')` are the retarded and advanced Green function of
-the system, and `Γⁱ = im * (Σⁱ - Σⁱ')` is the decay rate at contact `i`
+from contact `j` to `i` at energy `ω`. It can be written as ``Tᵢⱼ = Tr{gʳΓⁱgᵃΓʲ}``. Here `gʳ
+= g(ω)` and `gᵃ = (gʳ)' = g(ω')` are the retarded and advanced Green function of the system,
+and `Γⁱ = im * (Σⁱ - Σⁱ')` is the decay rate at contact `i`
 
 ## Full evaluation
 
