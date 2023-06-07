@@ -1,4 +1,4 @@
-using GLMakie
+using CairoMakie
 
 @testset "plot hamiltonian" begin
     h = LP.bcc() |> hamiltonian(hopping(1)) |> supercell(3) |> supercell((1,0,0))
