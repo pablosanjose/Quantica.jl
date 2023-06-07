@@ -1,6 +1,11 @@
 using Quantica: Sublat, Lattice, transform!, translate!
 
-@testset "sublat input" begin
+@testset "lattice internal API" begin
+    lat = LP.honeycomb()
+    @test length(Quantica.bravais_vectors(lat)) == 2
+end
+
+@testset "lattice sublats" begin
     sitelist = [(3,3), (3,3.), [3,3.], SA[3, 3], SA[3, 3f0], SA[3f0, 3.]]
     for site2 in sitelist, site1 in sitelist
         T = float(promote_type(typeof.(site1)..., typeof.(site2)...))
@@ -22,7 +27,7 @@ end
             @test_throws DimensionMismatch lattice(s; bravais = br, type = t, dim = e)
         else
             @test lattice(s; bravais = br, type = t, dim = Val(e)) isa Lattice{t,e,l}
-            @test lattice([s, s´]; bravais = br, type = t, dim = e) isa Lattice{t,e,l}
+            @test lattice([s, s´]; bravais = Matrix(br), type = t, dim = e) isa Lattice{t,e,l}
         end
         if l > 2
             @test_throws DimensionMismatch lattice(s; bravais = br, type = t)
