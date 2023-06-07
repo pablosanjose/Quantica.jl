@@ -19,7 +19,6 @@ Sublat{T,E}(s::Sublat, name = s.name) where {T<:AbstractFloat,E} =
 CellSites{L,V}(c::CellSites) where {L,V} =
     CellSites{L,V}(convert(SVector{L,Int}, cell(c)), convert(V, siteindices(c)))
 
-
 # We need this to promote different sublats into common dimensionality and type to combine
 # into a lattice
 Base.promote(ss::Sublat{T,E}...) where {T,E} = ss
