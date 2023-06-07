@@ -3,7 +3,7 @@
 #region
 
 # Marching Tetrahedra mesh
-function mesh(rngs::Vararg{<:Any,L}) where {L}
+function mesh(rngs::Vararg{Any,L}) where {L}
     vmat   = [SVector(pt) for pt in Iterators.product(rngs...)]
     verts  = vec(vmat)
     cinds  = CartesianIndices(vmat)
