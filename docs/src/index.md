@@ -6,7 +6,7 @@
 Pages = [
     "manual.md",
     "examples.md",
-    "reference.md",
+    "api.md",
 ]
 Depth = 1
 ```
@@ -14,17 +14,23 @@ Depth = 1
 ## Installation
 
 ```julia
-import Pkg; Pkg.add("Quantica")
+julia> import Pkg; Pkg.add("Quantica")
 ```
 
 Quantica.jl requires Julia v1.9 or later. Some of its functionality, notably plotting, will become available only after `using GLMakie`, or some other plotting package from the [Makie.jl](https://docs.makie.org/stable/) family. Install `GLMakie` with
 ```julia
-import Pkg; Pkg.add("GLMakie")
+julia> import Pkg; Pkg.add("GLMakie")
 ```
+
+Then, to begin using Quantica, just load it by doing
+```julia
+julia> using Quantica
+```
+(and possibly also e.g. `using GLMakie` if you need to plot Quantica objects).
 
 ## Asking questions, reporting bugs
 
-If you encounter problems, please read the manual and examples, your question is probably answered there. You can also check the docstring of each Quantica command within the Julia REPL, by entering the command preceded by a `?`, e.g. `?hamiltonian`.
+If you encounter problems, please read the manual and examples, your question is probably answered there. You can also check the docstring of each Quantica function within the Julia REPL, by entering the function preceded by a `?`, e.g. `?hamiltonian`.
 
 If you are still stuck, you may sometimes find me (`@pablosanjose`) at the [Julia Slack](https://julialang.slack.com) or [Julia Discourse](https://discourse.julialang.org).
 

@@ -104,7 +104,7 @@ sanitize_supercell(::Val{L}, n::Tuple{Int}) where {L} =
     SMatrix{L,L,Int}(first(n) * I)
 sanitize_supercell(::Val{L}, ns::NTuple{L,Int}) where {L} =
     SMatrix{L,L,Int}(Diagonal(SVector(ns)))
-sanitize_supercell(::Val{L}, s::Tuple{SMatrix{<:Any,L,Int}}) where {L} = only(s)
+sanitize_supercell(::Val{L}, s::Tuple{SMatrix{<:Any,<:Any,Int}}) where {L} = only(s)
 sanitize_supercell(::Val{L}, v) where {L} =
     throw(ArgumentError("Improper supercell specification $v for an $L lattice dimensions, see `supercell`"))
 
