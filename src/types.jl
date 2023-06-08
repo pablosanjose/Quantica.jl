@@ -466,14 +466,6 @@ ParametricModel(ts::AbstractParametricTerm...) = ParametricModel(TightbindingMod
 ParametricModel(m::TightbindingModel) = ParametricModel(m, ())
 ParametricModel(m::ParametricModel) = m
 
-OnsiteTerm(t::OnsiteTerm, os::SiteSelector) = OnsiteTerm(t.f, os, t.coefficient)
-ParametricOnsiteTerm(t::ParametricOnsiteTerm, os::SiteSelector) =
-    ParametricOnsiteTerm(t.f, os, t.coefficient)
-
-HoppingTerm(t::HoppingTerm, os::HopSelector) = HoppingTerm(t.f, os, t.coefficient)
-ParametricHoppingTerm(t::ParametricHoppingTerm, os::HopSelector) =
-    ParametricHoppingTerm(t.f, os, t.coefficient)
-
 #endregion
 
 #region ## API ##
@@ -637,12 +629,6 @@ Base.similar(m::A) where {A <: AppliedModifier} = A(m.blocktype, m.f, similar(m.
 
 Base.parent(m::AppliedOnsiteModifier) = OnsiteModifier(m.f, m.parentselector)
 Base.parent(m::AppliedHoppingModifier) = HoppingModifier(m.f, m.parentselector)
-
-function emptyptrs!(m::AppliedHoppingModifier{<:Any,<:Any,R}, n) where {R}
-    resize!(m.ptrs, 0)
-    foreach(_ -> push!(m.ptrs, Tuple{Int,R,R,Tuple{Int,Int}}[]), 1:n)
-    return m
-end
 
 #endregion
 #endregion

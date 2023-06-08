@@ -624,8 +624,8 @@ Convert `m` into a new model with just onsite terms acting on `sites`.
 
 ## Model algebra
 
-Models can be combined using `+`, `-` and `*`, e.g. `onsite(1) - 2 * hopping(1)`. One can
-also take the adjoint of a model (i.e. its Hermitian conjugate) `m` with `m'`.
+Models can be combined using `+`, `-` and `*`, or conjugated with `'`, e.g. `onsite(1) - 2 *
+hopping(1)'`.
 
 # Examples
 ```jldoctest
@@ -681,8 +681,8 @@ Convert `m` into a new model with just hopping terms acting on `hops`.
 
 ## Model algebra
 
-Models can be combined using `+`, `-` and `*`, e.g. `onsite(1) - 2 * hopping(1)`. One can
-also take the adjoint of a model (i.e. its Hermitian conjugate) `m` with `m'`.
+Models can be combined using `+`, `-` and `*`, or conjugated with `'`, e.g. `onsite(1) - 2 *
+hopping(1)'`.
 
 # Examples
 ```jldoctest
@@ -746,8 +746,9 @@ Special form of a parametric onsite potential meant to model a self-energy (see 
 
 ## Model algebra
 
-Parametric models can be combined with other regular or parametric models using `+`, `-` and
-`*`, e.g. `onsite(1) - 2 * hopping(1)`. The combined parametric models can share parameters.
+Parametric models can be combined using `+`, `-` and `*`, or conjugated with `'`, e.g.
+`@onsite((; o=1) -> o) - 2 * hopping(1)'`. The combined parametric models can share
+parameters.
 
 # Examples
 ```jldoctest
@@ -811,8 +812,9 @@ Special form of a parametric hopping amplitude meant to model a self-energy (see
 
 ## Model algebra
 
-Parametric models can be combined with other regular or parametric models using `+`, `-` and
-`*`, e.g. `onsite(1) - 2 * hopping(1)`. The combined parametric models can share parameters.
+Parametric models can be combined using `+`, `-` and `*`, or conjugated with `'`, e.g.
+`@onsite((; o=1) -> o) - 2 * hopping(1)'`. The combined parametric models can share
+parameters.
 
 # Examples
 ```jldoctest

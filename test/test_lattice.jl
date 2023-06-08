@@ -16,6 +16,9 @@ using Quantica: Sublat, Lattice, transform!, translate!
     @test NamedTuple(s) === (; nt..., cells = missing)
     h = hopselector(; nt...)
     @test NamedTuple(h).sublats == :C
+
+    h = HP.graphene(orbitals = 2)
+    @test Quantica.flatrange(h, :B) === 3:4
 end
 
 @testset "lattice sublats" begin

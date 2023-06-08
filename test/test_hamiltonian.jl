@@ -119,13 +119,11 @@ end
     mh = (hopping(1), hopping((r, dr)-> im*dr[1]), @hopping((; t) -> t), @hopping((r, dr; t) -> r[1]*t))
     for o in mo, h in mh
         @test length(Quantica.allterms(-o - 2*h)) == 2
-        @test length(Quantica.allterms(onsite(2o + h))) == 1
-        @test length(Quantica.allterms(hopping(o + h))) == 1
         @test Quantica.ParametricModel(o+h) isa Quantica.ParametricModel
         m = onsite(o + h; cells = 1)
         ts = Quantica.allterms(m)
         @test length(ts) == 1 && all(t->Quantica.selector(t).cells == 1, ts)
-        m = hopping(o + h; dcells = 1)
+        m = hopping(2*(o' + h'); dcells = 1)
         ts = Quantica.allterms(m)
         @test length(ts) == 1 && all(t->Quantica.selector(t).dcells == 1, ts)
     end
