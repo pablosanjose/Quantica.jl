@@ -640,6 +640,7 @@ Base.parent(m::AppliedHoppingModifier) = HoppingModifier(m.f, m.parentselector)
 
 struct SMatrixView{N,M,T,NM}
     s::SMatrix{N,M,T,NM}
+    SMatrixView{N,M,T,NM}(mat) where {N,M,T,NM} = new(sanitize_SMatrix(SMatrix{N,M,T}, mat))
 end
 
 struct OrbitalBlockStructure{B}
@@ -668,15 +669,11 @@ const MatrixElementNonscalarType{T,N} = Union{
 
 #region ## Constructors ##
 
-SMatrixView{N,M}(mat::AbstractMatrix{T}) where {N,M,T} =
-    SMatrixView{N,M,T}(mat)
+SMatrixView(mat::SMatrix{N,M,T,NM}) where {N,M,T,NM} = SMatrixView{N,M,T,NM}(mat)
 
-function SMatrixView{N,M,T}(mat) where {N,M,T}
-    smat = sanitize_SMatrix(SMatrix{N,M,T}, mat)
-    return SMatrixView(smat)
-end
+SMatrixView{N,M}(mat::AbstractMatrix{T}) where {N,M,T} = SMatrixView{N,M,T}(mat)
 
-SMatrixView{N,M,T,NM}(mat::AbstractMatrix) where {N,M,T,NM} = SMatrixView{N,M,T}(mat)
+SMatrixView{N,M,T}(mat) where {N,M,T} = SMatrixView{N,M,T,N*M}(mat)
 
 SMatrixView(::Type{SMatrix{N,M,T,NM}}) where {N,M,T,NM} = SMatrixView{N,M,T,NM}
 
