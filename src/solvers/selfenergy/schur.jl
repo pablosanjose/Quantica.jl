@@ -253,7 +253,7 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead;
     leadorbs = contact_sites_to_orbitals(leadsites, leadbs)
     # build V and V´ as a leadorbs reordering of inter-cell harmonics of hlead
     hlead = hamiltonian(glead)  # careful, not parent, which could be a ParametricHamiltonian
-    h₊₁, h₋₁ = flat(hlead[SA[1]]), flat(hlead[SA[-1]])
+    h₊₁, h₋₁ = hlead[SA[1]], hlead[SA[-1]]
     V  = SparseMatrixView(view(h₊₁, :, leadorbs))
     V´ = SparseMatrixView(view(h₋₁, leadorbs, :))
     solver´ = SelfEnergyGenericSolver(gslice, hlead, V´, V)

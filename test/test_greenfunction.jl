@@ -140,7 +140,7 @@ end
     @test size(J1(0.2)) == size(J2(0.2)) == (3, 3)
     @test 2*J1(0.2; B = 0.1) ≈ J2(0.2; B = 0.1)
 
-    glead = LP.square() |> hamiltonian(hopping(1)) |> supercell((0,1), region = r -> -1 <= r[1] <= 1) |> greenfunction(GS.Schur(boundary = 0));
+    glead = LP.square() |> hamiltonian(hopping(1)) |> supercell((0,1), region = r -> -1 <= r[1] <= 1) |> attach(nothing; cells = SA[10]) |> greenfunction(GS.Schur(boundary = 0));
     contact1 = r -> r[1] ≈ 5 && -1 <= r[2] <= 1
     contact2 = r -> r[2] ≈ 5 && -1 <= r[1] <= 1
     g0 = LP.square() |> hamiltonian(hopping(1)) |> supercell(region = RP.square(10)) |> attach(glead, reverse = true; region = contact2) |> attach(glead; transform = r->SA[0 1; 1 0] * r, region = contact1) |> greenfunction;

@@ -36,3 +36,77 @@ Here you will read about using Quantica.jl to build and compute properties of ti
 
 # Building a Lattice
 
+Consider a lattice like graphene's. It has two sublattices, A and B, forming a honeycomb pattern in space. The position of the single A site inside the unitcell is `[0, -a0/√3]`, with the B site at `[0, a0/√3]`. The `i=1,2` Bravais vectors are `Aᵢ = [± cos(π/3), sin(π/3)]`. If we set the lattice constant `a0 = 1`, one way to build this lattice would be
+
+```jldoctest
+julia> A = (cos(π/3), sin(π/3)), (-cos(π/3), sin(π/3));
+
+julia> sA = sublat((0, -1/√3), name = :A);
+
+julia> sB = sublat((0,  1/√3), name = :B);
+
+julia> lattice(sA, sB, bravais = A)
+Lattice{Float64,2,2} : 2D lattice in 2D space
+  Bravais vectors : [[0.5, 0.866025], [-0.5, 0.866025]]
+  Sublattices     : 2
+    Names         : (:A, :B)
+    Sites         : (1, 1) --> 2 total per unit cell
+```
+
+!!! tip Note that we have used `Tuple`s, such as `(0, 1/√3)` instead of `Vector`s, like `[0, 1/√3]`. In Julia small-length `Tuple`s are much more efficient than `Vector`s, since their length is known and fixed at compile time. Static vectors (`SVector`) and matrices (`SMatrix`) are also available to Quantica, which are just as efficient as `Tuple`s. They be entered as `SA[0, 1/√3]` and `SA[1 0; 0 1]`, respectively. Always use `Tuple`, `SVector` and `SMatrix` in Quantica where possible.
+
+If we don't plan to address the two sublattices individually, we could also fuse them into one with
+```jldoctest
+julia> lattice(sublat((0, 1/√3), (0, -1/√3)), bravais = A)
+Lattice{Float64,2,2} : 2D lattice in 2D space
+  Bravais vectors : [[0.5, 0.866025], [-0.5, 0.866025]]
+  Sublattices     : 1
+    Names         : (:A,)
+    Sites         : (2,) --> 2 total per unit cell
+```
+
+This lattice has type `Lattice{T,E,L}`, with `T = Float64` the numeric type of position coordinates, `E = 2` the dimension of embedding space, and `L = 2` the number of Bravais vectors (i.e. the lattice dimension). Both `T` and `E`, and even the `Sublat` names can be overridden when creating a lattice. One can also provide the Bravais vectors as a matrix, with each `Aᵢ` as a column
+
+```jldoctest
+julia> Amat = SA[-cos(π/3) cos(π/3); sin(π/3) sin(π/3)];
+
+julia> lat = lattice(sA, sB, bravais = Amat, type = Float32, dim = 3, names = (:C, :D))
+Lattice{Float32,3,2} : 2D lattice in 3D space
+  Bravais vectors : Vector{Float32}[[-0.5, 0.866025, 0.0], [0.5, 0.866025, 0.0]]
+  Sublattices     : 2
+    Names         : (:C, :D)
+    Sites         : (1, 1) --> 2 total per unit cell
+```
+
+!!! tip For the `dim` keyword above we can alternatively use `dim = Val(3)`, which is slightly more efficient, because the value is encoded as a type. This is a Julia thing (the concept of type stability), and can be ignored upon a first contact with Quantica.
+
+One can also *convert* an existing lattice like the above to have a different type, embedding dimension, bravais vectors, `Sublat` names with
+
+```jldoctest
+julia> lattice(lat, bravais = √3 * Amat, type = Float16, dim = 2, names = (:Boron, :Nitrogen))
+Lattice{Float16,2,2} : 2D lattice in 2D space
+  Bravais vectors : Vector{Float16}[[-0.866, 1.5], [0.866, 1.5]]
+  Sublattices     : 2
+    Names         : (:Boron, :Nitrogen)
+    Sites         : (1, 1) --> 2 total per unit cell
+```
+
+## Lattice presets
+
+We can also use a collection of pre-built lattices in different dimensions, which are defined in the submodule `LatticePresets`, also called `LP`. These presets currently include
+- `LP.linear`: linear 1D lattice
+- `LP.square`: square 2D lattice
+- `LP.honeycomb`: square 2D lattice
+- `LP.cubic`: cubic 3D lattice
+- `LP.bcc`: body-centered cubic 3D lattice
+- `LP.fcc`: face-centered cubic 3D lattice
+
+One can modify any of these presets by passing a `bravais`, `type`, `dim`, `names` and also a new keyword `a0` for the lattice constant. The last lattice above can thus be also obtained with
+```jldoctest
+julia> LP.honeycomb(a0 = √3, type = Float16, names = (:Boron, :Nitrogen))
+Lattice{Float16,2,2} : 2D lattice in 2D space
+  Bravais vectors : Vector{Float16}[[0.866, 1.5], [-0.866, 1.5]]
+  Sublattices     : 2
+    Names         : (:Boron, :Nitrogen)
+    Sites         : (1, 1) --> 2 total per unit cell
+```
