@@ -54,7 +54,7 @@ function sanitize_SMatrix(::Type{S}, x, (rows, cols) = (E, L)) where {T<:Number,
     return SMatrix{E,L,T}(t)
 end
 
-function sanitize_SMatrix(::Type{S}, s::SMatrix, (rows, cols) = (E, L)) where {T<:Number,E,L,S<:SMatrix{E,L,T}}
+function sanitize_SMatrix(::Type{S}, s::AbstractMatrix, (rows, cols) = (E, L)) where {T<:Number,E,L,S<:SMatrix{E,L,T}}
     t = ntuple(Val(E*L)) do l
         j, i = fldmod1(l, E)
         i <= rows && j <= cols && checkbounds(Bool, s, i, j) ? convert(T, s[i,j]) : zero(T)

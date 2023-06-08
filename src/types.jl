@@ -640,7 +640,6 @@ Base.parent(m::AppliedHoppingModifier) = HoppingModifier(m.f, m.parentselector)
 
 struct SMatrixView{N,M,T,NM}
     s::SMatrix{N,M,T,NM}
-    SMatrixView{N,M,T,NM}(s) where {N,M,T,NM} = new(convert(SMatrix{N,M,T,NM}, s))
 end
 
 struct OrbitalBlockStructure{B}
@@ -669,11 +668,17 @@ const MatrixElementNonscalarType{T,N} = Union{
 
 #region ## Constructors ##
 
-SMatrixView(s::SMatrix{N,M,T,NM}) where {N,M,T,NM} = SMatrixView{N,M,T,NM}(s)
+SMatrixView{N,M}(mat::AbstractMatrix{T}) where {N,M,T} =
+    SMatrixView{N,M,T}(mat)
 
-SMatrixView(::Type{<:SMatrix{N,M,T,NM}}) where {N,M,T,NM} = SMatrixView{N,M,T,NM}
+function SMatrixView{N,M,T}(mat) where {N,M,T}
+    smat = sanitize_SMatrix(SMatrix{N,M,T}, mat)
+    return SMatrixView(smat)
+end
 
-SMatrixView{N,M}(s) where {N,M} = SMatrixView(SMatrix{N,M}(s))
+SMatrixView{N,M,T,NM}(mat::AbstractMatrix) where {N,M,T,NM} = SMatrixView{N,M,T}(mat)
+
+SMatrixView(::Type{SMatrix{N,M,T,NM}}) where {N,M,T,NM} = SMatrixView{N,M,T,NM}
 
 @inline function OrbitalBlockStructure(T, orbitals, subsizes)
     orbitals´ = sanitize_orbitals(orbitals) # <:Union{Val,distinct_collection}

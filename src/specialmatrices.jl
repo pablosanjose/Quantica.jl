@@ -144,8 +144,8 @@ function Base.setindex!(b::HybridSparseMatrix, val::AbstractVecOrMat, i::Integer
     return val
 end
 
-mask_block(::Type{B}, val::UniformScaling, args...) where {N,B<:MatrixElementNonscalarType{<:Any,N}} =
-    mask_block(B, SMatrix{N,N}(val))
+mask_block(::Type{B}, val::UniformScaling, size = (N, N)) where {T,N,B<:MatrixElementNonscalarType{T,N}} =
+    mask_block(B, sanitize_SMatrix(SMatrix{N,N,T}, SMatrix{N,N}(val), size))
 
 mask_block(::Type{B}, val::UniformScaling, args...) where {B<:Number} =
     mask_block(B, convert(B, val.λ))
@@ -237,6 +237,26 @@ end
 
 ## TODO
 unflat_sync!(s) = internalerror("unflat_sync!: method not yet implemented")
+
+# Uniform and non-uniform cases
+function unflat_sync!(s::HybridSparseMatrix{<:Any,S}) where {S<:Union{SMatrix,SMatrixView}}
+    checkinitialized(s)
+    flat, unflat = flat_unsafe(s), unflat_unsafe(s)
+    cols, rows = axes(unflat, 2), rowvals(unflat)
+    nzunflat = nonzeros(unflat)
+    bs = blockstructure(s)
+    for col in cols
+        colrng = flatrange(bs, col)
+        for ptr in nzrange(unflat, col)
+            row = rows[ptr]
+            rowrng = flatrange(bs, row)
+            val = view(flat, colrng, rowrng)
+            nzunflat[ptr] = S(val)
+        end
+    end
+    needs_no_sync!(s)
+    return s
+end
 
 #endregion
 

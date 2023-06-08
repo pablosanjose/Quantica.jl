@@ -224,6 +224,12 @@ end
             @test Quantica.needs_flat_sync(s)
         end
         @test_throws BoundsError h[(1,1)]
+        bs = Quantica.blockstructure(h)
+        hflat, hunflat = h[()], h[unflat()]
+        @test Quantica.flat(Quantica.HybridSparseMatrix(bs, hflat)) == hflat
+        @test unflat(Quantica.HybridSparseMatrix(bs, hunflat)) == hunflat
+        @test Quantica.flat(Quantica.HybridSparseMatrix(bs, hunflat)) == hflat
+        @test unflat(Quantica.HybridSparseMatrix(bs, hflat)) == hunflat
     end
 end
 

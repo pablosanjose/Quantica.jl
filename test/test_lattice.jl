@@ -22,11 +22,12 @@ using Quantica: Sublat, Lattice, transform!, translate!
 end
 
 @testset "lattice sublats" begin
-    sitelist = [(3,3), (3,3.), [3,3.], SA[3, 3], SA[3, 3f0], SA[3f0, 3.]]
+    sitelist = [(3,3), (3,3.), [3,3.], SA[3, 3], SA[3, 3f0], SA[3f0, 3.0]]
     for site2 in sitelist, site1 in sitelist
         T = float(promote_type(typeof.(site1)..., typeof.(site2)...))
         @test sublat(site1, site2) isa Sublat{T,2}
         @test sublat([site1, site2]) isa Sublat{T,2}
+        @test lattice(sublat(site1), sublat(site2)) isa Lattice
     end
     @test sublat((3,)) isa Sublat{Float64,1}
     @test sublat(()) isa Sublat{Float64,0}
@@ -35,7 +36,7 @@ end
 
 @testset "lattice construction" begin
     s = sublat((1, 2))
-    s´ = sublat([0,0])
+    s´ = sublat([0,0f0])
     for t in (Float32, Float64), e in 1:4, l = 1:4
         br = SMatrix{e,l,Float64}(I)
         if l > e
