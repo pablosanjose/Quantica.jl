@@ -126,7 +126,12 @@ Base.getindex(g::GreenSolution, i::OrbitalSlice, j::CellOrbitals) =
 Base.getindex(g::GreenSolution, i::CellOrbitals, j::OrbitalSlice) =
     mortar([g[si, sj] for si in (i,), sj in subcells(j)])
 
-Base.getindex(g::GreenSolution, i::CellOrbitals, j::CellOrbitals) = slicer(g)[i, j]
+Base.getindex(g::GreenSolution, i::CellOrbitals, j::CellOrbitals) =
+    slicer(g)[sanitize_cellorbs(i), sanitize_cellorbs(j)]
+
+# must ensure that orbindex is not a scalar, to consistently obtain a Matrix
+sanitize_cellorbs(c::CellOrbitals) = c
+sanitize_cellorbs(c::CellOrbital) = CellOrbitals(cell(c), orbindex(c):orbindex(c))
 
 # fallback
 Base.getindex(s::GreenSlicer, ::CellOrbitals, ::CellOrbitals) =

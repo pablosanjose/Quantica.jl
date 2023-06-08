@@ -160,8 +160,6 @@ function parsenode(node::Symbol, val)
     return pt´
 end
 
-padright(pt::SVector{L´,T}, ::Val{L}) where {L´,L,T} = SVector(ntuple(i -> i > L´ ? zero(T) : pt[i], Val(L)))
-
 const BZpoints =
     ( Γ  = (0,)
     , X  = (pi,)

@@ -1,8 +1,21 @@
 using Quantica: Sublat, Lattice, transform!, translate!
 
-@testset "lattice internal API" begin
+@testset "Internal API" begin
+    s = sublat((0,0,0))
+    @test Quantica.embdim(s) == 3
+    @test Quantica.numbertype(s) <: AbstractFloat
+
     lat = LP.honeycomb()
     @test length(Quantica.bravais_vectors(lat)) == 2
+    @test_throws BoundsError sites(lat, :C)
+    @test length(sites(lat, 1)) == 1
+    @test length(lat) == 2
+
+    nt = (; region = r -> r[1] == 1, sublats = :C)
+    s = siteselector(; nt...)
+    @test NamedTuple(s) === (; nt..., cells = missing)
+    h = hopselector(; nt...)
+    @test NamedTuple(h).sublats == :C
 end
 
 @testset "lattice sublats" begin
@@ -146,6 +159,7 @@ end
     ls1 = lat[sublats = :B, region = RP.ellipse((10, 20), (0, 1/√3))]
     ls2 = lat[sublats = :A, region = RP.ellipse((10, 20))]
     @test length(ls1) == length(ls2)
+    @test ls2[2] isa Tuple{SVector{2, Int}, Int}
     ls = ls1[sublats = :B]
     @test isempty(ls)
     ls = lat[cells = n -> norm(n) < 4]

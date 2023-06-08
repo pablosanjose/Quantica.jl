@@ -421,12 +421,18 @@ function Makie.plot!(plot::PlotLattice{Tuple{L}}) where {L<:ParametricHamiltonia
     return plotlattice!(plot, h; plot.attributes...)
 end
 
-function Makie.plot!(plot::PlotLattice{Tuple{H}}) where {E,L,H<:Hamiltonian{<:Any,E,L}}
+function Makie.plot!(plot::PlotLattice{Tuple{H}}) where {T,E,H<:Hamiltonian{T,E}}
     h = to_value(plot[1])
     lat = Quantica.lattice(h)
     sel = sanitize_selector(plot[:selector][], lat)
     latslice = lat[sel]
     return plotlattice!(plot, h, latslice; plot.attributes...)
+end
+
+# For E < 2 Hamiltonians, promote to 2D
+function Makie.plot!(plot::PlotLattice{Tuple{H}}) where {T,H<:Hamiltonian{T,1}}
+    h = Hamiltonian{T,2}(to_value(plot[1]))
+    return plotlattice!(plot, h; plot.attributes...)
 end
 
 function Makie.plot!(plot::PlotLattice{Tuple{H,S}}) where {E,L,H<:Hamiltonian{<:Any,E,L},S<:LatticeSlice}
@@ -562,10 +568,9 @@ end
 function plotbravais!(plot::PlotLattice, lat::Lattice{<:Any,E,L}, latslice) where {E,L}
     iszero(L) && return plot
     bravais = Quantica.bravais(lat)
-    vs = Point{E}.(Quantica.bravais_vectors(bravais))
+    vs = Point{E,Float32}.(Quantica.bravais_vectors(bravais))
     vtot = sum(vs)
     r0 = Point{E,Float32}(Quantica.mean(Quantica.sites(lat))) - 0.5 * vtot
-
     if !ishidden(:axes, plot)
         for (v, color) in zip(vs, (:red, :green, :blue))
             arrows!(plot, [r0], [v]; color, inspectable = false)
@@ -669,8 +674,6 @@ function selfenergy_plottable(s::Quantica.SelfEnergyGenericSolver, hcoupling; kw
     return ((p1, k1),)
 end
 
-
-
 #endregion
 
 ############################################################################################
@@ -679,13 +682,15 @@ end
 
 Makie.convert_arguments(::PointBased, lat::Lattice, sublat = missing) =
     (Point.(Quantica.sites(lat, sublat)),)
+Makie.convert_arguments(p::PointBased, lat::Lattice{<:Any,1}, sublat = missing) =
+    Makie.convert_arguments(p, Quantica.lattice(lat, dim = Val(2)), sublat)
 Makie.convert_arguments(p::PointBased, h::Union{AbstractHamiltonian,GreenFunction,GreenSolution}, sublat = missing) =
     Makie.convert_arguments(p, Quantica.lattice(h), sublat)
 Makie.convert_arguments(p::Type{<:LineSegments}, g::Union{GreenFunction,GreenSolution}, sublat = missing) =
     Makie.convert_arguments(p, Quantica.hamiltonian(g), sublat)
 
 function Makie.convert_arguments(::Type{<:LineSegments}, h::AbstractHamiltonian{<:Any,E}, sublat = missing) where {E}
-    segments = Point{E,Float32}[]
+    segments = Point{max(E,2),Float32}[]
     lat = Quantica.lattice(h)
     for har in harmonics(h)
         colrng = sublat === missing ? axes(h, 2) : siterange(lat, sublat)

@@ -403,9 +403,9 @@ respectively, they also admit other possibilities:
 
 - If either `cells` or `sublats` are a single cell or sublattice, they will be treated as single-element collections
 - If `sublat` is a collection of `Integer`s, it will refer to sublattice numbers.
-- If `cells` is a collection of `NTuple`s, they will be converted to `SVector`s.
+- If `cells` is an `i::Integer`, it will be converted to an `SVector{1}`
+- If `cells` is a collection, each element will be converted to an `SVector`.
 - If `cells` is a boolean function, `n in cells` will be the result of `cells(n)`
-- If `cells` is an `Integer`, it will include all cells with `n[i] in 0:cells-1`
 
 ## Usage
 
@@ -607,9 +607,9 @@ ishermitian
     onsite(o; sites...)
     onsite(r -> o(r); sites...)
 
-Build a tight-binding model representing a uniform or a position-dependent onsite
-potential, respectively, on sites selected by `siteselector(; sites...)` (see `siteselector`
-for details).
+Build a `TighbindingModel` representing a uniform or a position-dependent onsite potential,
+respectively, on sites selected by `siteselector(; sites...)` (see `siteselector` for
+details).
 
 Site positions are `r::SVector{E}`, where `E` is the embedding dimension of the lattice. The
 onsite potential `o` can be a `Number` (for single-orbital sites), a `UniformScaling` (e.g.
@@ -617,6 +617,12 @@ onsite potential `o` can be a `Number` (for single-orbital sites), a `UniformSca
 number of orbitals in the selected sites. Models may be applied to a lattice `lat` to
 produce a `Hamiltonian` with `hamiltonian(lat, model; ...)`, see `hamiltonian`. Position
 dependent models are forced to preserve the periodicity of the lattice.
+
+    onsite(m::{TighbindingModel,ParametricModel}; sites...)
+
+Convert `m` into a new model with just onsite terms acting on `sites`.
+
+## Model algebra
 
 Models can be combined using `+`, `-` and `*`, e.g. `onsite(1) - 2 * hopping(1)`. One can
 also take the adjoint of a model (i.e. its Hermitian conjugate) `m` with `m'`.
@@ -658,9 +664,8 @@ onsite
     hopping(t; hops...)
     hopping((r, dr) -> t(r, dr); hops...)
 
-Build a tight-binding model representing a uniform or a position-dependent hopping
-amplitude, respectively, on hops selected by `hopselector(; hops...)` (see `hopselector` for
-details).
+Build a `TighbindingModel` representing a uniform or a position-dependent hopping amplitude,
+respectively, on hops selected by `hopselector(; hops...)` (see `hopselector` for details).
 
 Hops from a site at position `r₁` to another at `r₂` are described using the hop center `r =
 (r₁ + r₂)/2` and the hop vector `dr = r₂ - r₁`. Hopping amplitudes `t` can be a `Number`
@@ -669,6 +674,12 @@ Hops from a site at position `r₁` to another at `r₂` are described using the
 orbitals in the selected sites. Models may be applied to a lattice `lat` to produce an
 `Hamiltonian` with `hamiltonian(lat, model; ...)`, see `hamiltonian`. Position dependent
 models are forced to preserve the periodicity of the lattice.
+
+    hopping(m::Union{TighbindingModel,ParametricModel}; hops...)
+
+Convert `m` into a new model with just hopping terms acting on `hops`.
+
+## Model algebra
 
 Models can be combined using `+`, `-` and `*`, e.g. `onsite(1) - 2 * hopping(1)`. One can
 also take the adjoint of a model (i.e. its Hermitian conjugate) `m` with `m'`.
@@ -710,9 +721,9 @@ hopping
     @onsite((; params...) -> o(; params...); sites...)
     @onsite((r; params...) -> o(r; params...); sites...)
 
-Build a parametric tight-binding model representing a uniform or a position-dependent
-onsite potential, respectively, on sites selected by `siteselector(; sites...)` (see
-`siteselector` for details).
+Build a `ParametricModel` representing a uniform or a position-dependent onsite potential,
+respectively, on sites selected by `siteselector(; sites...)` (see `siteselector` for
+details).
 
 Site positions are `r::SVector{E}`, where `E` is the embedding dimension of the lattice. The
 onsite potential `o` can be a `Number` (for single-orbital sites), a `UniformScaling` (e.g.
@@ -728,13 +739,15 @@ The difference between regular and parametric tight-binding models (see `onsite`
 then be evaluated very efficiently for different parameter values by callling `h(;
 params...)`, to obtain a regular `Hamiltonian` without reconstructing it from scratch.
 
-Parametric models can be combined with other regular or parametric models using `+`, `-` and
-`*`, e.g. `onsite(1) - 2 * hopping(1)`. The combined parametric models can share parameters.
-
     @onsite((ω; params...) -> Σᵢᵢ(ω; params...); sites...)
     @onsite((ω, r; params...) -> Σᵢᵢ(ω, r; params...); sites...)
 
 Special form of a parametric onsite potential meant to model a self-energy (see `attach`).
+
+## Model algebra
+
+Parametric models can be combined with other regular or parametric models using `+`, `-` and
+`*`, e.g. `onsite(1) - 2 * hopping(1)`. The combined parametric models can share parameters.
 
 # Examples
 ```jldoctest
@@ -774,9 +787,8 @@ macro onsite end
     @hopping((; params...) -> t(; params...); hops...)
     @hopping((r, dr; params...) -> t(r; params...); hops...)
 
-Build a parametric tight-binding model representing a uniform or a position-dependent
-hopping amplitude, respectively, on hops selected by `hopselector(; hops...)` (see
-`hopselector` for details).
+Build a `ParametricModel` representing a uniform or a position-dependent hopping amplitude,
+respectively, on hops selected by `hopselector(; hops...)` (see `hopselector` for details).
 
 Hops from a site at position `r₁` to another at `r₂` are described using the hop center `r =
 (r₁ + r₂)/2` and the hop vector `dr = r₂ - r₁`. Hopping amplitudes `t` can be a `Number`
@@ -792,13 +804,15 @@ The difference between regular and parametric tight-binding models (see `onsite`
 then be evaluated very efficiently for different parameter values by callling `h(;
 params...)`, to obtain a regular `Hamiltonian` without reconstructing it from scratch.
 
-Parametric models can be combined with other regular or parametric models using `+`, `-` and
-`*`, e.g. `onsite(1) - 2 * hopping(1)`. The combined parametric models can share parameters.
-
     @hopping((ω; params...) -> Σᵢⱼ(ω; params...); hops...)
     @hopping((ω, r, dr; params...) -> Σᵢⱼ(ω, r, dr; params...); hops...)
 
 Special form of a parametric hopping amplitude meant to model a self-energy (see `attach`).
+
+## Model algebra
+
+Parametric models can be combined with other regular or parametric models using `+`, `-` and
+`*`, e.g. `onsite(1) - 2 * hopping(1)`. The combined parametric models can share parameters.
 
 # Examples
 ```jldoctest

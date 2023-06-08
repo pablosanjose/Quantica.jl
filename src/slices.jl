@@ -164,9 +164,6 @@ end
 # findsubcell(c, ::LatticeSlice) and Base.in
 #region
 
-findsubcell(c, l::LatticeSlice{<:Any,<:Any,L}) where {L} =
-    findsubcell(SVector{L,Int}(c), l)
-
 # returns (subcellindex, siteoffset), or nothing if not found
 function findsubcell(cell´::SVector, l::LatticeSlice)
     offset = 0
@@ -216,7 +213,8 @@ function combine!(ls0::S, lss::S...) where {L,S<:LatticeSlice{<:Any,<:Any,L}}
     return ls0
 end
 
-combine_subcells(scs::Vector{S}...) where {L,S<:CellSites{L}} = combine_subcells!(S[], scs...)
+## unused
+# combine_subcells(scs::Vector{S}...) where {L,S<:CellSites{L}} = combine_subcells!(S[], scs...)
 
 function combine_subcells!(sc0::Vector{S}, scs::Vector{S}...) where {L, S<:CellSites{L}}
     allcellinds = Tuple{SVector{L,Int},Int}[]

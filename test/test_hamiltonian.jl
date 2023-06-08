@@ -94,7 +94,7 @@ end
         @test supercell(lat, region = r) isa Quantica.Lattice
     end
     lat = LatticePresets.honeycomb()
-    for r in (RP.circle(10), missing), s in (:A, 1, (:A, :B), [1, :B], missing), c in (SA[0,1], (0,1), [0,1]), cs in (c, (c, 2 .* c), [c, 2 .* c], missing)
+    for r in (RP.circle(10), missing), s in (:A, 1, (:A, :B), [1, :B], missing), c in (SA[0,1], (0,1)), cs in (c, (c, 2 .* c), [c, 2 .* c], missing)
         @test supercell(lat, region = r, sublats = s, cells = cs) isa Quantica.Lattice
     end
     r1 = RP.ellipse((10,15))
@@ -121,6 +121,13 @@ end
         @test length(Quantica.allterms(-o - 2*h)) == 2
         @test length(Quantica.allterms(onsite(2o + h))) == 1
         @test length(Quantica.allterms(hopping(o + h))) == 1
+        @test Quantica.ParametricModel(o+h) isa Quantica.ParametricModel
+        m = onsite(o + h; cells = 1)
+        ts = Quantica.allterms(m)
+        @test length(ts) == 1 && all(t->Quantica.selector(t).cells == 1, ts)
+        m = hopping(o + h; dcells = 1)
+        ts = Quantica.allterms(m)
+        @test length(ts) == 1 && all(t->Quantica.selector(t).dcells == 1, ts)
     end
 end
 

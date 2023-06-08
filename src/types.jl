@@ -105,7 +105,12 @@ sublatname(u::Unitcell, s) = u.names[s]
 sublatname(s::Sublat) = s.name
 
 sublatindex(l::Lattice, name::Symbol) = sublatindex(l.unitcell, name)
-sublatindex(u::Unitcell, name::Symbol) = findfirst(==(name), sublatnames(u))
+
+function sublatindex(u::Unitcell, name::Symbol)
+    i = findfirst(==(name), sublatnames(u))
+    i === nothing && boundserror(u, string(name))
+    return i
+end
 
 nsublats(l::Lattice) = nsublats(l.unitcell)
 nsublats(u::Unitcell) = length(u.names)
@@ -123,7 +128,6 @@ sites(l::Lattice, sublat...) = sites(l.unitcell, sublat...)
 sites(u::Unitcell) = u.sites
 sites(u::Unitcell, sublat) = view(u.sites, siterange(u, sublat))
 sites(u::Unitcell, ::Missing) = sites(u)            # to work with QuanticaMakieExt
-sites(u::Unitcell, ::Nothing) = view(u.sites, 1:0)  # to work with sublatindex
 sites(l::Lattice, name::Symbol) = sites(unitcell(l), name)
 sites(u::Unitcell, name::Symbol) = sites(u, sublatindex(u, name))
 
@@ -253,8 +257,6 @@ iswithinrange(dr, (rmin, rmax)::Tuple{Real,Real}) =  ifelse(sign(rmin)*rmin^2 <=
 
 isbelowrange(dr, s::AppliedHopSelector) = isbelowrange(dr, s.range)
 isbelowrange(dr, (rmin, rmax)::Tuple{Real,Real}) =  ifelse(dr'dr < rmin^2, true, false)
-
-Base.adjoint(s::SiteSelector) = s
 
 Base.adjoint(s::HopSelector) = HopSelector(s.region, s.sublats, s.dcells, s.range, !s.adjoint)
 
@@ -462,6 +464,7 @@ ParametricFunction{N}(f::F, params = Symbol[]) where {N,F} =
 TightbindingModel(ts::AbstractTightbindingTerm...) = TightbindingModel(ts)
 ParametricModel(ts::AbstractParametricTerm...) = ParametricModel(TightbindingModel(), ts)
 ParametricModel(m::TightbindingModel) = ParametricModel(m, ())
+ParametricModel(m::ParametricModel) = m
 
 OnsiteTerm(t::OnsiteTerm, os::SiteSelector) = OnsiteTerm(t.f, os, t.coefficient)
 ParametricOnsiteTerm(t::ParametricOnsiteTerm, os::SiteSelector) =

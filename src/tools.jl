@@ -33,6 +33,12 @@ padtuple(t, x, N) = ntuple(i -> i <= length(t) ? t[i] : x, N)
 unitvector(i, ::Type{SVector{L,T}}) where {L,T} =
     SVector(ntuple(j -> j == i ? one(T) : zero(T), Val(L)))
 
+function padright(pt, ::Val{L}) where {L}
+    T = eltype(pt)
+    L´ = length(pt)
+    return SVector(ntuple(i -> i > L´ ? zero(T) : pt[i], Val(L)))
+end
+
 function boundingbox(positions)
     isempty(positions) && argerror("Cannot find bounding box of an empty collection")
     posmin = posmax = first(positions)

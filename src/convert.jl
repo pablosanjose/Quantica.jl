@@ -12,12 +12,33 @@ Base.convert(::Type{T}, l::Sublat) where T<:Sublat = T(l)
 Base.convert(::Type{T}, l::T) where T<:CellSites = l
 Base.convert(::Type{T}, l::CellSites) where T<:CellSites = T(l)
 
+Base.convert(::Type{T}, l::T) where T<:AbstractHamiltonian = l
+Base.convert(::Type{T}, l::AbstractHamiltonian) where T<:AbstractHamiltonian = T(l)
+
 # Constructors for conversion
 Sublat{T,E}(s::Sublat, name = s.name) where {T<:AbstractFloat,E} =
     Sublat{T,E}([sanitize_SVector(SVector{E,T}, site) for site in sites(s)], name)
 
 CellSites{L,V}(c::CellSites) where {L,V} =
     CellSites{L,V}(convert(SVector{L,Int}, cell(c)), convert(V, siteindices(c)))
+
+function Hamiltonian{T,E}(h::Hamiltonian) where {T,E}
+    lat = lattice(h)
+    lat´ = lattice(lat, dim = Val(E), type = T)
+    bs = blockstructure(h)
+    hs = harmonics(h)
+    b = bloch(h)
+    return Hamiltonian(lat´, bs, hs, b)
+end
+
+function ParametricHamiltonian{T,E}(ph::ParametricHamiltonian) where {T,E}
+    hparent = Hamiltonian{T,E}(parent(ph))
+    h = Hamiltonian{T,E}(hamiltonian(ph))
+    ms = modifiers(ph)
+    ptrs = pointers(ph)
+    pars = parameters(ph)
+    return ParametricHamiltonian(hparent, h, ms, ptrs, pars)
+end
 
 # We need this to promote different sublats into common dimensionality and type to combine
 # into a lattice

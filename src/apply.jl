@@ -14,6 +14,8 @@ function apply(s::SiteSelector, lat::Lattice{T,E,L}) where {T,E,L}
     intsublats = recursive_apply(name -> sublatindex_or_zero(lat, name), s.sublats)
     sublats = recursive_push!(Int[], intsublats)
     cells = recursive_push!(SVector{L,Int}[], sanitize_cells(s.cells, Val(L)))
+    unique!(sort!(sublats))
+    unique!(sort!(cells))
     return AppliedSiteSelector{T,E,L}(lat, region, sublats, cells)
 end
 
@@ -26,6 +28,8 @@ function apply(s::HopSelector, lat::Lattice{T,E,L}) where {T,E,L}
     intsublats = recursive_apply(names -> sublatindex_or_zero(lat, names), s.sublats)
     sublats = recursive_push!(Pair{Int,Int}[], intsublats)
     dcells = recursive_push!(SVector{L,Int}[], sanitize_cells(s.dcells, Val(L)))
+    unique!(sublats)
+    unique!(dcells)
     if s.adjoint
         sublats .= reverse.(sublats)
         dcells .*= -1
@@ -45,17 +49,14 @@ sanitize_minmaxrange(r, lat) = sanitize_minmaxrange((zero(numbertype(lat)), r), 
 sanitize_minmaxrange((rmin, rmax)::Tuple{Any,Any}, lat) =
     padrange(applyrange(rmin, lat), -1), padrange(applyrange(rmax, lat), 1)
 
-sanitize_cells(cells::Integer, ::Val{L}) where {L} = cells > 0 ?
-    Tuple.(CartesianIndices(ntuple(Returns(0:cells-1), Val(L)))) :
-    Tuple.(CartesianIndices(ntuple(Returns(cells+1:0), Val(L))))
-sanitize_cells(cell::AbstractVector{<:Number}, ::Val{L}) where {L} =
-    (sanitize_SVector(SVector{L,Int}, cell),)
-sanitize_cells(cell::Union{NTuple{L,<:Number},SVector{L,<:Number}}, ::Val{L}) where {L} =
+sanitize_cells(cell::Number, ::Val{1}) = (sanitize_SVector(SVector{1,Int}, cell),)
+sanitize_cells(cell::Union{NTuple{L,<:Integer},SVector{L,<:Number}}, ::Val{L´}) where {L,L´} =
+    argerror("Dimension $L of `cells` does not match lattice dimension $(L´)")
+sanitize_cells(cell::Union{NTuple{L,<:Integer},SVector{L,<:Number}}, ::Val{L}) where {L} =
     (sanitize_SVector(SVector{L,Int}, cell),)
 sanitize_cells(::Missing, ::Val{L}) where {L} = missing
 sanitize_cells(f::Function, ::Val{L}) where {L} = f
-sanitize_cells(cells, ::Val{L}) where {L} =
-    sanitize_SVector.(SVector{L,Int}, cells)
+sanitize_cells(cells, ::Val{L}) where {L} = sanitize_SVector.(SVector{L,Int}, cells)
 
 applyrange(r::Neighbors, lat) = nrange(Int(r), lat)
 applyrange(r::Real, lat) = r

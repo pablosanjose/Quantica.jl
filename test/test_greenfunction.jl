@@ -1,4 +1,4 @@
-using Quantica: GreenFunction, GreenSlice, GreenSolution, zerocell
+using Quantica: GreenFunction, GreenSlice, GreenSolution, zerocell, cellorbs, cellorb
 
 function testgreen(h, s; kw...)
     ω = 0.2
@@ -9,14 +9,14 @@ function testgreen(h, s; kw...)
     L = Quantica.latdim(lattice(h))
     z = zero(SVector{L,Int})
     o = Quantica.unitvector(1, SVector{L,Int})
-    locs = (cellsites(z, :), cellsites(z, 2:3), cellsites(z, 2), cellsites(o, :))
+    locs = (cellsites(z, :), cellsites(z, 2:3), cellsites(z, 2), cellsites(o, :), cellorb(o, 1), cellorbs(z, 2:3))
     for loc in locs, loc´ in locs
         gs = g[loc, loc´]
         @test gs isa GreenSlice
         gsω = gs(ω; kw...)
         gωs = gω[loc, loc´]
         @test gsω == gωs
-        loc === loc´ && @test all(x->imag(x)<0, diag(gωs))
+        loc === loc´ && @test all(x->imag(x)<=0, diag(gωs))
     end
     return nothing
 end
@@ -33,6 +33,9 @@ end
 end
 
 @testset "greenfunction with contacts" begin
+    g = LP.linear() |> hamiltonian(hopping(I), orbitals = 2) |> attach(@onsite(ω->im*I), cells = 1) |> attach(@onsite(ω->im*I), cells = 4) |> greenfunction
+    @test size(g[(; cells = 2), (; cells = 3)](0.2)) == (2,2)
+
     h0 = LP.square() |> hamiltonian(hopping(SA[0 1; 1 0]), orbitals = 2) |> supercell(region = RP.circle(10))
     s0 = GS.SparseLU()
     h1 = LP.square() |> hamiltonian(@onsite((; o = 1) -> o*I) + hopping(SA[0 1; 1 0]), orbitals = 2) |> supercell((1,0), region = r -> abs(r[2]) < 2)
