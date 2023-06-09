@@ -119,9 +119,15 @@ end
 
 #endregion
 
+<<<<<<< HEAD
 ############################################################################################
 # hamiltonian
 #region
+=======
+zerocell(h::Hamiltonian) = zerocell(h.lattice)
+
+blockeltype(::Hamiltonian{<:Any,<:Any,M}) where {M} = eltype(M)
+>>>>>>> master
 
 hamiltonian(args...; kw...) = lat -> hamiltonian(lat, args...; kw...)
 
