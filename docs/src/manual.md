@@ -130,11 +130,28 @@ Lattice{Float16,2,2} : 2D lattice in 2D space
     Sites         : (1, 1) --> 2 total per unit cell
 ```
 
+## Visualizing lattices
+
+To produce an interactive visualization of `Lattice`s or other Quantica object you need to load GLMakie, CairoMakie or some other plotting backend from the Makie repository (i.e. do `using GLMakie`, see also Installation). Then, a number of new plotting functions will become available. The main one is `qplot`. A Lattice is represented, by default, as the sites in a unitcell plus the Bravais vectors.
+
+```julia
+julia> using GLMakie
+
+julia> lat = LP.honeycomb()
+
+julia> qplot(lat, hide = ())
+```
+![BCC lattice](assets/honeycomb_lat.png)
+
+`qplot` accepts a large number of keywords to customize your plot. In the case of lattice, most of these are passed over to the function `plotlattice`, specific to lattices and Hamiltonians. In the case above, `hide = ()` means "don't hide any element of the plot". See the `qplot` and `plotlattice` docstrings for details.
+
+!! tip GLMakie is optimized for interactive GPU-accelerated, rasterized plots. If you need to export to PDF for publications or in a Jupyter notebook, use CairoMakie instead, which in general renders non-interactive, but vector-based plots.
+
 ## SiteSelectors
 
-A central concept in Quantica is a selector. There are two types of selectors, `SiteSelector`s and `HopSelectors`. `SiteSelector`s are a set of directives that can be applied to a lattice to select a subset of its sites. Similarly, `HopSelector`s can be used to select a number of site pairs, and will be used later to define tight-binding models and Hamiltonians.
+A central concept in Quantica is that of a "selector". There are two types of selectors, `SiteSelector`s and `HopSelectors`. `SiteSelector`s are a set of directives or rules that can be applied to a lattice to select a subset of its sites. Similarly, `HopSelector`s can be used to select a number of site pairs, and will be used later to define tight-binding models and Hamiltonians.
 
-Let us define a SiteSelector that picks all sites belonging to the `:B` sublattice of a given lattice within a circle of radius 10
+Let us define a `SiteSelector` that picks all sites belonging to the `:B` sublattice of a given lattice within a circle of radius 10
 
 ```jldoctest
 julia> s = siteselector(region = r -> norm(r) <= 10, sublats = :B)
@@ -152,11 +169,16 @@ LatticeSlice{Float64,2,2} : collection of subcells for a 2D lattice in 2D space
   Cell range  : ([-11, -11], [11, 11])
   Total sites : 363
 ```
-The `Cell range` above are the corners of a bounding box that contains all unit cell indices with at least one selected site.
+The `Cell range` above are the corners of a bounding box *in cell-index space* that contains all unit cell indices with at least one selected site. Let's plot it
+
+```
+julia> qplot(lat[s], hide = ())
+```
+![A LatticeSlice](assets/latslice.png)
 
 !!! tip Collect the site positions of a `LatticeSlice` with `collect(sites(ls))`. If you do `sites(ls)` instead, you will get a lazy iterator that can be used to iterate efficiently among site positions without allocating them in memory
 
-Apart from `region` and `sublats` we can also restrict the unitcells by their index. For example, to select all sites in unit cells within the above bounding box we can do
+Apart from `region` and `sublats` we can also restrict the unitcells by their cell index. For example, to select all sites in unit cells within the above bounding box we can do
 ```jldoctest
 julia> s´ = siteselector(cells = CartesianIndices((-11:11, -11:11)))
 SiteSelector: a rule that defines a finite collection of sites in a lattice
@@ -171,7 +193,7 @@ LatticeSlice{Float64,2,2} : collection of subcells for a 2D lattice in 2D space
   Total sites : 1058
 ```
 
-We can also often omit constructing the `SiteSelector` altogether by passing the keywords directly
+We can also omit constructing the `SiteSelector` altogether by passing the keywords directly
 ```jldoctest
 julia> ls = lat[cells = n -> 0 <= n[1] <= 2 && abs(n[2]) < 3, sublats = :A]
 LatticeSlice{Float64,2,2} : collection of subcells for a 2D lattice in 2D space
@@ -269,16 +291,3 @@ Lattice{Float64,2,1} : 1D lattice in 2D space
 ```
 
 !!! tip As discussed in the `SiteSelector` section, we don't build a `siteselector(region = ...)` object to then pass it to `supercell`: as shown above we instead pass the corresponding keywords directly to `supercell`, which takes care to build the selector internally.
-
-## Visualizing lattices
-
-To produce an interactive visualization of `Lattice`s or other Quantica object you need to load GLMakie or some other plotting backend from the Makie repository (doing `using GLMakie`, see also Installation). Then, a number of new plotting functions will become available. The main one is `qplot`
-
-```julia
-julia> using GLMakie
-
-julia> lat = LP.bcc() |> supercell(6);
-
-julia> qplot(lat, sitecolor = :orange)
-```
-![BCC lattice](assets/bcclat.png)
