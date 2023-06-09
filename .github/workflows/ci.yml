@@ -7,7 +7,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   test:
-    if: github.event_name == 'push' && contains(toJson(github.event.commits), '[ci skip]') == false && contains(toJson(github.event.commits), '[skip ci]') == false
+    if: github.event_name == 'push' && contains(toJson(github.event.commits), '[skip test]') == false && contains(toJson(github.event.commits), '[skip tests]') == false
     name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }}
     runs-on: ${{ matrix.os }}
     strategy:
