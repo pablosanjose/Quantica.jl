@@ -12,9 +12,10 @@ Here you will read about using Quantica.jl to build and compute properties of ti
 - Computing Green functions of Hamiltonians or open Hamiltonians using a range of solvers
 - Computing observables from Green functions, such as spectral densities, current densities, local and nonlocal conductances, Josephson currents, critical currents, transmission probabilities, etc.
 
-!!! tip Full usage instructions on all Quantica functions can be obtained within the Julia REPL by querying its docstrings. For example, to obtained details on the `hamiltonian` function or on the available `LatticePresets`, just type `?hamiltonian` or `?LatticePresets`.
+!!! tip "Check the docstrings"
+    Full usage instructions on all Quantica functions can be obtained within the Julia REPL by querying its docstrings. For example, to obtained details on the `hamiltonian` function or on the available `LatticePresets`, just type `?hamiltonian` or `?LatticePresets`.
 
-# Glossary
+## Glossary
 
 - `Sublat`: a sublattice, representing a number of identical sites within the unit cell of a bounded or unbounded lattice. Each site has a position in an `E`-dimensional space (`E` is called the embedding dimension). All sites in a given `Sublat` will be able to hold the same number of orbitals, and they can be thought of as identical atoms. Each `Sublat` in a `Lattice` can be given a unique name, by default `:A`, `:B`, etc.
 - `Lattice`: a collection of `Sublat`s plus a collection of `L` Bravais vectors that define the periodicity of the lattice. A bounded lattice has `L=0`, and no Bravais vectors. A `Lattice` with `L > 0` can be understood as a periodic (unbounded) set of unit cells, each containing a set of sites, each of which belongs to a different sublattice.
@@ -35,9 +36,9 @@ Here you will read about using Quantica.jl to build and compute properties of ti
   - `GreenSlice`: a `GreenFunction` evaluated on a specific set of sites, but at an unspecified energy
   - `GreenSolution`: a `GreenFunction` evaluated at a specific energy, but on an unspecified set of sites
 
-# Building Lattices
+## Building Lattices
 
-## Constructing a Lattice from scratch
+### Constructing a Lattice from scratch
 
 Consider a lattice like graphene's. It has two sublattices, A and B, forming a honeycomb pattern in space. The position of the single A site inside the unitcell is `[0, -a0/√3]`, with the B site at `[0, a0/√3]`. The `i=1,2` Bravais vectors are `Aᵢ = [± cos(π/3), sin(π/3)]`. If we set the lattice constant `a0 = 1`, one way to build this lattice would be
 
@@ -56,7 +57,8 @@ Lattice{Float64,2,2} : 2D lattice in 2D space
     Sites         : (1, 1) --> 2 total per unit cell
 ```
 
-!!! tip Note that we have used `Tuple`s, such as `(0, 1/√3)` instead of `Vector`s, like `[0, 1/√3]`. In Julia small-length `Tuple`s are much more efficient than `Vector`s, since their length is known and fixed at compile time. Static vectors (`SVector`) and matrices (`SMatrix`) are also available to Quantica, which are just as efficient as `Tuple`s. They be entered as `SA[0, 1/√3]` and `SA[1 0; 0 1]`, respectively. Always use `Tuple`, `SVector` and `SMatrix` in Quantica where possible.
+!!! tip "Static collections are good"
+    Note that we have used `Tuple`s, such as `(0, 1/√3)` instead of `Vector`s, like `[0, 1/√3]`. In Julia small-length `Tuple`s are much more efficient than `Vector`s, since their length is known and fixed at compile time. Static vectors (`SVector`) and matrices (`SMatrix`) are also available to Quantica, which are just as efficient as `Tuple`s. They be entered as `SA[0, 1/√3]` and `SA[1 0; 0 1]`, respectively. Always use `Tuple`, `SVector` and `SMatrix` in Quantica where possible.
 
 If we don't plan to address the two sublattices individually, we could also fuse them into one with
 ```jldoctest
@@ -81,7 +83,8 @@ Lattice{Float32,3,2} : 2D lattice in 3D space
     Sites         : (1, 1) --> 2 total per unit cell
 ```
 
-!!! tip For the `dim` keyword above we can alternatively use `dim = Val(3)`, which is slightly more efficient, because the value is encoded as a type. This is a Julia thing (the concept of type stability), and can be ignored upon a first contact with Quantica.
+!!! tip "Advanced: static `dim` with `Val`"
+    For the `dim` keyword above we can alternatively use `dim = Val(3)`, which is slightly more efficient, because the value is encoded as a type. This is a Julia thing (the concept of type stability), and can be ignored upon a first contact with Quantica.
 
 One can also *convert* an existing lattice like the above to have a different type, embedding dimension, bravais vectors, `Sublat` names with
 
@@ -109,7 +112,7 @@ julia> sites(lat´´, :Nitrogen)
 Similarly, the Bravais matrix of a `lat` can be obtained with `bravais_matrix(lat)`.
 
 
-## Lattice presets
+### Lattice presets
 
 We can also use a collection of pre-built lattices in different dimensions, which are defined in the submodule `LatticePresets`, also called `LP`. These presets currently include
 - `LP.linear`: linear 1D lattice
@@ -130,7 +133,7 @@ Lattice{Float16,2,2} : 2D lattice in 2D space
     Sites         : (1, 1) --> 2 total per unit cell
 ```
 
-## Visualizing lattices
+### Visualizing lattices
 
 To produce an interactive visualization of `Lattice`s or other Quantica object you need to load GLMakie, CairoMakie or some other plotting backend from the Makie repository (i.e. do `using GLMakie`, see also Installation). Then, a number of new plotting functions will become available. The main one is `qplot`. A Lattice is represented, by default, as the sites in a unitcell plus the Bravais vectors.
 
@@ -141,13 +144,15 @@ julia> lat = LP.honeycomb()
 
 julia> qplot(lat, hide = ())
 ```
-![BCC lattice](assets/honeycomb_lat.png)
+
+<img src="assets/honeycomb_lat.png" alt="Honeycomb lattice" width="250" />
+
 
 `qplot` accepts a large number of keywords to customize your plot. In the case of lattice, most of these are passed over to the function `plotlattice`, specific to lattices and Hamiltonians. In the case above, `hide = ()` means "don't hide any element of the plot". See the `qplot` and `plotlattice` docstrings for details.
 
 !! tip GLMakie is optimized for interactive GPU-accelerated, rasterized plots. If you need to export to PDF for publications or in a Jupyter notebook, use CairoMakie instead, which in general renders non-interactive, but vector-based plots.
 
-## SiteSelectors
+### SiteSelectors
 
 A central concept in Quantica is that of a "selector". There are two types of selectors, `SiteSelector`s and `HopSelectors`. `SiteSelector`s are a set of directives or rules that can be applied to a lattice to select a subset of its sites. Similarly, `HopSelector`s can be used to select a number of site pairs, and will be used later to define tight-binding models and Hamiltonians.
 
@@ -171,12 +176,14 @@ LatticeSlice{Float64,2,2} : collection of subcells for a 2D lattice in 2D space
 ```
 The `Cell range` above are the corners of a bounding box *in cell-index space* that contains all unit cell indices with at least one selected site. Let's plot it
 
-```
+```julia
 julia> qplot(lat[s], hide = ())
 ```
-![A LatticeSlice](assets/latslice.png)
 
-!!! tip Collect the site positions of a `LatticeSlice` with `collect(sites(ls))`. If you do `sites(ls)` instead, you will get a lazy iterator that can be used to iterate efficiently among site positions without allocating them in memory
+<img src="assets/latslice.png" alt="A LatticeSlice" width="400" />
+
+!!! tip "Sites of a LatticeSlice"
+    Collect the site positions of a `LatticeSlice` with `collect(sites(ls))`. If you do `sites(ls)` instead, you will get a lazy iterator that can be used to iterate efficiently among site positions without allocating them in memory
 
 Apart from `region` and `sublats` we can also restrict the unitcells by their cell index. For example, to select all sites in unit cells within the above bounding box we can do
 ```jldoctest
@@ -204,7 +211,7 @@ LatticeSlice{Float64,2,2} : collection of subcells for a 2D lattice in 2D space
 
 Selectors are very expressive and powerful. Do check `siteselector` and `hopselector` docstrings for more details.
 
-## Transforming lattices
+### Transforming lattices
 
 To transform a lattice, so that site positions `r` become `f(r)` use `transform`
 ```jldoctest
@@ -234,11 +241,12 @@ julia> sites(translate(rotated_honeycomb, δr))
  [0.5, 1.0]
 ```
 
-## Currying: chaining transformations with the `|>` operator
+### Currying: chaining transformations with the `|>` operator
 
 Many functions in Quantica have a "curried" version that allows them to be chained together using the pipe operator `|>`.
 
-!!! tip The curried version of a function `f(x1, x2...)` is `f´ = x1 -> f(x2...)`, so that the curried form of `f(x1, x2...)` is `x2 |> f´(x2...)`, or `f´(x2...)(x1)`. This gives the first argument `x1` a privileged role. Users of object-oriented languages such as Python may find this use of the `|>` operator somewhat similar to the way the dot operator works there (i.e. `x1.f(x2...)`).
+!!! tip "Definition of currying"
+    The curried version of a function `f(x1, x2...)` is `f´ = x1 -> f(x2...)`, so that the curried form of `f(x1, x2...)` is `x2 |> f´(x2...)`, or `f´(x2...)(x1)`. This gives the first argument `x1` a privileged role. Users of object-oriented languages such as Python may find this use of the `|>` operator somewhat similar to the way the dot operator works there (i.e. `x1.f(x2...)`).
 
 The last example above can then be written as
 ```jldoctest
@@ -250,7 +258,7 @@ julia> LP.honeycomb(a0 = √3) |> transform(f) |> translate(δr) |> sites
 
 This type of curried syntax is supported by most Quantica functions, and will be used extensively in this manual.
 
-## Extending lattices with supercells
+### Extending lattices with supercells
 
 As a periodic structure, the choice of the unitcell in an unbounded lattice is to an extent arbitrary. Given a lattice `lat` we can obtain another with a unit cell 3 times larger with `supercell(lat, 3)`
 
@@ -290,4 +298,5 @@ Lattice{Float64,2,1} : 1D lattice in 2D space
     Sites         : (10,) --> 10 total per unit cell
 ```
 
-!!! tip As discussed in the `SiteSelector` section, we don't build a `siteselector(region = ...)` object to then pass it to `supercell`: as shown above we instead pass the corresponding keywords directly to `supercell`, which takes care to build the selector internally.
+!!! tip "No need to build selectors explicitly"
+    As discussed in the `SiteSelector` section, we don't build a `siteselector(region = ...)` object to then pass it to `supercell`: as shown above we instead pass the corresponding keywords directly to `supercell`, which takes care to build the selector internally.
