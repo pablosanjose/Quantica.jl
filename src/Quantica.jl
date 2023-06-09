@@ -17,7 +17,6 @@ using ExprTools
 using IntervalTrees
 using FrankenTuples
 using Statistics: mean
-<<<<<<< HEAD
 using QuadGK
 
 using Infiltrator # debugging
@@ -34,27 +33,6 @@ export sublat, bravais_matrix, lattice, sites, supercell,
 
 export LatticePresets, LP, RegionPresets, RP, HamiltonianPresets, HP
 export EigenSolvers, ES, GreenSolvers, GS
-=======
-
-using Compat # for use of argmin/argmax in bandstructure.jl
-
-export sublat, bravais, lattice, dims, supercell, unitcell,
-       hopping, onsite, @onsite!, @hopping!, @block!, parameters, siteselector, hopselector, nrange,
-       sitepositions, siteindices, not,
-       ket, ketmodel, randomkets, basiskets,
-       hamiltonian, parametric, bloch, bloch!, similarmatrix,
-       flatten, unflatten, orbitalstructure, wrap, transform!, combine,
-       spectrum, bandstructure, diagonalizer, cuboid, isometric, splitbands,
-       bands, vertices, minima, maxima, gapedge, gap, isinband,
-       energies, states, degeneracy,
-       momentaKPM, dosKPM, averageKPM, densityKPM, bandrangeKPM,
-       greens, greensolver, Schur1D, proj_DACP, DACPdiagonaliser
-
-export RegionPresets, RP, LatticePresets, LP, HamiltonianPresets, HP
-
-export LinearAlgebraPackage, ArpackPackage, ArnoldiMethodPackage, KrylovKitPackage
-
->>>>>>> master
 export @SMatrix, @SVector, SMatrix, SVector, SA
 export ishermitian, tr, I, norm, dot, diag, det
 export ftuple
@@ -78,21 +56,12 @@ include("hamiltonian.jl")
 include("supercell.jl")
 include("transform.jl")
 include("mesh.jl")
-<<<<<<< HEAD
 include("bands.jl")
 include("greenfunction.jl")
 include("observables.jl")
 # Plumbing
 include("apply.jl")
 include("show.jl")
-=======
-include("diagonalizer.jl")
-include("bandstructure.jl")
-include("KPM.jl")
-include("DACP.jl")
-include("effective.jl")
-include("greens.jl")
->>>>>>> master
 include("convert.jl")
 include("sanitizers.jl")
 
