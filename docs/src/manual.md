@@ -13,7 +13,7 @@ Here you will learn how to use Quantica.jl to build and compute properties of ti
 - Computing observables from Green functions, such as spectral densities, current densities, local and nonlocal conductances, Josephson currents, critical currents, transmission probabilities, etc.
 
 !!! tip "Check the docstrings"
-    Full usage instructions on all Quantica functions can be found [here](@ref api) or within the Julia REPL by querying its docstrings. For example, to obtain details on the `hamiltonian` function or on the available `LatticePresets`, just type `?hamiltonian` or `?LatticePresets`.
+    Full usage instructions on all Quantica functions can be found [here](@ref api) or within the Julia REPL by querying their docstrings. For example, to obtain details on the `hamiltonian` function or on the available `LatticePresets`, just type `?hamiltonian` or `?LatticePresets`.
 
 ## Glossary
 
@@ -319,7 +319,7 @@ julia> qplot(lat[cells = -7:7])
 
 We now will see how to build a generic single-particle tight-binding model, with Hamiltonian
 
-``H = \\sum_{i\\alpha j\\beta} c_{i\\alpha}^\\dagger V_{\\alpha\\beta}(r_i, r_j)c_{j\\alpha}``
+``H = \sum_{i\alpha j\beta} c_{i\alpha}^\dagger V_{\alpha\beta}(r_i, r_j)c_{j\alpha}``
 
 Here, `α,β` are orbital indices in each site, `i,j` are site indices, and `rᵢ, rⱼ` are site positions. In Quantica we would write the above model as
 
