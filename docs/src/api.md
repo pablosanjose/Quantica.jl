@@ -1,4 +1,4 @@
-# API
+# [API](@id api)
 ```@meta
 CurrentModule = Quantica
 ```
