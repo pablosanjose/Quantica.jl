@@ -530,7 +530,7 @@ qplot(h, inspector = true)
 
 The `inspector = true` keyword enables interactive tooltips in the visualization of `h` that allows to navigate each `onsite` and `hopping` amplitude graphically. Note that sites connected to the unit cell of `h` by some hopping are included, but are rendered with partial transparency by default.
 
-### ParametricHamiltonian
+### ParametricHamiltonians
 
 If we use a `ParametricModel` instead of a simple `TightBindingModel` we will obtain a `ParametricHamiltonian` instead of a simple `Hamiltonian`, both of which are subtypes of the `AbstractHamiltonian` type
 ```jldoctest
@@ -632,8 +632,8 @@ julia> h_param(t=2)[(0,0)]
     The above behavior for unspecified parameters is not set in stone and may change in future versions. Another option would be to apply their default values (which may, however, not exist).
 
 We are usually not interested in the harmonics `h[dn]` themselves, but rather in the Bloch matrix of a Hamiltonian
-    `` H(\phi) = \sum_{dn} H_{dn} exp(-i \phi * dn)``
-where ``H_{dn}`` are the Hamiltonian harmonics, ``\phi = (\phi_1, \phi_2...) = k\cdot A_i`` are the Bloch phases, and ``A_i`` are the Bravais vectors.
+    `` H(\phi) = \sum_{dn} H_{dn} \exp(-i \phi * dn)``
+where ``H_{dn}`` are the Hamiltonian harmonics, ``\phi = (\phi_1, \phi_2...) = (k\cdot A_1, k\cdot A_2...)`` are the Bloch phases, ``k`` is the Bloch wavevector and ``A_i`` are the Bravais vectors.
 
 We obtain the Bloch matrix using the syntax `h(ϕ; params...)`
 ```jldoctest
@@ -644,13 +644,15 @@ julia> h((0,0))
  8.1+0.0im  0.0+0.0im      ⋅          ⋅
  0.0+0.0im  8.1+0.0im      ⋅          ⋅
 
-julia> h_param_mod((0.2, 0.3); t=2, B = 0.1)
+julia> h_param_mod((0.2, 0.3); B = 0.1)
 4×4 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 8 stored entries:
-         ⋅                   ⋅           5.87081-0.988379im      0.0+0.0im
-         ⋅                   ⋅               0.0+0.0im       5.87081-0.988379im
- 5.87081+0.988379im      0.0+0.0im               ⋅                   ⋅
-     0.0+0.0im       5.87081+0.988379im          ⋅                   ⋅
+         ⋅                  ⋅          7.92559-1.33431im      0.0+0.0im
+         ⋅                  ⋅              0.0+0.0im      7.92559-1.33431im
+ 7.92559+1.33431im      0.0+0.0im              ⋅                  ⋅
+     0.0+0.0im      7.92559+1.33431im          ⋅                  ⋅
 ```
+
+Note that unspecified parameters take their default values when using the call syntax (as per the standard Julia convention). Any unspecified parameter that does not have a default value will produce an `UndefKeywordError` error.
 
 ## Bandstructures
 
