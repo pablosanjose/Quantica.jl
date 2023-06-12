@@ -532,7 +532,7 @@ The `inspector = true` keyword enables interactive tooltips in the visualization
 
 ### ParametricHamiltonian
 
-If we use a `ParametricModel` we will obtain a `ParametricHamiltonian` which is another subtype of the `AbstractHamiltonian` type
+If we use a `ParametricModel` instead of a simple `TightBindingModel` we will obtain a `ParametricHamiltonian` instead of a simple `Hamiltonian`, both of which are subtypes of the `AbstractHamiltonian` type
 ```jldoctest
 julia> model_param = @hopping((; t = 2.7) -> t*I);
 
@@ -548,7 +548,7 @@ ParametricHamiltonian{Float64,2,2}: Parametric Hamiltonian on a 2D Lattice in 2D
   Parameters       : [:t]
 ```
 
-We can apply `Modifier`s by passing them as extra arguments to `hamiltonian`, which results again in a `ParametricHamiltonian` with the parametric modifiers applied
+We can also apply `Modifier`s by passing them as extra arguments to `hamiltonian`, which results again in a `ParametricHamiltonian` with the parametric modifiers applied
 ```jldoctest
 julia> peierls! = @hopping!((t, r, dr; Bz = 0) -> t * cis(-Bz/2 * SA[-r[2], r[1]]' * dr));
 
@@ -565,10 +565,15 @@ ParametricHamiltonian{Float64,2,2}: Parametric Hamiltonian on a 2D Lattice in 2D
 ```
 Note that `SA[-r[2], r[1]]` above is a 2D `SVector`, because since the embedding dimension is `E = 2`, both `r` and `dr` are also 2D `SVector`s.
 
-!!! warning "Modifiers do not commute"
-    We can add as many modifiers as we need, by passing them as extra arguments to `hamiltonian`. Beware, however, that modifiers do not need to commute, in the sense that the result will in general depend on their order.
+We can also apply modifiers to an already constructed `AbstractHamiltonian`. The following is equivalent to the above
+```jldoctest
+julia> h_param_mod = hamiltonian(h_param, peierls!);
+```
 
-To apply specific values to the parameters of a `ParametricHamiltonian` and obtain a plain `Hamiltonian`, simply use the call syntax
+!!! warning "Modifiers do not commute"
+    We can add as many modifiers as we need by passing them as extra arguments to `hamiltonian`. Beware, however, that modifiers do not necessarily commute, in the sense that the result will in general depend on their order.
+
+We can obtain a plain `Hamiltonian` from a `ParametricHamiltonian` by applying specific values to its parameters. To do so, simply use the call syntax with parameters as keyword arguments
 ```jldoctest
 julia> h_param_mod(Bz = 0.1, t = 1)
 Hamiltonian{Float64,2,2}: Hamiltonian on a 2D Lattice in 2D space
@@ -583,7 +588,7 @@ Hamiltonian{Float64,2,2}: Hamiltonian on a 2D Lattice in 2D space
 
 ### Obtaining actual matrices
 
-For an L-dimensional AbstractHamiltonian `h`, i.e. defined on a Lattice with `L` Bravais vectors, the Hamiltonian matrix between any unit cell with cell index `n` and another unit cell at `n+dn` (here known as Hamiltonian "harmonic") is given by `h[dn]`
+For an L-dimensional AbstractHamiltonian `h` (i.e. defined on a Lattice with `L` Bravais vectors), the Hamiltonian matrix between any unit cell with cell index `n` and another unit cell at `n+dn` (here known as a Hamiltonian "harmonic") is given by `h[dn]`
 ```jldoctest
 julia> h[(1,0)]
 4×4 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 4 stored entries:
@@ -601,14 +606,14 @@ julia> h[(0,0)]
 ```
 
 !!! tip "Cell distance indices"
-    We can use `Tuple`s or `SVector`s for cell distance indices `dn`. Also an empty `Tuple` `()` will always be intepreted as the zero distance: `h[()] = h[(0,0...)] = h[SA[0,0...]]`.
+    We can use `Tuple`s or `SVector`s for cell distance indices `dn`. An empty `Tuple` `dn = ()` will always return the main intra-unitcell harmonic: `h[()] = h[(0,0...)] = h[SA[0,0...]]`.
 
 !!! note "Bounded Hamiltonians"
-    If the Hamiltonian has a bounded lattice (i.e. `L=0` Bravais vectors), we will use an empty tuple to obtain its matrix `h[()]`. This is not in conflict with the above syntax.
+    If the Hamiltonian has a bounded lattice (i.e. it has `L=0` Bravais vectors), we will simply use an empty tuple to obtain its matrix `h[()]`. This is not in conflict with the above syntax.
 
 Note that if `h` is a `ParametricHamiltonian`, such as `h_param` above, we will get zeros in place of the unspecified parametric terms, unless we actually first specify the values of the parameters
 ```jldoctest
-julia> h_param[(0,0)]
+julia> h_param[(0,0)] # Parameter t is not specified -> it is not applied
 4×4 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 8 stored entries:
      ⋅          ⋅      0.0+0.0im  0.0+0.0im
      ⋅          ⋅      0.0+0.0im  0.0+0.0im
@@ -622,6 +627,9 @@ julia> h_param(t=2)[(0,0)]
  2.0+0.0im  0.0+0.0im      ⋅          ⋅
  0.0+0.0im  2.0+0.0im      ⋅          ⋅
 ```
+
+!!! note "ParametricHamiltonian harmonics"
+    The above behavior for unspecified parameters is not set in stone and may change in future versions. Another option would be to apply their default values (which may, however, not exist).
 
 We are usually not interested in the harmonics `h[dn]` themselves, but rather in the Bloch matrix of a Hamiltonian
     `` H(\phi) = \sum_{dn} H_{dn} exp(-i \phi * dn)``
