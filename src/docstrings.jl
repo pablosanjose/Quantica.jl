@@ -564,9 +564,12 @@ its parameters `params`. If `ph` is a non-parametric `Hamiltonian` instead, this
 
 Return the flat, sparse Bloch matrix of `h::AbstractHamiltonian` at Bloch phases `φs`, with
 applied parameters `params` if `h` is a `ParametricHamiltonian`. The Bloch matrix is defined
-as `H = ∑_dn exp(-im φs⋅dn) H_dn`, where `H_dn = h[dn]` is the `dn` flat Bloch
-harmonic of `h`, and `φs[i] = k⋅aᵢ` in terms of the wavevector `k` and the
-Bravais vectors `aᵢ`.
+as
+
+        H = ∑_dn exp(-im φs⋅dn) H_dn
+
+where `H_dn = h[dn]` is the `dn` flat Bloch harmonic of `h`, and `φs[i] = k⋅aᵢ` in terms of
+the wavevector `k` and the Bravais vectors `aᵢ`.
 
 # Examples
 

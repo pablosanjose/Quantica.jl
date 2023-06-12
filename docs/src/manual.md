@@ -58,9 +58,9 @@ Lattice{Float64,2,2} : 2D lattice in 2D space
 ```
 
 !!! tip "Tuple, SVector and SMatrix"
-    Note that we have used `Tuple`s, such as `(0, 1/√3)` instead of `Vector`s, like `[0, 1/√3]`. In Julia small-length `Tuple`s are much more efficient than `Vector`s, since their length is known and fixed at compile time. Static vectors (`SVector`) and matrices (`SMatrix`) are also available to Quantica, which are just as efficient as `Tuple`s. They be entered as `SA[0, 1/√3]` and `SA[1 0; 0 1]`, respectively. Always use `Tuple`, `SVector` and `SMatrix` in Quantica where possible.
+    Note that we have used `Tuple`s, such as `(0, 1/√3)` instead of `Vector`s, like `[0, 1/√3]`. In Julia small-length `Tuple`s are much more efficient as containers than `Vector`s, since their length is known and fixed at compile time. Static vectors (`SVector`) and matrices (`SMatrix`) are also available to Quantica, which are just as efficient as `Tuple`s. They be entered as e.g. `SA[0, 1/√3]` and `SA[1 0; 0 1]`, respectively. For efficiency, always use `Tuple`, `SVector` and `SMatrix` in Quantica where possible.
 
-If we don't plan to address the two sublattices individually, we could also fuse them into one with
+If we don't plan to address the two sublattices individually, we could also fuse them into one, like
 ```jldoctest
 julia> lat = lattice(sublat((0, 1/√3), (0, -1/√3)), bravais = (A1, A2))
 Lattice{Float64,2,2} : 2D lattice in 2D space
@@ -313,13 +313,13 @@ julia> qplot(lat[cells = -7:7])
 <img src="../assets/nanoribbon_lat.png" alt="Honeycomb nanoribbon" height="250" />
 ```
 !!! tip "No need to build selectors explicitly"
-    As discussed in the `SiteSelector` section, we don't build a `siteselector(region = ...)` object to pass it to `supercell`. Instead, as shown above, we pass the corresponding keywords directly to `supercell`, which then takes care to build the selector internally.
+    Note that we we didn't build a `siteselector(region = ...)` object to pass it to `supercell`. Instead, as shown above, we passed the corresponding keywords directly to `supercell`, which then takes care to build the selector internally.
 
 ## Models
 
 We now will see how to build a generic single-particle tight-binding model, with Hamiltonian
 
-``H = \sum_{i\alpha j\beta} c_{i\alpha}^\dagger V_{\alpha\beta}(r_i, r_j)c_{j\alpha}``
+    ``H = \sum_{i\alpha j\beta} c_{i\alpha}^\dagger V_{\alpha\beta}(r_i, r_j)c_{j\alpha}``
 
 Here, `α,β` are orbital indices in each site, `i,j` are site indices, and `rᵢ, rⱼ` are site positions. In Quantica we would write the above model as
 
@@ -339,7 +339,7 @@ TightbindingModel: model with 2 terms
     Reverse hops      : false
     Coefficient       : 1
 ```
-where `V(r₁, r₂)` is a function that returns a matrix (preferably an `SMatrix`) of the required orbital dimensionality.
+where `V(rᵢ, rⱼ)` is a function that returns a matrix ``V_{\alpha\beta}(r_i, r_j)`` (preferably an `SMatrix`) of the required orbital dimensionality.
 
 Note that when writing models we distinguish between onsite (`rᵢ=rⱼ`) and hopping (`rᵢ≠rⱼ`) terms. For the former, `r` is the site position. For the latter we use a bond-center and bond-distance `(r, dr)` parametrization of `V`, so that `r₁, r₂ = r ∓ dr/2`
 
@@ -414,11 +414,77 @@ TightbindingModel: model with 3 terms
     The convenience function `plusadjoint(term) = term + term'` adds the Hermitian conjugate of its argument (`term'`), equivalent to the `+ h.c.` notation often used in the literature.
 
 !!! note "Index-agnostic modeling"
-    The Quantica approach to defining tight-binding models does not rely on site indices (`i,j` above), since these are arbitrary, and may even be beyond the control of the user (for example after using `supercell`). Instead, we rely on physical properties of sites, such as position, distance or sublattice. In the future we might add an interface to also allow index-based modeling, if there is demand for it, but we have yet to encounter an example where it is preferable.
+    The Quantica approach to defining tight-binding models does not rely on site indices (`i,j` above), since these are arbitrary, and may even be beyond the control of the user (for example after using `supercell`). Instead, we rely on physical properties of sites, such as position, distance or sublattice. In the future we might add an interface to also allow index-based modeling if there is demand for it, but we have yet to encounter an example where it is preferable.
 
 ### Parametric Models
 
+The models introduced above are non-parametric, in the sense that they encode fixed, numerical Hamiltonian matrix elements. In actual problems, it is commonplace to have models that depend on a number of free parameters that will need to be adjusted during a calculation. For example, one may need to compute the phase diagram of a system as a function of a spin-orbit coupling or applied magnetic field. For these cases, we have `ParametricModel`s.
+
+Parametric models are defined with
+- `@onsite((; params...) -> ...; sites...)`
+- `@onsite((r; params...) -> ...; sites...)`
+- `@hopping((; params...) -> ...; hops...)`
+- `@hopping((r, dr; params...) -> ...; hops...)`
+
+where `params` enter as keyword arguments with (optional) default values. An example of a hopping model with a Peierls phase in the symmetric gauge
+```jldoctest
+julia> model_perierls = @hopping((r, dr; B = 0, t = 1) -> t * cis(-im * Bz/2 * SA[-r[2], r[1], 0]' * dr))
+ParametricModel: model with 1 term
+  ParametricHoppingTerm{ParametricFunction{2}}
+    Region            : any
+    Sublattice pairs  : any
+    Cell distances    : any
+    Hopping range     : Neighbors(1)
+    Reverse hops      : false
+    Coefficient       : 1
+    Parameters        : [:B, :t]
+```
+Note that `B` and `t` are free parameters in the model.
+
+One can linearly combine parametric and non-parametric models freely, omit argument default values, and use any of the functional argument forms described for `onsite` and `hopping` (but not the constant argument form)
+```jldoctest
+julia> model´ = 2 * (onsite(1) - 2 * @hopping((; t) -> t))
+ParametricModel: model with 2 terms
+  ParametricHoppingTerm{ParametricFunction{0}}
+    Region            : any
+    Sublattice pairs  : any
+    Cell distances    : any
+    Hopping range     : Neighbors(1)
+    Reverse hops      : false
+    Coefficient       : -4
+    Parameters        : [:t]
+  OnsiteTerm{Int64}:
+    Region            : any
+    Sublattices       : any
+    Cells             : any
+    Coefficient       : 2
+```
+
 ### Modifiers
+
+There is a third model-related functionality known as a `OnsiteModifier` and `HoppingModifier`. Given a model that defines a set of onsite and hopping amplitudes on a subset of sites and hops, one can define a parametric-dependent modification of a subset of said amplitudes. Modifiers are built with
+- `@onsite!((o; params...) -> new_onsite; sites...)`
+- `@onsite!((o, r; params...) -> new_onsite; sites...)`
+- `@hopping((t; params...) -> new_hopping; hops...)`
+- `@hopping((t, r, dr; params...) -> new_hopping; hops...)`
+
+For example, the following modifier inserts a peierls phase on any non-zero hopping in a model
+```jldoctest
+julia> model_perierls! = @hopping!((t, r, dr; B = 0) -> t * cis(-Bz/2 * SA[-r[2], r[1], 0]' * dr))
+HoppingModifier{ParametricFunction{3}}:
+  Region            : any
+  Sublattice pairs  : any
+  Cell distances    : any
+  Hopping range     : Inf
+  Reverse hops      : false
+  Parameters        : [:B]
+```
+The difference with `model_perierls` is that `model_perierls!` will never add any new hoppings. It will only modify a subset or all previously existing hoppings in a model. Modifiers are not models themselves, and cannot be combined with other models. They are instead meant to be applied sequentially after applying a model.
+
+We now show how models and modifiers can be used in practice to construct Hamiltonians.
+
+!!! note "Mind the `;`"
+    While syntax like `onsite(2, sublats = :B)` and `onsite(2; sublats = :B)` are equivalent in Julia, due to the way keyword arguments are parsed, the same is not true for macro calls like `@onsite`, `@onsite!`, `@hopping` and `@hopping!`. These macros just emulate the function call syntax. But to work you must currently always use the `;` separator for keywords. Hence, something like `@onsite((; p) -> p; sublats = :B)` works, but `@onsite((; p) -> p, sublats = :B)` does not.
 
 ## Hamiltonians
 
@@ -446,7 +512,7 @@ A crucial thing to remember when defining multi-orbital Hamiltonians as the abov
 
 The Kane-Mele model for graphene describes intrinsic spin-orbit coupling (SOC), in the form of an imaginary second-nearest-neighbor hopping between same-sublattice sites, with a sign that alternates depending on hop direction `dr`. A possible implementation in Quantica would be
 ```jldoctest
-SOC(dr) = ifelse(iseven(round(Int, atan(dr[2], dr[1])/(pi/3))), im, -im)
+SOC(dr) = 0.05 * ifelse(iseven(round(Int, atan(dr[2], dr[1])/(pi/3))), im, -im)
 
 model =
   hopping(1, range = neighbors(1)) +
@@ -463,6 +529,120 @@ qplot(h, inspector = true)
 ```
 
 The `inspector = true` keyword enables interactive tooltips in the visualization of `h` that allows to navigate each `onsite` and `hopping` amplitude graphically. Note that sites connected to the unit cell of `h` by some hopping are included, but are rendered with partial transparency by default.
+
+### ParametricHamiltonian
+
+If we use a `ParametricModel` we will obtain a `ParametricHamiltonian` which is another subtype of the `AbstractHamiltonian` type
+```jldoctest
+julia> model_param = @hopping((; t = 2.7) -> t*I);
+
+julia> h_param = hamiltonian(lat, model_param; orbitals = 2)
+ParametricHamiltonian{Float64,2,2}: Parametric Hamiltonian on a 2D Lattice in 2D space
+  Bloch harmonics  : 5
+  Harmonic size    : 2 × 2
+  Orbitals         : [2, 2]
+  Element type     : 2 × 2 blocks (ComplexF64)
+  Onsites          : 0
+  Hoppings         : 6
+  Coordination     : 3.0
+  Parameters       : [:t]
+```
+
+We can apply `Modifier`s by passing them as extra arguments to `hamiltonian`, which results again in a `ParametricHamiltonian` with the parametric modifiers applied
+```jldoctest
+julia> peierls! = @hopping!((t, r, dr; Bz = 0) -> t * cis(-Bz/2 * SA[-r[2], r[1]]' * dr));
+
+julia> h_param_mod = hamiltonian(lat, model_param, peierls!; orbitals = 2)
+ParametricHamiltonian{Float64,2,2}: Parametric Hamiltonian on a 2D Lattice in 2D space
+  Bloch harmonics  : 5
+  Harmonic size    : 2 × 2
+  Orbitals         : [2, 2]
+  Element type     : 2 × 2 blocks (ComplexF64)
+  Onsites          : 0
+  Hoppings         : 6
+  Coordination     : 3.0
+  Parameters       : [:Bz, :t]
+```
+Note that `SA[-r[2], r[1]]` above is a 2D `SVector`, because since the embedding dimension is `E = 2`, both `r` and `dr` are also 2D `SVector`s.
+
+!!! warning "Modifiers do not commute"
+    We can add as many modifiers as we need, by passing them as extra arguments to `hamiltonian`. Beware, however, that modifiers do not need to commute, in the sense that the result will in general depend on their order.
+
+To apply specific values to the parameters of a `ParametricHamiltonian` and obtain a plain `Hamiltonian`, simply use the call syntax
+```jldoctest
+julia> h_param_mod(Bz = 0.1, t = 1)
+Hamiltonian{Float64,2,2}: Hamiltonian on a 2D Lattice in 2D space
+  Bloch harmonics  : 5
+  Harmonic size    : 2 × 2
+  Orbitals         : [2, 2]
+  Element type     : 2 × 2 blocks (ComplexF64)
+  Onsites          : 0
+  Hoppings         : 6
+  Coordination     : 3.0
+```
+
+### Obtaining actual matrices
+
+For an L-dimensional AbstractHamiltonian `h`, i.e. defined on a Lattice with `L` Bravais vectors, the Hamiltonian matrix between any unit cell with cell index `n` and another unit cell at `n+dn` (here known as Hamiltonian "harmonic") is given by `h[dn]`
+```jldoctest
+julia> h[(1,0)]
+4×4 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 4 stored entries:
+     ⋅          ⋅      2.7+0.0im  0.0+0.0im
+     ⋅          ⋅      0.0+0.0im  2.7+0.0im
+     ⋅          ⋅          ⋅          ⋅
+     ⋅          ⋅          ⋅          ⋅
+
+julia> h[(0,0)]
+4×4 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 8 stored entries:
+     ⋅          ⋅      2.7+0.0im  0.0+0.0im
+     ⋅          ⋅      0.0+0.0im  2.7+0.0im
+ 2.7+0.0im  0.0+0.0im      ⋅          ⋅
+ 0.0+0.0im  2.7+0.0im      ⋅          ⋅
+```
+
+!!! tip "Cell distance indices"
+    We can use `Tuple`s or `SVector`s for cell distance indices `dn`. Also an empty `Tuple` `()` will always be intepreted as the zero distance: `h[()] = h[(0,0...)] = h[SA[0,0...]]`.
+
+!!! note "Bounded Hamiltonians"
+    If the Hamiltonian has a bounded lattice (i.e. `L=0` Bravais vectors), we will use an empty tuple to obtain its matrix `h[()]`. This is not in conflict with the above syntax.
+
+Note that if `h` is a `ParametricHamiltonian`, such as `h_param` above, we will get zeros in place of the unspecified parametric terms, unless we actually first specify the values of the parameters
+```jldoctest
+julia> h_param[(0,0)]
+4×4 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 8 stored entries:
+     ⋅          ⋅      0.0+0.0im  0.0+0.0im
+     ⋅          ⋅      0.0+0.0im  0.0+0.0im
+ 0.0+0.0im  0.0+0.0im      ⋅          ⋅
+ 0.0+0.0im  0.0+0.0im      ⋅          ⋅
+
+julia> h_param(t=2)[(0,0)]
+4×4 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 8 stored entries:
+     ⋅          ⋅      2.0+0.0im  0.0+0.0im
+     ⋅          ⋅      0.0+0.0im  2.0+0.0im
+ 2.0+0.0im  0.0+0.0im      ⋅          ⋅
+ 0.0+0.0im  2.0+0.0im      ⋅          ⋅
+```
+
+We are usually not interested in the harmonics `h[dn]` themselves, but rather in the Bloch matrix of a Hamiltonian
+    `` H(\phi) = \sum_{dn} H_{dn} exp(-i \phi * dn)``
+where ``H_{dn}`` are the Hamiltonian harmonics, ``\phi = (\phi_1, \phi_2...) = k\cdot A_i`` are the Bloch phases, and ``A_i`` are the Bravais vectors.
+
+We obtain the Bloch matrix using the syntax `h(ϕ; params...)`
+```jldoctest
+julia> h((0,0))
+4×4 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 8 stored entries:
+     ⋅          ⋅      8.1+0.0im  0.0+0.0im
+     ⋅          ⋅      0.0+0.0im  8.1+0.0im
+ 8.1+0.0im  0.0+0.0im      ⋅          ⋅
+ 0.0+0.0im  8.1+0.0im      ⋅          ⋅
+
+julia> h_param_mod((0.2, 0.3); t=2, B = 0.1)
+4×4 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 8 stored entries:
+         ⋅                   ⋅           5.87081-0.988379im      0.0+0.0im
+         ⋅                   ⋅               0.0+0.0im       5.87081-0.988379im
+ 5.87081+0.988379im      0.0+0.0im               ⋅                   ⋅
+     0.0+0.0im       5.87081+0.988379im          ⋅                   ⋅
+```
 
 ## Bandstructures
 

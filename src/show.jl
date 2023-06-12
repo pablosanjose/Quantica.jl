@@ -138,13 +138,13 @@ function Base.show(io::IO, t::Union{AbstractModelTerm,Modifier})
 end
 
 Base.summary(m::TightbindingModel) = "TightbindingModel: model with $(pluraltext(terms(m), "term"))"
-Base.summary(m::ParametricModel) = "ParametricModel: model with $(pluraltext(terms(m), "term"))"
+Base.summary(m::ParametricModel) = "ParametricModel: model with $(pluraltext(allterms(m), "term"))"
 Base.summary(::OnsiteTerm{F}) where {F} = "OnsiteTerm{$(displayparameter(F))}:"
 Base.summary(::HoppingTerm{F}) where {F} = "HoppingTerm{$(displayparameter(F))}:"
 Base.summary(::ParametricOnsiteTerm{N}) where {N} = "ParametricOnsiteTerm{ParametricFunction{$N}}"
 Base.summary(::ParametricHoppingTerm{N}) where {N} = "ParametricHoppingTerm{ParametricFunction{$N}}"
 Base.summary(::OnsiteModifier{N}) where {N} = "OnsiteModifier{ParametricFunction{$N}}:"
-Base.summary(::HoppingModifier{N}) where {N} = "OnsiteModifier{ParametricFunction{$N}}:"
+Base.summary(::HoppingModifier{N}) where {N} = "HoppingModifier{ParametricFunction{$N}}:"
 
 #endregion
 
