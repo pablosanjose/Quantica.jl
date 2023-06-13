@@ -31,6 +31,9 @@ end
     for (h, s) in zip((h0, h1, h1), (s0, s1, s1´))
         testgreen(h, s; o = 2)
     end
+    # This ensures that flat_sync! is called with multiorbitals when call!-ing ph upon calling g
+    g = LP.square() |> hamiltonian(@onsite(()->I), orbitals = 2) |> supercell |> greenfunction
+    @test g[](0.0 + 0im) ≈ SA[-1 0; 0 -1]
 end
 
 @testset "greenfunction with contacts" begin

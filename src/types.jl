@@ -1219,6 +1219,14 @@ bloch(h::Hamiltonian) = h.bloch
 minimal_callsafe_copy(h::Hamiltonian) = Hamiltonian(
     lattice(h), blockstructure(h), copy.(harmonics(h)), copy_matrices(bloch(h)))
 
+function flat_sync!(h::Hamiltonian)
+    for har in harmonics(h)
+        harmat = matrix(har)
+        needs_flat_sync(harmat) && flat_sync!(harmat)
+    end
+    return h
+end
+
 Base.size(h::Hamiltonian, i...) = size(bloch(h), i...)
 Base.axes(h::Hamiltonian, i...) = axes(bloch(h), i...)
 

@@ -280,7 +280,7 @@ end
 
 (h::Hamiltonian)(phi...; params...) = copy(call!(h, phi...; params...))
 
-call!(h::Hamiltonian; params...) = h  # mimic partial call!(p::ParametricHamiltonian; params...)
+call!(h::Hamiltonian; params...) = flat_sync!(h)  # mimic partial call!(p::ParametricHamiltonian; params...)
 call!(h::Hamiltonian, φ1::Number, φ2::Number, φs::Number...; params...) =
     argerror("To obtain the (flat) Bloch matrix of `h` use `h(ϕs)`, where `ϕs` is a collection of `L=$(latdim(lattice(h)))` Bloch phases")
 call!(h::Hamiltonian{T}, φs; params...) where {T} = flat_bloch!(h, sanitize_SVector(T, φs))
@@ -327,8 +327,8 @@ end
     L == L´ || throw(ArgumentError("Need $L Bloch phases, got $(L´)"))
 
 # ouput of a call!(h, ϕs)
-call!_output(h::Hamiltonian) = flat(bloch(h))
-call!_output(h::Hamiltonian{<:Any,<:Any,0}) = h[()]
+call!_output(h::Hamiltonian) = flat_unsafe(bloch(h))
+call!_output(h::Hamiltonian{<:Any,<:Any,0}) = flat_unsafe(h[hybrid()])
 
 #endregion
 
@@ -346,6 +346,7 @@ function call!(ph::ParametricHamiltonian; kw...)
     reset_to_parent!(ph)
     h = hamiltonian(ph)
     applymodifiers!(h, modifiers(ph)...; kw...)
+    flat_sync!(h)  # modifiers are applied to unflat, need to be synced to flat
     return h
 end
 
