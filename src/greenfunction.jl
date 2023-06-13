@@ -50,7 +50,7 @@ call!(g::GreenSlice, ω; params...) =
     call!(greenfunction(g), ω; params...)[slicerows(g), slicecols(g)]
 
 retarded_omega(ω::T, s::AppliedGreenSolver) where {T<:Real} =
-    ω + im * sqrt(eps(T)) * needs_omega_shift(s)
+    ω + im * sqrt(eps(float(T))) * needs_omega_shift(s)
 
 # fallback, may be overridden
 needs_omega_shift(s::AppliedGreenSolver) = true
