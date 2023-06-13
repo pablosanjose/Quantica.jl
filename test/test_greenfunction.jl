@@ -6,6 +6,7 @@ function testgreen(h, s; kw...)
     @test g isa GreenFunction
     gω = g(ω; kw...)
     @test gω isa GreenSolution
+    @test g(0) isa GreenSolution # promote Int to AbstractFloat to add eps
     L = Quantica.latdim(lattice(h))
     z = zero(SVector{L,Int})
     o = Quantica.unitvector(1, SVector{L,Int})
