@@ -184,7 +184,7 @@ end
         h = LatticePresets.honeycomb() |> hamiltonian(hopping((r, dr) -> 1/norm(dr) * I, range = 10), orbitals = o)
         @test_throws ArgumentError wrap(h, (1,2,3))
         @test_throws ArgumentError wrap(h, 1)
-        wh = wrap(h, (1,2))
+        wh = h |> wrap((1,2))
         @test wh(()) ≈ h(SA[1,2])
         wh = wrap(h, (1,:))
         @test wh(SA[2]) ≈ h(SA[1,2])
@@ -230,6 +230,11 @@ end
         @test unflat(Quantica.HybridSparseMatrix(bs, hunflat)) == hunflat
         @test Quantica.flat(Quantica.HybridSparseMatrix(bs, hunflat)) == hflat
         @test unflat(Quantica.HybridSparseMatrix(bs, hflat)) == hunflat
+        # Tampering protection
+        h[(1,0)][1,1] = 1
+        @test_throws ArgumentError h[(1,0)]
+        @test h[unflat(0,0)] isa Quantica.SparseMatrixCSC
+        @test_throws ArgumentError h((0,0))
     end
 end
 

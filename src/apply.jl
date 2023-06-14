@@ -112,13 +112,13 @@ end
 function apply(o::OnsiteTerm, (lat, os)::Tuple{Lattice{T,E,L},OrbitalBlockStructure{B}}) where {T,E,L,B}
     f = (r, orbs) -> mask_block(B, o(r), (orbs, orbs))
     asel = apply(selector(o), lat)
-    return AppliedOnsiteTerm{T,E,L,B}(f, asel)   # f gets wrapped in a FunctionWrapper
+    return AppliedOnsiteTerm{T,E,L,B}(f, asel)         # f gets wrapped in a FunctionWrapper
 end
 
 function apply(t::HoppingTerm, (lat, os)::Tuple{Lattice{T,E,L},OrbitalBlockStructure{B}}) where {T,E,L,B}
     f = (r, dr, orbs) -> mask_block(B, t(r, dr), orbs)
     asel = apply(selector(t), lat)
-    return AppliedHoppingTerm{T,E,L,B}(f, asel)  # f gets wrapped in a FunctionWrapper
+    return AppliedHoppingTerm{T,E,L,B}(f, asel)        # f gets wrapped in a FunctionWrapper
 end
 
 apply(m::TightbindingModel, latos) = TightbindingModel(apply.(terms(m), Ref(latos)))
