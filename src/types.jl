@@ -615,14 +615,14 @@ pointers(m::AppliedModifier) = m.ptrs
 
 blocktype(m::AppliedModifier) = m.blocktype
 
-(m::AppliedOnsiteModifier{B,1})(o, r, orbs; kw...) where {B} =
+@inline (m::AppliedOnsiteModifier{B,1})(o, r, orbs; kw...) where {B} =
     mask_block(B, m.f.f(o; kw...), (orbs, orbs))
-(m::AppliedOnsiteModifier{B,2})(o, r, orbs; kw...) where {B} =
+@inline (m::AppliedOnsiteModifier{B,2})(o, r, orbs; kw...) where {B} =
     mask_block(B, m.f.f(o, r; kw...), (orbs, orbs))
 
-(m::AppliedHoppingModifier{B,1})(t, r, dr, orborb; kw...) where {B} =
+@inline (m::AppliedHoppingModifier{B,1})(t, r, dr, orborb; kw...) where {B} =
     mask_block(B, m.f.f(t; kw...), orborb)
-(m::AppliedHoppingModifier{B,3})(t, r, dr, orborb; kw...) where {B} =
+@inline (m::AppliedHoppingModifier{B,3})(t, r, dr, orborb; kw...) where {B} =
     mask_block(B, m.f.f(t, r, dr; kw...), orborb)
 
 Base.similar(m::A) where {A <: AppliedModifier} = A(m.blocktype, m.f, similar(m.ptrs, 0))
@@ -822,9 +822,13 @@ struct HybridSparseMatrix{T,B<:MatrixElementType{T}} <: SparseArrays.AbstractSpa
     unflat::SparseMatrixCSC{B,Int}
     flat::SparseMatrixCSC{Complex{T},Int}
     sync_state::Base.RefValue{Int}  # 0 = in sync, 1 = flat needs sync, -1 = unflat needs sync, 2 = none initialized
+    ufnnz::Vector{Int}  # Number of stored nonzeros in unflat and flat - to guard against tampering
 end
 
 #region ## Constructors ##
+
+HybridSparseMatrix(bs, unflat, flat, sync_state) =
+    HybridSparseMatrix(bs, unflat, flat, sync_state, [nnz(unflat), nnz(flat)])
 
 HybridSparseMatrix(b::OrbitalBlockStructure{Complex{T}}, flat::SparseMatrixCSC{Complex{T},Int}) where {T} =
     HybridSparseMatrix(b, flat, flat, Ref(0))  # aliasing
@@ -852,6 +856,12 @@ unflat_unsafe(s::HybridSparseMatrix) = s.unflat
 flat_unsafe(s::HybridSparseMatrix) = s.flat
 
 syncstate(s::HybridSparseMatrix) = s.sync_state
+
+check_integrity(s::HybridSparseMatrix) =
+    (nnz(s.unflat) == s.ufnnz[1] && nnz(s.flat) == s.ufnnz[2]) ||
+    argerror("The AbstractHamiltonian seems to have been modified externally and has become corrupted")
+
+update_nnz!(s::HybridSparseMatrix) = (s.ufnnz .= (nnz(s.unflat), nnz(s.flat)))
 
 # are flat === unflat? Only for scalar eltype
 isaliased(::HybridSparseMatrix{<:Any,<:Complex}) = true
@@ -1133,9 +1143,11 @@ struct HybridInds{T}
 end
 
 unflat(i) = UnflatInds(i)
+unflat(i, is...) = UnflatInds((i, is...))
 unflat() = UnflatInds(())
 
 hybrid(i) = HybridInds(i)
+hybrid(i, is...) = HybridInds((i, is...))
 hybrid() = HybridInds(())
 
 Base.parent(u::UnflatInds) = u.inds

@@ -313,13 +313,12 @@ function addblochs!(dst::SparseMatrixCSC, h::Hamiltonian, φs, axis)
     return dst
 end
 
-is_bloch_initialized(h) = !needs_full_update(bloch(h))
-
 function initialize_bloch!(bloch, hars)
     fbloch = flat_unsafe(bloch)
     fbloch´ = merge_sparse(flat.(matrix.(hars)))
     copy!(fbloch, fbloch´)
     needs_no_sync!(bloch)
+    update_nnz!(bloch)
     return bloch
 end
 
@@ -376,37 +375,41 @@ applymodifiers!(h, m::Modifier; kw...) = applymodifiers!(h, apply(m, h); kw...)
 
 function applymodifiers!(h, m::AppliedOnsiteModifier; kw...)
     nz = nonzeros(unflat(first(harmonics(h))))
-    for (ptr, r, norbs) in pointers(m)
-        nz[ptr] = m(nz[ptr], r, norbs; kw...)
+    @simd for p in pointers(m)
+        (ptr, r, norbs) = p
+        @inbounds nz[ptr] = m(nz[ptr], r, norbs; kw...)   # @inbounds too risky?
     end
     return h
 end
 
 function applymodifiers!(h, m::AppliedOnsiteModifier{B}; kw...) where {B<:SMatrixView}
     nz = nonzeros(unflat(first(harmonics(h))))
-    for (ptr, r, norbs) in pointers(m)
-        val = view(nz[ptr], 1:norbs, 1:norbs)
-        nz[ptr] = m(val, r, norbs; kw...) # this allocates, currently unavoidable
+    @simd for p in pointers(m)
+        (ptr, r, norbs) = p
+        val = view(nz[ptr], 1:norbs, 1:norbs)  # this might be suboptimal - do we need view?
+        @inbounds nz[ptr] = m(val, r, norbs; kw...)      # this allocates, currently unavoidable
     end
     return h
 end
 
 function applymodifiers!(h, m::AppliedHoppingModifier; kw...)
-    for (har, p) in zip(harmonics(h), pointers(m))
+    for (har, ptrs) in zip(harmonics(h), pointers(m))
         nz = nonzeros(unflat(har))
-        for (ptr, r, dr, orborb) in p
-            nz[ptr] = m(nz[ptr], r, dr, orborb; kw...)
+        @simd for p in ptrs
+            (ptr, r, dr, orborb) = p
+            @inbounds nz[ptr] = m(nz[ptr], r, dr, orborb; kw...)
         end
     end
     return h
 end
 
 function applymodifiers!(h, m::AppliedHoppingModifier{B}; kw...) where {B<:SMatrixView}
-    for (har, p) in zip(harmonics(h), pointers(m))
+    for (har, ptrs) in zip(harmonics(h), pointers(m))
         nz = nonzeros(unflat(har))
-        for (ptr, r, dr, (norbs, norbs´)) in p
-            val = view(nz[ptr], 1:norbs, 1:norbs´)
-            nz[ptr] = m(val, r, dr, (norbs, norbs´); kw...)  # this allocates, unavoidable
+        @simd for p in ptrs
+            (ptr, r, dr, (norbs, norbs´)) = p
+            val = view(nz[ptr], 1:norbs, 1:norbs´)    # this might be suboptimal - do we need view?
+            @inbounds nz[ptr] = m(val, r, dr, (norbs, norbs´); kw...) # this allocates, unavoidable
         end
     end
     return h

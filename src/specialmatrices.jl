@@ -11,11 +11,13 @@
 #region
 
 function unflat(s::HybridSparseMatrix)
+    check_integrity(s)
     needs_unflat_sync(s) && unflat_sync!(s)
     return unflat_unsafe(s)
 end
 
 function flat(s::HybridSparseMatrix)
+    check_integrity(s)
     needs_flat_sync(s) && flat_sync!(s)
     return flat_unsafe(s)
 end
@@ -144,25 +146,25 @@ function Base.setindex!(b::HybridSparseMatrix, val::AbstractVecOrMat, i::Integer
     return val
 end
 
-mask_block(::Type{B}, val::UniformScaling, size = (N, N)) where {T,N,B<:MatrixElementNonscalarType{T,N}} =
+@inline mask_block(::Type{B}, val::UniformScaling, size = (N, N)) where {T,N,B<:MatrixElementNonscalarType{T,N}} =
     mask_block(B, sanitize_SMatrix(SMatrix{N,N,T}, SMatrix{N,N}(val), size))
 
-mask_block(::Type{B}, val::UniformScaling, args...) where {B<:Number} =
-    mask_block(B, convert(B, val.λ))
+@inline mask_block(::Type{B}, val::UniformScaling, size...) where {B<:Number} =
+    convert(B, val.λ)
 
-function mask_block(B, val, size)
+@inline mask_block(::Type{B}, val, size...) where {B<:Number} = convert(B, only(val)) # conversion not needed
+
+@inline function mask_block(B, val, size)
     @boundscheck(checkmatrixsize(val, size)) # tools.jl
     return mask_block(B, val)
 end
 
 @inline mask_block(::Type{B}, val) where {N,B<:SMatrix{N,N}} = B(val)
 
-@inline mask_block(::Type{B}, val) where {B<:Complex} = convert(B, only(val))
-
 @inline mask_block(::Type{B}, val::SMatrix{R,C}) where {R,C,N,T,B<:SMatrixView{N,N,T}} =
     SMatrixView(SMatrix{N,R}(I) * val * SMatrix{C,N}(I))
 
-function mask_block(::Type{B}, val) where {N,T,B<:SMatrixView{N,N,T}}
+@inline function mask_block(::Type{B}, val) where {N,T,B<:SMatrixView{N,N,T}}
     (nrows, ncols) = size_or_1x1(val)
     s = ntuple(Val(N*N)) do i
         n, m = mod1(i, N), fld1(i, N)
@@ -171,7 +173,7 @@ function mask_block(::Type{B}, val) where {N,T,B<:SMatrixView{N,N,T}}
     return SMatrixView(SMatrix{N,N,T}(s))
 end
 
-mask_block(t, val) = throw(ArgumentError("Unexpected block size"))
+mask_block(t, val) = argerror("Unexpected block size")
 
 size_or_1x1(::Number) = (1, 1)
 size_or_1x1(val) = size(val)
@@ -234,9 +236,6 @@ function flat_sync!(s::HybridSparseMatrix{<:Any,S}) where {N,S<:SMatrixView{N,N}
     needs_no_sync!(s)
     return s
 end
-
-## TODO
-unflat_sync!(s) = internalerror("unflat_sync!: method not yet implemented")
 
 # Uniform and non-uniform cases
 function unflat_sync!(s::HybridSparseMatrix{<:Any,S}) where {S<:Union{SMatrix,SMatrixView}}
