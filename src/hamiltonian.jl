@@ -514,6 +514,8 @@ end
 # wrap
 #region
 
+wrap(phases) = h -> wrap(h, phases)
+
 function wrap(h::Hamiltonian{<:Any,<:Any,L}, phases) where {L}
     check_wrap_phases(phases, L)
     wa, ua = split_axes(phases)  # indices for wrapped and unwrapped axes
@@ -572,4 +574,3 @@ end
 
 
 #endregion
-

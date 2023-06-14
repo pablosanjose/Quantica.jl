@@ -357,7 +357,7 @@ Combine a collection `hams` of hamiltonians into one by combining their correspo
 lattices, and optionally by adding a coupling between them, given by the hopping terms in
 `coupling`.
 
-    Note that the `coupling` model will be applied to the combined lattice (which may have renamed sublattices to avoid name collissions). However, only hopping terms between different `hams` blocks will be applied. 
+    Note that the `coupling` model will be applied to the combined lattice (which may have renamed sublattices to avoid name collissions). However, only hopping terms between different `hams` blocks will be applied.
 
 # Examples
 ```jldoctest
@@ -588,8 +588,8 @@ julia> h((0,0))
 4×4 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 8 stored entries:
      ⋅          ⋅      0.0+0.0im  3.0+0.0im
      ⋅          ⋅      3.0+0.0im  0.0+0.0im
- 0.0+0.0im  3.0+0.0im      ⋅          ⋅    
- 3.0+0.0im  0.0+0.0im      ⋅          ⋅    
+ 0.0+0.0im  3.0+0.0im      ⋅          ⋅
+ 3.0+0.0im  0.0+0.0im      ⋅          ⋅
 ```
 
 # See also
@@ -998,6 +998,12 @@ If a number `L´` of phases `ϕᵢ` are `:` instead of numbers, the correspondin
 vectors will not be wrapped, and the resulting `h´` will have a finite lattice dimension
 `L´`.
 
+## Currying
+
+    h |> wrap((ϕ₁, ϕ₂,...))
+
+Currying syntax equivalent to `wrap(h, (ϕ₁, ϕ₂,...))`.
+
 # Examples
 
 ```jldoctest
@@ -1040,7 +1046,7 @@ Equivalent to `unflat(())`
 julia> h = HP.graphene(orbitals = 2); h[unflat(0,0)])
 2×2 SparseArrays.SparseMatrixCSC{SMatrix{2, 2, ComplexF64, 4}, Int64} with 2 stored entries:
                      ⋅                       [2.7+0.0im 0.0+0.0im; 0.0+0.0im 2.7+0.0im]
- [2.7+0.0im 0.0+0.0im; 0.0+0.0im 2.7+0.0im]                      ⋅                     
+ [2.7+0.0im 0.0+0.0im; 0.0+0.0im 2.7+0.0im]                      ⋅
 ```
 """
 unflat
