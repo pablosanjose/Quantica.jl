@@ -14,7 +14,7 @@ using Quantica: Hamiltonian, ParametricHamiltonian, sites, nsites, nonsites, nho
             @test hamiltonian(lat, onsite(t) - hopping(t; dcells = dn0), orbitals = o) isa Hamiltonian
         end
     end
-    h = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = 1/√3))
+    h = LatticePresets.honeycomb() |> hopping(1, range = 1/√3)
     @test h[SA[0,0]] === h[()] === flat(h.harmonics[1].h)
     # Inf range
     h = LatticePresets.square() |> supercell(region = RegionPresets.rectangle((5,6))) |>

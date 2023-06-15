@@ -123,6 +123,8 @@ end
 # hamiltonian
 #region
 
+(model::AbstractModel)(lat::Lattice) = hamiltonian(lat, model)
+
 hamiltonian(args...; kw...) = lat -> hamiltonian(lat, args...; kw...)
 
 hamiltonian(lat::Lattice, m0::TightbindingModel, m::Modifier, ms::Modifier...; kw...) =
