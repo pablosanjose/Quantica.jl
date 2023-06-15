@@ -145,7 +145,7 @@ julia> lat = LP.honeycomb()
 julia> qplot(lat, hide = ())
 ```
 ```@raw html
-<img src="../assets/honeycomb_lat.png" alt="Honeycomb lattice" width="250" />
+<img src="../assets/honeycomb_lat.png" alt="Honeycomb lattice" width="250" class="center"/>
 ```
 
 `qplot` accepts a large number of keywords to customize your plot. In the case of lattice, most of these are passed over to the function `plotlattice`, specific to lattices and Hamiltonians. In the case above, `hide = ()` means "don't hide any element of the plot". See the `qplot` and `plotlattice` docstrings for details.
@@ -186,7 +186,7 @@ Let's plot it
 julia> qplot(lat[s], hide = ())
 ```
 ```@raw html
-<img src="../assets/latslice.png" alt="A LatticeSlice" width="400" />
+<img src="../assets/latslice.png" alt="A LatticeSlice" width="400" class="center"/>
 ```
 
 !!! tip "qplot selector"
@@ -223,6 +223,8 @@ Selectors are very expressive and powerful. Do check `siteselector` and `hopsele
 
 ### Transforming lattices
 
+We can transform lattices using `transform`, `translate`, `supercell` and `wrap`.
+
 To transform a lattice, so that site positions `r` become `f(r)` use `transform`
 ```jldoctest
 julia> f(r) = SA[0 1; 1 0] * r
@@ -251,29 +253,10 @@ julia> sites(translate(rotated_honeycomb, δr))
  [0.5, 1.0]
 ```
 
-### Currying: chaining transformations with the `|>` operator
-
-Many functions in Quantica have a "curried" version that allows them to be chained together using the pipe operator `|>`.
-
-!!! note "Definition of currying"
-    The curried version of a function `f(x1, x2...)` is `f´ = x1 -> f(x2...)`, so that the curried form of `f(x1, x2...)` is `x2 |> f´(x2...)`, or `f´(x2...)(x1)`. This gives the first argument `x1` a privileged role. Users of object-oriented languages such as Python may find this use of the `|>` operator somewhat similar to the way the dot operator works there (i.e. `x1.f(x2...)`).
-
-The last example above can then be written as
-```jldoctest
-julia> LP.honeycomb(a0 = √3) |> transform(f) |> translate(δr) |> sites
-2-element Vector{SVector{2, Float64}}:
- [-0.5, 1.0]
- [0.5, 1.0]
-```
-
-This type of curried syntax is supported by most Quantica functions, and will be used extensively in this manual.
-
-### Extending lattices with supercells
-
 As a periodic structure, the choice of the unitcell in an unbounded lattice is to an extent arbitrary. Given a lattice `lat` we can obtain another with a unit cell 3 times larger with `supercell(lat, 3)`
 
 ```jldoctest
-julia> lat = LP.honeycomb() |> supercell(3)
+julia> lat = supercell(LP.honeycomb(), 3)
 Lattice{Float64,2,2} : 2D lattice in 2D space
   Bravais vectors : [[1.5, 2.598076], [-1.5, 2.598076]]
   Sublattices     : 2
@@ -300,7 +283,7 @@ Lattice{Float64,2,1} : 1D lattice in 2D space
 Its important to note that the lattice in the directions perpendicular to the new Bravais vector is bounded. With the syntax above, the new unitcell will be minimal. We may however define how many sites to include in the new unitcell by adding a `SiteSelector` directive to be applied in the non-periodic directions. For example, to create a 10 * a0 wide, honeycomb nanoribbon we can do
 
 ```jldoctest
-julia> lat = LP.honeycomb() |> supercell((1,-1), region = r -> -5 <= r[2] <= 5)
+julia> lat = supercell(LP.honeycomb(), (1,-1), region = r -> -5 <= r[2] <= 5)
 Lattice{Float64,2,1} : 1D lattice in 2D space
   Bravais vectors : [[1.0, 0.0]]
   Sublattices     : 2
@@ -310,10 +293,27 @@ Lattice{Float64,2,1} : 1D lattice in 2D space
 julia> qplot(lat[cells = -7:7])
 ```
 ```@raw html
-<img src="../assets/nanoribbon_lat.png" alt="Honeycomb nanoribbon" height="250" />
+<img src="../assets/nanoribbon_lat.png" alt="Honeycomb nanoribbon" height="250" class="center"/>
 ```
 !!! tip "No need to build selectors explicitly"
     Note that we we didn't build a `siteselector(region = ...)` object to pass it to `supercell`. Instead, as shown above, we passed the corresponding keywords directly to `supercell`, which then takes care to build the selector internally.
+
+### Currying: chaining transformations with the `|>` operator
+
+Many functions in Quantica have a "curried" version that allows them to be chained together using the pipe operator `|>`.
+
+!!! note "Definition of currying"
+    The curried version of a function `f(x1, x2...)` is `f´ = x1 -> f(x2...)`, so that the curried form of `f(x1, x2...)` is `x2 |> f´(x2...)`, or `f´(x2...)(x1)`. This gives the first argument `x1` a privileged role. Users of object-oriented languages such as Python may find this use of the `|>` operator somewhat similar to the way the dot operator works there (i.e. `x1.f(x2...)`).
+
+The last example above can then be written as
+```jldoctest
+julia> LP.honeycomb(a0 = √3) |> transform(f) |> translate(δr) |> sites
+2-element Vector{SVector{2, Float64}}:
+ [-0.5, 1.0]
+ [0.5, 1.0]
+```
+
+This type of curried syntax is supported by most Quantica functions, and will be used extensively in this manual.
 
 ## Models
 
@@ -525,7 +525,7 @@ qplot(h, inspector = true)
 ```
 
 ```@raw html
-<img src="../assets/latticeKM.png" alt="Honeycomb lattice" width="350" />
+<img src="../assets/latticeKM.png" alt="Kane-Mele lattice" width="350" class="center"/>
 ```
 
 The `inspector = true` keyword enables interactive tooltips in the visualization of `h` that allows to navigate each `onsite` and `hopping` amplitude graphically. Note that sites connected to the unit cell of `h` by some hopping are included, but are rendered with partial transparency by default.
@@ -691,5 +691,37 @@ As a consequence, `h` and `supercell(h)` represent exactly the same system, with
 These two different behaviors make sense in different situations, so it is important to be aware of the order dependence of transformations. Similar considerations apply to `transform` and `translate` when models are position dependent.
 
 ## Bandstructures
+
+The bandstructure of an `AbstractHamiltonian` is computed using `bands`
+```jldoctest
+julia> h = LP.honeycomb() |> hopping(1); ϕ₁points = ϕ₂points = range(0, 2π, length = 19);
+
+julia> b = bands(h, ϕ₁points, ϕ₂points)
+Bandstructure{Float64,3,2}: 3D Bandstructure over a 2-dimensional parameter space of type Float64
+  Subbands  : 1
+  Vertices  : 720
+  Edges     : 2016
+  Simplices : 1296
+```
+The first argument is the Hamiltonian. Here it is defined on an `L=2` dimensional lattice. The subsequent arguments are collections of Bloch phases on each of the `L` axes of the Brillouin zone, which define a grid. Here the grid is the direct product `ϕ₁points` ⊗ `ϕ₂points`, a uniform 19×19 grid. We can visualize this, as usual, with `qplot`
+```julia
+julia> using GLMakie; qplot(b, inspector = true)
+```
+```@raw html
+<img src="../assets/graphene_bands.png" alt="Graphene bands" width="400" class="center"/>
+```
+The dots on the bands are the points in the grid (they can be omitted with `hide = :nodes`).
+
+### Band defects
+
+Note that the uniform grid contains the Dirac points. This is the reason for the number `19` of Bloch phases. Note also that it is identified as a point in the bands with `degeneracy = 2` (the rest have `degeneracy = 1`). The points on the bands are connected based on eigenstate continuity. This interpolation algorithm can deal with subspace degeneracies, as here. However, Dirac points (and Diabolical Points in general) are required to belong to the mesh to work. If the number of points is reduced to 18 per axis, the Dirac points become unavoidable band dislocations, that appear as missing simplices in the bands:
+```@raw html
+<img src="../assets/graphene_bands_bad.png" alt="Graphene bands with Dirac point dislocation" width="400" class="center"/>
+```
+
+!!! tip "Advanced: band defects and patching"
+    If a Dirac point or other type of band dislocation point happens to not belong to the sampling grid, it can be added with the `bands` keyword `defects`. Then, it can be reconnected with the rest of the band by increasing the `patches::Integer` keyword (see `bands` docstring for details). This "band repair" functionality is experimental, and should only be necessary in some cases with Diabolical Points.
+
+### Band slicing
 
 ## GreenFunctions

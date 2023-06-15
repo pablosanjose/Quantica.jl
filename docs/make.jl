@@ -19,6 +19,7 @@ makedocs(;
         "Examples" => "examples.md",
         "API" => "api.md",
     ],
+    assets=[“assets/custom.css”]
 )
 
 deploydocs(;
