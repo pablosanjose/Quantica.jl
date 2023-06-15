@@ -538,6 +538,14 @@ details on defining modifiers).
 
 Curried form of `hamiltonian` equivalent to `hamiltonian(lat, model, modifiers...; kw...)`.
 
+    lat |> model
+
+Alternative and less general curried form equivalent to `hamiltonian(lat, model)`.
+
+    h |> modifier
+
+Alternative and less general curried form equivalent to `hamiltonian(h, modifier)`.
+
 ## Indexing
 
     h[dn::SVector{L,Int}]

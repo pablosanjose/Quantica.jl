@@ -179,7 +179,7 @@ LatticeSlice{Float64,2,2} : collection of subcells for a 2D lattice in 2D space
   Cell range  : ([-11, -11], [11, 11])
   Total sites : 363
 ```
-The `Cell range` above are the corners of a bounding box *in cell-index space* that contains all unit cell indices with at least one selected site. 
+The `Cell range` above are the corners of a bounding box *in cell-index space* that contains all unit cell indices with at least one selected site.
 
 Let's plot it
 ```julia
@@ -241,7 +241,7 @@ julia> sites(rotated_honeycomb)
  [0.5, 0.0]
 ```
 
-To translate a lattice by a displacement vector `δr` use `translate` 
+To translate a lattice by a displacement vector `δr` use `translate`
 ```jldoctest
 julia> δr = SA[0, 1];
 
@@ -519,7 +519,7 @@ model =
   hopping((r, dr) ->  SOC(dr); sublats = :A => :A, range = neighbors(2)) +
   hopping((r, dr) -> -SOC(dr); sublats = :B => :B, range = neighbors(2))
 
-h = LatticePresets.honeycomb() |> hamiltonian(model)
+h = LatticePresets.honeycomb() |> model
 
 qplot(h, inspector = true)
 ```
@@ -586,9 +586,12 @@ Hamiltonian{Float64,2,2}: Hamiltonian on a 2D Lattice in 2D space
   Coordination     : 3.0
 ```
 
+!!! tip "Syntax `lat |> model` and `h |> modifier"
+    The common cases `lat |> hamiltonian(model)` (or `hamiltonian(lat, model)`) and `h |> hamiltonian(modifier)` (or `hamiltonian(h, modifier)`) can be also written as `lat |> model` and `h |> modifier`, respectively. Hence `hamiltonian(lat, model, modifier)` may be written as `lat |> model |> modifier`. This form however does not allow to specify the number of orbitals per sublattice (it will be one, the default).
+
 ### Obtaining actual matrices
 
-For an L-dimensional AbstractHamiltonian `h` (i.e. defined on a Lattice with `L` Bravais vectors), the Hamiltonian matrix between any unit cell with cell index `n` and another unit cell at `n+dn` (here known as a Hamiltonian "harmonic") is given by `h[dn]`
+For an L-dimensional `h::AbstractHamiltonian` (i.e. defined on a Lattice with `L` Bravais vectors), the Hamiltonian matrix between any unit cell with cell index `n` and another unit cell at `n+dn` (here known as a Hamiltonian "harmonic") is given by `h[dn]`
 ```jldoctest
 julia> h[(1,0)]
 4×4 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 4 stored entries:
@@ -653,6 +656,39 @@ julia> h_param_mod((0.2, 0.3); B = 0.1)
 ```
 
 Note that unspecified parameters take their default values when using the call syntax (as per the standard Julia convention). Any unspecified parameter that does not have a default value will produce an `UndefKeywordError` error.
+
+### Transforming Hamiltonians
+
+Like with lattices, we can transform an `h::AbstractHamiltonians` using `transform`, `translate` and `supercell`. The first two operate only on the underlying `lattice(h)`, leaving the hoppings and onsite elements unchanged, while `supercell` acts on `lattice(h)` and copies the hoppings and onsites of `h` onto the new sites, preserving the periodicity of the original `h`
+
+It's important to understand the above to avoid unexpected results: the model used to build `h` is not re-evaluated when transforming it. As a consequence, these two constructions give different Hamiltonians
+```julia
+julia> h1 = LP.linear() |> supercell(4) |> hamiltonian(onsite(r -> r[1]));
+
+julia> h2 = LP.linear() |> hamiltonian(onsite(r -> r[1])) |> supercell(4);
+```
+In the case of `h1` the `onsite` model is applied to the 4-site unitcell. Since each site has a different position, each gets a different onsite energy.
+```julia
+julia> h1[()]
+4×4 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 4 stored entries:
+ 0.0+0.0im      ⋅          ⋅          ⋅
+     ⋅      1.0+0.0im      ⋅          ⋅
+     ⋅          ⋅      2.0+0.0im      ⋅
+     ⋅          ⋅          ⋅      3.0+0.0im
+```
+
+In contrast `h2` first gets the `onsite` model applied with a 1-site unitcell at position `r = SA[0]`, so all sites in the lattice get onsite energy zero. Only then it is expanded with `supercell`, which generates a 4-site unitcell with zero onsite energy on all its sites
+```julia
+julia> h2[()]
+4×4 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 4 stored entries:
+ 0.0+0.0im      ⋅          ⋅          ⋅
+     ⋅      0.0+0.0im      ⋅          ⋅
+     ⋅          ⋅      0.0+0.0im      ⋅
+     ⋅          ⋅          ⋅      0.0+0.0im
+```
+As a consequence, `h` and `supercell(h)` represent exactly the same system, with the same observables, but with a different choice of unitcell.
+
+These two different behaviors make sense in different situations, so it is important to be aware of the order dependence of transformations. Similar considerations apply to `transform` and `translate` when models are position dependent.
 
 ## Bandstructures
 
