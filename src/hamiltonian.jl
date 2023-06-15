@@ -124,6 +124,7 @@ end
 #region
 
 (model::AbstractModel)(lat::Lattice) = hamiltonian(lat, model)
+(modifier::Modifier)(h::AbstractHamiltonian) = hamiltonian(h, modifier)
 
 hamiltonian(args...; kw...) = lat -> hamiltonian(lat, args...; kw...)
 

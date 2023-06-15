@@ -508,9 +508,6 @@ A crucial thing to remember when defining multi-orbital Hamiltonians as the abov
 !!! tip "Models with different number of orbitals per sublattice"
     Non-homogeneous multiorbital models are more advanced but are fully supported in Quantica. Just use `orbitals = (n₁, n₂,...)` to have `nᵢ` orbitals in sublattice `i`, and make sure your model is consistent with that. As in the case of the `dim` keyword in `lattice`, you can also use `Val(nᵢ)` for marginally faster construction.
 
-!!! tip "Syntax `lat |> model`"
-    The common case `lat |> hamiltonian(model)` can be also written as `lat |> model`. This form however does not allow to specify the number of orbitals per sublattice (it will be one, the default), or to apply modifiers (see further below).
-
 ### A more elaborate example: the Kane-Mele model
 
 The Kane-Mele model for graphene describes intrinsic spin-orbit coupling (SOC), in the form of an imaginary second-nearest-neighbor hopping between same-sublattice sites, with a sign that alternates depending on hop direction `dr`. A possible implementation in Quantica would be
@@ -588,6 +585,9 @@ Hamiltonian{Float64,2,2}: Hamiltonian on a 2D Lattice in 2D space
   Hoppings         : 6
   Coordination     : 3.0
 ```
+
+!!! tip "Syntax `lat |> model` and `h |> modifier"
+    The common cases `lat |> hamiltonian(model)` (or `hamiltonian(lat, model)`) and `h |> hamiltonian(modifier)` (or `hamiltonian(h, modifier)`) can be also written as `lat |> model` and `h |> modifier`, respectively. Hence `hamiltonian(lat, model, modifier)` may be written as `lat |> model |> modifier`. This form however does not allow to specify the number of orbitals per sublattice (it will be one, the default).
 
 ### Obtaining actual matrices
 

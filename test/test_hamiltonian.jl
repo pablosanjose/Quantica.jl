@@ -277,7 +277,7 @@ end
     @test !all(x -> x isa Real, h0)
     h0 = h(t = 1, takeabs = true)((0,0))
     @test all(==(1), Quantica.nonzeros(h0))
-    h = LatticePresets.linear() |> hamiltonian(hopping(1), @onsite!((o; k) -> o + k*I))
+    h = LatticePresets.linear() |> hopping(1) |> @onsite!((o; k) -> o + k*I)
     # No onsites, no need to specify k
     @test h() isa Hamiltonian
     # Issue #35
