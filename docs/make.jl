@@ -11,15 +11,14 @@ makedocs(;
     format=Documenter.HTML(;
         prettyurls=get(ENV, "CI", "false") == "true",
         canonical="https://pablosanjose.github.io/Quantica.jl",
-        assets=String[],
+        assets=["assets/custom.css"],
     ),
     pages=[
         "Home" => "index.md",
         "Manual" => "manual.md",
         "Examples" => "examples.md",
         "API" => "api.md",
-    ],
-    assets=["assets/custom.css"]
+    ]
 )
 
 deploydocs(;
