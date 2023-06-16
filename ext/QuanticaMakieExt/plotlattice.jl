@@ -431,7 +431,7 @@ end
 
 # For E < 2 Hamiltonians, promote to 2D
 function Makie.plot!(plot::PlotLattice{Tuple{H}}) where {T,H<:Hamiltonian{T,1}}
-    h = Hamiltonian{T,2}(to_value(plot[1]))
+    h = Hamiltonian{2}(to_value(plot[1]))
     return plotlattice!(plot, h; plot.attributes...)
 end
 

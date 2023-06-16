@@ -47,6 +47,7 @@ using Quantica: Hamiltonian, ParametricHamiltonian, sites, nsites, nonsites, nho
     @test Quantica.Quantica.nhoppings(h) == 12
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = (10, 10.1)))
     @test Quantica.Quantica.nhoppings(h) == 48
+    @test Hamiltonian{3}(h) isa Hamiltonian{<:Any,3}
 end
 
 @testset "hamiltonian orbitals" begin
@@ -311,6 +312,7 @@ end
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(2I), orbitals = (Val(2), Val(1)), @hopping!((t; α, β = 0) -> α * t .+ β))
     b = h((0, 0); α = 2)
     @test b == [0 0 12; 0 0 0; 12 0 0]
+    @test ParametricHamiltonian{3}(h) isa ParametricHamiltonian{<:Any,3}
     # Old bug in apply
     h = LP.honeycomb() |> supercell(2) |> onsite(1) |> @onsite!(o -> 0; sublats = :A)
     @test tr(h((0,0))) == 4
