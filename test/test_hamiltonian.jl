@@ -316,11 +316,11 @@ end
     @test tr(h((0,0))) == 4
     # wrap and supercell commutativity with modifier application
     h = LP.linear() |> hopping(1) |> supercell(3) |> @onsite!((o,r; E = 1)-> E*r[1]) |> @hopping!((t, r,dr; A = SA[1])->t*cis(dot(A,dr[1])))
-    @test supercell(h(), 4)((1,)) == supercell(h, 4)((1,))
-    @test wrap(h, (2,))(()) == wrap(h(), (2,))(()) == h((2,))
-    h = LP.linear() |> supercell(3) |> @hopping((r,dr; A = SA[1])->cis(dot(A,dr[1])))
-    @test supercell(h(), 4)((1,)) == supercell(h, 4)((1,))
-    @test wrap(h(), (2,))(()) == h((2,))
+    @test supercell(h(), 4)((1,)) ≈ supercell(h, 4)((1,))
+    @test wrap(h, (2,))(()) ≈ wrap(h(), (2,))(()) ≈ h((2,))
+    h = LP.linear() |> supercell(3) |> @hopping((r,dr; ϕ = 1) -> cis(ϕ*dr[1]))
+    @test supercell(h(), 4)((1,)) ≈ supercell(h, 4)((1,))
+    @test wrap(h(), (2,))(()) ≈ h((2,))
 end
 
 @testset "hamiltonian nrange" begin

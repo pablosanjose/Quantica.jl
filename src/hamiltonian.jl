@@ -379,7 +379,7 @@ applymodifiers!(h, m::Modifier; kw...) = applymodifiers!(h, apply(m, h); kw...)
 
 function applymodifiers!(h, m::AppliedOnsiteModifier; kw...)
     nz = nonzeros(unflat(first(harmonics(h))))
-    for p in pointers(m)
+    @simd for p in pointers(m)
         (ptr, r, norbs) = p
         @inbounds nz[ptr] = m(nz[ptr], r, norbs; kw...)   # @inbounds too risky?
     end
@@ -388,7 +388,7 @@ end
 
 function applymodifiers!(h, m::AppliedOnsiteModifier{B}; kw...) where {B<:SMatrixView}
     nz = nonzeros(unflat(first(harmonics(h))))
-    for p in pointers(m)
+    @simd for p in pointers(m)
         (ptr, r, norbs) = p
         val = view(nz[ptr], 1:norbs, 1:norbs)  # this might be suboptimal - do we need view?
         @inbounds nz[ptr] = m(val, r, norbs; kw...)      # this allocates, currently unavoidable
@@ -399,7 +399,7 @@ end
 function applymodifiers!(h, m::AppliedHoppingModifier; kw...)
     for (har, ptrs) in zip(harmonics(h), pointers(m))
         nz = nonzeros(unflat(har))
-        for p in ptrs
+        @simd for p in ptrs
             (ptr, r, dr, orborb) = p
             @inbounds nz[ptr] = m(nz[ptr], r, dr, orborb; kw...)
         end
@@ -410,7 +410,7 @@ end
 function applymodifiers!(h, m::AppliedHoppingModifier{B}; kw...) where {B<:SMatrixView}
     for (har, ptrs) in zip(harmonics(h), pointers(m))
         nz = nonzeros(unflat(har))
-        for p in ptrs
+        @simd for p in ptrs
             (ptr, r, dr, (norbs, norbs´)) = p
             val = view(nz[ptr], 1:norbs, 1:norbs´)    # this might be suboptimal - do we need view?
             @inbounds nz[ptr] = m(val, r, dr, (norbs, norbs´); kw...) # this allocates, unavoidable
@@ -622,12 +622,13 @@ end
 
 function wrap_modifier(m::AppliedHoppingModifier, ptrmap, harmap)
     ps = pointers(m)
-    ps´ = similar.(ps, 0)
+    ps´ = [similar(first(ps), 0) for _ in 1:maximum(harmap)]
     for (i, p) in enumerate(ps), (ptr, r, dr, orborbs) in p
         i´ = harmap[i]
         ptrs´ = ptrmap[i]
         push!(ps´[i´], (ptrs´[ptr], r, dr, orborbs))
     end
+    sort!.(ps´)
     return AppliedHoppingModifier(m, ps´)
 end
 
