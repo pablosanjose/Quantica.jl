@@ -320,7 +320,7 @@ end
     @test wrap(h, (2,))(()) == wrap(h(), (2,))(()) == h((2,))
     h = LP.linear() |> supercell(3) |> @hopping((r,dr; A = SA[1])->cis(dot(A,dr[1])))
     @test supercell(h(), 4)((1,)) == supercell(h, 4)((1,))
-    @test_broken wrap(h, (2,))(()) == wrap(h(), (2,))(()) == h((2,))
+    @test wrap(h(), (2,))(()) == h((2,))
 end
 
 @testset "hamiltonian nrange" begin

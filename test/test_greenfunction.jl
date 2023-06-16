@@ -137,8 +137,8 @@ function testjosephson(g0)
 end
 
 @testset "greenfunction observables" begin
-    g1 = LP.square() |> hamiltonian(@hopping((r, dr; B = 0.1) -> I * cis(B * dr' * SA[r[2],-r[1]])), orbitals = 1) |> supercell((1,0), region = r->-2<r[2]<2) |> greenfunction(GS.Schur(boundary = 0));
-    g2 = LP.square() |> hamiltonian(@hopping((r, dr; B = 0.1) -> I * cis(B * dr' * SA[r[2],-r[1]])), orbitals = 2) |> supercell((1,0), region = r->-2<r[2]<2) |> greenfunction(GS.Schur(boundary = 0));
+    g1 = LP.square() |> supercell((1,0), region = r->-2<r[2]<2) |> hamiltonian(@hopping((r, dr; B = 0.1) -> I * cis(B * dr' * SA[r[2],-r[1]])), orbitals = 1) |> greenfunction(GS.Schur(boundary = 0));
+    g2 = LP.square() |> supercell((1,0), region = r->-2<r[2]<2) |> hamiltonian(@hopping((r, dr; B = 0.1) -> I * cis(B * dr' * SA[r[2],-r[1]])), orbitals = 2) |> greenfunction(GS.Schur(boundary = 0));
     J1 = current(g1[cells = SA[1]])
     J2 = current(g2[cells = SA[1]])
     @test size(J1(0.2)) == size(J2(0.2)) == (3, 3)
@@ -161,4 +161,3 @@ end
     testcond(g0; nambu = true)
     testjosephson(g0)
 end
-

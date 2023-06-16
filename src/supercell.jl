@@ -179,28 +179,6 @@ function supercell(h::Hamiltonian, data::SupercellData; mincoordination = 0)
     return Hamiltonian(lat´, blk´, har´)
 end
 
-function supercell(h::Hamiltonian, v...; mincoordination = 0, kw...)
-    data = supercell_data(lattice(h), v...; kw...)
-    # data.sitelist === sites(lat´), so any change to data will reflect in lat´ too
-    lat´ = lattice(data)
-    B = blocktype(h)
-    blk´ = OrbitalBlockStructure{B}(norbitals(h), sublatlengths(lat´))
-    builder = CSCBuilder(lat´, blk´)
-    har´ = supercell_harmonics(h, data, builder, mincoordination)
-    return Hamiltonian(lat´, blk´, har´)
-end
-
-function supercell(h::Hamiltonian, v...; mincoordination = 0, kw...)
-    data = supercell_data(lattice(h), v...; kw...)
-    # data.sitelist === sites(lat´), so any change to data will reflect in lat´ too
-    lat´ = lattice(data)
-    B = blocktype(h)
-    blk´ = OrbitalBlockStructure{B}(norbitals(h), sublatlengths(lat´))
-    builder = CSCBuilder(lat´, blk´)
-    har´ = supercell_harmonics(h, data, builder, mincoordination)
-    return Hamiltonian(lat´, blk´, har´)
-end
-
 function supercell_harmonics(h, data, builder, mincoordination)
     indexlist, offset = supercell_indexlist(data)
     if mincoordination > 0
