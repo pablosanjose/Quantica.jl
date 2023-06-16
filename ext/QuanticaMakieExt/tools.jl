@@ -34,6 +34,7 @@ safeextrema(v) = isempty(v) ? (Float32(0), Float32(1)) : extrema(v)
 function empty_fig_axis_2D(default_figure, default_axis2D; axis = (;), figure = (;), kw...)
     fig = Figure(; default_figure..., figure...)
     ax = Axis(fig[1,1]; default_axis2D..., axis...)
+    tight_ticklabel_spacing!(ax) # Workaround for Makie issue #3009
     return fig, ax
 end
 

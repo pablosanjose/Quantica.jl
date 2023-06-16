@@ -130,13 +130,15 @@ end
 # supercell(lattice, ...)
 #region
 
-supercell(lat::Lattice, vs...; kw...) = lattice(supercell_data(lat, vs...; kw...))
+supercell(lat::Lattice, vs...; kw...) =
+    lattice(supercell_data(lat, vs...; kw...))
 
 function lattice(data::SupercellData)
     n = sublatnames(data.lat)
     o = supercell_offsets(data.masklist, nsublats(data.lat))
     u = Unitcell(data.sitelist, n, o)
-    return Lattice(data.bravais´, u)
+    lat = Lattice(data.bravais´, u)
+    return lat
 end
 
 function supercell_offsets(masklist, nsublats)
@@ -148,11 +150,45 @@ function supercell_offsets(masklist, nsublats)
     return offsets
 end
 
+# function latslice(data::SupercellData)
+#     # data.masklist is [(sublat, cell, siteindex)...] for each site in lat´
+#     cellindsvec = sort!(Base.tail.(data.masklist))
+#     subcells = splitruns(last, cellindsvec; by = first, reduce = CellSites)  # see tools.jl
+#     ls = LatticeSlice(data.lat, subcells)
+#     return ls
+# end
+
 #endregion
 
 ############################################################################################
 # supercell(::Hamiltonian, ...)
 #region
+
+function supercell(h::Hamiltonian, v...; mincoordination = 0, kw...)
+    data = supercell_data(lattice(h), v...; kw...)
+    return supercell(h, data; mincoordination)
+end
+
+function supercell(h::Hamiltonian, data::SupercellData; mincoordination = 0)
+    # data.sitelist === sites(lat´), so any change to data will reflect in lat´ too
+    lat´ = lattice(data)
+    B = blocktype(h)
+    blk´ = OrbitalBlockStructure{B}(norbitals(h), sublatlengths(lat´))
+    builder = CSCBuilder(lat´, blk´)
+    har´ = supercell_harmonics(h, data, builder, mincoordination)
+    return Hamiltonian(lat´, blk´, har´)
+end
+
+function supercell(h::Hamiltonian, v...; mincoordination = 0, kw...)
+    data = supercell_data(lattice(h), v...; kw...)
+    # data.sitelist === sites(lat´), so any change to data will reflect in lat´ too
+    lat´ = lattice(data)
+    B = blocktype(h)
+    blk´ = OrbitalBlockStructure{B}(norbitals(h), sublatlengths(lat´))
+    builder = CSCBuilder(lat´, blk´)
+    har´ = supercell_harmonics(h, data, builder, mincoordination)
+    return Hamiltonian(lat´, blk´, har´)
+end
 
 function supercell(h::Hamiltonian, v...; mincoordination = 0, kw...)
     data = supercell_data(lattice(h), v...; kw...)
@@ -294,11 +330,23 @@ end
 # supercell(::ParametricHamiltonian, ...)
 #region
 
-function supercell(p::ParametricHamiltonian, args...; kw...)
-    h´ = supercell(parent(p), args...; kw...)
+function supercell(p::ParametricHamiltonian, v...; mincoordination = 0, kw...)
+    h = parent(p)
+    data = supercell_data(lattice(h), v...; kw...)
+    h´ = supercell(h, data; mincoordination)
+    shifts = supercell_shifts(data)     # allows to compute new ptrs to old r, dr
     ms = parent.(modifiers(p))          # extract unapplied modifiers to reapply them to h´
-    p´ = hamiltonian(h´, ms...)
+    ams = apply.(ms, Ref(h´), Ref(shifts))
+    p´ = hamiltonian(h´, ams...)
     return p´
 end
+
+# For each site in new lattice, store the corresponding shift = bravais_matrix * cell
+function supercell_shifts(data::SupercellData)
+    b = bravais_matrix(data.lat)
+    shifts = [b * cell for (_, cell, _) in data.masklist]
+    return shifts
+end
+
 
 #endregion

@@ -49,7 +49,7 @@ end
 # end
 
 function Base.in(((sj, si), (r, dr), dcell)::Tuple{Pair,Tuple,SVector}, sel::AppliedHopSelector)
-    return !isonsite((sj, si), dcell) &&
+    return !isonsite(dr) &&
             indcells(dcell, sel) &&
             insublats(sj => si, sel) &&
             iswithinrange(dr, sel) &&
@@ -57,6 +57,7 @@ function Base.in(((sj, si), (r, dr), dcell)::Tuple{Pair,Tuple,SVector}, sel::App
 end
 
 isonsite((j, i), dn) = ifelse(i == j && iszero(dn), true, false)
+isonsite(dr) = iszero(dr)
 
 #endregion
 

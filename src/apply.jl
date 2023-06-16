@@ -135,27 +135,30 @@ apply(m::ParametricModel, lat) = ParametricModel(apply.(terms(m), Ref(lat)))
 
 ############################################################################################
 # apply parametric modifiers
+#   shifts allows to transform lattice(h) sites into the sites of some originating lattice
+#   unit cell: shifts = [bravais * dn] for each site in lattice(h)
+#   shifts is useful for supercell, where we want to keep the r, dr of original lat
 #region
 
-function apply(m::OnsiteModifier, h::Hamiltonian)
+function apply(m::OnsiteModifier, h::Hamiltonian, shifts = missing)
     f = parametric_function(m)
     sel = selector(m)
     asel = apply(sel, lattice(h))
-    ptrs = pointers(h, asel)
+    ptrs = pointers(h, asel, shifts)
     B = blocktype(h)
     return AppliedOnsiteModifier(sel, B, f, ptrs)
 end
 
-function apply(m::HoppingModifier, h::Hamiltonian)
+function apply(m::HoppingModifier, h::Hamiltonian, shifts = missing)
     f = parametric_function(m)
     sel = selector(m)
     asel = apply(sel, lattice(h))
-    ptrs = pointers(h, asel)
+    ptrs = pointers(h, asel, shifts)
     B = blocktype(h)
     return AppliedHoppingModifier(sel, B, f, ptrs)
 end
 
-function pointers(h::Hamiltonian{T,E}, s::AppliedSiteSelector{T,E}) where {T,E}
+function pointers(h::Hamiltonian{T,E}, s::AppliedSiteSelector{T,E}, shifts) where {T,E}
     isempty(cells(s)) || argerror("Cannot constrain cells in an onsite modifier, cell periodicity is assumed.")
     ptr_r = Tuple{Int,SVector{E,T},Int}[]
     lat = lattice(h)
@@ -166,8 +169,9 @@ function pointers(h::Hamiltonian{T,E}, s::AppliedSiteSelector{T,E}) where {T,E}
     for scol in sublats(lat), col in siterange(lat, scol), p in nzrange(umat, col)
         row = rows[p]
         col == row || continue
-        r = site(lat, row)
-        if (row, r) in s
+        r = site(lat, col)
+        r = apply_shift(shifts, r, col)
+        if (scol, r) in s
             n = norbs[scol]
             push!(ptr_r, (p, r, n))
         end
@@ -175,11 +179,10 @@ function pointers(h::Hamiltonian{T,E}, s::AppliedSiteSelector{T,E}) where {T,E}
     return ptr_r
 end
 
-function pointers(h::Hamiltonian{T,E}, s::AppliedHopSelector{T,E}) where {T,E}
+function pointers(h::Hamiltonian{T,E}, s::AppliedHopSelector{T,E}, shifts) where {T,E}
     hars = harmonics(h)
     ptr_r_dr = [Tuple{Int,SVector{E,T},SVector{E,T},Tuple{Int,Int}}[] for _ in hars]
     lat = lattice(h)
-    bs = blockstructure(h)
     dn0 = zerocell(lat)
     norbs = norbitals(h)
     for (har, ptr_r_dr) in zip(hars, ptr_r_dr)
@@ -187,18 +190,24 @@ function pointers(h::Hamiltonian{T,E}, s::AppliedHopSelector{T,E}) where {T,E}
         rows = rowvals(mh)
         for scol in sublats(lat), col in siterange(lat, scol), p in nzrange(mh, col)
             row = rows[p]
+            srow = sitesublat(lat, row)
             dn = dcell(har)
-            r, dr = rdr(site(lat, col, dn0) => site(lat, row, dn))
-            # @show (col => row, (r, dr), dn) in s
-            if (col => row, (r, dr), dn) in s
+            rcol = site(lat, col, dn0)
+            rrow = site(lat, row, dn)
+            r, dr = rdr(rcol => rrow)
+            r = apply_shift(shifts, r, col)
+            if (scol => srow, (r, dr), dn) in s
                 ncol = norbs[scol]
-                nrow = blocksize(bs, row)
+                nrow = norbs[srow]
                 push!(ptr_r_dr, (p, r, dr, (nrow, ncol)))
             end
         end
     end
     return ptr_r_dr
 end
+
+apply_shift(::Missing, r, _) = r
+apply_shift(shifts, r, i) = r - shifts[i]
 
 #endregion
 

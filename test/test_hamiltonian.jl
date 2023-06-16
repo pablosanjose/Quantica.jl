@@ -311,6 +311,16 @@ end
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(2I), orbitals = (Val(2), Val(1)), @hopping!((t; α, β = 0) -> α * t .+ β))
     b = h((0, 0); α = 2)
     @test b == [0 0 12; 0 0 0; 12 0 0]
+    # Old bug in apply
+    h = LP.honeycomb() |> supercell(2) |> onsite(1) |> @onsite!(o -> 0; sublats = :A)
+    @test tr(h((0,0))) == 4
+    # wrap and supercell commutativity with modifier application
+    h = LP.linear() |> hopping(1) |> supercell(3) |> @onsite!((o,r; E = 1)-> E*r[1]) |> @hopping!((t, r,dr; A = SA[1])->t*cis(dot(A,dr[1])))
+    @test supercell(h(), 4)((1,)) == supercell(h, 4)((1,))
+    @test wrap(h, (2,))(()) == wrap(h(), (2,))(()) == h((2,))
+    h = LP.linear() |> supercell(3) |> @hopping((r,dr; A = SA[1])->cis(dot(A,dr[1])))
+    @test supercell(h(), 4)((1,)) == supercell(h, 4)((1,))
+    @test_broken wrap(h, (2,))(()) == wrap(h(), (2,))(()) == h((2,))
 end
 
 @testset "hamiltonian nrange" begin
