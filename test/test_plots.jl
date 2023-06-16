@@ -1,5 +1,11 @@
 using CairoMakie
 
+@testset "plot lattice" begin
+    # Makie issue #3009 workaround
+    lat = LP.linear() |> supercell(10) |> supercell
+    @test display(qplot(lat)) isa CairoMakie.Screen{CairoMakie.IMAGE}
+end
+
 @testset "plot hamiltonian" begin
     h = LP.bcc() |> hamiltonian(hopping(1)) |> supercell(3) |> supercell((1,0,0))
     g = greenfunction(h)
