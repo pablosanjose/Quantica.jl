@@ -318,9 +318,12 @@ end
     h = LP.linear() |> hopping(1) |> supercell(3) |> @onsite!((o,r; E = 1)-> E*r[1]) |> @hopping!((t, r,dr; A = SA[1])->t*cis(dot(A,dr[1])))
     @test supercell(h(), 4)((1,)) ≈ supercell(h, 4)((1,))
     @test wrap(h, (2,))(()) ≈ wrap(h(), (2,))(()) ≈ h((2,))
-    h = LP.linear() |> supercell(3) |> @hopping((r,dr; ϕ = 1) -> cis(ϕ*dr[1]))
+    h = LP.linear() |> supercell(3) |> @hopping((r,dr; ϕ = 1) -> cis(ϕ * dr[1]))
     @test supercell(h(), 4)((1,)) ≈ supercell(h, 4)((1,))
     @test wrap(h(), (2,))(()) ≈ h((2,))
+    h0 = LP.square() |> hopping(1) |> supercell(3) |> @hopping!((t, r, dr; A = SA[1,2]) -> t*cis(A'dr))
+    h = wrap(h0, (0.2,:))
+    @test h0((0.2, 0.3)) ≈ h((0.3,))
 end
 
 @testset "hamiltonian nrange" begin
