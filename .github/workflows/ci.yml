@@ -13,8 +13,8 @@ jobs:
     strategy:
       matrix:
         version:
-          - '1.9'
-          - 'nightly'
+          - '1'
+          # - 'nightly'
         os:
           - ubuntu-latest
           - macOS-latest
