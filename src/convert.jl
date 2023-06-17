@@ -22,18 +22,18 @@ Sublat{T,E}(s::Sublat, name = s.name) where {T<:AbstractFloat,E} =
 CellSites{L,V}(c::CellSites) where {L,V} =
     CellSites{L,V}(convert(SVector{L,Int}, cell(c)), convert(V, siteindices(c)))
 
-function Hamiltonian{T,E}(h::Hamiltonian) where {T,E}
+function Hamiltonian{E}(h::Hamiltonian) where {E}
     lat = lattice(h)
-    lat´ = lattice(lat, dim = Val(E), type = T)
+    lat´ = lattice(lat, dim = Val(E))
     bs = blockstructure(h)
     hs = harmonics(h)
     b = bloch(h)
     return Hamiltonian(lat´, bs, hs, b)
 end
 
-function ParametricHamiltonian{T,E}(ph::ParametricHamiltonian) where {T,E}
-    hparent = Hamiltonian{T,E}(parent(ph))
-    h = Hamiltonian{T,E}(hamiltonian(ph))
+function ParametricHamiltonian{E}(ph::ParametricHamiltonian) where {E}
+    hparent = Hamiltonian{E}(parent(ph))
+    h = Hamiltonian{E}(hamiltonian(ph))
     ms = modifiers(ph)
     ptrs = pointers(ph)
     pars = parameters(ph)

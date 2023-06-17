@@ -602,6 +602,16 @@ end
 const Modifier = Union{OnsiteModifier,HoppingModifier}
 const AppliedModifier = Union{AppliedOnsiteModifier,AppliedHoppingModifier}
 
+#region ## Constructors ##
+
+AppliedOnsiteModifier(m::AppliedOnsiteModifier, ptrs) =
+    AppliedOnsiteModifier(m.parentselector, m.blocktype, m.f, ptrs)
+
+AppliedHoppingModifier(m::AppliedHoppingModifier, ptrs) =
+    AppliedHoppingModifier(m.parentselector, m.blocktype, m.f, ptrs)
+
+#enregion
+
 #region ## API ##
 
 selector(m::Modifier) = m.selector
@@ -1205,6 +1215,14 @@ flatrange(h::AbstractHamiltonian, name::Symbol) =
 
 zerocell(h::AbstractHamiltonian) = zerocell(lattice(h))
 zerocellsites(h::AbstractHamiltonian, i) = zerocellsites(lattice(h), i)
+
+function harmonic_index(h::AbstractHamiltonian, dn)
+    for (i, har) in enumerate(harmonics(h))
+        dcell(har) == dn && return har, i
+    end
+    boundserror(harmonics(h), dn)
+    return first(harmonics(h)), 1  # unreachable
+end
 
 ## Hamiltonian
 

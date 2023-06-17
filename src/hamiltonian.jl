@@ -137,7 +137,8 @@ hamiltonian(lat::Lattice, m0::ParametricModel, ms::Modifier...; kw...) =
 hamiltonian(lat::Lattice, m::Modifier, ms::Modifier...; kw...) =
     parametric(hamiltonian(lat; kw...), m, ms...)
 
-hamiltonian(h::AbstractHamiltonian, m::Modifier, ms::Modifier...) = parametric(h, m, ms...)
+hamiltonian(h::AbstractHamiltonian, m::AbstractModifier, ms::AbstractModifier...) =
+    parametric(h, m, ms...)
 
 hamiltonian(lat::Lattice, m::AbstractBlockModel{<:TightbindingModel}; kw...) =
     hamiltonian(lat, parent(m), block(m); kw...)
@@ -226,17 +227,17 @@ function parametric(hparent::Hamiltonian)
 end
 
 parametric(h::Hamiltonian, m::AbstractModifier, ms::AbstractModifier...) =
-    _parametric!(parametric(h), m, ms...)
+    parametric!(parametric(h), m, ms...)
 parametric(p::ParametricHamiltonian, ms::AbstractModifier...) =
-    _parametric!(copy(p), ms...)
+    parametric!(copy(p), ms...)
 
 # This should not be exported, because it doesn't modify p in place (because of modifiers)
-function _parametric!(p::ParametricHamiltonian, ms::Modifier...)
+function parametric!(p::ParametricHamiltonian, ms::Modifier...)
     ams = apply.(ms, Ref(parent(p)))
-    return _parametric!(p, ams...)
+    return parametric!(p, ams...)
 end
 
-function _parametric!(p::ParametricHamiltonian, ms::AppliedModifier...)
+function parametric!(p::ParametricHamiltonian, ms::AppliedModifier...)
     hparent = parent(p)
     h = hamiltonian(p)
     allmodifiers = (modifiers(p)..., ms...)
@@ -361,7 +362,7 @@ function reset_to_parent!(ph)
         nz = nonzeros(needs_initialization(m) ? unflat(m) : unflat_unsafe(m))
         nz´ = nonzeros(unflat(m´))
         if length(ptrs) < length(nz) * nnzfraction
-            @simd for ptr in ptrs
+            for ptr in ptrs
                 nz[ptr] = nz´[ptr]
             end
         else
@@ -517,7 +518,7 @@ end
 #endregion
 
 ############################################################################################
-# wrap
+# wrap(::Hamiltonian, phases)
 #region
 
 wrap(phases) = h -> wrap(h, phases)
@@ -571,11 +572,64 @@ function summed_harmonic(inds, hars::Vector{<:Harmonic{<:Any,<:Any,B}}, phases_w
     return Harmonic(dn_u, HybridSparseMatrix(bs, mat))
 end
 
+#endregion
+
+############################################################################################
+# wrap(::ParametricHamiltonian, phases)
+#region
+
 function wrap(p::ParametricHamiltonian, phases)
-    h´ = wrap(parent(p), phases)
-    ms = parent.(modifiers(p))
-    p´ = hamiltonian(h´, ms...)
+    wa, ua = split_axes(phases)  # indices for wrapped and unwrapped axes
+    iszero(length(wa)) && return minimal_callsafe_copy(p)
+    h = parent(p)
+    h´ = wrap(h, phases)
+    ams = modifiers(p)
+    L = latdim(lattice(h))
+    S = SMatrix{L,L,Int}(I)[SVector(ua), :] # dnnew = S * dnold
+    ptrmap = pointer_map(h, h´, S)    # [[(ptr´ of har´[S*dn]) for ptr in har] for har in h]
+    harmap = harmonics_map(h, h´, S)  # [(index of har´[S*dn]) for har in h]
+    ams´ = wrap_modifier.(ams, Ref(ptrmap), Ref(harmap))
+    p´ = hamiltonian(h´, ams´...)
     return p´
+end
+
+pointer_map(h, h´, S) =
+    [pointer_map(har, first(harmonic_index(h´, S*dcell(har)))) for har in harmonics(h)]
+
+function pointer_map(har, har´)
+    ptrs´ = Int[]
+    mat, mat´ = unflat(matrix(har)), unflat(matrix(har´))
+    rows, rows´ = rowvals(mat), rowvals(mat´)
+    for col in axes(mat, 2), ptr in nzrange(mat, col)
+        row = rows[ptr]
+        for ptr´ in nzrange(mat´, col)
+            if row == rows´[ptr´]
+                push!(ptrs´, ptr´)
+                break
+            end
+        end
+    end
+    return ptrs´
+end
+
+harmonics_map(h, h´, S) = [last(harmonic_index(h´, S*dcell(har))) for har in harmonics(h)]
+
+function wrap_modifier(m::AppliedOnsiteModifier, ptrmap, harmap)
+    ptrs´ = first(ptrmap)
+    p´ = [(ptrs´[ptr], r, orbs) for (ptr, r, orbs) in pointers(m)]
+    return AppliedOnsiteModifier(m, p´)
+end
+
+function wrap_modifier(m::AppliedHoppingModifier, ptrmap, harmap)
+    ps = pointers(m)
+    ps´ = [similar(first(ps), 0) for _ in 1:maximum(harmap)]
+    for (i, p) in enumerate(ps), (ptr, r, dr, orborbs) in p
+        i´ = harmap[i]
+        ptrs´ = ptrmap[i]
+        push!(ps´[i´], (ptrs´[ptr], r, dr, orborbs))
+    end
+    sort!.(ps´)
+    return AppliedHoppingModifier(m, ps´)
 end
 
 
