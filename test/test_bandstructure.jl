@@ -12,7 +12,7 @@ using Quantica: nsubbands, nvertices, nedges, nsimplices
     h = LatticePresets.honeycomb() |>
         hamiltonian(onsite(0.5, sublats = :A) + onsite(-0.5, sublats = :B) +
                     hopping(-1, range = 1/√3))
-    b = bands(h, subdiv(-pi, pi, 13), subdiv(-pi, pi, 15), showprogress = false)
+    b = h |> bands(subdiv(-pi, pi, 13), subdiv(-pi, pi, 15), showprogress = false)
     @test nsubbands(b)  == 2
 
     h = LatticePresets.cubic() |> hamiltonian(hopping((r,dr)-> im*dr'SA[1,1.5,2])) |> supercell(2)

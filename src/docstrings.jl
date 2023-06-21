@@ -1205,6 +1205,12 @@ driver without the added slicing functionality of a full `Bandstructure` object,
 - `defects`: (experimental) a collection of extra points to add to the mesh, typically the location of topological band defects such as Dirac points, so that interpolation avoids creating dislocation defects in the bands. You need to also increase `patches` to repair the subband dislocations using the added defect vertices.
 - `patches::Integer`: (experimental) if a dislocation is encountered, attempt to patch it by searching for the defect recursively to a given order, or using the provided `defects` (preferred). Default: `0`
 
+## Currying
+
+    h |> bands(xcolᵢ...; kw...)
+
+Curried form of `bands` equivalent to `bands(h, xcolᵢ...; kw...)`
+
 ## Band linecuts
 
 To do a linecut of a bandstructure along a polygonal path in the `L`-dimensional Brillouin
@@ -1224,7 +1230,7 @@ list (`:Γ`,`:K`, `:K´`, `:M`, `:X`, `:Y`, `:Z`). If `mapping = nodes`, then `x
 Extract `i`-th subband from `b::Bandstructure`. `i` can also be a `Vector`, an
 `AbstractRange` or any other argument accepted by `getindex(subbands::Vector, i)`
 
-    b[slice::Tuple]
+    b[slice...]
 
 Compute a section of `b::Bandstructure` with a "plane" defined by `slice = (ϕ₁, ϕ₂,..., ϕₗ[,
 ϵ])`, where each `ϕᵢ` or `ϵ` can be a real number (representing a fixed momentum or energy)

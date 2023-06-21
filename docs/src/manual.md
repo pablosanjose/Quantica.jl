@@ -223,7 +223,7 @@ Selectors are very expressive and powerful. Do check `siteselector` and `hopsele
 
 ### Transforming lattices
 
-We can transform lattices using `transform`, `translate`, `supercell` and `wrap`.
+We can transform lattices using `transform`, `translate` and `supercell`.
 
 To transform a lattice, so that site positions `r` become `f(r)` use `transform`
 ```jldoctest
@@ -280,7 +280,7 @@ Lattice{Float64,2,1} : 1D lattice in 2D space
     Sites         : (27, 27) --> 54 total per unit cell
 ```
 
-Its important to note that the lattice in the directions perpendicular to the new Bravais vector is bounded. With the syntax above, the new unitcell will be minimal. We may however define how many sites to include in the new unitcell by adding a `SiteSelector` directive to be applied in the non-periodic directions. For example, to create a 10 * a0 wide, honeycomb nanoribbon we can do
+Its important to note that the lattice will be bounded along directions different from the specified Bravais vectors. With the syntax above, the new unitcell will be minimal. We may however define how many sites to include in the new unitcell by adding a `SiteSelector` directive to be applied in the non-periodic directions. For example, to create a 10 * a0 wide, honeycomb nanoribbon we can do
 
 ```jldoctest
 julia> lat = supercell(LP.honeycomb(), (1,-1), region = r -> -5 <= r[2] <= 5)
@@ -508,6 +508,8 @@ A crucial thing to remember when defining multi-orbital Hamiltonians as the abov
 !!! tip "Models with different number of orbitals per sublattice"
     Non-homogeneous multiorbital models are more advanced but are fully supported in Quantica. Just use `orbitals = (n₁, n₂,...)` to have `nᵢ` orbitals in sublattice `i`, and make sure your model is consistent with that. As in the case of the `dim` keyword in `lattice`, you can also use `Val(nᵢ)` for marginally faster construction.
 
+Similarly to `LatticePreset`s, we also have `HamiltonianPresets`, also aliased as `HP`. Currently, we have only `HP.graphene(...)` and `HP.twisted_bilayer_graphene(...)`, but we expect to extend this library in the future (see the docstring of `HP`).
+
 ### A more elaborate example: the Kane-Mele model
 
 The Kane-Mele model for graphene describes intrinsic spin-orbit coupling (SOC), in the form of an imaginary second-nearest-neighbor hopping between same-sublattice sites, with a sign that alternates depending on hop direction `dr`. A possible implementation in Quantica would be
@@ -659,9 +661,26 @@ Note that unspecified parameters take their default values when using the call s
 
 ### Transforming Hamiltonians
 
-Like with lattices, we can transform an `h::AbstractHamiltonians` using `transform`, `translate` and `supercell`. The first two operate only on the underlying `lattice(h)`, leaving the hoppings and onsite elements unchanged, while `supercell` acts on `lattice(h)` and copies the hoppings and onsites of `h` onto the new sites, preserving the periodicity of the original `h`
+Like with lattices, we can transform an `h::AbstractHamiltonians` using `transform`, `translate` and `supercell`. Both `transform` and `translate` operate only on the underlying `lattice(h)` of `h`, leaving the hoppings and onsite elements unchanged, while `supercell` acts on `lattice(h)` and copies the hoppings and onsites of `h` onto the new sites, preserving the periodicity of the original `h`.
 
-It's important to understand the above to avoid unexpected results: the model used to build `h` is not re-evaluated when transforming it. As a consequence, these two constructions give different Hamiltonians
+Additionally, we can also use `wrap`, which makes `h` periodic along a number of its Bravais vectors, while leaving the rest unbounded.
+```jldoctest
+julia> wrap(HP.graphene(), (0.0,:))
+Hamiltonian{Float64,2,1}: Hamiltonian on a 1D Lattice in 2D space
+  Bloch harmonics  : 3
+  Harmonic size    : 2 × 2
+  Orbitals         : [1, 1]
+  Element type     : scalar (ComplexF64)
+  Onsites          : 0
+  Hoppings         : 4
+  Coordination     : 2.0
+```
+The `phases` argument of `wrap(h, phases)` is a `Tuple` of real numbers and/or colons (`:`), of length equal to the lattice dimension of `h`. Each real number `ϕᵢ` corresponds to a Bravais vector along which the transformed lattice will become periodic, picking up a phase `exp(iϕᵢ)` in the wrapping hoppings, while each colon leaves the lattice unbounded along the corresponding Bravais vector. In a way `wrap` is dual to `supercell`, in the sense that the it applies a different boundary condition to the lattice along the eliminated Bravais vectors, periodic instead of open, as in the case of `supercell`. The phases `ϕᵢ` are also connected to Bloch phases, in the sense that e.g. `wrap(h, (ϕ₁, :))(ϕ₂) == h(ϕ₁, ϕ₂)`
+
+!!! warning "Caveat of the Bloch-wrap duality"
+    The relation `wrap(h, phases)(()) = h(phases)` is only satisfied in the (most common) case wherein none of the wrapping hoppings added by `wrap` are  already present in `h`. This is only a concern with `h` containing hoppings at ranges equal or larger than half the size of the unit cell.
+
+It's important to understand that, when transforming an `h::AbstractHamiltonian`, the model used to build `h` is not re-evaluated. Hoppings and onsite energies are merely copied so as to preserve the periodicity of the original `h`. As a consequence, these two constructions give different Hamiltonians
 ```julia
 julia> h1 = LP.linear() |> supercell(4) |> hamiltonian(onsite(r -> r[1]));
 
@@ -688,7 +707,7 @@ julia> h2[()]
 ```
 As a consequence, `h` and `supercell(h)` represent exactly the same system, with the same observables, but with a different choice of unitcell.
 
-These two different behaviors make sense in different situations, so it is important to be aware of the order dependence of transformations. Similar considerations apply to `transform` and `translate` when models are position dependent.
+These two different behaviors make sense in different situations, so it is important to be aware of the order dependence of transformations. Similar considerations apply to `transform`, `translate` and `wrap` when models are position dependent.
 
 ## Bandstructures
 
@@ -722,6 +741,76 @@ Note that the uniform grid contains the Dirac points. This is the reason for the
 !!! tip "Advanced: band defects and patching"
     If a Dirac point or other type of band dislocation point happens to not belong to the sampling grid, it can be added with the `bands` keyword `defects`. Then, it can be reconnected with the rest of the band by increasing the `patches::Integer` keyword (see `bands` docstring for details). This "band repair" functionality is experimental, and should only be necessary in some cases with Diabolical Points.
 
+### Coordinate mapping and band linecuts
+
+The `ϕᵢpoints` above define a rectangular mesh over which we want to compute the bandstructure. By default, this mesh is taken as a discretization of Bloch phases, so `h(ϕᵢ)` is diagonalized. We might want, however, a different relation between the mesh and the parameters passed to `h`, for example if we wish to use wavevectors `kᵢ` instead of Bloch phases `ϕᵢ` for the mesh. This is achieved with the `mapping` keyword, which accepts a function `mapping = (mesh_points...) -> bloch_phases`,
+```jldoctest
+julia> h = LP.honeycomb() |> hopping(2); k₁points = range(-2π, 2π, length = 51); k₂points = range(-2π, 2π, length = 51);
+
+julia> Kpoints = [SA[cos(θ) -sin(θ); sin(θ) cos(θ)] * SA[4π/3,0] for θ in range(0, 5*2π/6, length = 6)];
+
+julia> ϕ(k...) =  SA[k...]' * bravais_matrix(h)
+ϕ (generic function with 1 method)
+
+julia> b = bands(h,  k₁points, k₂points; mapping = ϕ, defects = Kpoints, patches = 20);
+
+julia> using GLMakie; qplot(b, hide = :nodes, color = :orange)
+```
+```@raw html
+<img src="../assets/graphene_bands_k.png" alt="Graphene bands in k-space" width="400" class="center"/>
+```
+
+To compute a bandstructure along a polygonal line in the Brillouin zone, with vertices `ϕᵢ` we could once more use the `mapping` functionality, mapping a set of points `xᵢ::Real` in the mesh to Bloch phases `ϕᵢ::SVector{L}`, and interpolating linearly between them. To avoind having to construct this mapping ourselves, `mapping` accepts a second type of input for this specific usecase, `mapping = xᵢ => ϕᵢ`. It even understands common names for high-symmetry points in the Brillouin zone in place of `ϕᵢ`, such as :Γ, :K, :K´, :M, :X, :Y, and :Z. The following gives a Γ-K-M-Γ linecut for the bands above, where the (Γ, K, M, Γ) points lie at `x = (0, 2, 3, 4)`, respectively, with 10 subdivisions in each segment,
+```jldoctest
+julia> b = bands(h, subdiv((0, 2, 3, 4), 10); mapping = (0, 2, 3, 4) => (:Γ, :K, :M, :Γ));
+```
+```
+```@raw html
+<img src="../assets/graphene_bands_linecut.png" alt="Graphene bands along a Γ-K-M-Γ cut" width="400" class="center"/>
+```
+
+!!! tip "subdiv"
+    The `subdiv` function is a convenience function provided by Quantica that generalizes `range` (see the corresponding docstring for comprehensive details). It is useful to create collections of numbers as subdivisions of intervals, as in the example above. In its simplest form `subdiv(min, max, npoints)` is is equivalent to `range(min, max, length = npoints)` or `collect(LinRange(min, max, npoints))`
+
+The `mapping` keyword understand a third syntax that can be used to map a mesh to the space of Bloch phases and parameters of a `ParametricHamiltonian`. To this end we use `mapping = (mesh_points...) -> ftuple(bloch_phases...; params...)`. The `ftuple` function creates a `FrankenTuple`, which is a hybrid between a `Tuple` and a `NamedTuple`. For example, in the following 1D SSH chain we can compute the bandstructure as a function of Bloch phase `ϕ` *and* hopping `t´`
+```jldoctest
+julia> h = LP.linear() |> supercell(2) |> @hopping((r, dr; t = 1, t´ = 1) -> iseven(r[1]-1/2) ? t : t´);
+
+julia> b = bands(h, subdiv(0, 2π, 11), subdiv(0, 10, 11), mapping = (ϕ, y) -> ftuple(ϕ; t´ = y/5), patches = 20)
+Bandstructure{Float64,3,2}: 3D Bandstructure over a 2-dimensional parameter space of type Float64
+  Subbands  : 1
+  Vertices  : 249
+  Edges     : 664
+  Simplices : 416
+
+julia>  qplot(b, nodedarken = 0.5, axis = (; aspect = (1,1,1), xlabel = "ϕ", ylabel = "t´/t", zlabel = "ϵ"), fancyaxis = false)
+```
+```@raw html
+<img src="../assets/ssh_bands.png" alt="SSH bandstructure as a function of `ϕ` and `t´/t" width="400" class="center"/>
+```
+
+Note that since we didn't specify a value for `t`, it assumed its default `t=1`. In this case we needed to patch the defect at `(ϕ, t´) = (π, 1)` (topological transition) using the `patches` keyword to avoid a band dislocation.
+
 ### Band slicing
+
+For a band in a 2D Brillouin zone, we can obtain the intersection of a bandstructure with a plane of constant energy `ϵ=2` using the syntax `b[:,:,2]`. A section at fixed Bloch phase `ϕ₁=0` (or mesh coordinate `x₁=0` if `mapping` was used), can be obtained with `b[0,:,:]`. This type of band slicing can be generalized to higher dimensional bandstructures, or to more than one constrain (e.g. energy and/or a subset of Bloch phases).
+As an example, this would be the Fermi surface of a nearest-neighbor cubic-lattice Hamiltonian at Fermi energy `µ = 0.2t`
+```jldoctest
+julia> pts = subdiv(0, 2π, 41); b = LP.cubic() |> hopping(1) |> bands(pts, pts, pts)
+Bandstructure{Float64,4,3}: 4D Bandstructure over a 3-dimensional parameter space of type Float64
+  Subbands  : 1
+  Vertices  : 68921
+  Edges     : 462520
+  Simplices : 384000
+
+julia> qplot(b[:, :, :, 0.2], hide = :nodes)
+```
+```@raw html
+<img src="../assets/cubic_Fermi_surface.png" alt="Fermi surface of a cubic crystal at `µ = 0.2t`" width="400" class="center"/>
+```
+
+!!! warning "On simplex orientation of bandstructure slices"
+    The above example showcases a limitation of the current band slicing algorithm, which doesn't align all faces of the resulting manifold to point to have a coninuous orientation. The dark and bright regions of the surface reveals that approximately half of the faces are facing inward and the rest outward. Hopefully, this will be fixed in future versions.
+
 
 ## GreenFunctions
