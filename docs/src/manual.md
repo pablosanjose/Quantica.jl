@@ -293,8 +293,9 @@ Lattice{Float64,2,1} : 1D lattice in 2D space
 julia> qplot(lat[cells = -7:7])
 ```
 ```@raw html
-<img src="../assets/nanoribbon_lat.png" alt="Honeycomb nanoribbon" width="250" class="center"/>
+<img src="../assets/nanoribbon_lat.png" alt="Honeycomb nanoribbon" width="350" class="center"/>
 ```
+
 !!! tip "No need to build selectors explicitly"
     Note that we we didn't build a `siteselector(region = ...)` object to pass it to `supercell`. Instead, as shown above, we passed the corresponding keywords directly to `supercell`, which then takes care to build the selector internally.
 
@@ -775,7 +776,7 @@ julia> qplot(b, axis = (; xticks = ([0, 2, 3, 4], ["Γ", "K", "M", "Γ"]), ylabe
 !!! tip "subdiv"
     The `subdiv` function is a convenience function provided by Quantica that generalizes `range` (see the corresponding docstring for comprehensive details). It is useful to create collections of numbers as subdivisions of intervals, as in the example above. In its simplest form `subdiv(min, max, npoints)` is is equivalent to `range(min, max, length = npoints)` or `collect(LinRange(min, max, npoints))`
 
-The `mapping` keyword understand a third syntax that can be used to map a mesh to the space of Bloch phases and parameters of a `ParametricHamiltonian`. To this end we use `mapping = (mesh_points...) -> ftuple(bloch_phases...; params...)`. The `ftuple` function creates a `FrankenTuple`, which is a hybrid between a `Tuple` and a `NamedTuple`. For example, in the following 1D SSH chain we can compute the bandstructure as a function of Bloch phase `ϕ` *and* hopping `t´`
+The `mapping` keyword understand a third syntax that can be used to map a mesh to the space of Bloch phases and parameters of a `ParametricHamiltonian`. To this end we use `mapping = (mesh_points...) -> ftuple(bloch_phases...; params...)`. The `ftuple` function creates a `FrankenTuple`, which is a hybrid between a `Tuple` and a `NamedTuple`. For example, in the following 1D SSH chain we can compute the bandstructure as a function of Bloch phase `ϕ` *and* hopping `t´`, and plot it using more customization options
 ```jldoctest
 julia> h = LP.linear() |> supercell(2) |> @hopping((r, dr; t = 1, t´ = 1) -> iseven(r[1]-1/2) ? t : t´);
 
