@@ -293,7 +293,7 @@ Lattice{Float64,2,1} : 1D lattice in 2D space
 julia> qplot(lat[cells = -7:7])
 ```
 ```@raw html
-<img src="../assets/nanoribbon_lat.png" alt="Honeycomb nanoribbon" height="150" class="center"/>
+<img src="../assets/nanoribbon_lat.png" alt="Honeycomb nanoribbon" width="250" class="center"/>
 ```
 !!! tip "No need to build selectors explicitly"
     Note that we we didn't build a `siteselector(region = ...)` object to pass it to `supercell`. Instead, as shown above, we passed the corresponding keywords directly to `supercell`, which then takes care to build the selector internally.
@@ -637,7 +637,9 @@ julia> h_param(t=2)[(0,0)]
     The above behavior for unspecified parameters is not set in stone and may change in future versions. Another option would be to apply their default values (which may, however, not exist).
 
 We are usually not interested in the harmonics `h[dn]` themselves, but rather in the Bloch matrix of a Hamiltonian
-    `` H(\phi) = \sum_{dn} H_{dn} \exp(-i \phi * dn)``
+
+``H(\phi) = \sum_{dn} H_{dn} \exp(-i \phi * dn)``
+
 where ``H_{dn}`` are the Hamiltonian harmonics, ``\phi = (\phi_1, \phi_2...) = (k\cdot A_1, k\cdot A_2...)`` are the Bloch phases, ``k`` is the Bloch wavevector and ``A_i`` are the Bravais vectors.
 
 We obtain the Bloch matrix using the syntax `h(ϕ; params...)`
@@ -763,6 +765,8 @@ julia> using GLMakie; qplot(b, hide = :nodes, color = :orange)
 To compute a bandstructure along a polygonal line in the Brillouin zone, with vertices `ϕᵢ` we could once more use the `mapping` functionality, mapping a set of points `xᵢ::Real` in the mesh to Bloch phases `ϕᵢ::SVector{L}`, and interpolating linearly between them. To avoind having to construct this mapping ourselves, `mapping` accepts a second type of input for this specific usecase, `mapping = xᵢ => ϕᵢ`. It even understands common names for high-symmetry points in the Brillouin zone in place of `ϕᵢ`, such as :Γ, :K, :K´, :M, :X, :Y, and :Z. The following gives a Γ-K-M-Γ linecut for the bands above, where the (Γ, K, M, Γ) points lie at `x = (0, 2, 3, 4)`, respectively, with 10 subdivisions in each segment,
 ```jldoctest
 julia> b = bands(h, subdiv((0, 2, 3, 4), 10); mapping = (0, 2, 3, 4) => (:Γ, :K, :M, :Γ));
+
+julia> qplot(b, axis = (; xticks = ([0, 2, 3, 4], ["Γ", "K", "M", "Γ"]), ylabel = "ϵ"))
 ```
 ```@raw html
 <img src="../assets/graphene_bands_linecut.png" alt="Graphene bands along a Γ-K-M-Γ cut" width="400" class="center"/>
