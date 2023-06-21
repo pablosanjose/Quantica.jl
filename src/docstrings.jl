@@ -1223,14 +1223,14 @@ Here `nodes` can be a collection of `SVector{L}` or of named Brillouin zone poin
 list (`:Γ`,`:K`, `:K´`, `:M`, `:X`, `:Y`, `:Z`). If `mapping = nodes`, then `xs` defaults to
 `0:length(nodes)-1`. See also `subdiv` for its alternative methods.
 
-## Indexing
+## Indexing and slicing
 
     b[i]
 
 Extract `i`-th subband from `b::Bandstructure`. `i` can also be a `Vector`, an
 `AbstractRange` or any other argument accepted by `getindex(subbands::Vector, i)`
 
-    b[slice...]
+    b[slice::Tuple]
 
 Compute a section of `b::Bandstructure` with a "plane" defined by `slice = (ϕ₁, ϕ₂,..., ϕₗ[,
 ϵ])`, where each `ϕᵢ` or `ϵ` can be a real number (representing a fixed momentum or energy)

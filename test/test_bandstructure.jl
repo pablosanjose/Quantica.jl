@@ -114,6 +114,7 @@ end
     @test b[(:, pi)] isa Vector{Quantica.Subband{Float64,2}}
     @test length(b[(pi,)]) == length(b[(pi, :)]) == length(b[(pi, :, :)]) == 1
     @test b[1] isa Quantica.Subband
+    @test b[[1,end]] isa Vector{<:Quantica.Subband}
     m = Quantica.slice(b, (:,1))
     @test only(m) isa Quantica.Mesh
     m = Quantica.slice(b[1], (:,1))

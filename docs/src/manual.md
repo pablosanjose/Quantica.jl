@@ -293,7 +293,7 @@ Lattice{Float64,2,1} : 1D lattice in 2D space
 julia> qplot(lat[cells = -7:7])
 ```
 ```@raw html
-<img src="../assets/nanoribbon_lat.png" alt="Honeycomb nanoribbon" height="250" class="center"/>
+<img src="../assets/nanoribbon_lat.png" alt="Honeycomb nanoribbon" height="150" class="center"/>
 ```
 !!! tip "No need to build selectors explicitly"
     Note that we we didn't build a `siteselector(region = ...)` object to pass it to `supercell`. Instead, as shown above, we passed the corresponding keywords directly to `supercell`, which then takes care to build the selector internally.
@@ -313,13 +313,13 @@ julia> LP.honeycomb(a0 = √3) |> transform(f) |> translate(δr) |> sites
  [0.5, 1.0]
 ```
 
-This type of curried syntax is supported by most Quantica functions, and will be used extensively in this manual.
+This type of curried syntax is natural in Quantica, and will be used extensively in this manual.
 
 ## Models
 
 We now will see how to build a generic single-particle tight-binding model, with Hamiltonian
 
-    ``H = \sum_{i\alpha j\beta} c_{i\alpha}^\dagger V_{\alpha\beta}(r_i, r_j)c_{j\alpha}``
+``H = \sum_{i\alpha j\beta} c_{i\alpha}^\dagger V_{\alpha\beta}(r_i, r_j)c_{j\alpha}``
 
 Here, `α,β` are orbital indices in each site, `i,j` are site indices, and `rᵢ, rⱼ` are site positions. In Quantica we would write the above model as
 
@@ -525,10 +525,10 @@ h = LatticePresets.honeycomb() |> model
 
 qplot(h, inspector = true)
 ```
-
 ```@raw html
 <img src="../assets/latticeKM.png" alt="Kane-Mele lattice" width="350" class="center"/>
 ```
+
 
 The `inspector = true` keyword enables interactive tooltips in the visualization of `h` that allows to navigate each `onsite` and `hopping` amplitude graphically. Note that sites connected to the unit cell of `h` by some hopping are included, but are rendered with partial transparency by default.
 
@@ -573,7 +573,7 @@ julia> h_param_mod = hamiltonian(h_param, peierls!);
 ```
 
 !!! warning "Modifiers do not commute"
-    We can add as many modifiers as we need by passing them as extra arguments to `hamiltonian`. Beware, however, that modifiers do not necessarily commute, in the sense that the result will in general depend on their order.
+    We can add as many modifiers as we need by passing them as extra arguments to `hamiltonian`, and they will be applied sequentially, one by one. Beware, however, that modifiers do not necessarily commute, in the sense that the result will in general depend on their order.
 
 We can obtain a plain `Hamiltonian` from a `ParametricHamiltonian` by applying specific values to its parameters. To do so, simply use the call syntax with parameters as keyword arguments
 ```jldoctest
@@ -764,7 +764,6 @@ To compute a bandstructure along a polygonal line in the Brillouin zone, with ve
 ```jldoctest
 julia> b = bands(h, subdiv((0, 2, 3, 4), 10); mapping = (0, 2, 3, 4) => (:Γ, :K, :M, :Γ));
 ```
-```
 ```@raw html
 <img src="../assets/graphene_bands_linecut.png" alt="Graphene bands along a Γ-K-M-Γ cut" width="400" class="center"/>
 ```
@@ -783,7 +782,7 @@ Bandstructure{Float64,3,2}: 3D Bandstructure over a 2-dimensional parameter spac
   Edges     : 664
   Simplices : 416
 
-julia>  qplot(b, nodedarken = 0.5, axis = (; aspect = (1,1,1), xlabel = "ϕ", ylabel = "t´/t", zlabel = "ϵ"), fancyaxis = false)
+julia> qplot(b, nodedarken = 0.5, axis = (; aspect = (1,1,1), xlabel = "ϕ", ylabel = "t´/t", zlabel = "ϵ"), fancyaxis = false)
 ```
 ```@raw html
 <img src="../assets/ssh_bands.png" alt="SSH bandstructure as a function of `ϕ` and `t´/t" width="400" class="center"/>
@@ -791,9 +790,28 @@ julia>  qplot(b, nodedarken = 0.5, axis = (; aspect = (1,1,1), xlabel = "ϕ", yl
 
 Note that since we didn't specify a value for `t`, it assumed its default `t=1`. In this case we needed to patch the defect at `(ϕ, t´) = (π, 1)` (topological transition) using the `patches` keyword to avoid a band dislocation.
 
-### Band slicing
+### Band indexing and slicing
 
-For a band in a 2D Brillouin zone, we can obtain the intersection of a bandstructure with a plane of constant energy `ϵ=2` using the syntax `b[:,:,2]`. A section at fixed Bloch phase `ϕ₁=0` (or mesh coordinate `x₁=0` if `mapping` was used), can be obtained with `b[0,:,:]`. This type of band slicing can be generalized to higher dimensional bandstructures, or to more than one constrain (e.g. energy and/or a subset of Bloch phases).
+The individual subbands in a given `b::Bandstructure` can be obtained with `b[inds]` with `inds::Integer` or `inds::Vector`, just as if `b` where a normal `AbstractVector`. The extracted subbands can also be plotted directly. The following example has 12 subbands, of which we extract and plot the first and last
+```jldoctest
+julia> h = LP.triangular() |> supercell(4) |> hopping(1) + onsite(r -> 4*rand());
+
+julia> b = bands(h, subdiv(0, 2π, 31), subdiv(0, 2π, 31))
+Bandstructure{Float64,3,2}: 3D Bandstructure over a 2-dimensional parameter space of type Float64
+  Subbands  : 12
+  Vertices  : 15376
+  Edges     : 44152
+  Simplices : 28696
+
+julia> qplot(b, hide = :nodes)
+
+julia> qplot(b[[1, end]], hide = :nodes)
+```
+```@raw html
+<img src="../assets/bands_indexed.png" alt="Extracting and plotting a subset of the subbands in a bandstructure" width="400" class="center"/>
+```
+
+For a band in a 2D Brillouin zone, we can also obtain the intersection of a bandstructure with a plane of constant energy `ϵ=2` using the syntax `b[(:,:,2)]`. A section at fixed Bloch phase `ϕ₁=0` (or mesh coordinate `x₁=0` if `mapping` was used), can be obtained with `b[(0,:,:)]`. This type of band slicing can be generalized to higher dimensional bandstructures, or to more than one constrain (e.g. energy and/or a subset of Bloch phases).
 As an example, this would be the Fermi surface of a nearest-neighbor cubic-lattice Hamiltonian at Fermi energy `µ = 0.2t`
 ```jldoctest
 julia> pts = subdiv(0, 2π, 41); b = LP.cubic() |> hopping(1) |> bands(pts, pts, pts)
@@ -803,7 +821,7 @@ Bandstructure{Float64,4,3}: 4D Bandstructure over a 3-dimensional parameter spac
   Edges     : 462520
   Simplices : 384000
 
-julia> qplot(b[:, :, :, 0.2], hide = :nodes)
+julia> qplot(b[(:, :, :, 0.2)], hide = :nodes)
 ```
 ```@raw html
 <img src="../assets/cubic_Fermi_surface.png" alt="Fermi surface of a cubic crystal at `µ = 0.2t`" width="400" class="center"/>

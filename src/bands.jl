@@ -61,7 +61,7 @@ end
 
 bands(rng, rngs...; kw...) = h -> bands(h, rng, rngs...; kw...)
 
-bands(h::AbstractHamiltonian, rng, rngs...; kw...) = bands(h, mesh(rng, rngs...); kw...)
+bands(h::Union{Function,AbstractHamiltonian}, rng, rngs...; kw...) = bands(h, mesh(rng, rngs...); kw...)
 
 function bands(h::AbstractHamiltonian, mesh::Mesh{S};
          solver = ES.LinearAlgebra(), transform = missing, mapping = missing, kw...) where {S}
@@ -542,8 +542,10 @@ end
 #region
 
 Base.getindex(b::Bandstructure, i) = subbands(b, i)
-Base.getindex(b::Bandstructure, xs...) = [s[xs...] for s in subbands(b)]
-Base.getindex(s::Subband, xs...) = Subband(slice(s, xs, Val(true)))
+Base.getindex(b::Bandstructure, xs::Tuple) = [s[xs] for s in subbands(b)]
+Base.getindex(s::Subband, xs::Tuple) = Subband(slice(s, xs, Val(true)))
+
+Base.lastindex(b::Bandstructure, args...) = lastindex(subbands(b), args...)
 
 slice(b::Bandstructure, xs) = [slice(s, xs) for s in subbands(b)]
 slice(s::Subband, xs::Tuple) = slice(s, xs, Val(false))
