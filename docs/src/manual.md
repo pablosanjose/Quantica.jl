@@ -812,7 +812,7 @@ julia> qplot(b, hide = :nodes)
 julia> qplot(b[[1, end]], hide = :nodes)
 ```
 ```@raw html
-<img src="../assets/bands_indexed.png" alt="Extracting and plotting a subset of the subbands in a bandstructure" width="400" class="center"/>
+<img src="../assets/bands_indexed.png" alt="Extracting and plotting a subset of the subbands in a bandstructure" width="600" class="center"/>
 ```
 
 For a band in a 2D Brillouin zone, we can also obtain the intersection of a bandstructure with a plane of constant energy `ϵ=2` using the syntax `b[(:,:,2)]`. A section at fixed Bloch phase `ϕ₁=0` (or mesh coordinate `x₁=0` if `mapping` was used), can be obtained with `b[(0,:,:)]`. This type of band slicing can be generalized to higher dimensional bandstructures, or to more than one constrain (e.g. energy and/or a subset of Bloch phases).
