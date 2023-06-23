@@ -614,7 +614,7 @@ end
 
 harmonics_map(h, h´, S) = [last(harmonic_index(h´, S*dcell(har))) for har in harmonics(h)]
 
-function wrap_modifier(m::AppliedOnsiteModifier, ptrmap, harmap)
+function wrap_modifier(m::AppliedOnsiteModifier, ptrmap, _)
     ptrs´ = first(ptrmap)
     p´ = [(ptrs´[ptr], r, orbs) for (ptr, r, orbs) in pointers(m)]
     return AppliedOnsiteModifier(m, p´)
@@ -629,8 +629,15 @@ function wrap_modifier(m::AppliedHoppingModifier, ptrmap, harmap)
         push!(ps´[i´], (ptrs´[ptr], r, dr, orborbs))
     end
     sort!.(ps´)
+    check_ptr_duplicates(first(ps´))
     return AppliedHoppingModifier(m, ps´)
 end
 
+function check_ptr_duplicates(h0ptrs)
+    has_duplicates_ptrs = !allunique(first(p) for p in h0ptrs)
+    has_duplicates_ptrs &&
+        @warn "The wrapped ParametricHamiltonian has a modifier on hoppings that are the sum of intra- and intercell hoppings. The modifier will be applied to the sum, which may lead to unexpected results for position-dependent modifiers."
+    return nothing
+end
 
 #endregion

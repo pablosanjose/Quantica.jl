@@ -197,6 +197,8 @@ end
         wh = wrap(h, (:,:))
         @test wh == h
         @test wh !== h
+        h = LP.linear() |> supercell(2) |> hopping(1) |> @hopping!((t, r, dr) -> t*(r[1]-1/2))
+        @test_warn "unexpected results for position-dependent modifiers" wrap(h, (0.2,))
     end
 end
 

@@ -668,7 +668,7 @@ Like with lattices, we can transform an `h::AbstractHamiltonians` using `transfo
 
 Additionally, we can also use `wrap`, which makes `h` periodic along a number of its Bravais vectors, while leaving the rest unbounded.
 ```jldoctest
-julia> wrap(HP.graphene(), (0.0,:))
+julia> wrap(HP.graphene(), (0, :))
 Hamiltonian{Float64,2,1}: Hamiltonian on a 1D Lattice in 2D space
   Bloch harmonics  : 3
   Harmonic size    : 2 × 2
