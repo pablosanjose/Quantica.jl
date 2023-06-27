@@ -1318,7 +1318,7 @@ blockstructure(h::ParametricHamiltonian) = blockstructure(parent(h))
 
 blocktype(h::ParametricHamiltonian) = blocktype(parent(h))
 
-lattice(h::ParametricHamiltonian) = lattice(parent(h))
+lattice(h::ParametricHamiltonian) = lattice(hamiltonian(h))
 
 minimal_callsafe_copy(p::ParametricHamiltonian) = ParametricHamiltonian(
     p.hparent, minimal_callsafe_copy(p.h), p.modifiers, p.allptrs, p.allparams)
