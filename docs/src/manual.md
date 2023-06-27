@@ -223,37 +223,9 @@ Selectors are very expressive and powerful. Do check `siteselector` and `hopsele
 
 ### Transforming lattices
 
-We can transform lattices using `transform`, `translate` and `supercell`.
+We can transform lattices using `supercell`, `transform` and `translate`.
 
-To transform a lattice, so that site positions `r` become `f(r)` use `transform`
-```jldoctest
-julia> f(r) = SA[0 1; 1 0] * r
-f (generic function with 1 method)
-
-julia> rotated_honeycomb = transform(LP.honeycomb(a0 = √3), f)
-Lattice{Float64,2,2} : 2D lattice in 2D space
-  Bravais vectors : [[1.5, 0.866025], [1.5, -0.866025]]
-  Sublattices     : 2
-    Names         : (:A, :B)
-    Sites         : (1, 1) --> 2 total per unit cell
-
-julia> sites(rotated_honeycomb)
-2-element Vector{SVector{2, Float64}}:
- [-0.5, 0.0]
- [0.5, 0.0]
-```
-
-To translate a lattice by a displacement vector `δr` use `translate`
-```jldoctest
-julia> δr = SA[0, 1];
-
-julia> sites(translate(rotated_honeycomb, δr))
-2-element Vector{SVector{2, Float64}}:
- [-0.5, 1.0]
- [0.5, 1.0]
-```
-
-As a periodic structure, the choice of the unitcell in an unbounded lattice is to an extent arbitrary. Given a lattice `lat` we can obtain another with a unit cell 3 times larger with `supercell(lat, 3)`
+As a periodic structure, the choice of the unitcell in an unbounded lattice is, to an extent, arbitrary. Given a lattice `lat` we can obtain another with a unit cell 3 times larger with `supercell(lat, 3)`
 
 ```jldoctest
 julia> lat = supercell(LP.honeycomb(), 3)
@@ -298,6 +270,35 @@ julia> qplot(lat[cells = -7:7])
 
 !!! tip "No need to build selectors explicitly"
     Note that we we didn't build a `siteselector(region = ...)` object to pass it to `supercell`. Instead, as shown above, we passed the corresponding keywords directly to `supercell`, which then takes care to build the selector internally.
+
+To transform a lattice, so that site positions `r` become `f(r)` use `transform`
+```jldoctest
+julia> f(r) = SA[0 1; 1 0] * r
+f (generic function with 1 method)
+
+julia> rotated_honeycomb = transform(LP.honeycomb(a0 = √3), f)
+Lattice{Float64,2,2} : 2D lattice in 2D space
+  Bravais vectors : [[1.5, 0.866025], [1.5, -0.866025]]
+  Sublattices     : 2
+    Names         : (:A, :B)
+    Sites         : (1, 1) --> 2 total per unit cell
+
+julia> sites(rotated_honeycomb)
+2-element Vector{SVector{2, Float64}}:
+ [-0.5, 0.0]
+ [0.5, 0.0]
+```
+
+To translate a lattice by a displacement vector `δr` use `translate`
+```jldoctest
+julia> δr = SA[0, 1];
+
+julia> sites(translate(rotated_honeycomb, δr))
+2-element Vector{SVector{2, Float64}}:
+ [-0.5, 1.0]
+ [0.5, 1.0]
+```
+
 
 ### Currying: chaining transformations with the `|>` operator
 
