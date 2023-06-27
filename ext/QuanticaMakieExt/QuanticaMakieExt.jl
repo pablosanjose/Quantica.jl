@@ -12,8 +12,8 @@ using Quantica: Lattice, LatticeSlice, AbstractHamiltonian, Hamiltonian,
 import Quantica: plotlattice, plotlattice!, plotbands, plotbands!, qplot, qplot!
 
 # Currying fallback
-Quantica.qplot(args...; kw...) = x -> Quantica.qplot(x, args...; kw...)
-Quantica.qplot!(args...; kw...) = x -> Quantica.qplot!(x, args...; kw...)
+Quantica.qplot(; kw...) = x -> Quantica.qplot(x; kw...)
+Quantica.qplot!(; kw...) = x -> Quantica.qplot!(x; kw...)
 
 include("plotlattice.jl")
 include("plotbands.jl")
