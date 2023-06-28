@@ -63,7 +63,9 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurEmpty
     transform === missing || Quantica.transform!(hlead, transform)
     translate!(hlead, displacement)
     solver´ = SelfEnergySchurSolver(fsolver, hlead, reverse, leadorbs)
-    plottables = (hlead, reverse)
+
+    reverse && Base.reverse!(hlead)
+    plottables = (hlead,)
     return SelfEnergy(solver´, lsparent, plottables)
 end
 
@@ -193,7 +195,10 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead,
     gslice = glead[cells = SA[xunit]]
     Σs = selfenergies(contacts(glead))
     solver´ = extended_or_regular_solver(Σs, gslice, gunit, hcoupling, nparent)
-    plottables = (hcoupling,)
+
+    reverse && Base.reverse!(hlead)
+    plottables = (hcoupling, hlead)
+
     return SelfEnergy(solver´, lsparent, plottables)
 end
 
@@ -257,7 +262,10 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead;
     V  = SparseMatrixView(view(h₊₁, :, leadorbs))
     V´ = SparseMatrixView(view(h₋₁, leadorbs, :))
     solver´ = SelfEnergyGenericSolver(gslice, hlead, V´, V)
+
+    reverse && Base.reverse!(hlead)
     plottables = (hlead,)
+
     return SelfEnergy(solver´, lsparent, plottables)
 end
 

@@ -223,7 +223,7 @@ Selectors are very expressive and powerful. Do check `siteselector` and `hopsele
 
 ### Transforming lattices
 
-We can transform lattices using `supercell`, `transform` and `translate`.
+We can transform lattices using `supercell`, `reverse`, `transform`, `translate`.
 
 As a periodic structure, the choice of the unitcell in an unbounded lattice is, to an extent, arbitrary. Given a lattice `lat` we can obtain another with a unit cell 3 times larger with `supercell(lat, 3)`
 
@@ -270,6 +270,16 @@ julia> qplot(lat[cells = -7:7])
 
 !!! tip "No need to build selectors explicitly"
     Note that we we didn't build a `siteselector(region = ...)` object to pass it to `supercell`. Instead, as shown above, we passed the corresponding keywords directly to `supercell`, which then takes care to build the selector internally.
+
+To simply reverse the direction of the Bravais vectors of a lattice, while leaving the site positions unchanged, use `reverse` (or `reverse!` to do it in-place)
+```jldoctest
+julia> reverse(LP.square())
+Lattice{Float64,2,2} : 2D lattice in 2D space
+  Bravais vectors : [[-1.0, -0.0], [-0.0, -1.0]]
+  Sublattices     : 1
+    Names         : (:A,)
+    Sites         : (1,) --> 1 total per unit cell
+```
 
 To transform a lattice, so that site positions `r` become `f(r)` use `transform`
 ```jldoctest
@@ -665,7 +675,7 @@ Note that unspecified parameters take their default values when using the call s
 
 ### Transforming Hamiltonians
 
-Like with lattices, we can transform an `h::AbstractHamiltonians` using `transform`, `translate` and `supercell`. Both `transform` and `translate` operate only on the underlying `lattice(h)` of `h`, leaving the hoppings and onsite elements unchanged, while `supercell` acts on `lattice(h)` and copies the hoppings and onsites of `h` onto the new sites, preserving the periodicity of the original `h`.
+Like with lattices, we can transform an `h::AbstractHamiltonians` using `supercell`, `reverse`, `transform` and `translate`. All these except `supercell` operate only on the underlying `lattice(h)` of `h`, leaving the hoppings and onsite elements unchanged. Meanwhile, `supercell` acts on `lattice(h)` but also copies the hoppings and onsites of `h` onto the new sites, preserving the periodicity of the original `h`.
 
 Additionally, we can also use `wrap`, which makes `h` periodic along a number of its Bravais vectors, while leaving the rest unbounded.
 ```jldoctest

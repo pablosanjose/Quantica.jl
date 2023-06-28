@@ -42,6 +42,20 @@ translate(l::Lattice, δr) = translate!(copy(l), δr)
 #endregion
 
 ############################################################################################
+# Lattice reverse - flip all Bravais vectors
+#region
+
+Base.reverse!(lat::Lattice) = (matrix(bravais(lat)) .*= -1; lat)
+
+Base.reverse(lat::Lattice) = reverse!(copy(lat))
+
+Base.reverse!(h::AbstractHamiltonian) = (reverse!(lattice(h)); h)
+
+Base.reverse(h::AbstractHamiltonian) = reverse!(copy(h))
+
+#end
+
+############################################################################################
 # Hamiltonian transform/translate
 #region
 

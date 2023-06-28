@@ -288,6 +288,26 @@ Lattice{Float64,2,2} : 2D lattice in 2D space
 supercell
 
 """
+    reverse(lat_or_h::Union{Lattice,AbstractHamiltonian})
+
+Build a new lattice or hamiltonian with the orientation of all Bravais vectors reversed.
+
+# See also
+    `reverse!`, `transform`
+"""
+Base.reverse
+
+"""
+    reverse!(lat_or_h::Union{Lattice,AbstractHamiltonian})
+
+In-place version of `reverse`, inverts all Bravais vectors of `lat_or_h`.
+
+# See also
+    `reverse`, `transform`
+"""
+Base.reverse!
+
+"""
     transform(lat_or_h::Union{Lattice,AbstractHamiltonian}, f::Function)
 
 Build a new lattice or hamiltonian transforming each site positions `r` into `f(r)`.
@@ -312,7 +332,7 @@ Lattice{Float64,2,2} : 2D lattice in 2D space
 ```
 
 # See also
-    `translate`
+    `translate`, `reverse`, `reverse!`
 """
 transform
 
@@ -340,7 +360,7 @@ julia> LatticePresets.square() |> translate((3,3)) |> sites
 ```
 
 # See also
-    `transform`
+    `transform`, `reverse`, `reverse!`
 
 """
 translate

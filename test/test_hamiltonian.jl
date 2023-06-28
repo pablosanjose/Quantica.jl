@@ -355,6 +355,10 @@ end
     h´ = h |> transform(r -> SA[r[2], r[1]])
     @test sites(lattice(h´)) == sites(h´.h.lattice) != sites(lattice(parent(h´)))
     @test sites(lattice(h´)) == [SA[0,0], SA[0,1]]
+    h´´ = reverse(h´)
+    @test bravais_matrix(lattice(h´´)) == - bravais_matrix(lattice(h´))
+    @test reverse!(h´´) === h´´
+    @test bravais_matrix(lattice(h´´)) == bravais_matrix(lattice(h´))
 end
 
 @testset "hamiltonians combine" begin
