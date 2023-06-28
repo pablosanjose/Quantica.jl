@@ -61,7 +61,7 @@ function Quantica.qplot(g::GreenFunction; fancyaxis = true, axis = (;), figure =
     for (Σ, childkw) in zip(Σs, Σkws)
         primitives = selfenergy_plottable(Quantica.solver(Σ), Quantica.plottables(Σ)...; childkw...)
         for (prim, primkw) in primitives
-            plotlattice!(ax, prim; plotkw..., childkw..., primkw...)
+            plotlattice!(ax, prim; plotkw..., primkw..., childkw...)
         end
     end
     # Makie BUG: To allow inspector to show topmost tooltip, it should be transparent
