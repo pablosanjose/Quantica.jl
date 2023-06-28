@@ -59,7 +59,7 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurEmpty
     leadcbs = blockstructure(contacts(gunit))
     leadorbs = contact_sites_to_orbitals(leadsites, leadcbs)
     # translate glead unitcell by displacement, so it overlaps sel sites (modulo transform)
-    hlead = copy_lattice(parent(glead))
+    hlead = copy(parent(glead))
     transform === missing || Quantica.transform!(hlead, transform)
     translate!(hlead, displacement)
     solver´ = SelfEnergySchurSolver(fsolver, hlead, reverse, leadorbs)
@@ -163,7 +163,7 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead,
     schursolver = solver(glead)
     gunit = copy_lattice(reverse ? schursolver.gL : schursolver.gR)
     lat0lead = lattice(gunit)            # lat0lead is the zero cell of parent(glead)
-    hlead = copy_lattice(parent(glead))  # hlead is used only for plottables
+    hlead = copy(parent(glead))          # hlead is used only for plottables
 
     # move hlead and lat0lead to the left or right of boundary (if boundary is finite)
     boundary = schursolver.boundary
@@ -257,7 +257,7 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead;
     leadbs = blockstructure(glead)                              # This is a BlockStructure
     leadorbs = contact_sites_to_orbitals(leadsites, leadbs)
     # build V and V´ as a leadorbs reordering of inter-cell harmonics of hlead
-    hlead = hamiltonian(glead)  # careful, not parent, which could be a ParametricHamiltonian
+    hlead = copy(hamiltonian(glead))  # careful, not parent, which could be a ParametricHamiltonian
     h₊₁, h₋₁ = hlead[SA[1]], hlead[SA[-1]]
     V  = SparseMatrixView(view(h₊₁, :, leadorbs))
     V´ = SparseMatrixView(view(h₋₁, leadorbs, :))
