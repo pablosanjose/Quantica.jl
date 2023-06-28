@@ -1,7 +1,7 @@
 name = "Quantica"
 uuid = "ae5ea0c6-3f5e-46a2-bc28-a7c4c7a4773c"
 authors = ["Pablo San-Jose"]
-version = "0.6.0"
+version = "0.6.1"
 
 [deps]
 ArnoldiMethod = "ec485272-7323-5ecc-a04f-4719b315124d"
@@ -23,7 +23,6 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 SuiteSparse = "4607b0f0-06f3-5cda-b6b1-a6196a1729e9"
-Infiltrator = "5903a43b-9cc3-4c30-8d17-598619ec4e9b"
 
 [weakdeps]
 Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
