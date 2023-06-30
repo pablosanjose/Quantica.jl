@@ -1116,7 +1116,7 @@ julia> spectrum(h, (0,0), ES.ShiftInvert(ES.ArnoldiMethod(nev = 4), 0.0)) |> ene
 EigenSolvers
 
 """
-    spectrum(h::AbstractHamiltonian, ϕs; solver = EigenSolvers.LinearAlgebra()], transform = missing, params...)
+    spectrum(h::AbstractHamiltonian, ϕs; solver = EigenSolvers.LinearAlgebra(), transform = missing, params...)
 
 Compute the `Spectrum` of the Bloch matrix `h(ϕs; params...)` using the specified
 eigensolver, with `transform` applied to the resulting eigenenergies, if not `missing`.
@@ -1325,7 +1325,7 @@ supported forms are:
 
 Adds a generic self-energy `Σ(ω) = V´⋅gs(ω)⋅V` on `h`'s `sites`, where `V` and `V´` are
 couplings, given by `coupling`, between said `sites` and the `LatticeSlice` in `gs`. Allowed
-forms of `gs` include both `g[bath_sites...]` and `g[contactind::Integer]`m where `g` is any
+forms of `gs` include both `g[bath_sites...]` and `g[contactind::Integer]` where `g` is any
 `GreenFunction`.
 
     attach(h, model::ParametricModel; sites...)
@@ -1347,9 +1347,9 @@ Add a self-energy `Σ(ω) = h₋₁⋅g1D(ω)[surface]⋅h₁` corresponding to 
 (i.e. with a finite `boundary`, see `greenfunction`), where `h₁` and `h₋₁` are intercell
 couplings, and `g1D` is the lead `GreenFunction`. The `g1D(ω)` is taken at the `suface`
 unitcell, either adjacent to the `boundary` on its positive side (if `reverse = false`) or
-on its negative side (if `reverse = true`). The selected `sites` in `h` must match,
-geometrically, those of the lead unit cell after applying `transform` to the latter. If they
-don't, use the `attach` syntax below.
+on its negative side (if `reverse = true`). The positions of the selected `sites` in `h`
+must match, modulo an arbitrary displacement, those of the lead unit cell, after applying
+`transform` to the latter. If they don't, use the `attach` syntax below.
 
 Advanced: If the `g1D` does not have any self-energies, the produced self-energy is in fact
 an `ExtendedSelfEnergy`, which is numerically more stable than a naive implementation of
