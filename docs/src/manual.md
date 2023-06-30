@@ -871,7 +871,6 @@ julia> qplot(b[(:, :, :, 0.2)], hide = :nodes)
 Up to now we have seen how to define Lattices, Models, Hamiltonians and Bandstructures. Most problems require the computation of different physical observables for these objects, e.g. the local density of states or various transport coefficients. We reduce this general problem to the computation of the retarded Green function
 
 ``G^r_{ij}(\omega) = \langle i|(\omega-H-\Sigma(\omega))^{-1}|j\rangle``
-<!-- ``Gʳᵢⱼ(ω) = ⟨i|(ω - H - Σ(ω))⁻¹|j⟩`` -->
 
 where `i, j` are orbitals, `H` is the (possibly infinite) Hamiltonian matrix, and `Σ(ω)` is the self-energy coming from any coupling to other systems (typically described by their own `AbstractHamiltonian`).
 
@@ -879,8 +878,8 @@ We split the problem of computing `Gʳᵢⱼ(ω)` of a given `h::AbstractHamilto
 
 1. Attach self-energies to `h` using the command `oh = attach(h, args...)`. This produces a new object `oh::OpenHamiltonian` with a number of `Contacts`, numbered `1` to `N`
 2. Use `g = greenfunction(oh, solver)` to build a `g::GreenFunction` representing `Gʳ` (at arbitrary `ω` and `i,j`), where `oh::OpenHamiltonian` and `solver::GreenSolver` (see `GreenSolvers` below for available solvers)
-3. Evaluate `gω = g(ω; params...)` at a fixed energy `ω` and model parameters, which produces a `gω::GreenSolution`
-4. Slice `gω[sᵢ, sⱼ]` or `gω[sᵢ] == gω[sᵢ, sᵢ]` to obtain `Gʳᵢⱼ(ω)` as a flat matrix, where `sᵢ, sⱼ` are siteselectors, or integers denoting contacts, `1` to `N`.
+3. Evaluate `gω = g(ω; params...)` at fixed energy `ω` and model parameters, which produces a `gω::GreenSolution`
+4. Slice `gω[sᵢ, sⱼ]` or `gω[sᵢ] == gω[sᵢ, sᵢ]` to obtain `Gʳᵢⱼ(ω)` as a flat matrix, where `sᵢ, sⱼ` are either site selectors over sites spanning orbitals `i,j`, or integers denoting contacts, `1` to `N`.
 
 !!! tip "GreenSlice vs. GreenSolution"
     The two last steps can be interchanged, by first obtaining a `gs::GreenSlice` with `gs = g[sᵢ, sⱼ]` and then obtaining the `Gʳᵢⱼ(ω)` matrix with `gs(ω; params...)`.
@@ -916,7 +915,14 @@ julia> gω[cells = 1:2]  # we now ask for the Green function between orbitals in
  -0.48-0.113394im    -0.2+0.846606im   0.104-0.869285im   0.44+0.282715im
   -0.2+0.846606im   -0.48-0.113394im    0.44+0.282715im  0.104-0.869285im
 ```
-Note that the result is a 4 x 4 matrix, because there are 2 orbitals (one per site) in each of the two unit cells.
+Note that the result is a 4 x 4 matrix, because there are 2 orbitals (one per site) in each of the two unit cells. Note also that the Schur GreenSolver used here allows us to compute the Green function between distant cells with little overhead
+```julia
+julia> @time gω[cells = 1:2];
+  0.000067 seconds (70 allocations: 6.844 KiB)
+
+julia> @time gω[cells = (SA[10], SA[100000])];
+  0.000098 seconds (229 allocations: 26.891 KiB)
+```
 
 ### GreenSolvers
 
@@ -925,23 +931,20 @@ The currently implemented `GreenSolver`s (abbreviated as `GS`) are the following
 - `GS.SparseLU()`
 
   For bounded (`L=0`) AbstractHamiltonians. Default for `L=0`.
-
   Uses a sparse `LU` factorization to compute the `⟨i|(ω - H - Σ(ω))⁻¹|j⟩` inverse.
 
 - `GS.KPM(order = 100, bandrange = missing, kernel = I)`
 
-  For bounded (`L=0`) Hamiltonians, and restricted to sites belonging to contacts (see the section on Contacts)
-
+  For bounded (`L=0`) Hamiltonians, and restricted to sites belonging to contacts (see the section on Contacts).
   It precomputes the Chebyshev momenta
 
 - `GS.Schur(boundary = Inf)`
 
   For 1D (`L=1`) AbstractHamiltonians with only nearest-cell coupling. Default for `L=1`.
-
   Uses a deflating Generalized Schur (QZ) factorization of the generalized eigenvalue problem to compute the unit-cell self energies.
   The Dyson equation then yields the Green function between arbitrary unit cells, which is further dressed using a T-matrix approach if the lead has any attached self-energy.
 
-!!! tip "GS.Bands"
+!!! note "GS.Bands"
     In the near future we will also have `GS.Bands` as a general solver in lattice dimensions `L ∈ [1,3]`.
 
 ### Attaching Contacts
@@ -956,17 +959,20 @@ The supported `attach` forms are the following
 
   This is the generic form of `attach`, which couples some sites `i` of a `g::Greenfunction` (defined by the slice `gs = g[i]`), to `sites` of `h` using a `coupling` model. This results in a self-energy `Σ(ω) = V´⋅gs(ω)⋅V` on `h` `sites`, where `V` and `V´` are couplings matrices given by `coupling`.
 
+
 - **Dummy self-energy**
 
   `attach(h, nothing; sites...)`
 
   This form merely defines a new contact on the specified `sites`, but  adds no actual self-energy to it. It is meant as a way to refer to some sites of interest using the `g[i::Integer]` slicing syntax for `GreenFunction`s, where `i` is the contact index.
 
+
 - **Model self-energy**
 
   `attach(h, model::AbstractModel; sites...)`
 
   This form defines a self-energy `Σᵢⱼ(ω)` in terms of `model`, which must be composed purely of parametric terms (`@onsite` and `@hopping`) that have `ω` as first argument, as in e.g. `@onsite((ω, r) -> Σᵢᵢ(ω, r))` or `@hopping((ω, r, dr) -> Σᵢⱼ(ω, r, dr))`. This is a modellistic approach, wherein the self-energy is not computed from the properties of another `AbstractHamiltonian`, but rather has an arbitrary form defined by the user.
+
 
 - **Matched lead self-energy**
 
@@ -977,6 +983,7 @@ The supported `attach` forms are the following
   With this syntax `sites` must select a number of sites in `h` whose position match (after applying `transform` to them and modulo an arbitrary displacement) the sites in the unit cell of `glead`. Then, the coupling between these and the first unit cell of `glead` on the positive side of the boundary will be the same as between `glead` unitcells, i.e. `V = hlead[(1,)]`, where `hlead = hamiltonian(glead)`.
 
   If `reverse == true`, the lead is reversed before being attached, so that h is coupled through `V = hlead[(-1,)]` to the first unitcell on the negative side of the boundary. If there is no boundary, the `cell = 0` unitcell of the `glead` is used.
+
 
 - **Generic lead self-energy**
 
@@ -1025,7 +1032,7 @@ OpenHamiltonian{Float64,2,0}: Hamiltonian with a set of open contacts
 julia> qplot(g, children = (; selector = siteselector(; cells = 1:5), sitecolor = :blue))
 ```
 ```@raw html
-<img src="../assets/multiterminal.png" alt="Multiterminal system" width="250" class="center"/>
+<img src="../assets/multiterminal.png" alt="Multiterminal system" width="300" class="center"/>
 ```
 
 Note that since we did not specify the `solver` in `greenfunction`, the `L=0` default `GS.SparseLU()` was taken.
