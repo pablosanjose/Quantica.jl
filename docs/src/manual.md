@@ -931,18 +931,24 @@ The currently implemented `GreenSolver`s (abbreviated as `GS`) are the following
 - `GS.SparseLU()`
 
   For bounded (`L=0`) AbstractHamiltonians. Default for `L=0`.
+
   Uses a sparse `LU` factorization to compute the `⟨i|(ω - H - Σ(ω))⁻¹|j⟩` inverse.
+
 
 - `GS.KPM(order = 100, bandrange = missing, kernel = I)`
 
   For bounded (`L=0`) Hamiltonians, and restricted to sites belonging to contacts (see the section on Contacts).
+
   It precomputes the Chebyshev momenta
+
 
 - `GS.Schur(boundary = Inf)`
 
   For 1D (`L=1`) AbstractHamiltonians with only nearest-cell coupling. Default for `L=1`.
+
   Uses a deflating Generalized Schur (QZ) factorization of the generalized eigenvalue problem to compute the unit-cell self energies.
   The Dyson equation then yields the Green function between arbitrary unit cells, which is further dressed using a T-matrix approach if the lead has any attached self-energy.
+
 
 !!! note "GS.Bands"
     In the near future we will also have `GS.Bands` as a general solver in lattice dimensions `L ∈ [1,3]`.
