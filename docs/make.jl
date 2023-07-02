@@ -15,7 +15,15 @@ makedocs(;
     ),
     pages=[
         "Home" => "index.md",
-        "Manual" => "manual.md",
+        "Tutorial" => Any[
+            "tutorial/tutorial.md",
+            "tutorial/glossary.md",
+            "tutorial/lattices.md",
+            "tutorial/models.md",
+            "tutorial/hamiltonians.md",
+            "tutorial/greenfunctions.md",
+            "tutorial/observables.md"
+            ],
         "Examples" => "examples.md",
         "API" => "api.md",
     ]

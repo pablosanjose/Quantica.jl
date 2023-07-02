@@ -4,7 +4,7 @@
 
 ```@contents
 Pages = [
-    "manual.md",
+    "tutorial/index.md",
     "examples.md",
     "api.md",
 ]
@@ -30,7 +30,7 @@ julia> using Quantica
 
 ## Asking questions, reporting bugs
 
-If you encounter problems, please read the manual and examples, your question is probably answered there. You can also check the docstring of each Quantica function [here](@ref api) or within the Julia REPL, by entering the function preceded by a `?`, e.g. `?hamiltonian`.
+If you encounter problems, please read the tutorial and examples, your question is probably answered there. You can also check the docstring of each Quantica function [here](@ref api) or within the Julia REPL, by entering the function preceded by a `?`, e.g. `?hamiltonian`.
 
 If you are still stuck, you may sometimes find me (`@pablosanjose`) at the [Julia Slack](https://julialang.slack.com) or [Julia Discourse](https://discourse.julialang.org).
 
