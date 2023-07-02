@@ -6,7 +6,7 @@ We now will see how to build a generic single-particle tight-binding model, with
 
 Here, `α,β` are orbital indices in each site, `i,j` are site indices, and `rᵢ, rⱼ` are site positions. In Quantica we would write the above model as
 
-```jldoctest
+```julia
 julia> model = onsite(r -> V(r, r)) + hopping((r, dr) -> V(r-dr/2, r+dr/2))
 TightbindingModel: model with 2 terms
   OnsiteTerm{Function}:
@@ -27,7 +27,7 @@ where `V(rᵢ, rⱼ)` is a function that returns a matrix ``V_{\alpha\beta}(r_i,
 Note that when writing models we distinguish between onsite (`rᵢ=rⱼ`) and hopping (`rᵢ≠rⱼ`) terms. For the former, `r` is the site position. For the latter we use a bond-center and bond-distance `(r, dr)` parametrization of `V`, so that `r₁, r₂ = r ∓ dr/2`
 
 If the onsite  and hopping amplitudes do not depend on position, we can simply input them as constants
-```jldoctest
+```julia
 julia> model = onsite(1) - 2*hopping(1)
 TightbindingModel: model with 2 terms
   OnsiteTerm{Int64}:
@@ -59,7 +59,7 @@ We can change this default by specifying a `SiteSelector` or `HopSelector` for e
 
 As an example, a `HopSelector` that selects any two sites at a distance between `1.0` and the second-nearest neighbor distance, with the first belonging to sublattice `:B` and the second to sublattice `:A`, and their mean position inside a unit circle
 
-```jldoctest
+```julia
 julia> hs = hopselector(range = (1.0, neighbors(2)), sublats = :B => :A, region = (r, dr) -> norm(r) < 1)
 HopSelector: a rule that defines a finite collection of hops between sites in a lattice
   Region            : Function
@@ -110,7 +110,7 @@ Parametric models are defined with
 - `@hopping((r, dr; params...) -> ...; hops...)`
 
 where `params` enter as keyword arguments with (optional) default values. An example of a hopping model with a Peierls phase in the symmetric gauge
-```jldoctest
+```julia
 julia> model_perierls = @hopping((r, dr; B = 0, t = 1) -> t * cis(-im * Bz/2 * SA[-r[2], r[1], 0]' * dr))
 ParametricModel: model with 1 term
   ParametricHoppingTerm{ParametricFunction{2}}
@@ -125,7 +125,7 @@ ParametricModel: model with 1 term
 Note that `B` and `t` are free parameters in the model.
 
 One can linearly combine parametric and non-parametric models freely, omit argument default values, and use any of the functional argument forms described for `onsite` and `hopping` (but not the constant argument form)
-```jldoctest
+```julia
 julia> model´ = 2 * (onsite(1) - 2 * @hopping((; t) -> t))
 ParametricModel: model with 2 terms
   ParametricHoppingTerm{ParametricFunction{0}}
@@ -152,7 +152,7 @@ There is a third model-related functionality known as a `OnsiteModifier` and `Ho
 - `@hopping((t, r, dr; params...) -> new_hopping; hops...)`
 
 For example, the following modifier inserts a peierls phase on any non-zero hopping in a model
-```jldoctest
+```julia
 julia> model_perierls! = @hopping!((t, r, dr; B = 0) -> t * cis(-Bz/2 * SA[-r[2], r[1], 0]' * dr))
 HoppingModifier{ParametricFunction{3}}:
   Region            : any

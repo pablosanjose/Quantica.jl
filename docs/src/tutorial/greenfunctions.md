@@ -19,7 +19,7 @@ We split the problem of computing `Gʳᵢⱼ(ω)` of a given `h::AbstractHamilto
 ## A simple example
 
 Here is a simple example of the Green function of a 1D lead with two sites per unit cell, a boundary at `cell = 0`, and with no attached self-energies for simplicity
-```jldoctest
+```julia
 julia> hlead = LP.square() |> supercell((1,0), region = r -> 0 <= r[2] < 2) |> hopping(1);
 
 julia> glead = greenfunction(hlead, GreenSolvers.Schur(boundary = 0))
@@ -142,11 +142,11 @@ julia> hcentral = LP.square() |> hopping(1) |> supercell(region = RP.circle(10) 
 ```
 The two rectangles overlayed on the circle above create the stubs where the leads will be attached:
 ```@raw html
-<img src="../assets/central.png" alt="Central region with stubs" width="250" class="center"/>
+<img src="../../assets/central.png" alt="Central region with stubs" width="250" class="center"/>
 ```
 
 We now attach `glead` four times using the `Matched lead` syntax
-```jldoctest
+```julia
 julia> Rot = r -> SA[0 -1; 1 0] * r;  # 90º rotation function
 
 julia> gcentral = hcentral |>
@@ -170,7 +170,7 @@ OpenHamiltonian{Float64,2,0}: Hamiltonian with a set of open contacts
 julia> qplot(g, children = (; selector = siteselector(; cells = 1:5), sitecolor = :blue))
 ```
 ```@raw html
-<img src="../assets/multiterminal.png" alt="Multiterminal system" width="300" class="center"/>
+<img src="../../assets/multiterminal.png" alt="Multiterminal system" width="300" class="center"/>
 ```
 
 Note that since we did not specify the `solver` in `greenfunction`, the `L=0` default `GS.SparseLU()` was taken.

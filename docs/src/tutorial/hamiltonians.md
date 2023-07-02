@@ -1,7 +1,7 @@
 # Hamiltonians
 
 We build a Hamiltonian by combining a lattice and a model, specifying the number of orbitals on each lattice if there is more than one. A spinful graphene model with nearest neighbor hopping `t0 = 2.7`
-```jldoctest
+```julia
 julia> lat = LP.honeycomb(); model = hopping(2.7*I);
 
 julia> h = hamiltonian(lat, model; orbitals = 2)
@@ -25,7 +25,7 @@ Similarly to `LatticePreset`s, we also have `HamiltonianPresets`, also aliased a
 ## A more elaborate example: the Kane-Mele model
 
 The Kane-Mele model for graphene describes intrinsic spin-orbit coupling (SOC), in the form of an imaginary second-nearest-neighbor hopping between same-sublattice sites, with a sign that alternates depending on hop direction `dr`. A possible implementation in Quantica would be
-```jldoctest
+```julia
 SOC(dr) = 0.05 * ifelse(iseven(round(Int, atan(dr[2], dr[1])/(pi/3))), im, -im)
 
 model =
@@ -38,7 +38,7 @@ h = LatticePresets.honeycomb() |> model
 qplot(h, inspector = true)
 ```
 ```@raw html
-<img src="../assets/latticeKM.png" alt="Kane-Mele lattice" width="350" class="center"/>
+<img src="../../assets/latticeKM.png" alt="Kane-Mele lattice" width="350" class="center"/>
 ```
 
 
@@ -47,7 +47,7 @@ The `inspector = true` keyword enables interactive tooltips in the visualization
 ## ParametricHamiltonians
 
 If we use a `ParametricModel` instead of a simple `TightBindingModel` we will obtain a `ParametricHamiltonian` instead of a simple `Hamiltonian`, both of which are subtypes of the `AbstractHamiltonian` type
-```jldoctest
+```julia
 julia> model_param = @hopping((; t = 2.7) -> t*I);
 
 julia> h_param = hamiltonian(lat, model_param; orbitals = 2)
@@ -63,7 +63,7 @@ ParametricHamiltonian{Float64,2,2}: Parametric Hamiltonian on a 2D Lattice in 2D
 ```
 
 We can also apply `Modifier`s by passing them as extra arguments to `hamiltonian`, which results again in a `ParametricHamiltonian` with the parametric modifiers applied
-```jldoctest
+```julia
 julia> peierls! = @hopping!((t, r, dr; Bz = 0) -> t * cis(-Bz/2 * SA[-r[2], r[1]]' * dr));
 
 julia> h_param_mod = hamiltonian(lat, model_param, peierls!; orbitals = 2)
@@ -80,7 +80,7 @@ ParametricHamiltonian{Float64,2,2}: Parametric Hamiltonian on a 2D Lattice in 2D
 Note that `SA[-r[2], r[1]]` above is a 2D `SVector`, because since the embedding dimension is `E = 2`, both `r` and `dr` are also 2D `SVector`s.
 
 We can also apply modifiers to an already constructed `AbstractHamiltonian`. The following is equivalent to the above
-```jldoctest
+```julia
 julia> h_param_mod = hamiltonian(h_param, peierls!);
 ```
 
@@ -88,7 +88,7 @@ julia> h_param_mod = hamiltonian(h_param, peierls!);
     We can add as many modifiers as we need by passing them as extra arguments to `hamiltonian`, and they will be applied sequentially, one by one. Beware, however, that modifiers do not necessarily commute, in the sense that the result will in general depend on their order.
 
 We can obtain a plain `Hamiltonian` from a `ParametricHamiltonian` by applying specific values to its parameters. To do so, simply use the call syntax with parameters as keyword arguments
-```jldoctest
+```julia
 julia> h_param_mod(Bz = 0.1, t = 1)
 Hamiltonian{Float64,2,2}: Hamiltonian on a 2D Lattice in 2D space
   Bloch harmonics  : 5
@@ -106,7 +106,7 @@ Hamiltonian{Float64,2,2}: Hamiltonian on a 2D Lattice in 2D space
 ## Obtaining actual matrices
 
 For an L-dimensional `h::AbstractHamiltonian` (i.e. defined on a Lattice with `L` Bravais vectors), the Hamiltonian matrix between any unit cell with cell index `n` and another unit cell at `n+dn` (here known as a Hamiltonian "harmonic") is given by `h[dn]`
-```jldoctest
+```julia
 julia> h[(1,0)]
 4×4 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 4 stored entries:
      ⋅          ⋅      2.7+0.0im  0.0+0.0im
@@ -129,7 +129,7 @@ julia> h[(0,0)]
     If the Hamiltonian has a bounded lattice (i.e. it has `L=0` Bravais vectors), we will simply use an empty tuple to obtain its matrix `h[()]`. This is not in conflict with the above syntax.
 
 Note that if `h` is a `ParametricHamiltonian`, such as `h_param` above, we will get zeros in place of the unspecified parametric terms, unless we actually first specify the values of the parameters
-```jldoctest
+```julia
 julia> h_param[(0,0)] # Parameter t is not specified -> it is not applied
 4×4 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 8 stored entries:
      ⋅          ⋅      0.0+0.0im  0.0+0.0im
@@ -155,7 +155,7 @@ We are usually not interested in the harmonics `h[dn]` themselves, but rather in
 where ``H_{dn}`` are the Hamiltonian harmonics, ``\phi = (\phi_1, \phi_2...) = (k\cdot A_1, k\cdot A_2...)`` are the Bloch phases, ``k`` is the Bloch wavevector and ``A_i`` are the Bravais vectors.
 
 We obtain the Bloch matrix using the syntax `h(ϕ; params...)`
-```jldoctest
+```julia
 julia> h((0,0))
 4×4 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 8 stored entries:
      ⋅          ⋅      8.1+0.0im  0.0+0.0im
@@ -178,7 +178,7 @@ Note that unspecified parameters take their default values when using the call s
 Like with lattices, we can transform an `h::AbstractHamiltonians` using `supercell`, `reverse`, `transform` and `translate`. All these except `supercell` operate only on the underlying `lattice(h)` of `h`, leaving the hoppings and onsite elements unchanged. Meanwhile, `supercell` acts on `lattice(h)` but also copies the hoppings and onsites of `h` onto the new sites, preserving the periodicity of the original `h`.
 
 Additionally, we can also use `wrap`, which makes `h` periodic along a number of its Bravais vectors, while leaving the rest unbounded.
-```jldoctest
+```julia
 julia> wrap(HP.graphene(), (0, :))
 Hamiltonian{Float64,2,1}: Hamiltonian on a 1D Lattice in 2D space
   Bloch harmonics  : 3
