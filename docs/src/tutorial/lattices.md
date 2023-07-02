@@ -112,7 +112,7 @@ julia> qplot(lat, hide = nothing)
 !!! tip "GLMakie.jl vs CairoMakie.jl"
     GLMakie.jl is optimized for interactive GPU-accelerated, rasterized plots. If you need to export to PDF for publications or display plots inside a Jupyter notebook, use CairoMakie.jl instead, which in general renders non-interactive, but vector-based plots.
 
-## SiteSelectors
+## [SiteSelectors](@id siteselectors)
 
 A central concept in Quantica.jl is that of a "selector". There are two types of selectors, `SiteSelector`s and `HopSelectors`. `SiteSelector`s are a set of directives or rules that define a subset of its sites. `SiteSelector` rules are defined through three keywords:
 - `region`: a boolean function of allowed site positions `r`.

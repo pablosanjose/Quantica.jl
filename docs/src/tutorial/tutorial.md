@@ -8,7 +8,7 @@ Here you will learn how to use Quantica.jl to build and compute properties of ti
 - Defining generic tight-binding **Models** with arbitrary parameter dependences
 - Building **Hamiltonians** of mono- or multiorbital systems by combining Lattices and Models
 - Computing **Bandstructures** of Hamiltonians
-- Computing **GreenFunctions** of Hamiltonians or open Hamiltonians (i.e. Hamiltonians with attached self-energies from other Hamiltonians, such as leads).
+- Computing **GreenFunctions** of Hamiltonians or OpenHamiltonians (i.e. Hamiltonians with attached self-energies from other Hamiltonians, such as leads).
 - Computing **Observables** from Green functions, such as spectral densities, current densities, local and nonlocal conductances, Josephson currents, critical currents, transmission probabilities, etc.
 
 Check the menu on the left for shortcuts to the relevant sections.
