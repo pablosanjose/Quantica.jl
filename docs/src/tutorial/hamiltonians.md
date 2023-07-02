@@ -18,13 +18,13 @@ Hamiltonian{Float64,2,2}: Hamiltonian on a 2D Lattice in 2D space
 A crucial thing to remember when defining multi-orbital Hamiltonians as the above is that `onsite` and `hopping` amplitudes need to be matrices of the correct size. The symbol `I` in Julia represents the identity matrix of any size, which is convenient to define a spin-preserving hopping in the case above. An alternative would be to use `model = hopping(2.7*SA[1 0; 0 1])`.
 
 !!! tip "Models with different number of orbitals per sublattice"
-    Non-homogeneous multiorbital models are more advanced but are fully supported in Quantica. Just use `orbitals = (n₁, n₂,...)` to have `nᵢ` orbitals in sublattice `i`, and make sure your model is consistent with that. As in the case of the `dim` keyword in `lattice`, you can also use `Val(nᵢ)` for marginally faster construction.
+    Non-homogeneous multiorbital models are more advanced but are fully supported in Quantica.jl. Just use `orbitals = (n₁, n₂,...)` to have `nᵢ` orbitals in sublattice `i`, and make sure your model is consistent with that. As in the case of the `dim` keyword in `lattice`, you can also use `Val(nᵢ)` for marginally faster construction.
 
 Similarly to `LatticePreset`s, we also have `HamiltonianPresets`, also aliased as `HP`. Currently, we have only `HP.graphene(...)` and `HP.twisted_bilayer_graphene(...)`, but we expect to extend this library in the future (see the docstring of `HP`).
 
 ## A more elaborate example: the Kane-Mele model
 
-The Kane-Mele model for graphene describes intrinsic spin-orbit coupling (SOC), in the form of an imaginary second-nearest-neighbor hopping between same-sublattice sites, with a sign that alternates depending on hop direction `dr`. A possible implementation in Quantica would be
+The Kane-Mele model for graphene describes intrinsic spin-orbit coupling (SOC), in the form of an imaginary second-nearest-neighbor hopping between same-sublattice sites, with a sign that alternates depending on hop direction `dr`. A possible implementation in Quantica.jl would be
 ```julia
 SOC(dr) = 0.05 * ifelse(iseven(round(Int, atan(dr[2], dr[1])/(pi/3))), im, -im)
 

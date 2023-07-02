@@ -79,7 +79,7 @@ julia> qplot(b, axis = (; xticks = ([0, 2, 3, 4], ["Γ", "K", "M", "Γ"]), ylabe
 ```
 
 !!! tip "subdiv"
-    The `subdiv` function is a convenience function provided by Quantica that generalizes `range` (see the corresponding docstring for comprehensive details). It is useful to create collections of numbers as subdivisions of intervals, as in the example above. In its simplest form `subdiv(min, max, npoints)` is is equivalent to `range(min, max, length = npoints)` or `collect(LinRange(min, max, npoints))`
+    The `subdiv` function is a convenience function provided by Quantica.jl that generalizes `range` (see the corresponding docstring for comprehensive details). It is useful to create collections of numbers as subdivisions of intervals, as in the example above. In its simplest form `subdiv(min, max, npoints)` is is equivalent to `range(min, max, length = npoints)` or `collect(LinRange(min, max, npoints))`
 
 The `mapping` keyword understand a third syntax that can be used to map a mesh to the space of Bloch phases and parameters of a `ParametricHamiltonian`. To this end we use `mapping = (mesh_points...) -> ftuple(bloch_phases...; params...)`. The `ftuple` function creates a `FrankenTuple`, which is a hybrid between a `Tuple` and a `NamedTuple`. For example, in the following 1D SSH chain we can compute the bandstructure as a function of Bloch phase `ϕ` *and* hopping `t´`, and plot it using more customization options
 ```julia

@@ -2,56 +2,54 @@
 
 ## Constructing a Lattice from scratch
 
-Consider a lattice like graphene's. It has two sublattices, A and B, forming a honeycomb pattern in space. The position of site A inside the unitcell is `[0, -a0/√3]`, with site B at `[0, a0/√3]`. The `i=1,2` Bravais vectors are `Aᵢ = [± cos(π/3), sin(π/3)]`. If we set the lattice constant to `a0 = 1`, one way to build this lattice in Quantica would be
+Consider a lattice like graphene's. It has two sublattices, A and B, forming a 2D honeycomb pattern in space. The position of site A and B inside the unitcell are `[0, -a0/(2√3)]` and `[0, a0/(2√3)]`, respectively. The Bravais vectors are `A₁, A₂ = a0 * [± cos(π/3), sin(π/3)]`. If we set the lattice constant to `a0 = √3` (so the carbon-carbon distance is 1), one way to build this lattice in Quantica.jl would be
 
 ```julia
-julia> A1, A2 = (cos(π/3), sin(π/3)), (-cos(π/3), sin(π/3));
+julia> A₁, A₂ = √3 .* (cos(π/3), sin(π/3)),
+                √3 .* (-cos(π/3), sin(π/3));
 
-julia> sA = sublat((0, -1/(2√3)), name = :A);
+julia> sA, sB = sublat((0, -1/2), name = :A),
+                sublat((0,  1/2), name = :B);
 
-julia> sB = sublat((0,  1/(2√3)), name = :B);
-
-julia> lattice(sA, sB, bravais = (A1, A2))
+julia> lattice(sA, sB, bravais = (A₁, A₂))
 Lattice{Float64,2,2} : 2D lattice in 2D space
-  Bravais vectors : [[0.5, 0.866025], [-0.5, 0.866025]]
+  Bravais vectors : [[0.866025, 1.5], [-0.866025, 1.5]]
   Sublattices     : 2
     Names         : (:A, :B)
     Sites         : (1, 1) --> 2 total per unit cell
 ```
 
 !!! tip "Tuple, SVector and SMatrix"
-    Note that we have used `Tuple`s, such as `(0, 1/√3)` instead of `Vector`s, like `[0, 1/√3]`. In Julia small-length `Tuple`s are much more efficient as containers than `Vector`s, since their length is known and fixed at compile time. Static vectors (`SVector`) and matrices (`SMatrix`) are also available to Quantica, which are just as efficient as `Tuple`s. They be entered as e.g. `SA[0, 1/√3]` and `SA[1 0; 0 1]`, respectively. For efficiency, always use `Tuple`, `SVector` and `SMatrix` in Quantica where possible.
+    Note that we have used `Tuple`s, such as `(0, 1/2)` instead of `Vector`s, like `[0, 1/2]`. In Julia small-length `Tuple`s are much more efficient as containers than `Vector`s, since their length is known and fixed at compile time. Static vectors (`SVector`) and matrices (`SMatrix`) are also available to Quantica, which are just as efficient as `Tuple`s, and they also implement linear algebra operations. They be entered as e.g. `SA[0, 1/2]` and `SA[1 0; 0 1]`, respectively. For efficiency, always use `Tuple`, `SVector` and `SMatrix` in Quantica.jl where possible.
 
 If we don't plan to address the two sublattices individually, we could also fuse them into one, like
 ```julia
-julia> lat = lattice(sublat((0, 1/2√3), (0, -1/2√3)), bravais = (A1, A2))
+julia> lat = lattice(sublat((0, 1/2), (0, -1/2)), bravais = (A₁, A₂))
 Lattice{Float64,2,2} : 2D lattice in 2D space
-  Bravais vectors : [[0.5, 0.866025], [-0.5, 0.866025]]
+  Bravais vectors : [[0.866025, 1.5], [-0.866025, 1.5]]
   Sublattices     : 1
     Names         : (:A,)
     Sites         : (2,) --> 2 total per unit cell
 ```
 
-This lattice has type `Lattice{T,E,L}`, with `T = Float64` the numeric type of position coordinates, `E = 2` the dimension of embedding space, and `L = 2` the number of Bravais vectors (i.e. the lattice dimension). Both `T` and `E`, and even the `Sublat` names can be overridden when creating a lattice. One can also provide the Bravais vectors as a matrix, with each `Aᵢ` as a column
-
+This lattice has type `Lattice{T,E,L}`, with `T = Float64` the numeric type of position coordinates, `E = 2` the dimension of embedding space, and `L = 2` the number of Bravais vectors (i.e. the lattice dimension). Both `T` and `E`, and even the `Sublat` names can be overridden when creating a lattice. One can also provide the Bravais vectors as a matrix, with each `Aᵢ` as a column.
 ```julia
-julia> Amat = SA[-cos(π/3) cos(π/3); sin(π/3) sin(π/3)];
+julia> Amat = √3 * SA[-cos(π/3) cos(π/3); sin(π/3) sin(π/3)];
 
 julia> lat´ = lattice(sA, sB, bravais = Amat, type = Float32, dim = 3, names = (:C, :D))
 Lattice{Float32,3,2} : 2D lattice in 3D space
-  Bravais vectors : Vector{Float32}[[-0.5, 0.866025, 0.0], [0.5, 0.866025, 0.0]]
+  Bravais vectors : Vector{Float32}[[-0.866025, 1.5, 0.0], [0.866025, 1.5, 0.0]]
   Sublattices     : 2
     Names         : (:C, :D)
     Sites         : (1, 1) --> 2 total per unit cell
 ```
 
-!!! tip "Advanced: static `dim` with `Val`"
-    For the `dim` keyword above we can alternatively use `dim = Val(3)`, which is slightly more efficient, because the value is encoded as a type. This is a Julia thing (the concept of type stability), and can be ignored upon a first contact with Quantica.
+!!! tip "Advanced: `dim = Val(E)` vs. `dim = E`"
+    For the `dim` keyword above we can alternatively use `dim = Val(3)`, which is slightly more efficient, because the value is encoded as a type. This is a "Julia thing" (related to the concept of type stability), and can be ignored upon a first contact with Quantica.jl.
 
-One can also *convert* an existing lattice like the above to have a different type, embedding dimension, bravais vectors, `Sublat` names with
-
+One can also *convert* an existing lattice like the above to have a different type, embedding dimension, Bravais vectors and `Sublat` names with `lattice(lat; kw...)`. For example
 ```julia
-julia> lat´´ = lattice(lat´, bravais = √3 * Amat, type = Float16, dim = 2, names = (:Boron, :Nitrogen))
+julia> lat´´ = lattice(lat´, type = Float16, dim = 2, names = (:Boron, :Nitrogen))
 Lattice{Float16,2,2} : 2D lattice in 2D space
   Bravais vectors : Vector{Float16}[[-0.866, 1.5], [0.866, 1.5]]
   Sublattices     : 2
@@ -73,18 +71,17 @@ julia> sites(lat´´, :Nitrogen)
 
 Similarly, the Bravais matrix of a `lat` can be obtained with `bravais_matrix(lat)`.
 
-
 ## Lattice presets
 
-We can also use a collection of pre-built lattices in different dimensions, which are defined in the submodule `LatticePresets`, also called `LP`. These presets currently include
+Quantica.jl provides a range of presets. A preset is a pre-built object of some type. In particular we have Lattice presets, defined in the submodule `LatticePresets` (also called `LP` for convenience), that include a number of classical lattices in different dimensions:
 - `LP.linear`: linear 1D lattice
 - `LP.square`: square 2D lattice
-- `LP.honeycomb`: square 2D lattice
+- `LP.honeycomb`: honeycomb 2D lattice
 - `LP.cubic`: cubic 3D lattice
 - `LP.bcc`: body-centered cubic 3D lattice
 - `LP.fcc`: face-centered cubic 3D lattice
 
-One can modify any of these presets by passing a `bravais`, `type`, `dim`, `names` and also a new keyword `a0` for the lattice constant. The last lattice above can thus be also obtained with
+To obtain a lattice from a preset one simply calls it, e.g. `LP.honecyomb(; kw...)`. One can modify any of these `LatticePresets` by passing a `bravais`, `type`, `dim` or `names` keyword. One can also use a new keyword `a0` for the lattice constant (`a0 = 1` by default). The lattice `lat´´` above can thus be also obtained with
 
 ```julia
 julia> lat´´ = LP.honeycomb(a0 = √3, type = Float16, names = (:Boron, :Nitrogen))
@@ -97,27 +94,27 @@ Lattice{Float16,2,2} : 2D lattice in 2D space
 
 ## Visualization
 
-To produce an interactive visualization of `Lattice`s or other Quantica object you need to load GLMakie, CairoMakie or some other plotting backend from the Makie repository (i.e. do `using GLMakie`, see also Installation). Then, a number of new plotting functions will become available. The main one is `qplot`. A Lattice is represented, by default, as the sites in a unitcell plus the Bravais vectors.
+To produce an interactive visualization of `Lattice`s or other Quantica.jl object you need to load GLMakie.jl, CairoMakie.jl or some other plotting backend from the Makie repository (i.e. do `using GLMakie`, see also Installation). Then, a number of new plotting functions will become available. The main one is `qplot`. A `Lattice` is represented, by default, as the sites in a unitcell plus the Bravais vectors.
 
 ```julia
 julia> using GLMakie
 
 julia> lat = LP.honeycomb()
 
-julia> qplot(lat, hide = ())
+julia> qplot(lat, hide = nothing)
 ```
 ```@raw html
 <img src="../../assets/honeycomb_lat.png" alt="Honeycomb lattice" width="250" class="center"/>
 ```
 
-`qplot` accepts a large number of keywords to customize your plot. In the case of lattice, most of these are passed over to the function `plotlattice`, specific to lattices and Hamiltonians. In the case above, `hide = ()` means "don't hide any element of the plot". See the `qplot` and `plotlattice` docstrings for details.
+`qplot` accepts a large number of keywords to customize your plot. In the case of lattice, most of these are passed over to the function `plotlattice`, specific to `Lattices` and `Hamiltonians`. In the case above, `hide = nothing` means "don't hide any element of the plot". See the `qplot` and `plotlattice` docstrings for details.
 
-!!! tip "GLMakie vs CairoMakie"
-    GLMakie is optimized for interactive GPU-accelerated, rasterized plots. If you need to export to PDF for publications or in a Jupyter notebook, use CairoMakie instead, which in general renders non-interactive, but vector-based plots.
+!!! tip "GLMakie.jl vs CairoMakie.jl"
+    GLMakie.jl is optimized for interactive GPU-accelerated, rasterized plots. If you need to export to PDF for publications or display plots inside a Jupyter notebook, use CairoMakie.jl instead, which in general renders non-interactive, but vector-based plots.
 
 ## SiteSelectors
 
-A central concept in Quantica is that of a "selector". There are two types of selectors, `SiteSelector`s and `HopSelectors`. `SiteSelector`s are a set of directives or rules that define a subset of its sites. The rules are defined through three keywords
+A central concept in Quantica.jl is that of a "selector". There are two types of selectors, `SiteSelector`s and `HopSelectors`. `SiteSelector`s are a set of directives or rules that define a subset of its sites. `SiteSelector` rules are defined through three keywords:
 - `region`: a boolean function of allowed site positions `r`.
 - `sublats`: allowed sublattices of selected sites
 - `cells`: allowed cell indices of selected sites
@@ -274,7 +271,7 @@ julia> sites(translate(rotated_honeycomb, δr))
 
 ## Currying: chaining transformations with the `|>` operator
 
-Many functions in Quantica have a "curried" version that allows them to be chained together using the pipe operator `|>`.
+Many functions in Quantica.jl have a "curried" version that allows them to be chained together using the pipe operator `|>`.
 
 !!! note "Definition of currying"
     The curried version of a function `f(x1, x2...)` is `f´ = x1 -> f(x2...)`, so that the curried form of `f(x1, x2...)` is `x2 |> f´(x2...)`, or `f´(x2...)(x1)`. This gives the first argument `x1` a privileged role. Users of object-oriented languages such as Python may find this use of the `|>` operator somewhat similar to the way the dot operator works there (i.e. `x1.f(x2...)`).

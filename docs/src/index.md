@@ -2,15 +2,6 @@
 
 [Quantica.jl](https://github.com/pablosanjose/Quantica.jl/) is a Julia package for building generic tight-binding models and computing spectral and transport properties.
 
-```@contents
-Pages = [
-    "tutorial/index.md",
-    "examples.md",
-    "api.md",
-]
-Depth = 1
-```
-
 ## Installation
 
 ```julia
@@ -30,7 +21,7 @@ julia> using Quantica
 
 ## Asking questions, reporting bugs
 
-If you encounter problems, please read the tutorial and examples, your question is probably answered there. You can also check the docstring of each Quantica function [here](@ref api) or within the Julia REPL, by entering the function preceded by a `?`, e.g. `?hamiltonian`.
+If you encounter problems, please read the tutorial and examples, your question is probably answered there. You can also check the docstring of each Quantica.jl function [here](@ref api) or within the Julia REPL, by entering the function preceded by a `?`, e.g. `?hamiltonian`.
 
 If you are still stuck, you may sometimes find me (`@pablosanjose`) at the [Julia Slack](https://julialang.slack.com) or [Julia Discourse](https://discourse.julialang.org).
 

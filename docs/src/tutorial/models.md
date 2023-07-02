@@ -4,7 +4,7 @@ We now will see how to build a generic single-particle tight-binding model, with
 
 ``H = \sum_{i\alpha j\beta} c_{i\alpha}^\dagger V_{\alpha\beta}(r_i, r_j)c_{j\alpha}``
 
-Here, `α,β` are orbital indices in each site, `i,j` are site indices, and `rᵢ, rⱼ` are site positions. In Quantica we would write the above model as
+Here, `α,β` are orbital indices in each site, `i,j` are site indices, and `rᵢ, rⱼ` are site positions. In Quantica.jl we would write the above model as
 
 ```julia
 julia> model = onsite(r -> V(r, r)) + hopping((r, dr) -> V(r-dr/2, r+dr/2))
@@ -97,7 +97,7 @@ TightbindingModel: model with 3 terms
     The convenience function `plusadjoint(term) = term + term'` adds the Hermitian conjugate of its argument (`term'`), equivalent to the `+ h.c.` notation often used in the literature.
 
 !!! note "Index-agnostic modeling"
-    The Quantica approach to defining tight-binding models does not rely on site indices (`i,j` above), since these are arbitrary, and may even be beyond the control of the user (for example after using `supercell`). Instead, we rely on physical properties of sites, such as position, distance or sublattice. In the future we might add an interface to also allow index-based modeling if there is demand for it, but we have yet to encounter an example where it is preferable.
+    The Quantica.jl approach to defining tight-binding models does not rely on site indices (`i,j` above), since these are arbitrary, and may even be beyond the control of the user (for example after using `supercell`). Instead, we rely on physical properties of sites, such as position, distance or sublattice. In the future we might add an interface to also allow index-based modeling if there is demand for it, but we have yet to encounter an example where it is preferable.
 
 ## Parametric Models
 
