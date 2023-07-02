@@ -1,6 +1,6 @@
-## Lattices
+# Lattices
 
-### Constructing a Lattice from scratch
+## Constructing a Lattice from scratch
 
 Consider a lattice like graphene's. It has two sublattices, A and B, forming a honeycomb pattern in space. The position of site A inside the unitcell is `[0, -a0/√3]`, with site B at `[0, a0/√3]`. The `i=1,2` Bravais vectors are `Aᵢ = [± cos(π/3), sin(π/3)]`. If we set the lattice constant to `a0 = 1`, one way to build this lattice in Quantica would be
 
@@ -74,7 +74,7 @@ julia> sites(lat´´, :Nitrogen)
 Similarly, the Bravais matrix of a `lat` can be obtained with `bravais_matrix(lat)`.
 
 
-### Lattice presets
+## Lattice presets
 
 We can also use a collection of pre-built lattices in different dimensions, which are defined in the submodule `LatticePresets`, also called `LP`. These presets currently include
 - `LP.linear`: linear 1D lattice
@@ -95,7 +95,7 @@ Lattice{Float16,2,2} : 2D lattice in 2D space
     Sites         : (1, 1) --> 2 total per unit cell
 ```
 
-### Visualization
+## Visualization
 
 To produce an interactive visualization of `Lattice`s or other Quantica object you need to load GLMakie, CairoMakie or some other plotting backend from the Makie repository (i.e. do `using GLMakie`, see also Installation). Then, a number of new plotting functions will become available. The main one is `qplot`. A Lattice is represented, by default, as the sites in a unitcell plus the Bravais vectors.
 
@@ -115,7 +115,7 @@ julia> qplot(lat, hide = ())
 !!! tip "GLMakie vs CairoMakie"
     GLMakie is optimized for interactive GPU-accelerated, rasterized plots. If you need to export to PDF for publications or in a Jupyter notebook, use CairoMakie instead, which in general renders non-interactive, but vector-based plots.
 
-### SiteSelectors
+## SiteSelectors
 
 A central concept in Quantica is that of a "selector". There are two types of selectors, `SiteSelector`s and `HopSelectors`. `SiteSelector`s are a set of directives or rules that define a subset of its sites. The rules are defined through three keywords
 - `region`: a boolean function of allowed site positions `r`.
@@ -183,7 +183,7 @@ LatticeSlice{Float64,2,2} : collection of subcells for a 2D lattice in 2D space
 
 Selectors are very expressive and powerful. Do check `siteselector` and `hopselector` docstrings for more details.
 
-### Transforming lattices
+## Transforming lattices
 
 We can transform lattices using `supercell`, `reverse`, `transform`, `translate`.
 
@@ -272,7 +272,7 @@ julia> sites(translate(rotated_honeycomb, δr))
 ```
 
 
-### Currying: chaining transformations with the `|>` operator
+## Currying: chaining transformations with the `|>` operator
 
 Many functions in Quantica have a "curried" version that allows them to be chained together using the pipe operator `|>`.
 

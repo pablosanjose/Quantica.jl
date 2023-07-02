@@ -1,4 +1,4 @@
-## Models
+# Models
 
 We now will see how to build a generic single-particle tight-binding model, with Hamiltonian
 
@@ -47,7 +47,7 @@ TightbindingModel: model with 2 terms
 !!! tip "Model term algebra"
     Note that we can combine model terms as in the above example by summing and subtracting them, and using constant coefficients.
 
-### HopSelectors
+## HopSelectors
 
 By default `onsite` terms apply to any site in a Lattice, and `hopping` terms apply to any pair of sites within nearest-neighbor distance (see the `Hopping range: Neighbors(1)` above).
 
@@ -99,7 +99,7 @@ TightbindingModel: model with 3 terms
 !!! note "Index-agnostic modeling"
     The Quantica approach to defining tight-binding models does not rely on site indices (`i,j` above), since these are arbitrary, and may even be beyond the control of the user (for example after using `supercell`). Instead, we rely on physical properties of sites, such as position, distance or sublattice. In the future we might add an interface to also allow index-based modeling if there is demand for it, but we have yet to encounter an example where it is preferable.
 
-### Parametric Models
+## Parametric Models
 
 The models introduced above are non-parametric, in the sense that they encode fixed, numerical Hamiltonian matrix elements. In actual problems, it is commonplace to have models that depend on a number of free parameters that will need to be adjusted during a calculation. For example, one may need to compute the phase diagram of a system as a function of a spin-orbit coupling or applied magnetic field. For these cases, we have `ParametricModel`s.
 
@@ -143,7 +143,7 @@ ParametricModel: model with 2 terms
     Coefficient       : 2
 ```
 
-### Modifiers
+## Modifiers
 
 There is a third model-related functionality known as a `OnsiteModifier` and `HoppingModifier`. Given a model that defines a set of onsite and hopping amplitudes on a subset of sites and hops, one can define a parametric-dependent modification of a subset of said amplitudes. Modifiers are built with
 - `@onsite!((o; params...) -> new_onsite; sites...)`

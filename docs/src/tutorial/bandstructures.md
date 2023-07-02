@@ -1,4 +1,4 @@
-## Bandstructures
+# Bandstructures
 
 The eigenpairs (eigenvalues and eigenvectors) of a `Hamiltonian` or `ParametricHamiltonian` at given Bloch phases `ϕᵢ` can be obtained with `spectrum`:
 ```jldoctest
@@ -39,7 +39,7 @@ julia> using GLMakie; qplot(b, inspector = true)
 ```
 The dots on the bands are the band mesh vertices `(ϕᵢ..., eⱼ(ϕᵢ))`. They can be omitted with the `qplot` keyword `hide = :nodes` (or `hide = :vertices`, both are equivalent).
 
-### Band defects
+## Band defects
 
 Note that the uniform grid contains the Dirac points. This is the reason for the number `19` of Bloch phases used above. Note also that it is identified as a point in the bands with `degeneracy = 2` (the rest have `degeneracy = 1`). As mentioned, the points on the bands are connected based on eigenstate overlaps between adjacent `ϕᵢ`s. This interpolation algorithm can deal with subspace degeneracies, as here. However, Dirac points (and Diabolical Points in general) must belong to the mesh for the method to work. If the number of points is reduced to 18 per axis, the Dirac points become unavoidable band dislocations, that appear as missing simplices in the bands:
 ```@raw html
@@ -49,7 +49,7 @@ Note that the uniform grid contains the Dirac points. This is the reason for the
 !!! tip "Advanced: band defects and patching"
     If a Dirac point or other type of band dislocation point happens to not belong to the sampling grid, it can be added with the `bands` keyword `defects`. Then, it can be reconnected with the rest of the band by increasing the `patches::Integer` keyword (see `bands` docstring for details). This "band repair" functionality is experimental, and should only be necessary in some cases with Diabolical Points.
 
-### Coordinate mapping and band linecuts
+## Coordinate mapping and band linecuts
 
 The direct product of the `ϕᵢpoints` above define a rectangular mesh over which we want to compute the bandstructure. By default, this mesh is taken as a discretization of Bloch phases, so `h(ϕᵢ)` is diagonalized at each point of the base mesh. We might want, however, a different relation between the mesh and the parameters passed to `h`, for example if we wish to use wavevectors `k` instead of Bloch phases `ϕᵢ = k⋅Aᵢ` for the mesh. This is achieved with the `mapping` keyword, which accepts a function `mapping = (mesh_points...) -> bloch_phases`,
 ```jldoctest
@@ -100,7 +100,7 @@ julia> qplot(b, nodedarken = 0.5, axis = (; aspect = (1,1,1), xlabel = "ϕ", yla
 
 Note that since we didn't specify a value for `t`, it assumed its default `t=1`. In this case we needed to patch the defect at `(ϕ, t´) = (π, 1)` (topological transition) using the `patches` keyword to avoid a band dislocation.
 
-### Band indexing and slicing
+## Band indexing and slicing
 
 The individual subbands in a given `b::Bandstructure` can be obtained with `b[inds]` with `inds::Integer` or `inds::Vector`, just as if `b` where a normal `AbstractVector`. The extracted subbands can also be plotted directly. The following example has 12 subbands, of which we extract and plot the first and last
 ```jldoctest

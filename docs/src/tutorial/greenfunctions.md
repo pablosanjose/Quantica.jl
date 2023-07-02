@@ -1,4 +1,4 @@
-## GreenFunctions
+# GreenFunctions
 
 Up to now we have seen how to define Lattices, Models, Hamiltonians and Bandstructures. Most problems require the computation of different physical observables for these objects, e.g. the local density of states or various transport coefficients. We reduce this general problem to the computation of the retarded Green function
 
@@ -16,7 +16,7 @@ We split the problem of computing `Gʳᵢⱼ(ω)` of a given `h::AbstractHamilto
 !!! tip "GreenSlice vs. GreenSolution"
     The two last steps can be interchanged, by first obtaining a `gs::GreenSlice` with `gs = g[sᵢ, sⱼ]` and then obtaining the `Gʳᵢⱼ(ω)` matrix with `gs(ω; params...)`.
 
-### A simple example
+## A simple example
 
 Here is a simple example of the Green function of a 1D lead with two sites per unit cell, a boundary at `cell = 0`, and with no attached self-energies for simplicity
 ```jldoctest
@@ -56,7 +56,7 @@ julia> @time gω[cells = (SA[10], SA[100000])];
   0.000098 seconds (229 allocations: 26.891 KiB)
 ```
 
-### GreenSolvers
+## GreenSolvers
 
 The currently implemented `GreenSolver`s (abbreviated as `GS`) are the following
 
@@ -85,7 +85,7 @@ The currently implemented `GreenSolver`s (abbreviated as `GS`) are the following
 !!! note "GS.Bands"
     In the near future we will also have `GS.Bands` as a general solver in lattice dimensions `L ∈ [1,3]`.
 
-### Attaching Contacts
+## Attaching Contacts
 
 A self energy `Σ(ω)` acting of a finite set of sites of `h` (i.e. on a `LatticeSlice` of `lat = lattice(h)`) can be incorporated using the `attach` command. This defines a new Contact in `h`. The general syntax is `oh = attach(h, args...; sites...)`, where the `sites` directives define the Contact `LatticeSlice` (`lat[siteselector(; sites...)]`), and `args` can take a number of forms.
 
@@ -130,7 +130,7 @@ The supported `attach` forms are the following
   The same as above, but without any restriction on `sites`. The coupling between these and the first unit cell of `glead` (transformed by `transform`) is constructed using `model::TightbindingModel`. The "first unit cell" is defined as above.
 
 
-### A more advanced example
+## A more advanced example
 
 Let us define the classical example of a multiterminal mesoscopic junction. We choose a square lattice, and a circular central region of radius `10`, with four leads of width `5` coupled to it at right angles.
 

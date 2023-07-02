@@ -15,14 +15,14 @@ makedocs(;
     ),
     pages=[
         "Home" => "index.md",
-        "Tutorial" => Any[
-            "tutorial/tutorial.md",
-            "tutorial/glossary.md",
-            "tutorial/lattices.md",
-            "tutorial/models.md",
-            "tutorial/hamiltonians.md",
-            "tutorial/greenfunctions.md",
-            "tutorial/observables.md"
+        "Tutorial" => [
+            "Tutorial" => "tutorial/tutorial.md",
+            "Glossary" => "tutorial/glossary.md",
+            "Lattices" => "tutorial/lattices.md",
+            "Models" => "tutorial/models.md",
+            "Hamiltonians" => "tutorial/hamiltonians.md",
+            "GreenFunctions" => "tutorial/greenfunctions.md",
+            "Observables" => "tutorial/observables.md"
             ],
         "Examples" => "examples.md",
         "API" => "api.md",

@@ -1,4 +1,4 @@
-## Hamiltonians
+# Hamiltonians
 
 We build a Hamiltonian by combining a lattice and a model, specifying the number of orbitals on each lattice if there is more than one. A spinful graphene model with nearest neighbor hopping `t0 = 2.7`
 ```jldoctest
@@ -22,7 +22,7 @@ A crucial thing to remember when defining multi-orbital Hamiltonians as the abov
 
 Similarly to `LatticePreset`s, we also have `HamiltonianPresets`, also aliased as `HP`. Currently, we have only `HP.graphene(...)` and `HP.twisted_bilayer_graphene(...)`, but we expect to extend this library in the future (see the docstring of `HP`).
 
-### A more elaborate example: the Kane-Mele model
+## A more elaborate example: the Kane-Mele model
 
 The Kane-Mele model for graphene describes intrinsic spin-orbit coupling (SOC), in the form of an imaginary second-nearest-neighbor hopping between same-sublattice sites, with a sign that alternates depending on hop direction `dr`. A possible implementation in Quantica would be
 ```jldoctest
@@ -44,7 +44,7 @@ qplot(h, inspector = true)
 
 The `inspector = true` keyword enables interactive tooltips in the visualization of `h` that allows to navigate each `onsite` and `hopping` amplitude graphically. Note that sites connected to the unit cell of `h` by some hopping are included, but are rendered with partial transparency by default.
 
-### ParametricHamiltonians
+## ParametricHamiltonians
 
 If we use a `ParametricModel` instead of a simple `TightBindingModel` we will obtain a `ParametricHamiltonian` instead of a simple `Hamiltonian`, both of which are subtypes of the `AbstractHamiltonian` type
 ```jldoctest
@@ -103,7 +103,7 @@ Hamiltonian{Float64,2,2}: Hamiltonian on a 2D Lattice in 2D space
 !!! tip "Syntax `lat |> model` and `h |> modifier"
     The common cases `lat |> hamiltonian(model)` (or `hamiltonian(lat, model)`) and `h |> hamiltonian(modifier)` (or `hamiltonian(h, modifier)`) can be also written as `lat |> model` and `h |> modifier`, respectively. Hence `hamiltonian(lat, model, modifier)` may be written as `lat |> model |> modifier`. This form however does not allow to specify the number of orbitals per sublattice (it will be one, the default).
 
-### Obtaining actual matrices
+## Obtaining actual matrices
 
 For an L-dimensional `h::AbstractHamiltonian` (i.e. defined on a Lattice with `L` Bravais vectors), the Hamiltonian matrix between any unit cell with cell index `n` and another unit cell at `n+dn` (here known as a Hamiltonian "harmonic") is given by `h[dn]`
 ```jldoctest
@@ -173,7 +173,7 @@ julia> h_param_mod((0.2, 0.3); B = 0.1)
 
 Note that unspecified parameters take their default values when using the call syntax (as per the standard Julia convention). Any unspecified parameter that does not have a default value will produce an `UndefKeywordError` error.
 
-### Transforming Hamiltonians
+## Transforming Hamiltonians
 
 Like with lattices, we can transform an `h::AbstractHamiltonians` using `supercell`, `reverse`, `transform` and `translate`. All these except `supercell` operate only on the underlying `lattice(h)` of `h`, leaving the hoppings and onsite elements unchanged. Meanwhile, `supercell` acts on `lattice(h)` but also copies the hoppings and onsites of `h` onto the new sites, preserving the periodicity of the original `h`.
 
