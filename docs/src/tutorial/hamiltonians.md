@@ -1,6 +1,6 @@
 # Hamiltonians
 
-We build a Hamiltonian by combining a lattice and a model, specifying the number of orbitals on each lattice if there is more than one. A spinful graphene model with nearest neighbor hopping `t0 = 2.7`
+We build a Hamiltonian by combining a `Lattice` and a `TightbindingModel`, optionally specifying also the number of orbitals on each sublattice if there is more than one. A spinful graphene model (two orbitals per site in both sublattices) with nearest neighbor hopping `t0 = 2.7` would be written as
 ```julia
 julia> lat = LP.honeycomb(); model = hopping(2.7*I);
 

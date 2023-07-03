@@ -21,6 +21,7 @@ makedocs(;
             "Lattices" => "tutorial/lattices.md",
             "Models" => "tutorial/models.md",
             "Hamiltonians" => "tutorial/hamiltonians.md",
+            "Bandstructures" => "tutorial/bandstructures.md",
             "GreenFunctions" => "tutorial/greenfunctions.md",
             "Observables" => "tutorial/observables.md"
             ],
