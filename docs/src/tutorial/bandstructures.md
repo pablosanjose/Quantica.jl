@@ -138,4 +138,4 @@ julia> qplot(b[(:, :, :, 0.2)], hide = :nodes)
 ```
 
 !!! warning "On simplex orientation of bandstructure slices"
-    The above example showcases a current (cosmetic) limitation of the band slicing algorithm, which sometimes fails to align all faces of the resulting manifold to the same orientation. The dark and bright regions of the surface above reveals that approximately half of the faces in this case are facing inward and the rest outward.
+    The above example showcases a current (cosmetic) limitation of the band slicing algorithm: it sometimes fails to align all faces of the resulting manifold to the same orientation. The dark and bright regions of the surface above reveals that approximately half of the faces in this case are facing inward and the rest outward.
