@@ -18,6 +18,7 @@ using IntervalTrees
 using FrankenTuples
 using Statistics: mean
 using QuadGK
+using SpecialFunctions
 
 export sublat, bravais_matrix, lattice, sites, supercell,
        hopping, onsite, @onsite, @hopping, @onsite!, @hopping!, plusadjoint, neighbors,

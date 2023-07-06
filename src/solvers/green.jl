@@ -74,5 +74,4 @@ const GS = GreenSolvers
 include("green/sparselu.jl")
 include("green/schur.jl")
 include("green/kpm.jl")
-# include("greensolvers/bands.jl")
-
+include("green/bands.jl")
