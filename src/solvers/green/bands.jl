@@ -1,9 +1,9 @@
 ############################################################################################
 # Taylor
-#   A generalization of dual numbers to arbitrary order of differential ε, including negtive
+#   A generalization of dual numbers to arbitrary powers of differential ε, also negative
 #   When inverting (dividing), negative powers may be produced if leading terms are zero
 #   Higher terms can be lost throughout operations.
-#       Taylor{N}(f(x), f'(x), f''(x),..., f⁽ᴺ⁾(x)) = Series[f(x + ε), {ε, 0, N-1}]
+#       Taylor{N}(f(x), f'(x)/1!, f''(x)/2!,..., f⁽ᴺ⁾(x)/N!) = Series[f(x + ε), {ε, 0, N-1}]
 #   If we need derivatives respect to x/α instead of x, we do rescale(::Taylor, α)
 #region
 
@@ -20,9 +20,6 @@ Taylor{N}(t::Tuple) where {N} = Taylor{N}(SVector(t))
 Taylor{N}(d::Taylor) where {N} = Taylor{N}(d.x)
 Taylor{N}(x::SVector{<:Any,T}, pow = 0) where {N,T} =
     Taylor(SVector(padtuple(x, zero(T), Val(N))), pow)
-
-# rescale(t::Taylor{N}, α::Number) where {N} =
-#     Taylor(ntuple(i -> α^(t.pow + i - 1) * t.x[i], Val(N)), t.pow)
 
 function rescale(d::Taylor{N}, α::T) where {N,T<:Number}
     αp = cumprod((α ^ d.pow, ntuple(Returns(α), Val(N-1))...))
@@ -113,7 +110,6 @@ struct Simplex{D,T,S1,S2,S3,SU<:SMatrix{D,D,T}}
     ei::S1        # eᵢ::SVector{D´,T} = energy of vertex i
     ki::S2        # kᵢ[j]::SMatrix{D´,D,T,DD´} = coordinate j of momentum for vertex i
     eij::S3       # eᵢʲ::SMatrix{D´,D´,T,D´D´} = e_j - e_i
-    kij::SVector{D,S3}  # kⱼ[β] - kᵢ[β] for β = 1...D
     Uij::SU       # Uᵢⱼ::SMatrix{D,D,T,DD} = k_ij − k_0j
     Uij⁻¹::SU     # inv(Uᵢⱼ)
     VD::T          # D!V = |det(U)|
@@ -121,43 +117,50 @@ end
 
 function Simplex(ei::SVector{D´}, ki::SMatrix{D´,D}) where {D´,D}
     eij = chop.(ei' .- ei)
-    kij = SVector(ntuple(β -> ki[:,β]' .- ki[:,β], Val(D)))
     Uij = ki[SVector{D}(2:D´),:] .- ki[1,:]'
     Uij⁻¹ = inv(Uij)
     VD = abs(det(Uij))
-    return Simplex(ei, ki, eij, kij, Uij, Uij⁻¹, VD)
+    return Simplex(ei, ki, eij, Uij, Uij⁻¹, VD)
 end
 
 # β is the direction of the dr_β differential
-function g0_simplex(ω, dn::SVector{D}, s::Simplex{D,T}, β = 1, ::Val{N} = Val(D+1)) where {D,T,N}
+function g0_simplex(ω, dn::SVector{D}, s::Simplex{D,T}, ::Val{N} = Val(D+1), β = flipped_range(1, Val(D))) where {D,T,N}
     ϕverts = s.ki * dn
     ϕedges = chop.(ϕverts' .- ϕverts)
     Δverts = ω .- s.ei
     eedges = s.eij
-    kβverts = s.ki[:,β]
-    kβedges = s.kij[β]
+    # phases ϕverts[j+1] will be perturbed by βverts[j+1]*dϕ, for j in 0:D
+    βverts = SVector(0, β...)
+    # Similartly, ϕedges[j+1,k+1] will be perturbed by βedges[j+1,k+1]*dϕ
+    βedges = βverts' .- βverts
     g0sum = zero(Taylor{N,complex(T)})
     for j in 0:D
-        ϕj = Taylor{N}(ϕverts[j+1], kβverts[j+1])
-        ϕij = Taylor{N}.(ϕedges[:, j+1], kβedges[:, j+1])
+        ϕj = Taylor{N}(ϕverts[j+1], βverts[j+1])
+        ϕij = Taylor{N}.(ϕedges[:, j+1], βedges[:, j+1])
         eij = eedges[:, j+1]
         Δj = Δverts[j+1]
         g0sum += g0_term(j, ϕj, ϕij, eij, Δj)
     end
-    g0sum *= im^(D+1) * s.VD
-    return chop(g0sum)
+    g0sum *= (-im)^(D+1) * s.VD
+    return trim(chop(g0sum))
 end
+
+flipped_range(i, ::Val{D}) where {D} = ntuple(j -> ifelse(i==j, -j, j), Val(D))
 
 function g0_term(j, ϕ::Taylor{N,T}, ϕs, es::SVector{D´}, Δ) where {N,T,D´}
     D = D´ - 1
-    Jⱼ = zero(Taylor{N,complex(T)})
     γⱼ = gamma_taylor(j, ϕs, es)
-    for k in 0:D
-        iszero(es[k+1]) && continue
-        zkj = ϕs[k+1] / es[k+1]
-        αₖⱼ = alpha_taylor(k, j, zkj, ϕs, es)
-        Jₖⱼ = J_taylor(zkj, Δ)
-        Jⱼ += αₖⱼ * Jₖⱼ
+    if iszero(es) # all εⱼ - εᵢ == 0, no z-integral
+        Jⱼ = one(Taylor{N,complex(T)}) / Δ
+    else
+        Jⱼ = zero(Taylor{N,complex(T)})
+        for k in 0:D
+            iszero(es[k+1]) && continue
+            zkj = ϕs[k+1] / es[k+1]
+            αₖⱼ = alpha_taylor(k, j, zkj, ϕs, es)
+            Jₖⱼ = J_taylor(zkj, Δ)
+            Jⱼ += αₖⱼ * Jₖⱼ
+        end
     end
     Jⱼ *= cis_taylor(ϕ)
     return γⱼ * Jⱼ
@@ -181,7 +184,7 @@ function alpha_taylor(k, j, zkj::T, ϕs::SVector{D´}, es) where {D´,T<:Taylor}
             α⁻¹ *= es[l+1]
             if l != k # ekj != 0 because it is constrained by caller
                 zlj = ϕs[l+1]/es[l+1]
-                α⁻¹ *= zkj - zlj
+                α⁻¹ *= -(zkj - zlj)
             end
         end
     end
@@ -191,22 +194,24 @@ end
 
 function J_taylor(z::Taylor{N}, Δ) where {N}
     @assert iszero(z.pow)
-    return rescale(J_taylor(z[0], Δ, Val(N)), z[1] * Δ)
+    J = J_taylor(z[0], Δ, Val(N))
+    # Go from d(zΔ) = dz*Δ differential to dϕ
+    return rescale(J, z[1] * Δ)
 end
 
 
-# Taylor of J(zΔ) = cis(zΔ) * [Ci(|zΔ|) - i Si(zΔ)]
+# Taylor of log-regularized J(zΔ) = cis(zΔ) * [Ci(|z|Δ) - i Si(zΔ)] (variable zΔ for Taylor)
 function J_taylor(z::Real, Δ::Real, ::Val{N}) where {N}
     zΔ = z * Δ
-    if iszero(zΔ)  # need higher orders in case the cancellations are deep
-        J₀ = complex(MathConstants.γ) + im * ifelse(Δ >= 0, 0, π) + im * ifelse(zΔ <= 0, π, 0)
+    if iszero(zΔ)
+        J₀ = log(abs(Δ)) + im * ifelse(Δ > 0, 0, π) #+ MathConstants.γ # constant, not needed
         Jᵢ = ntuple(n -> (-im)^n/(n*factorial(n)), Val(N-1))
         J = Taylor{N}(J₀, Jᵢ...)
         E = cis_taylor(zΔ, Val(N))
         d = J * E
-    else # no cancellations, only first order needed?
+    else
         ciszΔ =  cis(zΔ)
-        J₀, J₁ = cosint(abs(zΔ)) - im*sinint(zΔ) + im * ifelse(Δ > 0, 0, π), conj(ciszΔ)/zΔ
+        J₀, J₁ = cosint(abs(zΔ)) - log(abs(z)) - im*sinint(zΔ) + im * ifelse(Δ > 0, 0, π), (conj(ciszΔ)-1)/zΔ
         E₀, E₁ = ciszΔ, im * ciszΔ
         J = Taylor{2}(J₀, J₁)
         E = Taylor{2}(E₀, E₁)
@@ -217,7 +222,9 @@ end
 
 function cis_taylor(z::Taylor{N}) where {N}
     @assert iszero(z.pow)
-    return rescale(cis_taylor(z[0], Val(N)), z[1])
+    c = cis_taylor(z[0], Val(N))
+    # Go from dz differential to dϕ
+    return rescale(c, z[1])
 end
 
 # Taylor of cis(ϕ)
