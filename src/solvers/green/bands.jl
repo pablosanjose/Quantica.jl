@@ -115,6 +115,7 @@ struct Simplex{D,T,S1,S2,S3,SU<:SMatrix{D,D,T}}
     eij::S3       # ϵᵢʲ::SMatrix{D´,D´,T,D´D´} = e_j - e_i
     U⁻¹::SU       # inv(Uᵢⱼ) for Uᵢⱼ::SMatrix{D,D,T,DD} = kⱼ[i] - k₀[i] (edges as cols)
     U⁻¹Q⁻¹::SU    # Q cols are basis of shift vectors δrᵝ
+    phi´::S2      # kij * Q
     w::SVector{D,T} # U⁻¹ * k₀
     VD::T         # D!V = |det(U)|
 end
@@ -135,17 +136,25 @@ function Simplex(ei::SVector{D´}, kij::SMatrix{D´,D,T}) where {D´,D,T}
         Q´, R´ = qr(vext)                       # full orthonormal basis with v as first vec
         Q = rotate45(Q´ * sign(R´[1,1]))        # rotate 1 & 2 by 45º -> none parallel to v
     end
+    phi´ = kij * Q
     U⁻¹Q⁻¹ = U⁻¹ * Q'
-    return Simplex(ei, kij, eij, U⁻¹, U⁻¹Q⁻¹, w, VD)
+    return Simplex(ei, kij, eij, U⁻¹, U⁻¹Q⁻¹, phi´, w, VD)
 end
 
 rotate45(s::SMatrix{D,D}) where {D} =
     hcat((s[:,1] + s[:,2])/√2, (s[:,1] - s[:,2])/√2, s[:,SVector{D-2}(3:D)])
 
-function g_simplex(::Val{N}, ω::Number, dn::SVector{D}, s::Simplex{D}, ϕ´ = ntuple(identity, Val(D))) where {D,N}
+function g_simplex(ω, dn, s::Simplex{D}) where {D}
+    gβ = ntuple(Val(D)) do β
+        ϕ´verts = s.phi´[:, β]
+        g_simplex(Val(D+1), ω, dn, s, ϕ´verts)
+    end
+    return first(first(gβ)), last.(gβ)
+end
+
+function g_simplex(::Val{N}, ω::Number, dn::SVector{D}, s::Simplex{D,T}, ϕ´verts::SVector) where {D,N,T}
     # phases ϕverts[j+1] will be perturbed by ϕ´verts[j+1]*dϕ, for j in 0:D
     # Similartly, ϕedges[j+1,k+1] will be perturbed by ϕ´edges[j+1,k+1]*dϕ
-    ϕ´verts = SVector(0, ϕ´...)
     ϕ´edges = ϕ´verts' .- ϕ´verts
     ϕverts0 = s.kij * dn
     ϕverts = Series{N}.(ϕverts0, ϕ´verts)
@@ -156,7 +165,8 @@ function g_simplex(::Val{N}, ω::Number, dn::SVector{D}, s::Simplex{D}, ϕ´ = n
     eϕ = cis_series.(ϕverts)
     γα = γα_series(ϕedges, zedges, eedges)            # SMatrix{D´,D´}
     if iszero(eedges)                                 # special case, full energy degeneracy
-        eγαJ = im * sum(γα[1,:] .* eϕ) / first(Δverts)
+        Δ0 = chop(first(Δverts))
+        eγαJ = iszero(Δ0) ? zero(Series{N,complex(T)}) :  im * sum(γα[1,:] .* eϕ) / Δ0
     else
         J = J_series.(zedges, eedges, transpose(Δverts))  # SMatrix{D´,D´}
         eγαJ = sum(γα .* J .* transpose(eϕ))              # manual contraction is slower!
