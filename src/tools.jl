@@ -61,6 +61,7 @@ typename(::T) where {T} = nameof(T)
 
 chop(x::T) where {T<:Real} = ifelse(abs2(x) < eps(real(T)), zero(T), x)
 chop(x::Complex) = chop(real(x)) + im*chop(imag(x))
+chop(xs) = chop.(xs)
 
 # Flattens matrix of Matrix{<:Number} into a matrix of Number's
 function mortar(ms::AbstractMatrix{M}) where {C<:Number,M<:AbstractMatrix{C}}

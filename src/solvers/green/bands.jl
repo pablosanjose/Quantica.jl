@@ -1,89 +1,92 @@
 ############################################################################################
-# Taylor
+# Series
 #   A generalization of dual numbers to arbitrary powers of differential ε, also negative
 #   When inverting (dividing), negative powers may be produced if leading terms are zero
 #   Higher terms can be lost throughout operations.
-#       Taylor{N}(f(x), f'(x)/1!, f''(x)/2!,..., f⁽ᴺ⁾(x)/N!) = Series[f(x + ε), {ε, 0, N-1}]
-#   If we need derivatives respect to x/α instead of x, we do rescale(::Taylor, α)
+#       Series{N}(f(x), f'(x)/1!, f''(x)/2!,..., f⁽ᴺ⁾(x)/N!) = Series[f(x + ε), {ε, 0, N-1}]
+#   If we need derivatives respect to x/α instead of x, we do rescale(::Series, α)
 #region
 
-struct Taylor{N,T}
+struct Series{N,T}
     x::SVector{N,T}   # term coefficients
     pow::Int          # power of first term
 end
 
-Taylor(x::Tuple, pow = 0) = Taylor(SVector(x), pow)
-Taylor(x...) = Taylor(SVector(x), 0)
+Series(x::Tuple, pow = 0) = Series(SVector(x), pow)
+Series(x...) = Series(SVector(x), 0)
 
-Taylor{N}(x...) where {N} = Taylor{N}(SVector(x))
-Taylor{N}(t::Tuple) where {N} = Taylor{N}(SVector(t))
-Taylor{N}(d::Taylor) where {N} = Taylor{N}(d.x)
-Taylor{N}(x::SVector{<:Any,T}, pow = 0) where {N,T} =
-    Taylor(SVector(padtuple(x, zero(T), Val(N))), pow)
+Series{N}(x...) where {N} = Series{N}(SVector(x))
+Series{N}(t::Tuple) where {N} = Series{N}(SVector(t))
+Series{N}(d::Series) where {N} = Series{N}(d.x)
+Series{N}(x::SVector{<:Any,T}, pow = 0) where {N,T} =
+    Series(SVector(padtuple(x, zero(T), Val(N))), pow)
 
-function rescale(d::Taylor{N}, α::T) where {N,T<:Number}
+function rescale(d::Series{N}, α::Number) where {N}
     αp = cumprod((α ^ d.pow, ntuple(Returns(α), Val(N-1))...))
-    d´ = Taylor(d.x .* αp, d.pow)
+    d´ = Series(Tuple(d.x) .* αp, d.pow)
     return d´
 end
 
-chop(d::Taylor) = Taylor(chop.(d.x), d.pow)
+chop(d::Series) = Series(chop.(d.x), d.pow)
 
-function trim(d::Taylor{N}) where {N}
+function trim(d::Series{N}) where {N}
     nz = leading_zeros(d)
     iszero(nz) && return d
     pow = d.pow + nz
     t = ntuple(i -> d[i + pow - 1], Val(N))
-    return Taylor(t, pow)
+    return Series(t, pow)
 end
 
-function leading_zeros(d::Taylor{N}) where {N}
-    for i in 0:N-1
+function leading_zeros(d::Series{N}) where {N}
+    @inbounds for i in 0:N-1
         iszero(d[d.pow + i]) || return i
     end
     return 0
 end
 
-Base.first(d::Taylor) = first(d.x)
+Base.first(d::Series) = first(d.x)
 
-Base.getindex(d::Taylor{N,T}, i::Integer) where {N,T} =
-    d.pow <= i < d.pow + N ? d.x[i-d.pow+1] : zero(T)
+Base.getindex(d::Series{N,T}, i::Integer) where {N,T} =
+    d.pow <= i < d.pow + N ? (@inbounds d.x[i-d.pow+1]) : zero(T)
 
-Base.eltype(::Taylor{<:Any,T}) where {T} = T
+Base.eltype(::Series{<:Any,T}) where {T} = T
 
-Base.one(::Type{<:Taylor{N,T}}) where {N,T<:Number} = Taylor{N}(one(T))
-Base.zero(::Type{<:Taylor{N,T}}) where {N,T} = Taylor(zero(SVector{N,T}), 0)
-Base.iszero(d::Taylor) = iszero(d.x)
+Base.one(::Type{<:Series{N,T}}) where {N,T<:Number} = Series{N}(one(T))
+Base.zero(::Type{<:Series{N,T}}) where {N,T} = Series(zero(SVector{N,T}), 0)
+Base.iszero(d::Series) = iszero(d.x)
+Base.transpose(d::Series) = d
 
-function Base.:+(d::Taylor{N}, d´::Taylor{N}) where {N}
+function Base.:+(d::Series{N}, d´::Series{N}) where {N}
     f, f´ = trim(d), trim(d´)
     pow = min(f.pow, f´.pow)
     t = ntuple(i -> f[pow + i - 1] + f´[pow + i - 1], Val(N))
-    Taylor(t, pow)
+    Series(t, pow)
 end
 
-Base.:-(d::Taylor, d´::Taylor) = d + (-d´)
-Base.:-(d::Taylor) = Taylor(.-(d.x), d.pow)
-Base.:*(d::Number, d´::Taylor) = Taylor(d * d´.x, d´.pow)
-Base.:*(d´::Taylor, d::Number) = Taylor(d * d´.x, d´.pow)
-Base.:/(d::Taylor{N}, d´::Taylor{N}) where {N} = d * inv(d´)
-Base.:/(d::Taylor, d´::Number) = Taylor(d.x / d´, d.pow)
+Base.:+(d::Series) = d
+Base.:-(d::Series, d´::Series) = d + (-d´)
+Base.:-(d::Series) = Series(.-(d.x), d.pow)
+Base.:*(d::Number, d´::Series) = Series(d * d´.x, d´.pow)
+Base.:*(d´::Series, d::Number) = Series(d * d´.x, d´.pow)
+Base.:/(d::Series{N}, d´::Series{N}) where {N} = d * inv(d´)
+Base.:/(d::Series, d´::Number) = Series(d.x / d´, d.pow)
 
-function Base.:*(d::Taylor{N}, d´::Taylor{N}) where {N}
+function Base.:*(d::Series{N}, d´::Series{N}) where {N}
+    iszero(d´) && return d´
     f, f´ = trim(d), trim(d´)
     pow = f.pow + f´.pow
     s = product_matrix(f.x) * f´.x
-    return Taylor(s, pow)
+    return Series(s, pow)
 end
 
-function Base.inv(d::Taylor{N}) where {N}
+function Base.inv(d::Series{N}) where {N}
     d´ = trim(d) # remove leading zeros
     iszero(d´) && argerror("Divide by zero")
     pow = d´.pow
     # impose d * inv(d) = 1. This is equivalent to Ud * inv(d).x = 1.x, where
     # Ud = hcat(d.x, shift(d.x, 1), ...)
     s = inv(product_matrix(d´.x))[:, 1]  # faster than \
-    invd = Taylor(Tuple(s), -pow)
+    invd = Series(Tuple(s), -pow)
     return invd
 end
 
@@ -108,130 +111,144 @@ shiftpad(s::SVector{N,T}, i) where {N,T} =
 
 struct Simplex{D,T,S1,S2,S3,SU<:SMatrix{D,D,T}}
     ei::S1        # eᵢ::SVector{D´,T} = energy of vertex i
-    ki::S2        # kᵢ[j]::SMatrix{D´,D,T,DD´} = coordinate j of momentum for vertex i
-    eij::S3       # eᵢʲ::SMatrix{D´,D´,T,D´D´} = e_j - e_i
-    Uij::SU       # Uᵢⱼ::SMatrix{D,D,T,DD} = k_ij − k_0j
-    Uij⁻¹::SU     # inv(Uᵢⱼ)
-    VD::T          # D!V = |det(U)|
+    kij::S2       # kᵢ[j]::SMatrix{D´,D,T,DD´} = coordinate j of momentum for vertex i
+    eij::S3       # ϵᵢʲ::SMatrix{D´,D´,T,D´D´} = e_j - e_i
+    U⁻¹::SU       # inv(Uᵢⱼ) for Uᵢⱼ::SMatrix{D,D,T,DD} = kⱼ[i] - k₀[i] (edges as cols)
+    U⁻¹Q⁻¹::SU    # Q cols are basis of shift vectors δrᵝ
+    w::SVector{D,T} # U⁻¹ * k₀
+    VD::T         # D!V = |det(U)|
 end
 
-function Simplex(ei::SVector{D´}, ki::SMatrix{D´,D}) where {D´,D}
-    eij = chop.(ei' .- ei)
-    Uij = ki[SVector{D}(2:D´),:] .- ki[1,:]'
-    Uij⁻¹ = inv(Uij)
-    VD = abs(det(Uij))
-    return Simplex(ei, ki, eij, Uij, Uij⁻¹, VD)
+function Simplex(ei::SVector{D´}, kij::SMatrix{D´,D,T}) where {D´,D,T}
+    eij = chop(ei' .- ei)
+    k0 = kij[1, :]
+    U = kij[SVector{D}(2:D´),:]' .- k0          # edges as columns
+    U⁻¹ = inv(U)
+    VD = abs(det(U))
+    w = U⁻¹ * k0
+    Δe = eij[1, SVector{D}(2:D´)]               # eⱼ - e₀
+    v = chop(transpose(U⁻¹) * Δe)
+    if iszero(v)
+        Q = one(SMatrix{D,D,T})                 # special case
+    else
+        vext = hcat(v, zero(SMatrix{D,D-1,T}))  # pad with zero to get full Q from QR
+        Q´, R´ = qr(vext)                       # full orthonormal basis with v as first vec
+        Q = rotate45(Q´ * sign(R´[1,1]))        # rotate 1 & 2 by 45º -> none parallel to v
+    end
+    U⁻¹Q⁻¹ = U⁻¹ * Q'
+    return Simplex(ei, kij, eij, U⁻¹, U⁻¹Q⁻¹, w, VD)
 end
 
-# β is the direction of the dr_β differential
-function g0_simplex(ω, dn::SVector{D}, s::Simplex{D,T}, ::Val{N} = Val(D+1), β = flipped_range(1, Val(D))) where {D,T,N}
-    ϕverts = s.ki * dn
-    ϕedges = chop.(ϕverts' .- ϕverts)
+rotate45(s::SMatrix{D,D}) where {D} =
+    hcat((s[:,1] + s[:,2])/√2, (s[:,1] - s[:,2])/√2, s[:,SVector{D-2}(3:D)])
+
+function g_simplex(::Val{N}, ω::Number, dn::SVector{D}, s::Simplex{D}, ϕ´ = ntuple(identity, Val(D))) where {D,N}
+    # phases ϕverts[j+1] will be perturbed by ϕ´verts[j+1]*dϕ, for j in 0:D
+    # Similartly, ϕedges[j+1,k+1] will be perturbed by ϕ´edges[j+1,k+1]*dϕ
+    ϕ´verts = SVector(0, ϕ´...)
+    ϕ´edges = ϕ´verts' .- ϕ´verts
+    ϕverts0 = s.kij * dn
+    ϕverts = Series{N}.(ϕverts0, ϕ´verts)
+    ϕedges = Series{N}.(chop.(ϕverts0' .- ϕverts0), ϕ´edges)
     Δverts = ω .- s.ei
     eedges = s.eij
-    # phases ϕverts[j+1] will be perturbed by βverts[j+1]*dϕ, for j in 0:D
-    βverts = SVector(0, β...)
-    # Similartly, ϕedges[j+1,k+1] will be perturbed by βedges[j+1,k+1]*dϕ
-    βedges = βverts' .- βverts
-    g0sum = zero(Taylor{N,complex(T)})
-    for j in 0:D
-        ϕj = Taylor{N}(ϕverts[j+1], βverts[j+1])
-        ϕij = Taylor{N}.(ϕedges[:, j+1], βedges[:, j+1])
-        eij = eedges[:, j+1]
-        Δj = Δverts[j+1]
-        g0sum += g0_term(j, ϕj, ϕij, eij, Δj)
-    end
-    g0sum *= (-im)^(D+1) * s.VD
-    return trim(chop(g0sum))
-end
-
-flipped_range(i, ::Val{D}) where {D} = ntuple(j -> ifelse(i==j, -j, j), Val(D))
-
-function g0_term(j, ϕ::Taylor{N,T}, ϕs, es::SVector{D´}, Δ) where {N,T,D´}
-    D = D´ - 1
-    γⱼ = gamma_taylor(j, ϕs, es)
-    if iszero(es) # all εⱼ - εᵢ == 0, no z-integral
-        Jⱼ = one(Taylor{N,complex(T)}) / Δ
+    zedges = zkj_series.(ϕedges, eedges)
+    eϕ = cis_series.(ϕverts)
+    γα = γα_series(ϕedges, zedges, eedges)            # SMatrix{D´,D´}
+    if iszero(eedges)                                 # special case, full energy degeneracy
+        eγαJ = sum(γα .* transpose(eϕ) ./ first(Δverts))
     else
-        Jⱼ = zero(Taylor{N,complex(T)})
-        for k in 0:D
-            iszero(es[k+1]) && continue
-            zkj = ϕs[k+1] / es[k+1]
-            αₖⱼ = alpha_taylor(k, j, zkj, ϕs, es)
-            Jₖⱼ = J_taylor(zkj, Δ)
-            Jⱼ += αₖⱼ * Jₖⱼ
-        end
+        J = J_series.(zedges, eedges, transpose(Δverts))  # SMatrix{D´,D´}
+        eγαJ = sum(γα .* J .* transpose(eϕ))              # manual contraction is slower!
     end
-    Jⱼ *= cis_taylor(ϕ)
-    return γⱼ * Jⱼ
+    gsum = (-im)^(D+1) * s.VD * trim(chop(eγαJ))
+    return gsum[0], gsum[1]
 end
 
-function gamma_taylor(j, ϕs::SVector{D´,T}, es) where {D´,T<:Taylor}
-    D = D´ - 1
-    γⱼ⁻¹ = one(T)
-    for l in 0:D
-        l != j && iszero(es[l+1]) && (γⱼ⁻¹ *= ϕs[l+1])
-    end
-    γⱼ = inv(γⱼ⁻¹)
-    return γⱼ
-end
+zkj_series(ϕ, e) = iszero(e) ? ϕ : ϕ/e
 
-function alpha_taylor(k, j, zkj::T, ϕs::SVector{D´}, es) where {D´,T<:Taylor}
-    D = D´ - 1
-    α⁻¹ = one(T)
-    for l in 0:D
-        if l != j && !iszero(es[l+1])
-            α⁻¹ *= es[l+1]
-            if l != k # ekj != 0 because it is constrained by caller
-                zlj = ϕs[l+1]/es[l+1]
-                α⁻¹ *= -(zkj - zlj)
-            end
-        end
-    end
-    α = inv(α⁻¹)
-    return α
-end
-
-function J_taylor(z::Taylor{N}, Δ) where {N}
+function cis_series(z::Series{N}) where {N}
     @assert iszero(z.pow)
-    J = J_taylor(z[0], Δ, Val(N))
-    # Go from d(zΔ) = dz*Δ differential to dϕ
-    return rescale(J, z[1] * Δ)
-end
-
-
-# Taylor of log-regularized J(zΔ) = cis(zΔ) * [Ci(|z|Δ) - i Si(zΔ)] (variable zΔ for Taylor)
-function J_taylor(z::Real, Δ::Real, ::Val{N}) where {N}
-    zΔ = z * Δ
-    if iszero(zΔ)
-        J₀ = log(abs(Δ)) + im * ifelse(Δ > 0, 0, π) #+ MathConstants.γ # constant, not needed
-        Jᵢ = ntuple(n -> (-im)^n/(n*factorial(n)), Val(N-1))
-        J = Taylor{N}(J₀, Jᵢ...)
-        E = cis_taylor(zΔ, Val(N))
-        d = J * E
-    else
-        ciszΔ =  cis(zΔ)
-        J₀, J₁ = cosint(abs(zΔ)) - log(abs(z)) - im*sinint(zΔ) + im * ifelse(Δ > 0, 0, π), (conj(ciszΔ)-1)/zΔ
-        E₀, E₁ = ciszΔ, im * ciszΔ
-        J = Taylor{2}(J₀, J₁)
-        E = Taylor{2}(E₀, E₁)
-        d = Taylor{N}(J * E)
-    end
-    return d
-end
-
-function cis_taylor(z::Taylor{N}) where {N}
-    @assert iszero(z.pow)
-    c = cis_taylor(z[0], Val(N))
+    c = cis_series(z[0], Val(N))
     # Go from dz differential to dϕ
     return rescale(c, z[1])
 end
 
-# Taylor of cis(ϕ)
-function cis_taylor(ϕ::Real, ::Val{N}) where {N}
+# Series of cis(ϕ)
+function cis_series(ϕ::Real, ::Val{N}) where {N}
     E₀, Eᵢ = complex(1.0), ntuple(n -> im^n/(factorial(n)), Val(N-1))
-    E = cis(ϕ) * Taylor{N}(E₀, Eᵢ...)
+    E = cis(ϕ) * Series{N}(E₀, Eᵢ...)
     return E
+end
+
+@inline function γα_series(ϕedges::S, zedges::S, eedges::SMatrix{D´,D´}) where {N,T,D´,S<:SMatrix{D´,D´,Series{N,T}}}
+    # js = ks = SVector{D´}(1:D´)
+    # α⁻¹ = α⁻¹_series.(js', ks, Ref(zedges), Ref(eedges))
+    # γ⁻¹ = γ⁻¹_series.(js', Ref(ϕedges), Ref(eedges))
+    # γα = inv.(α⁻¹ .* γ⁻¹)
+    # return γα
+    ## BUG: broadcast over SArrays is currently allocations-buggy
+    ## https://github.com/JuliaArrays/StaticArrays.jl/issues/1178
+    js = ks = SVector{D´}(1:D´)
+    jks = Tuple(tuple.(js', ks))
+    α⁻¹ = α⁻¹_series.(jks, Ref(zedges), Ref(eedges))
+    γ⁻¹ = γ⁻¹_series.(Tuple(js), Ref(ϕedges), Ref(eedges))
+    γα = inv.(SMatrix{D´,D´}(α⁻¹) .* transpose(SVector(γ⁻¹)))
+    return γα
+end
+
+function α⁻¹_series((j, k), zedges::SMatrix{D´,D´,T}, eedges) where {D´,T<:Series}
+    x = one(T)
+    @inbounds j != k && !iszero(eedges[k, j]) || return x
+    @inbounds for l in 1:D´
+        if l != j && !iszero(eedges[l, j])
+            x *= eedges[l, j]
+            if l != k # ekj != 0, already constrained above
+                x *= zedges[l, j] - zedges[k, j]
+            end
+        end
+    end
+    return x
+end
+
+function γ⁻¹_series(j, ϕedges::SMatrix{D´,D´,T}, eedges) where {D´,T<:Series}
+    x = one(T)
+    @inbounds for l in 1:D´
+        if l != j && iszero(eedges[l, j])
+            x *= ϕedges[l, j]
+        end
+    end
+    return x
+end
+
+@inline function J_series(z::Series{N,T}, e, Δ) where {N,T}
+    iszero(e) && return zero(Series{N,Complex{T}})
+    J = J_series(z[0], Δ, Val(N))
+    # Go from d(zΔ) = dz*Δ differential to dϕ
+    return rescale(J, z[1] * Δ)
+end
+
+# Series of J(zΔ) = cis(zΔ) * [Ci(|z|Δ) - i Si(zΔ)] (variable zΔ for Series)
+function J_series(z::T, Δ::T, ::Val{N}) where {N,T<:Number}
+    C = complex(T)
+    iszero(Δ) && return Series{N}(C(Inf))
+    zΔ = z * Δ
+    imπ = im * ifelse(Δ > 0, 0, π) # strangely enough, union splitting is faster than stable
+    if iszero(zΔ)
+        J₀ = log(abs(Δ)) + imπ #+ MathConstants.γ + log(|z|) # not needed, cancels out
+        Jᵢ = ntuple(n -> (-im)^n/(n*factorial(n)), Val(N-1))
+        J = Series{N}(J₀, Jᵢ...)
+        E = cis_series(zΔ, Val(N))
+        EJ = E * J
+    else
+        ciszΔ =  cis(zΔ)
+        J₀, J₁ = cosint(abs(zΔ)) - im*sinint(zΔ) + imπ, conj(ciszΔ)/zΔ
+        E₀, E₁ = ciszΔ, im * ciszΔ
+        J´ = Series{2}(J₀, J₁)
+        E´ = Series{2}(E₀, E₁)
+        EJ = Series{N}(E´ * J´)
+    end
+    return EJ
 end
 
 #endregion
