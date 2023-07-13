@@ -156,7 +156,7 @@ function g_simplex(::Val{N}, ω::Number, dn::SVector{D}, s::Simplex{D}, ϕ´ = n
     eϕ = cis_series.(ϕverts)
     γα = γα_series(ϕedges, zedges, eedges)            # SMatrix{D´,D´}
     if iszero(eedges)                                 # special case, full energy degeneracy
-        eγαJ = sum(γα .* transpose(eϕ) ./ first(Δverts))
+        eγαJ = im * sum(γα[1,:] .* eϕ) / first(Δverts)
     else
         J = J_series.(zedges, eedges, transpose(Δverts))  # SMatrix{D´,D´}
         eγαJ = sum(γα .* J .* transpose(eϕ))              # manual contraction is slower!
@@ -191,9 +191,9 @@ end
     ## https://github.com/JuliaArrays/StaticArrays.jl/issues/1178
     js = ks = SVector{D´}(1:D´)
     jks = Tuple(tuple.(js', ks))
-    α⁻¹ = α⁻¹_series.(jks, Ref(zedges), Ref(eedges))
-    γ⁻¹ = γ⁻¹_series.(Tuple(js), Ref(ϕedges), Ref(eedges))
-    γα = inv.(SMatrix{D´,D´}(α⁻¹) .* transpose(SVector(γ⁻¹)))
+    α⁻¹ = SMatrix{D´,D´}(α⁻¹_series.(jks, Ref(zedges), Ref(eedges)))
+    γ⁻¹ = SVector(γ⁻¹_series.(Tuple(js), Ref(ϕedges), Ref(eedges)))
+    γα = inv.(α⁻¹ .* transpose(γ⁻¹))
     return γα
 end
 
