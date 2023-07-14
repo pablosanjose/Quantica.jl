@@ -127,22 +127,32 @@ function Simplex(ei::SVector{D´}, kij::SMatrix{D´,D,T}) where {D´,D,T}
     U⁻¹ = inv(U)
     VD = abs(det(U))
     w = U⁻¹ * k0
-    Δe = eij[1, SVector{D}(2:D´)]               # eⱼ - e₀
-    v = chop(transpose(U⁻¹) * Δe)
-    if iszero(v)
-        Q = one(SMatrix{D,D,T})                 # special case
-    else
-        vext = hcat(v, zero(SMatrix{D,D-1,T}))  # pad with zero to get full Q from QR
-        Q´, R´ = qr(vext)                       # full orthonormal basis with v as first vec
-        Q = rotate45(Q´ * sign(R´[1,1]))        # rotate 1 & 2 by 45º -> none parallel to v
-    end
+    Q = generate_Q(eij, kij)
     phi´ = kij * Q
     U⁻¹Q⁻¹ = U⁻¹ * Q'
     return Simplex(ei, kij, eij, U⁻¹, U⁻¹Q⁻¹, phi´, w, VD)
 end
 
-rotate45(s::SMatrix{D,D}) where {D} =
-    hcat((s[:,1] + s[:,2])/√2, (s[:,1] - s[:,2])/√2, s[:,SVector{D-2}(3:D)])
+function generate_Q(eij, kij::SMatrix{<:Any,D,T}) where {D,T}
+    Q = one(SMatrix{D,D,T})
+    iszero(eij) && return Q
+    while !is_valid_Q(Q, eij, kij)
+        Q = first(qr(rand(SMatrix{D,D,T})))
+    end
+    return Q
+end
+
+function is_valid_Q(Q, es, ks)
+    phi´ = ks * Q
+    for j in axes(es, 2), k in 1:j-1, l in 1:k-1
+        eʲₖ = es[k,j]
+        eʲₗ = es[l,j]
+        (iszero(eʲₖ) || iszero(eʲₗ)) && continue
+        @show phi´[k, j] * eʲₗ - eʲₖ * phi´[l, j]
+        phi´[k, j] * eʲₗ ≈ eʲₖ * phi´[l, j] && return false
+    end
+    return true
+end
 
 function g_simplex(ω, dn, s::Simplex{D}) where {D}
     gβ = ntuple(Val(D)) do β
