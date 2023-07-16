@@ -114,7 +114,7 @@ struct Simplex{D,T,S1,S2,S3,SU<:SMatrix{D,D,T}}
     kij::S2       # kᵢ[j]::SMatrix{D´,D,T,DD´} = coordinate j of momentum for vertex i
     eij::S3       # ϵᵢʲ::SMatrix{D´,D´,T,D´D´} = e_j - e_i
     U⁻¹::SU       # inv(Uᵢⱼ) for Uᵢⱼ::SMatrix{D,D,T,DD} = kⱼ[i] - k₀[i] (edges as cols)
-    U⁻¹Q⁻¹::SU    # Q cols are basis of shift vectors δrᵝ
+    Q⁻¹::SU       # Q cols are basis of shift vectors δrᵝ
     phi´::S2      # kij * Q
     w::SVector{D,T} # U⁻¹ * k₀
     VD::T         # D!V = |det(U)|
@@ -127,10 +127,10 @@ function Simplex(ei::SVector{D´}, kij::SMatrix{D´,D,T}) where {D´,D,T}
     U⁻¹ = inv(U)
     VD = abs(det(U))
     w = U⁻¹ * k0
-    Q = generate_Q(eij, kij)
+    Q = generate_Q(eij, kij)                    # Q is unitary
     phi´ = kij * Q
-    U⁻¹Q⁻¹ = U⁻¹ * Q'
-    return Simplex(ei, kij, eij, U⁻¹, U⁻¹Q⁻¹, phi´, w, VD)
+    Q⁻¹ = Q'
+    return Simplex(ei, kij, eij, U⁻¹, Q⁻¹, phi´, w, VD)
 end
 
 function generate_Q(eij, kij::SMatrix{<:Any,D,T}) where {D,T}
@@ -143,24 +143,32 @@ function generate_Q(eij, kij::SMatrix{<:Any,D,T}) where {D,T}
 end
 
 function is_valid_Q(Q, es, ks)
-    phi´ = ks * Q
-    for j in axes(es, 2), k in 1:j-1, l in 1:k-1
-        eʲₖ = es[k,j]
-        eʲₗ = es[l,j]
-        (iszero(eʲₖ) || iszero(eʲₗ)) && continue
-        @show phi´[k, j] * eʲₗ - eʲₖ * phi´[l, j]
-        phi´[k, j] * eʲₗ ≈ eʲₖ * phi´[l, j] && return false
+    for qβ in eachcol(Q)
+        phi = ks * qβ
+        phis = phi' .- phi
+        for j in axes(es, 2), k in 1:j-1, l in 1:k-1
+            eʲₖ = es[k,j]
+            eʲₗ = es[l,j]
+            (iszero(eʲₖ) || iszero(eʲₗ)) && continue
+            phis[k, j] * eʲₗ ≈ eʲₖ * phis[l, j] && return false
+        end
     end
     return true
 end
 
-function g_simplex(ω, dn, s::Simplex{D}) where {D}
+g_simplex(ω, dn, s::Simplex{D}) where {D} = g_simplex(Val(D+1), ω, dn, s)
+
+function g_simplex(val, ω, dn, s::Simplex{D}) where {D}
     gβ = ntuple(Val(D)) do β
-        ϕ´verts = s.phi´[:, β]
-        g_simplex(Val(D+1), ω, dn, s, ϕ´verts)
+        g_simplex(val, ω, dn, s, β)
     end
-    return first(first(gβ)), last.(gβ)
+    g0, g1 = first(first(gβ)), last.(gβ)
+    # gk should be SVector(g1)' * s.Q⁻¹, but we return the transpose
+    gk = s.Q⁻¹' * SVector(g1)
+    return g0, gk
 end
+
+g_simplex(val, ω, dn, s, β::Int) = g_simplex(val, ω, dn, s, s.phi´[:, β])
 
 function g_simplex(::Val{N}, ω::Number, dn::SVector{D}, s::Simplex{D,T}, ϕ´verts::SVector) where {D,N,T}
     # phases ϕverts[j+1] will be perturbed by ϕ´verts[j+1]*dϕ, for j in 0:D
@@ -262,11 +270,15 @@ function J_series(z::T, Δ::T, ::Val{N}) where {N,T<:Number}
         EJ = E * J
     else
         ciszΔ =  cis(zΔ)
-        J₀, J₁ = cosint(abs(zΔ)) - im*sinint(zΔ) + imπ, conj(ciszΔ)/zΔ
-        E₀, E₁ = ciszΔ, im * ciszΔ
-        J´ = Series{2}(J₀, J₁)
-        E´ = Series{2}(E₀, E₁)
-        EJ = Series{N}(E´ * J´)
+        J₀ = cosint(abs(zΔ)) - im*sinint(zΔ) + imπ
+        J₁ = conj(ciszΔ) .* ntuple(Val(N-1)) do n
+            ifelse(isodd(n), 1, -1) * sum(m -> im^m * zΔ^(m-n)/(n*factorial(m)), 0:n-1)
+        end
+        E₀ = ciszΔ
+        E₁ = ciszΔ .* ntuple(n -> im^n/factorial(n), Val(N-1))
+        J = Series(J₀, J₁...)
+        E = Series(E₀, E₁...)
+        EJ = E * J
     end
     return EJ
 end
