@@ -65,8 +65,6 @@ Base.zero(::Type{<:Series{N,T}}) where {N,T} = Series(zero(SVector{N,T}), 0)
 Base.iszero(d::Series) = iszero(d.x)
 Base.transpose(d::Series) = d  # act as a scalar
 
-Base.:+(d::Series) = d
-Base.:-(d::Series) = Series(.-(d.x), d.pow)
 Base.:+(d::Series, d´::Series) = trim_and_map(+, d, d´)
 Base.:-(d::Series, d´::Series) = trim_and_map(-, d, d´)
 Base.:*(d::Number, d´::Series) = Series(d * d´.x, d´.pow)
@@ -110,40 +108,29 @@ shiftpad(s::SVector{N,T}, i) where {N,T} =
 #endregion
 
 ############################################################################################
-# g0(ω) for a D-simplex, with D´ = D + 1
+# BandSimplex: encodes energy and momenta of vertices, and derived quantitities
 #region
 
-struct Simplex{D,T,S1,S2,S3,SU<:SMatrix{D,D,T}}
+struct BandSimplex{D,T,S1,S2,S3,SU<:SMatrix{D,D,T}}     # D = manifold dimension
     ei::S1        # eᵢ::SVector{D´,T} = energy of vertex i
     kij::S2       # kᵢ[j]::SMatrix{D´,D,T,DD´} = coordinate j of momentum for vertex i
     eij::S3       # ϵᵢʲ::SMatrix{D´,D´,T,D´D´} = e_j - e_i
     U⁻¹::SU       # inv(Uᵢⱼ) for Uᵢⱼ::SMatrix{D,D,T,DD} = kⱼ[i] - k₀[i] (edges as cols)
-    Q⁻¹::SU       # Q cols are basis of shift vectors δrᵝ
+    Q⁻¹::SU       # Q::SMatrix{D,D,T,DD} = cols are basis of shift vectors δrᵝ
     phi´::S2      # kij * Q
     w::SVector{D,T} # U⁻¹ * k₀
     VD::T         # D!V = |det(U)|
 end
 
-struct Expansions{N,TC<:NTuple{N},TJ,SJ}
-    cis::TC
-    J0::TJ
-    Jmat::SJ
+function BandSimplex(es::NTuple{<:Any,Number}, ks::NTuple{<:Any,SVector})
+    ei = SVector(es)
+    kij = transpose(reduce(hcat, ks))   # ks are rows of kij
+    return BandSimplex(ei, kij)
 end
 
-# Precomputes the Series expansion coefficients for cis, J(z->0) and J(z)
-function Expansions(::Val{N´}, ::Type{T}) where {N´,T}  # here N´ = N-1
-    C = complex(T)
-    cis = ntuple(n -> C(im)^(n-1)/(factorial(n-1)), Val(N´+1))
-    J0 = ntuple(n -> C(-im)^n/(n*factorial(n)), Val(N´))
-    Jmat = ntuple(Val(N´*N´)) do ij
-        j, i = fldmod1(ij, N´)
-        j > i ? zero(C) : ifelse(isodd(i), 1, -1) * C(im)^(i-j) / (i*factorial(i-j))
-    end |> SMatrix{N´,N´,C}
-    return Expansions(cis, J0, Jmat)
-end
-
-
-function Simplex(ei::SVector{D´}, kij::SMatrix{D´,D,T}) where {D´,D,T}
+function BandSimplex(ei::SVector{D´}, kij::SMatrix{D´,D,T}) where {D´,D,T}
+    D == D´ - 1 ||
+        argerror("The dimension $D of Bloch phases in simplex should be one less than the number of vertices $(D´)")
     eij = chop(ei' .- ei)
     k0 = kij[1, :]
     U = kij[SVector{D}(2:D´),:]' .- k0          # edges as columns
@@ -153,7 +140,7 @@ function Simplex(ei::SVector{D´}, kij::SMatrix{D´,D,T}) where {D´,D,T}
     Q = generate_Q(eij, kij)                    # Q is unitary
     phi´ = kij * Q
     Q⁻¹ = Q'
-    return Simplex(ei, kij, eij, U⁻¹, Q⁻¹, phi´, w, VD)
+    return BandSimplex(ei, kij, eij, U⁻¹, Q⁻¹, phi´, w, VD)
 end
 
 function generate_Q(eij, kij::SMatrix{<:Any,D,T}) where {D,T}
@@ -180,11 +167,60 @@ function is_valid_Q(Q, es, ks)
     return true
 end
 
-g_simplex(ω, dn, s::Simplex{D}) where {D} = g_simplex(Val(D+1), ω, dn, s)
+#endregion
 
-function g_simplex(val, ω, dn, s::Simplex{D}) where {D}
+############################################################################################
+# BandSimplexSubspace: basis of subspaces at each vertex that interpolate inside simplex
+#region
+
+struct BandSimplexSubspace{D,N,S<:SMatrix{<:Any,N},M<:MatrixView,X<:BandSimplex{D}}
+    simplex::X
+    states::Tuple{M,Vararg{M,D}}  # basis of degenerate states at each vertex
+    coords::Tuple{S,Vararg{S,D}}  # an s::Smatrix per vertex such that states * s = subspace
+end
+
+function BandSimplexSubspace(vs::NTuple{D´,BandVertex{T,D´}}) where {D´,T}
+    cs = coordinates.(vs)
+    es = energy.(cs)
+    ks = base_coordinates.(cs)
+    simplex = BandSimplex(es, ks)
+    states´ = states.(vs)
+    coords = simplexsubspace(states´)
+    return BandSimplexSubspace(simplex, states´, coords)
+end
+
+#endregion
+
+############################################################################################
+# g0(ω) and g_j(ω) for a BandSimplex{D}, with D´ = D + 1
+#region
+
+struct Expansions{N,TC<:NTuple{N},TJ,SJ}
+    cis::TC
+    J0::TJ
+    Jmat::SJ
+end
+
+# Precomputes the Series expansion coefficients for cis, J(z->0) and J(z)
+function Expansions(::Val{N´}, ::Type{T}) where {N´,T}  # here N´ = N-1
+    C = complex(T)
+    cis = ntuple(n -> C(im)^(n-1)/(factorial(n-1)), Val(N´+1))
+    J0 = ntuple(n -> C(-im)^n/(n*factorial(n)), Val(N´))
+    Jmat = ntuple(Val(N´*N´)) do ij
+        j, i = fldmod1(ij, N´)
+        j > i ? zero(C) : ifelse(isodd(i), 1, -1) * C(im)^(i-j) / (i*factorial(i-j))
+    end |> SMatrix{N´,N´,C}
+    return Expansions(cis, J0, Jmat)
+end
+
+# OPTIM: could perhaps dispatch to Val(2) in the case with no degeneracies?
+g_simplex(s::BandSimplex{D}, ω, dn) where {D} = g_simplex(s, ω, dn, Val(D+1))
+
+function g_simplex(s::BandSimplex{D,T}, ω, dn, ::Val{N}) where {D,T,N}
     gβ = ntuple(Val(D)) do β
-        g_simplex(val, ω, dn, s, β)
+        ϕ´verts = s.phi´[:, β]
+        ex = Expansions(Val(N-1), T)
+        g_simplex(s, ω, dn, ϕ´verts, ex)
     end
     g0, g1 = first(first(gβ)), last.(gβ)
     # gk should be SVector(g1)' * s.Q⁻¹, but we return the transpose
@@ -192,10 +228,7 @@ function g_simplex(val, ω, dn, s::Simplex{D}) where {D}
     return g0, gk
 end
 
-g_simplex(::Val{N}, ω, dn, s::Simplex{<:Any,T}, β::Int) where {N,T} =
-    g_simplex(Expansions(Val(N-1), T), ω, dn, s, s.phi´[:, β])
-
-function g_simplex(ex::Expansions{N}, ω::Number, dn::SVector{D}, s::Simplex{D,T}, ϕ´verts::SVector) where {D,N,T}
+function g_simplex(s::BandSimplex{D,T}, ω::Number, dn::SVector{D}, ϕ´verts::SVector, ex::Expansions{N}) where {D,T,N}
     # phases ϕverts[j+1] will be perturbed by ϕ´verts[j+1]*dϕ, for j in 0:D
     # Similartly, ϕedges[j+1,k+1] will be perturbed by ϕ´edges[j+1,k+1]*dϕ
     ϕ´edges = ϕ´verts' .- ϕ´verts

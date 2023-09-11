@@ -1220,7 +1220,7 @@ driver without the added slicing functionality of a full `Bandstructure` object,
 - `transform`: function to apply to each eigenvalue after diagonalization. Default: `identity`
 - `degtol::Real`: maximum distance between to nearby eigenvalue so that they are classified as degenerate. Default: `sqrt(eps)`
 - `split::Bool`: whether to split bands into disconnected subbands. Default: `true`
-- `warn::Bool`: whether to emit warning when band dislocations are encountered
+- `warn::Bool`: whether to emit warning when band dislocations are encountered. Default: `true`
 - `showprogress::Bool`: whether to show or not a progress bar. Default: `true`
 - `defects`: (experimental) a collection of extra points to add to the mesh, typically the location of topological band defects such as Dirac points, so that interpolation avoids creating dislocation defects in the bands. You need to also increase `patches` to repair the subband dislocations using the added defect vertices.
 - `patches::Integer`: (experimental) if a dislocation is encountered, attempt to patch it by searching for the defect recursively to a given order, or using the provided `defects` (preferred). Default: `0`

@@ -1345,11 +1345,13 @@ copy_lattice(p::ParametricHamiltonian) = ParametricHamiltonian(
 
 abstract type AbstractMesh{V,S} end
 
-struct Mesh{V,S} <: AbstractMesh{V,S}
+struct Mesh{V,S} <: AbstractMesh{V,S}    # S-1 is the manifold dimension
     verts::Vector{V}
     neighs::Vector{Vector{Int}}          # all neighbors neighs[i][j] of vertex i
-    simps::Vector{NTuple{S,Int}}         # list of simplices, each one a group of neighboring vertex indices
+    simps::Vector{NTuple{S,Int}}         # list of simplices, each a group of S neighboring
+                                         # vertex indices
 end
+
 
 #region ## Constructors ##
 
@@ -1411,8 +1413,10 @@ struct BandVertex{T<:AbstractFloat,E}
     states::MatrixView{Complex{T}}
 end
 
-# Subband is a type of AbstractMesh with manifold dimension = embedding dimension - 1
+# Subband: an AbstractMesh with manifold_dimension (S-1) = embedding_dimension (E) - 1
 # and with interval search trees to allow slicing
+# CAUTION: "embedding" dimension E here refers to the Mesh object (unrelated to Lattice's E)
+#   unlike a Subband, a general Mesh can have S≠E, like a 1D curve (S=2) in  3D (E=3) space.
 struct Subband{T,E} <: AbstractMesh{BandVertex{T,E},E}  # we restrict S == E
     mesh::Mesh{BandVertex{T,E},E}
     trees::NTuple{E,IntervalTree{T,IntervalValue{T,Int}}}
@@ -1442,19 +1446,32 @@ BandVertex(ke, s::Matrix) = BandVertex(ke, view(s, :, 1:size(s, 2)))
 BandVertex(k, e, s::Matrix) = BandVertex(k, e, view(s, :, 1:size(s, 2)))
 BandVertex(k, e, s::SubArray) = BandVertex(vcat(k, e), s)
 
-Subband(verts::Vector{<:BandVertex{<:Any,E}}, neighs) where {E} =
+Subband(verts::Vector{<:BandVertex{<:Any,E}}, neighs::Vector) where {E} =
     Subband(Mesh{E}(verts, neighs))
 
 function Subband(mesh::Mesh{<:BandVertex{T,E}}) where {T,E}
     verts, simps = vertices(mesh), simplices(mesh)
-    order_simplices!(simps, verts)
+    sort_simplex_degeneracies!(simps, verts)
+    orient_simplices!(simps, verts)                             # see mesh.jl
+    trees = subband_trees(verts, simps)
+    return Subband(mesh, trees)
+end
+
+function sort_simplex_degeneracies!(simps, verts)
+    for (i, simp) in enumerate(simps)
+        simps[i] = sort(simp, by = i -> degeneracy(verts[i]))
+    end
+    return simps
+end
+
+function subband_trees(verts::Vector{BandVertex{T,E}}, simps) where {T,E}
     trees = ntuple(Val(E)) do i
         list = [IntervalValue(shrinkright(extrema(j->coordinates(verts[j])[i], s))..., n)
                      for (n, s) in enumerate(simps)]
         sort!(list)
         return IntervalTree{T,IntervalValue{T,Int}}(list)
     end
-    return Subband(mesh, trees)
+    return trees
 end
 
 # Interval is closed, we want semiclosed on the left -> exclude the upper limit

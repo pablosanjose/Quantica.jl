@@ -119,7 +119,8 @@ function subbands_precompilable(solvers::Vector{A}, basemesh::Mesh{SVector{L,T}}
     frustrated = similar(crossed)
     subbands = Subband{T,L+1}[]
     data = (; basemesh, eigens, bandverts, bandneighs, bandneideg, coloffsets, solvers, L,
-              crossed, frustrated, subbands, defects, patches, showprogress, degtol, split, warn)
+              crossed, frustrated, subbands, defects, patches, showprogress, degtol, split,
+              warn)
 
     # Step 1 - Diagonalize:
     # Uses multiple SpectrumSolvers (one per Julia thread) to diagonalize h at each
@@ -331,13 +332,13 @@ function knit_seam!(data, ib, jb)
     return data
 end
 
-# Number of singular values greater than √min_squared_overlap.
+# Number of singular values greater than √min_squared_overlap in proj = ψj'*ψi
 # Fast rank-1 |svd|^2 is r = tr(proj'proj). For higher ranks and r > 0 we must compute and
 # count singular values. The min_squared_overlap is arbitrary, and is fixed heuristically to
 # a high enough value to connect in the coarsest base lattices
 function connection_rank(proj)
     min_squared_overlap = 0.5
-    rankf = sum(abs2, proj)
+    rankf = sum(abs2, proj) # = tr(proj'proj)
     fastrank = ifelse(rankf > min_squared_overlap, 1, 0)  # For rank=1 proj: upon doubt, connect
     if iszero(fastrank) || size(proj, 1) == 1 || size(proj, 2) == 1
         return fastrank
@@ -537,6 +538,135 @@ end
 #endregion
 
 ############################################################################################
+# simplex_states!
+#   append coordinates pᵢ of interpolating vertex states ψᵢ=φᵢpᵢ for each simplex in simps
+#   Method: compute SVD of projection φ₀'φᵢ, choosing singular_vals > √min_squared_overlap
+#     for i ∈ 1:D´, updating the projector p₀ at each step. Then repeat backward, i ∈ D´-1:1
+#     updating pᵢ and p₀ at each step. If at any point no singular_val is chosen, abort with
+#     all pᵢ empty (zero columns).
+#   Related: connection_rank(proj)
+#region
+
+# simplex_states(s::Subband) = simplex_states(mesh(s))
+
+# simplex_states(m::Mesh) = simplex_states(vertices(m), simplices(m))
+
+# function simplex_states(verts::Vector{BandVertex{T,D´}}, simps::Vector) where {T,D´}
+#     simpstates = NTuple{D´,Matrix{Complex{T}}}[]
+#     simplex_states!(simpstates, verts, simps)
+#     return simpstates
+# end
+
+# function simplex_states!(simpstates, verts, simps::Vector)
+#     for simp in simps
+#         simplex_states!(simpstates, verts, simp)
+#     end
+#     return simpstates
+# end
+
+# function simplex_states!(simpstates, verts::Vector{BandVertex{T,D´}}, simp::NTuple{D´,Int}) where {T,D´}
+#     φ0, φs... = ntuple(i -> states(verts[simp[i]]), Val(D´))
+#     ps = [Matrix{Complex{T}}(I, size(φ, 2), size(φ, 2)) for φ in (φ0, φs...)]
+#     projs = Ref(φ0') .* φs
+#     D = D´ - 1
+#     for i in 1:D
+#         update_projectors!(ps, projs, i)
+#     end
+#     for i in reverse(D-1:1)
+#         update_projectors!(ps, projs, i)
+#     end
+#     push!(simpstates, NTuple{D´}(ps))
+#     return simpstates
+# end
+
+# function update_projectors!(ps, projs, i)
+#     p0, p = ps[1], ps[i+1]
+#     if iszero(size(p0, 2))
+#         ps[i+1] = p0
+#         return ps
+#     end
+#     proj = p0' * projs[i] * p  # proj = p₀'φ₀'φᵢpᵢ = ψ₀'ψᵢ
+#     U, S, V = svd!(proj)        # proj = U Diagonal(S) V'
+#     min_squared_overlap = 0.5
+#     cols = filter(s -> S[s]^2 > min_squared_overlap, eachindex(S))
+#     p0 = p0 * view(U, :, cols)
+#     p = p * view(V, :, cols)
+#     ps[1], ps[i+1] = p0, p
+#     return ps
+# end
+
+#endregion
+
+############################################################################################
+# simplex_projectors
+#   Build projectors Pᵢ = pᵢp₀⁺ of interpolating vertex states ψᵢ=φᵢpᵢ inside each simplex
+#   Method: compute SVD of projection Qᵢ = φᵢ'φ₀, with singular_vals > min_squared_overlap
+#     for i ∈ 1:D´, updating the projector p₀, pᵢ at each step. Then repeat backward,
+#     for i ∈ D´-1:1, again updating pᵢ and p₀ at each step.
+#   Related: connection_rank(proj)
+#region
+
+simplex_projectors(s::Subband) = simplex_projectors(mesh(s))
+
+simplex_projectors(m::Mesh) = simplex_projectors(vertices(m), simplices(m))
+
+simplex_projectors(verts, simps::Vector) = [simplex_projectors(verts, s) for s in simps]
+
+# This implements pᵢp₀⁺ preallocating and reusing memory as much as possible
+# At each sweep it stores and updates p₀, pᵢ and Qᵢ = pᵢ⁺φᵢ'φ₀p₀
+function simplex_projectors(verts::Vector{BandVertex{T,D´}}, simp::NTuple{D´}) where {T,D´}
+    φ₀, φs... = ntuple(i -> states(verts[simp[i]]), Val(D´))
+    d₀ = size(φ₀, 2)
+    Qs = adjoint.(φs) .* Ref(φ₀)               # Qs[i] : dᵢ × d₀
+    Mᵢ₀ = similar.(Qs)                         # Mᵢ₀[i]: dᵢ × d₀    (prealloc)
+    M₀₀ = similar.(Qs, d₀, d₀)                 # M₀₀[i]: d₀ × d₀    (prealloc)
+    @assert all(ϕ -> size(ϕ, 2) >= d₀, φs)     # d₀ <= dᵢ
+    p₀⁺ = Matrix{Complex{T}}(undef, d₀, d₀)
+    p₀⁺´= similar(p₀⁺)
+    D = D´ - 1
+    for i in 1:D                                # Forward pass
+        Q, m₀₀, mᵢ₀ = Qs[i], M₀₀[i], Mᵢ₀[i]     # m₀₀ and mᵢ₀ are preallocations
+        Q´ = i == 1 ? copy!(mᵢ₀, Q) : mul!(mᵢ₀, Q, p₀⁺')                      # Q = Q p₀
+        U, V´ = filtered_projectors!(Q´)         # U: dᵢ×d₀, V´: d₀×d₀  (d₀ <= dᵢ)
+        i == 1 ? copy!(p₀⁺´, V´) : mul!(p₀⁺´, V´, p₀⁺)
+        p₀⁺, p₀⁺´ = p₀⁺´, p₀⁺                   # p₀⁺ = V´ p₀⁺
+        mul!(m₀₀, U', mul!(mᵢ₀, Q, V´'))        # M₀₀[i] = pᵢ⁺ Qs[i] p₀  (d₀ × d₀)
+        copy!(mᵢ₀, U)                           # Mᵢ₀[i] = pᵢ = U        (dᵢ × d₀)
+    end
+    for i in reverse(D-1:1)                     # Backward pass
+        Q, pᵢ = M₀₀[i], Mᵢ₀[i]                  # Q = pᵢ⁺ Qs[i] p₀
+        U, V´ = filtered_projectors!(Q)
+        mul!(p₀⁺´, V´, p₀⁺)
+        p₀⁺, p₀⁺´ = p₀⁺´, p₀⁺                   # p₀⁺ = V´ p₀⁺
+        mul!(Qs[i], pᵢ, U)                      # Qs[i] = pᵢ
+    end
+    P₀ = mul!(p₀⁺´, p₀⁺', p₀⁺)                  # P0 = p₀ p₀⁺
+    Ps = mul!.(Mᵢ₀, Qs, Ref(p₀⁺))               # Pᵢ = pᵢ p₀⁺
+    projectors = (P₀, Ps...)
+    return projectors
+end
+
+# filtered_projectors!(Q) =
+#     size(Q) == (1, 1) ? filtered_projectors_fast!(only(Q)) : filtered_projectors_svd!(Q)
+
+function filtered_projectors!(Q)
+    s = svd!(Q, alg = LinearAlgebra.QRIteration())
+    U, S, V´ = s.U, s.S, s.Vt
+    min_squared_overlap = 0.5
+    for i in reverse(eachindex(S))
+        if S[i]^2 < min_squared_overlap
+            U[:, i] .= 0
+            V´[i, :] .= 0
+        else
+            break
+        end
+    end
+    return U, V´
+end
+
+#endregion
+
+############################################################################################
 # Subband slicing and indexing
 #   Example: in a 2D lattice, subband[(kx,ky,:)] is a vertical slice at fixed momentum kx, ky
 #region
@@ -610,7 +740,7 @@ function slice_simplex!(data, simp)
             sum(λs) < 1 && all(>=(0), λs) || continue
             dvpar = edgemat[paraxes, :]
             kε = kε0[paraxes] + dvpar * λs
-            φ = interpolate_state(λs, vertices(data.subband), simp, sub)
+            φ = interpolate_state_along_edges(λs, vertices(data.subband), simp, sub)
             push!(data.verts, BandVertex(kε, φ))
             push!(data.neighs, Int[])
             vind = length(data.verts)
@@ -639,8 +769,8 @@ function vertmat_simplex(::NTuple{N}, vs, simp, sub) where {N}
 end
 
 # we assume that sub is ordered and that simp is sorted so that the first vertex has minimal
-# degeneracy within the simplex (see order_simplices!)
-function interpolate_state(λs, vs, simp, sub)
+# degeneracy within the simplex (note that orient_simplices! preserves first vertex)
+function interpolate_state_along_edges(λs, vs, simp, sub)
     v0 = vs[simp[sub[1]]]
     φ0 = states(v0)
     deg0 = degeneracy(v0)
