@@ -1419,7 +1419,8 @@ end
 #   unlike a Subband, a general Mesh can have S≠E, like a 1D curve (S=2) in  3D (E=3) space.
 struct Subband{T,E} <: AbstractMesh{BandVertex{T,E},E}  # we restrict S == E
     mesh::Mesh{BandVertex{T,E},E}
-    trees::NTuple{E,IntervalTree{T,IntervalValue{T,Int}}}
+    trees::NTuple{E,IntervalTree{T,IntervalValue{T,Int}}} # for interval searches
+    projectors::Dict{Tuple{Int,Int},Matrix{Complex{T}}} # onto interpolated simplex subspace
 end
 
 struct Bandstructure{T,E,L,B} # E = L+1
@@ -1449,20 +1450,25 @@ BandVertex(k, e, s::SubArray) = BandVertex(vcat(k, e), s)
 Subband(verts::Vector{<:BandVertex{<:Any,E}}, neighs::Vector) where {E} =
     Subband(Mesh{E}(verts, neighs))
 
-function Subband(mesh::Mesh{<:BandVertex{T,E}}) where {T,E}
+function Subband(mesh::Mesh)
     verts, simps = vertices(mesh), simplices(mesh)
-    sort_simplex_degeneracies!(simps, verts)
+    # sort_simplex_degeneracies!(simps, verts)
     orient_simplices!(simps, verts)                             # see mesh.jl
     trees = subband_trees(verts, simps)
     return Subband(mesh, trees)
 end
 
-function sort_simplex_degeneracies!(simps, verts)
-    for (i, simp) in enumerate(simps)
-        simps[i] = sort(simp, by = i -> degeneracy(verts[i]))
-    end
-    return simps
+function Subband(mesh::Mesh{<:BandVertex{T}}, trees) where {T}
+    projs = Dict{Tuple{Int,Int},Matrix{Complex{T}}}()
+    return Subband(mesh, trees, projs)
 end
+
+# function sort_simplex_degeneracies!(simps, verts)
+#     for (i, simp) in enumerate(simps)
+#         simps[i] = sort(simp, by = i -> degeneracy(verts[i]))
+#     end
+#     return simps
+# end
 
 function subband_trees(verts::Vector{BandVertex{T,E}}, simps) where {T,E}
     trees = ntuple(Val(E)) do i
@@ -1538,6 +1544,8 @@ simplices(s::Subband, i...) = simplices(s.mesh, i...)
 trees(s::Subband) = s.trees
 trees(s::Subband, i::Int) = s.trees[i]
 
+projectors(s::Subband) = s.projectors
+
 # last argument: saxes = ((dim₁, x₁), (dim₂, x₂)...)
 function foreach_simplex(f, s::Subband, ((dim, k), xs...))
     for interval in intersect(trees(s, dim), (k, k))
@@ -1567,6 +1575,11 @@ embdim(::AbstractMesh{<:BandVertex{<:Any,E}}) where {E} = E
 meshdim(::AbstractMesh{<:Any,S}) where {S} = S
 
 dims(m::AbstractMesh) = (embdim(m), meshdim(m))
+
+function compute_projectors!(hf::Function, s::Subband)
+    ps = projectors(s)
+
+end
 
 Base.size(s::Spectrum, i...) = size(s.eigen.vectors, i...)
 

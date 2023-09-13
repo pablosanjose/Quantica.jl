@@ -64,31 +64,32 @@ bands(rng, rngs...; kw...) = h -> bands(h, rng, rngs...; kw...)
 bands(h::Union{Function,AbstractHamiltonian}, rng, rngs...; kw...) = bands(h, mesh(rng, rngs...); kw...)
 
 function bands(h::AbstractHamiltonian, mesh::Mesh{S};
-         solver = ES.LinearAlgebra(), transform = missing, mapping = missing, kw...) where {S}
-    solvers = eigensolvers_per_threads(solver, h, S, mapping, transform)
-    ss = subbands(solvers, mesh; kw...)
+         solver = ES.LinearAlgebra(), transform = missing, mapping = missing, kw...) where {S<:SVector}
+    mapping´ = sanitize_mapping(mapping, h)
+    solvers = eigensolvers_thread_pool(solver, h, S, mapping´, transform)
+    hf = apply_map(mapping´, h, S)
+    ss = subbands(hf, solvers, mesh; kw...)
     os = blockstructure(h)
     return Bandstructure(ss, solvers, os)
 end
 
 function bands(h::Function, mesh::Mesh{S};
-         solver = ES.LinearAlgebra(), transform = missing, mapping = missing, kw...) where {S}
-    solvers = eigensolvers_per_threads(solver, h, S, mapping, transform)
-    ss = subbands(solvers, mesh; kw...)
+         solver = ES.LinearAlgebra(), transform = missing, mapping = missing, kw...) where {S<:SVector}
+    mapping´ = sanitize_mapping(mapping, h)
+    solvers = eigensolvers_thread_pool(solver, h, S, mapping´, transform)
+    hf = apply_map(mapping´, h, S)
+    ss = subbands(hf, solvers, mesh; kw...)
     return ss
 end
 
-function eigensolvers_per_threads(solver, h, S, mapping, transform)
-    mapping´ = sanitize_mapping(mapping, h)
-    asolvers = [apply(solver, h, S, mapping´, transform) for _ in 1:Threads.nthreads()]
-    return asolvers
-end
+eigensolvers_thread_pool(solver, h, S, mapping, transform) =
+    [apply(solver, h, S, mapping, transform) for _ in 1:Threads.nthreads()]
 
-function subbands(solvers, basemesh::Mesh{SVector{L,T}};
-         showprogress = true, defects = (), patches = 0, degtol = missing, split = true, warn = true) where {T,L}
+function subbands(hf, solvers, basemesh::Mesh{SVector{L,T}};
+         showprogress = true, defects = (), patches = 0, degtol = missing, split = true, warn = true, projectors = true) where {T,L}
     defects´ = sanitize_Vector_of_SVectors(SVector{L,T}, defects)
     degtol´ = degtol isa Number ? degtol : sqrt(eps(real(T)))
-    subbands = subbands_precompilable(solvers, basemesh, showprogress, defects´, patches, degtol´, split, warn)
+    subbands = subbands_precompilable(hf, solvers, basemesh, showprogress, defects´, patches, degtol´, split, warn, projectors)
     return subbands
 end
 
@@ -106,8 +107,8 @@ sanitize_mapping((xs, nodes)::Pair, ::Val{L}) where {L} =
 sanitize_mapping((xs, nodes)::Pair{X,S}, ::Val{L}) where {N,L,T,X<:NTuple{N,Real},S<:NTuple{N,SVector{L,T}}} =
     polygonpath(xs, nodes)
 
-function subbands_precompilable(solvers::Vector{A}, basemesh::Mesh{SVector{L,T}},
-    showprogress, defects, patches, degtol, split, warn) where {T,L,A<:AppliedEigenSolver{T,L}}
+function subbands_precompilable(hf::FunctionWrapper, solvers::Vector{A}, basemesh::Mesh{SVector{L,T}},
+    showprogress, defects, patches, degtol, split, warn, projectors) where {T,L,A<:AppliedEigenSolver{T,L}}
 
     basemesh = copy(basemesh) # will become part of Band, possibly refined
     eigens = Vector{EigenComplex{T}}(undef, length(vertices(basemesh)))
@@ -118,9 +119,9 @@ function subbands_precompilable(solvers::Vector{A}, basemesh::Mesh{SVector{L,T}}
     crossed = NTuple{6,Int}[]
     frustrated = similar(crossed)
     subbands = Subband{T,L+1}[]
-    data = (; basemesh, eigens, bandverts, bandneighs, bandneideg, coloffsets, solvers, L,
-              crossed, frustrated, subbands, defects, patches, showprogress, degtol, split,
-              warn)
+    data = (; hf, solvers, basemesh, eigens, bandverts, bandneighs, bandneideg, coloffsets,
+              L, crossed, frustrated, subbands, defects, patches, showprogress, degtol,
+              split, warn, projectors)
 
     # Step 1 - Diagonalize:
     # Uses multiple SpectrumSolvers (one per Julia thread) to diagonalize h at each
@@ -141,8 +142,17 @@ function subbands_precompilable(solvers::Vector{A}, basemesh::Mesh{SVector{L,T}}
         subbands_patch!(data)
     end
 
-    # Step 4 - Split subbands
+    # Step 4 - Split subbands:
+    # Split disconnected subgraphs, rebuild their neighbor lists and convert to Subbands.
+    # As part of the Subband conversion, subband simplices are computed.
     subbands_split!(data)
+
+    # Step 5 - Compute projectors:
+    # Each simplex s has a continuous matrix Fₛ(k) = ψₛ(k)ψₛ(k)⁺ that interpolates between
+    # the Fₛ(kᵢ) at each vertex i. We compute Pˢᵢ such that F(kᵢ) = φₛ(kᵢ)*Pˢᵢ*φₛ(kᵢ)⁺ for
+    # any vertex i of s with a degenerate eigenbasis φ(kᵢ). Non-degenerate vertices have P=1
+    # Required to use a Bandstructure as a GreenSolver
+    subband_projectors!(data)
 
     return subbands
 end
@@ -285,6 +295,8 @@ end
 
 ############################################################################################
 # subbands_knit!
+#   Take two eigenpair columns connected on basemesh, and add edges between closest
+#   eigenpair using projections (svd).
 #region
 
 function subbands_knit!(data)
@@ -354,6 +366,7 @@ column_range(data, ibase) = data.coloffsets[ibase]+1:data.coloffsets[ibase+1]
 
 ############################################################################################
 # subbands_patch!
+#   Remove dislocations in mesh edges by edge splitting (adding patches)
 #region
 
 function subbands_patch!(data)
@@ -505,6 +518,9 @@ end
 
 ############################################################################################
 # subbands_split!
+#   We have vertex neighbors (data.bandneighs). Now we need to use these to cluster vertices
+#   into disconnected subbands (i.e. vertex `subsets`). Once we have these, split vertices
+#   into separate lists and rebuild neighbors using indices of these new lists
 #region
 
 function subbands_split!(data)
@@ -538,130 +554,78 @@ end
 #endregion
 
 ############################################################################################
-# simplex_states!
-#   append coordinates pᵢ of interpolating vertex states ψᵢ=φᵢpᵢ for each simplex in simps
-#   Method: compute SVD of projection φ₀'φᵢ, choosing singular_vals > √min_squared_overlap
-#     for i ∈ 1:D´, updating the projector p₀ at each step. Then repeat backward, i ∈ D´-1:1
-#     updating pᵢ and p₀ at each step. If at any point no singular_val is chosen, abort with
-#     all pᵢ empty (zero columns).
-#   Related: connection_rank(proj)
+# subband_projectors!(s::Subband, hf::Function)
+#   Fill dictionary of projector matrices for each degenerate vertex in each simplex of s
+#       Dict([(simp_index, vert_index) => P::Matrix])
+#   such that P = U PD U'. U columns are eigenstates of φᵢ hf(k_av) φᵢ⁺, i = vert_index,
+#   φᵢ are vertex eigenstate matrices, k_av is the basecoordinate at the center of the
+#   simplex, and PD is a Diagonal{Bool} that filters out M columns of U, so that only
+#   deg_simplex = minimum(deg_verts) remain. The criterion to filter out the required
+#   eigenstates is to order them is decreasing energy distance between their eigenvalue ε_av
+#   and the simplex mean energy mean(ε_j). No φᵢ overlap criterion is used because we need
+#   to fix the exact number of eliminations.
 #region
 
-# simplex_states(s::Subband) = simplex_states(mesh(s))
-
-# simplex_states(m::Mesh) = simplex_states(vertices(m), simplices(m))
-
-# function simplex_states(verts::Vector{BandVertex{T,D´}}, simps::Vector) where {T,D´}
-#     simpstates = NTuple{D´,Matrix{Complex{T}}}[]
-#     simplex_states!(simpstates, verts, simps)
-#     return simpstates
-# end
-
-# function simplex_states!(simpstates, verts, simps::Vector)
-#     for simp in simps
-#         simplex_states!(simpstates, verts, simp)
-#     end
-#     return simpstates
-# end
-
-# function simplex_states!(simpstates, verts::Vector{BandVertex{T,D´}}, simp::NTuple{D´,Int}) where {T,D´}
-#     φ0, φs... = ntuple(i -> states(verts[simp[i]]), Val(D´))
-#     ps = [Matrix{Complex{T}}(I, size(φ, 2), size(φ, 2)) for φ in (φ0, φs...)]
-#     projs = Ref(φ0') .* φs
-#     D = D´ - 1
-#     for i in 1:D
-#         update_projectors!(ps, projs, i)
-#     end
-#     for i in reverse(D-1:1)
-#         update_projectors!(ps, projs, i)
-#     end
-#     push!(simpstates, NTuple{D´}(ps))
-#     return simpstates
-# end
-
-# function update_projectors!(ps, projs, i)
-#     p0, p = ps[1], ps[i+1]
-#     if iszero(size(p0, 2))
-#         ps[i+1] = p0
-#         return ps
-#     end
-#     proj = p0' * projs[i] * p  # proj = p₀'φ₀'φᵢpᵢ = ψ₀'ψᵢ
-#     U, S, V = svd!(proj)        # proj = U Diagonal(S) V'
-#     min_squared_overlap = 0.5
-#     cols = filter(s -> S[s]^2 > min_squared_overlap, eachindex(S))
-#     p0 = p0 * view(U, :, cols)
-#     p = p * view(V, :, cols)
-#     ps[1], ps[i+1] = p0, p
-#     return ps
-# end
-
-#endregion
-
-############################################################################################
-# simplex_projectors
-#   Build projectors Pᵢ = pᵢp₀⁺ of interpolating vertex states ψᵢ=φᵢpᵢ inside each simplex
-#   Method: compute SVD of projection Qᵢ = φᵢ'φ₀, with singular_vals > min_squared_overlap
-#     for i ∈ 1:D´, updating the projector p₀, pᵢ at each step. Then repeat backward,
-#     for i ∈ D´-1:1, again updating pᵢ and p₀ at each step.
-#   Related: connection_rank(proj)
-#region
-
-simplex_projectors(s::Subband) = simplex_projectors(mesh(s))
-
-simplex_projectors(m::Mesh) = simplex_projectors(vertices(m), simplices(m))
-
-simplex_projectors(verts, simps::Vector) = [simplex_projectors(verts, s) for s in simps]
-
-# This implements pᵢp₀⁺ preallocating and reusing memory as much as possible
-# At each sweep it stores and updates p₀, pᵢ and Qᵢ = pᵢ⁺φᵢ'φ₀p₀
-function simplex_projectors(verts::Vector{BandVertex{T,D´}}, simp::NTuple{D´}) where {T,D´}
-    φ₀, φs... = ntuple(i -> states(verts[simp[i]]), Val(D´))
-    d₀ = size(φ₀, 2)
-    Qs = adjoint.(φs) .* Ref(φ₀)               # Qs[i] : dᵢ × d₀
-    Mᵢ₀ = similar.(Qs)                         # Mᵢ₀[i]: dᵢ × d₀    (prealloc)
-    M₀₀ = similar.(Qs, d₀, d₀)                 # M₀₀[i]: d₀ × d₀    (prealloc)
-    @assert all(ϕ -> size(ϕ, 2) >= d₀, φs)     # d₀ <= dᵢ
-    p₀⁺ = Matrix{Complex{T}}(undef, d₀, d₀)
-    p₀⁺´= similar(p₀⁺)
-    D = D´ - 1
-    for i in 1:D                                # Forward pass
-        Q, m₀₀, mᵢ₀ = Qs[i], M₀₀[i], Mᵢ₀[i]     # m₀₀ and mᵢ₀ are preallocations
-        Q´ = i == 1 ? copy!(mᵢ₀, Q) : mul!(mᵢ₀, Q, p₀⁺')                      # Q = Q p₀
-        U, V´ = filtered_projectors!(Q´)         # U: dᵢ×d₀, V´: d₀×d₀  (d₀ <= dᵢ)
-        i == 1 ? copy!(p₀⁺´, V´) : mul!(p₀⁺´, V´, p₀⁺)
-        p₀⁺, p₀⁺´ = p₀⁺´, p₀⁺                   # p₀⁺ = V´ p₀⁺
-        mul!(m₀₀, U', mul!(mᵢ₀, Q, V´'))        # M₀₀[i] = pᵢ⁺ Qs[i] p₀  (d₀ × d₀)
-        copy!(mᵢ₀, U)                           # Mᵢ₀[i] = pᵢ = U        (dᵢ × d₀)
-    end
-    for i in reverse(D-1:1)                     # Backward pass
-        Q, pᵢ = M₀₀[i], Mᵢ₀[i]                  # Q = pᵢ⁺ Qs[i] p₀
-        U, V´ = filtered_projectors!(Q)
-        mul!(p₀⁺´, V´, p₀⁺)
-        p₀⁺, p₀⁺´ = p₀⁺´, p₀⁺                   # p₀⁺ = V´ p₀⁺
-        mul!(Qs[i], pᵢ, U)                      # Qs[i] = pᵢ
-    end
-    P₀ = mul!(p₀⁺´, p₀⁺', p₀⁺)                  # P0 = p₀ p₀⁺
-    Ps = mul!.(Mᵢ₀, Qs, Ref(p₀⁺))               # Pᵢ = pᵢ p₀⁺
-    projectors = (P₀, Ps...)
-    return projectors
-end
-
-# filtered_projectors!(Q) =
-#     size(Q) == (1, 1) ? filtered_projectors_fast!(only(Q)) : filtered_projectors_svd!(Q)
-
-function filtered_projectors!(Q)
-    s = svd!(Q, alg = LinearAlgebra.QRIteration())
-    U, S, V´ = s.U, s.S, s.Vt
-    min_squared_overlap = 0.5
-    for i in reverse(eachindex(S))
-        if S[i]^2 < min_squared_overlap
-            U[:, i] .= 0
-            V´[i, :] .= 0
-        else
-            break
+function subband_projectors!(data)
+    nsimps = sum(s -> length(simplices(s)), data.subbands)
+    meter = Progress(nsimps, "Step 5 - Projectors: ")
+    if data.projectors
+        for s in data.subbands
+            subband_projectors!(s, data.hf, meter, data.showprogress)
         end
     end
-    return U, V´
+    return data
+end
+
+function subband_projectors!(s::Subband{T}, hf, meter, showprogress) where {T}
+    projs = projectors(s)
+    isempty(projs) || return s
+    verts = vertices(s)
+    simps = simplices(s)
+    # a random symmetry-breaking perturbation common to all simplices
+    perturbation = Complex{T}[]
+    for (sind, simp) in enumerate(simps)
+        degs = degeneracy.(getindex.(Ref(verts), simp))
+        if any(>(1), degs)
+            kav = mean(i -> base_coordinates(verts[i]), simp)
+            εav = mean(i -> energy(verts[i]), simp)
+            hkav = hf(kav)
+            nzs = nonzeros(hkav)
+            nnzs = length(nzs)
+            nnzs == length(perturbation) || resize_perturbation!(perturbation, nnzs)
+            nzs .+= perturbation
+            mindeg = minimum(degs)
+            for (vind, deg) in zip(simp, degs)
+                if deg > 1  # diagonalize vertex even if all degs are equal and > 1
+                    p = simplex_projector(hkav, verts, vind, εav, mindeg)
+                    projs[(sind, vind)] = p
+                end
+            end
+        end
+        showprogress && ProgressMeter.next!(meter)
+    end
+    return projs
+end
+
+function resize_perturbation!(p::Vector{C}, n) where {C}
+    l = length(p)
+    @assert n > l   # perturbation length should not decrease
+    resize!(p, n)
+    η = sqrt(eps(real(C)))  # makes the perturbation small
+    for i in l+1:n
+        p[i] = η * rand(C)
+    end
+    return p
+end
+
+function simplex_projector(hkav, verts, vind, εav, mindeg)
+    φ = states(verts[vind])
+    vdeg = size(φ, 2)
+    hproj = φ' * hkav * φ
+    _, U = eigen!(Hermitian(hproj), sortby = ε -> abs(ε - εav))
+    view(U, :, mindeg+1:vdeg) .= 0  # U = U * PD. Keep only mindeg closest states
+    P = mul!(hproj, U, U')  # reuse hproj. It's safe, not aliased with U in eigen!
+    return P
 end
 
 #endregion

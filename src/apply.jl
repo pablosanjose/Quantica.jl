@@ -219,7 +219,7 @@ function apply(solver::AbstractEigenSolver, h::AbstractHamiltonian, ::Type{S}, m
     h´ = minimal_callsafe_copy(h)
     # Some solvers (e.g. ES.LinearAlgebra) only accept certain matrix types
     # so this mat´ could be an alias of the call! output, or an unaliased conversion
-    mat´ = ES.input_matrix(solver, h´)
+    mat´ = ES.input_matrix(solver, h)
     function sfunc(φs)
         φs´ = apply_map(mapping, φs)    # this can be a FrankenTuple
         mat = call!(h´, φs´)
@@ -235,7 +235,7 @@ end
 
 function apply(solver::AbstractEigenSolver, hf::Function, ::Type{S}, mapping, transform) where {T<:Real,S<:SVector{<:Any,T}}
     function sfunc(φs)
-        φs´ = apply_map(mapping, φs)
+        φs´ = apply_map(mapping, φs)    # can be a FrankenTuple, should be accepted by hf
         mat = hf(φs´)
         eigen = solver(mat)
         apply_transform!(eigen, transform)
@@ -258,6 +258,26 @@ end
 
 apply_map(::Missing, φs) = φs
 apply_map(mapping, φs) = mapping(Tuple(φs)...)
+
+function apply_map(mapping, h::AbstractHamiltonian{T}, ::Type{S}) where {T,S<:SVector}
+    function sfunc(φs)
+        h´ = minimal_callsafe_copy(h)
+        φs´ = apply_map(mapping, φs)    # can be a FrankenTuple
+        mat = call!(h´, φs´)
+        return mat
+    end
+    return FunctionWrapper{SparseMatrixCSC{Complex{T},Int},Tuple{S}}(sfunc)
+end
+
+function apply_map(mapping, hf::Function, ::Type{S}) where {T,S<:SVector{T}}
+    function sfunc(φs)
+        φs´ = apply_map(mapping, φs)    # can be a FrankenTuple, should be accepted by hf
+        mat = hf(φs´)
+        return mat
+    end
+    return FunctionWrapper{SparseMatrixCSC{Complex{T},Int},Tuple{S}}(sfunc)
+end
+
 
 #endregion
 

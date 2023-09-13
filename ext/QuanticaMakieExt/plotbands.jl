@@ -99,7 +99,7 @@ end
 function bandprimitives!(mp, mesh, s, (hue, opacity, size))
     offset = length(mp.verts)
     append!(mp.simps, offset .+ reinterpret(Int, Quantica.simplices(mesh)))
-    for vert in Quantica.vertices(mesh)
+    for (ivert, vert) in enumerate(Quantica.vertices(mesh))
         ψ = Quantica.states(vert)
         kϵ = Quantica.coordinates(vert)
         k = Quantica.base_coordinates(vert)
@@ -108,7 +108,7 @@ function bandprimitives!(mp, mesh, s, (hue, opacity, size))
         push_subbandhue!(mp, hue, ψ, ϵ, k, s)
         push_subbandopacity!(mp, opacity, ψ, ϵ, k, s)
         push_subbandsize!(mp, size, ψ, ϵ, k, s)
-        push_subbandtooltip!(mp, ψ, ϵ, k, s)
+        push_subbandtooltip!(mp, ψ, ϵ, k, s, ivert)
     end
     return mp
 end
@@ -141,8 +141,8 @@ push_subbandsize!(mp, size::Real, ψ, ϵ, k, s) = push!(mp.sizes, size)
 push_subbandsize!(mp, size::Function, ψ, ϵ, k, s) = push!(mp.sizes, size(ψ, ϵ, k))
 push_subbandsize!(mp, size, ψ, ϵ, k, s) = argerror("Unrecognized size")
 
-push_subbandtooltip!(mp, ψ, ϵ, k, s) =
-    push!(mp.tooltips, "Subband $s:\n k = $k\n ϵ = $ϵ\n degeneracy = $(size(ψ, 2))")
+push_subbandtooltip!(mp, ψ, ϵ, k, s, iv) =
+    push!(mp.tooltips, "Subband $s, vertex $iv:\n k = $k\n ϵ = $ϵ\n degeneracy = $(size(ψ, 2))")
 
 ## update_color! ##
 
