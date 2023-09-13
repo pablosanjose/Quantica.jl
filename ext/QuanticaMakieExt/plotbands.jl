@@ -7,11 +7,11 @@
         colormap = :Spectral_9,
         color = missing,
         opacity = 1.0,
-        size = 3,
+        size = 2,
         minmaxsize = (0,6),
         nodesizefactor = 4,
         nodedarken = 0.0,
-        hide = ()   # :nodes, :bands
+        hide = ()   # :nodes, :bands, :wireframe
     )
 end
 
@@ -212,7 +212,13 @@ function plotmeshes!(plot, mp::MeshPrimitives{<:Any,3})
     transparency = has_transparencies(plot[:opacity][])
     if !ishidden((:bands, :subbands), plot)
         simps = simplices_matrix(mp)
-        mesh!(plot, mp.verts, simps; color = mp.colors, inspectable = false, transparency)
+        if !ishidden((:wireframe, :simplices), plot)
+            color´ = darken.(mp.colors, plot[:nodedarken][])
+            poly!(plot, mp.verts, simps; color = mp.colors, inspectable = false, transparency,
+                 strokewidth = plot[:size][], shading = true)
+        else
+            mesh!(plot, mp.verts, simps; color = mp.colors, inspectable = false, transparency)
+        end
     end
     if !ishidden((:nodes, :points, :vertices), plot)
         inspector_label = (self, i, r) -> mp.tooltips[i]
