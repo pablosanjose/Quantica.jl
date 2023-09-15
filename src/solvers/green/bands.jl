@@ -67,12 +67,21 @@ Base.transpose(d::Series) = d  # act as a scalar
 
 Base.:+(d::Series, d´::Series) = trim_and_map(+, d, d´)
 Base.:-(d::Series, d´::Series) = trim_and_map(-, d, d´)
+Base.:+(d::Number, d´::Series{N}) where {N} = Series{N}(d) + d´
+Base.:-(d::Number, d´::Series{N}) where {N} = Series{N}(d) - d´
 Base.:*(d::Number, d´::Series) = Series(d * d´.x, d´.pow)
 Base.:*(d´::Series, d::Number) = Series(d * d´.x, d´.pow)
 Base.:/(d::Series{N}, d´::Series{N}) where {N} = d * inv(d´)
 Base.:/(d::Series, d´::Number) = Series(d.x / d´, d.pow)
 
 function Base.:*(d::Series{N}, d´::Series{N}) where {N}
+    x, x´ = promote(d.x, d´.x)
+    dp = Series(x, d.pow)
+    dp´ = Series(x´, d´.pow)
+    return dp * dp´
+end
+
+function Base.:*(d::Series{N,T}, d´::Series{N,T}) where {N,T}
     iszero(d´) && return d´
     f, f´ = trim(d), trim(d´)
     pow = f.pow + f´.pow
@@ -116,8 +125,7 @@ struct BandSimplex{D,T,S1,S2,S3,SU<:SMatrix{D,D,T}}     # D = manifold dimension
     kij::S2       # kᵢ[j]::SMatrix{D´,D,T,DD´} = coordinate j of momentum for vertex i
     eij::S3       # ϵᵢʲ::SMatrix{D´,D´,T,D´D´} = e_j - e_i
     U⁻¹::SU       # inv(Uᵢⱼ) for Uᵢⱼ::SMatrix{D,D,T,DD} = kⱼ[i] - k₀[i] (edges as cols)
-    Q⁻¹::SU       # Q::SMatrix{D,D,T,DD} = cols are basis of shift vectors δrᵝ
-    phi´::S2      # kij * Q
+    phi´::S1      # first hyperdual coefficient of φ
     w::SVector{D,T} # U⁻¹ * k₀
     VD::T         # D!V = |det(U)|
 end
@@ -137,62 +145,54 @@ function BandSimplex(ei::SVector{D´}, kij::SMatrix{D´,D,T}) where {D´,D,T}
     U⁻¹ = inv(U)
     VD = abs(det(U))
     w = U⁻¹ * k0
-    Q = generate_Q(eij, kij)                    # Q is unitary
-    phi´ = kij * Q
-    Q⁻¹ = Q'
-    return BandSimplex(ei, kij, eij, U⁻¹, Q⁻¹, phi´, w, VD)
+    phi´ = generate_phi´(eij)
+    return BandSimplex(ei, kij, eij, U⁻¹, phi´, w, VD)
 end
 
-function generate_Q(eij, kij::SMatrix{<:Any,D,T}) where {D,T}
-    Q = one(SMatrix{D,D,T})
-    iszero(eij) && return Q
-    while !is_valid_Q(Q, eij, kij)
-        Q = first(qr(rand(SMatrix{D,D,T})))
+function generate_phi´(eij::SMatrix{D´,D´,T}) where {D´,T}
+    phi´ = rand(SVector{D´,T})
+    iszero(eij) && return phi´
+    while !is_valid_phi´(phi´, eij)
+        phi´ = rand(SVector{D´,T})
     end
-    return Q
+    return phi´
 end
 
-function is_valid_Q(Q, es, ks)
-    for qβ in eachcol(Q)
-        phi = ks * qβ
-        phis = phi' .- phi
-        for j in axes(es, 2), k in axes(es, 1), l in axes(es, 1)
-            l != k != j && l != k || continue
-            eʲₖ = es[k,j]
-            eʲₗ = es[l,j]
-            (iszero(eʲₖ) || iszero(eʲₗ)) && continue
-            phis[k, j] * eʲₗ ≈ eʲₖ * phis[l, j] && return false
-        end
+# check whether iszero(eʲₖφʲₗ - φʲₖeʲₗ) for nonzero e's
+function is_valid_phi´(phi, es)
+    phis = phi' .- phi
+    for j in axes(es, 2), k in axes(es, 1), l in axes(es, 1)
+        l != k != j && l != k || continue
+        eʲₖ = es[k,j]
+        eʲₗ = es[l,j]
+        (iszero(eʲₖ) || iszero(eʲₗ)) && continue
+        eʲₖ * phis[l, j] ≈ phis[k, j] * eʲₗ && return false
     end
     return true
 end
 
-#endregion
-
-############################################################################################
-# BandSimplexSubspace: basis of subspaces at each vertex that interpolate inside simplex
-#region
-
-struct BandSimplexSubspace{D,N,S<:SMatrix{<:Any,N},M<:MatrixView,X<:BandSimplex{D}}
-    simplex::X
-    states::Tuple{M,Vararg{M,D}}  # basis of degenerate states at each vertex
-    coords::Tuple{S,Vararg{S,D}}  # an s::Smatrix per vertex such that states * s = subspace
-end
-
-function BandSimplexSubspace(vs::NTuple{D´,BandVertex{T,D´}}) where {D´,T}
-    cs = coordinates.(vs)
-    es = energy.(cs)
-    ks = base_coordinates.(cs)
-    simplex = BandSimplex(es, ks)
-    states´ = states.(vs)
-    coords = simplexsubspace(states´)
-    return BandSimplexSubspace(simplex, states´, coords)
+function g_integrals(s::BandSimplex, ω, dn)
+    # g0, gi = if iszero(dn)
+    #     if any(iszero, s.eij)
+    #         g_integrals_local_series(s, ω, dn)
+    #     else
+    #         g_integrals_local(s, ω, dn)
+    #     end
+    # else
+    #     if any(iszero, dn)
+    #         g_integrals_nonlocal_series(s, ω, dn)
+    #     else
+    #         g_integrals_nonlocal(s, ω, dn)
+    #     end
+    # end
+    g0, gi = g_integrals_nonlocal_series(s, ω, dn)
+    return g0, gi
 end
 
 #endregion
 
 ############################################################################################
-# g0(ω) and g_j(ω) for a BandSimplex{D}, with D´ = D + 1
+# g_integrals_nonlocal_series: g0(ω) and g_j(ω) with hyperdual numbers for φ
 #region
 
 struct Expansions{N,TC<:NTuple{N},TJ,SJ}
@@ -213,45 +213,93 @@ function Expansions(::Val{N´}, ::Type{T}) where {N´,T}  # here N´ = N-1
     return Expansions(cis, J0, Jmat)
 end
 
-# OPTIM: could perhaps dispatch to Val(2) in the case with no degeneracies?
-g_simplex(s::BandSimplex{D}, ω, dn) where {D} = g_simplex(s, ω, dn, Val(D+1))
+g_integrals_nonlocal_series(s::BandSimplex{D}, ω, dn) where {D} =
+    g_integrals_nonlocal_series(s, ω, dn, Val(D+1))
 
-function g_simplex(s::BandSimplex{D,T}, ω, dn, ::Val{N}) where {D,T,N}
-    gβ = ntuple(Val(D)) do β
-        ϕ´verts = s.phi´[:, β]
-        ex = Expansions(Val(N-1), T)
-        g_simplex(s, ω, dn, ϕ´verts, ex)
-    end
-    g0, g1 = first(first(gβ)), last.(gβ)
-    # gk should be SVector(g1)' * s.Q⁻¹, but we return the transpose
-    gk = s.Q⁻¹' * SVector(g1)
-    return g0, gk
-end
-
-function g_simplex(s::BandSimplex{D,T}, ω::Number, dn::SVector{D}, ϕ´verts::SVector, ex::Expansions{N}) where {D,T,N}
-    # phases ϕverts[j+1] will be perturbed by ϕ´verts[j+1]*dϕ, for j in 0:D
-    # Similartly, ϕedges[j+1,k+1] will be perturbed by ϕ´edges[j+1,k+1]*dϕ
-    ϕ´edges = ϕ´verts' .- ϕ´verts
-    ϕverts0 = s.kij * dn
-    ϕverts = Series{N}.(ϕverts0, ϕ´verts)
-    ϕedges = Series{N}.(chop.(ϕverts0' .- ϕverts0), ϕ´edges)
-    Δverts = ω .- s.ei
-    eedges = s.eij
-    zedges = zkj_series.(ϕedges, eedges)
-    eϕ = cis_series.(ϕverts, Ref(ex))
-    γα = γα_series(ϕedges, zedges, eedges)            # SMatrix{D´,D´}
-    if iszero(eedges)                                 # special case, full energy degeneracy
-        Δ0 = chop(first(Δverts))
-        eγαJ = iszero(Δ0) ? zero(Series{N,complex(T)}) :  im * sum(γα[1,:] .* eϕ) / Δ0
+function g_integrals_nonlocal_series(s::BandSimplex{D,T}, ω::Number, dn::SVector{D}, ::Val{N}) where {D,T,N}
+    ex = Expansions(Val(N-1), T)
+    # phases ϕ₀ʲ[j+1] will be perturbed by ϕ₀ʲ´[j+1]*dϕ, for j in 0:D
+    # Similartly, ϕₖʲ[j+1,k+1] will be perturbed by ϕₖʲ´[j+1,k+1]*dϕ
+    eⱼ  = s.ei
+    eₖʲ = s.eij
+    Δⱼ  = ω .- eⱼ
+    ϕ₀ʲ  = s.kij * dn
+    ϕ₀ʲ´ = s.phi´
+    ϕₖʲ  = chop.(ϕ₀ʲ' .- ϕ₀ʲ)
+    ϕₖʲ´ = chop.(ϕ₀ʲ´' .- ϕ₀ʲ´)
+    ϕ₀ʲseries = Series{N}.(ϕ₀ʲ, ϕ₀ʲ´)
+    ϕₖʲseries = Series{N}.(ϕₖʲ, ϕₖʲ´)
+    tₖʲ = divide_if_nonzero.(ϕₖʲseries, eₖʲ)
+    eϕⱼ  = cis_series.(ϕ₀ʲseries, Ref(ex))          # cis(ϕ₀ʲ)
+    αₖʲγⱼ  = αγ_series(ϕₖʲseries, tₖʲ, eₖʲ)         # αₖʲγⱼ :: SMatrix{D´,D´}
+    if iszero(eₖʲ)                                  # special case, full energy degeneracy
+        Δ0 = chop(first(Δⱼ))
+        if iszero(Δ0)
+            g0 = zero(Series{N,complex(T)})
+            gj = SVector(ntuple(Returns(g0), Val(D)))
+        else
+            Δ0⁻¹ = inv(Δ0)
+            γⱼ = αₖʲγⱼ[1,:]                         # if eₖʲ == 0, then αₖʲ == 1
+            λⱼ = γⱼ .* eϕⱼ
+            λₖʲ = λⱼ ./ ϕₖʲseries
+            q = (-im)^D * s.VD * Δ0⁻¹
+            g0 = q * sum(λⱼ)
+            gj = ntuple(Val(D)) do j
+                q * trim(chop(λⱼ[j+1] + im * sum(λₖʲ[:,j+1] - transpose(λₖʲ)[:,j+1])))
+            end |> SVector
+        end
     else
-        J = J_series.(zedges, eedges, transpose(Δverts), Ref(ex))  # SMatrix{D´,D´}
-        eγαJ = sum(γα .* J .* transpose(eϕ))              # manual contraction is slower!
+        αₖʲγⱼeϕⱼ = αₖʲγⱼ .* transpose(eϕⱼ)          # αₖʲγⱼeϕⱼ :: SMatrix{D´,D´}
+        Jₖʲ = J_series.(tₖʲ, eₖʲ, transpose(Δⱼ), Ref(ex))  # Jₖʲ :: SMatrix{D´,D´}
+        αₖʲγⱼeϕⱼJₖʲ = αₖʲγⱼeϕⱼ .* Jₖʲ
+        Λⱼ = sum(αₖʲγⱼeϕⱼJₖʲ, dims = 1)
+        Λⱼsum = sum(Λⱼ)                             # αₖʲγⱼJʲₖ (manual contraction slower!)
+        Λₖʲ = Λ_series(eₖʲ, ϕₖʲseries, Λⱼ, Δⱼ, tₖʲ, αₖʲγⱼeϕⱼ, Jₖʲ)
+        q´ = (-im)^(D+1) * s.VD
+        g0 = q´ * trim(chop(Λⱼsum))
+        gj = ntuple(Val(D)) do j
+            q´ * trim(chop(Λⱼ[j+1] + im * sum(Λₖʲ[:,j+1] - transpose(Λₖʲ)[:,j+1])))
+        end |> SVector
     end
-    gsum = (-im)^(D+1) * s.VD * trim(chop(eγαJ))
-    return gsum[0], gsum[1]
+    return g0, gj
 end
 
-zkj_series(ϕ, e) = iszero(e) ? ϕ : ϕ/e
+divide_if_nonzero(a, b) = iszero(b) ? a : a/b
+
+function Λ_series(eₖʲ::SMatrix{D´}, ϕₖʲ, Λⱼ, Δⱼ, tₖʲ, αₖʲγⱼeϕⱼ, Jₖʲ) where {D´}
+    js = ks = SVector{D´}(1:D´)
+    kjs = Tuple(tuple.(ks, js'))
+    Λₖʲtup = ntuple(Val(D´*D´)) do i
+        (k,j) = kjs[i]
+        Λ_series((k,j), ϕₖʲ[k,j], Λⱼ[j], Δⱼ[j], eₖʲ, tₖʲ, αₖʲγⱼeϕⱼ, Jₖʲ)
+    end
+    Λₖʲ = SMatrix{D´,D´}(Λₖʲtup)
+    return Λₖʲ
+end
+
+function Λ_series((k, j), ϕₖʲ, Λⱼ, Δⱼ, emat::SMatrix{D´,D´,T}, tmat, αγeϕmat, Jmat) where {D´,T}
+    Λₖʲ = zero(typeof(Λⱼ))
+    j == k && return Λₖʲ
+    eₖʲ = emat[k,j]
+    if iszero(eₖʲ)
+        Λₖʲ = Λⱼ / ϕₖʲ
+    else
+        tₖʲ = tmat[k,j]
+        Jₖʲ = Jmat[k,j]
+        for l in 1:D´
+            if !iszero(emat[l,j])
+                tₗʲ = tmat[l,j]
+                Jₗʲ = Jmat[l,j]
+                if tₗʲ == tₖʲ
+                    Λₖʲ -= (αγeϕmat[l, j] / eₖʲ) * (inv(tₗʲ) + im * Δⱼ * Jₗʲ)
+                else
+                    Λₖʲ -= (αγeϕmat[l, j] / eₖʲ) * (Jₗʲ - Jₖʲ) * inv(tₗʲ - tₖʲ)
+                end
+            end
+        end
+    end
+    return Λₖʲ
+end
 
 @inline function cis_series(z::Series{N}, ex) where {N}
     @assert iszero(z.pow)
@@ -263,7 +311,7 @@ end
 # Series of cis(ϕ)
 cis_series(ϕ::Real, ex) = cis(ϕ) * Series(ex.cis)
 
-@inline function γα_series(ϕedges::S, zedges::S, eedges::SMatrix{D´,D´}) where {N,T,D´,S<:SMatrix{D´,D´,Series{N,T}}}
+@inline function αγ_series(ϕedges::S, zedges::S, eedges::SMatrix{D´,D´}) where {N,T,D´,S<:SMatrix{D´,D´,Series{N,T}}}
     # js = ks = SVector{D´}(1:D´)
     # α⁻¹ = α⁻¹_series.(js', ks, Ref(zedges), Ref(eedges))
     # γ⁻¹ = γ⁻¹_series.(js', Ref(ϕedges), Ref(eedges))
