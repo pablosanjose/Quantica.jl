@@ -29,6 +29,8 @@ end
 
 chop(d::Series) = Series(chop.(d.x), d.pow)
 
+trim(x::Number) = x
+
 function trim(d::Series{N}) where {N}
     nz = leading_zeros(d)
     iszero(nz) && return d
@@ -50,6 +52,9 @@ function trim_and_map(func, d::Series{N}, d´::Series{N}) where {N}
     t = ntuple(i -> func(f[pow + i - 1], f´[pow + i - 1]), Val(N))
     return Series(t, pow)
 end
+
+scalar(d::Series) = d[0]
+scalar(d) = d
 
 Base.first(d::Series) = first(d.x)
 
@@ -185,7 +190,8 @@ function g_integrals(s::BandSimplex, ω, dn)
     #         g_integrals_nonlocal(s, ω, dn)
     #     end
     # end
-    g0, gi = g_integrals_nonlocal_series(s, ω, dn)
+    # g0, gi = g_integrals_nonlocal_series(s, ω, dn)
+    g0, gi = g_integrals_nonlocal(s, ω, dn)
     return g0, gi
 end
 
@@ -213,35 +219,226 @@ function Expansions(::Val{N´}, ::Type{T}) where {N´,T}  # here N´ = N-1
     return Expansions(cis, J0, Jmat)
 end
 
-g_integrals_nonlocal_series(s::BandSimplex{D}, ω, dn) where {D} =
-    g_integrals_nonlocal_series(s, ω, dn, Val(D+1))
+# g_integrals_nonlocal_series(s::BandSimplex{D}, ω, dn) where {D} =
+#     g_integrals_nonlocal_series(s, ω, dn, Val(D+1))
 
-function g_integrals_nonlocal_series(s::BandSimplex{D,T}, ω::Number, dn::SVector{D}, ::Val{N}) where {D,T,N}
-    ex = Expansions(Val(N-1), T)
-    # phases ϕ₀ʲ[j+1] will be perturbed by ϕ₀ʲ´[j+1]*dϕ, for j in 0:D
-    # Similartly, ϕₖʲ[j+1,k+1] will be perturbed by ϕₖʲ´[j+1,k+1]*dϕ
+# function g_integrals_nonlocal_series(s::BandSimplex{D,T}, ω::Number, dn::SVector{D}, ::Val{N}) where {D,T,N}
+#     ex = Expansions(Val(N-1), T)
+#     # phases ϕ₀ʲ[j+1] will be perturbed by ϕ₀ʲ´[j+1]*dϕ, for j in 0:D
+#     # Similartly, ϕₖʲ[j+1,k+1] will be perturbed by ϕₖʲ´[j+1,k+1]*dϕ
+#     eⱼ  = s.ei
+#     eₖʲ = s.eij
+#     Δⱼ  = ω .- eⱼ
+#     ϕ₀ʲ  = s.kij * dn
+#     ϕ₀ʲ´ = s.phi´
+#     ϕₖʲ  = chop.(ϕ₀ʲ' .- ϕ₀ʲ)
+#     ϕₖʲ´ = chop.(ϕ₀ʲ´' .- ϕ₀ʲ´)
+#     ϕ₀ʲseries = Series{N}.(ϕ₀ʲ, ϕ₀ʲ´)
+#     ϕₖʲseries = Series{N}.(ϕₖʲ, ϕₖʲ´)
+#     tₖʲ = divide_if_nonzero.(ϕₖʲseries, eₖʲ)
+#     eϕⱼ  = cis_series.(ϕ₀ʲseries, Ref(ex))          # cis(ϕ₀ʲ)
+#     αₖʲγⱼ  = αγ_series(ϕₖʲseries, tₖʲ, eₖʲ)         # αₖʲγⱼ :: SMatrix{D´,D´}
+#     if iszero(eₖʲ)                                  # special case, full energy degeneracy
+#         Δ0 = chop(first(Δⱼ))
+#         if iszero(Δ0)
+#             g0 = zero(Series{N,complex(T)})
+#             gj = SVector(ntuple(Returns(g0), Val(D)))
+#         else
+#             Δ0⁻¹ = inv(Δ0)
+#             γⱼ = αₖʲγⱼ[1,:]                         # if eₖʲ == 0, then αₖʲ == 1
+#             λⱼ = γⱼ .* eϕⱼ
+#             λₖʲ = λⱼ ./ ϕₖʲseries
+#             q = (-im)^D * s.VD * Δ0⁻¹
+#             g0 = q * sum(λⱼ)
+#             gj = ntuple(Val(D)) do j
+#                 q * trim(chop(λⱼ[j+1] + im * sum(λₖʲ[:,j+1] - transpose(λₖʲ)[:,j+1])))
+#             end |> SVector
+#         end
+#     else
+#         αₖʲγⱼeϕⱼ = αₖʲγⱼ .* transpose(eϕⱼ)          # αₖʲγⱼeϕⱼ :: SMatrix{D´,D´}
+#         Jₖʲ = J_series.(tₖʲ, eₖʲ, transpose(Δⱼ), Ref(ex))  # Jₖʲ :: SMatrix{D´,D´}
+#         αₖʲγⱼeϕⱼJₖʲ = αₖʲγⱼeϕⱼ .* Jₖʲ
+#         Λⱼ = sum(αₖʲγⱼeϕⱼJₖʲ, dims = 1)
+#         Λⱼsum = sum(Λⱼ)                             # αₖʲγⱼJʲₖ (manual contraction slower!)
+#         Λₖʲ = Λ_series(eₖʲ, ϕₖʲseries, Λⱼ, Δⱼ, tₖʲ, αₖʲγⱼeϕⱼ, Jₖʲ)
+#         q´ = (-im)^(D+1) * s.VD
+#         g0 = q´ * trim(chop(Λⱼsum))
+#         gj = ntuple(Val(D)) do j
+#             q´ * trim(chop(Λⱼ[j+1] + im * sum(Λₖʲ[:,j+1] - transpose(Λₖʲ)[:,j+1])))
+#         end |> SVector
+#     end
+#     return g0, gj
+# end
+
+# divide_if_nonzero(a, b) = iszero(b) ? a : a/b
+
+# function Λ_series(eₖʲ::SMatrix{D´}, ϕₖʲ, Λⱼ, Δⱼ, tₖʲ, αₖʲγⱼeϕⱼ, Jₖʲ) where {D´}
+#     js = ks = SVector{D´}(1:D´)
+#     kjs = Tuple(tuple.(ks, js'))
+#     Λₖʲtup = ntuple(Val(D´*D´)) do i
+#         (k,j) = kjs[i]
+#         Λ_series((k,j), ϕₖʲ[k,j], Λⱼ[j], Δⱼ[j], eₖʲ, tₖʲ, αₖʲγⱼeϕⱼ, Jₖʲ)
+#     end
+#     Λₖʲ = SMatrix{D´,D´}(Λₖʲtup)
+#     return Λₖʲ
+# end
+
+# function Λ_series((k, j), ϕₖʲ, Λⱼ, Δⱼ, emat::SMatrix{D´,D´,T}, tmat, αγeϕmat, Jmat) where {D´,T}
+#     Λₖʲ = zero(typeof(Λⱼ))
+#     j == k && return Λₖʲ
+#     eₖʲ = emat[k,j]
+#     if iszero(eₖʲ)
+#         Λₖʲ = Λⱼ / ϕₖʲ
+#     else
+#         tₖʲ = tmat[k,j]
+#         Jₖʲ = Jmat[k,j]
+#         for l in 1:D´
+#             if !iszero(emat[l,j])
+#                 tₗʲ = tmat[l,j]
+#                 Jₗʲ = Jmat[l,j]
+#                 if tₗʲ == tₖʲ
+#                     Λₖʲ -= (αγeϕmat[l, j] / eₖʲ) * (inv(tₗʲ) + im * Δⱼ * Jₗʲ)
+#                 else
+#                     Λₖʲ -= (αγeϕmat[l, j] / eₖʲ) * (Jₗʲ - Jₖʲ) * inv(tₗʲ - tₖʲ)
+#                 end
+#             end
+#         end
+#     end
+#     return Λₖʲ
+# end
+
+# @inline function cis_series(z::Series{N}, ex) where {N}
+#     @assert iszero(z.pow)
+#     c = cis_series(z[0], ex)
+#     # Go from dz differential to dϕ
+#     return rescale(c, z[1])
+# end
+
+# @inline function αγ_series(ϕedges::S, zedges::S, eedges::SMatrix{D´,D´}) where {D´,S<:SMatrix{D´,D´,<:Series}}
+#     # js = ks = SVector{D´}(1:D´)
+#     # α⁻¹ = α⁻¹_series.(js', ks, Ref(zedges), Ref(eedges))
+#     # γ⁻¹ = γ⁻¹_series.(js', Ref(ϕedges), Ref(eedges))
+#     # γα = inv.(α⁻¹ .* γ⁻¹)
+#     # return γα
+#     ## BUG: broadcast over SArrays is currently allocations-buggy
+#     ## https://github.com/JuliaArrays/StaticArrays.jl/issues/1178
+#     js = ks = SVector{D´}(1:D´)
+#     jks = Tuple(tuple.(js', ks))
+#     α⁻¹ = SMatrix{D´,D´}(α⁻¹_series.(jks, Ref(zedges), Ref(eedges)))
+#     γ⁻¹ = SVector(γ⁻¹_series.(Tuple(js), Ref(ϕedges), Ref(eedges)))
+#     γα = inv.(α⁻¹ .* transpose(γ⁻¹))
+#     return γα
+# end
+
+# function α⁻¹_series((j, k), zedges::SMatrix{D´,D´,S}, eedges) where {D´,S<:Series}
+#     x = one(S)
+#     @inbounds j != k && !iszero(eedges[k, j]) || return x
+#     @inbounds for l in 1:D´
+#         if l != j  && !iszero(eedges[l, j])
+#             x *= eedges[l, j]
+#             if l != k # ekj != 0, already constrained above
+#                 x *= zedges[l, j] - zedges[k, j]
+#             end
+#         end
+#     end
+#     return x
+# end
+
+# function γ⁻¹_series(j, ϕedges::SMatrix{D´,D´,S}, eedges) where {D´,S<:Series}
+#     x = one(S)
+#     @inbounds for l in 1:D´
+#         if l != j && iszero(eedges[l, j])
+#             x *= ϕedges[l, j]
+#         end
+#     end
+#     return x
+# end
+
+# @inline function J_series(z::Series{N,T}, e, Δ, ex) where {N,T}
+#     iszero(e) && return zero(Series{N,Complex{T}})
+#     J = J_series(z[0], Δ, ex)
+#     # Go from d(zΔ) = dz*Δ differential to dϕ
+#     return rescale(J, z[1] * Δ)
+# end
+
+# # Series of J(zΔ) = cis(zΔ) * [Ci(|z|Δ) - i Si(zΔ)] (variable zΔ for Series)
+# function J_series(z::T, Δ::T, ex::Expansions{N}) where {N,T<:Number}
+#     C = complex(T)
+#     iszero(Δ) && return Series{N}(C(Inf))
+#     zΔ = z * Δ
+#     imπ = im * ifelse(Δ > 0, 0, π) # strangely enough, union splitting is faster than stable
+#     if iszero(zΔ)
+#         J₀ = log(abs(Δ)) + imπ #+ MathConstants.γ + log(|z|) # not needed, cancels out
+#         Jᵢ = ex.J0  # = ntuple(n -> (-im)^n/(n*factorial(n)), Val(N-1))
+#         J = Series{N}(J₀, Jᵢ...)
+#         E = cis_series(zΔ, ex)
+#         EJ = E * J
+#     else
+#         ciszΔ =  cis(zΔ)
+#         J₀ = cosint(abs(zΔ)) - im*sinint(zΔ) + imπ
+#         if N > 1
+#             invzΔ = cumprod(ntuple(Returns(1/zΔ), Val(N-1)))
+#             Jᵢ = Tuple(conj(ciszΔ) * (ex.Jmat * SVector(invzΔ)))
+#                 # Jᵢ = conj(ciszΔ) .* ntuple(Val(N-1)) do n
+#                 #    (-1)^(n-1) * sum(m -> im^m * zΔ^(m-n)/(n*factorial(m)), 0:n-1)
+#                 # end
+#             J = Series(J₀, Jᵢ...)
+#         else
+#             J = Series(J₀)
+#         end
+#         Eᵢ = ciszΔ .* ex.cis
+#         E = Series(Eᵢ)
+#         EJ = E * J
+#     end
+#     return EJ
+# end
+
+function g_integrals_nonlocal(s::BandSimplex{D,T}, ω, dn) where {D,T}
+    ϕ₀ʲ = s.kij * dn
+    g0, gj = begin
+        if is_degenerate(ϕ₀ʲ, s.ei)
+            # phases ϕ₀ʲ[j+1] will be perturbed by ϕ₀ʲ´[j+1]*dϕ, for j in 0:D
+            # Similartly, ϕₖʲ[j+1,k+1] will be perturbed by ϕₖʲ´[j+1,k+1]*dϕ
+            ϕ₀ʲ´ = s.phi´
+            ϕ₀ʲseries = Series{D+1}.(ϕ₀ʲ, ϕ₀ʲ´)
+            ex = Expansions(Val(D), T)
+            g_integrals_nonlocal_ϕ(s, ω, ϕ₀ʲseries, ex)
+        else
+            g_integrals_nonlocal_ϕ(s, ω, ϕ₀ʲ, missing)
+        end
+    end
+    return g0, gj
+end
+
+# If any ϕₖʲ is zero, or if any tₖʲ and tₗʲ are equal
+function is_degenerate(ϕ₀ʲ::SVector{D´}, eⱼ) where {D´}
+    for i in 2:D´
+        iszero(ϕ₀ʲ[i]) && return true
+        for i´ in i+1:D´
+            ϕ₀ʲ[i] ≈ ϕ₀ʲ[i´] && return true
+        end
+    end
+    return false
+end
+
+function g_integrals_nonlocal_ϕ(s::BandSimplex{D,T}, ω::Number, ϕ₀ʲ, ex) where {D,T}
     eⱼ  = s.ei
     eₖʲ = s.eij
     Δⱼ  = ω .- eⱼ
-    ϕ₀ʲ  = s.kij * dn
-    ϕ₀ʲ´ = s.phi´
-    ϕₖʲ  = chop.(ϕ₀ʲ' .- ϕ₀ʲ)
-    ϕₖʲ´ = chop.(ϕ₀ʲ´' .- ϕ₀ʲ´)
-    ϕ₀ʲseries = Series{N}.(ϕ₀ʲ, ϕ₀ʲ´)
-    ϕₖʲseries = Series{N}.(ϕₖʲ, ϕₖʲ´)
-    tₖʲ = divide_if_nonzero.(ϕₖʲseries, eₖʲ)
-    eϕⱼ  = cis_series.(ϕ₀ʲseries, Ref(ex))          # cis(ϕ₀ʲ)
-    αₖʲγⱼ  = αγ_series(ϕₖʲseries, tₖʲ, eₖʲ)         # αₖʲγⱼ :: SMatrix{D´,D´}
+    ϕₖʲ  = trim.(chop.(transpose(ϕ₀ʲ) .- ϕ₀ʲ))
+    tₖʲ = divide_if_nonzero.(ϕₖʲ, eₖʲ)
+    eϕⱼ  = cis_ex.(ϕ₀ʲ, Ref(ex))                      # cis(ϕ₀ʲ)
+    αₖʲγⱼ  = αγ_matrix(ϕₖʲ, tₖʲ, eₖʲ)               # αₖʲγⱼ :: SMatrix{D´,D´}
     if iszero(eₖʲ)                                  # special case, full energy degeneracy
         Δ0 = chop(first(Δⱼ))
         if iszero(Δ0)
-            g0 = zero(Series{N,complex(T)})
+            g0 = zero(complex(T))
             gj = SVector(ntuple(Returns(g0), Val(D)))
         else
             Δ0⁻¹ = inv(Δ0)
             γⱼ = αₖʲγⱼ[1,:]                         # if eₖʲ == 0, then αₖʲ == 1
             λⱼ = γⱼ .* eϕⱼ
-            λₖʲ = λⱼ ./ ϕₖʲseries
+            λₖʲ = λⱼ ./ ϕₖʲ
             q = (-im)^D * s.VD * Δ0⁻¹
             g0 = q * sum(λⱼ)
             gj = ntuple(Val(D)) do j
@@ -250,34 +447,45 @@ function g_integrals_nonlocal_series(s::BandSimplex{D,T}, ω::Number, dn::SVecto
         end
     else
         αₖʲγⱼeϕⱼ = αₖʲγⱼ .* transpose(eϕⱼ)          # αₖʲγⱼeϕⱼ :: SMatrix{D´,D´}
-        Jₖʲ = J_series.(tₖʲ, eₖʲ, transpose(Δⱼ), Ref(ex))  # Jₖʲ :: SMatrix{D´,D´}
+        Jₖʲ = J_matrix.(tₖʲ, eₖʲ, transpose(Δⱼ), Ref(ex))  # Jₖʲ :: SMatrix{D´,D´}
         αₖʲγⱼeϕⱼJₖʲ = αₖʲγⱼeϕⱼ .* Jₖʲ
         Λⱼ = sum(αₖʲγⱼeϕⱼJₖʲ, dims = 1)
         Λⱼsum = sum(Λⱼ)                             # αₖʲγⱼJʲₖ (manual contraction slower!)
-        Λₖʲ = Λ_series(eₖʲ, ϕₖʲseries, Λⱼ, Δⱼ, tₖʲ, αₖʲγⱼeϕⱼ, Jₖʲ)
+        Λₖʲ = Λ_matrix(eₖʲ, ϕₖʲ, Λⱼ, Δⱼ, tₖʲ, αₖʲγⱼeϕⱼ, Jₖʲ)
         q´ = (-im)^(D+1) * s.VD
         g0 = q´ * trim(chop(Λⱼsum))
         gj = ntuple(Val(D)) do j
             q´ * trim(chop(Λⱼ[j+1] + im * sum(Λₖʲ[:,j+1] - transpose(Λₖʲ)[:,j+1])))
         end |> SVector
     end
-    return g0, gj
+    return scalar(g0), scalar(gj)
 end
+
+# Series of cis(ϕ)
+@inline function cis_ex(z::Series{N}, ex) where {N}
+    @assert iszero(z.pow)
+    c = cis_ex(z[0], ex)
+    # Go from dz differential to dϕ
+    return rescale(c, z[1])
+end
+
+cis_ex(ϕ::Real, ex) = cis(ϕ) * Series(ex.cis)
+cis_ex(ϕ::Real, ::Missing) = cis(ϕ)
 
 divide_if_nonzero(a, b) = iszero(b) ? a : a/b
 
-function Λ_series(eₖʲ::SMatrix{D´}, ϕₖʲ, Λⱼ, Δⱼ, tₖʲ, αₖʲγⱼeϕⱼ, Jₖʲ) where {D´}
+function Λ_matrix(eₖʲ::SMatrix{D´}, ϕₖʲ, Λⱼ, Δⱼ, tₖʲ, αₖʲγⱼeϕⱼ, Jₖʲ) where {D´}
     js = ks = SVector{D´}(1:D´)
     kjs = Tuple(tuple.(ks, js'))
     Λₖʲtup = ntuple(Val(D´*D´)) do i
         (k,j) = kjs[i]
-        Λ_series((k,j), ϕₖʲ[k,j], Λⱼ[j], Δⱼ[j], eₖʲ, tₖʲ, αₖʲγⱼeϕⱼ, Jₖʲ)
+        Λ_scalar((k,j), ϕₖʲ[k,j], Λⱼ[j], Δⱼ[j], eₖʲ, tₖʲ, αₖʲγⱼeϕⱼ, Jₖʲ)
     end
     Λₖʲ = SMatrix{D´,D´}(Λₖʲtup)
     return Λₖʲ
 end
 
-function Λ_series((k, j), ϕₖʲ, Λⱼ, Δⱼ, emat::SMatrix{D´,D´,T}, tmat, αγeϕmat, Jmat) where {D´,T}
+function Λ_scalar((k, j), ϕₖʲ, Λⱼ, Δⱼ, emat::SMatrix{D´,D´,T}, tmat, αγeϕmat, Jmat) where {D´,T}
     Λₖʲ = zero(typeof(Λⱼ))
     j == k && return Λₖʲ
     eₖʲ = emat[k,j]
@@ -301,17 +509,7 @@ function Λ_series((k, j), ϕₖʲ, Λⱼ, Δⱼ, emat::SMatrix{D´,D´,T}, tmat
     return Λₖʲ
 end
 
-@inline function cis_series(z::Series{N}, ex) where {N}
-    @assert iszero(z.pow)
-    c = cis_series(z[0], ex)
-    # Go from dz differential to dϕ
-    return rescale(c, z[1])
-end
-
-# Series of cis(ϕ)
-cis_series(ϕ::Real, ex) = cis(ϕ) * Series(ex.cis)
-
-@inline function αγ_series(ϕedges::S, zedges::S, eedges::SMatrix{D´,D´}) where {N,T,D´,S<:SMatrix{D´,D´,Series{N,T}}}
+@inline function αγ_matrix(ϕedges::S, zedges::S, eedges::SMatrix{D´,D´}) where {D´,S<:SMatrix{D´,D´}}
     # js = ks = SVector{D´}(1:D´)
     # α⁻¹ = α⁻¹_series.(js', ks, Ref(zedges), Ref(eedges))
     # γ⁻¹ = γ⁻¹_series.(js', Ref(ϕedges), Ref(eedges))
@@ -321,13 +519,13 @@ cis_series(ϕ::Real, ex) = cis(ϕ) * Series(ex.cis)
     ## https://github.com/JuliaArrays/StaticArrays.jl/issues/1178
     js = ks = SVector{D´}(1:D´)
     jks = Tuple(tuple.(js', ks))
-    α⁻¹ = SMatrix{D´,D´}(α⁻¹_series.(jks, Ref(zedges), Ref(eedges)))
-    γ⁻¹ = SVector(γ⁻¹_series.(Tuple(js), Ref(ϕedges), Ref(eedges)))
+    α⁻¹ = SMatrix{D´,D´}(α⁻¹_scalar.(jks, Ref(zedges), Ref(eedges)))
+    γ⁻¹ = SVector(γ⁻¹_scalar.(Tuple(js), Ref(ϕedges), Ref(eedges)))
     γα = inv.(α⁻¹ .* transpose(γ⁻¹))
     return γα
 end
 
-function α⁻¹_series((j, k), zedges::SMatrix{D´,D´,S}, eedges) where {D´,S<:Series}
+function α⁻¹_scalar((j, k), zedges::SMatrix{D´,D´,S}, eedges) where {D´,S}
     x = one(S)
     @inbounds j != k && !iszero(eedges[k, j]) || return x
     @inbounds for l in 1:D´
@@ -341,7 +539,7 @@ function α⁻¹_series((j, k), zedges::SMatrix{D´,D´,S}, eedges) where {D´,S
     return x
 end
 
-function γ⁻¹_series(j, ϕedges::SMatrix{D´,D´,S}, eedges) where {D´,S<:Series}
+function γ⁻¹_scalar(j, ϕedges::SMatrix{D´,D´,S}, eedges) where {D´,S}
     x = one(S)
     @inbounds for l in 1:D´
         if l != j && iszero(eedges[l, j])
@@ -351,7 +549,15 @@ function γ⁻¹_series(j, ϕedges::SMatrix{D´,D´,S}, eedges) where {D´,S<:Se
     return x
 end
 
-@inline function J_series(z::Series{N,T}, e, Δ, ex) where {N,T}
+function J_matrix(z::T, e, Δ, ::Missing) where {T<:Number}
+    iszero(e) && return zero(complex(T))
+    zΔ = z * Δ
+    imπ = im * ifelse(Δ > 0, 0, π)
+    J = iszero(zΔ) ? log(abs(Δ)) + imπ : cis(zΔ) * (cosint(abs(zΔ)) - im*sinint(zΔ) + imπ)
+    return J
+end
+
+@inline function J_matrix(z::Series{N,T}, e, Δ, ex) where {N,T}
     iszero(e) && return zero(Series{N,Complex{T}})
     J = J_series(z[0], Δ, ex)
     # Go from d(zΔ) = dz*Δ differential to dϕ
@@ -368,7 +574,7 @@ function J_series(z::T, Δ::T, ex::Expansions{N}) where {N,T<:Number}
         J₀ = log(abs(Δ)) + imπ #+ MathConstants.γ + log(|z|) # not needed, cancels out
         Jᵢ = ex.J0  # = ntuple(n -> (-im)^n/(n*factorial(n)), Val(N-1))
         J = Series{N}(J₀, Jᵢ...)
-        E = cis_series(zΔ, ex)
+        E = cis_ex(zΔ, ex)
         EJ = E * J
     else
         ciszΔ =  cis(zΔ)
@@ -376,9 +582,6 @@ function J_series(z::T, Δ::T, ex::Expansions{N}) where {N,T<:Number}
         if N > 1
             invzΔ = cumprod(ntuple(Returns(1/zΔ), Val(N-1)))
             Jᵢ = Tuple(conj(ciszΔ) * (ex.Jmat * SVector(invzΔ)))
-                # Jᵢ = conj(ciszΔ) .* ntuple(Val(N-1)) do n
-                #    (-1)^(n-1) * sum(m -> im^m * zΔ^(m-n)/(n*factorial(m)), 0:n-1)
-                # end
             J = Series(J₀, Jᵢ...)
         else
             J = Series(J₀)
