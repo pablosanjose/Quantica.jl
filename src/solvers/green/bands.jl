@@ -201,23 +201,23 @@ end
 # g_integrals_nonlocal: g₀(ω) and gⱼ(ω) with normal or hyperdual numbers for φ
 #region
 
-struct Expansions{N,TC<:NTuple{N},TJ,SJ}
-    cis::TC
-    J0::TJ
-    Jmat::SJ
-end
+# struct Expansions{N,TC<:NTuple{N},TJ,SJ}
+#     cis::TC
+#     J0::TJ
+#     Jmat::SJ
+# end
 
-# Precomputes the Series expansion coefficients for cis, J(z->0) and J(z)
-function Expansions(::Val{N´}, ::Type{T}) where {N´,T}  # here N´ = N-1
-    C = complex(T)
-    cis = ntuple(n -> C(im)^(n-1)/(factorial(n-1)), Val(N´+1))
-    J0 = ntuple(n -> C(-im)^n/(n*factorial(n)), Val(N´))
-    Jmat = ntuple(Val(N´*N´)) do ij
-        j, i = fldmod1(ij, N´)
-        j > i ? zero(C) : ifelse(isodd(i), 1, -1) * C(im)^(i-j) / (i*factorial(i-j))
-    end |> SMatrix{N´,N´,C}
-    return Expansions(cis, J0, Jmat)
-end
+# # Precomputes the Series expansion coefficients for cis, J(z->0) and J(z)
+# function Expansions(::Val{N´}, ::Type{T}) where {N´,T}  # here N´ = N-1
+#     C = complex(T)
+#     cis = ntuple(n -> C(im)^(n-1)/(factorial(n-1)), Val(N´+1))
+#     J0 = ntuple(n -> C(-im)^n/(n*factorial(n)), Val(N´))
+#     Jmat = ntuple(Val(N´*N´)) do ij
+#         j, i = fldmod1(ij, N´)
+#         j > i ? zero(C) : ifelse(isodd(i), 1, -1) * C(im)^(i-j) / (i*factorial(i-j))
+#     end |> SMatrix{N´,N´,C}
+#     return Expansions(cis, J0, Jmat)
+# end
 
 function g_integrals_nonlocal(s::BandSimplex{D,T}, ω, dn, ::Val{N} = Val(0)) where {D,T,N}
     ϕⱼ = s.kij * dn
@@ -230,10 +230,10 @@ function g_integrals_nonlocal(s::BandSimplex{D,T}, ω, dn, ::Val{N} = Val(0)) wh
             ϕⱼ´ = s.phi´
             order = ifelse(N > 0, N, D+1)
             ϕⱼseries = Series{order}.(ϕⱼ, ϕⱼ´)
-            ex = Expansions(Val(order-1), T)
-            g_integrals_nonlocal_ϕ(s, ω, ϕⱼseries, ex)
+            # ex = Expansions(Val(order-1), T)
+            g_integrals_nonlocal_ϕ(s, ω, ϕⱼseries)
         else
-            g_integrals_nonlocal_ϕ(s, ω, ϕⱼ, missing)
+            g_integrals_nonlocal_ϕ(s, ω, ϕⱼ)
         end
     end
     return g0, gj
@@ -252,13 +252,13 @@ function is_degenerate(ϕₖʲ::SMatrix{D´}, eₖʲ) where {D´}
     return false
 end
 
-function g_integrals_nonlocal_ϕ(s::BandSimplex{D,T}, ω::Number, ϕⱼ, ex) where {D,T}
+function g_integrals_nonlocal_ϕ(s::BandSimplex{D,T}, ω::Number, ϕⱼ) where {D,T}
     eⱼ  = s.ei
     eₖʲ = s.eij
     Δⱼ  = ω .- eⱼ
-    ϕₖʲ  = map(x -> trim(chop(x)), transpose(ϕⱼ) .- ϕⱼ)
+    ϕₖʲ  = map(x -> trim(chop(x)), transpose(ϕⱼ) .- ϕⱼ)  # broadcast too hard for inference
     tₖʲ = divide_if_nonzero.(ϕₖʲ, eₖʲ)
-    eϕⱼ  = cis_ex.(ϕⱼ, Ref(ex))                     # cis(ϕⱼ)
+    eϕⱼ  = cis.(ϕⱼ)
     αₖʲγⱼ  = αγ_matrix(ϕₖʲ, tₖʲ, eₖʲ)               # αₖʲγⱼ :: SMatrix{D´,D´}
     if iszero(eₖʲ)                                  # special case, full energy degeneracy
         Δ0 = chop(first(Δⱼ))
@@ -278,7 +278,7 @@ function g_integrals_nonlocal_ϕ(s::BandSimplex{D,T}, ω::Number, ϕⱼ, ex) whe
         end
     else
         αₖʲγⱼeϕⱼ = αₖʲγⱼ .* transpose(eϕⱼ)          # αₖʲγⱼeϕⱼ :: SMatrix{D´,D´}
-        Jₖʲ = J_matrix.(tₖʲ, eₖʲ, transpose(Δⱼ), Ref(ex))  # Jₖʲ :: SMatrix{D´,D´}
+        Jₖʲ = J_matrix.(tₖʲ, eₖʲ, transpose(Δⱼ))  # Jₖʲ :: SMatrix{D´,D´}
         αₖʲγⱼeϕⱼJₖʲ = αₖʲγⱼeϕⱼ .* Jₖʲ
         Λⱼ = sum(αₖʲγⱼeϕⱼJₖʲ, dims = 1)
         Λⱼsum = sum(Λⱼ)                             # αₖʲγⱼJʲₖ (manual contraction slower!)
@@ -293,15 +293,14 @@ function g_integrals_nonlocal_ϕ(s::BandSimplex{D,T}, ω::Number, ϕⱼ, ex) whe
 end
 
 # Series of cis(ϕ)
-@inline function cis_ex(s::Series{N}, ex) where {N}
+@inline function Base.cis(s::Series{N,T}) where {N,T}
     @assert iszero(s.pow)
-    c = cis_ex(s[0], ex)
-    # Go from dz differential to dϕ
+    C = Complex{T}
+    cis_series = Series(ntuple(n -> C(im)^(n-1)/(factorial(n-1)), Val(N)))
+    c = cis(s[0]) * cis_series
+    # Go from ds differential to dϕ
     return rescale(c, s[1])
 end
-
-cis_ex(ϕ::Real, ex) = cis(ϕ) * Series(ex.cis)
-cis_ex(ϕ::Real, ::Missing) = cis(ϕ)
 
 divide_if_nonzero(a, b) = iszero(b) ? a : a/b
 
@@ -380,48 +379,47 @@ function Λ_scalar((k, j), ϕₖʲ, Λⱼ, Δⱼ, emat::SMatrix{D´,D´,T}, tmat
     return Λₖʲ
 end
 
-function J_matrix(z::T, e, Δ, ::Missing) where {T<:Number}
+function J_matrix(t::T, e, Δ) where {T<:Number}
     iszero(e) && return zero(complex(T))
-    zΔ = z * Δ
+    tΔ = t * Δ
     imπ = im * ifelse(Δ > 0, 0, π)
-    J = iszero(zΔ) ? log(abs(Δ)) + imπ : cis(zΔ) * (cosint(abs(zΔ)) - im*sinint(zΔ) + imπ)
+    J = iszero(tΔ) ? log(abs(Δ)) + imπ : cis(tΔ) * (cosint(abs(tΔ)) - im*sinint(tΔ) + imπ)
     return J
 end
 
-@inline function J_matrix(z::Series{N,T}, e, Δ, ex) where {N,T}
+@inline function J_matrix(t::Series{N,T}, e, Δ) where {N,T}
     iszero(e) && return zero(Series{N,Complex{T}})
-    J = J_series(z[0], Δ, ex)
-    # Go from d(zΔ) = dz*Δ differential to dϕ
-    return rescale(J, z[1] * Δ)
-end
-
-# Series of J(zΔ) = cis(zΔ) * [Ci(|z|Δ) - i Si(zΔ)] (variable zΔ for Series)
-function J_series(z::T, Δ::T, ex::Expansions{N}) where {N,T<:Number}
+    N´ = N - 1
     C = complex(T)
     iszero(Δ) && return Series{N}(C(Inf))
-    zΔ = z * Δ
+    tΔ = t[0] * Δ
     imπ = im * ifelse(Δ > 0, 0, π) # strangely enough, union splitting is faster than stable
-    if iszero(zΔ)
-        J₀ = log(abs(Δ)) + imπ #+ MathConstants.γ + log(|z|) # not needed, cancels out
-        Jᵢ = ex.J0  # = ntuple(n -> (-im)^n/(n*factorial(n)), Val(N-1))
+    if iszero(tΔ)
+        J₀ = log(abs(Δ)) + imπ #+ MathConstants.γ + log(|t|) # not needed, cancels out
+        Jᵢ = ntuple(n -> C(-im)^n/(n*factorial(n)), Val(N´))
         J = Series{N}(J₀, Jᵢ...)
-        E = cis_ex(zΔ, ex)
+        E = cis(tΔ)
         EJ = E * J
     else
-        ciszΔ =  cis(zΔ)
-        J₀ = cosint(abs(zΔ)) - im*sinint(zΔ) + imπ
+        cistΔ =  cis(tΔ)
+        J₀ = cosint(abs(tΔ)) - im*sinint(tΔ) + imπ
         if N > 1
-            invzΔ = cumprod(ntuple(Returns(1/zΔ), Val(N-1)))
-            Jᵢ = Tuple(conj(ciszΔ) * (ex.Jmat * SVector(invzΔ)))
+            invzΔ = cumprod(ntuple(Returns(1/tΔ), Val(N-1)))
+            Jmat = ntuple(Val(N´*N´)) do ij
+                j, i = fldmod1(ij, N´)
+                j > i ? zero(C) : ifelse(isodd(i), 1, -1) * C(im)^(i-j) / (i*factorial(i-j))
+            end |> SMatrix{N´,N´,C}
+            Jᵢ = Tuple(conj(cistΔ) * (Jmat * SVector(invzΔ)))
             J = Series(J₀, Jᵢ...)
         else
             J = Series(J₀)
         end
-        Eᵢ = ciszΔ .* ex.cis
+        cis_series = ntuple(n -> C(im)^(n-1)/(factorial(n-1)), Val(N))
+        Eᵢ = cistΔ .* cis_series
         E = Series(Eᵢ)
         EJ = E * J
     end
-    return EJ
+    return return rescale(EJ, t[1] * Δ)
 end
 
 #endregion
