@@ -125,14 +125,31 @@ shiftpad(s::SVector{N,T}, i) where {N,T} =
 # BandSimplex: encodes energy and momenta of vertices, and derived quantitities
 #region
 
-struct BandSimplex{D,T,S1,S2,S3,SU<:SMatrix{D,D,T}}     # D = manifold dimension
+struct Expansions{D,T,DD}
+    cis::Tuple{Complex{T},Vararg{Complex{T},D}}
+    J0::NTuple{D,Complex{T}}
+    Jmat::SMatrix{D,D,Complex{T},DD}
+end
+
+struct BandSimplex{D,T,S1,S2,S3,E<:Expansions{D,T}}     # D = manifold dimension
     ei::S1        # eᵢ::SVector{D´,T} = energy of vertex i
     kij::S2       # kᵢ[j]::SMatrix{D´,D,T,DD´} = coordinate j of momentum for vertex i
     eij::S3       # ϵᵢʲ::SMatrix{D´,D´,T,D´D´} = e_j - e_i
-    U⁻¹::SU       # inv(Uᵢⱼ) for Uᵢⱼ::SMatrix{D,D,T,DD} = kⱼ[i] - k₀[i] (edges as cols)
-    phi´::S1      # first hyperdual coefficient of φ
-    w::SVector{D,T} # U⁻¹ * k₀
+    dual::S1      # first hyperdual coefficient
     VD::T         # D!V = |det(U)|
+    ex::E         # Series expansions for necessary functions
+end
+
+# Precomputes the Series expansion coefficients for cis, J(z->0) and J(z)
+function Expansions(::Val{D}, ::Type{T}) where {D,T}  # here order = D
+    C = complex(T)
+    cis = ntuple(n -> C(im)^(n-1)/(factorial(n-1)), Val(D+1))
+    J0 = ntuple(n -> C(-im)^n/(n*factorial(n)), Val(D))
+    Jmat = ntuple(Val(D*D)) do ij
+        j, i = fldmod1(ij, D)
+        j > i ? zero(C) : ifelse(isodd(i), 1, -1) * C(im)^(i-j) / (i*factorial(i-j))
+    end |> SMatrix{D,D,C}
+    return Expansions(cis, J0, Jmat)
 end
 
 function BandSimplex(es::NTuple{<:Any,Number}, ks::NTuple{<:Any,SVector})
@@ -147,24 +164,23 @@ function BandSimplex(ei::SVector{D´}, kij::SMatrix{D´,D,T}) where {D´,D,T}
     eij = chop(ei' .- ei)
     k0 = kij[1, :]
     U = kij[SVector{D}(2:D´),:]' .- k0          # edges as columns
-    U⁻¹ = inv(U)
     VD = abs(det(U))
-    w = U⁻¹ * k0
-    phi´ = generate_phi´(eij)
-    return BandSimplex(ei, kij, eij, U⁻¹, phi´, w, VD)
+    dual = generate_dual(eij)
+    ex = Expansions(Val(D), T)
+    return BandSimplex(ei, kij, eij, dual, VD, ex)
 end
 
-function generate_phi´(eij::SMatrix{D´,D´,T}) where {D´,T}
-    phi´ = rand(SVector{D´,T})
-    iszero(eij) && return phi´
-    while !is_valid_phi´(phi´, eij)
-        phi´ = rand(SVector{D´,T})
+function generate_dual(eij::SMatrix{D´,D´,T}) where {D´,T}
+    dual = rand(SVector{D´,T})
+    iszero(eij) && return dual
+    while !is_valid_dual(dual, eij)
+        dual = rand(SVector{D´,T})
     end
-    return phi´
+    return dual
 end
 
 # check whether iszero(eʲₖφʲₗ - φʲₖeʲₗ) for nonzero e's
-function is_valid_phi´(phi, es)
+function is_valid_dual(phi, es)
     phis = phi' .- phi
     for j in axes(es, 2), k in axes(es, 1), l in axes(es, 1)
         l != k != j && l != k || continue
@@ -201,24 +217,6 @@ end
 # g_integrals_nonlocal: g₀(ω) and gⱼ(ω) with normal or hyperdual numbers for φ
 #region
 
-# struct Expansions{N,TC<:NTuple{N},TJ,SJ}
-#     cis::TC
-#     J0::TJ
-#     Jmat::SJ
-# end
-
-# # Precomputes the Series expansion coefficients for cis, J(z->0) and J(z)
-# function Expansions(::Val{N´}, ::Type{T}) where {N´,T}  # here N´ = N-1
-#     C = complex(T)
-#     cis = ntuple(n -> C(im)^(n-1)/(factorial(n-1)), Val(N´+1))
-#     J0 = ntuple(n -> C(-im)^n/(n*factorial(n)), Val(N´))
-#     Jmat = ntuple(Val(N´*N´)) do ij
-#         j, i = fldmod1(ij, N´)
-#         j > i ? zero(C) : ifelse(isodd(i), 1, -1) * C(im)^(i-j) / (i*factorial(i-j))
-#     end |> SMatrix{N´,N´,C}
-#     return Expansions(cis, J0, Jmat)
-# end
-
 function g_integrals_nonlocal(s::BandSimplex{D,T}, ω, dn, ::Val{N} = Val(0)) where {D,T,N}
     ϕⱼ = s.kij * dn
     ϕₖʲ = chop.(transpose(ϕⱼ) .- ϕⱼ)
@@ -227,7 +225,7 @@ function g_integrals_nonlocal(s::BandSimplex{D,T}, ω, dn, ::Val{N} = Val(0)) wh
         if N > 0 || is_degenerate(ϕₖʲ, eₖʲ)
             # phases ϕⱼ[j+1] will be perturbed by ϕⱼ´[j+1]*dϕ, for j in 0:D
             # Similartly, ϕₖʲ[j+1,k+1] will be perturbed by ϕₖʲ´[j+1,k+1]*dϕ
-            ϕⱼ´ = s.phi´
+            ϕⱼ´ = s.dual
             order = ifelse(N > 0, N, D+1)
             ϕⱼseries = Series{order}.(ϕⱼ, ϕⱼ´)
             # ex = Expansions(Val(order-1), T)
@@ -258,7 +256,7 @@ function g_integrals_nonlocal_ϕ(s::BandSimplex{D,T}, ω::Number, ϕⱼ) where {
     Δⱼ  = ω .- eⱼ
     ϕₖʲ  = map(x -> trim(chop(x)), transpose(ϕⱼ) .- ϕⱼ)  # broadcast too hard for inference
     tₖʲ = divide_if_nonzero.(ϕₖʲ, eₖʲ)
-    eϕⱼ  = cis.(ϕⱼ)
+    eϕⱼ  = cis_scalar.(ϕⱼ, Ref(s.ex))
     αₖʲγⱼ  = αγ_matrix(ϕₖʲ, tₖʲ, eₖʲ)               # αₖʲγⱼ :: SMatrix{D´,D´}
     if iszero(eₖʲ)                                  # special case, full energy degeneracy
         Δ0 = chop(first(Δⱼ))
@@ -278,7 +276,7 @@ function g_integrals_nonlocal_ϕ(s::BandSimplex{D,T}, ω::Number, ϕⱼ) where {
         end
     else
         αₖʲγⱼeϕⱼ = αₖʲγⱼ .* transpose(eϕⱼ)          # αₖʲγⱼeϕⱼ :: SMatrix{D´,D´}
-        Jₖʲ = J_matrix.(tₖʲ, eₖʲ, transpose(Δⱼ))  # Jₖʲ :: SMatrix{D´,D´}
+        Jₖʲ = J_scalar.(tₖʲ, eₖʲ, transpose(Δⱼ), Ref(s.ex))    # Jₖʲ :: SMatrix{D´,D´}
         αₖʲγⱼeϕⱼJₖʲ = αₖʲγⱼeϕⱼ .* Jₖʲ
         Λⱼ = sum(αₖʲγⱼeϕⱼJₖʲ, dims = 1)
         Λⱼsum = sum(Λⱼ)                             # αₖʲγⱼJʲₖ (manual contraction slower!)
@@ -293,14 +291,15 @@ function g_integrals_nonlocal_ϕ(s::BandSimplex{D,T}, ω::Number, ϕⱼ) where {
 end
 
 # Series of cis(ϕ)
-@inline function Base.cis(s::Series{N,T}) where {N,T}
+@inline function cis_scalar(s::Series{N}, ex) where {N}
     @assert iszero(s.pow)
-    C = Complex{T}
-    cis_series = Series(ntuple(n -> C(im)^(n-1)/(factorial(n-1)), Val(N)))
+    cis_series = Series(tupletake(ex.cis, Val(N)))
     c = cis(s[0]) * cis_series
     # Go from ds differential to dϕ
     return rescale(c, s[1])
 end
+
+cis_scalar(s, ex) = cis(s)
 
 divide_if_nonzero(a, b) = iszero(b) ? a : a/b
 
@@ -379,7 +378,7 @@ function Λ_scalar((k, j), ϕₖʲ, Λⱼ, Δⱼ, emat::SMatrix{D´,D´,T}, tmat
     return Λₖʲ
 end
 
-function J_matrix(t::T, e, Δ) where {T<:Number}
+function J_scalar(t::T, e, Δ, ex) where {T<:Number}
     iszero(e) && return zero(complex(T))
     tΔ = t * Δ
     imπ = im * ifelse(Δ > 0, 0, π)
@@ -387,7 +386,7 @@ function J_matrix(t::T, e, Δ) where {T<:Number}
     return J
 end
 
-@inline function J_matrix(t::Series{N,T}, e, Δ) where {N,T}
+@inline function J_scalar(t::Series{N,T}, e, Δ, ex) where {N,T}
     iszero(e) && return zero(Series{N,Complex{T}})
     N´ = N - 1
     C = complex(T)
@@ -396,7 +395,7 @@ end
     imπ = im * ifelse(Δ > 0, 0, π) # strangely enough, union splitting is faster than stable
     if iszero(tΔ)
         J₀ = log(abs(Δ)) + imπ #+ MathConstants.γ + log(|t|) # not needed, cancels out
-        Jᵢ = ntuple(n -> C(-im)^n/(n*factorial(n)), Val(N´))
+        Jᵢ = tupletake(ex.J0, Val(N´)) # ntuple(n -> C(-im)^n/(n*factorial(n)), Val(N´))
         J = Series{N}(J₀, Jᵢ...)
         E = cis(tΔ)
         EJ = E * J
@@ -405,17 +404,18 @@ end
         J₀ = cosint(abs(tΔ)) - im*sinint(tΔ) + imπ
         if N > 1
             invzΔ = cumprod(ntuple(Returns(1/tΔ), Val(N-1)))
-            Jmat = ntuple(Val(N´*N´)) do ij
-                j, i = fldmod1(ij, N´)
-                j > i ? zero(C) : ifelse(isodd(i), 1, -1) * C(im)^(i-j) / (i*factorial(i-j))
-            end |> SMatrix{N´,N´,C}
+            Jmat = smatrixtake(ex.Jmat, Val(N´))
+                # ntuple(Val(N´*N´)) do ij
+                #     j, i = fldmod1(ij, N´)
+                #     j > i ? zero(C) : ifelse(isodd(i), 1, -1) * C(im)^(i-j) / (i*factorial(i-j))
+                # end |> SMatrix{N´,N´,C}
             Jᵢ = Tuple(conj(cistΔ) * (Jmat * SVector(invzΔ)))
             J = Series(J₀, Jᵢ...)
         else
             J = Series(J₀)
         end
-        cis_series = ntuple(n -> C(im)^(n-1)/(factorial(n-1)), Val(N))
-        Eᵢ = cistΔ .* cis_series
+        cis_expansion = tupletake(ex.cis, Val(N))
+        Eᵢ = cistΔ .* cis_expansion
         E = Series(Eᵢ)
         EJ = E * J
     end

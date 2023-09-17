@@ -17,6 +17,13 @@ rdr((r1, r2)::Pair) = (0.5 * (r1 + r2), r2 - r1)
 
 padtuple(t, x, N) = ntuple(i -> i <= length(t) ? t[i] : x, N)
 
+@inline tupletake(x, ::Val{N}) where {N} = ntuple(i -> x[i], Val(N))
+
+@inline function smatrixtake(s::SMatrix, ::Val{N}) where {N}
+    is = SVector{N,Int}(1:N)
+    return s[is, is]
+end
+
 @noinline internalerror(func::String) =
     throw(ErrorException("Internal error in $func. Please file a bug report at https://github.com/pablosanjose/Quantica.jl/issues"))
 
