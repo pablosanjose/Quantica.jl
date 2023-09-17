@@ -74,6 +74,7 @@ Base.:+(d::Series, d´::Series) = trim_and_map(+, d, d´)
 Base.:-(d::Series, d´::Series) = trim_and_map(-, d, d´)
 Base.:+(d::Number, d´::Series{N}) where {N} = Series{N}(d) + d´
 Base.:-(d::Number, d´::Series{N}) where {N} = Series{N}(d) - d´
+Base.:-(d::Series) = Series(-d.x, d.pow)
 Base.:*(d::Number, d´::Series) = Series(d * d´.x, d´.pow)
 Base.:*(d´::Series, d::Number) = Series(d * d´.x, d´.pow)
 Base.:/(d::Series{N}, d´::Series{N}) where {N} = d * inv(d´)
@@ -152,13 +153,13 @@ function Expansions(::Val{D}, ::Type{T}) where {D,T}  # here order = D
     return Expansions(cis, J0, Jmat)
 end
 
-function BandSimplex(es::NTuple{<:Any,Number}, ks::NTuple{<:Any,SVector})
-    ei = SVector(es)
-    kij = transpose(reduce(hcat, ks))   # ks are rows of kij
-    return BandSimplex(ei, kij)
-end
+# function BandSimplex(es::NTuple{<:Any,Number}, ks::NTuple{<:Any,SVector})
+#     ei = SVector(es)
+#     kij = transpose(reduce(hcat, ks))   # ks are rows of kij
+#     return BandSimplex(ei, kij)
+# end
 
-function BandSimplex(ei::SVector{D´}, kij::SMatrix{D´,D,T}) where {D´,D,T}
+function BandSimplex(ei::SVector{D´}, kij::SMatrix{D´,D,T}, ex = Expansions(Val(D), T)) where {D´,D,T}
     D == D´ - 1 ||
         argerror("The dimension $D of Bloch phases in simplex should be one less than the number of vertices $(D´)")
     eij = chop(ei' .- ei)
@@ -166,7 +167,6 @@ function BandSimplex(ei::SVector{D´}, kij::SMatrix{D´,D,T}) where {D´,D,T}
     U = kij[SVector{D}(2:D´),:]' .- k0          # edges as columns
     VD = abs(det(U))
     dual = generate_dual(eij)
-    ex = Expansions(Val(D), T)
     return BandSimplex(ei, kij, eij, dual, VD, ex)
 end
 
@@ -193,7 +193,7 @@ function is_valid_dual(phi, es)
 end
 
 function g_integrals(s::BandSimplex, ω, dn)
-    # g0, gi = if iszero(dn)
+    # g₀, gi = if iszero(dn)
     #     if any(iszero, s.eij)
     #         g_integrals_local_series(s, ω, dn)
     #     else
@@ -206,35 +206,112 @@ function g_integrals(s::BandSimplex, ω, dn)
     #         g_integrals_nonlocal(s, ω, dn)
     #     end
     # end
-    # g0, gi = g_integrals_nonlocal_series(s, ω, dn)
-    g0, gi = g_integrals_nonlocal(s, ω, dn)
-    return g0, gi
+    # g₀, gi = g_integrals_nonlocal_series(s, ω, dn)
+    g₀, gi = g_integrals_nonlocal(s, ω, dn)
+    return g₀, gi
 end
 
 #endregion
 
+
 ############################################################################################
-# g_integrals_nonlocal: g₀(ω) and gⱼ(ω) with normal or hyperdual numbers for φ
+# g_integrals_local: zero-dn g₀(ω) and gⱼ(ω) with normal or hyperdual numbers for φ
+#region
+
+function g_integrals_local(s::BandSimplex{D,T}, ω, ::Val{N} = Val(0)) where {D,T,N}
+    eⱼ = s.ei
+    eₖʲ = s.eij
+    g₀, gⱼ = begin
+        if N > 0 || is_degenerate(eₖʲ)
+            # phases ϕⱼ[j+1] will be perturbed by ϕⱼ´[j+1]*dϕ, for j in 0:D
+            # Similartly, ϕₖʲ[j+1,k+1] will be perturbed by ϕₖʲ´[j+1,k+1]*dϕ
+            eⱼ´ = s.dual
+            order = ifelse(N > 0, N, D+1)
+            eⱼseries = Series{order}.(eⱼ, eⱼ´)
+            g_integrals_local_e(s, ω, eⱼseries)
+        else
+            g_integrals_local_e(s, ω, eⱼ)
+        end
+    end
+    return g₀, gⱼ
+end
+
+is_degenerate(eₖʲ) = any(iszero, eₖʲ)
+
+function g_integrals_local_e(s::BandSimplex{D,T}, ω::Number, eⱼ) where {D,T}
+    Δⱼ  = ω .- eⱼ
+    eₖʲ  = map(x -> trim(chop(x)), transpose(eⱼ) .- eⱼ)  # broadcast too hard for inference
+    qⱼ = q_vector(eₖʲ)
+    lΔⱼ = logim.(-Δⱼ)
+    Eᴰⱼ = Δⱼ.^(D-1) .* lΔⱼ ./ factorial(D-1)
+    Eᴰ⁺¹ⱼ = Δⱼ.^D .* lΔⱼ ./ factorial(D)
+    if iszero(eₖʲ)                                  # special case, full energy degeneracy
+        Δ0 = chop(first(Δⱼ))
+        if iszero(Δ0)
+            g₀ = zero(complex(T))
+            gⱼ = SVector(ntuple(Returns(g₀), Val(D)))
+        else
+            g₀ = scalar(inv(Δⱼ))/factorial(D)
+            gⱼ = SVector(ntuple(Returns(g₀/(D+1)), Val(D)))
+        end
+    else
+        g₀ = scalar(trim(chop(sum(qⱼ .* Eᴰⱼ))))
+        gⱼ = ntuple(Val(D)) do j
+            x = (Eᴰⱼ[j] - (-Δⱼ)^(D-1)) * qⱼ[j]
+            for k in 1:D´
+                if k != j
+                    x -= (qⱼ[j] * Eᴰ⁺¹ⱼ[j] + qⱼ[k] * Eᴰ⁺¹ⱼ[k]) / eₖʲ[k, j]
+                end
+            end
+            return scalar(trim(chop(x)))
+        end
+    end
+    return g₀, gⱼ
+end
+
+function q_vector(eₖʲ::SMatrix{D´,D´,S}) where {D´,S}
+    D = D´-1
+    qⱼ = ntuple(Val(D)) do j
+        x = one(S)
+        for k in 1:D´
+            j != k && (x *= eₖʲ[k, j])
+        end
+        return inv(x)
+    end
+    return qⱼ
+end
+
+# logim(x) = log(im * x)
+logim(x) = 0.5π * sign(x) * im + log(abs(x))
+
+# function logim(s::Series)
+#     s₀ = scalar(s)
+#     l₀ = logim(s₀)
+# end
+
+#endregion
+
+############################################################################################
+# g_integrals_nonlocal: finite-dn g₀(ω) and gⱼ(ω) with normal or hyperdual numbers for φ
 #region
 
 function g_integrals_nonlocal(s::BandSimplex{D,T}, ω, dn, ::Val{N} = Val(0)) where {D,T,N}
     ϕⱼ = s.kij * dn
     ϕₖʲ = chop.(transpose(ϕⱼ) .- ϕⱼ)
     eₖʲ = s.eij
-    g0, gj = begin
+    g₀, gⱼ = begin
         if N > 0 || is_degenerate(ϕₖʲ, eₖʲ)
             # phases ϕⱼ[j+1] will be perturbed by ϕⱼ´[j+1]*dϕ, for j in 0:D
             # Similartly, ϕₖʲ[j+1,k+1] will be perturbed by ϕₖʲ´[j+1,k+1]*dϕ
             ϕⱼ´ = s.dual
             order = ifelse(N > 0, N, D+1)
             ϕⱼseries = Series{order}.(ϕⱼ, ϕⱼ´)
-            # ex = Expansions(Val(order-1), T)
             g_integrals_nonlocal_ϕ(s, ω, ϕⱼseries)
         else
             g_integrals_nonlocal_ϕ(s, ω, ϕⱼ)
         end
     end
-    return g0, gj
+    return g₀, gⱼ
 end
 
 # If any ϕₖʲ is zero, or if any tₖʲ and tₗʲ are equal
@@ -261,16 +338,16 @@ function g_integrals_nonlocal_ϕ(s::BandSimplex{D,T}, ω::Number, ϕⱼ) where {
     if iszero(eₖʲ)                                  # special case, full energy degeneracy
         Δ0 = chop(first(Δⱼ))
         if iszero(Δ0)
-            g0 = zero(complex(T))
-            gj = SVector(ntuple(Returns(g0), Val(D)))
+            g₀ = zero(complex(T))
+            gⱼ = SVector(ntuple(Returns(g₀), Val(D)))
         else
             Δ0⁻¹ = inv(Δ0)
             γⱼ = αₖʲγⱼ[1,:]                         # if eₖʲ == 0, then αₖʲ == 1
             λⱼ = γⱼ .* eϕⱼ
-            λₖʲ = λⱼ ./ ϕₖʲ
+            λₖʲ = divide_if_nonzero.(transpose(λⱼ), ϕₖʲ)
             q = (-im)^D * s.VD * Δ0⁻¹
-            g0 = q * trim(chop(sum(λⱼ))) |> scalar
-            gj = ntuple(Val(D)) do j
+            g₀ = q * trim(chop(sum(λⱼ))) |> scalar
+            gⱼ = ntuple(Val(D)) do j
                 q * scalar(trim(chop(λⱼ[j+1] + im * sum(λₖʲ[:,j+1] - transpose(λₖʲ)[:,j+1]))))
             end |> SVector
         end
@@ -282,12 +359,12 @@ function g_integrals_nonlocal_ϕ(s::BandSimplex{D,T}, ω::Number, ϕⱼ) where {
         Λⱼsum = sum(Λⱼ)                             # αₖʲγⱼJʲₖ (manual contraction slower!)
         Λₖʲ = Λ_matrix(eₖʲ, ϕₖʲ, Λⱼ, Δⱼ, tₖʲ, αₖʲγⱼeϕⱼ, Jₖʲ)
         q´ = (-im)^(D+1) * s.VD
-        g0 = q´ * scalar(trim(chop(Λⱼsum)))
-        gj = ntuple(Val(D)) do j
+        g₀ = q´ * scalar(trim(chop(Λⱼsum)))
+        gⱼ = ntuple(Val(D)) do j
             q´ * scalar(trim(chop(Λⱼ[j+1] + im * sum(Λₖʲ[:,j+1] - transpose(Λₖʲ)[:,j+1]))))
         end |> SVector
     end
-    return g0, gj
+    return g₀, gⱼ
 end
 
 # Series of cis(ϕ)
