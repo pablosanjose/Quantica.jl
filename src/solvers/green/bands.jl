@@ -7,7 +7,7 @@
 #   If we need derivatives respect to x/α instead of x, we do rescale(::Series, α)
 #region
 
-struct Series{N,T}
+struct Series{N,T} <: Number
     x::SVector{N,T}   # term coefficients
     pow::Int          # power of first term
 end
@@ -130,6 +130,7 @@ struct Expansions{D,T,DD}
     cis::Tuple{Complex{T},Vararg{Complex{T},D}}
     J0::NTuple{D,Complex{T}}
     Jmat::SMatrix{D,D,Complex{T},DD}
+    log::NTuple{D,T}
 end
 
 struct BandSimplex{D,T,S1,S2,S3,E<:Expansions{D,T}}     # D = manifold dimension
@@ -144,13 +145,18 @@ end
 # Precomputes the Series expansion coefficients for cis, J(z->0) and J(z)
 function Expansions(::Val{D}, ::Type{T}) where {D,T}  # here order = D
     C = complex(T)
+    # series coefs of cis(t) around t = 0
     cis = ntuple(n -> C(im)^(n-1)/(factorial(n-1)), Val(D+1))
+    # series coefs of Ci(t) - im * Si(t) around t = 0
     J0 = ntuple(n -> C(-im)^n/(n*factorial(n)), Val(D))
+    # series coefs of Ci(t) - im * Si(t) around t = t_0 is cis(t0) * Jmat * SA[1/t, 1/t², ...]
     Jmat = ntuple(Val(D*D)) do ij
         j, i = fldmod1(ij, D)
         j > i ? zero(C) : ifelse(isodd(i), 1, -1) * C(im)^(i-j) / (i*factorial(i-j))
     end |> SMatrix{D,D,C}
-    return Expansions(cis, J0, Jmat)
+    # series coefs of log(x) around x = Δ is logim .* SA[1/Δ, 1/Δ², ...]
+    log = ntuple(n -> -T(-1)^n/n, Val(D))
+    return Expansions(cis, J0, Jmat, log)
 end
 
 # function BandSimplex(es::NTuple{<:Any,Number}, ks::NTuple{<:Any,SVector})
@@ -241,37 +247,38 @@ is_degenerate(eₖʲ) = any(iszero, eₖʲ)
 function g_integrals_local_e(s::BandSimplex{D,T}, ω::Number, eⱼ) where {D,T}
     Δⱼ  = ω .- eⱼ
     eₖʲ  = map(x -> trim(chop(x)), transpose(eⱼ) .- eⱼ)  # broadcast too hard for inference
-    qⱼ = q_vector(eₖʲ)
-    lΔⱼ = logim.(-Δⱼ)
-    Eᴰⱼ = Δⱼ.^(D-1) .* lΔⱼ ./ factorial(D-1)
-    Eᴰ⁺¹ⱼ = Δⱼ.^D .* lΔⱼ ./ factorial(D)
+    qⱼ = q_vector(eₖʲ)                              # SVector{D´,T}
+    lΔⱼ = logim.(-Δⱼ, Ref(s.ex))
+    Eᴰⱼ = (-1)^D .* Δⱼ.^(D-1) .* lΔⱼ ./ factorial(D-1)
+    Eᴰ⁺¹ⱼ = (-1)^(D+1) .* Δⱼ.^D .* lΔⱼ ./ factorial(D)
     if iszero(eₖʲ)                                  # special case, full energy degeneracy
         Δ0 = chop(first(Δⱼ))
         if iszero(Δ0)
             g₀ = zero(complex(T))
             gⱼ = SVector(ntuple(Returns(g₀), Val(D)))
         else
-            g₀ = scalar(inv(Δⱼ))/factorial(D)
+            g₀ = scalar(inv(complex(Δ0)))/factorial(D)
             gⱼ = SVector(ntuple(Returns(g₀/(D+1)), Val(D)))
         end
     else
         g₀ = scalar(trim(chop(sum(qⱼ .* Eᴰⱼ))))
         gⱼ = ntuple(Val(D)) do j
-            x = (Eᴰⱼ[j] - (-Δⱼ)^(D-1)) * qⱼ[j]
+            j´ = j + 1
+            D´ = D + 1
+            x = (Eᴰⱼ[j´] - (-Δⱼ[j´])^(D-1)/factorial(D)) * qⱼ[j´]
             for k in 1:D´
-                if k != j
-                    x -= (qⱼ[j] * Eᴰ⁺¹ⱼ[j] + qⱼ[k] * Eᴰ⁺¹ⱼ[k]) / eₖʲ[k, j]
+                if k != j´
+                    x -= (qⱼ[j´] * Eᴰ⁺¹ⱼ[j´] + qⱼ[k] * Eᴰ⁺¹ⱼ[k]) / eₖʲ[k, j´]
                 end
             end
             return scalar(trim(chop(x)))
-        end
+        end |> SVector
     end
     return g₀, gⱼ
 end
 
 function q_vector(eₖʲ::SMatrix{D´,D´,S}) where {D´,S}
-    D = D´-1
-    qⱼ = ntuple(Val(D)) do j
+    qⱼ = ntuple(Val(D´)) do j
         x = one(S)
         for k in 1:D´
             j != k && (x *= eₖʲ[k, j])
@@ -284,10 +291,15 @@ end
 # logim(x) = log(im * x)
 logim(x) = 0.5π * sign(x) * im + log(abs(x))
 
-# function logim(s::Series)
-#     s₀ = scalar(s)
-#     l₀ = logim(s₀)
-# end
+function logim(s::Series{N}, ex) where {N}
+    s₀ = scalar(s)
+    l₀ = logim(s₀)
+    log_coeff = tupletake(ex.log, Val(N-1))
+    invzΔ = cumprod(ntuple(Returns(1/s₀), Val(N-1)))
+    lⱼ = log_coeff .* invzΔ
+    l = Series(l₀, lⱼ...)
+    return rescale(l, s[1])
+end
 
 #endregion
 
@@ -474,7 +486,8 @@ end
         J₀ = log(abs(Δ)) + imπ #+ MathConstants.γ + log(|t|) # not needed, cancels out
         Jᵢ = tupletake(ex.J0, Val(N´)) # ntuple(n -> C(-im)^n/(n*factorial(n)), Val(N´))
         J = Series{N}(J₀, Jᵢ...)
-        E = cis(tΔ)
+        cis_coefs = tupletake(ex.cis, Val(N))
+        E = Series(cis(tΔ) .* cis_coefs)
         EJ = E * J
     else
         cistΔ =  cis(tΔ)
@@ -491,8 +504,8 @@ end
         else
             J = Series(J₀)
         end
-        cis_expansion = tupletake(ex.cis, Val(N))
-        Eᵢ = cistΔ .* cis_expansion
+        cis_coefs = tupletake(ex.cis, Val(N))
+        Eᵢ = cistΔ .* cis_coefs
         E = Series(Eᵢ)
         EJ = E * J
     end
