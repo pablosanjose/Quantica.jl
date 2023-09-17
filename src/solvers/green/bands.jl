@@ -159,12 +159,6 @@ function Expansions(::Val{D}, ::Type{T}) where {D,T}  # here order = D
     return Expansions(cis, J0, Jmat, log)
 end
 
-# function BandSimplex(es::NTuple{<:Any,Number}, ks::NTuple{<:Any,SVector})
-#     ei = SVector(es)
-#     kij = transpose(reduce(hcat, ks))   # ks are rows of kij
-#     return BandSimplex(ei, kij)
-# end
-
 function BandSimplex(ei::SVector{D´}, kij::SMatrix{D´,D,T}, ex = Expansions(Val(D), T)) where {D´,D,T}
     D == D´ - 1 ||
         argerror("The dimension $D of Bloch phases in simplex should be one less than the number of vertices $(D´)")
@@ -217,8 +211,6 @@ function g_integrals_local(s::BandSimplex{D,T}, ω, ::Val{N} = Val(0)) where {D,
     eₖʲ = s.eij
     g₀, gⱼ = begin
         if N > 0 || is_degenerate(eₖʲ)
-            # phases ϕⱼ[j+1] will be perturbed by ϕⱼ´[j+1]*dϕ, for j in 0:D
-            # Similartly, ϕₖʲ[j+1,k+1] will be perturbed by ϕₖʲ´[j+1,k+1]*dϕ
             eⱼ´ = s.dual
             order = ifelse(N > 0, N, D+1)
             eⱼseries = Series{order}.(eⱼ, eⱼ´)
