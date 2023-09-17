@@ -202,7 +202,6 @@ end
 
 #endregion
 
-
 ############################################################################################
 # g_integrals_local: zero-dn g₀(ω) and gⱼ(ω) with normal or hyperdual numbers for φ
 #region
@@ -253,7 +252,7 @@ function g_integrals_local_e(s::BandSimplex{D,T}, ω::Number, eⱼ) where {D,T}
             j´ = j + 1
             D´ = D + 1
             x = (Eᴰⱼ[j´] - (-Δⱼ[j´])^(D-1)/factorial(D)) * qⱼ[j´]
-            for k in 1:D´
+            @inbounds for k in 1:D´
                 if k != j´
                     x -= (qⱼ[j´] * Eᴰ⁺¹ⱼ[j´] + qⱼ[k] * Eᴰ⁺¹ⱼ[k]) / eₖʲ[k, j´]
                 end
@@ -267,7 +266,7 @@ end
 function q_vector(eₖʲ::SMatrix{D´,D´,S}) where {D´,S}
     qⱼ = ntuple(Val(D´)) do j
         x = one(S)
-        for k in 1:D´
+        @inbounds for k in 1:D´
             j != k && (x *= eₖʲ[k, j])
         end
         return inv(x)
@@ -316,7 +315,7 @@ end
 
 # If any ϕₖʲ is zero, or if any tₖʲ and tₗʲ are equal
 function is_degenerate(ϕₖʲ::SMatrix{D´}, eₖʲ) where {D´}
-    for j in 2:D´, k in 1:j-1
+    @inbounds for j in 2:D´, k in 1:j-1
         iszero(ϕₖʲ[k,j]) && return true
         for l in 1:D´
             if l != j && l != k
@@ -348,7 +347,7 @@ function g_integrals_nonlocal_ϕ(s::BandSimplex{D,T}, ω::Number, ϕⱼ) where {
             q = (-im)^D * s.VD * Δ0⁻¹
             g₀ = q * trim(chop(sum(λⱼ))) |> scalar
             gⱼ = ntuple(Val(D)) do j
-                q * scalar(trim(chop(λⱼ[j+1] + im * sum(λₖʲ[:,j+1] - transpose(λₖʲ)[:,j+1]))))
+                @inbounds q * scalar(trim(chop(λⱼ[j+1] + im * sum(λₖʲ[:,j+1] - transpose(λₖʲ)[:,j+1]))))
             end |> SVector
         end
     else
@@ -361,14 +360,14 @@ function g_integrals_nonlocal_ϕ(s::BandSimplex{D,T}, ω::Number, ϕⱼ) where {
         q´ = (-im)^(D+1) * s.VD
         g₀ = q´ * scalar(trim(chop(Λⱼsum)))
         gⱼ = ntuple(Val(D)) do j
-            q´ * scalar(trim(chop(Λⱼ[j+1] + im * sum(Λₖʲ[:,j+1] - transpose(Λₖʲ)[:,j+1]))))
+            @inbounds q´ * scalar(trim(chop(Λⱼ[j+1] + im * sum(Λₖʲ[:,j+1] - transpose(Λₖʲ)[:,j+1]))))
         end |> SVector
     end
     return g₀, gⱼ
 end
 
 # Series of cis(ϕ)
-@inline function cis_scalar(s::Series{N}, ex) where {N}
+function cis_scalar(s::Series{N}, ex) where {N}
     @assert iszero(s.pow)
     cis_series = Series(tupletake(ex.cis, Val(N)))
     c = cis(s[0]) * cis_series
@@ -380,7 +379,7 @@ cis_scalar(s, ex) = cis(s)
 
 divide_if_nonzero(a, b) = iszero(b) ? a : a/b
 
-@inline function αγ_matrix(ϕedges::S, tedges::S, eedges::SMatrix{D´,D´}) where {D´,S<:SMatrix{D´,D´}}
+function αγ_matrix(ϕedges::S, tedges::S, eedges::SMatrix{D´,D´}) where {D´,S<:SMatrix{D´,D´}}
     # js = ks = SVector{D´}(1:D´)
     # α⁻¹ = α⁻¹_series.(js', ks, Ref(tedges), Ref(eedges))
     # γ⁻¹ = γ⁻¹_series.(js', Ref(ϕedges), Ref(eedges))
@@ -398,7 +397,7 @@ end
 
 function α⁻¹_scalar((j, k), tedges::SMatrix{D´,D´,S}, eedges) where {D´,S}
     x = one(S)
-    @inbounds j != k && !iszero(eedges[k, j]) || return x
+    j != k && !iszero(eedges[k, j]) || return x
     @inbounds for l in 1:D´
         if l != j  && !iszero(eedges[l, j])
             x *= eedges[l, j]
@@ -423,7 +422,7 @@ end
 function Λ_matrix(eₖʲ::SMatrix{D´}, ϕₖʲ, Λⱼ, Δⱼ, tₖʲ, αₖʲγⱼeϕⱼ, Jₖʲ) where {D´}
     js = ks = SVector{D´}(1:D´)
     kjs = Tuple(tuple.(ks, js'))
-    Λₖʲtup = ntuple(Val(D´*D´)) do i
+    @inbounds Λₖʲtup = ntuple(Val(D´*D´)) do i
         (k,j) = kjs[i]
         Λ_scalar((k,j), ϕₖʲ[k,j], Λⱼ[j], Δⱼ[j], eₖʲ, tₖʲ, αₖʲγⱼeϕⱼ, Jₖʲ)
     end
@@ -434,13 +433,13 @@ end
 function Λ_scalar((k, j), ϕₖʲ, Λⱼ, Δⱼ, emat::SMatrix{D´,D´,T}, tmat, αγeϕmat, Jmat) where {D´,T}
     Λₖʲ = zero(typeof(Λⱼ))
     j == k && return Λₖʲ
-    eₖʲ = emat[k,j]
+    @inbounds eₖʲ = emat[k,j]
     if iszero(eₖʲ)
         Λₖʲ = Λⱼ / ϕₖʲ
     else
-        tₖʲ = tmat[k,j]
-        Jₖʲ = Jmat[k,j]
-        for l in 1:D´
+        @inbounds tₖʲ = tmat[k,j]
+        @inbounds Jₖʲ = Jmat[k,j]
+        @inbounds for l in 1:D´
             if !iszero(emat[l,j])
                 tₗʲ = tmat[l,j]
                 Jₗʲ = Jmat[l,j]
@@ -463,7 +462,7 @@ function J_scalar(t::T, e, Δ, ex) where {T}
     return J
 end
 
-@inline function J_scalar(t::Series{N,T}, e, Δ, ex) where {N,T}
+function J_scalar(t::Series{N,T}, e, Δ, ex) where {N,T}
     iszero(e) && return zero(Series{N,Complex{T}})
     N´ = N - 1
     C = complex(T)
