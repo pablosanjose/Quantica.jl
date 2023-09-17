@@ -7,7 +7,7 @@
 #   If we need derivatives respect to x/α instead of x, we do rescale(::Series, α)
 #region
 
-struct Series{N,T} <: Number
+struct Series{N,T}
     x::SVector{N,T}   # term coefficients
     pow::Int          # power of first term
 end
@@ -29,8 +29,6 @@ end
 
 chop(d::Series) = Series(chop(d.x), d.pow)
 
-trim(x::Number) = x
-
 function trim(d::Series{N}) where {N}
     nz = leading_zeros(d)
     iszero(nz) && return d
@@ -38,6 +36,8 @@ function trim(d::Series{N}) where {N}
     t = ntuple(i -> d[i + pow - 1], Val(N))
     return Series(t, pow)
 end
+
+trim(x) = x
 
 function leading_zeros(d::Series{N}) where {N}
     @inbounds for i in 0:N-1
@@ -65,7 +65,7 @@ end
 
 Base.eltype(::Series{<:Any,T}) where {T} = T
 
-Base.one(::Type{<:Series{N,T}}) where {N,T<:Number} = Series{N}(one(T))
+Base.one(::Type{<:Series{N,T}}) where {N,T} = Series{N}(one(T))
 Base.zero(::Type{<:Series{N,T}}) where {N,T} = Series(zero(SVector{N,T}), 0)
 Base.iszero(d::Series) = iszero(d.x)
 Base.transpose(d::Series) = d  # act as a scalar
@@ -79,6 +79,7 @@ Base.:*(d::Number, d´::Series) = Series(d * d´.x, d´.pow)
 Base.:*(d´::Series, d::Number) = Series(d * d´.x, d´.pow)
 Base.:/(d::Series{N}, d´::Series{N}) where {N} = d * inv(d´)
 Base.:/(d::Series, d´::Number) = Series(d.x / d´, d.pow)
+Base.:^(d::Series, n::Integer) = Base.power_by_squaring(d, n)
 
 function Base.:*(d::Series{N}, d´::Series{N}) where {N}
     x, x´ = promote(d.x, d´.x)
@@ -454,7 +455,7 @@ function Λ_scalar((k, j), ϕₖʲ, Λⱼ, Δⱼ, emat::SMatrix{D´,D´,T}, tmat
     return Λₖʲ
 end
 
-function J_scalar(t::T, e, Δ, ex) where {T<:Number}
+function J_scalar(t::T, e, Δ, ex) where {T}
     iszero(e) && return zero(complex(T))
     tΔ = t * Δ
     imπ = im * ifelse(Δ > 0, 0, π)
