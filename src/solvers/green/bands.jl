@@ -70,11 +70,11 @@ Base.zero(::Type{<:Series{N,T}}) where {N,T} = Series(zero(SVector{N,T}), 0)
 Base.iszero(d::Series) = iszero(d.x)
 Base.transpose(d::Series) = d  # act as a scalar
 
+Base.:-(d::Series) = Series(-d.x, d.pow)
 Base.:+(d::Series, d´::Series) = trim_and_map(+, d, d´)
 Base.:-(d::Series, d´::Series) = trim_and_map(-, d, d´)
 Base.:+(d::Number, d´::Series{N}) where {N} = Series{N}(d) + d´
 Base.:-(d::Number, d´::Series{N}) where {N} = Series{N}(d) - d´
-Base.:-(d::Series) = Series(-d.x, d.pow)
 Base.:*(d::Number, d´::Series) = Series(d * d´.x, d´.pow)
 Base.:*(d´::Series, d::Number) = Series(d * d´.x, d´.pow)
 Base.:/(d::Series{N}, d´::Series{N}) where {N} = d * inv(d´)
@@ -198,22 +198,10 @@ function is_valid_dual(phi, es)
     return true
 end
 
-function g_integrals(s::BandSimplex, ω, dn)
-    # g₀, gi = if iszero(dn)
-    #     if any(iszero, s.eij)
-    #         g_integrals_local_series(s, ω, dn)
-    #     else
-    #         g_integrals_local(s, ω, dn)
-    #     end
-    # else
-    #     if any(iszero, dn)
-    #         g_integrals_nonlocal_series(s, ω, dn)
-    #     else
-    #         g_integrals_nonlocal(s, ω, dn)
-    #     end
-    # end
-    # g₀, gi = g_integrals_nonlocal_series(s, ω, dn)
-    g₀, gi = g_integrals_nonlocal(s, ω, dn)
+function g_integrals(s::BandSimplex, ω, dn, val...)
+    g₀, gi = iszero(dn) ?
+        g_integrals_local(s, ω, val...) :
+        g_integrals_nonlocal(s, ω, dn, val...)
     return g₀, gi
 end
 
@@ -242,7 +230,13 @@ function g_integrals_local(s::BandSimplex{D,T}, ω, ::Val{N} = Val(0)) where {D,
     return g₀, gⱼ
 end
 
-is_degenerate(eₖʲ) = any(iszero, eₖʲ)
+# whether any eₖ == eⱼ for j != k
+function is_degenerate(eₖʲ::SMatrix{D´}) where {D´}
+    for j in 2:D´, k in 1:j-1
+        iszero(eₖʲ[k,j]) && return true
+    end
+    return false
+end
 
 function g_integrals_local_e(s::BandSimplex{D,T}, ω::Number, eⱼ) where {D,T}
     Δⱼ  = ω .- eⱼ
@@ -257,7 +251,7 @@ function g_integrals_local_e(s::BandSimplex{D,T}, ω::Number, eⱼ) where {D,T}
             g₀ = zero(complex(T))
             gⱼ = SVector(ntuple(Returns(g₀), Val(D)))
         else
-            g₀ = scalar(inv(complex(Δ0)))/factorial(D)
+            g₀ = complex(scalar(inv(Δ0)))/factorial(D)
             gⱼ = SVector(ntuple(Returns(g₀/(D+1)), Val(D)))
         end
     else
@@ -288,8 +282,9 @@ function q_vector(eₖʲ::SMatrix{D´,D´,S}) where {D´,S}
     return qⱼ
 end
 
-# logim(x) = log(im * x)
+# imaginary log: logim(x) = log(im * x)
 logim(x) = 0.5π * sign(x) * im + log(abs(x))
+logim(x, ex) = logim(x)
 
 function logim(s::Series{N}, ex) where {N}
     s₀ = scalar(s)
