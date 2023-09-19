@@ -81,6 +81,8 @@ Base.:/(d::Series{N}, d´::Series{N}) where {N} = d * inv(d´)
 Base.:/(d::Series, d´::Number) = Series(d.x / d´, d.pow)
 Base.:^(d::Series, n::Integer) = Base.power_by_squaring(d, n)
 
+Base.copy(d::Series) = d    # necessary for the case n = 1 in power_by_squaring
+
 function Base.:*(d::Series{N}, d´::Series{N}) where {N}
     x, x´ = promote(d.x, d´.x)
     dp = Series(x, d.pow)
@@ -134,13 +136,13 @@ struct Expansions{D,T,DD}
     log::NTuple{D,T}
 end
 
-struct BandSimplex{D,T,S1,S2,S3,E<:Expansions{D,T}}     # D = manifold dimension
+struct BandSimplex{D,T,S1<:SVector{<:Any,<:Real},S2<:SMatrix{<:Any,<:Any,<:Real},S3<:SMatrix{<:Any,<:Any,<:Real},R<:Ref{<:Expansions{D,T}}}     # D = manifold dimension
     ei::S1        # eᵢ::SVector{D´,T} = energy of vertex i
     kij::S2       # kᵢ[j]::SMatrix{D´,D,T,DD´} = coordinate j of momentum for vertex i
     eij::S3       # ϵᵢʲ::SMatrix{D´,D´,T,D´D´} = e_j - e_i
-    dual::S1      # first hyperdual coefficient
-    VD::T         # D!V = |det(U)|
-    ex::E         # Series expansions for necessary functions
+    dual::S1      # dual::SVector{D´,T}, first hyperdual coefficient
+    VD::T         # D!V = |det(kᵢʲ - kᵢ⁰)|
+    refex::R      # Ref to Series expansions for necessary functions
 end
 
 # Precomputes the Series expansion coefficients for cis, J(z->0) and J(z)
@@ -155,12 +157,14 @@ function Expansions(::Val{D}, ::Type{T}) where {D,T}  # here order = D
         j, i = fldmod1(ij, D)
         j > i ? zero(C) : ifelse(isodd(i), 1, -1) * C(im)^(i-j) / (i*factorial(i-j))
     end |> SMatrix{D,D,C}
-    # series coefs of log(x) around x = Δ is logim .* SA[1/Δ, 1/Δ², ...]
+    # series coefs of ln(x) around x = Δ is ln(Δ) + log .* SA[1/Δ, 1/Δ², ...]
     log = ntuple(n -> -T(-1)^n/n, Val(D))
     return Expansions(cis, J0, Jmat, log)
 end
 
-function BandSimplex(ei::SVector{D´}, kij::SMatrix{D´,D,T}, ex = Expansions(Val(D), T)) where {D´,D,T}
+BandSimplex(ei, kij, refex...) = BandSimplex(real(ei), real(kij), refex...)
+
+function BandSimplex(ei::SVector{D´,T}, kij::SMatrix{D´,D,T}, refex = Ref(Expansions(Val(D), T))) where {D´,D,T}
     D == D´ - 1 ||
         argerror("The dimension $D of Bloch phases in simplex should be one less than the number of vertices $(D´)")
     eij = chop(ei' .- ei)
@@ -168,7 +172,7 @@ function BandSimplex(ei::SVector{D´}, kij::SMatrix{D´,D,T}, ex = Expansions(Va
     U = kij[SVector{D}(2:D´),:]' .- k0          # edges as columns
     VD = abs(det(U))
     dual = generate_dual(eij)
-    return BandSimplex(ei, kij, eij, dual, VD, ex)
+    return BandSimplex(ei, kij, eij, dual, VD, refex)
 end
 
 function generate_dual(eij::SMatrix{D´,D´,T}) where {D´,T}
@@ -234,7 +238,7 @@ function g_integrals_local_e(s::BandSimplex{D,T}, ω::Number, eⱼ) where {D,T}
     Δⱼ  = ω .- eⱼ
     eₖʲ  = map(x -> trim(chop(x)), transpose(eⱼ) .- eⱼ)  # broadcast too hard for inference
     qⱼ = q_vector(eₖʲ)                              # SVector{D´,T}
-    lΔⱼ = logim.(-Δⱼ, Ref(s.ex))
+    lΔⱼ = logim.(-Δⱼ, s.refex)
     Eᴰⱼ = (-1)^D .* Δⱼ.^(D-1) .* lΔⱼ ./ factorial(D-1)
     Eᴰ⁺¹ⱼ = (-1)^(D+1) .* Δⱼ.^D .* lΔⱼ ./ factorial(D)
     if iszero(eₖʲ)                                  # special case, full energy degeneracy
@@ -332,7 +336,7 @@ function g_integrals_nonlocal_ϕ(s::BandSimplex{D,T}, ω::Number, ϕⱼ) where {
     Δⱼ  = ω .- eⱼ
     ϕₖʲ  = map(x -> trim(chop(x)), transpose(ϕⱼ) .- ϕⱼ)  # broadcast too hard for inference
     tₖʲ = divide_if_nonzero.(ϕₖʲ, eₖʲ)
-    eϕⱼ  = cis_scalar.(ϕⱼ, Ref(s.ex))
+    eϕⱼ  = cis_scalar.(ϕⱼ, s.refex)
     αₖʲγⱼ  = αγ_matrix(ϕₖʲ, tₖʲ, eₖʲ)               # αₖʲγⱼ :: SMatrix{D´,D´}
     if iszero(eₖʲ)                                  # special case, full energy degeneracy
         Δ0 = chop(first(Δⱼ))
@@ -344,7 +348,7 @@ function g_integrals_nonlocal_ϕ(s::BandSimplex{D,T}, ω::Number, ϕⱼ) where {
             γⱼ = αₖʲγⱼ[1,:]                         # if eₖʲ == 0, then αₖʲ == 1
             λⱼ = γⱼ .* eϕⱼ
             λₖʲ = divide_if_nonzero.(transpose(λⱼ), ϕₖʲ)
-            q = (-im)^D * s.VD * Δ0⁻¹
+            q = (-im)^D * Δ0⁻¹
             g₀ = q * trim(chop(sum(λⱼ))) |> scalar
             gⱼ = ntuple(Val(D)) do j
                 @inbounds q * scalar(trim(chop(λⱼ[j+1] + im * sum(λₖʲ[:,j+1] - transpose(λₖʲ)[:,j+1]))))
@@ -352,12 +356,12 @@ function g_integrals_nonlocal_ϕ(s::BandSimplex{D,T}, ω::Number, ϕⱼ) where {
         end
     else
         αₖʲγⱼeϕⱼ = αₖʲγⱼ .* transpose(eϕⱼ)          # αₖʲγⱼeϕⱼ :: SMatrix{D´,D´}
-        Jₖʲ = J_scalar.(tₖʲ, eₖʲ, transpose(Δⱼ), Ref(s.ex))    # Jₖʲ :: SMatrix{D´,D´}
+        Jₖʲ = J_scalar.(tₖʲ, eₖʲ, transpose(Δⱼ), s.refex)    # Jₖʲ :: SMatrix{D´,D´}
         αₖʲγⱼeϕⱼJₖʲ = αₖʲγⱼeϕⱼ .* Jₖʲ
         Λⱼ = sum(αₖʲγⱼeϕⱼJₖʲ, dims = 1)
         Λⱼsum = sum(Λⱼ)                             # αₖʲγⱼJʲₖ (manual contraction slower!)
         Λₖʲ = Λ_matrix(eₖʲ, ϕₖʲ, Λⱼ, Δⱼ, tₖʲ, αₖʲγⱼeϕⱼ, Jₖʲ)
-        q´ = (-im)^(D+1) * s.VD
+        q´ = (-im)^(D+1)
         g₀ = q´ * scalar(trim(chop(Λⱼsum)))
         gⱼ = ntuple(Val(D)) do j
             @inbounds q´ * scalar(trim(chop(Λⱼ[j+1] + im * sum(Λₖʲ[:,j+1] - transpose(Λₖʲ)[:,j+1]))))
@@ -498,5 +502,113 @@ function J_scalar(t::Series{N,T}, e, Δ, ex) where {N,T}
     end
     return return rescale(EJ, t[1] * Δ)
 end
+
+#endregion
+
+############################################################################################
+# AppliedBandsGreenSolver <: AppliedGreenSolver
+#region
+
+struct AppliedBandsGreenSolver{B,SB<:Subband,BS<:BandSimplex} <: AppliedGreenSolver
+    subbands::Vector{SB}
+    sbsimps::Vector{Vector{BS}}     # BandSimplex for each simplex in each subband
+    boundary::B
+end
+
+#region ## API ##
+
+minimal_callsafe_copy(s::AppliedBandsGreenSolver) = s   # solver is read-only
+
+needs_omega_shift(s::AppliedBandsGreenSolver) = false
+
+#endregion
+
+#region ## apply ##
+
+function apply(s::GS.Bands,  h::AbstractHamiltonian{T,<:Any,L}, cs::Contacts) where {T,L}
+    # bands must have a well-structured mesh
+    b = bands(h, s.bandsargs...; s.bandskw...)
+    sbs = subbands(b)
+    refex = Ref(Expansions(Val(L), T))
+    sbsimps = subband_simplices.(sbs, refex)
+    boundary = s.boundary
+    return AppliedBandsGreenSolver(sbs, sbsimps, boundary)
+end
+
+function subband_simplices(sb::Subband, ex::Expansions)
+    refex = Ref(ex)
+    sbs = [BandSimplex(energies(sb, simp), transpose(base_coordinates(sb, simp)), refex)
+        for simp in simplices(sb)]
+    return sbs
+end
+
+#endregion
+
+#region ## call ##
+
+function (s::AppliedBandsGreenSolver)(ω, Σblocks, cblockstruct)
+    g0slicer = BandsGreenSlicer(complex(ω), s, s.boundary)
+    gslicer = TMatrixSlicer(g0slicer, Σblocks, cblockstruct)
+    return gslicer
+end
+
+#endregion
+
+#endregion
+
+############################################################################################
+# BandsGreenSlicer <: GreenSlicer
+#region
+
+struct BandsGreenSlicer{C,B,S<:AppliedBandsGreenSolver{B}} <: GreenSlicer{C}
+    ω::C
+    solver::S
+    boundary::B
+end
+
+#region ## API ##
+
+Base.getindex(s::BandsGreenSlicer, i::CellOrbitals, j::CellOrbitals) =
+    s.boundary === missing ? inf_band_slice(s, i, j) : semi_band_slice(s, i, j)
+
+function inf_band_slice(s::BandsGreenSlicer{C}, i::CellOrbitals, j::CellOrbitals) where {C}
+    solver = s.solver
+    rows, cols = orbindices(i), orbindices(j)
+    dist = cell(i) - cell(j)
+    g = zeros(C, length(rows), length(cols))
+    for (sb, bsimps) in zip(solver.subbands, solver.sbsimps)
+        projs = projectors(sb)
+        for (simpind, simp) in enumerate(simplices(sb))
+            bsimp = bsimps[simpind]
+            v₀, vⱼs... = simp
+            g₀, gⱼs = g_integrals(bsimp, s.ω, dist)
+            ψ = view(states(vertices(sb, v₀)), rows, :)
+            ψ´ = view(states(vertices(sb, v₀)), cols, :)'
+            pind = (simpind, v₀)
+            muladd_ψPψ⁺!(g, ψ, ψ´, bsimp.VD * (g₀ - sum(gⱼs)), projs, pind)
+            for (j, gⱼ) in enumerate(gⱼs)
+                vⱼ = vⱼs[j]
+                ψ = view(states(vertices(sb, vⱼ)), rows, :)
+                ψ´ = view(states(vertices(sb, vⱼ)), cols, :)'
+                pind = (simpind, vⱼ)
+                muladd_ψPψ⁺!(g, ψ, ψ´, bsimp.VD * gⱼ, projs, pind)
+            end
+        end
+    end
+    return g
+end
+
+function semi_band_slice(s::BandsGreenSlicer{C}, i::CellOrbitals, j::CellOrbitals) where {C}
+    interalerror("semi_band_slice: work-in-progress")
+end
+
+# does g += α * ψPψ´, where P = projs[pind] is the vertex projector onto the simplex subspace
+# If pind = (simpind, vind) is not in projs::Dict, no projector P is necessary
+muladd_ψPψ⁺!(g, ψ, ψ´, α, projs, pind) =
+    haskey(projs, pind) ? mul!(g, ψ, projs[pind] * ψ´, α, 1) : mul!(g, ψ, ψ´, α, 1)
+
+minimal_callsafe_copy(s::BandsGreenSlicer) = s  # it is read-only
+
+#endregion
 
 #endregion

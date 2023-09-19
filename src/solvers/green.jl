@@ -4,7 +4,7 @@
 #     - apply(solver, h::AbstractHamiltonian, c::Contacts) -> AppliedGreenSolver
 #   All new s::AppliedGreenSolver must implement (with Σblock a [possibly nested] tuple of MatrixBlock's)
 #      - s(ω, Σblocks, ::ContactBlockStructure) -> GreenSlicer
-#      - minimal_callsafe_copy(gs)
+#      - minimal_callsafe_copy(s)
 #      - optional: needs_omega_shift(s) (with a true fallback)
 #   A gs::GreenSlicer's allows to compute G[gi, gi´]::AbstractMatrix for indices gi
 #   To do this, it must implement
@@ -66,6 +66,15 @@ end
 #     ϵmin = R(real(decomps.eigenvalues[1]))
 #     return (ϵmin, ϵmax)
 # end
+
+struct Bands{B<:Union{Missing,Pair},A,K} <: AbstractGreenSolver
+    bandsargs::A
+    bandskw::K
+    boundary::B
+end
+
+Bands(bandargs...; boundary = missing, bandskw...) =
+    Bands(bandargs, NamedTuple(bandskw), boundary)
 
 end # module
 

@@ -201,7 +201,6 @@ end
 
 #region ## call ##
 
-# Σblocks and contactblockstruct are not used here, because they are already inside invgreen
 function (s::AppliedKPMGreenSolver{T})(ω, Σblocks, cblockstruct) where {T}
     g0contacts = KPMgreen(s.momenta, ω, s.bandCH)
     gslicer = TMatrixSlicer(g0contacts, Σblocks, cblockstruct)

@@ -1420,7 +1420,7 @@ end
 struct Subband{T,E} <: AbstractMesh{BandVertex{T,E},E}  # we restrict S == E
     mesh::Mesh{BandVertex{T,E},E}
     trees::NTuple{E,IntervalTree{T,IntervalValue{T,Int}}} # for interval searches
-    projectors::Dict{Tuple{Int,Int},Matrix{Complex{T}}} # onto interpolated simplex subspace
+    projectors::Dict{Tuple{Int,Int},Matrix{Complex{T}}} # (simpind, vind) => subspace proj
 end
 
 struct Bandstructure{T,E,L,B} # E = L+1
@@ -1541,6 +1541,15 @@ neighbors_forward(s::Subband, i) = neighbors_forward(s.mesh, i)
 
 simplices(s::Subband, i...) = simplices(s.mesh, i...)
 
+energy(s::Subband, vind::Int) = energy(vertices(s, vind))
+
+energies(s::Subband, vinds::NTuple{D´,Int}) where {D´} =
+    SVector{D´}(energy.(Ref(s), vinds))
+
+base_coordinates(s::Subband, vind::Int) = base_coordinates(vertices(s, vind))
+base_coordinates(s::Subband, vinds::NTuple{D,Int}) where {D} =
+    reduce(hcat, base_coordinates.(Ref(s), vinds))
+
 trees(s::Subband) = s.trees
 trees(s::Subband, i::Int) = s.trees[i]
 
@@ -1575,11 +1584,6 @@ embdim(::AbstractMesh{<:BandVertex{<:Any,E}}) where {E} = E
 meshdim(::AbstractMesh{<:Any,S}) where {S} = S
 
 dims(m::AbstractMesh) = (embdim(m), meshdim(m))
-
-function compute_projectors!(hf::Function, s::Subband)
-    ps = projectors(s)
-
-end
 
 Base.size(s::Spectrum, i...) = size(s.eigen.vectors, i...)
 

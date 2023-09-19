@@ -1223,7 +1223,7 @@ driver without the added slicing functionality of a full `Bandstructure` object,
 - `projectors::Bool`: whether to compute interpolating subspaces in each simplex (for use as GreenSolver). Default: `true`
 - `warn::Bool`: whether to emit warning when band dislocations are encountered. Default: `true`
 - `showprogress::Bool`: whether to show or not a progress bar. Default: `true`
-- `defects`: (experimental) a collection of extra points to add to the mesh, typically the location of topological band defects such as Dirac points, so that interpolation avoids creating dislocation defects in the bands. You need to also increase `patches` to repair the subband dislocations using the added defect vertices.
+- `defects`: (experimental) a collection of extra points to add to the mesh, typically the location of topological band defects such as Dirac points, so that interpolation avoids creating dislocation defects in the bands. You need to also increase `patches` to repair the subband dislocations using the added defect vertices. Default: `()`
 - `patches::Integer`: (experimental) if a dislocation is encountered, attempt to patch it by searching for the defect recursively to a given order, or using the provided `defects` (preferred). Default: `0`
 
 ## Currying
@@ -1388,6 +1388,18 @@ julia> gdisk = HP.graphene(a0 = 1, dim = 3) |> supercell(region = RP.circle(10))
 
 """
 attach
+
+"""
+    cellsites(cell_indices, site_indices)
+
+Simple selector of sites with given `site_indices` in a given cell at `cell_indices`. Here,
+`site_indices` can be an index, a collection of integers or `:` (for all sites), and
+`cell_indices` should be a collection of `L` integers, where `L` is the lattice dimension.
+
+# See also
+    `siteselector`
+"""
+cellsites
 
 """
     greenfunction(h::Union{AbstractHamiltonian,OpenHamiltonian}, solver::GreenSolver)
