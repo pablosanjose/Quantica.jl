@@ -256,6 +256,7 @@ function subbands_diagonalize!(data)
     ProgressMeter.finish!(meter)
 end
 
+const degeneracy_warning = 16
 
 # collect eigen into a band column (vector of BandVertices for equal base vertex)
 function append_bands_column!(data, basevert, eigen)
@@ -263,6 +264,9 @@ function append_bands_column!(data, basevert, eigen)
     energies, states = eigen
     subs = collect(approxruns(energies, data.degtol))
     for (i, rng) in enumerate(subs)
+        deg = length(rng)
+        data.warn && data.projectors && deg > degeneracy_warning &&
+            @warn "Encountered a highly degenerate point in bandstructure (deg = $deg), which will likely slow down the computation of projectors"
         state = orthonormalize!(view(states, :, rng))
         energy = mean(i -> energies[i], rng)
         push!(data.bandverts, BandVertex(basevert, energy, state))

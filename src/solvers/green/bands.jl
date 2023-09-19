@@ -66,6 +66,7 @@ end
 Base.eltype(::Series{<:Any,T}) where {T} = T
 
 Base.one(::Type{<:Series{N,T}}) where {N,T} = Series{N}(one(T))
+Base.one(d::S) where {S<:Series} = one(S)
 Base.zero(::Type{<:Series{N,T}}) where {N,T} = Series(zero(SVector{N,T}), 0)
 Base.iszero(d::Series) = iszero(d.x)
 Base.transpose(d::Series) = d  # act as a scalar
@@ -81,7 +82,8 @@ Base.:/(d::Series{N}, d´::Series{N}) where {N} = d * inv(d´)
 Base.:/(d::Series, d´::Number) = Series(d.x / d´, d.pow)
 Base.:^(d::Series, n::Integer) = Base.power_by_squaring(d, n)
 
-Base.copy(d::Series) = d    # necessary for the case n = 1 in power_by_squaring
+# necessary for the case n = 0 and n = 1 in power_by_squaring
+Base.copy(d::Series) = d
 
 function Base.:*(d::Series{N}, d´::Series{N}) where {N}
     x, x´ = promote(d.x, d´.x)
@@ -170,7 +172,7 @@ function BandSimplex(ei::SVector{D´,T}, kij::SMatrix{D´,D,T}, refex = Ref(Expa
     eij = chop(ei' .- ei)
     k0 = kij[1, :]
     U = kij[SVector{D}(2:D´),:]' .- k0          # edges as columns
-    VD = abs(det(U))
+    VD = abs(det(U)) / (2π)^D
     dual = generate_dual(eij)
     return BandSimplex(ei, kij, eij, dual, VD, refex)
 end
@@ -521,13 +523,14 @@ minimal_callsafe_copy(s::AppliedBandsGreenSolver) = s   # solver is read-only
 
 needs_omega_shift(s::AppliedBandsGreenSolver) = false
 
+subbands(g::GreenFunction{<:Any,<:Any,<:Any,<:AppliedBandsGreenSolver}) = g.solver.subbands
+
 #endregion
 
 #region ## apply ##
 
 function apply(s::GS.Bands,  h::AbstractHamiltonian{T,<:Any,L}, cs::Contacts) where {T,L}
-    # bands must have a well-structured mesh
-    b = bands(h, s.bandsargs...; s.bandskw...)
+    b = bands(h, s.bandsargs...; s.bandskw..., projectors = true)
     sbs = subbands(b)
     refex = Ref(Expansions(Val(L), T))
     sbsimps = subband_simplices.(sbs, refex)
