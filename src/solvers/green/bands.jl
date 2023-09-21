@@ -68,6 +68,7 @@ Base.eltype(::Series{<:Any,T}) where {T} = T
 Base.one(::Type{<:Series{N,T}}) where {N,T} = Series{N}(one(T))
 Base.one(d::S) where {S<:Series} = one(S)
 Base.zero(::Type{<:Series{N,T}}) where {N,T} = Series(zero(SVector{N,T}), 0)
+Base.zero(d::S) where {S<:Series} = zero(S)
 Base.iszero(d::Series) = iszero(d.x)
 Base.transpose(d::Series) = d  # act as a scalar
 
@@ -152,7 +153,7 @@ function Expansions(::Val{D}, ::Type{T}) where {D,T}  # here order = D
     C = complex(T)
     # series coefs of cis(t) around t = 0
     cis = ntuple(n -> C(im)^(n-1)/(factorial(n-1)), Val(D+1))
-    # series coefs of Ci(t) - im * Si(t) around t = 0
+    # series coefs of Ci(t) - im * Si(t) around t = 0, starting at order 1
     J0 = ntuple(n -> C(-im)^n/(n*factorial(n)), Val(D))
     # series coefs of Ci(t) - im * Si(t) around t = t_0 is cis(t0) * Jmat * SA[1/t, 1/t², ...]
     Jmat = ntuple(Val(D*D)) do ij
@@ -358,7 +359,7 @@ function g_integrals_nonlocal_ϕ(s::BandSimplex{D,T}, ω::Number, ϕⱼ) where {
         end
     else
         αₖʲγⱼeϕⱼ = αₖʲγⱼ .* transpose(eϕⱼ)          # αₖʲγⱼeϕⱼ :: SMatrix{D´,D´}
-        Jₖʲ = J_scalar.(tₖʲ, eₖʲ, transpose(Δⱼ), s.refex)    # Jₖʲ :: SMatrix{D´,D´}
+        Jₖʲ = J_scalar.(tₖʲ, eₖʲ, transpose(Δⱼ), s.refex) # Jₖʲ :: SMatrix{D´,D´}
         αₖʲγⱼeϕⱼJₖʲ = αₖʲγⱼeϕⱼ .* Jₖʲ
         Λⱼ = sum(αₖʲγⱼeϕⱼJₖʲ, dims = 1)
         Λⱼsum = sum(Λⱼ)                             # αₖʲγⱼJʲₖ (manual contraction slower!)
@@ -397,7 +398,7 @@ function αγ_matrix(ϕedges::S, tedges::S, eedges::SMatrix{D´,D´}) where {D´
     jks = Tuple(tuple.(js', ks))
     α⁻¹ = SMatrix{D´,D´}(α⁻¹_scalar.(jks, Ref(tedges), Ref(eedges)))
     γ⁻¹ = SVector(γ⁻¹_scalar.(Tuple(js), Ref(ϕedges), Ref(eedges)))
-    γα = inv.(α⁻¹ .* transpose(γ⁻¹))
+    γα = inv.(α⁻¹ .* transpose(γ⁻¹)) #- one(α⁻¹) # if we want to eliminate j=k entries
     return γα
 end
 
@@ -460,39 +461,34 @@ function Λ_scalar((k, j), ϕₖʲ, Λⱼ, Δⱼ, emat::SMatrix{D´,D´,T}, tmat
     return Λₖʲ
 end
 
-function J_scalar(t::T, e, Δ, ex) where {T}
+function J_scalar(t::T, e, Δ, ex) where {T<:Real}
     iszero(e) && return zero(complex(T))
     tΔ = t * Δ
-    imπ = im * ifelse(Δ > 0, 0, π)
-    J = iszero(tΔ) ? log(abs(Δ)) + imπ : cis(tΔ) * (cosint(abs(tΔ)) - im*sinint(tΔ) + imπ)
+    J = iszero(tΔ) ? logim(-Δ) : cis(tΔ) * J_integral(tΔ, t, Δ)
     return J
 end
 
-function J_scalar(t::Series{N,T}, e, Δ, ex) where {N,T}
+function J_scalar(t::Series{N,T}, e, Δ, ex) where {N,T<:Real}
     iszero(e) && return zero(Series{N,Complex{T}})
     N´ = N - 1
     C = complex(T)
     iszero(Δ) && return Series{N}(C(Inf))
-    tΔ = t[0] * Δ
-    imπ = im * ifelse(Δ > 0, 0, π) # strangely enough, union splitting is faster than stable
+    t₀ = t[0]
+    tΔ = t₀ * Δ
     if iszero(tΔ)
-        J₀ = log(abs(Δ)) + imπ #+ MathConstants.γ + log(|t|) # not needed, cancels out
+        J₀ = logim(-Δ) #+ MathConstants.γ + log(|t|) # not needed, cancels out
         Jᵢ = tupletake(ex.J0, Val(N´)) # ntuple(n -> C(-im)^n/(n*factorial(n)), Val(N´))
         J = Series{N}(J₀, Jᵢ...)
         cis_coefs = tupletake(ex.cis, Val(N))
-        E = Series(cis(tΔ) .* cis_coefs)
+        E = Series(cis_coefs)   # cis(tΔ) == 1
         EJ = E * J
     else
         cistΔ =  cis(tΔ)
-        J₀ = cosint(abs(tΔ)) - im*sinint(tΔ) + imπ
+        J₀ = J_integral(tΔ, t₀, Δ)
         if N > 1
             invzΔ = cumprod(ntuple(Returns(1/tΔ), Val(N-1)))
             Jmat = smatrixtake(ex.Jmat, Val(N´))
-                # ntuple(Val(N´*N´)) do ij
-                #     j, i = fldmod1(ij, N´)
-                #     j > i ? zero(C) : ifelse(isodd(i), 1, -1) * C(im)^(i-j) / (i*factorial(i-j))
-                # end |> SMatrix{N´,N´,C}
-            Jᵢ = Tuple(conj(cistΔ) * (Jmat * SVector(invzΔ)))
+            Jᵢ = Tuple(inv(cistΔ) * (Jmat * SVector(invzΔ)))
             J = Series(J₀, Jᵢ...)
         else
             J = Series(J₀)
@@ -501,9 +497,16 @@ function J_scalar(t::Series{N,T}, e, Δ, ex) where {N,T}
         Eᵢ = cistΔ .* cis_coefs
         E = Series(Eᵢ)
         EJ = E * J
+        # EJ = E * J₀   # This option seems to make no difference after sum!
     end
-    return return rescale(EJ, t[1] * Δ)
+    return rescale(EJ, t[1] * Δ)
 end
+
+J_integral(tΔ::Real, t::Real, Δ::Real) =
+    cosint(abs(tΔ)) - im*sinint(tΔ) - im*0.5π*sign(real(Δ))
+
+J_integral(tΔ, t, Δ) =
+    -gamma(0, im*tΔ) - im*0.5π*(sign(real(Δ))+sign(real(tΔ))) - log(abs(t))
 
 #endregion
 
