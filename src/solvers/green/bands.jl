@@ -554,7 +554,7 @@ minimal_callsafe_copy(s::AppliedBandsGreenSolver) = s   # solver is read-only
 
 needs_omega_shift(s::AppliedBandsGreenSolver) = false
 
-subbands(g::GreenFunction{<:Any,<:Any,<:Any,<:AppliedBandsGreenSolver}) = g.solver.subbands
+bands(g::GreenFunction{<:Any,<:Any,<:Any,<:AppliedBandsGreenSolver}) = g.solver.subbands
 
 #endregion
 
