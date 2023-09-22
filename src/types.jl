@@ -1369,6 +1369,8 @@ dim(::AbstractMesh{<:Any,S}) where {S} = S - 1
 coordinates(s::AbstractMesh) = (coordinates(v) for v in vertices(s))
 coordinates(s::AbstractMesh, i::Int) = coordinates(vertices(s, i))
 
+nvertices(m::Mesh) = length(m.verts)
+
 vertices(m::Mesh) = m.verts
 vertices(m::Mesh, i) = m.verts[i]
 

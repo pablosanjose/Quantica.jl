@@ -138,6 +138,7 @@ function subbands_precompilable(hf::FunctionWrapper, solvers::Vector{A}, basemes
     # Step 3 - Patch seams:
     # Dirac points and other topological band defects will usually produce dislocations in
     # mesh connectivity that results in missing simplices.
+    insert_defects!(data)
     if L>1
         subbands_patch!(data)
     end
@@ -374,7 +375,6 @@ column_range(data, ibase) = data.coloffsets[ibase]+1:data.coloffsets[ibase+1]
 #region
 
 function subbands_patch!(data)
-    insert_defects!(data)
     data.patches > 0 || return data
     queue_frustrated!(data)
     data.warn && isempty(data.defects) &&
@@ -430,12 +430,25 @@ function insert_defect_column!(data, kdefect)
     for k in vertices(base)
         k ≈ kdefect && return data
     end
-    # find closest edge (center) to kdefect
+    (ib, jb) = find_closest_edge(kdefect, base)
+    insert_column!(data, (ib, jb), kdefect)
+    return data
+end
+
+function find_closest_edge(kdefect::SVector{1}, base)
+    kx = only(kdefect)
+    for i in eachindex(vertices(base)), j in neighbors(base, i)
+        only(vertices(base, i)) < kx < only(vertices(base, j)) && return (i, j)
+    end
+    argerror("Defects in 1D lattices should be contained inside the lattice, but the provided $kdefect is not")
+    return (0, 0)
+end
+
+function find_closest_edge(kdefect, base)
     (ib, jb) = argmin(((i, j) for i in eachindex(vertices(base)) for j in neighbors(base, i))) do (i, j)
         sum(abs2, 0.5*(vertices(base, i) + vertices(base, j)) - kdefect)
     end
-    insert_column!(data, (ib, jb), kdefect)
-    return data
+    return (ib, jb)
 end
 
 function insert_column!(data, (ib, jb), k)
