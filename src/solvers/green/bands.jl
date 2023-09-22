@@ -259,7 +259,7 @@ function g_integrals_local_e(s::BandSimplex{D,T}, ω::Number, eⱼ) where {D,T}
             j´ = j + 1
             D´ = D + 1
             x = (Eᴰⱼ[j´] - (-Δⱼ[j´])^(D-1)/factorial(D)) * qⱼ[j´]
-            @inbounds for k in 1:D´
+            for k in 1:D´
                 if k != j´
                     x -= (qⱼ[j´] * Eᴰ⁺¹ⱼ[j´] + qⱼ[k] * Eᴰ⁺¹ⱼ[k]) / eₖʲ[k, j´]
                 end
@@ -282,7 +282,8 @@ function q_vector(eₖʲ::SMatrix{D´,D´,S}) where {D´,S}
 end
 
 # imaginary log: logim(x) = log(im * x)
-logim(x) = 0.5π * sign(x) * im + log(abs(x))
+logim(x::Real) = 0.5π * sign(x) * im + log(abs(x))
+logim(x::Complex) = log(im * x)
 logim(x, ex) = logim(x)
 
 function logim(s::Series{N}, ex) where {N}
@@ -320,10 +321,10 @@ function g_integrals_nonlocal(s::BandSimplex{D,T}, ω, dn, ::Val{N} = Val(0)) wh
     return g₀, gⱼ
 end
 
-# If any ϕₖʲ = eₖʲ = 0, or if any tₖʲ and tₗʲ are equal
+# If any ϕₖʲ = 0, or if any tₖʲ and tₗʲ are equal
 function is_degenerate(ϕₖʲ::SMatrix{D´}, eₖʲ) where {D´}
     @inbounds for j in 2:D´, k in 1:j-1
-        iszero(ϕₖʲ[k,j]) && iszero(eₖʲ[k,j]) && return true
+        iszero(ϕₖʲ[k,j]) && return true
         if !iszero(eₖʲ[k,j])
             for l in 1:D´
                 if l != k && l != j
@@ -478,7 +479,7 @@ function J_scalar(t::Series{N,T}, e, Δ, ex) where {N,T<:Real}
     t₀ = t[0]
     tΔ = t₀ * Δ
     if iszero(tΔ)
-        J₀ = logim(-Δ) #+ MathConstants.γ + log(|t|) # not needed, cancels out
+        J₀ = logim(Δ) - im * pi * sign(real(Δ))
         Jᵢ = tupletake(ex.J0, Val(N´)) # ntuple(n -> C(-im)^n/(n*factorial(n)), Val(N´))
         J = Series{N}(J₀, Jᵢ...)
         cis_coefs = tupletake(ex.cis, Val(N))
@@ -498,18 +499,23 @@ function J_scalar(t::Series{N,T}, e, Δ, ex) where {N,T<:Real}
         cis_coefs = tupletake(ex.cis, Val(N))
         Eᵢ = cistΔ .* cis_coefs
         E = Series(Eᵢ)
-        EJ = E * J
-        # EJ = E * J₀   # This option seems to make no difference after sum!
+        # EJ = E * J
+        EJ = E * J₀   # This option seems to make no difference after sum!
     end
     return rescale(EJ, t[1] * Δ)
 end
 
-J_integral(tΔ::Real, t::Real, Δ::Real) =
-    cosint(abs(tΔ)) - im*sinint(tΔ) - im*0.5π*sign(real(Δ))
+function J_integral(tΔ::Real, t::Real, Δ::Real)
+    J = cosint(abs(tΔ)) - im*sinint(tΔ) - im*0.5π*sign(Δ)
+    Jreg = MathConstants.eulergamma + log(abs(t))
+    return J - Jreg
+end
 
-J_integral(tΔ, t, Δ) =
-    -gamma(0, im*tΔ) - im*0.5π*(sign(real(Δ))+sign(real(tΔ))) - log(abs(t))
-
+function J_integral(tΔ, t, Δ)
+    J = -gamma(0, im*tΔ) - im*0.5π*(sign(real(Δ))+sign(real(tΔ)))
+    Jreg = MathConstants.eulergamma + log(abs(t))
+    return J - Jreg
+end
 #endregion
 
 ############################################################################################
