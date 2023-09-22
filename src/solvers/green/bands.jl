@@ -239,7 +239,7 @@ end
 
 function g_integrals_local_e(s::BandSimplex{D,T}, ω::Number, eⱼ) where {D,T}
     Δⱼ  = ω .- eⱼ
-    eₖʲ  = map(x -> trim(chop(x)), transpose(eⱼ) .- eⱼ)  # broadcast too hard for inference
+    eₖʲ  = map(chop, transpose(eⱼ) .- eⱼ)  # broadcast too hard for inference
     qⱼ = q_vector(eₖʲ)                              # SVector{D´,T}
     lΔⱼ = logim.(Δⱼ, s.refex)
     Eᴰⱼ = (-1)^D .* Δⱼ.^(D-1) .* lΔⱼ ./ factorial(D-1)
@@ -254,7 +254,7 @@ function g_integrals_local_e(s::BandSimplex{D,T}, ω::Number, eⱼ) where {D,T}
             gⱼ = SVector(ntuple(Returns(g₀/(D+1)), Val(D)))
         end
     else
-        g₀ = scalar(trim(chop(sum(qⱼ .* Eᴰⱼ))))
+        g₀ = scalar(sum(qⱼ .* Eᴰⱼ))
         gⱼ = ntuple(Val(D)) do j
             j´ = j + 1
             D´ = D + 1
@@ -264,7 +264,7 @@ function g_integrals_local_e(s::BandSimplex{D,T}, ω::Number, eⱼ) where {D,T}
                     x -= (qⱼ[j´] * Eᴰ⁺¹ⱼ[j´] + qⱼ[k] * Eᴰ⁺¹ⱼ[k]) / eₖʲ[k, j´]
                 end
             end
-            return scalar(trim(chop(x)))
+            return scalar(x)
         end |> SVector
     end
     return g₀, gⱼ
@@ -282,7 +282,7 @@ function q_vector(eₖʲ::SMatrix{D´,D´,S}) where {D´,S}
 end
 
 # imaginary log with branchcut in the lower plane
-logim(x::Complex) = log(im * x) - im * pi * sign(real(x))
+logim(x::Complex) = iszero(imag(x)) ? logim(real(x)) : log(-im * x)
 logim(x::Real) =  log(abs(x)) - im * 0.5π * sign(x)
 logim(x, ex) = logim(x)
 
@@ -309,10 +309,11 @@ function g_integrals_nonlocal(s::BandSimplex{D,T}, ω, dn, ::Val{N} = Val(0)) wh
     eₖʲ = s.eij
     g₀, gⱼ = begin
         if N > 0 || is_degenerate(ϕₖʲ, eₖʲ)
-            # phases ϕⱼ[j+1] will be perturbed by ϕⱼ´[j+1]*dϕ, for j in 0:D
-            # Similartly, ϕₖʲ[j+1,k+1] will be perturbed by ϕₖʲ´[j+1,k+1]*dϕ
-            ϕⱼ´ = s.dual
             order = ifelse(N > 0, N, D+1)
+        ## This dynamical estimate of the order is not type-stable. Not worth it
+        # order = N == 0 ? simplex_degeneracy(ϕₖʲ, eₖʲ) + 1 : N
+        # if order > 1
+            ϕⱼ´ = s.dual
             ϕⱼseries = Series{order}.(ϕⱼ, ϕⱼ´)
             g_integrals_nonlocal_ϕ(s, ω, ϕⱼseries)
         else
@@ -321,6 +322,33 @@ function g_integrals_nonlocal(s::BandSimplex{D,T}, ω, dn, ::Val{N} = Val(0)) wh
     end
     return g₀, gⱼ
 end
+
+# # Computes how many denominator zeros in any of the terms of g₀ and gⱼ (max of both)
+# function simplex_degeneracy(ϕₖʲ::SMatrix{D´}, eₖʲ) where {D´}
+#     deg = degα = degd = 0
+#     for j in 1:D´
+#         degγ = 0
+#         for k in 1:D´
+#             k == j && continue
+#             e = eₖʲ[k, j]
+#             ϕ = ϕₖʲ[k, j]
+#             iszero(e) && (degγ += iszero(ϕ))
+#             degα = degd = 0
+#             for l in 1:D´
+#                 e´ = eₖʲ[l,j]
+#                 iszero(e) && continue
+#                 ϕ´ = ϕₖʲ[l,j]
+#                 tt = ϕ*e´≈e*ϕ´
+#                 l != k && l != j && (degα += tt)
+#                 iszero(e´) && continue
+#                 !iszero(e) && tt && iszero(ϕ´) && (degd = 1)
+#             end
+#             deg = max(deg, degγ + degα + degd)
+#         end
+#         deg >= D´ && return D´
+#     end
+#     return deg
+# end
 
 # If any ϕₖʲ = 0, or if any tₖʲ and tₗʲ are equal
 function is_degenerate(ϕₖʲ::SMatrix{D´}, eₖʲ) where {D´}
@@ -342,7 +370,7 @@ function g_integrals_nonlocal_ϕ(s::BandSimplex{D,T}, ω::Number, ϕⱼ) where {
     eⱼ  = s.ei
     eₖʲ = s.eij
     Δⱼ  = ω .- eⱼ
-    ϕₖʲ  = map(x -> trim(chop(x)), transpose(ϕⱼ) .- ϕⱼ)  # broadcast too hard for inference
+    ϕₖʲ  = map(chop, transpose(ϕⱼ) .- ϕⱼ)  # broadcast too hard for inference
     tₖʲ = divide_if_nonzero.(ϕₖʲ, eₖʲ)
     eϕⱼ  = cis_scalar.(ϕⱼ, s.refex)
     αₖʲγⱼ  = αγ_matrix(ϕₖʲ, tₖʲ, eₖʲ)               # αₖʲγⱼ :: SMatrix{D´,D´}
@@ -357,9 +385,9 @@ function g_integrals_nonlocal_ϕ(s::BandSimplex{D,T}, ω::Number, ϕⱼ) where {
             λⱼ = γⱼ .* eϕⱼ
             λₖʲ = divide_if_nonzero.(transpose(λⱼ), ϕₖʲ)
             q = (-im)^D * Δ0⁻¹
-            g₀ = q * trim(chop(sum(λⱼ))) |> scalar
+            g₀ = q * sum(scalar.(λⱼ))
             gⱼ = ntuple(Val(D)) do j
-                q * scalar(trim(chop(λⱼ[j+1] + im * sum(λₖʲ[:,j+1] - transpose(λₖʲ)[:,j+1]))))
+                q * scalar(λⱼ[j+1] + im * sum(λₖʲ[:,j+1] - transpose(λₖʲ)[:,j+1]))
             end |> SVector
         end
     else
@@ -367,12 +395,11 @@ function g_integrals_nonlocal_ϕ(s::BandSimplex{D,T}, ω::Number, ϕⱼ) where {
         Jₖʲ = J_scalar.(tₖʲ, eₖʲ, transpose(Δⱼ), s.refex) # Jₖʲ :: SMatrix{D´,D´}
         αₖʲγⱼeϕⱼJₖʲ = αₖʲγⱼeϕⱼ .* Jₖʲ
         Λⱼ = sum(αₖʲγⱼeϕⱼJₖʲ, dims = 1)
-        Λⱼsum = sum(Λⱼ)                             # αₖʲγⱼJʲₖ (manual contraction slower!)
         Λₖʲ = Λ_matrix(eₖʲ, ϕₖʲ, Λⱼ, Δⱼ, tₖʲ, αₖʲγⱼeϕⱼ, Jₖʲ)
         q´ = (-im)^(D+1)
-        g₀ = q´ * scalar(trim(chop(Λⱼsum)))
+        g₀ = q´ * sum(scalar.(Λⱼ))
         gⱼ = ntuple(Val(D)) do j
-            q´ * scalar(trim(chop(Λⱼ[j+1] + im * sum(Λₖʲ[:,j+1] - transpose(Λₖʲ)[:,j+1]))))
+            q´ * scalar(Λⱼ[j+1] + im * sum(Λₖʲ[:,j+1] - transpose(Λₖʲ)[:,j+1]))
         end |> SVector
     end
     return g₀, gⱼ
@@ -392,22 +419,15 @@ cis_scalar(s, ex) = cis(s)
 divide_if_nonzero(a, b) = iszero(b) ? a : a/b
 
 function αγ_matrix(ϕedges::S, tedges::S, eedges::SMatrix{D´,D´}) where {D´,S<:SMatrix{D´,D´}}
-    # js = ks = SVector{D´}(1:D´)
-    # α⁻¹ = α⁻¹_series.(js', ks, Ref(tedges), Ref(eedges))
-    # γ⁻¹ = γ⁻¹_series.(js', Ref(ϕedges), Ref(eedges))
-    # γα = inv.(α⁻¹ .* γ⁻¹)
-    # return γα
-    ## BUG: broadcast over SArrays is currently allocations-buggy
-    ## https://github.com/JuliaArrays/StaticArrays.jl/issues/1178
     js = ks = SVector{D´}(1:D´)
-    jks = Tuple(tuple.(js', ks))
-    α⁻¹ = SMatrix{D´,D´}(α⁻¹_scalar.(jks, Ref(tedges), Ref(eedges)))
-    γ⁻¹ = SVector(γ⁻¹_scalar.(Tuple(js), Ref(ϕedges), Ref(eedges)))
-    γα = inv.(α⁻¹ .* transpose(γ⁻¹)) #- one(α⁻¹) # if we want to eliminate j=k entries
+    kjs = tuple.(ks, js')
+    α⁻¹ = α⁻¹_scalar.(kjs, Ref(tedges), Ref(eedges))
+    γ⁻¹ = γ⁻¹_scalar.(js', Ref(ϕedges), Ref(eedges))
+    γα = inv.(α⁻¹ .* γ⁻¹)
     return γα
 end
 
-function α⁻¹_scalar((j, k), tedges::SMatrix{D´,D´,S}, eedges) where {D´,S}
+function α⁻¹_scalar((k, j), tedges::SMatrix{D´,D´,S}, eedges) where {D´,S}
     x = one(S)
     j != k && !iszero(eedges[k, j]) || return x
     @inbounds for l in 1:D´
@@ -433,6 +453,9 @@ end
 
 function Λ_matrix(eₖʲ::SMatrix{D´}, ϕₖʲ, Λⱼ, Δⱼ, tₖʲ, αₖʲγⱼeϕⱼ, Jₖʲ) where {D´}
     js = ks = SVector{D´}(1:D´)
+    ## Inference currently struggles with this
+    # kjs = tuple.(ks, js')
+    # Λₖʲ = Λ_scalar.(kjs, ϕₖʲ, transpose(Λⱼ), transpose(Δⱼ), Ref(eₖʲ), Ref(tₖʲ), Ref(αₖʲγⱼeϕⱼ), Ref(Jₖʲ))
     kjs = Tuple(tuple.(ks, js'))
     Λₖʲtup = ntuple(Val(D´*D´)) do i
         (k,j) = kjs[i]
@@ -490,7 +513,6 @@ function J_scalar(t::Series{N,T}, e, Δ, ex) where {N,T<:Real}
     else
         cistΔ =  cis(tΔ)
         J₀ = J_integral(tΔ, t₀, Δ)
-        J₀ = J_integral(tΔ, t₀, Δ)
         if N > 1
             invzΔ = cumprod(ntuple(Returns(1/tΔ), Val(N-1)))
             Jmat = smatrixtake(ex.Jmat, Val(N´))
@@ -507,13 +529,10 @@ function J_scalar(t::Series{N,T}, e, Δ, ex) where {N,T<:Real}
     return rescale(EJ, t[1] * Δ)
 end
 
-function J_integral(tΔ::Real, t::Real, Δ::Real)
-    J = cosint(abs(tΔ)) - im*sinint(tΔ) - im*0.5π*sign(Δ)
-    return J
-end
-
 function J_integral(tΔ, t, Δ)
-    J = -gamma(0, im*tΔ) - im*0.5π*(sign(real(Δ))+sign(real(tΔ)))
+    J = iszero(imag(tΔ)) ?
+        cosint(abs(tΔ)) - im*sinint(real(tΔ)) - im*0.5π*sign(Δ) :
+        -gamma(0, im*tΔ) - im*0.5π*(sign(real(Δ))+sign(real(tΔ)))
     return J
 end
 
