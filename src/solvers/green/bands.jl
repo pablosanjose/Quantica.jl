@@ -320,13 +320,15 @@ function g_integrals_nonlocal(s::BandSimplex{D,T}, ω, dn, ::Val{N} = Val(0)) wh
     return g₀, gⱼ
 end
 
-# If any ϕₖʲ is zero, or if any tₖʲ and tₗʲ are equal
+# If any ϕₖʲ = eₖʲ = 0, or if any tₖʲ and tₗʲ are equal
 function is_degenerate(ϕₖʲ::SMatrix{D´}, eₖʲ) where {D´}
     @inbounds for j in 2:D´, k in 1:j-1
-        iszero(ϕₖʲ[k,j]) && return true
-        for l in 1:D´
-            if l != j && l != k
-                ϕₖʲ[k,j]*eₖʲ[l,j] ≈ eₖʲ[k,j]*ϕₖʲ[l,j] && return true
+        iszero(ϕₖʲ[k,j]) && iszero(eₖʲ[k,j]) && return true
+        if !iszero(eₖʲ[k,j])
+            for l in 1:D´
+                if l != k && l != j
+                    ϕₖʲ[k,j]*eₖʲ[l,j] ≈ eₖʲ[k,j]*ϕₖʲ[l,j] && return true
+                end
             end
         end
     end
