@@ -241,7 +241,7 @@ function g_integrals_local_e(s::BandSimplex{D,T}, ω::Number, eⱼ) where {D,T}
     Δⱼ  = ω .- eⱼ
     eₖʲ  = map(x -> trim(chop(x)), transpose(eⱼ) .- eⱼ)  # broadcast too hard for inference
     qⱼ = q_vector(eₖʲ)                              # SVector{D´,T}
-    lΔⱼ = logim.(-Δⱼ, s.refex)
+    lΔⱼ = logim.(Δⱼ, s.refex)
     Eᴰⱼ = (-1)^D .* Δⱼ.^(D-1) .* lΔⱼ ./ factorial(D-1)
     Eᴰ⁺¹ⱼ = (-1)^(D+1) .* Δⱼ.^D .* lΔⱼ ./ factorial(D)
     if iszero(eₖʲ)                                  # special case, full energy degeneracy
@@ -273,7 +273,7 @@ end
 function q_vector(eₖʲ::SMatrix{D´,D´,S}) where {D´,S}
     qⱼ = ntuple(Val(D´)) do j
         x = one(S)
-        @inbounds for k in 1:D´
+        for k in 1:D´
             j != k && (x *= eₖʲ[k, j])
         end
         return inv(x)
@@ -281,11 +281,12 @@ function q_vector(eₖʲ::SMatrix{D´,D´,S}) where {D´,S}
     return qⱼ
 end
 
-# imaginary log: logim(x) = log(im * x)
-logim(x::Real) = 0.5π * sign(x) * im + log(abs(x))
-logim(x::Complex) = log(im * x)
+# imaginary log with branchcut in the lower plane
+logim(x::Complex) = log(im * x) - im * pi * sign(real(x))
+logim(x::Real) =  log(abs(x)) - im * 0.5π * sign(x)
 logim(x, ex) = logim(x)
 
+# required for local degenerate case (expansion of logim(Δ::Series, ex))
 function logim(s::Series{N}, ex) where {N}
     s₀ = scalar(s)
     l₀ = logim(s₀)
@@ -323,7 +324,8 @@ end
 
 # If any ϕₖʲ = 0, or if any tₖʲ and tₗʲ are equal
 function is_degenerate(ϕₖʲ::SMatrix{D´}, eₖʲ) where {D´}
-    @inbounds for j in 2:D´, k in 1:j-1
+    for j in 2:D´, k in 1:j-1
+        # iszero(ϕₖʲ[k,j]) && iszero(eₖʲ[k,j]) && return true # fails for g₁
         iszero(ϕₖʲ[k,j]) && return true
         if !iszero(eₖʲ[k,j])
             for l in 1:D´
@@ -357,7 +359,7 @@ function g_integrals_nonlocal_ϕ(s::BandSimplex{D,T}, ω::Number, ϕⱼ) where {
             q = (-im)^D * Δ0⁻¹
             g₀ = q * trim(chop(sum(λⱼ))) |> scalar
             gⱼ = ntuple(Val(D)) do j
-                @inbounds q * scalar(trim(chop(λⱼ[j+1] + im * sum(λₖʲ[:,j+1] - transpose(λₖʲ)[:,j+1]))))
+                q * scalar(trim(chop(λⱼ[j+1] + im * sum(λₖʲ[:,j+1] - transpose(λₖʲ)[:,j+1]))))
             end |> SVector
         end
     else
@@ -370,7 +372,7 @@ function g_integrals_nonlocal_ϕ(s::BandSimplex{D,T}, ω::Number, ϕⱼ) where {
         q´ = (-im)^(D+1)
         g₀ = q´ * scalar(trim(chop(Λⱼsum)))
         gⱼ = ntuple(Val(D)) do j
-            @inbounds q´ * scalar(trim(chop(Λⱼ[j+1] + im * sum(Λₖʲ[:,j+1] - transpose(Λₖʲ)[:,j+1]))))
+            q´ * scalar(trim(chop(Λⱼ[j+1] + im * sum(Λₖʲ[:,j+1] - transpose(Λₖʲ)[:,j+1]))))
         end |> SVector
     end
     return g₀, gⱼ
@@ -432,7 +434,7 @@ end
 function Λ_matrix(eₖʲ::SMatrix{D´}, ϕₖʲ, Λⱼ, Δⱼ, tₖʲ, αₖʲγⱼeϕⱼ, Jₖʲ) where {D´}
     js = ks = SVector{D´}(1:D´)
     kjs = Tuple(tuple.(ks, js'))
-    @inbounds Λₖʲtup = ntuple(Val(D´*D´)) do i
+    Λₖʲtup = ntuple(Val(D´*D´)) do i
         (k,j) = kjs[i]
         Λ_scalar((k,j), ϕₖʲ[k,j], Λⱼ[j], Δⱼ[j], eₖʲ, tₖʲ, αₖʲγⱼeϕⱼ, Jₖʲ)
     end
@@ -443,12 +445,12 @@ end
 function Λ_scalar((k, j), ϕₖʲ, Λⱼ, Δⱼ, emat::SMatrix{D´,D´,T}, tmat, αγeϕmat, Jmat) where {D´,T}
     Λₖʲ = zero(typeof(Λⱼ))
     j == k && return Λₖʲ
-    @inbounds eₖʲ = emat[k,j]
+    eₖʲ = emat[k,j]
     if iszero(eₖʲ)
         Λₖʲ = Λⱼ / ϕₖʲ
     else
-        @inbounds tₖʲ = tmat[k,j]
-        @inbounds Jₖʲ = Jmat[k,j]
+        tₖʲ = tmat[k,j]
+        Jₖʲ = Jmat[k,j]
         @inbounds for l in 1:D´
             if !iszero(emat[l,j])
                 tₗʲ = tmat[l,j]
@@ -467,7 +469,7 @@ end
 function J_scalar(t::T, e, Δ, ex) where {T<:Real}
     iszero(e) && return zero(complex(T))
     tΔ = t * Δ
-    J = iszero(tΔ) ? logim(-Δ) : cis(tΔ) * J_integral(tΔ, t, Δ)
+    J = iszero(tΔ) ? logim(Δ) : cis(tΔ) * J_integral(tΔ, t, Δ)
     return J
 end
 
@@ -479,7 +481,7 @@ function J_scalar(t::Series{N,T}, e, Δ, ex) where {N,T<:Real}
     t₀ = t[0]
     tΔ = t₀ * Δ
     if iszero(tΔ)
-        J₀ = logim(Δ) - im * pi * sign(real(Δ))
+        J₀ = logim(Δ)
         Jᵢ = tupletake(ex.J0, Val(N´)) # ntuple(n -> C(-im)^n/(n*factorial(n)), Val(N´))
         J = Series{N}(J₀, Jᵢ...)
         cis_coefs = tupletake(ex.cis, Val(N))
@@ -487,6 +489,7 @@ function J_scalar(t::Series{N,T}, e, Δ, ex) where {N,T<:Real}
         EJ = E * J
     else
         cistΔ =  cis(tΔ)
+        J₀ = J_integral(tΔ, t₀, Δ)
         J₀ = J_integral(tΔ, t₀, Δ)
         if N > 1
             invzΔ = cumprod(ntuple(Returns(1/tΔ), Val(N-1)))
@@ -499,23 +502,21 @@ function J_scalar(t::Series{N,T}, e, Δ, ex) where {N,T<:Real}
         cis_coefs = tupletake(ex.cis, Val(N))
         Eᵢ = cistΔ .* cis_coefs
         E = Series(Eᵢ)
-        # EJ = E * J
-        EJ = E * J₀   # This option seems to make no difference after sum!
+        EJ = E * J
     end
     return rescale(EJ, t[1] * Δ)
 end
 
 function J_integral(tΔ::Real, t::Real, Δ::Real)
     J = cosint(abs(tΔ)) - im*sinint(tΔ) - im*0.5π*sign(Δ)
-    Jreg = MathConstants.eulergamma + log(abs(t))
-    return J - Jreg
+    return J
 end
 
 function J_integral(tΔ, t, Δ)
     J = -gamma(0, im*tΔ) - im*0.5π*(sign(real(Δ))+sign(real(tΔ)))
-    Jreg = MathConstants.eulergamma + log(abs(t))
-    return J - Jreg
+    return J
 end
+
 #endregion
 
 ############################################################################################
