@@ -607,25 +607,23 @@ Base.getindex(s::BandsGreenSlicer, i::CellOrbitals, j::CellOrbitals) =
 
 function inf_band_slice(s::BandsGreenSlicer{C}, i::CellOrbitals, j::CellOrbitals) where {C}
     solver = s.solver
-    rows, cols = orbindices(i), orbindices(j)
+    rowcol = orbindices(i), orbindices(j)
     dist = cell(i) - cell(j)
-    g = zeros(C, length(rows), length(cols))
+    g = zeros(C, length.(rowcol)...)
     for (sb, bsimps) in zip(solver.subbands, solver.sbsimps)
-        projs = projectors(sb)
+        ψPdict = projected_states(sb)
         for (simpind, simp) in enumerate(simplices(sb))
             bsimp = bsimps[simpind]
             v₀, vⱼs... = simp
             g₀, gⱼs = g_integrals(bsimp, s.ω, dist)
-            ψ = view(states(vertices(sb, v₀)), rows, :)
-            ψ´ = view(states(vertices(sb, v₀)), cols, :)'
+            ψ = states(vertices(sb, v₀))
             pind = (simpind, v₀)
-            muladd_ψPψ⁺!(g, ψ, ψ´, bsimp.VD * (g₀ - sum(gⱼs)), projs, pind)
+            muladd_ψPψ⁺!(g, bsimp.VD * (g₀ - sum(gⱼs)), ψ, ψPdict, pind, rowcol)
             for (j, gⱼ) in enumerate(gⱼs)
                 vⱼ = vⱼs[j]
-                ψ = view(states(vertices(sb, vⱼ)), rows, :)
-                ψ´ = view(states(vertices(sb, vⱼ)), cols, :)'
+                ψ = states(vertices(sb, vⱼ))
                 pind = (simpind, vⱼ)
-                muladd_ψPψ⁺!(g, ψ, ψ´, bsimp.VD * gⱼ, projs, pind)
+                muladd_ψPψ⁺!(g, bsimp.VD * gⱼ, ψ, ψPdict, pind, rowcol)
             end
         end
     end
@@ -636,10 +634,21 @@ function semi_band_slice(s::BandsGreenSlicer{C}, i::CellOrbitals, j::CellOrbital
     interalerror("semi_band_slice: work-in-progress")
 end
 
-# does g += α * ψPψ´, where P = projs[pind] is the vertex projector onto the simplex subspace
-# If pind = (simpind, vind) is not in projs::Dict, no projector P is necessary
-muladd_ψPψ⁺!(g, ψ, ψ´, α, projs, pind) =
-    haskey(projs, pind) ? mul!(g, ψ, projs[pind] * ψ´, α, 1) : mul!(g, ψ, ψ´, α, 1)
+# does g += α * ψPψ´, where P = ψPdict[pind] is the vertex projector onto the simplex subspace
+# If pind = (simpind, vind) is not in ψPdict::Dict, no projector P is necessary
+function muladd_ψPψ⁺!(g, α, ψ, ψPdict, pind, (rows, cols))
+    if haskey(ψPdict, pind)
+        ψP = ψPdict[pind]
+        ψProws = view(ψP, rows, :)
+        ψPcols = view(ψP, cols, :)
+        mul!(g, ψProws, ψPcols', α, 1)
+    else
+        ψrows = view(ψ, rows, :)
+        ψcols = view(ψ, cols, :)
+        mul!(g, ψrows, ψcols', α, 1)
+    end
+    return g
+end
 
 minimal_callsafe_copy(s::BandsGreenSlicer) = s  # it is read-only
 

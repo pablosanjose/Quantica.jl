@@ -1422,7 +1422,7 @@ end
 struct Subband{T,E} <: AbstractMesh{BandVertex{T,E},E}  # we restrict S == E
     mesh::Mesh{BandVertex{T,E},E}
     trees::NTuple{E,IntervalTree{T,IntervalValue{T,Int}}} # for interval searches
-    projectors::Dict{Tuple{Int,Int},Matrix{Complex{T}}} # (simpind, vind) => subspace proj
+    projstates::Dict{Tuple{Int,Int},Matrix{Complex{T}}} # (simpind, vind) => projected_states
 end
 
 struct Bandstructure{T,E,L,B} # E = L+1
@@ -1555,7 +1555,7 @@ base_coordinates(s::Subband, vinds::NTuple{D,Int}) where {D} =
 trees(s::Subband) = s.trees
 trees(s::Subband, i::Int) = s.trees[i]
 
-projectors(s::Subband) = s.projectors
+projected_states(s::Subband) = s.projstates
 
 # last argument: saxes = ((dim₁, x₁), (dim₂, x₂)...)
 function foreach_simplex(f, s::Subband, ((dim, k), xs...))

@@ -86,7 +86,7 @@ eigensolvers_thread_pool(solver, h, S, mapping, transform) =
     [apply(solver, h, S, mapping, transform) for _ in 1:Threads.nthreads()]
 
 function subbands(hf, solvers, basemesh::Mesh{SVector{L,T}};
-         showprogress = true, defects = (), patches = 0, degtol = missing, split = true, warn = true, projectors = true) where {T,L}
+         showprogress = true, defects = (), patches = 0, degtol = missing, split = true, warn = true, projectors = false) where {T,L}
     defects´ = sanitize_Vector_of_SVectors(SVector{L,T}, defects)
     degtol´ = degtol isa Number ? degtol : sqrt(eps(real(T)))
     subbands = subbands_precompilable(hf, solvers, basemesh, showprogress, defects´, patches, degtol´, split, warn, projectors)
@@ -573,7 +573,7 @@ end
 ############################################################################################
 # subband_projectors!(s::Subband, hf::Function)
 #   Fill dictionary of projector matrices for each degenerate vertex in each simplex of s
-#       Dict([(simp_index, vert_index) => P::Matrix])
+#       Dict([(simp_index, vert_index) => φᵢ * P])
 #   such that P = U PD U'. U columns are eigenstates of φᵢ hf(k_av) φᵢ⁺, i = vert_index,
 #   φᵢ are vertex eigenstate matrices, k_av is the basecoordinate at the center of the
 #   simplex, and PD is a Diagonal{Bool} that filters out M columns of U, so that only
@@ -595,8 +595,8 @@ function subband_projectors!(data)
 end
 
 function subband_projectors!(s::Subband{T}, hf, meter, showprogress) where {T}
-    projs = projectors(s)
-    isempty(projs) || return s
+    projstates = projected_states(s)
+    isempty(projstates) || return s
     verts = vertices(s)
     simps = simplices(s)
     # a random symmetry-breaking perturbation common to all simplices
@@ -610,18 +610,18 @@ function subband_projectors!(s::Subband{T}, hf, meter, showprogress) where {T}
             nzs = nonzeros(hkav)
             nnzs = length(nzs)
             nnzs == length(perturbation) || resize_perturbation!(perturbation, nnzs)
-            nzs .+= perturbation
+            nzs .+= perturbation     # in-place allowed since hkav gets updated on each call
             mindeg = minimum(degs)
             for (vind, deg) in zip(simp, degs)
                 if deg > 1  # diagonalize vertex even if all degs are equal and > 1
-                    p = simplex_projector(hkav, verts, vind, εav, mindeg)
-                    projs[(sind, vind)] = p
+                    φP = simplex_projector(hkav, verts, vind, εav, mindeg)
+                    projstates[(sind, vind)] = φP
                 end
             end
         end
         showprogress && ProgressMeter.next!(meter)
     end
-    return projs
+    return projstates
 end
 
 function resize_perturbation!(p::Vector{C}, n) where {C}
@@ -637,12 +637,10 @@ end
 
 function simplex_projector(hkav, verts, vind, εav, mindeg)
     φ = states(verts[vind])
-    vdeg = size(φ, 2)
     hproj = φ' * hkav * φ
-    _, U = eigen!(Hermitian(hproj), sortby = ε -> abs(ε - εav))
-    view(U, :, mindeg+1:vdeg) .= 0  # U = U * PD. Keep only mindeg closest states
-    P = mul!(hproj, U, U')  # reuse hproj. It's safe, not aliased with U in eigen!
-    return P
+    _, P = eigen!(Hermitian(hproj), sortby = ε -> abs(ε - εav))
+    Pthin = view(P, :, 1:mindeg)
+    return φ * Pthin
 end
 
 #endregion
