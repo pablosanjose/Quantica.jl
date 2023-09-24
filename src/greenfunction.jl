@@ -112,7 +112,7 @@ ind_to_orbslice(kw::NamedTuple, g) = ind_to_orbslice(getindex(lattice(g); kw...)
 ind_to_orbslice(cell::Union{SVector,Tuple}, g::GreenSolution{<:Any,<:Any,L}) where {L} =
     ind_to_orbslice(cellsites(sanitize_SVector(SVector{L,Int}, cell), :), g)
 ind_to_orbslice(c::CellSites{<:Any,Colon}, g) = cellorbs(cell(c), 1:flatsize(hamiltonian(g)))
-ind_to_orbslice(c::CellSites{<:Any,Symbol}, g) =
+ind_to_orbslice(c::CellSites{<:Any,<:Union{Symbol,AbstractUnitRange}}, g) =
     # uses a UnitRange instead of a Vector
     cellorbs(cell(c), flatrange(hamiltonian(g), siteindices(c)))
 ind_to_orbslice(c::CellOrbitals, g) = c

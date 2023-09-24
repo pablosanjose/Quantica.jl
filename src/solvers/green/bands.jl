@@ -634,8 +634,8 @@ function semi_band_slice(s::BandsGreenSlicer{C}, i::CellOrbitals, j::CellOrbital
     interalerror("semi_band_slice: work-in-progress")
 end
 
-# does g += α * ψPψ´, where P = ψPdict[pind] is the vertex projector onto the simplex subspace
-# If pind = (simpind, vind) is not in ψPdict::Dict, no projector P is necessary
+# does g += α * ψPψ´ = α * ψP * (ψP)´, where ψP = ψPdict[pind] is the vertex projection onto
+# the simplex subspace. If pind = (simpind, vind) is not in ψPdict::Dict, no P is necessary
 function muladd_ψPψ⁺!(g, α, ψ, ψPdict, pind, (rows, cols))
     if haskey(ψPdict, pind)
         ψP = ψPdict[pind]

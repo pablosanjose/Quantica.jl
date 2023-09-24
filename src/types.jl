@@ -292,7 +292,7 @@ struct CellOrbitals{L,V} <: AbstractCellElements
 end
 
 struct OrbitalSlice{L}
-    subcells::Vector{CellOrbitals{L,Vector{Int}}}     # indices here correpond to orbitals, not sites
+    subcells::Vector{CellOrbitals{L,Vector{Int}}}  # indices here correpond to orbitals, not sites
 end
 
 const CellSite{L} = CellSites{L,Int}
@@ -1212,6 +1212,12 @@ flatrange(h::AbstractHamiltonian, iunflat::Integer) = flatrange(blockstructure(h
 
 flatrange(h::AbstractHamiltonian, name::Symbol) =
     sublatorbrange(blockstructure(h), sublatindex(lattice(h), name))
+
+function flatrange(h::AbstractHamiltonian, runflat::AbstractUnitRange)
+    imin, imax = first(runflat), last(runflat)
+    orng = first(flatrange(h, imin)) : last(flatrange(h, imax))
+    return orng
+end
 
 zerocell(h::AbstractHamiltonian) = zerocell(lattice(h))
 zerocellsites(h::AbstractHamiltonian, i) = zerocellsites(lattice(h), i)
