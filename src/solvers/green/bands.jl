@@ -165,6 +165,8 @@ function Expansions(::Val{D}, ::Type{T}) where {D,T}  # here order = D
     return Expansions(cis, J0, Jmat, log)
 end
 
+#region ## Constructors ##
+
 BandSimplex(ei, kij, refex...) = BandSimplex(real(ei), real(kij), refex...)
 
 function BandSimplex(ei::SVector{D´,T}, kij::SMatrix{D´,D,T}, refex = Ref(Expansions(Val(D), T))) where {D´,D,T}
@@ -200,12 +202,18 @@ function is_valid_dual(phi, es)
     return true
 end
 
+#endregion
+
+#region ## API ##
+
 function g_integrals(s::BandSimplex, ω, dn, val...)
     g₀, gi = iszero(dn) ?
         g_integrals_local(s, ω, val...) :
         g_integrals_nonlocal(s, ω, dn, val...)
     return g₀, gi
 end
+
+#endregion
 
 #endregion
 
@@ -542,10 +550,16 @@ end
 # AppliedBandsGreenSolver <: AppliedGreenSolver
 #region
 
-struct AppliedBandsGreenSolver{B,SB<:Subband,BS<:BandSimplex} <: AppliedGreenSolver
+struct SubbandSimplices{B,BS<:BandSimplex}
+    simps::Vector{BS}                   # collection of k_∥-ordered simplices
+    simpslices::Vector{UnitRange{Int}}  # ranges of simplices with "equal" k_∥ to boundary
+    boundary::B                         # missing or dir => pos
+end
+
+struct AppliedBandsGreenSolver{B,SB<:Subband,SS<:SubbandSimplices{B}} <: AppliedGreenSolver
     subbands::Vector{SB}
-    sbsimps::Vector{Vector{BS}}     # BandSimplex for each simplex in each subband
-    boundary::B
+    subbandsimps::Vector{SS}            # BandSimplices in each subband
+    boundary::B                         # missing or dir => pos
 end
 
 #region ## API ##
@@ -563,17 +577,65 @@ bands(g::GreenFunction{<:Any,<:Any,<:Any,<:AppliedBandsGreenSolver}) = g.solver.
 function apply(s::GS.Bands,  h::AbstractHamiltonian{T,<:Any,L}, cs::Contacts) where {T,L}
     b = bands(h, s.bandsargs...; s.bandskw..., projectors = true)
     sbs = subbands(b)
-    refex = Ref(Expansions(Val(L), T))
-    sbsimps = subband_simplices.(sbs, refex)
+    ex = Expansions(Val(L), T)
+    subbandsimps = subband_simplices.(sbs, Ref(ex), Ref(s))
     boundary = s.boundary
-    return AppliedBandsGreenSolver(sbs, sbsimps, boundary)
+    return AppliedBandsGreenSolver(sbs, subbandsimps, boundary)
 end
 
-function subband_simplices(sb::Subband, ex::Expansions)
+function subband_simplices(sb::Subband, ex::Expansions, s::GS.Bands)
     refex = Ref(ex)
-    sbs = [BandSimplex(energies(sb, simp), transpose(base_coordinates(sb, simp)), refex)
-        for simp in simplices(sb)]
-    return sbs
+    simps0 = simplices(sb)
+    simps = [BandSimplex(energies(sb, simp), transpose(base_coordinates(sb, simp)), refex)
+        for simp in simps0]
+    simpslices = simplex_slices!(simps, simps, s)
+    boundary = s.boundary
+    return SubbandSimplices(simps, simpslices, boundary)
+end
+
+# order simplices by their k∥ and compute ranges in each kranges bin
+function simplex_slices!(simps::Vector{<:BandSimplex{D}}, simps0, s) where{D}
+    boundary = s.boundary
+    if boundary !== missing
+        dir = first(boundary)
+        checkdirection(dir, simps)
+        if D > 1
+            p = sortperm(simps, by = simp -> parallel_base_coordinate(simp, dir))
+            permute!(simps, p)
+            permute!(simps0, p)
+            kticks = ntuple(i -> ifelse(i < dir, s.bandargs[i], s.bandargs[i+1]), Val(D-1))
+            simpslices = collect(Runs(simps, (s1, s2) -> in_same_interval((s1, s2), kticks, dir)))
+        else
+            simpslices = [UnitRange(eachindex(simps))]
+        end
+        return simpslices
+    end
+    return UnitRange{Int}[]
+end
+
+checkdirection(dir, ::Vector{<:BandSimplex{D}}) where {D} =
+    1 <= dir <= D || argerror("Boundary direction $dir should be 1 <= dir <= $D")
+
+function parallel_base_coordinate(s::BandSimplex{D}, dir) where {D}
+    kmean = mean(s.kij, dims = 1)
+    notdir = SVector(ntuple(i -> ifelse(i < dir, i, i+1), Val(D-1)))
+    kpar = kmean[notdir]
+    return kpar
+end
+
+# assumes kticks are sorted, see GS.Bands constructor
+function in_same_interval((s1, s2), kticks, dir)
+    kvec1 = parallel_base_coordinate(s1, dir)
+    kvec2 = parallel_base_coordinate(s2, dir)
+    for (k1, k2, ks) in zip(kvec1, kvec2, kticks)
+        for i in firstindex(ks):lastindex(ks)-1
+            in1 = ks[i] < k1 < ks[i+1]
+            in2 = ks[i] < k2 < ks[i+1]
+            xor(in1, in2) && return false
+            in1 && in2 && break
+        end
+    end
+    return true
 end
 
 #endregion
@@ -581,7 +643,7 @@ end
 #region ## call ##
 
 function (s::AppliedBandsGreenSolver)(ω, Σblocks, cblockstruct)
-    g0slicer = BandsGreenSlicer(complex(ω), s, s.boundary)
+    g0slicer = BandsGreenSlicer(complex(ω), s)
     gslicer = TMatrixSlicer(g0slicer, Σblocks, cblockstruct)
     return gslicer
 end
@@ -597,41 +659,48 @@ end
 struct BandsGreenSlicer{C,B,S<:AppliedBandsGreenSolver{B}} <: GreenSlicer{C}
     ω::C
     solver::S
-    boundary::B
 end
 
 #region ## API ##
 
+Base.getindex(s::BandsGreenSlicer{<:Any,Missing}, i::CellOrbitals, j::CellOrbitals) =
+    inf_band_slice(s, i, j)
 Base.getindex(s::BandsGreenSlicer, i::CellOrbitals, j::CellOrbitals) =
-    s.boundary === missing ? inf_band_slice(s, i, j) : semi_band_slice(s, i, j)
+    semi_band_slice(s, i, j)
 
 function inf_band_slice(s::BandsGreenSlicer{C}, i::CellOrbitals, j::CellOrbitals) where {C}
     solver = s.solver
     rowcol = orbindices(i), orbindices(j)
     dist = cell(i) - cell(j)
     g = zeros(C, length.(rowcol)...)
-    for (sb, bsimps) in zip(solver.subbands, solver.sbsimps)
-        ψPdict = projected_states(sb)
-        for (simpind, simp) in enumerate(simplices(sb))
-            bsimp = bsimps[simpind]
-            v₀, vⱼs... = simp
-            g₀, gⱼs = g_integrals(bsimp, s.ω, dist)
-            ψ = states(vertices(sb, v₀))
-            pind = (simpind, v₀)
-            muladd_ψPψ⁺!(g, bsimp.VD * (g₀ - sum(gⱼs)), ψ, ψPdict, pind, rowcol)
-            for (j, gⱼ) in enumerate(gⱼs)
-                vⱼ = vⱼs[j]
-                ψ = states(vertices(sb, vⱼ))
-                pind = (simpind, vⱼ)
-                muladd_ψPψ⁺!(g, bsimp.VD * gⱼ, ψ, ψPdict, pind, rowcol)
-            end
+    for (subband, subbandsimps) in zip(solver.subbands, solver.subbandsimps)
+        inf_band_slice!(g, s.ω, dist, subband, subbandsimps, rowcol)
+    end
+    return g
+end
+
+function inf_band_slice!(g, ω, dist, subband, subbandsimps, rowcol, simpinds = eachindex(simplices(subband)))
+    ψPdict = projected_states(subband)
+    for simpind in simpinds
+        bandsimplex = subbandsimps.simps[simpind]
+        v₀, vⱼs... = simplices(subband)[simpind]
+        g₀, gⱼs = g_integrals(bandsimplex, ω, dist)
+        ψ = states(vertices(subband, v₀))
+        pind = (simpind, v₀)
+        muladd_ψPψ⁺!(g, bandsimplex.VD * (g₀ - sum(gⱼs)), ψ, ψPdict, pind, rowcol)
+        for (j, gⱼ) in enumerate(gⱼs)
+            vⱼ = vⱼs[j]
+            ψ = states(vertices(subband, vⱼ))
+            pind = (simpind, vⱼ)
+            muladd_ψPψ⁺!(g, bandsimplex.VD * gⱼ, ψ, ψPdict, pind, rowcol)
         end
     end
     return g
 end
 
+# Gᵢⱼ(k∥) = G⁰ᵢⱼ(k∥) - G⁰ᵢᵦ(k∥)G⁰ᵦᵦ(k∥)⁻¹G⁰ᵦⱼ(k∥), where β are removed sites at boundary
 function semi_band_slice(s::BandsGreenSlicer{C}, i::CellOrbitals, j::CellOrbitals) where {C}
-    interalerror("semi_band_slice: work-in-progress")
+    internalerror("semi_band_slice: Not yet implemented")
 end
 
 # does g += α * ψPψ´ = α * ψP * (ψP)´, where ψP = ψPdict[pind] is the vertex projection onto
@@ -639,8 +708,8 @@ end
 function muladd_ψPψ⁺!(g, α, ψ, ψPdict, pind, (rows, cols))
     if haskey(ψPdict, pind)
         ψP = ψPdict[pind]
-        ψProws = view(ψP, rows, :)
-        ψPcols = view(ψP, cols, :)
+        ψProws = ψP[rows, :]
+        ψPcols = ψP[cols, :]
         mul!(g, ψProws, ψPcols', α, 1)
     else
         ψrows = view(ψ, rows, :)
