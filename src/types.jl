@@ -281,39 +281,45 @@ struct CellSites{L,V} <: AbstractCellElements
     inds::V             # Can be anything: a vector of site indices, a Colon, a UnitRange...
 end
 
-struct LatticeSlice{T,E,L}
-    lat::Lattice{T,E,L}
-    subcells::Vector{CellSites{L,Vector{Int}}}
-end
-
-struct CellOrbitals{L,V} <: AbstractCellElements
+struct CellOrbitals{L,V,R<:Union{Missing,Vector{UnitRange{Int}}}} <: AbstractCellElements
     cell::SVector{L,Int}
     inds::V             # Can be anything: a vector of site indices, a Colon, a UnitRange...
-end
-
-struct OrbitalSlice{L}
-    subcells::Vector{CellOrbitals{L,Vector{Int}}}  # indices here correpond to orbitals, not sites
+    ranges::R           # If not missing, inds range per site
 end
 
 const CellSite{L} = CellSites{L,Int}
 const CellOrbital{L} = CellOrbitals{L,Int}
+const ExplicitCellSites{L} = CellSites{L,Vector{Int}}
+const ExplicitCellOrbital{L} = CellOrbitals{L,Vector{Int},Vector{UnitRange{Int}}}
+
+struct LatticeSlice{T,E,L}
+    lat::Lattice{T,E,L}
+    subcells::Vector{ExplicitCellSites{L}}
+end
+
+struct OrbitalSlice{L}
+    subcells::Vector{ExplicitCellOrbital{L}} # indices here correpond to orbitals, not sites
+    siteoffsets::Vector{Int}                 # orbital index offset for each site in slice
+end
 
 #region ## Constructors ##
 
-CellSites(cell) = CellSites(cell, Int[])
+CellSites(cell, inds = Int[]) = CellSites(sanitize_SVector(Int, cell), inds)
 
-CellOrbitals(cell) = CellOrbitals(cell, Int[])
+CellOrbitals(cell, inds = Int[], ranges = missing) =
+    CellOrbitals(sanitize_SVector(Int, cell), inds, ranges)
 
 LatticeSlice(lat::Lattice{<:Any,<:Any,L}) where {L} =
-    LatticeSlice(lat, CellSites{L,Vector{Int}}[])
+    LatticeSlice(lat, ExplicitCellSites{L}[])
 
-OrbitalSlice{L}() where {L} = OrbitalSlice(CellOrbitals{L,Vector{Int}}[])
+OrbitalSlice{L}() where {L} = OrbitalSlice(ExplicitCellOrbital{L}[], [0])
+function OrbitalSlice(subcells)
+    siteoffsets = lengths_to_offsets(length, Iterators.flatten(orbranges.(subcells)))
+    return OrbitalSlice(subcells, siteoffsets)
+end
 
-cellsites(cell, x) = CellSites(sanitize_SVector(Int, cell), x)      # exported
-cellorbs(cell, x) = CellOrbitals(sanitize_SVector(Int, cell), x)    # unexported
-
-cellsite(cell, x::Integer) = cellsites(cell, x)
-cellorb(cell, x::Integer) = cellorbs(cell, x)
+cellsites(cell, x) = CellSites(cell, x)                             # exported
+cellsite(cell, x::Integer) = cellsites(cell, x)                     # unexported
 
 #endregion
 
@@ -326,6 +332,13 @@ orbindices(s::CellOrbitals) = s.inds
 
 siteindex(s::CellSite) = s.inds
 orbindex(s::CellOrbital) = s.inds
+
+orbranges(o::CellOrbitals) = o.ranges === missing ?
+    argerror("Requested siteoffsets of cellorbital but it is missing") :
+    o.ranges
+orbranges(o::CellOrbitals, sites::Integer) = orbranges(o)[sites]    # ::Integer to disambig.
+orbranges(o::OrbitalSlice) = (orbranges(o, i) for i in 1:length(siteoffsets(o))-1)
+orbranges(o::OrbitalSlice, sites::Integer) = siteoffsets(o, sites) + 1:siteoffsets(o, sites+1)
 
 cell(s::AbstractCellElements) = s.cell
 
@@ -340,6 +353,10 @@ cells(l::OrbitalSlice) = (s.cell for s in l.subcells)
 nsites(l::LatticeSlice) = isempty(l) ? 0 : sum(nsites, subcells(l))
 nsites(l::LatticeSlice, i) = isempty(l) ? 0 : nsites(subcells(l, i))
 nsites(c::CellSites) = length(c.inds)
+nsites(c::CellOrbitals) = length(c.ranges)
+
+siteoffsets(o::OrbitalSlice) = o.siteoffsets
+siteoffsets(o::OrbitalSlice, i) = o.siteoffsets[i]
 
 norbs(o::OrbitalSlice) = isempty(o) ? 0 : sum(norbs, subcells(o))
 norbs(o::OrbitalSlice, i) = isempty(o) ? 0 : norbs(subcells(o, i))
@@ -367,6 +384,7 @@ Base.copy(s::CellSites) = CellSites(copy(s.inds), s.cell)
 
 Base.length(l::LatticeSlice) = nsites(l)
 Base.length(s::CellSites) = nsites(s)
+Base.length(l::OrbitalSlice) = norbs(l)
 
 #endregion
 #endregion
@@ -766,11 +784,11 @@ flatrange(::OrbitalBlockStructure{<:Number}, iunflat::Integer) = iunflat:iunflat
 
 flatindex(b::OrbitalBlockStructure, i) = first(flatrange(b, i))
 
-function unflatindex(b::OrbitalBlockStructure{<:SMatrixView}, iflat::Integer)
+function unflatindex_and_blocksize(o::OrbitalBlockStructure{<:SMatrixView}, iflat::Integer)
     soffset  = 0
     soffset´ = 0
     @boundscheck(iflat < 0 && blockbounds_error())
-    @inbounds for (s, b) in zip(b.subsizes, b.blocksizes)
+    @inbounds for (s, b) in zip(o.subsizes, o.blocksizes)
         if soffset´ + b * s >= iflat
             iunflat = (iflat - soffset´ - 1) ÷ b + soffset + 1
             return iunflat, b
@@ -783,9 +801,9 @@ end
 
 @noinline blockbounds_error() = throw(BoundsError())
 
-unflatindex(::OrbitalBlockStructure{B}, iflat::Integer) where {N,B<:SMatrix{N}} =
+unflatindex_and_blocksize(::OrbitalBlockStructure{B}, iflat::Integer) where {N,B<:SMatrix{N}} =
     (iflat - 1)÷N + 1, N
-unflatindex(::OrbitalBlockStructure{<:Number}, iflat::Integer) = (iflat, 1)
+unflatindex_and_blocksize(::OrbitalBlockStructure{<:Number}, iflat::Integer) = (iflat, 1)
 
 Base.copy(b::OrbitalBlockStructure{B}) where {B} =
     OrbitalBlockStructure{B}(copy(blocksizes(b)), copy(subsizes(b)))
@@ -1739,10 +1757,9 @@ Base.parent(oh::OpenHamiltonian) = oh.h
 
 struct ContactBlockStructure{L}
     orbslice::OrbitalSlice{L}            # non-extended orbital indices for all contacts
+    corbslices::Vector{OrbitalSlice{L}}  # non-extended orbital indices for each contact
     contactinds::Vector{Vector{Int}}     # orbital indices in orbslice for each contact
     contactrngs::Vector{Vector{UnitRange{Int}}} # orbital ranges of sites for each contact
-    siteoffsets::Vector{Int}             # block offsets for each site in orbslice
-    subcelloffsets::Vector{Int}          # block offsets for each subcell in orbslice
 end
 
 struct Contacts{L,N,S<:NTuple{N,SelfEnergy},LS<:LatticeSlice}
@@ -1756,7 +1773,7 @@ const EmptyContacts{L} = Contacts{L,0,Tuple{}}
 #region ## Constructors ##
 
 ContactBlockStructure{L}() where {L} =
-    ContactBlockStructure(OrbitalSlice{L}(), Vector{Int}[], Vector{UnitRange{Int}}[], [0], [0])
+    ContactBlockStructure(OrbitalSlice{L}(), OrbitalSlice{L}[], Vector{Int}[], Vector{UnitRange{Int}}[])
 
 function Contacts(oh::OpenHamiltonian)
     Σs = selfenergies(oh)
@@ -1772,25 +1789,19 @@ end
 
 orbslice(c::Contacts) = orbslice(c.blockstruct)
 orbslice(c::ContactBlockStructure) = c.orbslice
+orbslice(c::ContactBlockStructure, i) = c.corbslices[i]
 
-flatsize(c::ContactBlockStructure) = last(c.subcelloffsets)
+flatsize(c::ContactBlockStructure) = last(siteoffsets(c))
 flatsize(c::ContactBlockStructure, i::Integer) = length(contactinds(c, i))
 
-unflatsize(c::ContactBlockStructure) = length(c.siteoffsets) - 1
+unflatsize(c::ContactBlockStructure) = length(siteoffsets(c)) - 1
 
-siteoffsets(c::ContactBlockStructure) = c.siteoffsets
-siteoffsets(c::ContactBlockStructure, i) = c.siteoffsets[i]
-
-subcelloffsets(c::ContactBlockStructure) = c.subcelloffsets
-subcelloffsets(c::ContactBlockStructure, i) = c.subcelloffsets[i]
+siteoffsets(c::ContactBlockStructure, i...) = siteoffsets(orbslice(c), i...)
 
 flatrange(c::ContactBlockStructure, iunflat::Integer) =
     siteoffsets(c, iunflat)+1:siteoffsets(c, iunflat+1)
 
-subcellrange(c::ContactBlockStructure, si::Integer) =
-    subcelloffsets(c, si)+1:subcelloffsets(c, si+1)
-subcellrange(c::ContactBlockStructure, cell::SVector) =
-    subcellrange(c, subcellindex(c, cell))
+orbranges(c::ContactBlockStructure, contact...) = orbranges(orbslice(c, contact...))
 
 function subcellindex(c::ContactBlockStructure, cell::SVector)
     for (i, cell´) in enumerate(c.cells)
@@ -1813,11 +1824,11 @@ contactinds(c::ContactBlockStructure) = c.contactinds
 contactinds(c::ContactBlockStructure, i::Integer) = 1 <= i <= length(c.contactinds) ? c.contactinds[i] :
     argerror("Cannot access contact $i, there are $(length(c.contactinds)) contacts")
 
-contactrngs(c::Contacts, i...) = contactrngs(c.blockstruct, i...)
-contactrngs(c::ContactBlockStructure) = c.contactrngs
-contactrngs(c::ContactBlockStructure, i::Integer) = 1 <= i <= length(c.contactrngs) ? c.contactrngs[i] :
+contactranges(c::Contacts, i...) = contactranges(c.blockstruct, i...)
+contactranges(c::ContactBlockStructure) = c.contactrngs
+contactranges(c::ContactBlockStructure, i::Integer) = 1 <= i <= length(c.contactrngs) ? c.contactrngs[i] :
     argerror("Cannot access contact $i, there are $(length(c.contactrngs)) contacts")
-contactrngs(c::ContactBlockStructure, ::Colon) = [flatrange(c, i) for i in 1:unflatsize(c)]
+contactranges(c::ContactBlockStructure, ::Colon) = [flatrange(c, i) for i in 1:unflatsize(c)]
 
 Base.isempty(c::Contacts) = isempty(selfenergies(c))
 
@@ -1876,6 +1887,11 @@ struct GreenSolution{T,E,L,S<:GreenSlicer,G<:GreenFunction{T,E,L},Σs}
     contactbs::ContactBlockStructure{L}
 end
 
+struct DiagIndices{K,V}   # represents Green indices to return only diagonal elements
+    inds::V
+    kernel::K
+end
+
 # Obtained with gs = g[; siteselection...]
 # Alows call!(gs, ω; params...) or gs(ω; params...)
 #   required to do e.g. h |> attach(g´[sites´], couplingmodel; sites...)
@@ -1883,9 +1899,25 @@ struct GreenSlice{T,E,L,G<:GreenFunction{T,E,L},R,C}
     parent::G
     rows::R
     cols::C
+    function GreenSlice{T,E,L,G,R,C}(parent, rows, cols) where {T,E,L,G<:GreenFunction{T,E,L},R,C}
+        if rows isa DiagIndices || cols isa DiagIndices
+            rows === cols || argerror("Diagonal indices should be identical for rows and columns")
+        end
+        return new(parent, rows, cols)
+    end
 end
 
+GreenSlice(parent::G, rows::R, cols::C) where {T,E,L,G<:GreenFunction{T,E,L},R,C} =
+    GreenSlice{T,E,L,G,R,C}(parent, rows, cols)
+
 #region ## API ##
+
+diagonal(inds; kernel = missing) = DiagIndices(inds, kernel)                      # exported
+diagonal(; kernel = missing, kw...) = DiagIndices(siteselector(; kw...), kernel)  # exported
+
+Base.parent(i::DiagIndices) = i.inds
+
+kernel(i::DiagIndices) = i.kernel
 
 hamiltonian(g::GreenFunction) = hamiltonian(g.parent)
 hamiltonian(g::GreenSolution) = hamiltonian(g.parent)
@@ -1913,6 +1945,11 @@ norbitals(g::GreenSlice) = norbitals(g.parent.parent)
 
 contactinds(g::GreenFunction, i...) = contactinds(contacts(g), i...)
 contactinds(g::GreenSolution, i...) = contactinds(blockstructure(g), i...)
+
+orbranges(o::OrbitalSlice, ::GreenSolution) = orbranges(o)
+orbranges(o::CellOrbitals, ::GreenSolution) = orbranges(o)
+orbranges(contact::Integer, g::GreenSolution) = orbranges(blockstructure(g), contact)
+orbranges(::Colon, g::GreenSolution) = orbranges(blockstructure(g))
 
 greenfunction(g::GreenSlice) = g.parent
 

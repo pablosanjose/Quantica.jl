@@ -1,4 +1,4 @@
-using Quantica: GreenFunction, GreenSlice, GreenSolution, zerocell, cellorbs, cellorb
+using Quantica: GreenFunction, GreenSlice, GreenSolution, zerocell, CellOrbitals
 
 function testgreen(h, s; kw...)
     ω = 0.2
@@ -10,7 +10,7 @@ function testgreen(h, s; kw...)
     L = Quantica.latdim(lattice(h))
     z = zero(SVector{L,Int})
     o = Quantica.unitvector(1, SVector{L,Int})
-    locs = (cellsites(z, :), cellsites(z, 2:3), cellsites(z, 2), cellsites(o, :), cellorb(o, 1), cellorbs(z, 2:3))
+    locs = (cellsites(z, :), cellsites(z, 2:3), cellsites(z, 2), cellsites(o, :), CellOrbitals(o, 1), CellOrbitals(z, 2:3))
     for loc in locs, loc´ in locs
         gs = g[loc, loc´]
         @test gs isa GreenSlice
@@ -71,7 +71,7 @@ end
 @testset "greenfunction KPM" begin
     g = HP.graphene(a0 = 1, t0 = 1, orbitals = (2,1)) |> supercell(region = RP.circle(20)) |>
         attach(nothing, region = RP.circle(1)) |> greenfunction(GS.KPM(order = 300, bandrange = (-3.1, 3.1)))
-    ρs = ldos(g[1])
+    ρs = ldos(g[1], kernel = missing)
     for ω in -3:0.1:3
         @test all(>=(0), ρs(ω))
     end
@@ -80,6 +80,16 @@ end
     gωs = g[1](ω)
     ρflat = -imag.(diag(gωs))/pi
     @test all(>(0), ρflat)
+    ρs = ldos(g[1], kernel = missing)
+    ρ = ρs(ω)
+    @test sum(ρ) ≈ sum(ρflat)
+    @test (length(ρflat), length(ρ)) == (9, 9)
+
+    ω = -0.1
+    gωs = g[1](ω)
+    ρflat = -imag.(diag(gωs))/pi
+    @test all(>(0), ρflat)
+    ρs = ldos(g[1], kernel = I)
     ρ = ρs(ω)
     @test sum(ρ) ≈ sum(ρflat)
     @test (length(ρflat), length(ρ)) == (9, 6)

@@ -150,51 +150,27 @@ greenfunction(d::LocalSpectralDensitySlice) = d.g
 
 kernel(d::Union{LocalSpectralDensitySolution,LocalSpectralDensitySlice}) = d.kernel
 
-Base.getindex(d::LocalSpectralDensitySolution; kw...) = d[getindex(lattice(d.gω); kw...)]
+ldos_kernel(g, kernel::UniformScaling) = - kernel.λ * imag(tr(g)) / π
+ldos_kernel(g, kernel) = -imag(tr(g * kernel)) / π
 
-function Base.getindex(d::LocalSpectralDensitySolution{T}, l::LatticeSlice) where {T}
-    v = T[]
-    foreach(scell -> append_ldos!(v, scell, d.gω, d.kernel), subcells(l))
-    return v
-end
+Base.getindex(d::LocalSpectralDensitySolution; selectors...) =
+    d[getindex(lattice(d.gω); selectors...)]
 
-Base.getindex(d::LocalSpectralDensitySolution{T}, sites::Union{CellSites,Colon,Integer}) where {T} =
-    append_ldos!(T[], sites, d.gω, d.kernel)
+Base.getindex(d::LocalSpectralDensitySolution, s::SiteSelector) =
+    d[getindex(lattice(d.gω), s)]
 
-function call!(d::LocalSpectralDensitySlice{T}, ω; params...) where {T}
-    sites = slicerows(d.gs)
-    gω = call!(parent(d.gs), ω; params...)
-    return append_ldos!(T[], sites, gω, d.kernel)
-end
+Base.getindex(d::LocalSpectralDensitySolution{T}, i) where {T} =
+    append_diagonal!(T[], d.gω, i, d.kernel, post = x -> -imag(x)/π)  # see greenfunction.jl
 
 (d::LocalSpectralDensitySlice)(ω; params...) = copy(call!(d, ω; params...))
 
-function append_ldos!(v, cs::CellSites, gω, kernel)
-    gcell = gω[cs]
-    bs = blockstructure(hamiltonian(gω))
-    blocks = block_ranges(cs, bs)
-    for rng in blocks
-        gblock = view(gcell, rng, rng)
-        ldos = ldos_kernel(gblock, kernel)
-        push!(v, ldos)
-    end
-    return v
+# fallback through LocalSpectralDensitySolution - overload to allow a more efficient path
+function call!(d::LocalSpectralDensitySlice{T}, ω; params...) where {T}
+    sites = slicerows(d.gs)
+    gω = call!(parent(d.gs), ω; params...)
+    l = ldos(gω; kernel = d.kernel)
+    return l[sites]
 end
-
-function append_ldos!(v, cind::Union{Colon,Integer}, gω, kernel)
-    gcontact = view(gω, :, :)
-    cbs = blockstructure(gω)
-    blocks = block_ranges(cind, cbs)
-    for rng in blocks
-        gblock = view(gcontact, rng, rng)
-        ldos = ldos_kernel(gblock, kernel)
-        push!(v, ldos)
-    end
-    return v
-end
-
-ldos_kernel(g, kernel::UniformScaling) = - kernel.λ * imag(tr(g)) / π
-ldos_kernel(g, kernel) = -imag(tr(g * kernel)) / π
 
 #endregion
 #endregion

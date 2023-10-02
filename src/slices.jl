@@ -127,40 +127,6 @@ end
 #endregion
 
 ############################################################################################
-# indexing OrbitalSlice
-#region
-
-# create new OrbitalSlice only with the i'th orbitals, where i in inds
-function Base.getindex(s::OrbitalSlice{L}, inds::Vector) where {L}
-    sort!(inds)
-    scs = CellOrbitals{L}[]
-    orbinds = Int[]
-    cellind = 1
-    i = 1
-    celloffset = 0
-    while i <= length(inds)
-        sc = subcells(s, cellind)
-        ind = inds[i] - celloffset
-        if ind <= norbs(sc)
-            push!(orbinds, orbindices(sc)[ind])
-            i += 1
-        else
-            if !isempty(orbinds)
-                push!(scs, CellOrbitals(cell(sc), orbinds))
-                orbinds = Int[]
-            end
-            cellind += 1
-            celloffset += norbs(sc)
-        end
-    end
-    isempty(orbinds) || push!(scs, CellOrbitals(cell(subcells(s, cellind)), orbinds))
-    return OrbitalSlice(scs)
-end
-
-
-#endregion
-
-############################################################################################
 # findsubcell(c, ::LatticeSlice) and Base.in
 #region
 
@@ -316,7 +282,7 @@ end
 
 function lattice0D(ls::LatticeSlice{T,E}, store = missing) where {T,E}
     lat = parent(ls)
-    _empty!(store)
+    missing_or_empty!(store)
     sls = [sublat(collect(sublatsites(ls, s, store)); name = sublatname(lat, s))
            for s in sublats(lat)]
     return lattice(sls)
@@ -325,48 +291,46 @@ end
 # positions of sites in a given sublattice. Pushes selected slice indices into store
 function sublatsites(l::LatticeSlice, s::Integer, store = missing)
     n = 0
-    gen = ((_store!(store, n); site(l.lat, i, cell(subcell)))
+    gen = ((missing_or_push!(store, n); site(l.lat, i, cell(subcell)))
         for subcell in subcells(l) for i in siteindices(subcell)
         if (n += 1; i in siterange(l.lat, s)))
     return gen
 end
 
+missing_or_empty!(::Missing) = missing
+missing_or_empty!(v) = empty!(v)
+
+missing_or_push!(::Missing, _) = missing
+missing_or_push!(v, n) = push!(v, n)
+
 #endregion
 
 ############################################################################################
-# convert a LatticeSlice to an OrbitalSlice
-#    build an OrbitalSlice using the sites in LatticeSlice
+# convert a LatticeSlice to an OrbitalSlice and CellSites to CellOrbs
 #region
 
-orbslice(x, h::AbstractHamiltonian, store...) = orbslice(x, blockstructure(h), store...)
-orbslice(sc::CellSites, bs::OrbitalBlockStructure, store...) = _orbslice((sc,), bs, store...)
-orbslice(ls::LatticeSlice, bs::OrbitalBlockStructure, store...) =
-    _orbslice(subcells(ls), bs, store...)
+orbslice(x, g::GreenSolution) = orbslice(x, hamiltonian(g))
+orbslice(x, h::AbstractHamiltonian) = orbslice(x, blockstructure(h))
+orbslice(sc::CellSites, bs::OrbitalBlockStructure) = _orbslice((sc,), bs)
+orbslice(ls::LatticeSlice, bs::OrbitalBlockStructure) = _orbslice(subcells(ls), bs)
 
-# stores site and subcell offsets in siteoffsets, subcelloffsets if not misssing
-function _orbslice(subcells, bs::OrbitalBlockStructure, siteoffsets = missing, subcelloffsets = missing)
-    _empty!(siteoffsets)
-    _store!(siteoffsets, 0)
-    _empty!(subcelloffsets)
-    _store!(subcelloffsets, 0)
-    orbscells = [CellOrbitals(cell(sc), Int[]) for sc in subcells]
-    offsetall = 0
-    for (oc, sc) in zip(orbscells, subcells)
-        for i in siteindices(sc)
-            irng = flatrange(bs, i)
-            append!(orbindices(oc), irng)
-            offsetall += length(irng)
-            _store!(siteoffsets, offsetall)
-        end
-        _store!(subcelloffsets, offsetall)
-    end
-    return OrbitalSlice(orbscells)
+function _orbslice(subcells, bs::OrbitalBlockStructure)
+    subcells = [cellorbs(sc, bs) for sc in subcells]
+    return OrbitalSlice(subcells)
 end
 
-_empty!(::Missing) = missing
-_empty!(v) = empty!(v)
+# simple version of the above: single cellorbs & no storage
+cellorbs(sc::CellSites, g::GreenSolution) = cellorbs(sc, blockstructure(hamiltonian(g)))
 
-_store!(::Missing, _) = missing
-_store!(v, n) = push!(v, n)
+function cellorbs(sc::CellSites, bs::OrbitalBlockStructure)
+    orbinds = Int[]
+    orbrngs = UnitRange{Int}[]
+    for i in siteindices(sc)
+        irng = flatrange(bs, i)
+        append!(orbinds, irng)
+        push!(orbrngs, irng)
+    end
+    return CellOrbitals(cell(sc), orbinds, orbrngs)
+end
 
 #endregion

@@ -269,7 +269,7 @@ function apply_map(mapping, h::AbstractHamiltonian{T}, ::Type{S}) where {T,S<:SV
     return FunctionWrapper{SparseMatrixCSC{Complex{T},Int},Tuple{S}}(sfunc)
 end
 
-function apply_map(mapping, hf::Function, ::Type{S}) where {T,S<:SVector{T}}
+function apply_map(mapping, hf::Function, ::Type{S}) where {T,S<:SVector{<:Any,T}}
     function sfunc(φs)
         φs´ = apply_map(mapping, φs)    # can be a FrankenTuple, should be accepted by hf
         mat = hf(φs´)

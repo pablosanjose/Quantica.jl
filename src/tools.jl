@@ -38,7 +38,7 @@ end
 @noinline function_not_defined(name) = argerror("Function $name not defined for the requested types")
 
 unitvector(i, ::Type{SVector{L,T}}) where {L,T} =
-    SVector(ntuple(j -> j == i ? one(T) : zero(T), Val(L)))
+    SVector{L,T}(ntuple(j -> j == i ? one(T) : zero(T), Val(L)))
 
 function padright(pt, ::Val{L}) where {L}
     T = eltype(pt)
@@ -104,6 +104,7 @@ one!(mat::AbstractArray, ::Colon) = one!(mat)
 
 lengths_to_offsets(v::NTuple{<:Any,Integer}) = (0, cumsum(v)...)
 lengths_to_offsets(v) = prepend!(cumsum(v), 0)
+lengths_to_offsets(f::Function, v) = prepend!(accumulate((i,j) -> i + f(j), v; init = 0), 0)
 
 # function get_or_push!(by, x, xs)
 #     for x´ in xs

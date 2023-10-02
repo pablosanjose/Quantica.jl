@@ -654,4 +654,10 @@ minimal_callsafe_copy(s::BandsGreenSlicer) = s  # it is read-only
 
 #endregion
 
+############################################################################################
+# Diagonal of BandsGreenSlicer
+#region
+
+#endregion
+
 #endregion

@@ -75,7 +75,7 @@ function unflat(b::OrbitalBlockStructure{B}, flat::SparseMatrixCSC{<:Number}) wh
         ptr = first(ptrs)
         while ptr in ptrs
             frow = rowsflat[ptr]
-            urow, Nrow = unflatindex(b, frow)
+            urow, Nrow = unflatindex_and_blocksize(b, frow)
             valview = view(flat, frow:frow+Nrow-1, fcol:fcol+Ncol-1)
             val = mask_block(B, valview)
             pushtocolumn!(builder, urow, val)
