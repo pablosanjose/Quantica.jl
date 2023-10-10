@@ -445,7 +445,7 @@ end
 
 #region ## Constructors ##
 
-function josephson(gs::GreenSlice{T}, ωmax; kBT = 0.0, phases = missing, imshift = missing, opts...) where {T}
+function josephson(gs::GreenSlice{T}, ωmax; kBT = 0.0, phases = missing, imshift = missing, atol = 1e-7, opts...) where {T}
     check_same_contact_slice(gs)
     contact = slicerows(gs)
     g = parent(gs)
@@ -458,8 +458,8 @@ function josephson(gs::GreenSlice{T}, ωmax; kBT = 0.0, phases = missing, imshif
     jd = JosephsonDensity(g, kBT´, contact, tauz, phases´,
         traces, Σfull, Σ, similar(Σ), similar(Σ), similar(Σ), similar(tauz, Complex{T}))
     integrator = iszero(kBT) ?
-        Integrator(traces, jd, (-ωmax, 0); imshift, slope = 1, post = real, opts...) :
-        Integrator(traces, jd, (-ωmax, 0, ωmax); imshift, slope = 1, post = real, opts...)
+        Integrator(traces, jd, (-ωmax, 0); imshift, slope = 1, post = real, atol, opts...) :
+        Integrator(traces, jd, (-ωmax, 0, ωmax); imshift, slope = 1, post = real, atol, opts...)
     return integrator
 end
 

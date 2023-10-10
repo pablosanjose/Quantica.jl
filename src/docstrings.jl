@@ -1724,7 +1724,7 @@ julia> T(0.2 + 0.00000000000001im)
 transmission
 
 """
-    josephson(gs::GreenSlice, ωmax; kBT = 0.0, phases = missing, imshift = missing, slope = 1, post = real, quadgk_opts...)
+    josephson(gs::GreenSlice, ωmax; kBT = 0.0, phases = missing, imshift = missing, slope = 1, post = real, atol = 1e-7, quadgk_opts...)
 
 For a `gs = g[i::Integer]` slice of the `g::GreenFunction` of a hybrid junction, build a
 partially evaluated object `J::Integrator` representing the equilibrium (static) Josephson
@@ -1746,7 +1746,8 @@ Evaluate the Josephson current `I_J` for the given `g` parameters `params`, if a
 - `imshift`: if `missing` the initial and final integration points `± ωmax` are shifted by `im * sqrt(eps(ωmax))`, to avoid the real axis. Otherwise a shift `im*imshift` is applied (may be zero if `ωmax` is greater than the bandwidth).
 - `slope`: if non-zero, the integration will be performed along a piecewise-linear path in the complex plane `(-ωmax, -ωmax/2 * (1+slope*im), 0, ωmax/2 * (1+slope*im), ωmax)`, taking advantage of the holomorphic integrand `f(ω) j(ω)` and the Cauchy Integral Theorem for faster convergence.
 - `post`: function to apply to the result of `∫ dω f(ω) j(ω)` to obtain the result, `post = real` by default.
-- `quadgk_opts` : extra keyword arguments to pass on to the function `QuadGK.quadgk` that is used for the integration.
+- `atol`: absolute integration tolerance. The default `1e-7` is chosen to avoid excessive integration times when the current is actually zero.
+- `quadgk_opts` : extra keyword arguments (other than `atol`) to pass on to the function `QuadGK.quadgk` that is used for the integration.
 
 # Examples
 
