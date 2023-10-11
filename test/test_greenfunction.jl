@@ -124,7 +124,7 @@ end
 @testset "greenfunction bands" begin
     h = HP.graphene(a0 = 1, t0 = 1, orbitals = (2,1))
     ga = h |> attach(nothing, cells = 1) |> greenfunction()
-    gb = h |> attach(nothing, cells = 1) |> greenfunction(GS.Bands(boundary = 2 => 3))
+    gb = h |> attach(nothing, cells = 1) |> greenfunction(GS.Bands(boundary = 2 => -3))
     for g in (ga, gb)
         @test Quantica.solver(g) isa Quantica.AppliedBandsGreenSolver
         @test bands(g) isa Quantica.Subband
@@ -133,11 +133,13 @@ end
         @test abs(g1[2,2] - 1/0.2) < 0.01
         @test all(x -> Quantica.chop(imag(x)) ≈ 0, g1[2,:])
         @test all(x -> Quantica.chop(imag(x)) ≈ 0, g1[:,2])
+        g2 = g[cellsites((0,0),:), cellsites((1,1),2)](0.2)
+        @test size(g2) == (3,1)
     end
 
     ha = LP.honeycomb() |> hopping(1) |> supercell((1,-1), region = r -> abs(r[2])<2)
     hb = LP.honeycomb() |> hopping(1, range = 1) |> supercell((1,-1), region = r -> abs(r[2])<2)
-    hc = LP.honeycomb() |> hopping(1, range = 1) |> supercell((3,-3), region = r -> abs(r[2])<2)
+    hc = LP.honeycomb() |> hamiltonian(hopping(I, range = 1), orbitals = (2,1)) |> supercell((3,-3), region = r -> abs(r[2])<2)
     hd = LP.square() |> hopping(1) |> supercell((1,0), region = r -> abs(r[2])<2)
     for h in (ha, hb, hc, hd)
         gc = h |> attach(nothing, cells = 3) |> greenfunction(GS.Bands(subdiv(-π, π, 89)))
