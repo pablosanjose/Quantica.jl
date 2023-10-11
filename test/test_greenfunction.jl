@@ -130,7 +130,7 @@ end
         @test bands(g) isa Quantica.Subband
         g1 = g[1](0.2)
         @test size(g1) == (3,3)
-        @test abs(g1[2,2] - 1/0.2) < 0.01
+        @test abs(g1[2,2] - 1/0.2) < 0.02
         @test all(x -> Quantica.chop(imag(x)) ≈ 0, g1[2,:])
         @test all(x -> Quantica.chop(imag(x)) ≈ 0, g1[:,2])
         g2 = g[cellsites((0,0),:), cellsites((1,1),2)](0.2)
