@@ -1213,6 +1213,11 @@ Like the above using `f(ϕs)::AbstractMatrix` in place of `h(ϕs; params...)`, a
 `Vector{<:Subband}` instead of a `Bandstructure` object. This is provided as a lower level
 driver without the added slicing functionality of a full `Bandstructure` object, see below.
 
+    bands(h::AbstractHamiltonian; kw...)
+
+Equivalent to `bands(h::AbstractHamiltonian, xcolᵢ...; kw...)` with a default `xcolᵢ =
+subdiv(-π, π, 49)`.
+
 ## Keywords
 
 - `solver`: eigensolver to use for each diagonalization (see `Eigensolvers`). Default: `ES.LinearAlgebra()`
@@ -1441,8 +1446,16 @@ Build a `GreenSlice` over all contacts.
     g[dst, src]
 
 Build a `gs::GreenSlice` between sites specified by `src` and `dst`, which can take any of
-the forms above. Therefore, all the previous slice forms correspond to a diagonal block
-`g[i, i]`.
+the forms above. Therefore, all the previous single-index slice forms correspond to a
+diagonal block `g[i, i]`.
+
+    g[diagonal(i, kernel = missing)]
+
+If `kernel = missing`, efficiently construct `diag(g[i, i])`. If `kernel` is a matrix,
+return `tr(g[site, site] * kernel)` over each site encoded in `i`. Note that if there are
+several orbitals per site, these will have different length (i.e. number of orbitals vs
+number of sites). See also `diagonal`.
+
 
     g(ω; params...)
 
@@ -1491,7 +1504,7 @@ true
 ```
 
 # See also
-    `GreenSolvers`, `ldos`, `conductance`, `current`, `josephson`
+    `GreenSolvers`, `diagonal`, `ldos`, `conductance`, `current`, `josephson`
 """
 greenfunction
 
@@ -1509,13 +1522,51 @@ possible keyword arguments are
     - `bandrange` : a `(min_energy, max_energy)::Tuple` interval that encompasses the full band of the Hamiltonian. If `missing`, it is computed automatically.
     - `kernel` : generalization that computes momenta as `μₙ = Tr[Tₙ(h)*kernel]`, so that the local density of states (see `ldos`) becomes the density of the `kernel` operator.
     - This solver does not allow arbitrary indexing of the resulting `g::GreenFunction`, only on contacts `g[contact_ind::Integer]`. If the system has none, we can add a dummy contact using `attach(h, nothing; sites...)`, see `attach`.
-
-## TODO
-
-Still in the TODO list is a bandstructure/spectrum-based solver, valid for Hamiltonians of any dimension with and without boundaries
+- `GS.Bands(bands_arguments; boundary = missing, bands_kw...)`: solver based on the integration of bandstructure simplices
+    - `bands_arguments`: positional arguments passed on to `bands`
+    - `bands_kw`: keyword arguments passed on to `bands`
+    - `boundary`: either `missing` (no boundary), or `dir => cell_pos`, where `dir::Integer` is the Bravais vector normal to the boundary, and `cell_pos::Integer` the value of cell indices `cells[dir]` that define the boundary (i.e. `cells[dir] <= cell_pos` are vaccum)
+    - This solver only allows zero or one boundary. WARNING: if a boundary is used, the algorithm may become unstable for very fine band meshes.
 
 """
 GreenSolvers
+
+"""
+    diagonal(i; kernel = missing)
+
+Wrapper over site or orbital indices (used to index into a `g::GreenFunction` or
+`g::GreenSolution`) that represent purely diagonal entries. Here `i` can be any index
+accepted in `g[i,i]`, e.g. `i::Integer` (contact index), `i::Colon` (merged contacts),
+`i::SiteSelector` (selected sites), etc.
+
+    diagonal(kernel = missing, sites...)
+
+Equivalent to `diagonal(siteselector(; sites...); kernel)`
+
+## Keywords
+
+    - `kernel`: if missing, all orbitals in the diagonal `g[i, i]` are returned when indexing `g[diagonal(i)]`. Otherwise, `tr(g[site, site]*kernel)` for each site included in `i` is returned. See also `ldos`
+
+# Example
+```jldoctest
+julia> g = HP.graphene(orbitals = 2) |> attach(nothing, cells = (0,0)) |> greenfunction();
+
+julia> g(1)[diagonal(:)]                            # g diagonal on all contact orbitals
+4-element Vector{ComplexF64}:
+ -0.10919028168061964 - 0.08398577667508965im
+ -0.10919028168734393 - 0.08398577667508968im
+ -0.10919028169083328 - 0.08398577667508969im
+   -0.109190281684109 - 0.08398577667508969im
+
+julia> g(1)[diagonal(:, kernel = SA[1 0; 0 -1])]    # σz spin density at ω = 1
+2-element Vector{ComplexF64}:
+  6.724287793247186e-12 + 2.7755575615628914e-17im
+ -6.724273915459378e-12 + 0.0im
+```
+
+# See also
+    `greenfunction`, `ldos`
+"""
 
 """
     ldos(gs::GreenSlice; kernel = I)
@@ -1570,10 +1621,13 @@ julia> ldos(g(0.2))[1]
  0.03493305572265034
  0.03493305572265045
  0.036802204179317045
+
+julia> ldos(g(0.2))[1] == -imag.(g[diagonal(1; kernel = I)](0.2)) ./ π
+true
 ```
 
 # See also
-    `greenfunction`, `current`, `conductance`, `josephson`, `transmission`
+    `greenfunction`, `diagonal`, `current`, `conductance`, `josephson`, `transmission`
 
 """
 ldos

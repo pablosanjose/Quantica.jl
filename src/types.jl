@@ -306,6 +306,7 @@ end
 
 CellSites(cell, inds = Int[]) = CellSites(sanitize_SVector(Int, cell), inds)
 
+# see slices.jl for cellorbs constructor that computes ranges
 CellOrbitals(cell, inds = Int[], ranges = missing) =
     CellOrbitals(sanitize_SVector(Int, cell), inds, ranges)
 
@@ -1802,6 +1803,7 @@ orbslice(c::Contacts) = orbslice(c.blockstruct)
 orbslice(c::ContactBlockStructure) = c.orbslice
 orbslice(c::ContactBlockStructure, i) = c.corbslices[i]
 
+# orbital size of merged contacts or specific contact
 flatsize(c::ContactBlockStructure) = last(siteoffsets(c))
 flatsize(c::ContactBlockStructure, i::Integer) = length(contactinds(c, i))
 

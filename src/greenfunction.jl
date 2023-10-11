@@ -17,7 +17,7 @@ end
 
 default_green_solver(::AbstractHamiltonian0D) = GS.SparseLU()
 default_green_solver(::AbstractHamiltonian1D) = GS.Schur()
-# default_green_solver(::AbstractHamiltonian) = GS.Bands()
+default_green_solver(::AbstractHamiltonian) = GS.Bands()
 
 #endregion
 
@@ -130,7 +130,10 @@ sanitize_cellorbs(c::CellOrbital) = CellOrbitals(cell(c), orbindex(c):orbindex(c
 
 # fallback
 Base.getindex(s::GreenSlicer, ::CellOrbitals, ::CellOrbitals) =
-    internalerror("getindex of $(nameof(typeof(s))): not implemented")
+    argerror("getindex of $(nameof(typeof(s))) not implemented")
+
+Base.view(s::GreenSlicer, args...) =
+    argerror("view of $(nameof(typeof(s))) not implemented")
 
 #endregion
 
@@ -170,11 +173,15 @@ end
 # it should include all diagonal blocks for each site, not just the orbital diagonal
 diagonal_slice(gω, o) = gω[o, o]
 
+GreenSolution
 # If no kernel is provided, we return the whole diagonal
-orbranges_or_allorbs(kernel::Missing, ::Union{Integer,Colon,CellOrbitals}, gω) = 1:flatsize(gω)
-orbranges_or_allorbs(kernel, contact::Integer, gω) = orbranges(blockstructure(gω), contact)
-orbranges_or_allorbs(kernel, ::Colon, gω) = orbranges(blockstructure(gω))
-orbranges_or_allorbs(kernel, o::CellOrbitals, gω) = orbranges(o)
+orbranges_or_allorbs(kernel::Missing, o::CellOrbitals, gω) = eachindex(orbindices(o))
+orbranges_or_allorbs(kernel::Missing, o::Colon, gω) = 1:flatsize(blockstructure(gω))
+orbranges_or_allorbs(kernel::Missing, i::Integer, gω) = 1:flatsize(blockstructure(gω), i)
+orbranges_or_allorbs(kernel, o, gω) = orbranges_or_allorbs(o, gω)
+orbranges_or_allorbs(contact::Integer, gω) = orbranges(blockstructure(gω), contact)
+orbranges_or_allorbs(::Colon, gω) = orbranges(blockstructure(gω))
+orbranges_or_allorbs(o::CellOrbitals, gω) = orbranges(o)
 
 view_or_scalar(gblock, rng::UnitRange) = view(gblock, rng, rng)
 view_or_scalar(gblock, i::Integer) = gblock[i, i]
@@ -412,8 +419,10 @@ end
 
 #region ## Constructors ##
 
-# if there are no Σblocks, return g0slicer
+# if there are no Σblocks, return g0slicer. Otherwise build TMatrixSlicer.
 maybe_TMatrixSlicer(g0slicer::GreenSlicer, Σblocks::Tuple{}, blockstruct) = g0slicer
+maybe_TMatrixSlicer(g0slicer, Σblocks, blockstruct) =
+    TMatrixSlicer(g0slicer, Σblocks, blockstruct)
 
 # Uses getindex(g0slicer) to construct g0contacts
 function TMatrixSlicer(g0slicer::GreenSlicer{C}, Σblocks, blockstruct) where {C}

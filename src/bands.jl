@@ -61,7 +61,13 @@ end
 
 bands(rng, rngs...; kw...) = h -> bands(h, rng, rngs...; kw...)
 
-bands(h::Union{Function,AbstractHamiltonian}, rng, rngs...; kw...) = bands(h, mesh(rng, rngs...); kw...)
+bands(h::Union{Function,AbstractHamiltonian}, rng, rngs...; kw...) =
+    bands(h, mesh(rng, rngs...); kw...)
+
+bands(h::AbstractHamiltonian{<:Any,<:Any,L}; kw...) where {L} =
+    bands(h, default_band_ticks(Val(L))...; kw...)
+
+default_band_ticks(::Val{L}) where {L} = ntuple(Returns(subdiv(-π, π, 49)), Val(L))
 
 function bands(h::AbstractHamiltonian, mesh::Mesh{S};
          solver = ES.LinearAlgebra(), transform = missing, mapping = missing, kw...) where {S<:SVector}
