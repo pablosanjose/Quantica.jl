@@ -81,9 +81,11 @@ The currently implemented `GreenSolver`s (abbreviated as `GS`) are the following
   Uses a deflating Generalized Schur (QZ) factorization of the generalized eigenvalue problem to compute the unit-cell self energies.
   The Dyson equation then yields the Green function between arbitrary unit cells, which is further dressed using a T-matrix approach if the lead has any attached self-energy.
 
+- `GS.Bands(bandsargs...; boundary = missing, bandskw...)`
 
-!!! note "GS.Bands"
-    In the near future we will also have `GS.Bands` as a general solver in lattice dimensions `L ∈ [1,3]`.
+  For unbounded (`L>0`) Hamiltonians.
+
+  It precomputes a bandstructure `b = bands(h, bandsargs...; kw..., split = false)` and then uses analytic expressions for the contribution of each subband simplex to the `GreenSolution`. If `boundary = dir => cell_pos`, it takes into account the reflections on an infinite boundary perpendicular to Bravais vector number `dir`, so that all sites with cell index `c[dir] <= cell_pos` are removed.
 
 ## Attaching Contacts
 

@@ -8,8 +8,8 @@
 #      - optional: needs_omega_shift(s) (with a true fallback)
 #   A gs::GreenSlicer's allows to compute G[gi, gi´]::AbstractMatrix for indices gi
 #   To do this, it must implement
-#      - view(gs, ::Int, ::Int) -> g(ω; kw...) between specific contacts
-#      - view(gs, ::Colon, ::Colon) -> g(ω; kw...) between all contacts
+#      - view(gs, ::Int, ::Int) -> g(ω; kw...) between specific contacts (has missing fallback)
+#      - view(gs, ::Colon, ::Colon) -> g(ω; kw...) between all contacts (has missing fallback)
 #      - gs[i::CellOrbitals, j::CellOrbitals] -> must return a Matrix for type stability
 #      - minimal_callsafe_copy(gs)
 #   The user-facing indexing API accepts:

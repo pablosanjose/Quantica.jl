@@ -88,8 +88,11 @@ Base.getindex(g::GreenSolution, kw::NamedTuple) = g[getindex(lattice(g); kw...)]
 Base.view(g::GreenSolution, i::Integer, j::Integer = i) = view(slicer(g), i, j)
 Base.view(g::GreenSolution, i::Colon, j::Colon = i) = view(slicer(g), i, j)
 
-Base.getindex(g::GreenSolution, i::Integer, j::Integer = i) = copy(view(g, i, j))
-Base.getindex(g::GreenSolution, ::Colon, ::Colon = :) = copy(view(g, :, :))
+Base.getindex(g::GreenSolution, i::Integer, j::Integer = i) = copy_or_missing(view(g, i, j))
+Base.getindex(g::GreenSolution, ::Colon, ::Colon = :) = copy_or_missing(view(g, :, :))
+
+copy_or_missing(::Missing) = missing
+copy_or_missing(x) = copy(x)
 
 # conversion to CellOrbitals by default
 Base.getindex(g::GreenSolution, i, j) = getindex(g, sites_to_orbs(i, g), sites_to_orbs(j, g))
@@ -132,8 +135,8 @@ sanitize_cellorbs(c::CellOrbital) = CellOrbitals(cell(c), orbindex(c):orbindex(c
 Base.getindex(s::GreenSlicer, ::CellOrbitals, ::CellOrbitals) =
     argerror("getindex of $(nameof(typeof(s))) not implemented")
 
-Base.view(s::GreenSlicer, args...) =
-    argerror("view of $(nameof(typeof(s))) not implemented")
+# fallback to missing for GreenSlicers that don't implement contacts
+Base.view(::GreenSlicer, args...) = missing
 
 #endregion
 
@@ -540,30 +543,32 @@ end
 
 function GreenSolutionCache(gω::GreenSolution{T,<:Any,L}) where {T,L}
     cache = Dict{Tuple{SVector{L,Int},SVector{L,Int},Int},Matrix{Complex{T}}}()
-    g = parent(gω)
-    h = hamiltonian(g)
-    bs = blockstructure(h)
-    cbs = blockstructure(g)
-    cls = latslice(g, :)
-    nrows = flatsize(h)
     gmat = gω[:]
-    j = 0
-    for colsc in subcells(cls)
-        nj = cell(colsc)
-        for j´ in siteindices(colsc)
-            j += 1
-            jrng = flatrange(cbs, j)
-            i = 0
-            for rowsc in subcells(cls)
-                ni = cell(rowsc)
-                undefs = Matrix{Complex{T}}(undef, nrows, length(jrng))
-                for i´ in siteindices(rowsc)
-                    i += 1
-                    irng = flatrange(cbs, i)
-                    irng´ = flatrange(bs, i´)
-                    copy!(view(undefs, irng´, :), view(gmat, irng, jrng))
+    if gmat !== missing
+        g = parent(gω)
+        h = hamiltonian(g)
+        bs = blockstructure(h)
+        cbs = blockstructure(g)
+        cls = latslice(g, :)
+        nrows = flatsize(h)
+        j = 0
+        for colsc in subcells(cls)
+            nj = cell(colsc)
+            for j´ in siteindices(colsc)
+                j += 1
+                jrng = flatrange(cbs, j)
+                i = 0
+                for rowsc in subcells(cls)
+                    ni = cell(rowsc)
+                    undefs = Matrix{Complex{T}}(undef, nrows, length(jrng))
+                    for i´ in siteindices(rowsc)
+                        i += 1
+                        irng = flatrange(cbs, i)
+                        irng´ = flatrange(bs, i´)
+                        copy!(view(undefs, irng´, :), view(gmat, irng, jrng))
+                    end
+                    push!(cache, (ni, nj, j´) => undefs)
                 end
-                push!(cache, (ni, nj, j´) => undefs)
             end
         end
     end

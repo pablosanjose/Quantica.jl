@@ -245,6 +245,7 @@ end
 
 function current_matrix(gω, ls, d)
     h = hamiltonian(parent(gω))
+    # see slices.jl for this form of getindex
     current = h[ls, (hij, cij) -> maybe_project(apply_charge_current(hij, cij, d), d.direction)]
     return current
 end
