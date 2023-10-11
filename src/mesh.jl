@@ -116,7 +116,8 @@ function all_adjacent(ids, dsts_f, neighs)
 end
 
 # ensure simplex orientation has normals pointing towards positive z
-function order_simplices!(simplices, vertices::Vector{B}) where {E,B<:BandVertex{<:Any,E}}
+function orient_simplices!(simplices, vertices::Vector{B}) where {E,B<:BandVertex{<:Any,E}}
+    E <= 2 && return simplices
     for (s, simplex) in enumerate(simplices)
         if E > 2
             k0 = base_coordinates(vertices[simplex[1]])

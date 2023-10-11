@@ -52,7 +52,7 @@ function apply(::GS.SparseLU, h::AbstractHamiltonian0D, cs::Contacts)
     return AppliedSparseLUGreenSolver(invgreen)
 end
 
-apply(::GS.SparseLU, h::AbstractHamiltonian, cs::Contacts) = 
+apply(::GS.SparseLU, h::AbstractHamiltonian, cs::Contacts) =
     argerror("Can only use SparseLU with bounded Hamiltonians")
 
 #endregion
@@ -134,4 +134,3 @@ Base.getindex(s::SparseLUSlicer, i::CellOrbitals, j::CellOrbitals) = copy(view(s
 #endregion
 
 #endregion
-

@@ -4,12 +4,12 @@
 #     - apply(solver, h::AbstractHamiltonian, c::Contacts) -> AppliedGreenSolver
 #   All new s::AppliedGreenSolver must implement (with Σblock a [possibly nested] tuple of MatrixBlock's)
 #      - s(ω, Σblocks, ::ContactBlockStructure) -> GreenSlicer
-#      - minimal_callsafe_copy(gs)
+#      - minimal_callsafe_copy(s)
 #      - optional: needs_omega_shift(s) (with a true fallback)
 #   A gs::GreenSlicer's allows to compute G[gi, gi´]::AbstractMatrix for indices gi
 #   To do this, it must implement
-#      - view(gs, ::Int, ::Int) -> g(ω; kw...) between specific contacts
-#      - view(gs, ::Colon, ::Colon) -> g(ω; kw...) between all contacts
+#      - view(gs, ::Int, ::Int) -> g(ω; kw...) between specific contacts (has missing fallback)
+#      - view(gs, ::Colon, ::Colon) -> g(ω; kw...) between all contacts (has missing fallback)
 #      - gs[i::CellOrbitals, j::CellOrbitals] -> must return a Matrix for type stability
 #      - minimal_callsafe_copy(gs)
 #   The user-facing indexing API accepts:
@@ -67,6 +67,18 @@ end
 #     return (ϵmin, ϵmax)
 # end
 
+struct Bands{B<:Union{Missing,Pair},A,K} <: AbstractGreenSolver
+    bandsargs::A    # sorted to make slices easier
+    bandskw::K
+    boundary::B
+end
+
+Bands(bandargs...; boundary = missing, bandskw...) =
+    Bands(sort.(bandargs), NamedTuple(bandskw), boundary)
+
+Bands(bandargs::Quantica.Mesh; kw...) =
+    argerror("Positional arguments of GS.Bands should be collections of Bloch phases or parameters")
+
 end # module
 
 const GS = GreenSolvers
@@ -74,5 +86,4 @@ const GS = GreenSolvers
 include("green/sparselu.jl")
 include("green/schur.jl")
 include("green/kpm.jl")
-# include("greensolvers/bands.jl")
-
+include("green/bands.jl")

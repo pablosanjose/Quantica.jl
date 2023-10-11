@@ -61,34 +61,41 @@ end
 
 bands(rng, rngs...; kw...) = h -> bands(h, rng, rngs...; kw...)
 
-bands(h::Union{Function,AbstractHamiltonian}, rng, rngs...; kw...) = bands(h, mesh(rng, rngs...); kw...)
+bands(h::Union{Function,AbstractHamiltonian}, rng, rngs...; kw...) =
+    bands(h, mesh(rng, rngs...); kw...)
+
+bands(h::AbstractHamiltonian{<:Any,<:Any,L}; kw...) where {L} =
+    bands(h, default_band_ticks(Val(L))...; kw...)
+
+default_band_ticks(::Val{L}) where {L} = ntuple(Returns(subdiv(-π, π, 49)), Val(L))
 
 function bands(h::AbstractHamiltonian, mesh::Mesh{S};
-         solver = ES.LinearAlgebra(), transform = missing, mapping = missing, kw...) where {S}
-    solvers = eigensolvers_per_threads(solver, h, S, mapping, transform)
-    ss = subbands(solvers, mesh; kw...)
+         solver = ES.LinearAlgebra(), transform = missing, mapping = missing, kw...) where {S<:SVector}
+    mapping´ = sanitize_mapping(mapping, h)
+    solvers = eigensolvers_thread_pool(solver, h, S, mapping´, transform)
+    hf = apply_map(mapping´, h, S)
+    ss = subbands(hf, solvers, mesh; kw...)
     os = blockstructure(h)
     return Bandstructure(ss, solvers, os)
 end
 
 function bands(h::Function, mesh::Mesh{S};
-         solver = ES.LinearAlgebra(), transform = missing, mapping = missing, kw...) where {S}
-    solvers = eigensolvers_per_threads(solver, h, S, mapping, transform)
-    ss = subbands(solvers, mesh; kw...)
+         solver = ES.LinearAlgebra(), transform = missing, mapping = missing, kw...) where {S<:SVector}
+    mapping´ = sanitize_mapping(mapping, h)
+    solvers = eigensolvers_thread_pool(solver, h, S, mapping´, transform)
+    hf = apply_map(mapping´, h, S)
+    ss = subbands(hf, solvers, mesh; kw...)
     return ss
 end
 
-function eigensolvers_per_threads(solver, h, S, mapping, transform)
-    mapping´ = sanitize_mapping(mapping, h)
-    asolvers = [apply(solver, h, S, mapping´, transform) for _ in 1:Threads.nthreads()]
-    return asolvers
-end
+eigensolvers_thread_pool(solver, h, S, mapping, transform) =
+    [apply(solver, h, S, mapping, transform) for _ in 1:Threads.nthreads()]
 
-function subbands(solvers, basemesh::Mesh{SVector{L,T}};
-         showprogress = true, defects = (), patches = 0, degtol = missing, split = true, warn = true) where {T,L}
+function subbands(hf, solvers, basemesh::Mesh{SVector{L,T}};
+         showprogress = true, defects = (), patches = 0, degtol = missing, split = true, warn = true, projectors = false) where {T,L}
     defects´ = sanitize_Vector_of_SVectors(SVector{L,T}, defects)
     degtol´ = degtol isa Number ? degtol : sqrt(eps(real(T)))
-    subbands = subbands_precompilable(solvers, basemesh, showprogress, defects´, patches, degtol´, split, warn)
+    subbands = subbands_precompilable(hf, solvers, basemesh, showprogress, defects´, patches, degtol´, split, warn, projectors)
     return subbands
 end
 
@@ -106,8 +113,8 @@ sanitize_mapping((xs, nodes)::Pair, ::Val{L}) where {L} =
 sanitize_mapping((xs, nodes)::Pair{X,S}, ::Val{L}) where {N,L,T,X<:NTuple{N,Real},S<:NTuple{N,SVector{L,T}}} =
     polygonpath(xs, nodes)
 
-function subbands_precompilable(solvers::Vector{A}, basemesh::Mesh{SVector{L,T}},
-    showprogress, defects, patches, degtol, split, warn) where {T,L,A<:AppliedEigenSolver{T,L}}
+function subbands_precompilable(hf::FunctionWrapper, solvers::Vector{A}, basemesh::Mesh{SVector{L,T}},
+    showprogress, defects, patches, degtol, split, warn, projectors) where {T,L,A<:AppliedEigenSolver{T,L}}
 
     basemesh = copy(basemesh) # will become part of Band, possibly refined
     eigens = Vector{EigenComplex{T}}(undef, length(vertices(basemesh)))
@@ -118,8 +125,9 @@ function subbands_precompilable(solvers::Vector{A}, basemesh::Mesh{SVector{L,T}}
     crossed = NTuple{6,Int}[]
     frustrated = similar(crossed)
     subbands = Subband{T,L+1}[]
-    data = (; basemesh, eigens, bandverts, bandneighs, bandneideg, coloffsets, solvers, L,
-              crossed, frustrated, subbands, defects, patches, showprogress, degtol, split, warn)
+    data = (; hf, solvers, basemesh, eigens, bandverts, bandneighs, bandneideg, coloffsets,
+              L, crossed, frustrated, subbands, defects, patches, showprogress, degtol,
+              split, warn, projectors)
 
     # Step 1 - Diagonalize:
     # Uses multiple SpectrumSolvers (one per Julia thread) to diagonalize h at each
@@ -136,12 +144,22 @@ function subbands_precompilable(solvers::Vector{A}, basemesh::Mesh{SVector{L,T}}
     # Step 3 - Patch seams:
     # Dirac points and other topological band defects will usually produce dislocations in
     # mesh connectivity that results in missing simplices.
+    insert_defects!(data)
     if L>1
         subbands_patch!(data)
     end
 
-    # Step 4 - Split subbands
+    # Step 4 - Split subbands:
+    # Split disconnected subgraphs, rebuild their neighbor lists and convert to Subbands.
+    # As part of the Subband conversion, subband simplices are computed.
     subbands_split!(data)
+
+    # Step 5 - Compute projectors:
+    # Each simplex s has a continuous matrix Fₛ(k) = ψₛ(k)ψₛ(k)⁺ that interpolates between
+    # the Fₛ(kᵢ) at each vertex i. We compute Pˢᵢ such that F(kᵢ) = φₛ(kᵢ)*Pˢᵢ*φₛ(kᵢ)⁺ for
+    # any vertex i of s with a degenerate eigenbasis φ(kᵢ). Non-degenerate vertices have P=1
+    # Required to use a Bandstructure as a GreenSolver
+    subband_projectors!(data)
 
     return subbands
 end
@@ -245,6 +263,7 @@ function subbands_diagonalize!(data)
     ProgressMeter.finish!(meter)
 end
 
+const degeneracy_warning = 16
 
 # collect eigen into a band column (vector of BandVertices for equal base vertex)
 function append_bands_column!(data, basevert, eigen)
@@ -252,6 +271,9 @@ function append_bands_column!(data, basevert, eigen)
     energies, states = eigen
     subs = collect(approxruns(energies, data.degtol))
     for (i, rng) in enumerate(subs)
+        deg = length(rng)
+        data.warn && data.projectors && deg > degeneracy_warning &&
+            @warn "Encountered a highly degenerate point in bandstructure (deg = $deg), which will likely slow down the computation of projectors"
         state = orthonormalize!(view(states, :, rng))
         energy = mean(i -> energies[i], rng)
         push!(data.bandverts, BandVertex(basevert, energy, state))
@@ -284,6 +306,8 @@ end
 
 ############################################################################################
 # subbands_knit!
+#   Take two eigenpair columns connected on basemesh, and add edges between closest
+#   eigenpair using projections (svd).
 #region
 
 function subbands_knit!(data)
@@ -331,13 +355,13 @@ function knit_seam!(data, ib, jb)
     return data
 end
 
-# Number of singular values greater than √min_squared_overlap.
+# Number of singular values greater than √min_squared_overlap in proj = ψj'*ψi
 # Fast rank-1 |svd|^2 is r = tr(proj'proj). For higher ranks and r > 0 we must compute and
 # count singular values. The min_squared_overlap is arbitrary, and is fixed heuristically to
 # a high enough value to connect in the coarsest base lattices
 function connection_rank(proj)
     min_squared_overlap = 0.5
-    rankf = sum(abs2, proj)
+    rankf = sum(abs2, proj) # = tr(proj'proj)
     fastrank = ifelse(rankf > min_squared_overlap, 1, 0)  # For rank=1 proj: upon doubt, connect
     if iszero(fastrank) || size(proj, 1) == 1 || size(proj, 2) == 1
         return fastrank
@@ -353,10 +377,10 @@ column_range(data, ibase) = data.coloffsets[ibase]+1:data.coloffsets[ibase+1]
 
 ############################################################################################
 # subbands_patch!
+#   Remove dislocations in mesh edges by edge splitting (adding patches)
 #region
 
 function subbands_patch!(data)
-    insert_defects!(data)
     data.patches > 0 || return data
     queue_frustrated!(data)
     data.warn && isempty(data.defects) &&
@@ -412,12 +436,25 @@ function insert_defect_column!(data, kdefect)
     for k in vertices(base)
         k ≈ kdefect && return data
     end
-    # find closest edge (center) to kdefect
+    (ib, jb) = find_closest_edge(kdefect, base)
+    insert_column!(data, (ib, jb), kdefect)
+    return data
+end
+
+function find_closest_edge(kdefect::SVector{1}, base)
+    kx = only(kdefect)
+    for i in eachindex(vertices(base)), j in neighbors(base, i)
+        only(vertices(base, i)) < kx < only(vertices(base, j)) && return (i, j)
+    end
+    argerror("Defects in 1D lattices should be contained inside the lattice, but the provided $kdefect is not")
+    return (0, 0)
+end
+
+function find_closest_edge(kdefect, base)
     (ib, jb) = argmin(((i, j) for i in eachindex(vertices(base)) for j in neighbors(base, i))) do (i, j)
         sum(abs2, 0.5*(vertices(base, i) + vertices(base, j)) - kdefect)
     end
-    insert_column!(data, (ib, jb), kdefect)
-    return data
+    return (ib, jb)
 end
 
 function insert_column!(data, (ib, jb), k)
@@ -504,6 +541,9 @@ end
 
 ############################################################################################
 # subbands_split!
+#   We have vertex neighbors (data.bandneighs). Now we need to use these to cluster vertices
+#   into disconnected subbands (i.e. vertex `subsets`). Once we have these, split vertices
+#   into separate lists and rebuild neighbors using indices of these new lists
 #region
 
 function subbands_split!(data)
@@ -532,6 +572,81 @@ function subbands_split!(data)
         isempty(sband) || push!(data.subbands, sband)
     end
     return data
+end
+
+#endregion
+
+############################################################################################
+# subband_projectors!(s::Subband, hf::Function)
+#   Fill dictionary of projector matrices for each degenerate vertex in each simplex of s
+#       Dict([(simp_index, vert_index) => φᵢ * P])
+#   such that P = U PD U'. U columns are eigenstates of φᵢ hf(k_av) φᵢ⁺, i = vert_index,
+#   φᵢ are vertex eigenstate matrices, k_av is the basecoordinate at the center of the
+#   simplex, and PD is a Diagonal{Bool} that filters out M columns of U, so that only
+#   deg_simplex = minimum(deg_verts) remain. The criterion to filter out the required
+#   eigenstates is to order them is decreasing energy distance between their eigenvalue ε_av
+#   and the simplex mean energy mean(ε_j). No φᵢ overlap criterion is used because we need
+#   to fix the exact number of eliminations.
+#region
+
+function subband_projectors!(data)
+    nsimps = sum(s -> length(simplices(s)), data.subbands)
+    meter = Progress(nsimps, "Step 5 - Projectors: ")
+    if data.projectors
+        for s in data.subbands
+            subband_projectors!(s, data.hf, meter, data.showprogress)
+        end
+    end
+    return data
+end
+
+function subband_projectors!(s::Subband{T}, hf, meter, showprogress) where {T}
+    projstates = projected_states(s)
+    isempty(projstates) || return s
+    verts = vertices(s)
+    simps = simplices(s)
+    # a random symmetry-breaking perturbation common to all simplices
+    perturbation = Complex{T}[]
+    for (sind, simp) in enumerate(simps)
+        degs = degeneracy.(getindex.(Ref(verts), simp))
+        if any(>(1), degs)
+            kav = mean(i -> base_coordinates(verts[i]), simp)
+            εav = mean(i -> energy(verts[i]), simp)
+            hkav = hf(kav)
+            nzs = nonzeros(hkav)
+            nnzs = length(nzs)
+            nnzs == length(perturbation) || resize_perturbation!(perturbation, nnzs)
+            nzs .+= perturbation     # in-place allowed since hkav gets updated on each call
+            mindeg = minimum(degs)
+            for (vind, deg) in zip(simp, degs)
+                if deg > 1  # diagonalize vertex even if all degs are equal and > 1
+                    φP = simplex_projector(hkav, verts, vind, εav, mindeg)
+                    projstates[(sind, vind)] = φP
+                end
+            end
+        end
+        showprogress && ProgressMeter.next!(meter)
+    end
+    return projstates
+end
+
+function resize_perturbation!(p::Vector{C}, n) where {C}
+    l = length(p)
+    @assert n > l   # perturbation length should not decrease
+    resize!(p, n)
+    η = sqrt(eps(real(C)))  # makes the perturbation small
+    for i in l+1:n
+        p[i] = η * rand(C)
+    end
+    return p
+end
+
+function simplex_projector(hkav, verts, vind, εav, mindeg)
+    φ = states(verts[vind])
+    hproj = φ' * hkav * φ
+    _, P = eigen!(Hermitian(hproj), sortby = ε -> abs(ε - εav))
+    Pthin = view(P, :, 1:mindeg)
+    return φ * Pthin
 end
 
 #endregion
@@ -610,7 +725,7 @@ function slice_simplex!(data, simp)
             sum(λs) < 1 && all(>=(0), λs) || continue
             dvpar = edgemat[paraxes, :]
             kε = kε0[paraxes] + dvpar * λs
-            φ = interpolate_state(λs, vertices(data.subband), simp, sub)
+            φ = interpolate_state_along_edges(λs, vertices(data.subband), simp, sub)
             push!(data.verts, BandVertex(kε, φ))
             push!(data.neighs, Int[])
             vind = length(data.verts)
@@ -639,8 +754,8 @@ function vertmat_simplex(::NTuple{N}, vs, simp, sub) where {N}
 end
 
 # we assume that sub is ordered and that simp is sorted so that the first vertex has minimal
-# degeneracy within the simplex (see order_simplices!)
-function interpolate_state(λs, vs, simp, sub)
+# degeneracy within the simplex (note that orient_simplices! preserves first vertex)
+function interpolate_state_along_edges(λs, vs, simp, sub)
     v0 = vs[simp[sub[1]]]
     φ0 = states(v0)
     deg0 = degeneracy(v0)

@@ -390,8 +390,7 @@ function (s::AppliedSchurGreenSolver)(ω, Σblocks, cblockstruct)
     # call! fsolver once for all the g's
     call!(s.fsolver, ω)
     g0slicer = SchurGreenSlicer(ω, s)
-    g0slicer.G∞₀₀
-    gslicer = TMatrixSlicer(g0slicer, Σblocks, cblockstruct)
+    gslicer = maybe_TMatrixSlicer(g0slicer, Σblocks, cblockstruct)
     return gslicer
 end
 
@@ -512,7 +511,7 @@ function inf_schur_slice(s::SchurGreenSlicer, i::CellOrbitals, j::CellOrbitals)
     dist = only(cell(i) - cell(j))
     if dist == 0
         g = s.G∞₀₀
-        i´, j´ = cellorbs((), rows), cellorbs((), cols)
+        i´, j´ = CellOrbitals((), rows), CellOrbitals((), cols)
         return g[i´, j´]
     elseif dist >= 1                                      # G∞ₙₘ = G₁₁L (R'G₁₁L)ⁿ⁻ᵐ⁻¹ R'G∞₀₀
         R´G∞₀₀ = view(s.R´G∞₀₀, :, cols)
@@ -538,17 +537,17 @@ function semi_schur_slice(s::SchurGreenSlicer{C}, i, j) where {C}
         return zeros(C, norbs(i), norbs(j))
     elseif n == m == 1
         g = s.G₁₁
-        i´, j´ = cellorbs((), rows), cellorbs((), cols)
+        i´, j´ = CellOrbitals((), rows), CellOrbitals((), cols)
         return g[i´, j´]
     elseif n == m == -1
         g = s.G₋₁₋₁
-        i´, j´ = cellorbs((), rows), cellorbs((), cols)
+        i´, j´ = CellOrbitals((), rows), CellOrbitals((), cols)
         return g[i´, j´]
     elseif m >= 1  # also n >= 1                       # Gₙₘ = G∞ₙₘ - G₁₁L(R'G₁₁L)ⁿ⁻¹ R'G∞₀ₘ
-        i´ = cellorbs(n, rows)
-        j´ = cellorbs(m, cols)
+        i´ = CellOrbitals(n, rows)
+        j´ = CellOrbitals(m, cols)
         G∞ₙₘ = inf_schur_slice(s, i´, j´)
-        i´ = cellorbs(0, :)
+        i´ = CellOrbitals(0, :)
         R´G∞₀ₘ = s.R' * inf_schur_slice(s, i´, j´)
         R´G₁₁L = s.R´G₁₁L
         G₁₁L = view(s.G₁₁L, rows, :)
@@ -557,10 +556,10 @@ function semi_schur_slice(s::SchurGreenSlicer{C}, i, j) where {C}
             mul!(G∞ₙₘ, G₁₁L, (R´G₁₁L^(n-1)) * R´G∞₀ₘ, -1, 1)
         return Gₙₘ
     else  # m, n <= -1                             # Gₙₘ = G∞ₙₘ - G₋₁₋₁R(L'G₋₁₋₁R)⁻ⁿ⁻¹L'G∞₀ₘ
-        i´ = cellorbs(n, rows)
-        j´ = cellorbs(m, cols)
+        i´ = CellOrbitals(n, rows)
+        j´ = CellOrbitals(m, cols)
         G∞ₙₘ = inf_schur_slice(s, i´, j´)
-        i´ = cellorbs(0, :)
+        i´ = CellOrbitals(0, :)
         L´G∞₀ₘ = s.L' * inf_schur_slice(s, i´, j´)
         L´G₋₁₋₁R = s.L´G₋₁₋₁R
         G₋₁₋₁R = view(s.G₋₁₋₁R, rows, :)

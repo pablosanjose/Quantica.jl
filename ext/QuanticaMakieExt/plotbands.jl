@@ -7,11 +7,11 @@
         colormap = :Spectral_9,
         color = missing,
         opacity = 1.0,
-        size = 3,
+        size = 2,
         minmaxsize = (0,6),
         nodesizefactor = 4,
         nodedarken = 0.0,
-        hide = ()   # :nodes, :bands
+        hide = ()   # :nodes, :bands, :wireframe
     )
 end
 
@@ -99,7 +99,7 @@ end
 function bandprimitives!(mp, mesh, s, (hue, opacity, size))
     offset = length(mp.verts)
     append!(mp.simps, offset .+ reinterpret(Int, Quantica.simplices(mesh)))
-    for vert in Quantica.vertices(mesh)
+    for (ivert, vert) in enumerate(Quantica.vertices(mesh))
         ψ = Quantica.states(vert)
         kϵ = Quantica.coordinates(vert)
         k = Quantica.base_coordinates(vert)
@@ -108,7 +108,7 @@ function bandprimitives!(mp, mesh, s, (hue, opacity, size))
         push_subbandhue!(mp, hue, ψ, ϵ, k, s)
         push_subbandopacity!(mp, opacity, ψ, ϵ, k, s)
         push_subbandsize!(mp, size, ψ, ϵ, k, s)
-        push_subbandtooltip!(mp, ψ, ϵ, k, s)
+        push_subbandtooltip!(mp, ψ, ϵ, k, s, ivert)
     end
     return mp
 end
@@ -141,8 +141,8 @@ push_subbandsize!(mp, size::Real, ψ, ϵ, k, s) = push!(mp.sizes, size)
 push_subbandsize!(mp, size::Function, ψ, ϵ, k, s) = push!(mp.sizes, size(ψ, ϵ, k))
 push_subbandsize!(mp, size, ψ, ϵ, k, s) = argerror("Unrecognized size")
 
-push_subbandtooltip!(mp, ψ, ϵ, k, s) =
-    push!(mp.tooltips, "Subband $s:\n k = $k\n ϵ = $ϵ\n degeneracy = $(size(ψ, 2))")
+push_subbandtooltip!(mp, ψ, ϵ, k, s, iv) =
+    push!(mp.tooltips, "Subband $s, vertex $iv:\n k = $k\n ϵ = $ϵ\n degeneracy = $(size(ψ, 2))")
 
 ## update_color! ##
 
@@ -212,7 +212,13 @@ function plotmeshes!(plot, mp::MeshPrimitives{<:Any,3})
     transparency = has_transparencies(plot[:opacity][])
     if !ishidden((:bands, :subbands), plot)
         simps = simplices_matrix(mp)
-        mesh!(plot, mp.verts, simps; color = mp.colors, inspectable = false, transparency)
+        if !ishidden((:wireframe, :simplices), plot)
+            color´ = darken.(mp.colors, plot[:nodedarken][])
+            poly!(plot, mp.verts, simps; color = mp.colors, inspectable = false, transparency,
+                 strokewidth = plot[:size][], shading = true)
+        else
+            mesh!(plot, mp.verts, simps; color = mp.colors, inspectable = false, transparency)
+        end
     end
     if !ishidden((:nodes, :points, :vertices), plot)
         inspector_label = (self, i, r) -> mp.tooltips[i]

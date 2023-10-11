@@ -117,11 +117,11 @@ subbands or subband slices (e.g. `ss = b[1:4]` or `ss = b[(:,0,:)]`).
 - `color = missing`: color of subbands, as a index in `colormap`, a named color, a `Makie.Colorant`, or as a band shader (see below). If `missing`, cycle through `colormap`.
 - `colormap = :Spectral_9`: colormap to use for `color` (see options in https://tinyurl.com/cschemes)
 - `opacity = 1.0`: opacity of subbands, as a real between 0 and 1 or as a band shader (see below)
-- `size = 3`: stroke thickness, in pixels, when plotting line-like subbands (only relevant to 2D plots). May also be a band shader (see below)
+- `size = 2`: stroke thickness, in pixels, when plotting line-like features. May also be a band shader in 2D plots (see below)
 - `minmaxsize = (0, 6)`: if `size` is a shader, minimum and maximum stroke thickness, in pixels.
 - `nodesizefactor = 4`: relative size of nodes respect to subbands.
 - `nodedarken = 0.0`: darkening factor of nodes despect to subband color.
-- `hide = ()`: collection of elements to hide, to choose from `(:nodes, :bands)`
+- `hide = ()`: collection of elements to hide, to choose from `(:nodes, :bands, :wireframe)`
 
 ## Shaders
 The element properties in the list above that accept band shaders may take either of these options

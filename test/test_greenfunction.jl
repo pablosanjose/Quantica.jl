@@ -1,4 +1,4 @@
-using Quantica: GreenFunction, GreenSlice, GreenSolution, zerocell, cellorbs, cellorb
+using Quantica: GreenFunction, GreenSlice, GreenSolution, zerocell, CellOrbitals
 
 function testgreen(h, s; kw...)
     ω = 0.2
@@ -10,7 +10,7 @@ function testgreen(h, s; kw...)
     L = Quantica.latdim(lattice(h))
     z = zero(SVector{L,Int})
     o = Quantica.unitvector(1, SVector{L,Int})
-    locs = (cellsites(z, :), cellsites(z, 2:3), cellsites(z, 2), cellsites(o, :), cellorb(o, 1), cellorbs(z, 2:3))
+    locs = (cellsites(z, :), cellsites(z, 2:3), cellsites(z, 2), cellsites(o, :), CellOrbitals(o, 1), CellOrbitals(z, 2:3))
     for loc in locs, loc´ in locs
         gs = g[loc, loc´]
         @test gs isa GreenSlice
@@ -71,7 +71,7 @@ end
 @testset "greenfunction KPM" begin
     g = HP.graphene(a0 = 1, t0 = 1, orbitals = (2,1)) |> supercell(region = RP.circle(20)) |>
         attach(nothing, region = RP.circle(1)) |> greenfunction(GS.KPM(order = 300, bandrange = (-3.1, 3.1)))
-    ρs = ldos(g[1])
+    ρs = ldos(g[1], kernel = missing)
     for ω in -3:0.1:3
         @test all(>=(0), ρs(ω))
     end
@@ -80,6 +80,16 @@ end
     gωs = g[1](ω)
     ρflat = -imag.(diag(gωs))/pi
     @test all(>(0), ρflat)
+    ρs = ldos(g[1], kernel = missing)
+    ρ = ρs(ω)
+    @test sum(ρ) ≈ sum(ρflat)
+    @test (length(ρflat), length(ρ)) == (9, 9)
+
+    ω = -0.1
+    gωs = g[1](ω)
+    ρflat = -imag.(diag(gωs))/pi
+    @test all(>(0), ρflat)
+    ρs = ldos(g[1], kernel = I)
     ρ = ρs(ω)
     @test sum(ρ) ≈ sum(ρflat)
     @test (length(ρflat), length(ρ)) == (9, 6)
@@ -109,6 +119,56 @@ end
     for ω in subdiv(-3, 3, 20)
         @test all(x -> sign(x) == sign(ω), ρs(ω))
     end
+end
+
+@testset "greenfunction bands" begin
+    h = HP.graphene(a0 = 1, t0 = 1, orbitals = (2,1))
+    ga = h |> attach(nothing, cells = 1) |> greenfunction()
+    gb = h |> attach(nothing, cells = 1) |> greenfunction(GS.Bands(boundary = 2 => -3))
+    for g in (ga, gb)
+        @test Quantica.solver(g) isa Quantica.AppliedBandsGreenSolver
+        @test bands(g) isa Quantica.Subband
+        g1 = g[1](0.2)
+        @test size(g1) == (3,3)
+        @test abs(g1[2,2] - 1/0.2) < 0.02
+        @test all(x -> Quantica.chop(imag(x)) ≈ 0, g1[2,:])
+        @test all(x -> Quantica.chop(imag(x)) ≈ 0, g1[:,2])
+        g2 = g[cellsites((0,0),:), cellsites((1,1),2)](0.2)
+        @test size(g2) == (3,1)
+    end
+
+    ha = LP.honeycomb() |> hopping(1) |> supercell((1,-1), region = r -> abs(r[2])<2)
+    hb = LP.honeycomb() |> hopping(1, range = 1) |> supercell((1,-1), region = r -> abs(r[2])<2)
+    hc = LP.honeycomb() |> hamiltonian(hopping(I, range = 1), orbitals = (2,1)) |> supercell((3,-3), region = r -> abs(r[2])<2)
+    hd = LP.square() |> hopping(1) |> supercell((1,0), region = r -> abs(r[2])<2)
+    for h in (ha, hb, hc, hd)
+        gc = h |> attach(nothing, cells = 3) |> greenfunction(GS.Bands(subdiv(-π, π, 89)))
+        gd = h |> attach(nothing, cells = 3) |> greenfunction(GS.Schur())
+        @test maximum(abs.(gc[cells = 1](0.5) - gd[cells = 1](0.5))) < 0.08
+        @test all(>=(0), ldos(gc[1])(0.2))
+        @test all(>=(0), ldos(gc[region = RP.circle(2)])(0.2))
+
+        gc = h |> attach(nothing, cells = 3) |> greenfunction(GS.Bands(subdiv(-π, π, 89), boundary = 1 => 0))
+        gd = h |> attach(nothing, cells = 3) |> greenfunction(GS.Schur(boundary = 0))
+        @test maximum(abs.(gc[cells = 1](0.5) - gd[cells = 1](0.5))) < 0.08
+        @test all(>=(0), ldos(gc[1])(0.2))
+        @test all(>=(0), ldos(gc[region = RP.circle(2)])(0.2))
+    end
+end
+
+@testset "diagonal slicing" begin
+    g = HP.graphene(a0 = 1, t0 = 1, orbitals = (2,1)) |> supercell((2,-2), region = r -> 0<=r[2]<=5) |>
+        attach(nothing, cells = 2, region = r -> 0<=r[2]<=2) |> attach(nothing, cells = 3) |>
+        greenfunction(GS.Schur(boundary = -2))
+    ω = 0.6
+    @test g[diagonal(2)](ω) == g(ω)[diagonal(2)]
+    @test size(g[diagonal(1)](ω)) == (12,)
+    @test size(g[diagonal(1, kernel = I)](ω)) == (8,)
+    @test length(g[diagonal(:)](ω)) == length(g[diagonal(1)](ω)) + length(g[diagonal(2)](ω)) == 48
+    @test length(g[diagonal(:, kernel = I)](ω)) == length(g[diagonal(1, kernel = I)](ω)) + length(g[diagonal(2, kernel = I)](ω)) == 32
+    @test length(g[diagonal(cells = 2:3)](ω)) == 72
+    @test length(g[diagonal(cells = 2:3, kernel = I)](ω)) == 48
+    @test ldos(g[1])(ω) ≈ -imag.(g[diagonal(1; kernel = I)](ω)) ./ π
 end
 
 function testcond(g0; nambu = false)

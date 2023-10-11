@@ -17,7 +17,7 @@ end
 
 default_green_solver(::AbstractHamiltonian0D) = GS.SparseLU()
 default_green_solver(::AbstractHamiltonian1D) = GS.Schur()
-# default_green_solver(::AbstractHamiltonian) = GS.Bandstructure()
+default_green_solver(::AbstractHamiltonian) = GS.Bands()
 
 #endregion
 
@@ -87,44 +87,42 @@ Base.getindex(g::GreenSolution, kw::NamedTuple) = g[getindex(lattice(g); kw...)]
 
 Base.view(g::GreenSolution, i::Integer, j::Integer = i) = view(slicer(g), i, j)
 Base.view(g::GreenSolution, i::Colon, j::Colon = i) = view(slicer(g), i, j)
-Base.getindex(g::GreenSolution, i::Integer, j::Integer = i) = copy(view(g, i, j))
-Base.getindex(g::GreenSolution, ::Colon, ::Colon = :) = copy(view(g, :, :))
 
-function Base.getindex(g::GreenSolution, i)
-    ai = ind_to_orbslice(i, g)
-    return getindex(g, ai, ai)
-end
+Base.getindex(g::GreenSolution, i::Integer, j::Integer = i) = copy_or_missing(view(g, i, j))
+Base.getindex(g::GreenSolution, ::Colon, ::Colon = :) = copy_or_missing(view(g, :, :))
 
-Base.getindex(g::GreenSolution, i, j) = getindex(g, ind_to_orbslice(i, g), ind_to_orbslice(j, g))
+copy_or_missing(::Missing) = missing
+copy_or_missing(x) = copy(x)
 
+# conversion to CellOrbitals by default
+Base.getindex(g::GreenSolution, i, j) = getindex(g, sites_to_orbs(i, g), sites_to_orbs(j, g))
+Base.getindex(g::GreenSolution, i) = (ai = sites_to_orbs(i, g); getindex(g, ai, ai))
+
+# convert to either CellOrbitals or OrbitalSlice (i.e. from sites to flat orbitals)
+sites_to_orbs(c::CellSites, g) = cellorbs(c, g)         # see slices.jl
+sites_to_orbs(l::LatticeSlice, g) = orbslice(l, g)      # see slices.jl
+sites_to_orbs(s::SiteSelector, g) = sites_to_orbs(lattice(g)[s], g)
+sites_to_orbs(kw::NamedTuple, g) = sites_to_orbs(getindex(lattice(g); kw...), g)
+sites_to_orbs(cell::Union{SVector,Tuple}, g::GreenSolution{<:Any,<:Any,L}) where {L} =
+    sites_to_orbs(cellsites(sanitize_SVector(SVector{L,Int}, cell), :), g)
+sites_to_orbs(c::CellSites{<:Any,Colon}, g) =
+    CellOrbitals(cell(c), 1:flatsize(hamiltonian(g)))
+# for sublat name or site range we use a UnitRange instead of a Vector
+sites_to_orbs(c::CellSites{<:Any,<:Union{Symbol,AbstractUnitRange,Integer}}, g) =
+    CellOrbitals(cell(c), flatrange(hamiltonian(g), siteindices(c)))
+sites_to_orbs(c::CellOrbitals, g) = c
 # fallback for cases where i and j are not *both* contact indices -> convert to OrbitalSlice
-function ind_to_orbslice(c::Integer, g)
-    contactbs = blockstructure(g)
-    cinds = contactinds(contactbs, c)
-    os = orbslice(contactbs)[cinds]
-    return os
-end
-
-ind_to_orbslice(c::CellSites, g) = orbslice(c, hamiltonian(g))
-ind_to_orbslice(l::LatticeSlice, g) = orbslice(l, hamiltonian(g))
-ind_to_orbslice(s::SiteSelector, g) = ind_to_orbslice(lattice(g)[s], g)
-ind_to_orbslice(kw::NamedTuple, g) = ind_to_orbslice(getindex(lattice(g); kw...), g)
-ind_to_orbslice(cell::Union{SVector,Tuple}, g::GreenSolution{<:Any,<:Any,L}) where {L} =
-    ind_to_orbslice(cellsites(sanitize_SVector(SVector{L,Int}, cell), :), g)
-ind_to_orbslice(c::CellSites{<:Any,Colon}, g) = cellorbs(cell(c), 1:flatsize(hamiltonian(g)))
-ind_to_orbslice(c::CellSites{<:Any,Symbol}, g) =
-    # uses a UnitRange instead of a Vector
-    cellorbs(cell(c), flatrange(hamiltonian(g), siteindices(c)))
-ind_to_orbslice(c::CellOrbitals, g) = c
+sites_to_orbs(::Colon, g) = orbslice(blockstructure(g))        # reads ContactBlockStructure
+sites_to_orbs(i::Integer, g) = orbslice(blockstructure(g), i)  # reads ContactBlockStructure
 
 Base.getindex(g::GreenSolution, i::OrbitalSlice, j::OrbitalSlice) =
-    mortar([g[si, sj] for si in subcells(i), sj in subcells(j)])
+    mortar((g[si, sj] for si in subcells(i), sj in subcells(j)))
 
 Base.getindex(g::GreenSolution, i::OrbitalSlice, j::CellOrbitals) =
-    mortar([g[si, sj] for si in subcells(i), sj in (j,)])
+    mortar((g[si, sj] for si in subcells(i), sj in (j,)))
 
 Base.getindex(g::GreenSolution, i::CellOrbitals, j::OrbitalSlice) =
-    mortar([g[si, sj] for si in (i,), sj in subcells(j)])
+    mortar((g[si, sj] for si in (i,), sj in subcells(j)))
 
 Base.getindex(g::GreenSolution, i::CellOrbitals, j::CellOrbitals) =
     slicer(g)[sanitize_cellorbs(i), sanitize_cellorbs(j)]
@@ -135,7 +133,68 @@ sanitize_cellorbs(c::CellOrbital) = CellOrbitals(cell(c), orbindex(c):orbindex(c
 
 # fallback
 Base.getindex(s::GreenSlicer, ::CellOrbitals, ::CellOrbitals) =
-    internalerror("getindex of $(nameof(typeof(s))): not implemented")
+    argerror("getindex of $(nameof(typeof(s))) not implemented")
+
+# fallback to missing for GreenSlicers that don't implement contacts
+Base.view(::GreenSlicer, args...) = missing
+
+#endregion
+
+############################################################################################
+# GreenSolution diagonal indexing
+#   returns a vector of AbstractMatrices or scalars, one per site
+#region
+
+Base.getindex(gω::GreenSolution{T}, i::DiagIndices, ::DiagIndices = i) where {T} =
+    append_diagonal!(Complex{T}[], gω, parent(i), kernel(i))
+
+# If i::Union{LatticeSlice,CellSites}, convert to orbitals
+append_diagonal!(d, gω, i, kernel; kw...) =
+    append_diagonal!(d, gω, sites_to_orbs(i, gω), kernel; kw...)
+
+function append_diagonal!(d, gω, s::OrbitalSlice, kernel; kw...)
+    sizehint!(d, length(s))
+    for sc in subcells(s)
+        append_diagonal!(d, gω, sc, kernel; kw...)
+    end
+    return d
+end
+
+function append_diagonal!(d, gω, o::Union{CellOrbitals,Integer,Colon}, kernel; post = identity)
+    gblock = diagonal_slice(gω, o)
+    rngs = orbranges_or_allorbs(kernel, o, gω)
+    l = length(rngs)
+    l0 = length(d)
+    resize!(d, l0 + l)
+    for (i, rng) in enumerate(rngs)
+        d[l0+i] = post(apply_kernel(kernel, view_or_scalar(gblock, rng)))
+    end
+    return d
+end
+
+# fallback, may be overloaded for gω's that know how to do this more efficiently
+# it should include all diagonal blocks for each site, not just the orbital diagonal
+diagonal_slice(gω, o) = gω[o, o]
+
+GreenSolution
+# If no kernel is provided, we return the whole diagonal
+orbranges_or_allorbs(kernel::Missing, o::CellOrbitals, gω) = eachindex(orbindices(o))
+orbranges_or_allorbs(kernel::Missing, o::Colon, gω) = 1:flatsize(blockstructure(gω))
+orbranges_or_allorbs(kernel::Missing, i::Integer, gω) = 1:flatsize(blockstructure(gω), i)
+orbranges_or_allorbs(kernel, o, gω) = orbranges_or_allorbs(o, gω)
+orbranges_or_allorbs(contact::Integer, gω) = orbranges(blockstructure(gω), contact)
+orbranges_or_allorbs(::Colon, gω) = orbranges(blockstructure(gω))
+orbranges_or_allorbs(o::CellOrbitals, gω) = orbranges(o)
+
+view_or_scalar(gblock, rng::UnitRange) = view(gblock, rng, rng)
+view_or_scalar(gblock, i::Integer) = gblock[i, i]
+
+apply_kernel(kernel::Missing, v::Number) = v
+apply_kernel(kernel::AbstractMatrix, v) = tr(kernel * v)
+apply_kernel(kernel::UniformScaling, v) = kernel.λ * tr(v)
+apply_kernel(kernel::Number, v) = kernel * tr(v)
+apply_kernel(kernel::Diagonal, v::AbstractMatrix) = sum(i -> kernel[i] * v[i, i], eachindex(kernel))
+apply_kernel(kernel::Diagonal, v::Number) = only(kernel) * v
 
 #endregion
 
@@ -265,19 +324,17 @@ contact_blockstructure_latslice(h::AbstractHamiltonian, ls, lss...) =
     contact_blockstructure_latslice(blockstructure(h), ls, lss...)
 
 function contact_blockstructure_latslice(bs::OrbitalBlockStructure, lss...)
+    coss  = [orbslice(ls, bs) for ls in lss]
     lsall = combine(lss...)
-    subcelloffsets = Int[]
-    siteoffsets = Int[]
-    store = (siteoffsets, subcelloffsets)
-    osall = orbslice(lsall, bs, store...)
+    osall = orbslice(lsall, bs)
     contactinds = Vector{Int}[]
     contactrngs = Vector{UnitRange{Int}}[]
     for ls in lss
-        i, r = contact_indices_ranges(lsall, siteoffsets, ls)
+        i, r = contact_indices_ranges(lsall, siteoffsets(osall), ls)
         push!(contactinds, i)
         push!(contactrngs, r)
     end
-    bs = ContactBlockStructure(osall, contactinds, contactrngs, siteoffsets, subcelloffsets)
+    bs = ContactBlockStructure(osall, coss, contactinds, contactrngs)
     return bs, lsall
 end
 
@@ -321,30 +378,9 @@ end
 #endregion
 
 ############################################################################################
-# block_ranges
-#  compute the flat index ranges for each site in LatticeSlice or contact
-#region
-
-function block_ranges(s, bs::OrbitalBlockStructure)
-    rngs = UnitRange{Int}[]
-    block_ranges!(rngs, s, bs)
-    return rngs
-end
-
-block_ranges!(rngs, ls::LatticeSlice, bs::OrbitalBlockStructure) =
-    foreach(sc -> block_ranges!(rngs, sc, bs), subcells(ls))
-
-block_ranges!(rngs, cs::CellSites, bs::OrbitalBlockStructure) =
-    foreach(i -> push!(rngs, flatrange(bs, i)), siteindices(cs))
-
-block_ranges(cind::Union{Integer,Colon}, bs::ContactBlockStructure) = contactrngs(bs, cind)
-
-#endregion
-
-############################################################################################
 # contact_orbinds_to_unitcell and contactbasis
 #  switch from contactinds(contacts) (orbinds relative to merged contact orbslice)
-#  to unitcinds (relative to parent unitcell). Only valid for single-sublcell contacts
+#  to unitcinds (relative to parent unitcell). Only valid for single-subcell contacts
 #region
 
 function contact_orbinds_to_unitcell(contacts)
@@ -381,10 +417,15 @@ struct TMatrixSlicer{C,L,V<:AbstractArray{C},S} <: GreenSlicer{C}
     blockstruct::ContactBlockStructure{L}
 end
 
-struct DummySlicer{C} <: GreenSlicer{C}
+struct NothingSlicer{C} <: GreenSlicer{C}
 end
 
 #region ## Constructors ##
+
+# if there are no Σblocks, return g0slicer. Otherwise build TMatrixSlicer.
+maybe_TMatrixSlicer(g0slicer::GreenSlicer, Σblocks::Tuple{}, blockstruct) = g0slicer
+maybe_TMatrixSlicer(g0slicer, Σblocks, blockstruct) =
+    TMatrixSlicer(g0slicer, Σblocks, blockstruct)
 
 # Uses getindex(g0slicer) to construct g0contacts
 function TMatrixSlicer(g0slicer::GreenSlicer{C}, Σblocks, blockstruct) where {C}
@@ -410,7 +451,7 @@ end
 # Takes a precomputed g0contacts (for dummy g0slicer that doesn't implement indexing)
 function TMatrixSlicer(g0contacts::AbstractMatrix{C}, Σblocks, blockstruct) where {C}
     tmatrix, gcontacts = t_g_matrices(g0contacts, blockstruct, Σblocks...)
-    g0slicer = DummySlicer{C}()
+    g0slicer = NothingSlicer{C}()
     return TMatrixSlicer(g0slicer, tmatrix, gcontacts, blockstruct)
 end
 
@@ -469,8 +510,8 @@ function Base.getindex(s::TMatrixSlicer, i::CellOrbitals, j::CellOrbitals)
     tkk´ = s.tmatrix
     isempty(tkk´) && return g0ij
     k = orbslice(s.blockstruct)
-    g0ik = mortar([g0[si, sk] for si in (i,), sk in subcells(k)])
-    g0k´j = mortar([g0[sk´, sj] for sk´ in subcells(k), sj in (j,)])
+    g0ik = mortar((g0[si, sk] for si in (i,), sk in subcells(k)))
+    g0k´j = mortar((g0[sk´, sj] for sk´ in subcells(k), sj in (j,)))
     gij = mul!(g0ij, g0ik, tkk´ * g0k´j, 1, 1)  # = g0ij + g0ik * tkk´ * g0k´j
     return gij
 end
@@ -478,12 +519,12 @@ end
 minimal_callsafe_copy(s::TMatrixSlicer) = TMatrixSlicer(minimal_callsafe_copy(s.g0slicer),
     s.tmatrix, s.gcontacts, s.blockstruct)
 
-Base.view(::DummySlicer, i::Union{Integer,Colon}...) =
-    internalerror("view(::DummySlicer): unreachable reached")
+Base.view(::NothingSlicer, i::Union{Integer,Colon}...) =
+    internalerror("view(::NothingSlicer): unreachable reached")
 
-Base.getindex(::DummySlicer, i::CellOrbitals...) = argerror("Slicer does not support generic indexing")
+Base.getindex(::NothingSlicer, i::CellOrbitals...) = argerror("Slicer does not support generic indexing")
 
-minimal_callsafe_copy(s::DummySlicer) = s
+minimal_callsafe_copy(s::NothingSlicer) = s
 
 #endregion
 #endregion
@@ -502,30 +543,32 @@ end
 
 function GreenSolutionCache(gω::GreenSolution{T,<:Any,L}) where {T,L}
     cache = Dict{Tuple{SVector{L,Int},SVector{L,Int},Int},Matrix{Complex{T}}}()
-    g = parent(gω)
-    h = hamiltonian(g)
-    bs = blockstructure(h)
-    cbs = blockstructure(g)
-    cls = latslice(g, :)
-    nrows = flatsize(h)
-    gmat = gω[:]
-    j = 0
-    for colsc in subcells(cls)
-        nj = cell(colsc)
-        for j´ in siteindices(colsc)
-            j += 1
-            jrng = flatrange(cbs, j)
-            i = 0
-            for rowsc in subcells(cls)
-                ni = cell(rowsc)
-                undefs = Matrix{Complex{T}}(undef, nrows, length(jrng))
-                for i´ in siteindices(rowsc)
-                    i += 1
-                    irng = flatrange(cbs, i)
-                    irng´ = flatrange(bs, i´)
-                    copy!(view(undefs, irng´, :), view(gmat, irng, jrng))
+    gmat = gω[:]    # may be missing if solver does not support (or doesn't have) contacts
+    if gmat !== missing
+        g = parent(gω)
+        h = hamiltonian(g)
+        bs = blockstructure(h)
+        cbs = blockstructure(g)
+        cls = latslice(g, :)
+        nrows = flatsize(h)
+        j = 0
+        for colsc in subcells(cls)
+            nj = cell(colsc)
+            for j´ in siteindices(colsc)
+                j += 1
+                jrng = flatrange(cbs, j)
+                i = 0
+                for rowsc in subcells(cls)
+                    ni = cell(rowsc)
+                    undefs = Matrix{Complex{T}}(undef, nrows, length(jrng))
+                    for i´ in siteindices(rowsc)
+                        i += 1
+                        irng = flatrange(cbs, i)
+                        irng´ = flatrange(bs, i´)
+                        copy!(view(undefs, irng´, :), view(gmat, irng, jrng))
+                    end
+                    push!(cache, (ni, nj, j´) => undefs)
                 end
-                push!(cache, (ni, nj, j´) => undefs)
             end
         end
     end

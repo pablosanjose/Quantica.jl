@@ -11,7 +11,7 @@ We split the problem of computing `Gʳᵢⱼ(ω)` of a given `h::AbstractHamilto
 1. Attach self-energies to `h` using the command `oh = attach(h, args...)`. This produces a new object `oh::OpenHamiltonian` with a number of `Contacts`, numbered `1` to `N`
 2. Use `g = greenfunction(oh, solver)` to build a `g::GreenFunction` representing `Gʳ` (at arbitrary `ω` and `i,j`), where `oh::OpenHamiltonian` and `solver::GreenSolver` (see `GreenSolvers` below for available solvers)
 3. Evaluate `gω = g(ω; params...)` at fixed energy `ω` and model parameters, which produces a `gω::GreenSolution`
-4. Slice `gω[sᵢ, sⱼ]` or `gω[sᵢ] == gω[sᵢ, sᵢ]` to obtain `Gʳᵢⱼ(ω)` as a flat matrix, where `sᵢ, sⱼ` are either site selectors over sites spanning orbitals `i,j`, or integers denoting contacts, `1` to `N`.
+4. Slice `gω[sᵢ, sⱼ]` or `gω[sᵢ] == gω[sᵢ, sᵢ]` to obtain `Gʳᵢⱼ(ω)` as a flat matrix, where `sᵢ, sⱼ` are either site selectors over sites spanning orbitals `i,j`, integers denoting contacts, `1` to `N`, or `:` denoting all contacts merged together.
 
 !!! tip "GreenSlice vs. GreenSolution"
     The two last steps can be interchanged, by first obtaining a `gs::GreenSlice` with `gs = g[sᵢ, sⱼ]` and then obtaining the `Gʳᵢⱼ(ω)` matrix with `gs(ω; params...)`.
@@ -19,7 +19,7 @@ We split the problem of computing `Gʳᵢⱼ(ω)` of a given `h::AbstractHamilto
 ## A simple example
 
 Here is a simple example of the Green function of a 1D lead with two sites per unit cell, a boundary at `cell = 0`, and with no attached self-energies for simplicity
-```julia
+```
 julia> hlead = LP.square() |> supercell((1,0), region = r -> 0 <= r[2] < 2) |> hopping(1);
 
 julia> glead = greenfunction(hlead, GreenSolvers.Schur(boundary = 0))
@@ -47,6 +47,7 @@ julia> gω[cells = 1:2]  # we now ask for the Green function between orbitals in
  -0.48-0.113394im    -0.2+0.846606im   0.104-0.869285im   0.44+0.282715im
   -0.2+0.846606im   -0.48-0.113394im    0.44+0.282715im  0.104-0.869285im
 ```
+
 Note that the result is a 4 x 4 matrix, because there are 2 orbitals (one per site) in each of the two unit cells. Note also that the Schur GreenSolver used here allows us to compute the Green function between distant cells with little overhead
 ```julia
 julia> @time gω[cells = 1:2];
@@ -81,9 +82,11 @@ The currently implemented `GreenSolver`s (abbreviated as `GS`) are the following
   Uses a deflating Generalized Schur (QZ) factorization of the generalized eigenvalue problem to compute the unit-cell self energies.
   The Dyson equation then yields the Green function between arbitrary unit cells, which is further dressed using a T-matrix approach if the lead has any attached self-energy.
 
+- `GS.Bands(bandsargs...; boundary = missing, bandskw...)`
 
-!!! note "GS.Bands"
-    In the near future we will also have `GS.Bands` as a general solver in lattice dimensions `L ∈ [1,3]`.
+  For unbounded (`L>0`) Hamiltonians.
+
+  It precomputes a bandstructure `b = bands(h, bandsargs...; kw..., split = false)` and then uses analytic expressions for the contribution of each subband simplex to the `GreenSolution`. If `boundary = dir => cell_pos`, it takes into account the reflections on an infinite boundary perpendicular to Bravais vector number `dir`, so that all sites with cell index `c[dir] <= cell_pos` are removed.
 
 ## Attaching Contacts
 
@@ -149,15 +152,17 @@ We now attach `glead` four times using the `Matched lead` syntax
 ```julia
 julia> Rot = r -> SA[0 -1; 1 0] * r;  # 90º rotation function
 
-julia> gcentral = hcentral |>
+julia> g = hcentral |>
     attach(glead, region = r -> r[1] ==  11) |>
     attach(glead, region = r -> r[1] == -11, reverse = true) |>
     attach(glead, region = r -> r[2] ==  11, transform = Rot) |>
     attach(glead, region = r -> r[2] == -11, reverse = true, transform = Rot) |>
     greenfunction
-OpenHamiltonian{Float64,2,0}: Hamiltonian with a set of open contacts
-  Number of contacts : 4
-  Contact solvers    : (:SelfEnergySchurSolver, :SelfEnergySchurSolver, :SelfEnergySchurSolver, :SelfEnergySchurSolver)
+GreenFunction{Float64,2,0}: Green function of a Hamiltonian{Float64,2,0}
+  Solver          : AppliedSparseLUGreenSolver
+  Contacts        : 4
+  Contact solvers : (SelfEnergySchurSolver, SelfEnergySchurSolver, SelfEnergySchurSolver, SelfEnergySchurSolver)
+  Contact sizes   : (5, 5, 5, 5)
   Hamiltonian{Float64,2,0}: Hamiltonian on a 0D Lattice in 2D space
     Bloch harmonics  : 1
     Harmonic size    : 353 × 353
@@ -177,3 +182,96 @@ Note that since we did not specify the `solver` in `greenfunction`, the `L=0` de
 
 !!! tip "The GreenFunction <-> AbstractHamiltonian relation"
     Its important un appreciate that a `g::GreenFunction` represents the retarded Green function between sites in a given `AbstractHamiltonian`, but not on sites of the coupled `AbstractHamiltonians` of its attached self-energies. Therefore, `gcentral` above cannot yield observables in the leads (blue sites above), only on the red sites. To obtain observables in a given lead, its `GreenFunction` must be constructed, with an attached self-energy coming from the central region plus the other three leads.
+
+## Slicing and evaluation
+
+As explained above, a `g::GreenFunction` represents a Green function of an `OpenHamiltonian` (i.e. `AbstractHamiltonian` with zero or more self-energies), but it does so for any energy `ω` or lattice sites.
+    - To specify `ω` (plus any parameters `params` in the underlying `AbstractHamiltonian`) we use the syntax `g(ω; params...)`, which yields an `gω::GreenSolution`
+    - To specify source (`sⱼ`) and drain (`sᵢ`) sites we use the syntax `g[sᵢ, sⱼ]` or `g[sᵢ] == g[sᵢ,sᵢ]`, which yields a `gs::GreenSlice`. `sᵢ` and `sⱼ` can be `SiteSelectors(; sites...)`, or an integer denoting a specific contact (i.e. sites with an attached self-energy) or `:` denoting all contacts merged together.
+    - If we specify both of the above we get the Green function between the orbitals of the specified sites at the specified energy, in the form of a `Matrix`
+
+Let us see this in action using the example from the previous section
+```julia
+julia> g[1, 3]
+GreenSlice{Float64,2,0}: Green function at arbitrary energy, but at a fixed lattice positions
+
+julia> g(0.2)
+GreenSolution{Float64,2,0}: Green function at arbitrary positions, but at a fixed energy
+
+julia> g(0.2)[1, 3]
+5×5 Matrix{ComplexF64}:
+ -0.370342-0.0778282im   0.0575525-0.211484im   0.0245456-0.129385im     0.174425-0.155446im       0.100593+0.0134301im
+ 0.0575525-0.211484im   -0.0619157+0.0480224im   0.156603+0.256013im    -0.342883+0.0760708im    -0.0414971+0.0510385im
+ 0.0245456-0.129385im     0.156603+0.256013im    -0.13008-0.156987im     0.129202-0.139979im       0.155843-0.0597696im
+  0.174425-0.155446im    -0.342883+0.0760708im   0.129202-0.139979im   -0.0515859+0.000612582im   0.0298279+0.109486im
+  0.100593+0.0134301im  -0.0414971+0.0510385im   0.155843-0.0597696im   0.0298279+0.109486im     0.00445114+0.0242172im
+
+  julia> g(0.2)[siteselector(region = RP.circle(1, (0.5, 0))), 3]
+2×5 Matrix{ComplexF64}:
+ -0.0051739-0.0122979im  0.258992+0.388052im   0.01413-0.192581im  0.258992+0.388052im   -0.0051739-0.0122979im
+   0.265667+0.296249im   0.171343-0.022414im  0.285251+0.348008im  0.171247+0.0229456im   0.0532086+0.24404im
+```
+
+There is a special form of slicing that requests just the diagonal of a given `g[sᵢ] == g[sᵢ,sᵢ]`. It uses the syntax `g[diagonal(sᵢ)]`. Let us see it in action in a multiorbital example in 2D
+```julia
+julia> g = HP.graphene(a0 = 1, t0 = 1, orbitals = 2) |> greenfunction
+GreenFunction{Float64,2,2}: Green function of a Hamiltonian{Float64,2,2}
+  Solver          : AppliedBandsGreenSolver
+  Contacts        : 0
+  Contact solvers : ()
+  Contact sizes   : ()
+  Hamiltonian{Float64,2,2}: Hamiltonian on a 2D Lattice in 2D space
+    Bloch harmonics  : 5
+    Harmonic size    : 2 × 2
+    Orbitals         : [2, 2]
+    Element type     : 2 × 2 blocks (ComplexF64)
+    Onsites          : 0
+    Hoppings         : 6
+    Coordination     : 3.0
+
+julia> g(0.5)[diagonal(cells = (0, 0))]
+4-element Vector{ComplexF64}:
+ -0.34973634684887517 - 0.3118358260293383im
+  -0.3497363468428337 - 0.3118358260293383im
+   -0.349736346839396 - 0.31183582602933824im
+ -0.34973634684543714 - 0.3118358260293383im
+```
+Note that we get a vector, which is equal to the diagonal `diag(g(0.5)[cells = (0, 0)])`. Like the `g` Matrix, this vector is resolved in orbitals, of which there are two per site and four per unit cell in this case. Using `diagonal(sᵢ; kernel = K)` we can collect all the orbitals of different sites, and compute `tr(g[site, site] * K)` for a given matrix `K`. This is useful to obtain spectral densities. In the above example, and interpreting the two orbitals per site as the electron spin, we could obtain the spin density along the `x` axis, say, using `σx = SA[0 1; 1 0]` as `kernel`,
+```julia
+julia> g(0.5)[diagonal(cells = (0, 0), kernel = SA[0 1; 1 0])]
+2-element Vector{ComplexF64}:
+ -1.1268039540527714e-11 - 2.3843717644870095e-17im
+   1.126802874880133e-11 + 1.9120152589671175e-17im
+```
+which is zero in this spin-degenerate case
+
+This particular example made use of the `GS.Bands` solver (the default for `L>1`), which is a quite powerful solver, and can even implement flat boundaries normal to one of the Bravais vectors (see `GreenSolvers` for details). We can see the bandstructure employed with
+```julia
+julia> qplot(bands(g))
+```
+```@raw html
+<img src="../../assets/bands_solver.png" alt="Bands used by the GS.Bands solver" width="250" class="center"/>
+```
+These bands can be adjusted by passing arguments such as
+```
+julia> g = HP.graphene(a0 = 1, t0 = 1, orbitals = 2) |> greenfunction(GS.Bands(subdiv(0, 2π, 100), subdiv(0, 2π, 100); boundary = 1 => 0));
+```
+
+## Visualizing a Green function
+
+We can use `qplot` to visualize a `GreenSolution` in space. Here we define a bounded square lattice with an interesting shape, and attach a model self-energy to the right. Then we compute the Green function from each orbital in the contact to any other site in the lattice, and compute the norm over contact sites. The resulting vector is used as a shader for the color and radius of sites when plotting the system
+```julia
+julia> h = LP.square() |> onsite(4) - hopping(1) |> supercell(region = r -> norm(r) < 40*(1+0.2*cos(5*atan(r[2],r[1]))));
+
+julia> g = h |> attach(@onsite(ω -> -im), region = r -> r[1] ≈ 47) |> greenfunction;
+
+julia> g_1_to_all = sum(abs2, g(0.1)[siteselector(), 1], dims = 2);
+
+julia> qplot(h, hide = :hops, sitecolor = (i, r) -> gω[i], siteradius = (i, r) -> gω[i], minmaxsiteradius = (0, 2), sitecolormap = :balance)
+```
+```@raw html
+<img src="../../assets/star_shape.png" alt="Green function from a contact on the right" width="250" class="center"/>
+```
+
+!!! warning "Caveat for multiorbital systems"
+    Since, currently, `g(ω)[sᵢ, sⱼ]` yields a `Matrix` over orbitals (instead of over sites), the above example requires single-orbital sites to work. In the future we will probably introduce a way to slice a `GreenSolution` over sites, similar to the way `diagonal` works. For the moment, one can use observables like `ldos` for visualization (see next section), which are all site-based by default.

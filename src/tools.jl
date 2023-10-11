@@ -17,6 +17,13 @@ rdr((r1, r2)::Pair) = (0.5 * (r1 + r2), r2 - r1)
 
 padtuple(t, x, N) = ntuple(i -> i <= length(t) ? t[i] : x, N)
 
+@inline tupletake(x, ::Val{N}) where {N} = ntuple(i -> x[i], Val(N))
+
+@inline function smatrixtake(s::SMatrix, ::Val{N}) where {N}
+    is = SVector{N,Int}(1:N)
+    return s[is, is]
+end
+
 @noinline internalerror(func::String) =
     throw(ErrorException("Internal error in $func. Please file a bug report at https://github.com/pablosanjose/Quantica.jl/issues"))
 
@@ -31,7 +38,7 @@ padtuple(t, x, N) = ntuple(i -> i <= length(t) ? t[i] : x, N)
 @noinline function_not_defined(name) = argerror("Function $name not defined for the requested types")
 
 unitvector(i, ::Type{SVector{L,T}}) where {L,T} =
-    SVector(ntuple(j -> j == i ? one(T) : zero(T), Val(L)))
+    SVector{L,T}(ntuple(j -> j == i ? one(T) : zero(T), Val(L)))
 
 function padright(pt, ::Val{L}) where {L}
     T = eltype(pt)
@@ -61,6 +68,7 @@ typename(::T) where {T} = nameof(T)
 
 chop(x::T) where {T<:Real} = ifelse(abs2(x) < eps(real(T)), zero(T), x)
 chop(x::Complex) = chop(real(x)) + im*chop(imag(x))
+chop(xs) = chop.(xs)
 
 # Flattens matrix of Matrix{<:Number} into a matrix of Number's
 function mortar(ms::AbstractMatrix{M}) where {C<:Number,M<:AbstractMatrix{C}}
@@ -81,6 +89,8 @@ function mortar(ms::AbstractMatrix{M}) where {C<:Number,M<:AbstractMatrix{C}}
     end
     return mat
 end
+# faspath for generators or other collections
+mortar(ms) = length(ms) == 1 ? only(ms) : mortar(collect(ms))
 
 # equivalent to mat = I[:, cols]. Useful for Green function source
 # no check of mat size vs cols is done
@@ -96,6 +106,7 @@ one!(mat::AbstractArray, ::Colon) = one!(mat)
 
 lengths_to_offsets(v::NTuple{<:Any,Integer}) = (0, cumsum(v)...)
 lengths_to_offsets(v) = prepend!(cumsum(v), 0)
+lengths_to_offsets(f::Function, v) = prepend!(accumulate((i,j) -> i + f(j), v; init = 0), 0)
 
 # function get_or_push!(by, x, xs)
 #     for x´ in xs
