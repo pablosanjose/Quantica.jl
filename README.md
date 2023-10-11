@@ -1,4 +1,4 @@
-# Quantica.jl
+![banner_small](https://github.com/pablosanjose/Quantica.jl/assets/4310809/e1af9dd1-58ae-4eff-8632-69ba8792c582)
 
 <!-- [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://pablosanjose.github.io/Quantica.jl/stable) -->
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://pablosanjose.github.io/Quantica.jl/dev)
