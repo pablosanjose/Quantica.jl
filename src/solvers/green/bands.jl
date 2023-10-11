@@ -139,7 +139,7 @@ struct Expansions{D,T,DD}
     log::NTuple{D,T}
 end
 
-struct BandSimplex{D,T,S1<:SVector{<:Any,<:Real},S2<:SMatrix{<:Any,<:Any,<:Real},S3<:SMatrix{<:Any,<:Any,<:Real},R<:Ref{<:Expansions{D,T}}}     # D = manifold dimension
+struct BandSimplex{D,T,S1<:SVector{<:Any,<:Real},S2<:SMatrix{<:Any,D,<:Real},S3<:SMatrix{<:Any,<:Any,<:Real},R<:Ref{<:Expansions}}     # D = manifold dimension
     ei::S1        # eᵢ::SVector{D´,T} = energy of vertex i
     kij::S2       # kᵢ[j]::SMatrix{D´,D,T,DD´} = coordinate j of momentum for vertex i
     eij::S3       # ϵᵢʲ::SMatrix{D´,D´,T,D´D´} = e_j - e_i
@@ -169,15 +169,31 @@ end
 
 BandSimplex(ei, kij, refex...) = BandSimplex(real(ei), real(kij), refex...)
 
+BandSimplex(sb::Subband, simpinds, refex...) =  # for simpinds = (v1::Int, v2::Int,...)
+    BandSimplex(energies(sb, simpinds), transpose(base_coordinates(sb, simpinds)), refex...)
+
 function BandSimplex(ei::SVector{D´,T}, kij::SMatrix{D´,D,T}, refex = Ref(Expansions(Val(D), T))) where {D´,D,T}
     D == D´ - 1 ||
         argerror("The dimension $D of Bloch phases in simplex should be one less than the number of vertices $(D´)")
-    eij = chop(ei' .- ei)
+    ei, eij = snap_and_diff(ei)
     k0 = kij[1, :]
     U = kij[SVector{D}(2:D´),:]' .- k0          # edges as columns
     VD = abs(det(U)) / (2π)^D
     dual = generate_dual(eij)
     return BandSimplex(ei, kij, eij, dual, VD, refex)
+end
+
+# make similar ei[i] exactly the same, and compute the pairwise difference
+function snap_and_diff(es)
+    mes = MVector(es)
+    for j in eachindex(es), i in j+1:lastindex(es)
+        ei, ej = es[i], es[j]
+        if ei ≈ ej
+            mes[i] = mes[j]
+        end
+    end
+    ess = SVector(mes)
+    return ess, chop(ess' .- ess)
 end
 
 function generate_dual(eij::SMatrix{D´,D´,T}) where {D´,T}
@@ -206,7 +222,11 @@ end
 
 #region ## API ##
 
-function g_integrals(s::BandSimplex, ω, dn, val...)
+g_integrals(s::BandSimplex, ω, dn, val...) = isreal(ω) ?
+    _g_integrals(s, real(ω), dn, val...) :  # this may be faster
+    _g_integrals(s, ω, dn, val...)
+
+function _g_integrals(s::BandSimplex, ω, dn, val...)
     g₀, gi = iszero(dn) ?
         g_integrals_local(s, ω, val...) :
         g_integrals_nonlocal(s, ω, dn, val...)
@@ -332,6 +352,13 @@ function g_integrals_nonlocal(s::BandSimplex{D,T}, ω, dn, ::Val{N} = Val(0)) wh
 end
 
 # # Computes how many denominator zeros in any of the terms of g₀ and gⱼ (max of both)
+# function simplex_degeneracy(s::BandSimplex, dn)
+#     ϕⱼ = s.kij * dn
+#     ϕₖʲ = chop.(transpose(ϕⱼ) .- ϕⱼ)
+#     eₖʲ = s.eij
+#     return simplex_degeneracy(ϕₖʲ, eₖʲ)
+# end
+
 # function simplex_degeneracy(ϕₖʲ::SMatrix{D´}, eₖʲ) where {D´}
 #     deg = degα = degd = 0
 #     for j in 1:D´
@@ -550,17 +577,49 @@ end
 # AppliedBandsGreenSolver <: AppliedGreenSolver
 #region
 
-struct SubbandSimplices{B,BS<:BandSimplex}
+struct SubbandSimplices{BS<:BandSimplex}
     simps::Vector{BS}                   # collection of k_∥-ordered simplices
     simpslices::Vector{UnitRange{Int}}  # ranges of simplices with "equal" k_∥ to boundary
-    boundary::B                         # missing or dir => pos
 end
 
-struct AppliedBandsGreenSolver{B,SB<:Subband,SS<:SubbandSimplices{B}} <: AppliedGreenSolver
+struct BoundaryOrbs{L}
+    boundary::Pair{Int,Int}             # dir => pos
+    orbsright::OrbitalSlice{L}          # 1D boundary orbslice coupled to right half-"plane"
+    orbsleft::OrbitalSlice{L}           # 1D boundary orbslice coupled to left half-"plane"
+end
+
+struct AppliedBandsGreenSolver{B<:Union{Missing,BoundaryOrbs},SB<:Subband,SS<:SubbandSimplices} <: AppliedGreenSolver
     subbands::Vector{SB}
     subbandsimps::Vector{SS}            # BandSimplices in each subband
-    boundary::B                         # missing or dir => pos
+    boundaryorbs::B                     # missing or BoundaryOrbs
 end
+
+#region ## Constructors ##
+
+boundaryorbs(::Missing, h::AbstractHamiltonian) = missing
+
+function boundaryorbs((dir, pos), h::AbstractHamiltonian)
+    L = latdim(h)
+    rcell = (pos+1) * unitvector(dir, SVector{L,Int})
+    lcell = (pos-1) * unitvector(dir, SVector{L,Int})
+    orbsright = coupled_cellorbs(<=(pos), h, rcell, dir)
+    orbsleft  = coupled_cellorbs(>=(pos), h, lcell, dir)
+    return BoundaryOrbs(dir => pos, orbsright, orbsleft)
+end
+
+function coupled_cellorbs(condition, h, seedcell, dir)
+    lat = lattice(h)
+    ls = grow(lat[CellSites(seedcell, :)], h)
+    sc´ = [projected_cellsites(c, dir) for c in subcells(ls) if condition(cell(c)[dir])]
+    # combine_subcells!(sc´)
+    os = orbslice(sc´, h)
+    return os
+end
+
+projected_cellsites(c::CellSites{L}, dir) where {L} =
+    CellSites(cell(c)[dir] * unitvector(dir, SVector{L,Int}), siteindices(c))
+
+#endregion
 
 #region ## API ##
 
@@ -578,23 +637,22 @@ function apply(s::GS.Bands,  h::AbstractHamiltonian{T,<:Any,L}, cs::Contacts) wh
     b = bands(h, s.bandsargs...; s.bandskw..., projectors = true)
     sbs = subbands(b)
     ex = Expansions(Val(L), T)
-    subbandsimps = subband_simplices.(sbs, Ref(ex), Ref(s))
-    boundary = s.boundary
+    subbandsimps = subband_simplices!.(sbs, Ref(ex), Ref(s))
+    boundary = boundaryorbs(s.boundary, h)
     return AppliedBandsGreenSolver(sbs, subbandsimps, boundary)
 end
 
-function subband_simplices(sb::Subband, ex::Expansions, s::GS.Bands)
+# reorders simplices(sb) (simp indices) to match simps::Vector{<:BandSimplex}
+function subband_simplices!(sb::Subband, ex::Expansions, s::GS.Bands)
     refex = Ref(ex)
-    simps0 = simplices(sb)
-    simps = [BandSimplex(energies(sb, simp), transpose(base_coordinates(sb, simp)), refex)
-        for simp in simps0]
-    simpslices = simplex_slices!(simps, simps, s)
-    boundary = s.boundary
-    return SubbandSimplices(simps, simpslices, boundary)
+    simpinds = simplices(sb)
+    simps = [BandSimplex(sb, simp, refex) for simp in simpinds]
+    simpslices = simplex_slices!(simps, simpinds, s)
+    return SubbandSimplices(simps, simpslices)
 end
 
 # order simplices by their k∥ and compute ranges in each kranges bin
-function simplex_slices!(simps::Vector{<:BandSimplex{D}}, simps0, s) where{D}
+function simplex_slices!(simps::Vector{<:BandSimplex{D}}, simpinds, s::GS.Bands) where{D}
     boundary = s.boundary
     if boundary !== missing
         dir = first(boundary)
@@ -602,8 +660,9 @@ function simplex_slices!(simps::Vector{<:BandSimplex{D}}, simps0, s) where{D}
         if D > 1
             p = sortperm(simps, by = simp -> parallel_base_coordinate(simp, dir))
             permute!(simps, p)
-            permute!(simps0, p)
-            kticks = ntuple(i -> ifelse(i < dir, s.bandargs[i], s.bandargs[i+1]), Val(D-1))
+            permute!(simpinds, p)
+            # Discrete values for L-1 dimensional k∥ mesh
+            kticks = ntuple(i -> ifelse(i < dir, s.bandsargs[i], s.bandsargs[i+1]), Val(D-1))
             simpslices = collect(Runs(simps, (s1, s2) -> in_same_interval((s1, s2), kticks, dir)))
         else
             simpslices = [UnitRange(eachindex(simps))]
@@ -644,7 +703,7 @@ end
 
 function (s::AppliedBandsGreenSolver)(ω, Σblocks, cblockstruct)
     g0slicer = BandsGreenSlicer(complex(ω), s)
-    gslicer = TMatrixSlicer(g0slicer, Σblocks, cblockstruct)
+    gslicer = maybe_TMatrixSlicer(g0slicer, Σblocks, cblockstruct)
     return gslicer
 end
 
@@ -670,16 +729,23 @@ Base.getindex(s::BandsGreenSlicer, i::CellOrbitals, j::CellOrbitals) =
 
 function inf_band_slice(s::BandsGreenSlicer{C}, i::CellOrbitals, j::CellOrbitals) where {C}
     solver = s.solver
-    rowcol = orbindices(i), orbindices(j)
-    dist = cell(i) - cell(j)
-    g = zeros(C, length.(rowcol)...)
+    g = zeros(C, norbs(i), norbs(j))
     for (subband, subbandsimps) in zip(solver.subbands, solver.subbandsimps)
-        inf_band_slice!(g, s.ω, dist, subband, subbandsimps, rowcol)
+        inf_band_slice!(g, s.ω, (i, j), subband, subbandsimps)
     end
     return g
 end
 
-function inf_band_slice!(g, ω, dist, subband, subbandsimps, rowcol, simpinds = eachindex(simplices(subband)))
+function inf_band_slice!(g, ω, (i, j)::Tuple{CellOrbitals,CellOrbitals},
+        subband::Subband, subbandsimps::SubbandSimplices,
+        simpinds = eachindex(simplices(subband)))
+    dist = celldist(i, j)
+    orbs = orbindices(i), orbindices(j)
+    return inf_band_slice!(g, ω, dist, orbs, subband, subbandsimps, simpinds)
+end
+
+# main driver
+function inf_band_slice!(g, ω, dist, orbs, subband, subbandsimps, simpinds)
     ψPdict = projected_states(subband)
     for simpind in simpinds
         bandsimplex = subbandsimps.simps[simpind]
@@ -687,45 +753,138 @@ function inf_band_slice!(g, ω, dist, subband, subbandsimps, rowcol, simpinds = 
         g₀, gⱼs = g_integrals(bandsimplex, ω, dist)
         ψ = states(vertices(subband, v₀))
         pind = (simpind, v₀)
-        muladd_ψPψ⁺!(g, bandsimplex.VD * (g₀ - sum(gⱼs)), ψ, ψPdict, pind, rowcol)
+        muladd_ψPψ⁺!(g, bandsimplex.VD * (g₀ - sum(gⱼs)), ψ, ψPdict, pind, orbs)
         for (j, gⱼ) in enumerate(gⱼs)
             vⱼ = vⱼs[j]
             ψ = states(vertices(subband, vⱼ))
             pind = (simpind, vⱼ)
-            muladd_ψPψ⁺!(g, bandsimplex.VD * gⱼ, ψ, ψPdict, pind, rowcol)
+            muladd_ψPψ⁺!(g, bandsimplex.VD * gⱼ, ψ, ψPdict, pind, orbs)
+        end
+    end
+    return g
+end
+
+celldist(i::CellOrbitals{L}, j::CellOrbitals{L}) where {L} = cell(i) - cell(j)
+
+function inf_band_slice!(g, ω, (si, sj)::Tuple, args...)   # si, sj can be slice or cellorbs
+    if nsubcells(si) == nsubcells(sj) == 1
+        # boundary slice is one-cell-wide, no need for views
+        i, j = only(subcells(si)), only(subcells(sj))
+        inf_band_slice!(g, ω, (i, j), args...)
+    else
+        offsetj = 0
+        for j in subcells(sj)
+            offseti = 0
+            nj = norbs(j)
+            for i in subcells(si)
+                ni = norbs(i)
+                gv = view(g, offseti+1:offseti+ni, offsetj+1:offsetj+nj)
+                inf_band_slice!(gv, ω, (i, j), args...)
+                offseti += ni
+            end
+            offsetj += nj
         end
     end
     return g
 end
 
 # Gᵢⱼ(k∥) = G⁰ᵢⱼ(k∥) - G⁰ᵢᵦ(k∥)G⁰ᵦᵦ(k∥)⁻¹G⁰ᵦⱼ(k∥), where β are removed sites at boundary
-function semi_band_slice(s::BandsGreenSlicer{C}, i::CellOrbitals, j::CellOrbitals) where {C}
-    internalerror("semi_band_slice: Not yet implemented")
+function semi_band_slice(s::BandsGreenSlicer{C}, i::CellOrbitals{L}, j::CellOrbitals{L}) where {C,L}
+    borbs = s.solver.boundaryorbs
+    ni, nj = length(orbindices(i)), length(orbindices(j))
+    gij = zeros(C, ni, nj)
+    (dir, pos) = borbs.boundary
+    xi, xj = cell(i)[dir] - pos, cell(j)[dir] - pos
+    if sign(xi) == sign(xj) != 0
+        b = ifelse(xi > 0, borbs.orbsright, borbs.orbsleft)  # 1D boundary orbital slice
+        n0 = norbs(b)
+        g0j = zeros(C, n0, nj)
+        gi0 = zeros(C, ni, n0)
+        g00 = zeros(C, n0, n0)
+        for (subband, subbandsimps) in zip(s.solver.subbands, s.solver.subbandsimps)
+            for simpinds in subbandsimps.simpslices
+                fill!(g00, zero(C))
+                fill!(g0j, zero(C))
+                fill!(gi0, zero(C))
+                inf_band_slice!(gij, s.ω, (i, j), subband, subbandsimps, simpinds)
+                inf_band_slice!(g00, s.ω, (b, b), subband, subbandsimps, simpinds)
+                inf_band_slice!(g0j, s.ω, (b, j), subband, subbandsimps, simpinds)
+                inf_band_slice!(gi0, s.ω, (i, b), subband, subbandsimps, simpinds)
+                gg = ldiv!(lu!(g00), g0j)
+                mul!(gij, gi0, gg, -1, 1)
+            end
+        end
+    end
+    return gij
 end
 
 # does g += α * ψPψ´ = α * ψP * (ψP)´, where ψP = ψPdict[pind] is the vertex projection onto
 # the simplex subspace. If pind = (simpind, vind) is not in ψPdict::Dict, no P is necessary
-function muladd_ψPψ⁺!(g, α, ψ, ψPdict, pind, (rows, cols))
+function muladd_ψPψ⁺!(gmat, α, ψ, ψPdict, pind, orbs)
     if haskey(ψPdict, pind)
-        ψP = ψPdict[pind]
-        ψProws = ψP[rows, :]
-        ψPcols = ψP[cols, :]
-        mul!(g, ψProws, ψPcols', α, 1)
+        muladd_ψPψ⁺!(gmat, α, ψPdict[pind], orbs)
     else
-        ψrows = view(ψ, rows, :)
-        ψcols = view(ψ, cols, :)
-        mul!(g, ψrows, ψcols', α, 1)
+        muladd_ψPψ⁺!(gmat, α, ψ, orbs)
     end
-    return g
+    return gmat
 end
+
+function muladd_ψPψ⁺!(gmat, α, ψ, (rows, cols)::Tuple)
+    if size(ψ,1) == length(rows) == length(cols)
+        mul!(gmat, ψ, ψ', α, 1)
+    else
+        ψrows = view_or_copy(ψ, rows, :)
+        ψcols = view_or_copy(ψ, cols, :)
+        mul!(gmat, ψrows, ψcols', α, 1)
+    end
+    return gmat
+end
+
+view_or_copy(ψ, rows::Union{Colon,AbstractRange}, cols::Union{Colon,AbstractRange}) =
+    view(ψ, rows, cols)
+view_or_copy(ψ, rows, cols) = ψ[rows, cols]
 
 minimal_callsafe_copy(s::BandsGreenSlicer) = s  # it is read-only
 
 #endregion
 
 ############################################################################################
-# Diagonal of BandsGreenSlicer
+# diagonal_slice
+#   optimized block diagonal of g[::CellOrbitals] for BandsGreenSlicer without boundary
+#   otherwise we need to do it the normal way
 #region
+
+function diagonal_slice(gω::GreenSolution{T,<:Any,<:Any,G}, o::CellOrbitals{<:Any,<:Any,<:Vector}) where {T,G<:BandsGreenSlicer{<:Any,Missing}}
+    s = slicer(gω)   # BandsGreenSlicer
+    norbs = flatsize(gω)
+    rngs = orbranges(o)
+    dist = zero(cell(o))
+    C = complex(T)
+    gmat = Matrix{C}(undef, norbs, norbs)
+    for rng in rngs
+        gmat[rng, rng] .= zero(C)
+    end
+    for (subband, subbandsimps) in zip(s.solver.subbands, s.solver.subbandsimps)
+        simpinds = eachindex(simplices(subband))
+        # to main driver with orbs = rngs
+        inf_band_slice!(gmat, s.ω, dist, rngs, subband, subbandsimps, simpinds)
+    end
+    return gmat
+end
+
+function muladd_ψPψ⁺!(gmat, α, ψ, rngs::Vector{<:UnitRange})
+    for rng in rngs
+        if length(rng) == 1
+            i = only(rng)
+            gmat[i, i] += α * abs2(ψ[i])
+        else
+            gv = view(gmat, rng, rng)
+            ψv = view(ψ, rng, :)
+            mul!(gv, ψv, ψv', α, 1)
+        end
+    end
+    return gmat
+end
 
 #endregion
 

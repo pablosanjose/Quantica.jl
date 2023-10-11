@@ -281,4 +281,17 @@ end
 
 #endregion
 
+
+############################################################################################
+# apply CellSites
+#region
+
+apply(c::CellSites{L,Vector{Int}}, ::Lattice{<:Any,<:Any,L}) where {L} = c
+
+apply(c::CellSites{L,Colon}, l::Lattice{<:Any,<:Any,L}) where {L} =
+    CellSites(cell(c), collect(siterange(l)))
+
+apply(c::CellSites{L}, l::Lattice{<:Any,<:Any,L}) where {L} =
+    CellSites(cell(c), [i for i in siteindices(c) if i in siterange(l)])
+
 #endregion

@@ -28,14 +28,14 @@ function Base.getindex(lat::Lattice, as::AppliedSiteSelector)
     return latslice
 end
 
-Base.getindex(l::Lattice, c::CellSites{L}) where {L} =
-    LatticeSlice(l, [CellSites{L,Vector{Int}}(c)])
+Base.getindex(l::Lattice, c::CellSites) = LatticeSlice(l, [apply(c, l)])
 
 Base.getindex(ls::LatticeSlice; kw...) = getindex(ls, siteselector(; kw...))
 
 Base.getindex(ls::LatticeSlice, ss::SiteSelector) = getindex(ls, apply(ss, parent(ls)))
 
-function Base.getindex(l::LatticeSlice{<:Any,<:Any,L}, i::Integer) where {L}
+# return cell, siteindex of the i-th site of LatticeSlice
+function Base.getindex(l::LatticeSlice, i::Integer)
     offset = 0
     for scell in subcells(l)
         ninds = length(siteindices(scell))
@@ -46,6 +46,7 @@ function Base.getindex(l::LatticeSlice{<:Any,<:Any,L}, i::Integer) where {L}
         end
     end
     @boundscheck(boundserror(l, i))
+    return zerocell(lattice(l)), 0
 end
 
 # indexlist is populated with latslice indices of selected sites
@@ -312,6 +313,7 @@ missing_or_push!(v, n) = push!(v, n)
 orbslice(x, g::GreenSolution) = orbslice(x, hamiltonian(g))
 orbslice(x, h::AbstractHamiltonian) = orbslice(x, blockstructure(h))
 orbslice(sc::CellSites, bs::OrbitalBlockStructure) = _orbslice((sc,), bs)
+orbslice(scs::Vector{<:CellSites}, bs::OrbitalBlockStructure) = _orbslice(scs, bs)
 orbslice(ls::LatticeSlice, bs::OrbitalBlockStructure) = _orbslice(subcells(ls), bs)
 
 function _orbslice(subcells, bs::OrbitalBlockStructure)
@@ -319,16 +321,19 @@ function _orbslice(subcells, bs::OrbitalBlockStructure)
     return OrbitalSlice(subcells)
 end
 
-# simple version of the above: single cellorbs & no storage
 cellorbs(sc::CellSites, g::GreenSolution) = cellorbs(sc, blockstructure(hamiltonian(g)))
+cellorbs(sc::CellSites, h::AbstractHamiltonian) = cellorbs(sc, blockstructure(h))
 
 function cellorbs(sc::CellSites, bs::OrbitalBlockStructure)
     orbinds = Int[]
     orbrngs = UnitRange{Int}[]
+    offset = 0
     for i in siteindices(sc)
         irng = flatrange(bs, i)
+        len = length(irng)
         append!(orbinds, irng)
-        push!(orbrngs, irng)
+        push!(orbrngs, offset+1:offset+len)
+        offset += len
     end
     return CellOrbitals(cell(sc), orbinds, orbrngs)
 end

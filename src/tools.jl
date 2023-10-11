@@ -89,6 +89,8 @@ function mortar(ms::AbstractMatrix{M}) where {C<:Number,M<:AbstractMatrix{C}}
     end
     return mat
 end
+# faspath for generators or other collections
+mortar(ms) = length(ms) == 1 ? only(ms) : mortar(collect(ms))
 
 # equivalent to mat = I[:, cols]. Useful for Green function source
 # no check of mat size vs cols is done

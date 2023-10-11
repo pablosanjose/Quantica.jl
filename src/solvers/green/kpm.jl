@@ -203,7 +203,7 @@ end
 
 function (s::AppliedKPMGreenSolver{T})(ω, Σblocks, cblockstruct) where {T}
     g0contacts = KPMgreen(s.momenta, ω, s.bandCH)
-    gslicer = TMatrixSlicer(g0contacts, Σblocks, cblockstruct)
+    gslicer = maybe_TMatrixSlicer(g0contacts, Σblocks, cblockstruct)
     return gslicer
 end
 

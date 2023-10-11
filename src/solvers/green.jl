@@ -74,12 +74,10 @@ struct Bands{B<:Union{Missing,Pair},A,K} <: AbstractGreenSolver
 end
 
 Bands(bandargs...; boundary = missing, bandskw...) =
-    Bands(bandargs, NamedTuple(bandskw), boundary)
+    Bands(sort.(bandargs), NamedTuple(bandskw), boundary)
 
 Bands(bandargs::Quantica.Mesh; kw...) =
     argerror("Positional arguments of GS.Bands should be collections of Bloch phases or parameters")
-
-maybesort!(l) = (issorted(l) || sort!(l); l)
 
 end # module
 

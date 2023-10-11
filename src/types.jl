@@ -289,16 +289,16 @@ end
 
 const CellSite{L} = CellSites{L,Int}
 const CellOrbital{L} = CellOrbitals{L,Int}
-const ExplicitCellSites{L} = CellSites{L,Vector{Int}}
-const ExplicitCellOrbital{L} = CellOrbitals{L,Vector{Int},Vector{UnitRange{Int}}}
+const AppliedCellSites{L} = CellSites{L,Vector{Int}}
+const AppliedCellOrbitals{L} = CellOrbitals{L,Vector{Int},Vector{UnitRange{Int}}}
 
 struct LatticeSlice{T,E,L}
     lat::Lattice{T,E,L}
-    subcells::Vector{ExplicitCellSites{L}}
+    subcells::Vector{AppliedCellSites{L}}
 end
 
 struct OrbitalSlice{L}
-    subcells::Vector{ExplicitCellOrbital{L}} # indices here correpond to orbitals, not sites
+    subcells::Vector{AppliedCellOrbitals{L}} # indices here correpond to orbitals, not sites
     siteoffsets::Vector{Int}                 # orbital index offset for each site in slice
 end
 
@@ -310,9 +310,9 @@ CellOrbitals(cell, inds = Int[], ranges = missing) =
     CellOrbitals(sanitize_SVector(Int, cell), inds, ranges)
 
 LatticeSlice(lat::Lattice{<:Any,<:Any,L}) where {L} =
-    LatticeSlice(lat, ExplicitCellSites{L}[])
+    LatticeSlice(lat, AppliedCellSites{L}[])
 
-OrbitalSlice{L}() where {L} = OrbitalSlice(ExplicitCellOrbital{L}[], [0])
+OrbitalSlice{L}() where {L} = OrbitalSlice(AppliedCellOrbitals{L}[], [0])
 function OrbitalSlice(subcells)
     siteoffsets = lengths_to_offsets(length, Iterators.flatten(orbranges.(subcells)))
     return OrbitalSlice(subcells, siteoffsets)
@@ -346,6 +346,9 @@ subcells(l::LatticeSlice) = l.subcells
 subcells(l::LatticeSlice, i) = l.subcells[i]
 subcells(o::OrbitalSlice) = o.subcells
 subcells(o::OrbitalSlice, i) = o.subcells[i]
+subcells(c::CellOrbitals) = (c,)    # single-element container
+
+nsubcells(x, i...) = length(subcells(x, i...))
 
 cells(l::LatticeSlice) = (s.cell for s in l.subcells)
 cells(l::OrbitalSlice) = (s.cell for s in l.subcells)
@@ -764,9 +767,9 @@ end
 
 # Basic relation: iflat - 1 == (iunflat - soffset - 1) * b + soffset´
 function flatrange(b::OrbitalBlockStructure{<:SMatrixView}, iunflat::Integer)
+    checkinrange(iunflat, b)
     soffset  = 0
     soffset´ = 0
-    @boundscheck(iunflat < 0 && blockbounds_error())
     @inbounds for (s, b) in zip(b.subsizes, b.blocksizes)
         if soffset + s >= iunflat
             offset = muladd(iunflat - soffset - 1, b, soffset´)
@@ -776,11 +779,16 @@ function flatrange(b::OrbitalBlockStructure{<:SMatrixView}, iunflat::Integer)
         soffset´ += b * s
     end
     @boundscheck(blockbounds_error())
+    return 1:0
 end
 
-flatrange(::OrbitalBlockStructure{<:SMatrix{N}}, iunflat::Integer) where {N} =
-    (iunflat - 1) * N + 1 : iunflat * N
-flatrange(::OrbitalBlockStructure{<:Number}, iunflat::Integer) = iunflat:iunflat
+flatrange(b::OrbitalBlockStructure{<:SMatrix{N}}, iunflat::Integer) where {N} =
+    (checkinrange(iunflat, b); ((iunflat - 1) * N + 1 : iunflat * N))
+flatrange(b::OrbitalBlockStructure{<:Number}, iunflat::Integer) =
+    (checkinrange(iunflat, b); iunflat:iunflat)
+
+checkinrange(siteind, b::OrbitalBlockStructure) = 1 <= siteind <= flatsize(b) ||
+    @boundscheck(internalerror("flatrange: site $siteind our of range [1, $(flatsize(b))]"))
 
 flatindex(b::OrbitalBlockStructure, i) = first(flatrange(b, i))
 
@@ -1213,6 +1221,8 @@ end
 
 ## AbstractHamiltonian
 
+latdim(h::AbstractHamiltonian) = latdim(lattice(h))
+
 bravais_matrix(h::AbstractHamiltonian) = bravais_matrix(lattice(h))
 
 norbitals(h::AbstractHamiltonian) = blocksizes(blockstructure(h))
@@ -1234,7 +1244,8 @@ flatrange(h::AbstractHamiltonian, name::Symbol) =
 function flatrange(h::AbstractHamiltonian, runflat::AbstractUnitRange)
     imin, imax = first(runflat), last(runflat)
     orng = first(flatrange(h, imin)) : last(flatrange(h, imax))
-    return orng
+    orng´ = intersect(orng, siterange(lattice(h)))
+    return orng´
 end
 
 zerocell(h::AbstractHamiltonian) = zerocell(lattice(h))
@@ -1946,11 +1957,6 @@ norbitals(g::GreenSlice) = norbitals(g.parent.parent)
 contactinds(g::GreenFunction, i...) = contactinds(contacts(g), i...)
 contactinds(g::GreenSolution, i...) = contactinds(blockstructure(g), i...)
 
-orbranges(o::OrbitalSlice, ::GreenSolution) = orbranges(o)
-orbranges(o::CellOrbitals, ::GreenSolution) = orbranges(o)
-orbranges(contact::Integer, g::GreenSolution) = orbranges(blockstructure(g), contact)
-orbranges(::Colon, g::GreenSolution) = orbranges(blockstructure(g))
-
 greenfunction(g::GreenSlice) = g.parent
 
 slicerows(g::GreenSlice) = g.rows
@@ -1963,6 +1969,9 @@ Base.parent(g::GreenSlice) = g.parent
 
 Base.size(g::GreenFunction, i...) = size(g.parent, i...)
 Base.size(g::GreenSolution, i...) = size(g.parent, i...)
+
+flatsize(g::GreenFunction, i...) = flatsize(g.parent, i...)
+flatsize(g::GreenSolution, i...) = flatsize(g.parent, i...)
 
 copy_lattice(g::GreenFunction) = GreenFunction(copy_lattice(g.parent), g.solver, g.contacts)
 copy_lattice(g::GreenSolution) = GreenSolution(
