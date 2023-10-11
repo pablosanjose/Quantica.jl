@@ -62,7 +62,7 @@ julia> ϕ(k...) =  SA[k...]' * bravais_matrix(h)
 
 julia> b = bands(h,  k₁points, k₂points; mapping = ϕ, defects = Kpoints, patches = 20);
 
-julia> using GLMakie; qplot(b, hide = :nodes, color = :orange)
+julia> using GLMakie; qplot(b, hide = (:nodes, :wireframe), color = :orange)
 ```
 ```@raw html
 <img src="../../assets/graphene_bands_k.png" alt="Graphene bands in k-space" width="400" class="center"/>
@@ -92,7 +92,7 @@ Bandstructure{Float64,3,2}: 3D Bandstructure over a 2-dimensional parameter spac
   Edges     : 664
   Simplices : 416
 
-julia> qplot(b, nodedarken = 0.5, axis = (; aspect = (1,1,1), xlabel = "ϕ", ylabel = "t´/t", zlabel = "ϵ"), fancyaxis = false)
+julia> qplot(b, nodedarken = 0.5, axis = (; aspect = (1,1,1), perspectiveness = 0.5, xlabel = "ϕ", ylabel = "t´/t", zlabel = "ϵ"), fancyaxis = false)
 ```
 ```@raw html
 <img src="../../assets/ssh_bands.png" alt="SSH bandstructure as a function of `ϕ` and `t´/t" width="400" class="center"/>
@@ -113,9 +113,9 @@ Bandstructure{Float64,3,2}: 3D Bandstructure over a 2-dimensional parameter spac
   Edges     : 44152
   Simplices : 28696
 
-julia> qplot(b, hide = :nodes)
+julia> qplot(b, hide = (:nodes, :wireframe))
 
-julia> qplot(b[[1, end]], hide = :nodes)
+julia> qplot(b[[1, end]], hide = (:nodes, :wireframe))
 ```
 ```@raw html
 <img src="../../assets/bands_indexed.png" alt="Extracting and plotting a subset of the subbands in a bandstructure" width="600" class="center"/>
@@ -131,7 +131,7 @@ Bandstructure{Float64,4,3}: 4D Bandstructure over a 3-dimensional parameter spac
   Edges     : 462520
   Simplices : 384000
 
-julia> qplot(b[(:, :, :, 0.2)], hide = :nodes)
+julia> qplot(b[(:, :, :, 0.2)], hide = (:nodes, :wireframe))
 ```
 ```@raw html
 <img src="../../assets/cubic_Fermi_surface.png" alt="Fermi surface of a cubic crystal at `µ = 0.2t`" width="400" class="center"/>
