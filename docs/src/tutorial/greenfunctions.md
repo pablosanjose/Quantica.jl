@@ -270,7 +270,7 @@ julia> g_1_to_all = sum(abs2, g(0.1)[siteselector(), 1], dims = 2);
 julia> qplot(h, hide = :hops, sitecolor = (i, r) -> gω[i], siteradius = (i, r) -> gω[i], minmaxsiteradius = (0, 2), sitecolormap = :balance)
 ```
 ```@raw html
-<img src="../../assets/star_shape.png" alt="Green function from a contact on the right" width="250" class="center"/>
+<img src="../../assets/star_shape.png" alt="Green function from a contact on the right" width="500" class="center"/>
 ```
 
 !!! warning "Caveat for multiorbital systems"

@@ -26,7 +26,7 @@ LocalSpectralDensitySolution{Float64} : local density of states at fixed energy 
 julia> qplot(h, hide = :hops, sitecolor = ρ, siteradius = ρ, minmaxsiteradius = (0, 2), sitecolormap = :balance)
 ```
 ```@raw html
-<img src="../../assets/star_shape_ldos.png" alt="LDOS" width="250" class="center"/>
+<img src="../../assets/star_shape_ldos.png" alt="LDOS" width="500" class="center"/>
 ```
 
 Note that `ρ[sites...]` produces a vector with the LDOS at sites defined by `siteselector(; sites...)` (`ρ[]` is the ldos over all sites). We can also define a `kernel` to be traced over orbitals to obtain the spectral density of site-local observables (see `diagonal` slicing in the preceding section).
@@ -47,7 +47,7 @@ CurrentDensitySolution{Float64} : current density at a fixed energy and arbitrar
 julia> qplot(h, siteradius = 0.08, sitecolor = :black, siteoutline = 0, hopradius = J, hopcolor = J, minmaxhopradius = (0, 2), hopcolormap = :balance, hopdarken = 0)
 ```
 ```@raw html
-<img src="../../assets/star_shape_current.png" alt="Current density with magnetic flux" width="250" class="center"/>
+<img src="../../assets/star_shape_current.png" alt="Current density with magnetic flux" width="500" class="center"/>
 ```
 !!! note "Remember to construct supercell before applying position-dependent fields"
     Note that we built the supercell before applying the model with the magnetic flux. Not doing so would make the gauge field be repeated in each unit cell when expanding the supercell. This was mentioned in the section on Hamiltonians, and is a common mistake when modeling systems with position dependent fields.
