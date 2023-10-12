@@ -22,7 +22,7 @@ function testgreen(h, s; kw...)
     return nothing
 end
 
-@testset "bare greenfunctions" begin
+@testset "basic greenfunctions" begin
     h0 = LP.honeycomb() |> hamiltonian(hopping(SA[0 1; 1 0]), orbitals = 2) |> supercell(region = RP.circle(10))
     s0 = GS.SparseLU()
     h1 = LP.square() |> hamiltonian(@onsite((; o = 1) -> o*I) + hopping(SA[0 1; 1 0]), orbitals = 2) |> supercell((1,0), region = r -> abs(r[2]) < 2)
@@ -66,6 +66,9 @@ end
             testgreen(oh, s)
         end
     end
+    # contacts that don't include all sublattices
+    h = lattice(sublat(0, name = :L), sublat(1, name = :R)) |> hamiltonian
+    @test h |> attach(onsite(ω->1), sublats = :L) |> greenfunction isa GreenFunction
 end
 
 @testset "greenfunction KPM" begin
