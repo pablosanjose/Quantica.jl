@@ -31,7 +31,7 @@ end
     end
     @test sublat((3,)) isa Sublat{Float64,1}
     @test sublat(()) isa Sublat{Float64,0}
-    @test_throws ArgumentError sublat(SVector{3,Float64}[])
+    @test sublat(SVector{3,Float64}[]) isa Sublat{Float64,3}
 end
 
 @testset "lattice construction" begin

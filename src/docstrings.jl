@@ -1726,6 +1726,7 @@ dω ∑ⱼ [fᵢ(ω) - fⱼ(ω)] Gᵢⱼ(ω)``, where ``fᵢ(ω)`` is the Fermi 
 
 Compute the conductance at the specified contacts.
 
+# Examples
 ```jldoctest
 julia> # A central system g0 with two 1D leads and transparent contacts
 

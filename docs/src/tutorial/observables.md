@@ -93,9 +93,10 @@ julia> f = Figure(); a = Axis(f[1,1], xlabel = "ω/t", ylabel = "T(ω)"); lines!
 ```@raw html
 <img src="../../assets/four_terminal_T.png" alt="Total transmission from right contact" width="400" class="center"/>
 ```
+So we indeed find that the 90-degree transmission `T₃₁` is indeed larger than the forward transmission `T₂₁` for all energies. The rapid oscillations are due to mesoscopic fluctuations.
 
 !!! note "Total transmission vs transmission probability"
-    Note that `transmission` gives the total transmission, which is the sum of the transmission probability from each orbital in the source contact to any other orbital in the drain contact. As such it is not normalized to 1, but to the number of source orbitals. It also gives the local conductance from a given contact in units of $$e^2/h$$ according to the Landauer formula, $$G\_j = e^2/h \sum_i T_{ij}(eV)$$.
+    Note that `transmission` gives the total transmission, which is the sum of the transmission probability from each orbital in the source contact to any other orbital in the drain contact. As such it is not normalized to 1, but to the number of source orbitals. It also gives the local conductance from a given contact in units of $$e^2/h$$ according to the Landauer formula, $$G_j = e^2/h \sum_i T_{ij}(eV)$$.
 
 ## Conductance
 
