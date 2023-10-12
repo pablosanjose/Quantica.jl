@@ -48,6 +48,7 @@ using Quantica: Hamiltonian, ParametricHamiltonian, sites, nsites, nonsites, nho
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = (10, 10.1)))
     @test Quantica.Quantica.nhoppings(h) == 48
     @test Hamiltonian{3}(h) isa Hamiltonian{<:Any,3}
+    @test convert(Hamiltonian{3}, h) isa Hamiltonian{<:Any,3}
 end
 
 @testset "hamiltonian orbitals" begin

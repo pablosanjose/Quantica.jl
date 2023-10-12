@@ -68,6 +68,8 @@ end
     lat2 = lattice(lat, dim = Val(2), bravais = SA[1 2; 3 4])
     @test lat2 isa Lattice{Float32,2,2}             # dimension cropping
     @test bravais_matrix(lat2) == SA[1 2; 3 4]
+    # dim/type promotion
+    @test lattice(sublat(Float16(0), name = :A), sublat(SA[1,2f0], name = :B)) isa Lattice{Float32,2}
 end
 
 @testset "lattice presets" begin

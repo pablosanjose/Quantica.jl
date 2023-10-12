@@ -82,7 +82,7 @@ It's apparent from the plot that the transmission from right to left (`T₂₁` 
 ```julia
 julia> using ProgressMeter
 
-julia> T₂₁ = transmission(g[2,1]); T₃₁ = transmission(g[3,1]); ωs = subdiv(0, 8, 200);
+julia> T₂₁ = transmission(g[2,1]); T₃₁ = transmission(g[3,1]); ωs = subdiv(0, 8, 201);
 
 julia> T₂₁ω = @showprogress [T₂₁(ω) for ω in ωs]; T₃₁ω = @showprogress [T₃₁(ω) for ω in ωs];
 Progress: 100%|██████████████████████████████████████████████████████████████| Time: 0:01:02
