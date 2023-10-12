@@ -1,3 +1,5 @@
+@test_throws ArgumentError qplot(LP.linear())  # no backend loaded
+
 using CairoMakie
 
 @testset "plot lattice" begin
