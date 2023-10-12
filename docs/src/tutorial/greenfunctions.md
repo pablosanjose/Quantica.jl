@@ -88,6 +88,8 @@ The currently implemented `GreenSolver`s (abbreviated as `GS`) are the following
 
   It precomputes a bandstructure `b = bands(h, bandsargs...; kw..., split = false)` and then uses analytic expressions for the contribution of each subband simplex to the `GreenSolution`. If `boundary = dir => cell_pos`, it takes into account the reflections on an infinite boundary perpendicular to Bravais vector number `dir`, so that all sites with cell index `c[dir] <= cell_pos` are removed.
 
+  To retrieve the bands from a `g::GreenFunction` that used the `GS.Bands` solver, we may use `bands(g)`.
+
 ## Attaching Contacts
 
 A self energy `Σ(ω)` acting of a finite set of sites of `h` (i.e. on a `LatticeSlice` of `lat = lattice(h)`) can be incorporated using the `attach` command. This defines a new Contact in `h`. The general syntax is `oh = attach(h, args...; sites...)`, where the `sites` directives define the Contact `LatticeSlice` (`lat[siteselector(; sites...)]`), and `args` can take a number of forms.
@@ -212,6 +214,7 @@ julia> g(0.2)[1, 3]
    0.265667+0.296249im   0.171343-0.022414im  0.285251+0.348008im  0.171247+0.0229456im   0.0532086+0.24404im
 ```
 
+### Diagonal slices
 There is a special form of slicing that requests just the diagonal of a given `g[sᵢ] == g[sᵢ,sᵢ]`. It uses the syntax `g[diagonal(sᵢ)]`. Let us see it in action in a multiorbital example in 2D
 ```julia
 julia> g = HP.graphene(a0 = 1, t0 = 1, orbitals = 2) |> greenfunction
@@ -244,18 +247,6 @@ julia> g(0.5)[diagonal(cells = (0, 0), kernel = SA[0 1; 1 0])]
    1.126802874880133e-11 + 1.9120152589671175e-17im
 ```
 which is zero in this spin-degenerate case
-
-This particular example made use of the `GS.Bands` solver (the default for `L>1`), which is a quite powerful solver, and can even implement flat boundaries normal to one of the Bravais vectors (see `GreenSolvers` for details). We can see the bandstructure employed with
-```julia
-julia> qplot(bands(g))
-```
-```@raw html
-<img src="../../assets/bands_solver.png" alt="Bands used by the GS.Bands solver" width="300" class="center"/>
-```
-These bands can be adjusted by passing arguments such as
-```
-julia> g = HP.graphene(a0 = 1, t0 = 1, orbitals = 2) |> greenfunction(GS.Bands(subdiv(0, 2π, 100), subdiv(0, 2π, 100); boundary = 1 => 0));
-```
 
 ## Visualizing a Green function
 
