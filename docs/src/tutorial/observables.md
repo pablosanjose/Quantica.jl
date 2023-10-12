@@ -75,7 +75,7 @@ julia> gx1 = sum(abs2, g(0.04)[siteselector(), 1], dims = 2);
 julia> qplot(hcentral, hide = :hops, siteoutline = 1, sitecolor = (i, r) -> gx1[i], siteradius = (i, r) -> gx1[i], minmaxsiteradius = (0, 2), sitecolormap = :balance)
 ```
 ```@raw html
-<img src="../../assets/star_shape_current.png" alt="Green function from right lead" width="400" class="center"/>
+<img src="../../assets/four_terminal_g_big.png" alt="Green function from right lead" width="400" class="center"/>
 ```
 
 It's apparent from the plot that the transmission from right to left (`T₂₁` here) at this energy of `0.04` is larger than from right to top (`T₃₁`). Is this true in general? Let us compute the two transmissions as a function of energy. To show the progress of the calculation we can use a monitor package, such as `ProgressMeter`
@@ -85,8 +85,8 @@ julia> using ProgressMeter
 julia> T₂₁ = transmission(g[2,1]); T₃₁ = transmission(g[3,1]); ωs = subdiv(0, 4, 200);
 
 julia> T₂₁ω = @showprogress [T₂₁(ω) for ω in ωs]; T₃₁ω = @showprogress [T₃₁(ω) for ω in ωs];
-Progress: 100%|████████████████████████████████████████████████████████████████████████████████████| Time: 0:01:05
-Progress: 100%|████████████████████████████████████████████████████████████████████████████████████| Time: 0:01:04
+Progress: 100%|██████████████████████████████████████████████████████████████| Time: 0:01:05
+Progress: 100%|██████████████████████████████████████████████████████████████| Time: 0:01:04
 
 julia> f = Figure(); a = Axis(f[1,1], xlabel = "ω/t", ylabel = "T(ω)"); lines!(a, ωs, T₂₁ω, label = L"T_{2,1}"); lines!(a, ωs, T₃₁ω, label = L"T_{3,1}"); axislegend("Transmission", position = :lt); f
 ```
