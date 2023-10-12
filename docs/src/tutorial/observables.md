@@ -82,22 +82,42 @@ It's apparent from the plot that the transmission from right to left (`T₂₁` 
 ```julia
 julia> using ProgressMeter
 
-julia> T₂₁ = transmission(g[2,1]); T₃₁ = transmission(g[3,1]); ωs = subdiv(0, 4, 200);
+julia> T₂₁ = transmission(g[2,1]); T₃₁ = transmission(g[3,1]); ωs = subdiv(0, 8, 200);
 
 julia> T₂₁ω = @showprogress [T₂₁(ω) for ω in ωs]; T₃₁ω = @showprogress [T₃₁(ω) for ω in ωs];
-Progress: 100%|██████████████████████████████████████████████████████████████| Time: 0:01:05
-Progress: 100%|██████████████████████████████████████████████████████████████| Time: 0:01:04
+Progress: 100%|██████████████████████████████████████████████████████████████| Time: 0:01:02
+Progress: 100%|██████████████████████████████████████████████████████████████| Time: 0:01:00
 
 julia> f = Figure(); a = Axis(f[1,1], xlabel = "ω/t", ylabel = "T(ω)"); lines!(a, ωs, T₂₁ω, label = L"T_{2,1}"); lines!(a, ωs, T₃₁ω, label = L"T_{3,1}"); axislegend("Transmission", position = :lt); f
 ```
 ```@raw html
 <img src="../../assets/four_terminal_T.png" alt="Total transmission from right contact" width="400" class="center"/>
 ```
+
 So we indeed find that the 90-degree transmission `T₃₁` is indeed larger than the forward transmission `T₂₁` for all energies. The rapid oscillations are due to mesoscopic fluctuations.
 
 !!! note "Total transmission vs transmission probability"
     Note that `transmission` gives the total transmission, which is the sum of the transmission probability from each orbital in the source contact to any other orbital in the drain contact. As such it is not normalized to 1, but to the number of source orbitals. It also gives the local conductance from a given contact in units of $$e^2/h$$ according to the Landauer formula, $$G_j = e^2/h \sum_i T_{ij}(eV)$$.
 
 ## Conductance
+
+Local and non-local differential conductance $$G_{ij} = dI_i/dV_j$$ can be computed with `G = conductance(g[i,j])`. Calling `G(ω)` returns the conductance at bias $$eV = \omega$$ in units of $$e^2/h$$. Let's look at the local differential conductance into the right contact in the previous example
+```julia
+julia> G₁₁ = conductance(g[1,1])
+Conductance{Float64}: Zero-temperature conductance dIᵢ/dVⱼ from contacts i,j, in units of e^2/h
+  Current contact  : 1
+  Bias contact     : 1
+
+julia> Gω = @showprogress  [G₁₁(ω) for ω in ωs];
+Progress: 100%|██████████████████████████████████████████████████████████████| Time: 0:01:01
+
+julia> f = Figure(); a = Axis(f[1,1], xlabel = "eV/t", ylabel = "G [e²/h]"); lines!(a, ωs, Gω); f
+```
+```@raw html
+<img src="../../assets/four_terminal_cond.png" alt="Local conductance from right contact" width="400" class="center"/>
+```
+
+!! warning "Sign of non-local conductance"
+    If you compute a non-local conductance such as `conductance(g[2,1])(ω)` in this example you will note it is negative. This is actually expected. It means that the current flowing **into** the system through the right contact when you **increase** the bias in a different contact is negative, because the current is actually flowing out into the right reservoir.
 
 ## Josephson
