@@ -57,7 +57,7 @@ julia> qplot(h, siteradius = 0.08, sitecolor = :black, siteoutline = 0, hopradiu
 
 The transmission `Tᵢⱼ` from contact `j` to contact `i` can be computed using `transmission`. This function accepts a `GreenSlice` between the contact. Let us recover the four-terminal setup of the preceding section, but let's make it bigger this time
 ```julia
-julia> hcentral = LP.square() |> onsite(4) - hopping(1) |> supercell(region = RP.circle(100) | RP.rectangle((202, 50)) | RP.rectangle((50, 202)))^C
+julia> hcentral = LP.square() |> onsite(4) - hopping(1) |> supercell(region = RP.circle(100) | RP.rectangle((202, 50)) | RP.rectangle((50, 202)))
 
 julia> glead = LP.square() |> onsite(4) - hopping(1) |> supercell((1, 0), region = r -> abs(r[2]) <= 50/2) |> greenfunction(GS.Schur(boundary = 0));
 
