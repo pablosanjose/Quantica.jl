@@ -139,9 +139,9 @@ Let us define the classical example of a multiterminal mesoscopic junction. We c
 
 We first define a single lead `Greenfunction` and the central Hamiltonian
 ```julia
-julia> glead = LP.square() |> hopping(1) |> supercell((1, 0), region = r -> abs(r[2]) <= 5/2) |> greenfunction(GS.Schur(boundary = 0));
+julia> glead = LP.square() |> onsite(4) - hopping(1) |> supercell((1, 0), region = r -> abs(r[2]) <= 5/2) |> greenfunction(GS.Schur(boundary = 0));
 
-julia> hcentral = LP.square() |> hopping(1) |> supercell(region = RP.circle(10) | RP.rectangle((22, 5)) | RP.rectangle((5, 22)))
+julia> hcentral = LP.square() |> onsite(4) - hopping(1) |> supercell(region = RP.circle(10) | RP.rectangle((22, 5)) | RP.rectangle((5, 22)))
 ```
 The two rectangles overlayed on the circle above create the stubs where the leads will be attached:
 ```@raw html
@@ -250,7 +250,7 @@ This particular example made use of the `GS.Bands` solver (the default for `L>1`
 julia> qplot(bands(g))
 ```
 ```@raw html
-<img src="../../assets/bands_solver.png" alt="Bands used by the GS.Bands solver" width="250" class="center"/>
+<img src="../../assets/bands_solver.png" alt="Bands used by the GS.Bands solver" width="300" class="center"/>
 ```
 These bands can be adjusted by passing arguments such as
 ```
@@ -265,12 +265,12 @@ julia> h = LP.square() |> onsite(4) - hopping(1) |> supercell(region = r -> norm
 
 julia> g = h |> attach(@onsite(ω -> -im), region = r -> r[1] ≈ 47) |> greenfunction;
 
-julia> g_1_to_all = sum(abs2, g(0.1)[siteselector(), 1], dims = 2);
+julia> gx1 = sum(abs2, g(0.1)[siteselector(), 1], dims = 2);
 
-julia> qplot(h, hide = :hops, sitecolor = (i, r) -> gω[i], siteradius = (i, r) -> gω[i], minmaxsiteradius = (0, 2), sitecolormap = :balance)
+julia> qplot(h, hide = :hops, sitecolor = (i, r) -> gx1[i], siteradius = (i, r) -> gx1[i], minmaxsiteradius = (0, 2), sitecolormap = :balance)
 ```
 ```@raw html
-<img src="../../assets/star_shape.png" alt="Green function from a contact on the right" width="500" class="center"/>
+<img src="../../assets/star_shape.png" alt="Green function from a contact on the right" width="400" class="center"/>
 ```
 
 !!! warning "Caveat for multiorbital systems"

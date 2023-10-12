@@ -355,7 +355,7 @@ $i  To contact    : $(currentcontact(parent(T)))")
 end
 
 Base.summary(::Transmission) =
-    "Transmission: total transmission probability between two different contacts"
+    "Transmission: total transmission between two different contacts"
 
 #endregion
 
