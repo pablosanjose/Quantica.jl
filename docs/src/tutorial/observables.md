@@ -117,7 +117,7 @@ julia> f = Figure(); a = Axis(f[1,1], xlabel = "eV/t", ylabel = "G [e²/h]"); li
 <img src="../../assets/four_terminal_cond.png" alt="Local conductance from right contact" width="400" class="center"/>
 ```
 
-!! warning "Sign of non-local conductance"
+!!! warning "Sign of non-local conductance"
     If you compute a non-local conductance such as `conductance(g[2,1])(ω)` in this example you will note it is negative. This is actually expected. It means that the current flowing **into** the system through the right contact when you **increase** the bias in a different contact is negative, because the current is actually flowing out into the right reservoir.
 
 ## Josephson
