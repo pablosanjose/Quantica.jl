@@ -292,9 +292,9 @@ end
 # positions of sites in a given sublattice. Pushes selected slice indices into store
 function sublatsites(l::LatticeSlice, s::Integer, store = missing)
     n = 0
-    gen = ((missing_or_push!(store, n); site(l.lat, i, cell(subcell)))
+    gen = ((missing_or_push!(store, n); site(lattice(l), i, cell(subcell)))
         for subcell in subcells(l) for i in siteindices(subcell)
-        if (n += 1; i in siterange(l.lat, s)))
+        if (n += 1; i in siterange(lattice(l), s)))
     return gen
 end
 
