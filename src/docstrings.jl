@@ -213,7 +213,7 @@ returned.
 Return a collection of positions of a LatticeSlice, generally obtained by indexing a
 lattice `lat[sel...]` with some `siteselector` keywords `sel`. See also `lattice`.
 
-    Note: the returned collections can be of different types (vectors, generators, views...)
+Note: the returned collections can be of different types (vectors, generators, views...)
 
 # Examples
 ```jldoctest
@@ -318,7 +318,9 @@ Build a new lattice or hamiltonian transforming each site positions `r` into `f(
 
 Curried version of `transform`, equivalent to `transform(f, x)`
 
-    Note: Unexported `Quantica.transform!` is also available for in-place transforms. Use with care, as aliasing (i.e. several objects sharing the modified one) can produce unexpected results.
+Note: Unexported `Quantica.transform!` is also available for in-place transforms. Use with
+care, as aliasing (i.e. several objects sharing the modified one) can produce unexpected
+results.
 
 # Examples
 
@@ -348,7 +350,9 @@ a `NTuple` or an `SVector` in embedding space.
 
 Curried version of `translate`, equivalent to `translate(x, δr)`
 
-    Note: Unexported `Quantica.translate!` is also available for in-place translations. Use with care, as aliasing (i.e. several objects sharing the modified one) can produce unexpected results.
+Note: Unexported `Quantica.translate!` is also available for in-place translations. Use with
+care, as aliasing (i.e. several objects sharing the modified one) can produce unexpected
+results.
 
 # Examples
 
@@ -377,7 +381,9 @@ Combine a collection `hams` of hamiltonians into one by combining their correspo
 lattices, and optionally by adding a coupling between them, given by the hopping terms in
 `coupling`.
 
-    Note that the `coupling` model will be applied to the combined lattice (which may have renamed sublattices to avoid name collissions). However, only hopping terms between different `hams` blocks will be applied.
+Note that the `coupling` model will be applied to the combined lattice (which may have
+renamed sublattices to avoid name collissions). However, only hopping terms between
+different `hams` blocks will be applied.
 
 # Examples
 ```jldoctest
