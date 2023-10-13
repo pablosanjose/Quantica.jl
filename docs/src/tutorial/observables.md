@@ -3,11 +3,12 @@
 We are almost at our destination now. We have defined a `Lattice`, a `Model` for our system, we applied the `Model` to the `Lattice` to obtain a `Hamiltonian` or a `ParametricHamiltonian`, and finally, after possibly attaching some contacts to outside reservoirs and specifying a `GreenSolver`, we obtained a `GreenFunction`. It is now time to use the `GreenFunction` to obtain some observables of interest.
 
 Currently, we have the following observables built into Quantica.jl (with more to come in the future)
-    - `ldos`: computes the local density of states at specific energy and sites
-    - `current`: computes the local current density along specific directions, and at specific energy and sites
-    - `transmission`: computes the total transmission between contacts
-    - `conductance`: computes the differential conductance `dIᵢ/dVⱼ` between contacts `i` and `j`
-    - `josephson`: computes the supercurrent and the current-phase relation through a given contact in a superconducting system
+
+- `ldos`: computes the local density of states at specific energy and sites
+- `current`: computes the local current density along specific directions, and at specific energy and sites
+- `transmission`: computes the total transmission between contacts
+- `conductance`: computes the differential conductance `dIᵢ/dVⱼ` between contacts `i` and `j`
+- `josephson`: computes the supercurrent and the current-phase relation through a given contact in a superconducting system
 
 See the corresponding docstrings for full usage instructions. Here we will present some basic examples
 
