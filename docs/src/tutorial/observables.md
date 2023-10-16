@@ -204,7 +204,7 @@ julia> J(phase = 0.2)
 ```
 Note that finite temperatures can be taken using the `kBT` keyword argument for `josephson`, see docstring for details.
 
-One is often interested in the critical current, which is the maximum of the Josephson current over all phase differences. Quantica.jl can compute the integral over a collection of phase differences simulataneously, which is more efficient that computing them one by one. This is done with
+One is often interested in the critical current, which is the maximum of the Josephson current over all phase differences. Quantica.jl can compute the integral over a collection of phase differences simultaneously, which is more efficient that computing them one by one. This is done with
 ```julia
 julia> φs = subdiv(0, pi, 11); J = josephson(g[1], 4.1; phases = φs)
   Integration path    : (-4.1 + 1.4901161193847656e-8im, -2.05 + 2.050000014901161im, 0.0 + 1.4901161193847656e-8im)
