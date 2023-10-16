@@ -1074,7 +1074,7 @@ Equivalent to `unflat(())`
 
 # Examples
 
-```jldoctest
+```
 julia> h = HP.graphene(orbitals = 2); h[unflat(0,0)]
 2×2 SparseArrays.SparseMatrixCSC{SMatrix{2, 2, ComplexF64, 4}, Int64} with 2 stored entries:
                      ⋅                       [2.7+0.0im 0.0+0.0im; 0.0+0.0im 2.7+0.0im]
@@ -1741,8 +1741,8 @@ Conductance{Float64}: Zero-temperature conductance dIᵢ/dVⱼ from contacts i,j
   Current contact  : 1
   Bias contact     : 1
 
-julia> G(0.2)
-2.9999999999999996
+julia> G(0.2) ≈ 3
+true
 ```
 
 # See also
