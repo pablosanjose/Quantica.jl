@@ -389,13 +389,11 @@ different `hams` blocks will be applied.
 ```jldoctest
 julia> # Building Bernal-stacked bilayer graphene
 
-julia> hbot = HP.graphene(a0 = 1, dim = 3); htop = translate(hbot, (0, 1/√3, 1/√3));
+julia> hbot = HP.graphene(a0 = 1, dim = 3, names = (:A,:B));
 
-julia> h2 = combine(hbot, htop; coupling = hopping(1, sublats = :B => :C) |> plusadjoint))
-┌ Warning: Renamed repeated sublattice :A to :C
-└ @ Quantica ~/.julia/dev/Quantica/src/types.jl:60
-┌ Warning: Renamed repeated sublattice :B to :D
-└ @ Quantica ~/.julia/dev/Quantica/src/types.jl:60
+julia> htop = translate(HP.graphene(a0 = 1, dim = 3, names = (:C,:D)), (0, 1/√3, 1/√3));
+
+julia> h2 = combine(hbot, htop; coupling = hopping(1, sublats = :B => :C) |> plusadjoint)
 Hamiltonian{Float64,3,2}: Hamiltonian on a 2D Lattice in 3D space
   Bloch harmonics  : 5
   Harmonic size    : 4 × 4
@@ -951,11 +949,11 @@ same applies to `@hopping!`.
 # Examples
 ```jldoctest
 julia> model = hopping(1); peierls = @hopping!((t, r, dr; A = r -> SA[0,0]) -> t * cis(-dr' * A(r)))
-OnsiteModifier{ParametricFunction{3}}:
+HoppingModifier{ParametricFunction{3}}:
   Region            : any
   Sublattice pairs  : any
   Cell distances    : any
-  Hopping range     : Neighbors(1)
+  Hopping range     : Inf
   Reverse hops      : false
   Parameters        : [:A]
 
@@ -1105,15 +1103,15 @@ calling these solvers.
 
 # Examples
 
-```jldoctest
+```
 julia> h = HP.graphene(t0 = 1) |> supercell(10);
 
-julia> spectrum(h, (0,0), ES.ShiftInvert(ES.ArnoldiMethod(nev = 4), 0.0)) |> energies
+julia> spectrum(h, (0,0); solver = ES.ShiftInvert(ES.ArnoldiMethod(nev = 4), 0.0)) |> energies
 4-element Vector{ComplexF64}:
- -0.38196601125010465 + 3.686368662666227e-16im
-  -0.6180339887498938 + 6.015655020129746e-17im
-   0.6180339887498927 + 2.6478518218421853e-16im
-  0.38196601125010476 - 1.741261108320361e-16im
+ -0.3819660112501042 + 2.407681231060336e-16im
+ -0.6180339887498942 - 2.7336317916863215e-16im
+  0.6180339887498937 - 1.7243387890744497e-16im
+  0.3819660112501042 - 1.083582785131051e-16im
 ```
 
 # See also
@@ -1272,7 +1270,7 @@ collection of of sliced `Subband`s.
 
 # Examples
 
-```jldoctest
+```
 julia> phis = range(0, 2pi, length = 50); h = LP.honeycomb() |> hamiltonian(@hopping((; t = 1) -> t));
 
 julia> bands(h(t = 1), phis, phis)
@@ -1386,12 +1384,11 @@ Curried form equivalent to `attach(h, args...; sites...)`.
 ```jldoctest
 julia> # A graphene flake with two out-of-plane cubic-lattice leads
 
-julia> g1D = LP.cubic() |> hamiltonian(hopping(1)) |> supercell((0,0,1), region = RP.square(4)) |> greenfunction(GS.Schur(boundary = 0));
+julia> g1D = LP.cubic(names = :C) |> hamiltonian(hopping(1)) |> supercell((0,0,1), region = RP.square(4)) |> greenfunction(GS.Schur(boundary = 0));
 
 julia> coupling = hopping(1, range = 2);
 
 julia> gdisk = HP.graphene(a0 = 1, dim = 3) |> supercell(region = RP.circle(10)) |> attach(g1D, coupling; region = RP.square(4)) |> attach(g1D, coupling; region = RP.square(4), reverse = true) |> greenfunction;
-
 ```
 
 # See also
@@ -1603,7 +1600,7 @@ Given a partially evaluated `ρω::LocalSpectralDensitySolution` or
 densities of states.
 
 # Example
-```jldoctest
+```
 julia> g = HP.graphene(a0 = 1, t0 = 1) |> supercell(region = RP.circle(20)) |> attach(nothing, region = RP.circle(1)) |> greenfunction(GS.KPM(order = 300, bandrange = (-3.1, 3.1)))
 GreenFunction{Float64,2,0}: Green function of a Hamiltonian{Float64,2,0}
   Solver          : AppliedKPMGreenSolver
@@ -1677,7 +1674,7 @@ densities.
 ```jldoctest
 julia> # A semi-infinite 1D lead with a magnetic field `B`
 
-julia> g = LP.square() |> hamiltonian(@hopping((r, dr; B = 0.1) -> cis(B * dr' * SA[r[2],-r[1]]))) |> supercell((1,0), region = r->-2<r[2]<2) |> greenfunction(GS.Schur(boundary = 0));
+julia> g = LP.square() |> supercell((1,0), region = r->-2<r[2]<2) |> hamiltonian(@hopping((r, dr; B = 0.1) -> cis(B * dr' * SA[r[2],-r[1]]))) |> greenfunction(GS.Schur(boundary = 0));
 
 julia> J = current(g[cells = SA[1]])
 CurrentDensitySlice{Float64} : current density at a fixed location and arbitrary energy
@@ -1695,7 +1692,6 @@ julia> J(0.2; B = 0.0)
   ⋅           7.77156e-16   ⋅
  7.77156e-16   ⋅           5.55112e-16
   ⋅           5.55112e-16   ⋅
-
 ```
 
 # See also
@@ -1775,12 +1771,12 @@ Compute the transmission `Tᵢⱼ(ω)` at a given `ω` and for the specified `pa
 ```jldoctest
 julia> # A central system g0 with two 1D leads and transparent contacts
 
-julia> glead = LP.honecycomb() |> hamiltonian(hopping(1)) |> supercell((1,-1), region = r->-2<r[2]<2) |> greenfunction(GS.Schur(boundary = 0));
+julia> glead = LP.square() |> hamiltonian(hopping(1)) |> supercell((1,0), region = r->-2<r[2]<2) |> greenfunction(GS.Schur(boundary = 0));
 
-julia> g0 = LP.honecycomb() |> hamiltonian(hopping(1)) |> supercell(region = r->-2<r[2]<2 && r[1]≈0) |> attach(glead, reverse = true) |> attach(glead) |> greenfunction;
+julia> g0 = LP.square() |> hamiltonian(hopping(1)) |> supercell(region = r->-2<r[2]<2 && r[1]≈0) |> attach(glead, reverse = true) |> attach(glead) |> greenfunction;
 
 julia> T = transmission(g0[2, 1])
-Transmission: total transmission probability between two different contacts
+Transmission: total transmission between two different contacts
   From contact  : 1
   To contact    : 2
 
@@ -1833,7 +1829,7 @@ julia> g0 = LP.square() |> hamiltonian(hopping(SA[1 0; 0 -1]), orbitals = 2) |> 
 julia> J = josephson(g0[1], 4; phases = subdiv(0, pi, 10))
 Integrator: Complex-plane integrator
   Integration path    : (-4.0 + 1.4901161193847656e-8im, -2.0 + 2.000000014901161im, 0.0 + 1.4901161193847656e-8im)
-  Integration options : ()
+  Integration options : (atol = 1.0e-7,)
   Integrand:          :
   JosephsonDensity{Float64} : Equilibrium (dc) Josephson current observable before integration over energy
     kBT                     : 0.0
@@ -1842,16 +1838,16 @@ Integrator: Complex-plane integrator
 
 julia> J()
 10-element Vector{Float64}:
- -6.751348391359149e-16
-  0.0016315088241546964
-  0.003213820056117238
-  0.004699191781510955
-  0.0060427526322931946
-  0.0072038354411029185
-  0.008147188939639644
-  0.008844017741703502
-  0.009272686515034255
- -1.7744618723033526e-12
+ -2.0320075667964386e-16
+  0.0016315088241551684
+  0.0032138200561177372
+  0.00469919178151151
+  0.0060427526322938355
+  0.0072038354411036384
+  0.008147188939640162
+  0.008844017741701734
+  0.00927268648629106
+ -1.0417739037813499e-12
 ```
 
 # See also
