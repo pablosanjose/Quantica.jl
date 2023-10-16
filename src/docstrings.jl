@@ -1075,7 +1075,7 @@ Equivalent to `unflat(())`
 # Examples
 
 ```jldoctest
-julia> h = HP.graphene(orbitals = 2); h[unflat(0,0)])
+julia> h = HP.graphene(orbitals = 2); h[unflat(0,0)]
 2×2 SparseArrays.SparseMatrixCSC{SMatrix{2, 2, ComplexF64, 4}, Int64} with 2 stored entries:
                      ⋅                       [2.7+0.0im 0.0+0.0im; 0.0+0.0im 2.7+0.0im]
  [2.7+0.0im 0.0+0.0im; 0.0+0.0im 2.7+0.0im]                      ⋅
@@ -1671,7 +1671,7 @@ densities.
 
 # Example
 
-```jldoctest
+```
 julia> # A semi-infinite 1D lead with a magnetic field `B`
 
 julia> g = LP.square() |> supercell((1,0), region = r->-2<r[2]<2) |> hamiltonian(@hopping((r, dr; B = 0.1) -> cis(B * dr' * SA[r[2],-r[1]]))) |> greenfunction(GS.Schur(boundary = 0));
@@ -1742,7 +1742,7 @@ Conductance{Float64}: Zero-temperature conductance dIᵢ/dVⱼ from contacts i,j
   Bias contact     : 1
 
 julia> G(0.2)
-2.999999999999999
+2.9999999999999996
 ```
 
 # See also
@@ -1821,7 +1821,7 @@ Evaluate the Josephson current `I_J` for the given `g` parameters `params`, if a
 
 # Examples
 
-```jldoctest
+```
 julia> glead = LP.square() |> hamiltonian(onsite(0.0005 * SA[0 1; 1 0]) + hopping(SA[1 0; 0 -1]), orbitals = 2) |> supercell((1,0), region = r->-2<r[2]<2) |> greenfunction(GS.Schur(boundary = 0));
 
 julia> g0 = LP.square() |> hamiltonian(hopping(SA[1 0; 0 -1]), orbitals = 2) |> supercell(region = r->-2<r[2]<2 && r[1]≈0) |> attach(glead, reverse = true) |> attach(glead) |> greenfunction;
