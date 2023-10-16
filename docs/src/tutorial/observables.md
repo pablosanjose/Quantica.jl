@@ -58,9 +58,9 @@ julia> qplot(h, siteradius = 0.08, sitecolor = :black, siteoutline = 0, hopradiu
 
 The transmission `Tᵢⱼ` from contact `j` to contact `i` can be computed using `transmission`. This function accepts a `GreenSlice` between the contact. Let us recover the four-terminal setup of the preceding section, but let's make it bigger this time
 ```julia
-julia> hcentral = LP.square() |> onsite(4) - hopping(1) |> supercell(region = RP.circle(100) | RP.rectangle((202, 50)) | RP.rectangle((50, 202)))
+julia> hcentral = LP.square() |> hopping(-1) |> supercell(region = RP.circle(100) | RP.rectangle((202, 50)) | RP.rectangle((50, 202)))
 
-julia> glead = LP.square() |> onsite(4) - hopping(1) |> supercell((1, 0), region = r -> abs(r[2]) <= 50/2) |> greenfunction(GS.Schur(boundary = 0));
+julia> glead = LP.square() |> hopping(-1) |> supercell((1, 0), region = r -> abs(r[2]) <= 50/2) |> greenfunction(GS.Schur(boundary = 0));
 
 julia> Rot = r -> SA[0 -1; 1 0] * r;  # 90º rotation function
 
@@ -71,7 +71,7 @@ julia> g = hcentral |>
            attach(glead, region = r -> r[2] == -101, reverse = true, transform = Rot) |>
            greenfunction;
 
-julia> gx1 = sum(abs2, g(0.04)[siteselector(), 1], dims = 2);
+julia> gx1 = sum(abs2, g(-3.96)[siteselector(), 1], dims = 2);
 
 julia> qplot(hcentral, hide = :hops, siteoutline = 1, sitecolor = (i, r) -> gx1[i], siteradius = (i, r) -> gx1[i], minmaxsiteradius = (0, 2), sitecolormap = :balance)
 ```
@@ -83,7 +83,7 @@ It's apparent from the plot that the transmission from right to left (`T₂₁` 
 ```julia
 julia> using ProgressMeter
 
-julia> T₂₁ = transmission(g[2,1]); T₃₁ = transmission(g[3,1]); ωs = subdiv(0, 8, 201);
+julia> T₂₁ = transmission(g[2,1]); T₃₁ = transmission(g[3,1]); ωs = subdiv(-4, 4, 201);
 
 julia> T₂₁ω = @showprogress [T₂₁(ω) for ω in ωs]; T₃₁ω = @showprogress [T₃₁(ω) for ω in ωs];
 Progress: 100%|██████████████████████████████████████████████████████████████| Time: 0:01:02
@@ -109,7 +109,7 @@ Conductance{Float64}: Zero-temperature conductance dIᵢ/dVⱼ from contacts i,j
   Current contact  : 1
   Bias contact     : 1
 
-julia> Gω = @showprogress  [G₁₁(ω) for ω in ωs];
+julia> ωs = subdiv(-4, 4, 201); Gω = @showprogress [G₁₁(ω) for ω in ωs];
 Progress: 100%|██████████████████████████████████████████████████████████████| Time: 0:01:01
 
 julia> f = Figure(); a = Axis(f[1,1], xlabel = "eV/t", ylabel = "G [e²/h]"); lines!(a, ωs, Gω); f
@@ -121,4 +121,116 @@ julia> f = Figure(); a = Axis(f[1,1], xlabel = "eV/t", ylabel = "G [e²/h]"); li
 !!! warning "Sign of non-local conductance"
     If you compute a non-local conductance such as `conductance(g[2,1])(ω)` in this example you will note it is negative. This is actually expected. It means that the current flowing **into** the system through the right contact when you **increase** the bias in a different contact is negative, because the current is actually flowing out into the right reservoir.
 
+The conductance can also be computed for hybrid (normal-superconducting) systems. To do so,
+one first needs to write the model in the Nambu representation, i.e. with particle and hole
+orbitals on each site (first particles, then holes). In the above examples amounts to
+switching `hopping(-1)` to `hamiltonian(onsite(Δ*σx) - hopping(σz), orbitals = 2)`, with `σx
+= SA[0 1; 1 0]`, `σz = SA[1 0; 0 -1]` and `Δ` the pairing amplitude. Then we must specify
+`G₁₁ = conductance(g[1,1], nambu = true)` to take into account Andreev reflections. The
+above example with left, bottom and top leads superconducting (with `Δ=0.3`) yields the
+following conductance `G₁₁` in the right (normal) lead (we leave the implementation as an
+exercise for the reader).
+```@raw html
+<img src="../../assets/four_terminal_nambu.png" alt="Local conductance from right contact, with other contacts superconducting" width="400" class="center"/>
+```
+Note that within the gap Andreev reflection leads to an enhancement of conductance, since
+the contacts are transparent
+
 ## Josephson
+
+The above example showcases normal-superconductor (NS) conductance, which is a Fermi-surface
+process in response to an electric bias on the normal contacts. In contrast,
+supercorconductor-superconductor junctions, also known as Josephson junctions, can exhibit
+supercurrents carried by the full Fermi sea even without a bias. Usually, this supercurrent
+flows in response to a phase bias between the superconductors, where by phase we mean the
+complex phase of the `Δ` order parameter.
+
+We can compute the supercurrent or the full current-phase relation of a Josephson junction
+with the command `josephson(gs::GreenSlice, ωmax)`, where `gs = g[contact_id]` and `ωmax` is
+the full bandwidth of the system (i.e. the maximum energy, in absolute value, spanned by the
+Fermi sea). This latter quantity can be an estimate or even an upper bound, as it is just
+used to know up to which energy we should integrate the supercurrent. Let us see an example.
+```julia
+julia> σz = SA[1 0; 0 -1];
+
+julia> central_region = RP.circle(50) & !RP.circle(40) | RP.rectangle((4, 10), (-50, 0)) | RP.rectangle((4, 10), (50, 0));
+
+julia> h = LP.square() |> hamiltonian(hopping(-σz), orbitals = 2) |> supercell(region = central_region)
+
+julia> Σ(ω, Δ) = SA[-ω Δ; conj(Δ) -ω]/sqrt(1-abs2(Δ))
+
+julia> g = h |>
+    attach(@onsite((ω; Δ = 0.2) -> Σ(ω, Δ)); region = r -> r[1] < -51) |>
+    attach(@onsite((ω; Δ = 0.2, phase = 0) -> Σ(ω, Δ*cis(phase))); region = r -> r[1] > 51) |>
+    greenfunction
+GreenFunction{Float64,2,0}: Green function of a Hamiltonian{Float64,2,0}
+  Solver          : AppliedSparseLUGreenSolver
+  Contacts        : 2
+  Contact solvers : (SelfEnergyModelSolver, SelfEnergyModelSolver)
+  Contact sizes   : (11, 11)
+  Hamiltonian{Float64,2,0}: Hamiltonian on a 0D Lattice in 2D space
+    Bloch harmonics  : 1
+    Harmonic size    : 2884 × 2884
+    Orbitals         : [2]
+    Element type     : 2 × 2 blocks (ComplexF64)
+    Onsites          : 0
+    Hoppings         : 10800
+    Coordination     : 3.7448
+
+julia> J = josephson(g[1], 4.1)
+Integrator: Complex-plane integrator
+  Integration path    : (-4.1 + 1.4901161193847656e-8im, -2.05 + 2.050000014901161im, 0.0 + 1.4901161193847656e-8im)
+  Integration options : (atol = 1.0e-7,)
+  Integrand:          :
+  JosephsonDensity{Float64} : Equilibrium (dc) Josephson current observable before integration over energy
+    kBT                     : 0.0
+    Contact                 : 1
+    Number of phase shifts  : 0
+
+julia> qplot(g)
+```
+```@raw html
+<img src="../../assets/josephson_lat.png" alt="Josephson junction" width="400" class="center"/>
+```
+
+In this case we have chosen to introduce the superconducting leads with a model self-energy,
+corresponding to a BCS bulk, but any other self-energy form could be used. We have introduced the phase difference (`phase`) as a model parameter. We can now evaluate the zero-temperature Josephson current simply with
+```julia
+julia> J(phase = 0)
+-1.974396994480587e-16
+
+julia> J(phase = 0.2)
+0.004617597139699372
+```
+Note that finite temperatures can be taken using the `kBT` keyword argument for `josephson`, see docstring for details.
+
+One is often interested in the critical current, which is the maximum of the Josephson current over all phase differences. Quantica.jl can compute the integral over a collection of phase differences simulataneously, which is more efficient that computing them one by one. This is done with
+```julia
+julia> φs = subdiv(0, pi, 11); J = josephson(g[1], 4.1; phases = φs)
+  Integration path    : (-4.1 + 1.4901161193847656e-8im, -2.05 + 2.050000014901161im, 0.0 + 1.4901161193847656e-8im)
+  Integration options : (atol = 1.0e-7,)
+  Integrand:          :
+  JosephsonDensity{Float64} : Equilibrium (dc) Josephson current observable before integration over energy
+    kBT                     : 0.0
+    Contact                 : 1
+    Number of phase shifts  : 11
+
+julia> Iφ = J()
+11-element Vector{Float64}:
+ 1.868862401627357e-14
+ 0.007231421775452674
+ 0.014242855188877
+ 0.02081870760779799
+ 0.026752065104401878
+ 0.031847203848574666
+ 0.0359131410974842
+ 0.03871895510547465
+ 0.039762442694035505
+ 0.03680096751905469
+ 2.7677727119798235e-14
+
+julia> f = Figure(); a = Axis(f[1,1], xlabel = "φ", ylabel = "I [e/h]"); lines!(a, φs, Iφ); scatter!(a, φs, Iφ); f
+```
+```@raw html
+<img src="../../assets/josephson_CPR.png" alt="Josephson junction current-phase relation" width="400" class="center"/>
+```
