@@ -20,7 +20,7 @@ Lattice{Float64,2,2} : 2D lattice in 2D space
 ```
 
 !!! tip "Tuple, SVector and SMatrix"
-    Note that we have used `Tuple`s, such as `(0, 1/2)` instead of `Vector`s, like `[0, 1/2]`. In Julia small-length `Tuple`s are much more efficient as containers than `Vector`s, since their length is known and fixed at compile time. Static vectors (`SVector`) and matrices (`SMatrix`) are also available to Quantica, which are just as efficient as `Tuple`s, and they also implement linear algebra operations. They be entered as e.g. `SA[0, 1/2]` and `SA[1 0; 0 1]`, respectively. For efficiency, always use `Tuple`, `SVector` and `SMatrix` in Quantica.jl where possible.
+    Note that we have used `Tuple`s, such as `(0, 1/2)` instead of `Vector`s, like `[0, 1/2]`. In Julia small-length `Tuple`s are much more efficient as containers than `Vector`s, since their length is known and fixed at compile time. Static vectors (`SVector`) and matrices (`SMatrix`) are also available to Quantica, which are just as efficient as `Tuple`s, and they also implement linear algebra operations. They may be entered as e.g. `SA[0, 1/2]` and `SA[1 0; 0 1]`, respectively. For efficiency, always use `Tuple`, `SVector` and `SMatrix` in Quantica.jl where possible.
 
 If we don't plan to address the two sublattices individually, we could also fuse them into one, like
 ```julia
