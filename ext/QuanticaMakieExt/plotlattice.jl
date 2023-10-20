@@ -25,7 +25,6 @@
         hopdarken = 0.85,
         hopcolormap = :Spectral_9,
         hoppixels = 6,
-        pixelscalesites = 2√2,
         selector = missing,
         hide = :cell, # :hops, :sites, :bravais, :cell, :axes, :shell, :all
     )
@@ -41,8 +40,7 @@ const PlotLatticeArgumentType{E} = Union{Lattice{<:Any,E},LatticeSlice{<:Any,E},
 
 function Quantica.qplot(h::PlotLatticeArgumentType{3}; fancyaxis = true, axis = (;), figure = (;), inspector = false, plotkw...)
     fig, ax = empty_fig_axis_3D(plotlat_default_3D...; fancyaxis, axis, figure)
-    fancyaxis ? plotlattice!(ax, h; plotkw...) :
-                plotlattice!(ax, h; pixelscalesites = 1, plotkw...)  # Makie BUG workaround?
+    plotlattice!(ax, h; plotkw...)
     inspector && DataInspector()
     return fig
 end
@@ -529,8 +527,7 @@ end
 
 function plotsites_flat!(plot::PlotLattice, sp::SitePrimitives, transparency)
     inspector_label = (self, i, r) -> sp.tooltips[i]
-    scalefactor = plot[:pixelscalesites][]
-    markersize = scalefactor ≈ 1 ? sp.radii : scalefactor * sp.radii
+    markersize = 2*sp.radii
     scatter!(plot, sp.centers;
         markersize,
         # Circle required until https://github.com/MakieOrg/Makie.jl/pull/3281 is merged

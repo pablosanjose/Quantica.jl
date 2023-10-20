@@ -77,7 +77,6 @@ inter-site links.
 - `minmaxhopradius = (0, 0.1)`: if `hopdradius` is a shader, minimum and maximum hop radius.
 - `hopdarken = 0.85`: darkening factor for hops
 - `selector = missing`: an optional `siteselector(; sites...)` to filter which sites are shown (see `siteselector`)
-- `pixelscalesites = 2√2`: for `flat = true`, conversion factor between `minmaxsiteradius` (in lattice space) and actual site radius (in pixel space)
 - `hide = (:cell,)`: collection of elements to hide, to choose from `(:hops, :sites, :hops, :bravais, :cell, :axes, :shell, :all)`. It can also be an empty collection or `nothing` to show all elements.
 
 ## Shaders
