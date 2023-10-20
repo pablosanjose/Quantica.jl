@@ -219,7 +219,7 @@ function apply(solver::AbstractEigenSolver, h::AbstractHamiltonian, ::Type{S}, m
     h´ = minimal_callsafe_copy(h)
     # Some solvers (e.g. ES.LinearAlgebra) only accept certain matrix types
     # so this mat´ could be an alias of the call! output, or an unaliased conversion
-    mat´ = ES.input_matrix(solver, h)
+    mat´ = ES.input_matrix(solver, h´)
     function sfunc(φs)
         φs´ = apply_map(mapping, φs)    # this can be a FrankenTuple
         mat = call!(h´, φs´)

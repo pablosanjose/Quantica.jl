@@ -26,6 +26,8 @@ using Quantica: Quantica, AbstractEigenSolver, ensureloaded, SVector, SMatrix,
 # an alias of h's call! output makes apply call! conversion a no-op, see apply.jl
 input_matrix(::AbstractEigenSolver, h) = call!_output(h)
 
+is_thread_safe(::AbstractEigenSolver) = true
+
 #### LinearAlgebra #####
 
 struct LinearAlgebra{K} <: AbstractEigenSolver
@@ -59,6 +61,9 @@ function (solver::Arpack)(mat::AbstractMatrix{<:Number})
     ε, Ψ, _ = Quantica.Arpack.eigs(mat; solver.kwargs...)
     return sanitize_eigen(ε, Ψ)
 end
+
+# See https://github.com/JuliaLinearAlgebra/Arpack.jl/issues/86
+is_thread_safe(::Arpack) = false
 
 #### KrylovKit #####
 

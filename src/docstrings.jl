@@ -1088,7 +1088,7 @@ unflat
 alias `ES` can be used in place of `EigenSolvers`. Currently supported solvers are
 
     ES.LinearAlgebra(; kw...)       # Uses `eigen(mat; kw...)` from the `LinearAlgebra` package
-    ES.Arpack(; kw...)              # Uses `eigs(mat; kw...)` from the `Arpack` package
+    ES.Arpack(; kw...)              # Uses `eigs(mat; kw...)` from the `Arpack` package (WARNING: Arpack is not thread-safe)
     ES.KrylovKit(params...; kw...)  # Uses `eigsolve(mat, params...; kw...)` from the `KrylovKit` package
     ES.ArnoldiMethod(; kw...)       # Uses `partialschur(mat; kw...)` from the `ArnoldiMethod` package
 
