@@ -531,19 +531,16 @@ function plotsites_flat!(plot::PlotLattice, sp::SitePrimitives, transparency)
     inspector_label = (self, i, r) -> sp.tooltips[i]
     scalefactor = plot[:pixelscalesites][]
     markersize = scalefactor ≈ 1 ? sp.radii : scalefactor * sp.radii
-    opts = (
+    scatter!(plot, sp.centers;
+        markersize,
+        # Circle required until https://github.com/MakieOrg/Makie.jl/pull/3281 is merged
+        marker = Circle,
         color = sp.colors,
         markerspace = :data,
         strokewidth = plot[:siteoutline][],
         strokecolor = darken.(sp.colors, Ref(plot[:siteoutlinedarken][])),
         transparency,
         inspector_label)
-    ## performance BUG in markersize: currently required in Makie for performance
-    if allequal(sp.radii)
-        scatter!(plot, sp.centers; markersize = first(scalefactor*sp.radii), opts...)
-    else
-        scatter!(plot, sp.centers; markersize, opts...)
-    end
     return plot
 end
 
