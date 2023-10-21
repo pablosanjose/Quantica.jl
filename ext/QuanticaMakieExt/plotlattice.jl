@@ -180,7 +180,7 @@ maybe_evaluate_observable(o::Quantica.IndexableObservable, ls) = o[ls]
 maybe_evaluate_observable(x, ls) = x
 
 maybe_getindex(v::AbstractVector, i) = v[i]
-maybe_getindex(m::AbstractMatrix, i) = sum(view(m, :, i))
+maybe_getindex(m::AbstractMatrix, i) = sum(view(m, i, :))
 maybe_getindex(m::Quantica.AbstractSparseMatrixCSC, i) = sum(view(nonzeros(m), nzrange(m, i)))
 maybe_getindex(v, i) = v
 maybe_getindex(v::AbstractVector, i, j) = 0.5*(v[i] + v[j])

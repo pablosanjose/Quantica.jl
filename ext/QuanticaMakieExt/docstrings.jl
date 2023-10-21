@@ -85,11 +85,15 @@ inter-site links.
 
 The element properties in the list above that accept site shaders may take either of these options
 - `(i, r) -> Real`: a real function of site index `i::Int` and site position `r::SVector`.
+- `AbstractVector`: a real vector representing the shading for each plotted site
+- `AbstractMatrix`: a real matrix whose summed rows represent the shading for each plotted site
 - `LocalSpectralDensitySolution`: a generator of local density of states at a fixed energy (see `ldos`). It is evaluated at the site position.
 - `CurrentDensitySolution`: a generator of local current density at a fixed energy (see `current`). It is taken as the sum of currents along all hops connected to the site.
 
 Element properties marked as accepting hop shaders may take either of these options
 - `((src, dst), (r, dr)) -> Real`: a real function of site indices `(src, dst)` and hop coordinates `(r, dr)` (see `hopselector` for definition of hop coordinates)
+- `AbstractVector`: a real vector `v` such that `(v[i]+v[j])/2` represents the shading for each hopping `j => i`
+- `AbstractMatrix`: a real matrix `m` such that `m[i,j]` represents the shading for each hopping `j => i`
 - `LocalSpectralDensitySolution`: a generator of local density of states at a fixed energy (see `ldos`). It is evaluated as the average between connected sites.
 - `CurrentDensitySolution`: a generator of local current density at a fixed energy (see `current`). It is taken as the current along the hop.
 

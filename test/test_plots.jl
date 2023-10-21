@@ -28,6 +28,12 @@ end
     @test qplot(g) isa Figure
     g = LP.linear() |> hamiltonian(hopping(I), orbitals = 2) |> attach(@onsite(ω->im*I), cells = 1) |> attach(@onsite(ω->im*I), cells = 4) |> greenfunction
     @test qplot(g, cells = -10:10) isa Figure
+    # matrix shader
+    gx1 = abs2.(g(0.01)[siteselector(cells = 1:10), 1])
+    @test qplot(g, selector = siteselector(cells = 1:10), sitecolor = gx1) isa Figure
+    # vector shader
+    gx1´ = vec(sum(gx1, dims = 2))
+    @test qplot(g, selector = siteselector(cells = 1:10), sitecolor = gx1´) isa Figure
 end
 
 @testset "plot bands" begin
