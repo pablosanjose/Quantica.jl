@@ -92,13 +92,19 @@ function recursive_push!(v::Vector{Pair{T,T}}, (xs, ys)::Pair) where {T}
     return v
 end
 
-# for cells = function
+# for cells::Function
 function recursive_push!(v::Vector{SVector{L,Int}}, fcell::Function) where {L}
     iter = BoxIterator(zero(SVector{L,Int}))
+    keepgoing = true
     for cell in iter
-        fcell(cell) || continue
-        acceptcell!(iter, cell)
-        push!(v, cell)
+        found = fcell(cell)
+        if found || keepgoing
+            acceptcell!(iter, cell)
+            if found
+                push!(v, cell)
+                keepgoing = false
+            end
+        end
     end
     return v
 end
