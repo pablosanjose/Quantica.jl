@@ -168,6 +168,9 @@ end
     @test ls2[2] isa Tuple{SVector{2, Int}, Int}
     ls = ls1[sublats = :B]
     @test isempty(ls)
-    ls = lat[cells = n -> norm(n) < 4]
-    @test all(n -> norm(n) < 4, Quantica.cells(ls))
+    ls = lat[cells = n -> 5 < norm(n) < 10]
+    @test !isempty(Quantica.cells(ls)) && all(n -> 5 < norm(n) < 10, Quantica.cells(ls))
+    ls = lat[region = r -> 5 < norm(r) < 10]
+    @test !isempty(Quantica.cells(ls)) && all(r -> 5 < norm(r) < 10, Quantica.sites(ls))
+
 end

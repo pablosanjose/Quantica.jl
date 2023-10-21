@@ -70,11 +70,15 @@ isonsite(dr) = iszero(dr)
 function foreach_cell(f, sel::AppliedSiteSelector)
     lat = lattice(sel)
     cells_list = cells(sel)
-    if isempty(cells_list) # no cells specified
+    if isempty(cells_list)      # no cells specified
         iter = BoxIterator(zerocell(lat))
+        keepgoing = true        # will search until we find at least one
         for cell in iter
             found = f(cell)
-            found && acceptcell!(iter, cell)
+            if found || keepgoing
+                acceptcell!(iter, cell)
+                found && (keepgoing = false)
+            end
         end
     else
         for cell in cells_list
