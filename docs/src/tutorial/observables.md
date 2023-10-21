@@ -71,13 +71,16 @@ julia> g = hcentral |>
            attach(glead, region = r -> r[2] == -101, reverse = true, transform = Rot) |>
            greenfunction;
 
-julia> gx1 = sum(abs2, g(-3.96)[siteselector(), 1], dims = 2);
+julia> gx1 = abs2.(g(-3.96)[siteselector(), 1]);
 
-julia> qplot(hcentral, hide = :hops, siteoutline = 1, sitecolor = (i, r) -> gx1[i], siteradius = (i, r) -> gx1[i], minmaxsiteradius = (0, 2), sitecolormap = :balance)
+julia> qplot(hcentral, hide = :hops, siteoutline = 1, sitecolor = gx1, siteradius = gx1, minmaxsiteradius = (0, 2), sitecolormap = :balance)
 ```
 ```@raw html
 <img src="../../assets/four_terminal_g_big.png" alt="Green function from right lead" width="400" class="center"/>
 ```
+
+!!! tip "Matrix and vector shaders"
+    In the above example `gx1` is a matrix with one row per orbital in `hcentral`. The color and radii of each site is obtained from the sum of each row. If `gx1` were a vector, the color/radius of site `i` would be taken as `gx1[i]`. See `plotlattice` for more details and other shader types.
 
 It's apparent from the plot that the transmission from right to left (`T₂₁` here) at this energy of `0.04` is larger than from right to top (`T₃₁`). Is this true in general? Let us compute the two transmissions as a function of energy. To show the progress of the calculation we can use a monitor package, such as `ProgressMeter`
 ```julia
