@@ -219,12 +219,13 @@ function apply(solver::AbstractEigenSolver, h::AbstractHamiltonian, ::Type{S}, m
     h´ = minimal_callsafe_copy(h)
     # Some solvers (e.g. ES.LinearAlgebra) only accept certain matrix types
     # so this mat´ could be an alias of the call! output, or an unaliased conversion
-    mat´ = ES.input_matrix(solver, h)
+    mat´ = ES.input_matrix(solver, h´)
     function sfunc(φs)
-        φs´ = apply_map(mapping, φs)    # this can be a FrankenTuple
+        φs´ = apply_map(mapping, φs)      # this can be a FrankenTuple
         mat = call!(h´, φs´)
         mat´ === mat || copy!(mat´, mat)
-        # the solver always receives the matrix type declared by ES.input_matrix
+        # mat´ could be dense, while mat is sparse, so if not egal, we copy
+        # the solver always receives the type of matrix mat´ declared by ES.input_matrix
         eigen = solver(mat´)
         apply_transform!(eigen, transform)
         return eigen

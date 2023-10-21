@@ -88,8 +88,12 @@ function bands(h::Function, mesh::Mesh{S};
     return ss
 end
 
-eigensolvers_thread_pool(solver, h, S, mapping, transform) =
-    [apply(solver, h, S, mapping, transform) for _ in 1:Threads.nthreads()]
+function eigensolvers_thread_pool(solver, h, S, mapping, transform)
+    # if h::Function we cannot be sure it is thread-safe
+    nsolvers = ES.is_thread_safe(solver) && h isa AbstractHamiltonian ? Threads.nthreads() : 1
+    solvers = [apply(solver, h, S, mapping, transform) for _ in 1:nsolvers]
+    return solvers
+end
 
 function subbands(hf, solvers, basemesh::Mesh{SVector{L,T}};
          showprogress = true, defects = (), patches = 0, degtol = missing, split = true, warn = true, projectors = false) where {T,L}
@@ -250,11 +254,20 @@ function subbands_diagonalize!(data)
     baseverts = vertices(data.basemesh)
     meter = Progress(length(baseverts), "Step 1 - Diagonalizing: ")
     push!(data.coloffsets, 0) # first element
-    Threads.@threads :static for i in eachindex(baseverts)
-        vert = baseverts[i]
-        solver = data.solvers[Threads.threadid()]
-        data.eigens[i] = solver(vert)
-        data.showprogress && ProgressMeter.next!(meter)
+    if length(data.solvers) > 1
+        Threads.@threads :static for i in eachindex(baseverts)
+            vert = baseverts[i]
+            solver = data.solvers[Threads.threadid()]
+            data.eigens[i] = solver(vert)
+            data.showprogress && ProgressMeter.next!(meter)
+        end
+    else
+        solver = first(data.solvers)
+        for i in eachindex(baseverts)
+            vert = baseverts[i]
+            data.eigens[i] = solver(vert)
+            data.showprogress && ProgressMeter.next!(meter)
+        end
     end
     # Collect band vertices and store column offsets
     for (basevert, eigen) in zip(baseverts, data.eigens)
