@@ -4,7 +4,7 @@
 
 ## qplot defaults
 
-function qplotdefaults(; figure = (;), axis = (;))
+function qplotdefaults(; figure::NamedTuple = (;), axis::NamedTuple = (;))
     global default_figure_kwarg = figure
     global default_axis_kwarg = axis
     return (; default_figure_kwarg, default_axis_kwarg)
