@@ -27,7 +27,7 @@ export sublat, bravais_matrix, lattice, sites, supercell,
        unflat, wrap, transform, translate, combine,
        spectrum, energies, states, bands, subdiv,
        greenfunction, selfenergy, attach, contact, cellsites,
-       plotlattice, plotlattice!, plotbands, plotbands!, qplot, qplot!,
+       plotlattice, plotlattice!, plotbands, plotbands!, qplot, qplot!, qplotdefaults,
        conductance, josephson, ldos, current, transmission
 
 export LatticePresets, LP, RegionPresets, RP, HamiltonianPresets, HP
@@ -84,6 +84,7 @@ function plotbands end
 function plotbands! end
 function qplot end
 function qplot! end
+function qplotdefaults end
 
 qplot(args...; kw...) =
     argerror("No plotting backend found or unexpected argument. Forgot to do e.g. `using GLMakie`?")
