@@ -26,7 +26,7 @@ end
 const PlotBandsArgumentType =
     Union{Quantica.Bandstructure,Quantica.Subband,AbstractVector{<:Quantica.Subband},AbstractVector{<:Quantica.Mesh},Quantica.Mesh}
 
-function Quantica.qplot(b::PlotBandsArgumentType; fancyaxis = true, axis = (;), figure = (;), inspector = false, plotkw...)
+function Quantica.qplot(b::PlotBandsArgumentType; fancyaxis = true, axis = default_axis_user, figure = default_figure_user, inspector = false, plotkw...)
     meshes = collect(Quantica.meshes(b))
     E = Quantica.embdim(first(meshes))
     fig, ax = if E < 3
@@ -42,26 +42,6 @@ function Quantica.qplot(b::PlotBandsArgumentType; fancyaxis = true, axis = (;), 
 end
 
 Quantica.qplot!(b::PlotBandsArgumentType; kw...) = plotbands!(b; kw...)
-
-const plotbands_default_figure = (; resolution = (1200, 1200), fontsize = 40)
-
-const plotbands_default_axis3D = (;
-    xticklabelcolor = :gray, yticklabelcolor = :gray, zticklabelcolor = :gray,
-    xspinewidth = 0.2, yspinewidth = 0.2, zspinewidth = 0.2,
-    xlabelrotation = 0, ylabelrotation = 0, zlabelrotation = 0,
-    xticklabelsize = 30, yticklabelsize = 30, zticklabelsize = 30,
-    xlabelsize = 40, ylabelsize = 40, zlabelsize = 40,
-    xlabelfont = :italic, ylabelfont = :italic, zlabelfont = :italic,
-    perspectiveness = 0.0, aspect = :data)
-
-const plotbands_default_axis2D = (; autolimitaspect = nothing)
-
-const plotbands_default_lscene = (;)
-
-const plotbands_default_2D =
-    (plotbands_default_figure, plotbands_default_axis2D)
-const plotbands_default_3D =
-    (plotbands_default_figure, plotbands_default_axis3D, plotbands_default_lscene)
 
 #endregion
 

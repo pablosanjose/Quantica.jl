@@ -38,21 +38,21 @@ end
 
 const PlotLatticeArgumentType{E} = Union{Lattice{<:Any,E},LatticeSlice{<:Any,E},AbstractHamiltonian{<:Any,E}}
 
-function Quantica.qplot(h::PlotLatticeArgumentType{3}; fancyaxis = true, axis = (;), figure = (;), inspector = false, plotkw...)
+function Quantica.qplot(h::PlotLatticeArgumentType{3}; fancyaxis = true, axis = default_axis_user, figure = default_figure_user, inspector = false, plotkw...)
     fig, ax = empty_fig_axis_3D(plotlat_default_3D...; fancyaxis, axis, figure)
     plotlattice!(ax, h; plotkw...)
     inspector && DataInspector()
     return fig
 end
 
-function Quantica.qplot(h::PlotLatticeArgumentType; axis = (;), figure = (;), inspector = false, plotkw...)
+function Quantica.qplot(h::PlotLatticeArgumentType; axis = default_axis_user, figure = default_figure_user, inspector = false, plotkw...)
     fig, ax = empty_fig_axis_2D(plotlat_default_2D...; axis, figure)
     plotlattice!(ax, h; plotkw...)
     inspector && DataInspector()
     return fig
 end
 
-function Quantica.qplot(g::GreenFunction; fancyaxis = true, axis = (;), figure = (;), inspector = false, children = missing, plotkw...)
+function Quantica.qplot(g::GreenFunction; fancyaxis = true, axis = default_axis_user, figure = default_figure_user, inspector = false, children = missing, plotkw...)
     fig, ax = empty_fig_axis(g; fancyaxis, axis, figure)
     Σkws = Iterators.cycle(parse_children(children))
     Σs = Quantica.selfenergies(Quantica.contacts(g))
@@ -80,27 +80,6 @@ empty_fig_axis(::GreenFunction{<:Any,3}; kw...) =
     empty_fig_axis_3D(plotlat_default_3D...; kw...)
 empty_fig_axis(::GreenFunction; kw...) =
     empty_fig_axis_2D(plotlat_default_2D...; kw...)
-
-const plotlat_default_figure = (; resolution = (1200, 1200), fontsize = 40)
-
-const plotlat_default_axis3D = (;
-    xlabel = "x", ylabel = "y", zlabel = "z",
-    xticklabelcolor = :gray, yticklabelcolor = :gray, zticklabelcolor = :gray,
-    xspinewidth = 0.2, yspinewidth = 0.2, zspinewidth = 0.2,
-    xlabelrotation = 0, ylabelrotation = 0, zlabelrotation = 0,
-    xticklabelsize = 30, yticklabelsize = 30, zticklabelsize = 30,
-    xlabelsize = 40, ylabelsize = 40, zlabelsize = 40,
-    xlabelfont = :italic, ylabelfont = :italic, zlabelfont = :italic,
-    perspectiveness = 0.0, aspect = :data)
-
-const plotlat_default_axis2D = (; autolimitaspect = 1)
-
-const plotlat_default_lscene = (;)
-
-const plotlat_default_2D =
-    (plotlat_default_figure, plotlat_default_axis2D)
-const plotlat_default_3D =
-    (plotlat_default_figure, plotlat_default_axis3D, plotlat_default_lscene)
 
 #endregion
 
