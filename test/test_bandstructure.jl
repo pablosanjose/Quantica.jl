@@ -1,4 +1,5 @@
 using Quantica: nsubbands, nvertices, nedges, nsimplices
+using Random
 
 @testset "basic bandstructures" begin
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(-1))
@@ -57,6 +58,12 @@ end
     b = bands(hf, m, showprogress = false, mapping = x -> 2π * x)
     @test nsubbands(b) == 1
     @test nsimplices(b)  == 36
+    # teting thread safety - we should fall back to a single thread for hf::Function
+    Random.seed!(1) # to have ArnoldiMethod be deterministic
+    hf((x,)) = Quantica.call!(hc, (x, -x))
+    m = subdiv(0,2π,40)
+    b = bands(hf, m, showprogress = false, solver = ES.ArnoldiMethod(nev = 18))
+    @test nsubbands(b) == 1
 
     hp2 = LatticePresets.honeycomb() |> hamiltonian(hopping(-1), @hopping!((t; s) -> s*t))
     hf2((s, x)) = Matrix(Quantica.call!(hp2, (x, x); s))

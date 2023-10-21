@@ -89,7 +89,8 @@ function bands(h::Function, mesh::Mesh{S};
 end
 
 function eigensolvers_thread_pool(solver, h, S, mapping, transform)
-    nsolvers = ES.is_thread_safe(solver) ? Threads.nthreads() : 1
+    # if h::Function we cannot be sure it is thread-safe
+    nsolvers = ES.is_thread_safe(solver) && h isa AbstractHamiltonian ? Threads.nthreads() : 1
     solvers = [apply(solver, h, S, mapping, transform) for _ in 1:nsolvers]
     return solvers
 end
