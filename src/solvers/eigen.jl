@@ -67,14 +67,14 @@ is_thread_safe(::Arpack) = false
 
 #### KrylovKit #####
 
-struct KrylovKit{P,K} <: AbstractEigenSolver
+struct KrylovKit{P<:Tuple,K<:NamedTuple} <: AbstractEigenSolver
     params::P
     kwargs::K
 end
 
 function KrylovKit(params...; kw...)
     ensureloaded(:KrylovKit)
-    return KrylovKit(params, kw)
+    return KrylovKit(params, NamedTuple(kw))
 end
 
 function (solver::KrylovKit)(mat)
