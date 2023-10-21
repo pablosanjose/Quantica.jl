@@ -3,13 +3,13 @@
 #region
 
 function qplotdefaults(; figure = (;), axis = (;))
-    global default_figure_user = figure
-    global default_axis_user = axis
-    return (; default_figure_user, default_axis_user)
+    global default_figure_kwarg = figure
+    global default_axis_kwarg = axis
+    return (; default_figure_kwarg, default_axis_kwarg)
 end
 
-default_figure_user = (;)
-default_axis_user = (;)
+default_figure_kwarg = (;)
+default_axis_kwarg = (;)
 
 const plotlat_default_figure = (; resolution = (1200, 1200), fontsize = 40)
 

@@ -26,7 +26,7 @@ end
 const PlotBandsArgumentType =
     Union{Quantica.Bandstructure,Quantica.Subband,AbstractVector{<:Quantica.Subband},AbstractVector{<:Quantica.Mesh},Quantica.Mesh}
 
-function Quantica.qplot(b::PlotBandsArgumentType; fancyaxis = true, axis = default_axis_user, figure = default_figure_user, inspector = false, plotkw...)
+function Quantica.qplot(b::PlotBandsArgumentType; fancyaxis = true, axis = default_axis_kwarg, figure = default_figure_kwarg, inspector = false, plotkw...)
     meshes = collect(Quantica.meshes(b))
     E = Quantica.embdim(first(meshes))
     fig, ax = if E < 3

@@ -27,6 +27,8 @@ cycling over them if necessary.
 - `inspector::Bool`: whether to enable interactive tooltips of plot elements
 - `plotkw`: additional keywords to pass on to `plotlattice` or `plotbands`, see their docstring for details.
 
+# See also
+    `plotlattice`, `plotbands`, `qplotdefaults`
 """
 qplot
 
@@ -137,3 +139,19 @@ Render bands-based `object` on currently active scene. See `plotbands` for possi
 
 """
 plotbands!
+
+"""
+    qplotdefaults(; figure = (;), axis = (;))
+
+Define default values for the `figure` and `axis` keyword arguments of `qplot`.
+
+# Examples
+```jldoctest
+julia> qplotdefaults(figure = (resolution = (1000, 1000),))
+(default_figure_kwarg = (resolution = (1000, 1000),), default_axis_kwarg = NamedTuple())
+
+julia> qplotdefaults()
+(default_figure_kwarg = NamedTuple(), default_axis_kwarg = NamedTuple())
+```
+"""
+qplotdefaults

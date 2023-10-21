@@ -38,21 +38,21 @@ end
 
 const PlotLatticeArgumentType{E} = Union{Lattice{<:Any,E},LatticeSlice{<:Any,E},AbstractHamiltonian{<:Any,E}}
 
-function Quantica.qplot(h::PlotLatticeArgumentType{3}; fancyaxis = true, axis = default_axis_user, figure = default_figure_user, inspector = false, plotkw...)
+function Quantica.qplot(h::PlotLatticeArgumentType{3}; fancyaxis = true, axis = default_axis_kwarg, figure = default_figure_kwarg, inspector = false, plotkw...)
     fig, ax = empty_fig_axis_3D(plotlat_default_3D...; fancyaxis, axis, figure)
     plotlattice!(ax, h; plotkw...)
     inspector && DataInspector()
     return fig
 end
 
-function Quantica.qplot(h::PlotLatticeArgumentType; axis = default_axis_user, figure = default_figure_user, inspector = false, plotkw...)
+function Quantica.qplot(h::PlotLatticeArgumentType; axis = default_axis_kwarg, figure = default_figure_kwarg, inspector = false, plotkw...)
     fig, ax = empty_fig_axis_2D(plotlat_default_2D...; axis, figure)
     plotlattice!(ax, h; plotkw...)
     inspector && DataInspector()
     return fig
 end
 
-function Quantica.qplot(g::GreenFunction; fancyaxis = true, axis = default_axis_user, figure = default_figure_user, inspector = false, children = missing, plotkw...)
+function Quantica.qplot(g::GreenFunction; fancyaxis = true, axis = default_axis_kwarg, figure = default_figure_kwarg, inspector = false, children = missing, plotkw...)
     fig, ax = empty_fig_axis(g; fancyaxis, axis, figure)
     Σkws = Iterators.cycle(parse_children(children))
     Σs = Quantica.selfenergies(Quantica.contacts(g))
