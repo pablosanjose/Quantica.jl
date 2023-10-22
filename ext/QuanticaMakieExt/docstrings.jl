@@ -145,17 +145,22 @@ Render bands-based `object` on currently active scene. See `plotbands` for possi
 plotbands!
 
 """
-    qplotdefaults(; figure = (;), axis = (;))
+    qplotdefaults(; figure = missing, axis2D = missing, axis3D = missing, lscene = missing)
 
 Define default values for the `figure` and `axis` keyword arguments of `qplot`.
+
+    qplotdefaults(defaults::NamedTuple)
+
+Equivalent to `qplotdefaults(; defaults...)`
 
 # Examples
 ```jldoctest
 julia> qplotdefaults(figure = (resolution = (1000, 1000),))
-(default_figure_kwarg = (resolution = (1000, 1000),), default_axis_kwarg = NamedTuple())
+(user_default_figure = (resolution = (1000, 1000),), user_default_axis2D = NamedTuple(), user_default_axis3D = NamedTuple(), user_default_lscene = NamedTuple())
 
-julia> qplotdefaults()
-(default_figure_kwarg = NamedTuple(), default_axis_kwarg = NamedTuple())
+julia> qplotdefaults(axis2D = (xlabel = "X",))
+(user_default_figure = (resolution = (1000, 1000),), user_default_axis2D = (xlabel = "X",), user_default_axis3D = NamedTuple(), user_default_lscene = NamedTuple())
+
 ```
 """
 qplotdefaults

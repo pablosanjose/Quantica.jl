@@ -23,19 +23,9 @@ end
 #   slice(b, ...)::Vector{Mesh}
 #region
 
-const PlotBandsArgumentType =
-    Union{Quantica.Bandstructure,Quantica.Subband,AbstractVector{<:Quantica.Subband},AbstractVector{<:Quantica.Mesh},Quantica.Mesh}
-
-function Quantica.qplot(b::PlotBandsArgumentType; fancyaxis = true, axis = default_axis_kwarg, figure = default_figure_kwarg, inspector = false, plotkw...)
-    meshes = collect(Quantica.meshes(b))
-    E = Quantica.embdim(first(meshes))
-    fig, ax = if E < 3
-        empty_fig_axis_2D(plotbands_default_2D...; axis, figure)
-    elseif E == 3
-        empty_fig_axis_3D(plotbands_default_3D...; fancyaxis, axis, figure)
-    else
-        argerror("Cannot represent a mesh in an $E-dimensional embedding space")
-    end
+function Quantica.qplot(b::PlotBandsArgumentType;
+    fancyaxis = true, axis = axis_defaults(b, fancyaxis), figure = user_default_figure, inspector = false, plotkw...)
+    fig, ax = empty_fig_axis(b; fancyaxis, axis, figure)
     plotbands!(ax, b; plotkw...)
     inspector && DataInspector()
     return fig
