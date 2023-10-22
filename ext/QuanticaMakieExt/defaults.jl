@@ -8,12 +8,14 @@ function qplotdefaults(;
     figure::Union{Missing,NamedTuple} = missing,
     axis2D::Union{Missing,NamedTuple} = missing,
     axis3D::Union{Missing,NamedTuple} = missing,
-    lscene::Union{Missing,NamedTuple} = missing)
+    lscene::Union{Missing,NamedTuple} = missing,
+    inspector::Union{Missing,NamedTuple} = missing)
     ismissing(figure) || (global user_default_figure = figure)
     ismissing(axis2D) || (global user_default_axis2D = axis2D)
     ismissing(axis3D) || (global user_default_axis3D = axis3D)
     ismissing(lscene) || (global user_default_lscene = lscene)
-    return (; user_default_figure, user_default_axis2D, user_default_axis3D, user_default_lscene)
+    ismissing(inspector) || (global user_default_inspector = inspector)
+    return (; user_default_figure, user_default_axis2D, user_default_axis3D, user_default_lscene, user_default_inspector)
 end
 
 qplotdefaults(defaults::NamedTuple) = qplotdefaults(; defaults...)
@@ -22,6 +24,7 @@ user_default_figure = (;)
 user_default_axis2D = (;)
 user_default_axis3D = (;)
 user_default_lscene = (;)
+user_default_inspector = (;)
 
 # Choose used_default_axis for each given type of plotted object
 axis_defaults(::PlotArgumentType{3}, fancyaxis) = axis_defaults(fancyaxis)
@@ -103,5 +106,9 @@ const plotbands_default_2D =
     (plotbands_default_figure, plotbands_default_axis2D)
 const plotbands_default_3D =
     (plotbands_default_figure, plotbands_default_axis3D, plotbands_default_lscene)
+
+## inspector defaults
+
+const default_inspector = (; fontsize = 20)
 
 #endregion

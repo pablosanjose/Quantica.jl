@@ -39,7 +39,7 @@ function Quantica.qplot(h::PlotLatticeArgumentType;
     fancyaxis = true, axis = axis_defaults(h, fancyaxis), figure = user_default_figure, inspector = false, plotkw...)
     fig, ax = empty_fig_axis(h; fancyaxis, axis, figure)
     plotlattice!(ax, h; plotkw...)
-    inspector && DataInspector()
+    inspector && DataInspector(; default_inspector..., user_default_inspector...)
     return fig
 end
 
@@ -56,7 +56,7 @@ function Quantica.qplot(g::GreenFunction; fancyaxis = true, axis = axis_defaults
     # Makie BUG: To allow inspector to show topmost tooltip, it should be transparent
     # if other layers (here the leads) are transparent
     plotlattice!(ax, parent(g); plotkw..., force_transparency = inspector && !isempty(Σs))
-    inspector && DataInspector()
+    inspector && DataInspector(; default_inspector..., user_default_inspector...)
     return fig
 end
 
