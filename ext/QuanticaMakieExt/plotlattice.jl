@@ -1,4 +1,3 @@
-
 ############################################################################################
 # plotlattice recipe
 #region
@@ -36,23 +35,15 @@ end
 # qplot
 #region
 
-const PlotLatticeArgumentType{E} = Union{Lattice{<:Any,E},LatticeSlice{<:Any,E},AbstractHamiltonian{<:Any,E}}
-
-function Quantica.qplot(h::PlotLatticeArgumentType{3}; fancyaxis = true, axis = default_axis_kwarg, figure = default_figure_kwarg, inspector = false, plotkw...)
-    fig, ax = empty_fig_axis_3D(plotlat_default_3D...; fancyaxis, axis, figure)
+function Quantica.qplot(h::PlotLatticeArgumentType;
+    fancyaxis = true, axis = axis_defaults(h, fancyaxis), figure = user_default_figure, inspector = false, plotkw...)
+    fig, ax = empty_fig_axis(h; fancyaxis, axis, figure)
     plotlattice!(ax, h; plotkw...)
-    inspector && DataInspector()
+    inspector && DataInspector(; default_inspector..., user_default_inspector...)
     return fig
 end
 
-function Quantica.qplot(h::PlotLatticeArgumentType; axis = default_axis_kwarg, figure = default_figure_kwarg, inspector = false, plotkw...)
-    fig, ax = empty_fig_axis_2D(plotlat_default_2D...; axis, figure)
-    plotlattice!(ax, h; plotkw...)
-    inspector && DataInspector()
-    return fig
-end
-
-function Quantica.qplot(g::GreenFunction; fancyaxis = true, axis = default_axis_kwarg, figure = default_figure_kwarg, inspector = false, children = missing, plotkw...)
+function Quantica.qplot(g::GreenFunction; fancyaxis = true, axis = axis_defaults(g, fancyaxis), figure = user_default_figure, inspector = false, children = missing, plotkw...)
     fig, ax = empty_fig_axis(g; fancyaxis, axis, figure)
     Σkws = Iterators.cycle(parse_children(children))
     Σs = Quantica.selfenergies(Quantica.contacts(g))
@@ -65,21 +56,15 @@ function Quantica.qplot(g::GreenFunction; fancyaxis = true, axis = default_axis_
     # Makie BUG: To allow inspector to show topmost tooltip, it should be transparent
     # if other layers (here the leads) are transparent
     plotlattice!(ax, parent(g); plotkw..., force_transparency = inspector && !isempty(Σs))
-    inspector && DataInspector()
+    inspector && DataInspector(; default_inspector..., user_default_inspector...)
     return fig
 end
 
-Quantica.qplot!(x::Union{PlotLatticeArgumentType,GreenFunction}; kw...) =
-    plotlattice!(x; kw...)
+Quantica.qplot!(x::PlotLatticeArgumentType; kw...) = plotlattice!(x; kw...)
 
 parse_children(::Missing) = (NamedTuple(),)
 parse_children(p::Tuple) = p
 parse_children(p::NamedTuple) = (p,)
-
-empty_fig_axis(::GreenFunction{<:Any,3}; kw...) =
-    empty_fig_axis_3D(plotlat_default_3D...; kw...)
-empty_fig_axis(::GreenFunction; kw...) =
-    empty_fig_axis_2D(plotlat_default_2D...; kw...)
 
 #endregion
 

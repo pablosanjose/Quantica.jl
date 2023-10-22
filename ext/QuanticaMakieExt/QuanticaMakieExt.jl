@@ -11,7 +11,24 @@ using Quantica: Lattice, LatticeSlice, AbstractHamiltonian, Hamiltonian,
 
 import Quantica: plotlattice, plotlattice!, plotbands, plotbands!, qplot, qplot!, qplotdefaults
 
-# Currying fallback
+## PlotArgumentTypes
+
+const PlotLatticeArgumentType{E} = Union{
+    Lattice{<:Any,E},
+    LatticeSlice{<:Any,E},
+    AbstractHamiltonian{<:Any,E},
+    GreenFunction{<:Any,E}}
+
+const PlotBandsArgumentType{E} =
+    Union{Quantica.Bandstructure{<:Any,E},
+          Quantica.Subband{<:Any,E},
+          AbstractVector{<:Quantica.Subband{<:Any,E}},
+          Quantica.Mesh{<:Quantica.BandVertex{<:Any,E}},
+          AbstractVector{<:Quantica.Mesh{<:Quantica.BandVertex{<:Any,E}}}}
+
+const PlotArgumentType{E} = Union{PlotLatticeArgumentType{E},PlotBandsArgumentType{E}}
+
+## Currying fallbacks
 Quantica.qplot(; kw...) = x -> Quantica.qplot(x; kw...)
 Quantica.qplot!(; kw...) = x -> Quantica.qplot!(x; kw...)
 

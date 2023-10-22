@@ -31,21 +31,6 @@ jointextrema(v, v´) = min(minimum(v; init = 0f0), minimum(v´; init = 0f0)), ma
 safeextrema(v::Missing) = (Float32(0), Float32(1))
 safeextrema(v) = isempty(v) ? (Float32(0), Float32(1)) : extrema(v)
 
-function empty_fig_axis_2D(default_figure, default_axis2D; axis = (;), figure = (;), kw...)
-    fig = Figure(; default_figure..., figure...)
-    ax = Axis(fig[1,1]; default_axis2D..., axis...)
-    tight_ticklabel_spacing!(ax)  # Workaround for Makie issue #3009
-    return fig, ax
-end
-
-function empty_fig_axis_3D(default_figure, default_axis3D, default_lscene; fancyaxis = true, axis = (;), figure = (;), kw...)
-    fig = Figure(; default_figure..., figure...)
-    ax = fancyaxis ?
-        LScene(fig[1,1]; default_lscene..., axis...) :
-        Axis3(fig[1,1]; default_axis3D..., axis...)
-    return fig, ax
-end
-
 has_transparencies(x::Real) = !(x ≈ 1)
 has_transparencies(::Missing) = false
 has_transparencies(x) = true
