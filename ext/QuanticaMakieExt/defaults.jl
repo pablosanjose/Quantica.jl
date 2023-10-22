@@ -71,11 +71,11 @@ const plotlat_default_axis3D = (;
     xspinewidth = 0.2, yspinewidth = 0.2, zspinewidth = 0.2,
     xlabelrotation = 0, ylabelrotation = 0, zlabelrotation = 0,
     xticklabelsize = 30, yticklabelsize = 30, zticklabelsize = 30,
-    xlabelsize = 40, ylabelsize = 40, zlabelsize = 40,
+    xlabelsize = 35, ylabelsize = 35, zlabelsize = 35,
     xlabelfont = :italic, ylabelfont = :italic, zlabelfont = :italic,
     perspectiveness = 0.0, aspect = :data)
 
-const plotlat_default_axis2D = (; autolimitaspect = 1)
+const plotlat_default_axis2D = (; xlabel = "x", ylabel = "y", autolimitaspect = 1)
 
 const plotlat_default_lscene = (;)
 
@@ -89,7 +89,7 @@ const plotlat_default_3D =
 const plotbands_default_figure = (; resolution = (1200, 1200), fontsize = 40)
 
 const plotbands_default_axis3D = (;
-    xlabel = "ϕ₁", ylabel = "ϕ₂", zlabel = "ϕ₃",
+    xlabel = "ϕ₁", ylabel = "ϕ₂", zlabel = "ε",
     xticklabelcolor = :gray, yticklabelcolor = :gray, zticklabelcolor = :gray,
     xspinewidth = 0.2, yspinewidth = 0.2, zspinewidth = 0.2,
     xlabelrotation = 0, ylabelrotation = 0, zlabelrotation = 0,
@@ -98,7 +98,7 @@ const plotbands_default_axis3D = (;
     xlabelfont = :italic, ylabelfont = :italic, zlabelfont = :italic,
     perspectiveness = 0.4, aspect = :data)
 
-const plotbands_default_axis2D = (; autolimitaspect = nothing)
+const plotbands_default_axis2D = (; xlabel = "ε", ylabel = "ϕ", autolimitaspect = nothing)
 
 const plotbands_default_lscene = (;)
 
