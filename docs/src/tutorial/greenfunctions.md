@@ -65,7 +65,7 @@ The currently implemented `GreenSolver`s (abbreviated as `GS`) are the following
 
   For bounded (`L=0`) AbstractHamiltonians. Default for `L=0`.
 
-  Uses a sparse `LU` factorization to compute the `⟨i|(ω - H - Σ(ω))⁻¹|j⟩` inverse.
+  Uses a sparse `LU` factorization to compute the inverse of `⟨i|ω - H - Σ(ω)|j⟩`.
 
 
 - `GS.KPM(order = 100, bandrange = missing, kernel = I)`
@@ -81,6 +81,7 @@ The currently implemented `GreenSolver`s (abbreviated as `GS`) are the following
 
   Uses a deflating Generalized Schur (QZ) factorization of the generalized eigenvalue problem to compute the unit-cell self energies.
   The Dyson equation then yields the Green function between arbitrary unit cells, which is further dressed using a T-matrix approach if the lead has any attached self-energy.
+
 
 - `GS.Bands(bandsargs...; boundary = missing, bandskw...)`
 
