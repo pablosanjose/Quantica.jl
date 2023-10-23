@@ -98,7 +98,7 @@ const plotbands_default_axis3D = (;
     xlabelfont = :italic, ylabelfont = :italic, zlabelfont = :italic,
     perspectiveness = 0.4, aspect = :data)
 
-const plotbands_default_axis2D = (; xlabel = "ε", ylabel = "ϕ", autolimitaspect = nothing)
+const plotbands_default_axis2D = (; xlabel = "ϕ", ylabel = "ε", autolimitaspect = nothing)
 
 const plotbands_default_lscene = (;)
 
