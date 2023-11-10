@@ -137,7 +137,10 @@ function subbands_precompilable(hf::FunctionWrapper, solvers::Vector{A}, basemes
     # Uses multiple SpectrumSolvers (one per Julia thread) to diagonalize h at each
     # vertex of basemesh. Then, it collects each of the produced Spectrum (aka "columns")
     # into a bandverts::Vector{BandVertex}, recording the coloffsets for each column
+    blasthreads = BLAS.get_num_threads()
+    BLAS.set_num_threads(1)
     subbands_diagonalize!(data)
+    BLAS.set_num_threads(blasthreads)
 
     # Step 2 - Knit seams:
     # Each base vertex holds a column of subspaces. Each subspace s of degeneracy d will
