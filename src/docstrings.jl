@@ -577,7 +577,7 @@ Alternative and less general curried form equivalent to `hamiltonian(h, modifier
 
 Return the Bloch harmonic of an `h::AbstractHamiltonian` in the form of a `SparseMatrixCSC`
 with complex scalar `eltype`. This matrix is "flat", in the sense that it contains matrix
-elements between indivisual orbitals, not sites. This distinction is only relevant for
+elements between individual orbitals, not sites. This distinction is only relevant for
 multiorbital Hamiltonians. To access the non-flattened matrix use `h[unflat(dn)]` (see
 also `unflat`).
 

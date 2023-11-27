@@ -1,4 +1,4 @@
-using Quantica: Hamiltonian, ParametricHamiltonian, sites, nsites, nonsites, nhoppings, coordination, flat, hybrid, transform!
+using Quantica: Hamiltonian, ParametricHamiltonian, sites, nsites, nonsites, nhoppings, coordination, flat, hybrid, transform!, nnz
 
 @testset "basic hamiltonians" begin
     presets = (LatticePresets.linear, LatticePresets.square, LatticePresets.triangular, LatticePresets.honeycomb,
@@ -385,4 +385,8 @@ end
     @test c ≈ c'
     @test iszero(diag(c))
     @test all(x -> real(x) ≈ 0, c)
+    cp = co[unflat(SA[1,0])]
+    cm = co[unflat(SA[-1,0])]
+    @test nnz(cp) == nnz(cm) == 2
+    # cp ≈ cm'
 end
