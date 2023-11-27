@@ -1992,23 +1992,13 @@ Base.:(==)(g::GreenSlice, g´::GreenSlice) = function_not_defined("==")
 #endregion
 
 ############################################################################################
-# Operators - Hamiltonian-like operators representing observables other than a Hamiltonian
+# Operator - Hamiltonian-like operator representing observables other than a Hamiltonian
+#   see observables.jl for specific constructors
 #region
 
 struct Operator{H<:AbstractHamiltonian}
     h::H
 end
-
-#region ## Constructors ##
-
-function current(h::AbstractHamiltonian; charge = -I, direction = 1)
-    current = parametric(h,
-        @onsite!(o -> zero(o)),
-        @hopping!((t, r, dr) -> im*dr[direction]*charge*t))
-    return Operator(current)
-end
-
-#endregion
 
 #region ## API ##
 
