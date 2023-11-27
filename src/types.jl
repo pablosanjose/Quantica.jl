@@ -1990,3 +1990,36 @@ Base.:(==)(g::GreenSlice, g´::GreenSlice) = function_not_defined("==")
 
 #endregion
 #endregion
+
+############################################################################################
+# Operators - Hamiltonian-like operators representing observables other than a Hamiltonian
+#region
+
+struct Operator{H<:AbstractHamiltonian}
+    h::H
+end
+
+#region ## Constructors ##
+
+function current(h::AbstractHamiltonian; charge = -I, direction = 1)
+    current = parametric(h,
+        @onsite!(o -> zero(o)),
+        @hopping!((t, r, dr) -> im*dr[direction]*charge*t))
+    return Operator(current)
+end
+
+#endregion
+
+#region ## API ##
+
+hamiltonian(o::Operator) = o.h
+
+(c::Operator)(φ...; kw...) = c.h(φ...; kw...)
+
+call!(c::Operator, φ...; kw...) = call!(c.h, φ...; kw...)
+
+Base.getindex(c::Operator, i...) = getindex(c.h, i...)
+
+#endregion
+
+#endregion

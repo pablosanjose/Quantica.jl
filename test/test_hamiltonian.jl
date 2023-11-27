@@ -376,3 +376,13 @@ end
     h = combine(hb, h0, ht; coupling = hopping((r,dr) -> exp(-norm(dr)), range = 2))
     @test !iszero(h((0,0))[1:2, 5:6])
 end
+
+
+@testset "current operator" begin
+    h = LP.honeycomb() |> hamiltonian(@onsite((; μ = 0) -> (2-μ)*I) - hopping(SA[0 1; 1 0]), orbitals = 2) |> supercell(2)
+    co = current(h, direction = 2)
+    c = co(SA[0,0])
+    @test c ≈ c'
+    @test iszero(diag(c))
+    @test all(x -> real(x) ≈ 0, c)
+end

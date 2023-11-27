@@ -1636,6 +1636,13 @@ true
 ldos
 
 """
+    current(h::AbstractHamiltonian; charge = -I, direction = 1)
+
+Build an `Operator` object that behaves like a `ParametricHamiltonian` in regards to calls
+and getindex, but whose matrix elements are hoppings ``im*(rⱼ-rᵢ)[direction]*charge*tⱼᵢ``,
+where `tᵢⱼ` are the hoppings in `h`. This operator is equal to ``∂h/∂Aᵢ``, where `Aᵢ`
+is a gauge field along `direction = i`.
+
     current(gs::GreenSlice; charge = -I, direction = missing)
 
 Build `Js::CurrentDensitySlice`, a partially evaluated object representing the equilibrium
