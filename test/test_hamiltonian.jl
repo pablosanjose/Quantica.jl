@@ -1,4 +1,4 @@
-using Quantica: Hamiltonian, ParametricHamiltonian, sites, nsites, nonsites, nhoppings, coordination, flat, hybrid, transform!
+using Quantica: Hamiltonian, ParametricHamiltonian, sites, nsites, nonsites, nhoppings, coordination, flat, hybrid, transform!, nnz, nonzeros
 
 @testset "basic hamiltonians" begin
     presets = (LatticePresets.linear, LatticePresets.square, LatticePresets.triangular, LatticePresets.honeycomb,
@@ -375,4 +375,20 @@ end
     @test iszero(h((0,0))[1:2, 5:6])
     h = combine(hb, h0, ht; coupling = hopping((r,dr) -> exp(-norm(dr)), range = 2))
     @test !iszero(h((0,0))[1:2, 5:6])
+end
+
+
+@testset "current operator" begin
+    h = LP.honeycomb() |> hamiltonian(@onsite((; μ = 0) -> (2-μ)*I) - hopping(SA[0 1; 1 0]), orbitals = 2) |> supercell(2)
+    co = current(h, direction = 2)
+    c = co(SA[0,0])
+    @test c ≈ c'
+    @test iszero(diag(c))
+    @test all(x -> real(x) ≈ 0, c)
+    cp = co[unflat(SA[1,0])]
+    cm = co[unflat(SA[-1,0])]
+    @test nnz(cp) == nnz(cm) == 2
+    @test cp ≈ cm'
+    @test all(x -> x[1] ≈ x[2]', zip(nonzeros(cp), nonzeros(cm)))
+    @test all(x -> iszero(real(x)), nonzeros(cp))
 end

@@ -577,7 +577,7 @@ Alternative and less general curried form equivalent to `hamiltonian(h, modifier
 
 Return the Bloch harmonic of an `h::AbstractHamiltonian` in the form of a `SparseMatrixCSC`
 with complex scalar `eltype`. This matrix is "flat", in the sense that it contains matrix
-elements between indivisual orbitals, not sites. This distinction is only relevant for
+elements between individual orbitals, not sites. This distinction is only relevant for
 multiorbital Hamiltonians. To access the non-flattened matrix use `h[unflat(dn)]` (see
 also `unflat`).
 
@@ -1636,6 +1636,13 @@ true
 ldos
 
 """
+    current(h::AbstractHamiltonian; charge = -I, direction = 1)
+
+Build an `Operator` object that behaves like a `ParametricHamiltonian` in regards to calls
+and getindex, but whose matrix elements are hoppings ``im*(rⱼ-rᵢ)[direction]*charge*tⱼᵢ``,
+where `tᵢⱼ` are the hoppings in `h`. This operator is equal to ``∂h/∂Aᵢ``, where `Aᵢ`
+is a gauge field along `direction = i`.
+
     current(gs::GreenSlice; charge = -I, direction = missing)
 
 Build `Js::CurrentDensitySlice`, a partially evaluated object representing the equilibrium

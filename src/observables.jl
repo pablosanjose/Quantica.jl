@@ -51,6 +51,19 @@ check_different_contact_slice(gs) = (slicerows(gs) isa Integer && slicecols(gs) 
 #endregion
 
 ############################################################################################
+# Operators
+#region
+
+function current(h::AbstractHamiltonian; charge = -I, direction = 1)
+    current = parametric(h,
+        @onsite!(o -> zero(o)),
+        @hopping!((t, r, dr) -> im*dr[direction]*charge*t))
+    return Operator(current)
+end
+
+#endregion
+
+############################################################################################
 # Integrator - integrates a function f along a complex path ωcomplex(ω::Real), connecting ωi
 #   The path is piecewise linear in the form of a sawtooth with a given ± slope
 #region

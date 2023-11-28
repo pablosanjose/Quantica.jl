@@ -1990,3 +1990,26 @@ Base.:(==)(g::GreenSlice, g´::GreenSlice) = function_not_defined("==")
 
 #endregion
 #endregion
+
+############################################################################################
+# Operator - Hamiltonian-like operator representing observables other than a Hamiltonian
+#   see observables.jl for specific constructors
+#region
+
+struct Operator{H<:AbstractHamiltonian}
+    h::H
+end
+
+#region ## API ##
+
+hamiltonian(o::Operator) = o.h
+
+(c::Operator)(φ...; kw...) = c.h(φ...; kw...)
+
+call!(c::Operator, φ...; kw...) = call!(c.h, φ...; kw...)
+
+Base.getindex(c::Operator, i...) = getindex(c.h, i...)
+
+#endregion
+
+#endregion
