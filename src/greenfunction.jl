@@ -176,7 +176,6 @@ end
 # it should include all diagonal blocks for each site, not just the orbital diagonal
 diagonal_slice(gω, o) = gω[o, o]
 
-GreenSolution
 # If no kernel is provided, we return the whole diagonal
 orbranges_or_allorbs(kernel::Missing, o::CellOrbitals, gω) = eachindex(orbindices(o))
 orbranges_or_allorbs(kernel::Missing, o::Colon, gω) = 1:flatsize(blockstructure(gω))
