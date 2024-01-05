@@ -278,7 +278,7 @@ end
 struct CellOrbitals{L,V,R<:Union{Missing,Vector{UnitRange{Int}}}} <: AbstractCellElements
     cell::SVector{L,Int}
     inds::V             # Can be anything: a vector of site indices, a Colon, a UnitRange...
-    ranges::R           # If not missing, inds range per site
+    ranges::R           # If not missing, consecutive inds ranges for each site in slice
 end
 
 const CellSite{L} = CellSites{L,Int}
