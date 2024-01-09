@@ -626,7 +626,7 @@ AppliedOnsiteModifier(m::AppliedOnsiteModifier, ptrs) =
 AppliedHoppingModifier(m::AppliedHoppingModifier, ptrs) =
     AppliedHoppingModifier(m.parentselector, m.blocktype, m.f, ptrs)
 
-#enregion
+#endregion
 
 #region ## API ##
 
