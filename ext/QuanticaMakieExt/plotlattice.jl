@@ -550,7 +550,7 @@ function plotbravais!(plot::PlotLattice, lat::Lattice{<:Any,E,L}, latslice) wher
         mrect0 = GeometryBasics.mesh(rect, pointtype=Point{L,Float32}, facetype=QuadFace{Int})
         vertices0 = mrect0.position
         mat = Quantica.bravais_matrix(bravais)
-        for sc in Quantica.subcells(latslice)
+        for sc in Quantica.cellsdict(latslice)
             cell = Quantica.cell(sc)
             mrect = GeometryBasics.mesh(rect, pointtype=Point{E,Float32}, facetype=QuadFace{Int})
             vertices = mrect.position

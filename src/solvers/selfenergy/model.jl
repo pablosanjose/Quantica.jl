@@ -11,19 +11,17 @@ end
 
 #region ## Constructor ##
 
-function SelfEnergyModelSolver(h::AbstractHamiltonian, model::AbstractModel, latslice::LatticeSlice)
+function SelfEnergyModelSolver(h::AbstractHamiltonian, model::AbstractModel, siteslice::SiteSlice, orbslice::OrbitalSliceGrouped)
     modelω = model_ω_to_param(model)  # see models.jl - transforms ω into a ω_internal param
     siteinds = Int[]
-    # this converts latslice to a 0D Lattice lat0
-    # and fills siteinds::Vector{Int} with the latslice index for each lat0 site
-    lat0 = lattice0D(latslice, siteinds)
+    # this converts siteslice to a 0D Lattice lat0
+    # and fills siteinds::Vector{Int} with the siteslice index for each lat0 site (i.e. for sites ordered by sublattices)
+    lat0 = lattice0D(siteslice, siteinds)
     # this is a 0D ParametricHamiltonian to build the Σ(ω) as a view over flat(ph(; ...))
-    ph = hamiltonian(lat0, modelω; orbitals = norbitals(h))
-    # this build siteoffsets for all h orbitals over latslice
-    cbs, _ = contact_blockstructure_latslice(h, latslice)
-    # translation from lat0 to latslice orbital indices
-    # i.e. orbital index on latslice for each orbital in lat0 (this is just a reordering!)
-    parentinds = contact_sites_to_orbitals(siteinds, cbs)
+    ph = hamiltonian(lat0, modelω; orbitals = norbitals(h)) # WARNING: type-unstable orbs
+    # translation from orbitals in lat0 to orbslice indices
+    # i.e. orbital index on orbslice for each orbital in lat0 (this is just a reordering!)
+    parentinds = reordered_site_orbitals(siteinds, orbslice)
     return SelfEnergyModelSolver(ph, parentinds)
 end
 
@@ -33,10 +31,11 @@ end
 
 function SelfEnergy(h::AbstractHamiltonian, model::AbstractModel; kw...)
     sel = siteselector(; kw...)
-    latslice = lattice(h)[sel]
-    solver = SelfEnergyModelSolver(h, model, latslice)
+    siteslice = lattice(h)[sel]
+    orbslice = sites_to_orbs(siteslice, h)
+    solver = SelfEnergyModelSolver(h, model, siteslice, orbslice)
     plottables = (solver.ph,)
-    return SelfEnergy(solver, latslice, plottables)
+    return SelfEnergy(solver, orbslice, plottables)
 end
 
 function call!(s::SelfEnergyModelSolver, ω; params...)

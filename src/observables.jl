@@ -35,10 +35,6 @@ mul_tau!(tau::Vector, g) = (g .*= tau)
 tauz_diag(i, normalsize) = ifelse(iseven(fld1(i, normalsize)), -1, 1)
 taue_diag(i, normalsize) = ifelse(iseven(fld1(i, normalsize)), 0, 1)
 
-# if inds isa Integer, select contact cellsites
-sanitize_latslice(i::Integer, g::GreenFunction) = latslice(selfenergies(contacts(g), i))
-sanitize_latslice(sites, g) = lattice(g)[sites]
-
 check_contact_slice(gs) = (slicerows(gs) isa Integer && slicecols(gs) isa Integer) ||
     argerror("Please use a Green slice of the form `g[i::Integer, j::Integer]` or `g[i::Integer]`")
 
@@ -137,12 +133,12 @@ end
 
 struct LocalSpectralDensitySolution{T,E,L,G<:GreenSolution{T,E,L},K} <: IndexableObservable
     gω::G
-    kernel::K                      # should return a float when applied to gω[cellsite(n,i)]
+    kernel::K                      # should return a float when applied to gω[CellSite(n,i)]
 end
 
 struct LocalSpectralDensitySlice{T,E,L,G<:GreenSlice{T,E,L},K}
     gs::G
-    kernel::K                      # should return a float when applied to gω[cellsite(n,i)]
+    kernel::K                      # should return a float when applied to gω[CellSite(n,i)]
 end
 
 #region ## Constructors ##
@@ -209,7 +205,7 @@ end
 struct CurrentDensitySlice{T,E,L,G<:GreenFunction{T,E,L},K,V<:Union{Missing,SVector}}
     g::G
     charge::K                               # should return a float when traced with gʳᵢⱼHᵢⱼ
-    latslice::LatticeSlice{T,E,L}
+    orbslice::OrbitalSliceGrouped{T,E,L}
     direction::V
 end
 
@@ -222,8 +218,8 @@ function current(gs::GreenSlice; direction = missing, charge = -I)
     slicerows(gs) === slicecols(gs) ||
         argerror("Cannot currently take ldos of a GreenSlice with rows !== cols")
     g = parent(gs)
-    latslice = sanitize_latslice(slicerows(gs), g)
-    return CurrentDensitySlice(g, charge, latslice, sanitize_direction(direction, g))
+    orbslice = sites_to_orbs(slicerows(gs), g)
+    return CurrentDensitySlice(g, charge, orbslice, sanitize_direction(direction, g))
 end
 
 sanitize_direction(dir, ::GreenSolution{<:Any,E}) where {E} = _sanitize_direction(dir, Val(E))
@@ -251,7 +247,7 @@ Base.getindex(d::CurrentDensitySolution, i::Union{Integer,Colon}) = d[latslice(p
 # no call! support here
 function (d::CurrentDensitySlice)(ω; params...)
     gω = call!(d.g, ω; params...)
-    ls = d.latslice
+    ls = d.orbslice
     cu = current(gω; charge = d.charge)
     return cu[ls]
 end
@@ -317,8 +313,8 @@ function conductance(gs::GreenSlice{T}; nambu = false) where {T}
     i = slicerows(gs)
     j = slicecols(gs)
     g = parent(gs)
-    ni = flatsize(blockstructure(g), i)
-    nj = flatsize(blockstructure(g), j)
+    ni = norbitals(contactorbitals(g), i)
+    nj = norbitals(contactorbitals(g), j)
     Γ = similar_contactΣ(g)
     if nambu
         nsize = normal_size(hamiltonian(g))

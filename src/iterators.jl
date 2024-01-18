@@ -258,7 +258,7 @@ Base.IteratorEltype(::Type{Combinations}) = Base.HasEltype()
 # Runs
 #region
 
-# iteration yields ranges of subsequent xs elements such that istogether on them gives true
+# iteration yields ranges of subsequent xs elements such that istogether of consecutive pairs gives true
 struct Runs{T,F}
     xs::Vector{T}
     istogether::F
@@ -267,18 +267,30 @@ end
 equalruns(xs) = Runs(xs, ==)
 approxruns(xs::Vector{T}, atol = sqrt(eps(real(T)))) where {T<:Number} = Runs(xs, (x, y) -> isapprox(x, y; atol))
 
-function last_in_run(xs::Vector{T}, i, istogether) where {T}
-    xi = xs[i]
-    for j in i:length(xs)
-        (j == length(xs) || !istogether(xs[j+1], xi)) && return j
+function Base.iterate(s::Runs, frst = 1)
+    xs = s.xs
+    frst > length(xs) && return nothing
+    # find first element in run
+    for frst´ in frst:length(xs)
+        xj´ = xs[frst´]
+        if s.istogether(xj´, xj´)
+            frst = frst´
+            break
+        elseif frst´ == length(xs)
+            return nothing
+        end
     end
-    return i
-end
-
-function Base.iterate(s::Runs, j = 1)
-    j > length(s.xs) && return nothing
-    lst = last_in_run(s.xs, j, s.istogether)
-    return j:lst, lst + 1
+    # find last element in run, which is at least xs[frst]
+    lst = frst
+    for lst´ in frst+1:length(xs)
+        if !s.istogether(xs[lst´-1], xs[lst´])
+            lst = lst´-1
+            break
+        else
+            lst = lst´
+        end
+    end
+    return frst:lst, lst + 1
 end
 
 Base.IteratorSize(::Runs) = Base.SizeUnknown()

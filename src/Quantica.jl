@@ -9,6 +9,7 @@ using NearestNeighbors
 using SparseArrays
 using SparseArrays: getcolptr, AbstractSparseMatrix, AbstractSparseMatrixCSC
 using LinearAlgebra
+using Dictionaries
 using ProgressMeter
 using Random
 using SuiteSparse

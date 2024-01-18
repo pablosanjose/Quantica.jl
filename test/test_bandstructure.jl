@@ -53,25 +53,25 @@ end
 
 @testset "functional bandstructures" begin
     hc = LatticePresets.honeycomb() |> hamiltonian(hopping(-1, sublats = :A=>:B) |> plusadjoint) |> supercell(3)
-    hf((x,)) = Matrix(Quantica.call!(hc, (x, -x)))
+    hf1((x,)) = Matrix(Quantica.call!(hc, (x, -x)))
     m = subdiv(0, 1, 4)
-    b = bands(hf, m, showprogress = false, mapping = x -> 2π * x)
+    b = bands(hf1, m, showprogress = false, mapping = x -> 2π * x)
     @test nsubbands(b) == 1
     @test nsimplices(b)  == 36
-    # teting thread safety - we should fall back to a single thread for hf::Function
-    hf((x,)) = Quantica.call!(hc, (x, -x))
+    # teting thread safety - we should fall back to a single thread for hf2::Function
+    hf2((x,)) = Quantica.call!(hc, (x, -x))
     m = subdiv(0,2π,40)
     Random.seed!(1) # to have ArnoldiMethod be deterministic
-    b = bands(hf, m, showprogress = false, solver = ES.ArnoldiMethod(nev = 18))
+    b = bands(hf2, m, showprogress = false, solver = ES.ArnoldiMethod(nev = 18))
     @test nsubbands(b) <= 2    # there is a random, platform-dependent component to this
 
     hp2 = LatticePresets.honeycomb() |> hamiltonian(hopping(-1), @hopping!((t; s) -> s*t))
-    hf2((s, x)) = Matrix(Quantica.call!(hp2, (x, x); s))
+    hf3((s, x)) = Matrix(Quantica.call!(hp2, (x, x); s))
     m = subdiv(0, pi, 13)
-    b = bands(hf2, m, m, showprogress = false)
+    b = bands(hf3, m, m, showprogress = false)
     @test nsubbands(b) == 1
     @test nsimplices(b)  == 288 * 2
-    b = bands(hf2, m, m, showprogress = false, transform = ω -> ω^2)    # degeneracies doubled
+    b = bands(hf3, m, m, showprogress = false, transform = ω -> ω^2)    # degeneracies doubled
     @test nsubbands(b) == 1
     @test nsimplices(b)  == 288
 end

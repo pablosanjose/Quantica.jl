@@ -605,18 +605,18 @@ function boundaryorbs((dir, pos), h::AbstractHamiltonian)
     L = latdim(h)
     rcell = (pos+1) * unitvector(dir, SVector{L,Int})
     lcell = (pos-1) * unitvector(dir, SVector{L,Int})
-    orbsright = coupled_cellorbs(<=(pos), h, rcell, dir)
-    orbsleft  = coupled_cellorbs(>=(pos), h, lcell, dir)
+    orbsright = coupled_orbslice(<=(pos), h, rcell, dir)
+    orbsleft  = coupled_orbslice(>=(pos), h, lcell, dir)
     return BoundaryOrbs(dir => pos, orbsright, orbsleft)
 end
 
-function coupled_cellorbs(condition, h, seedcell, dir)
+function coupled_orbslice(condition, h, seedcell, dir)
     lat = lattice(h)
     ls = grow(lat[CellSites(seedcell, :)], h)
-    sc´ = [projected_cellsites(c, dir) for c in subcells(ls) if condition(cell(c)[dir])]
-    # combine_subcells!(sc´)
-    os = orbslice(sc´, h)
-    return os
+    sc´ = [projected_cellsites(c, dir) for c in cellsdict(ls) if condition(cell(c)[dir])]
+    sslice = SiteSlice(lat, CellSitesDict(sc´))
+    oslice = sites_to_orbs_flat(sslice, h)
+    return oslice
 end
 
 projected_cellsites(c::CellSites{L}, dir) where {L} =
@@ -739,7 +739,7 @@ Base.getindex(s::BandsGreenSlicer, i::CellOrbitals, j::CellOrbitals) =
 
 function inf_band_slice(s::BandsGreenSlicer{C}, i::CellOrbitals, j::CellOrbitals) where {C}
     solver = s.solver
-    gmat = zeros(C, norbs(i), norbs(j))
+    gmat = zeros(C, norbitals(i), norbitals(j))
     inf_band_slice!(gmat, s.ω, (i, j), solver.subband, solver.subbandsimps)
     return gmat
 end
@@ -775,18 +775,18 @@ end
 
 celldist(i::CellOrbitals{L}, j::CellOrbitals{L}) where {L} = cell(i) - cell(j)
 
-function inf_band_slice!(gmat, ω, (si, sj)::Tuple, args...)   # si, sj can be slice or cellorbs
-    if nsubcells(si) == nsubcells(sj) == 1
+function inf_band_slice!(gmat, ω, (si, sj)::Tuple, args...)   # si, sj can be orbslice or cellorbs
+    if ncells(si) == ncells(sj) == 1
         # boundary slice is one-cell-wide, no need for views
-        i, j = only(subcells(si)), only(subcells(sj))
+        i, j = get_single_cellorbs(si), get_single_cellorbs(sj)
         inf_band_slice!(gmat, ω, (i, j), args...)
     else
         offsetj = 0
-        for j in subcells(sj)
+        for j in cellsdict(sj)
             offseti = 0
-            nj = norbs(j)
-            for i in subcells(si)
-                ni = norbs(i)
+            nj = norbitals(j)
+            for i in cellsdict(si)
+                ni = norbitals(i)
                 gv = view(gmat, offseti+1:offseti+ni, offsetj+1:offsetj+nj)
                 inf_band_slice!(gv, ω, (i, j), args...)
                 offseti += ni
@@ -796,6 +796,9 @@ function inf_band_slice!(gmat, ω, (si, sj)::Tuple, args...)   # si, sj can be s
     end
     return gmat
 end
+
+get_single_cellorbs(c::CellOrbitals) = c
+get_single_cellorbs(c::OrbitalSlice) = only(cellsdict(c))
 
 # Gᵢⱼ(k∥) = G⁰ᵢⱼ(k∥) - G⁰ᵢᵦ(k∥)G⁰ᵦᵦ(k∥)⁻¹G⁰ᵦⱼ(k∥), where β are removed sites at boundary
 function semi_band_slice(s::BandsGreenSlicer{C}, i::CellOrbitals{L}, j::CellOrbitals{L}) where {C,L}
@@ -807,7 +810,7 @@ function semi_band_slice(s::BandsGreenSlicer{C}, i::CellOrbitals{L}, j::CellOrbi
     if sign(xi) == sign(xj) != 0
         subband, subbandsimps = s.solver.subband, s.solver.subbandsimps
         b = ifelse(xi > 0, borbs.orbsright, borbs.orbsleft)  # 1D boundary orbital slice
-        n0 = norbs(b)
+        n0 = norbitals(b)
         g0j = zeros(C, n0, nj)
         gi0 = zeros(C, ni, n0)
         g00 = zeros(C, n0, n0)
@@ -862,7 +865,7 @@ minimal_callsafe_copy(s::BandsGreenSlicer) = s  # it is read-only
 #   otherwise we need to do it the normal way
 #region
 
-function diagonal_slice(gω::GreenSolution{T,<:Any,<:Any,G}, o::CellOrbitals{<:Any,<:Any,<:Vector}) where {T,G<:BandsGreenSlicer{<:Any,Missing}}
+function diagonal_slice(gω::GreenSolution{T,<:Any,<:Any,G}, o::CellOrbitals) where {T,G<:BandsGreenSlicer{<:Any,Missing}}
     s = slicer(gω)   # BandsGreenSlicer
     norbs = flatsize(gω)
     rngs = orbranges(o)

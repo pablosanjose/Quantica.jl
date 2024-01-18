@@ -348,12 +348,12 @@ function apply(s::GS.Schur, h::AbstractHamiltonian1D, contacts::Contacts)
     boundary = round(only(s.boundary))
     rsites = stored_cols(h[unflat(1)])
     lsites = stored_cols(h[unflat(-1)])
-    latslice_l = lattice(h0)[cellsites((), lsites)]
-    latslice_r = lattice(h0)[cellsites((), rsites)]
+    orbslice_l = sites_to_orbs(lattice(h0)[cellsites((), lsites)], h)
+    orbslice_r = sites_to_orbs(lattice(h0)[cellsites((), rsites)], h)
     ΣR_solver = SelfEnergySchurSolver(fsolver, h, :R)
     ΣL_solver = SelfEnergySchurSolver(fsolver, h, :L)
-    ΣL = SelfEnergy(ΣL_solver, latslice_l)
-    ΣR = SelfEnergy(ΣR_solver, latslice_r)
+    ΣL = SelfEnergy(ΣL_solver, orbslice_l)
+    ΣR = SelfEnergy(ΣR_solver, orbslice_r)
 
     ohL = attach(h0, ΣL)
     ohR = attach(h0, ΣR)
@@ -364,7 +364,7 @@ function apply(s::GS.Schur, h::AbstractHamiltonian1D, contacts::Contacts)
 end
 
 const GFUnit{T,E,H,N,S} =
-    GreenFunction{T,E,0,AppliedSparseLUGreenSolver{Complex{T}},H,Contacts{0,N,S,LatticeSlice{T,E,0}}}
+    GreenFunction{T,E,0,AppliedSparseLUGreenSolver{Complex{T}},H,Contacts{0,N,S,OrbitalSliceGrouped{T,E,0}}}
 
 green_type(::H,::S) where {T,E,H<:AbstractHamiltonian{T,E},S} =
     GFUnit{T,E,H,1,Tuple{S}}
@@ -534,7 +534,7 @@ function semi_schur_slice(s::SchurGreenSlicer{C}, i, j) where {C}
     rows, cols = orbindices(i), orbindices(j)
     if n * m <= 0 # This includes inter-boundary
         # need to add view with specific index types for type stability
-        return zeros(C, norbs(i), norbs(j))
+        return zeros(C, norbitals(i), norbitals(j))
     elseif n == m == 1
         g = s.G₁₁
         i´, j´ = CellOrbitals((), rows), CellOrbitals((), cols)

@@ -59,8 +59,8 @@ apply(::GS.SparseLU, h::AbstractHamiltonian, cs::Contacts) =
 
 #region ## call ##
 
-# Σblocks and contactblockstruct are not used here, because they are already inside invgreen
-function (s::AppliedSparseLUGreenSolver{C})(ω, Σblocks, contactblockstruct) where {C}
+# Σblocks and contactorbitals are not used here, because they are already inside invgreen
+function (s::AppliedSparseLUGreenSolver{C})(ω, Σblocks, contactorbitals) where {C}
     invgreen = s.invgreen
     nonextrng = orbrange(invgreen)
     unitcinds = invgreen.unitcinds
@@ -126,7 +126,7 @@ end
 similar_source(s::SparseLUSlicer, ::CellOrbitals{<:Any,Colon}) =
     similar(s.source, size(s.source, 1), maximum(s.nonextrng))
 similar_source(s::SparseLUSlicer, j::CellOrbitals) =
-    similar(s.source, size(s.source, 1), norbs(j))
+    similar(s.source, size(s.source, 1), norbitals(j))
 
 # getindex must return a Matrix
 Base.getindex(s::SparseLUSlicer, i::CellOrbitals, j::CellOrbitals) = copy(view(s, i, j))

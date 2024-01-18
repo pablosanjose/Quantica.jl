@@ -9,12 +9,12 @@ end
 
 function SelfEnergy(h::AbstractHamiltonian{T}, ::Nothing; kw...) where {T}
     sel = siteselector(; kw...)
-    latslice = lattice(h)[sel]
+    orbslice = sites_to_orbs(lattice(h)[sel], h)
     plottables = ()
-    norbs = flatsize(h, latslice)
+    norbs = norbitals(orbslice)
     emptyΣ = spzeros(Complex{T}, norbs, norbs)
     solver = SelfEnergyEmptySolver(emptyΣ)
-    return SelfEnergy(solver, latslice, plottables)
+    return SelfEnergy(solver, orbslice, plottables)
 end
 
 call!(s::SelfEnergyEmptySolver, ω; params...) = s.emptymat
