@@ -321,6 +321,8 @@ function initialize_bloch!(bloch, hars)
     fbloch = flat_unsafe(bloch)
     fbloch´ = merge_sparse(flat.(matrix.(hars)))
     copy!(fbloch, fbloch´)
+    ubloch = unflat_unsafe(bloch)
+    ubloch === fbloch || copy!(ubloch, unflat(blockstructure(bloch), fbloch))
     needs_no_sync!(bloch)
     update_nnz!(bloch)
     return bloch
