@@ -28,7 +28,7 @@ function Base.getindex(lat::Lattice, as::AppliedSiteSelector)
             return true
         end
     end
-    cellsdict = index(cell, csites)
+    cellsdict = CellSitesDict{L}(cell.(csites), csites)
     return LatticeSlice(lat, cellsdict)
 end
 
@@ -145,7 +145,10 @@ end
 
 combine(d) = d
 
-combine(d1::D, d2::D, ds::D...) where {D<:CellIndicesDict} =  mergewith(combine_subcells, d1, d2, ds...)
+# TODO: when/if https://github.com/andyferris/Dictionaries.jl/pull/130 is merged
+# this should become simply mergewith(combine_subcells, d1, d2, ds...)
+combine(d1::D, d2::D, ds::D...) where {D<:CellIndicesDict} =
+    foldl(mergewith!(combine_subcells), (d2, ds...), init = copy(d1))
 
 combine_subcells(c::C, cs::C...) where {C<:CellSites} =
     CellSites(cell(c), union(siteindices(c), siteindices.(cs)...))
@@ -206,7 +209,7 @@ function grow(css::CellSitesDict{L}, h::AbstractHamiltonian) where {L}
     for cs in css´
         unique!(sort!(siteindices(cs)))
     end
-    return index(cell, css´)
+    return CellSitesDict{L}(cell.(css´), css´)
 end
 
 function Base.setdiff!(cdict::CellSitesDict, cdict0::CellSitesDict)

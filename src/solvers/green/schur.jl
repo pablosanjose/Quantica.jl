@@ -341,9 +341,9 @@ end
 
 #region ## apply ##
 
-function apply(s::GS.Schur, h::AbstractHamiltonian1D, contacts::Contacts)
+function apply(s::GS.Schur, h::AbstractHamiltonian1D{T}, contacts::Contacts) where {T}
     h´ = hamiltonian(h)
-    fsolver = SchurFactorsSolver(h´, s.shift)
+    fsolver = SchurFactorsSolver(h´, T(s.shift))
     h0 = unitcell_hamiltonian(h)
     boundary = round(only(s.boundary))
     rsites = stored_cols(h[unflat(1)])

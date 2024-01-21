@@ -1970,6 +1970,9 @@ solver(g::GreenFunction) = g.solver
 contacts(g::GreenFunction) = g.contacts
 contacts(g::Union{GreenSolution,GreenSlice}) = contacts(parent(g))
 
+ncontacts(g::GreenFunction) = ncontacts(g.contacts)
+ncontacts(g::Union{GreenSolution,GreenSlice}) = ncontacts(parent(g))
+
 slicer(g::GreenSolution) = g.slicer
 
 selfenergies(g::GreenSolution) = g.contactΣs
