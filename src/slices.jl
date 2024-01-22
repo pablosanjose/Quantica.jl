@@ -339,53 +339,47 @@ sites_to_orbs(c::CellSites, g) = sites_to_orbs(c, blockstructure(g))
 
 function sites_to_orbs(cs::CellSites, os::OrbitalBlockStructure)
     sites = siteindices(cs)
-    orbinds, groups = orbinds_and_groups(sites, os)
-    return CellIndices(cell(cs), orbinds, OrbitalLikeGrouped(dictionary(groups)))
+    groups = _groups(sites, os) # sites, orbranges
+    orbinds = _orbinds(sites, groups, os)
+    return CellIndices(cell(cs), orbinds, OrbitalLikeGrouped(Dictionary(groups...)))
 end
 
 function sites_to_orbs_flat(cs::CellSites, os::OrbitalBlockStructure)
     sites = siteindices(cs)
-    orbinds = orbinds_only(sites, os)
+    orbinds = _orbinds(sites, os)
     return CellIndices(cell(cs), orbinds, OrbitalLike())
 end
 
-function orbinds_and_groups(sites, os)
+_groups(i::Integer, os) = [i], [flatrange(os, i)]
+_groups(::Colon, os) = _groups(siterange(os), os)
+
+function _groups(sites, os)
+    siteinds = Int[]
+    orbranges = UnitRange{Int}[]
+    sizehint!(siteinds, length(sites))
+    sizehint!(orbranges, length(sites))
+    for site in sites
+        rng = flatrange(os, site)
+        push!(siteinds, site)
+        push!(orbranges, rng)
+    end
+    return siteinds, orbranges
+end
+
+_orbinds(sites::Union{Integer,Colon,AbstractUnitRange}, _, os) = flatrange(os, sites)
+
+function _orbinds(_, (sites, orbrngs), os)  # reuse precomputed groups
     orbinds = Int[]
-    groups = Pair{Int,UnitRange{Int}}[]
-    for i in sites
-        rng = flatrange(os, i)
+    sizehint!(orbinds, length(sites))
+    for rng in orbrngs
         append!(orbinds, rng)
-        push!(groups, i => rng) # site index => orb range
     end
-    return orbinds, groups
+    return orbinds
 end
 
-function orbinds_and_groups(i::Integer, os)
-    orbinds = flatrange(os, i)  # a UnitRange
-    groups = (i => orbinds,)
-    return orbinds, groups
-end
-
-function orbinds_and_groups(::Colon, os)
-    orbinds = flatrange(os, :)  # a UnitRange
-    groups = Pair{Int,UnitRange{Int}}[]
-    for i in siterange(os)
-        push!(groups, i => flatrange(os, i))
-    end
-    return orbinds, groups
-end
-
-function orbinds_and_groups(sites::AbstractUnitRange, os)
-    orbinds = flatrange(os, sites)  # a UnitRange
-    groups = Pair{Int,UnitRange{Int}}[]
-    for i in sites
-        push!(groups, i => flatrange(os, i))
-    end
-    return orbinds, groups
-end
-
-function orbinds_only(sites, os)
+function _orbinds(sites, os)
     orbinds = Int[]
+    sizehint!(orbinds, length(sites))
     for i in sites
         rng = flatrange(os, i)
         append!(orbinds, rng)

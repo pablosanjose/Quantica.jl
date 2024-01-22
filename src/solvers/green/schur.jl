@@ -54,7 +54,7 @@ function SchurFactorsSolver(h::Hamiltonian{T,<:Any,1}, shift = one(Complex{T})) 
     iG, (p, pd) = store_diagonal_ptrs(fh0)
     ptrs = (p, pd, pd[sinds])
     workspace = SchurWorkspace{Complex{T}}(size(L), length(linds), length(rinds))
-    return SchurFactorsSolver(shift, hm, h0, hp, l_leq_r, iG, ptrs, linds, rinds, sinds, L, R, R´L´, workspace)
+    return SchurFactorsSolver(T(shift), hm, h0, hp, l_leq_r, iG, ptrs, linds, rinds, sinds, L, R, R´L´, workspace)
 end
 
 function SchurWorkspace{C}((n, d), l, r) where {C}
@@ -341,9 +341,9 @@ end
 
 #region ## apply ##
 
-function apply(s::GS.Schur, h::AbstractHamiltonian1D{T}, contacts::Contacts) where {T}
+function apply(s::GS.Schur, h::AbstractHamiltonian1D, contacts::Contacts)
     h´ = hamiltonian(h)
-    fsolver = SchurFactorsSolver(h´, T(s.shift))
+    fsolver = SchurFactorsSolver(h´, s.shift)
     h0 = unitcell_hamiltonian(h)
     boundary = round(only(s.boundary))
     rsites = stored_cols(h[unflat(1)])
