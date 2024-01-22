@@ -181,25 +181,25 @@ end
     @test Quantica.nsites(h3) == 64
 end
 
-@testset "hamiltonian wrap" begin
+@testset "hamiltonian torus" begin
     for o in (1, (2,3))
         h = LatticePresets.honeycomb() |> hamiltonian(hopping((r, dr) -> 1/norm(dr) * I, range = 10), orbitals = o)
-        @test_throws ArgumentError wrap(h, (1,2,3))
-        @test_throws ArgumentError wrap(h, 1)
-        wh = h |> wrap((1,2))
+        @test_throws ArgumentError torus(h, (1,2,3))
+        @test_throws ArgumentError torus(h, 1)
+        wh = h |> torus((1,2))
         @test wh(()) ≈ h(SA[1,2])
-        wh = wrap(h, (1,:))
+        wh = torus(h, (1,:))
         @test wh(SA[2]) ≈ h(SA[1,2])
         h = LatticePresets.honeycomb() |> hamiltonian(hopping((r, dr) -> 1/norm(dr) * I, range = 10)) |> supercell(3)
-        wh = wrap(h, (1,2))
+        wh = torus(h, (1,2))
         @test wh(()) ≈ h(SA[1,2])
-        wh = wrap(h, (1,:))
+        wh = torus(h, (1,:))
         @test wh(SA[2]) ≈ h(SA[1,2])
-        wh = wrap(h, (:,:))
+        wh = torus(h, (:,:))
         @test wh == h
         @test wh !== h
         h = LP.linear() |> supercell(2) |> hopping(1) |> @hopping!((t, r, dr) -> t*(r[1]-1/2))
-        @test_warn "unexpected results for position-dependent modifiers" wrap(h, (0.2,))
+        @test_warn "unexpected results for position-dependent modifiers" torus(h, (0.2,))
     end
 end
 
@@ -319,15 +319,15 @@ end
     # Old bug in apply
     h = LP.honeycomb() |> supercell(2) |> onsite(1) |> @onsite!(o -> 0; sublats = :A)
     @test tr(h((0,0))) == 4
-    # wrap and supercell commutativity with modifier application
+    # torus and supercell commutativity with modifier application
     h = LP.linear() |> hopping(1) |> supercell(3) |> @onsite!((o,r; E = 1)-> E*r[1]) |> @hopping!((t, r,dr; A = SA[1])->t*cis(dot(A,dr[1])))
     @test supercell(h(), 4)((1,)) ≈ supercell(h, 4)((1,))
-    @test wrap(h, (2,))(()) ≈ wrap(h(), (2,))(()) ≈ h((2,))
+    @test torus(h, (2,))(()) ≈ torus(h(), (2,))(()) ≈ h((2,))
     h = LP.linear() |> supercell(3) |> @hopping((r,dr; ϕ = 1) -> cis(ϕ * dr[1]))
     @test supercell(h(), 4)((1,)) ≈ supercell(h, 4)((1,))
-    @test wrap(h(), (2,))(()) ≈ h((2,))
+    @test torus(h(), (2,))(()) ≈ h((2,))
     h0 = LP.square() |> hopping(1) |> supercell(3) |> @hopping!((t, r, dr; A = SA[1,2]) -> t*cis(A'dr))
-    h = wrap(h0, (0.2,:))
+    h = torus(h0, (0.2,:))
     @test h0((0.2, 0.3)) ≈ h((0.3,))
 end
 
