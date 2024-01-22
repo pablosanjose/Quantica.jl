@@ -525,13 +525,13 @@ end
 #endregion
 
 ############################################################################################
-# wrap(::Hamiltonian, phases)
+# torus(::Hamiltonian, phases)
 #region
 
-wrap(phases) = h -> wrap(h, phases)
+torus(phases) = h -> torus(h, phases)
 
-function wrap(h::Hamiltonian{<:Any,<:Any,L}, phases) where {L}
-    check_wrap_phases(phases, L)
+function torus(h::Hamiltonian{<:Any,<:Any,L}, phases) where {L}
+    check_torus_phases(phases, L)
     wa, ua = split_axes(phases)  # indices for wrapped and unwrapped axes
     iszero(length(wa)) && return minimal_callsafe_copy(h)
     lat = lattice(h)
@@ -539,19 +539,19 @@ function wrap(h::Hamiltonian{<:Any,<:Any,L}, phases) where {L}
     lat´ = lattice(lat; bravais = b´)
     bs´ = blockstructure(h)
     bloch´ = copy_matrices(bloch(h))
-    hars´ = wrap_harmonics(harmonics(h), phases, wa, ua)
+    hars´ = stitch_harmonics(harmonics(h), phases, wa, ua)
     return Hamiltonian(lat´, bs´, hars´, bloch´)
 end
 
-check_wrap_phases(phases, L) = length(phases) == L ||
-    argerror("Expected $L `wrap` phases, got $(length(phases))")
+check_torus_phases(phases, L) = length(phases) == L ||
+    argerror("Expected $L `torus` phases, got $(length(phases))")
 
 split_axes(phases) = split_axes((), (), 1, phases...)
 split_axes(wa, ua, n, x::Colon, xs...) = split_axes(wa, (ua..., n), n+1, xs...)
 split_axes(wa, ua, n, x, xs...) = split_axes((wa..., n), ua, n+1, xs...)
 split_axes(wa, ua, n) = wa, ua
 
-function wrap_harmonics(hars, phases, wa::NTuple{W}, ua::NTuple{U}) where {W,U}
+function stitch_harmonics(hars, phases, wa::NTuple{W}, ua::NTuple{U}) where {W,U}
     phases_w = SVector(phases)[SVector(wa)]
     dcells_u = SVector{U,Int}[dcell(har)[SVector(ua)] for har in hars]
     dcells_w = SVector{W,Int}[dcell(har)[SVector(wa)] for har in hars]
@@ -582,20 +582,20 @@ end
 #endregion
 
 ############################################################################################
-# wrap(::ParametricHamiltonian, phases)
+# torus(::ParametricHamiltonian, phases)
 #region
 
-function wrap(p::ParametricHamiltonian, phases)
+function torus(p::ParametricHamiltonian, phases)
     wa, ua = split_axes(phases)  # indices for wrapped and unwrapped axes
     iszero(length(wa)) && return minimal_callsafe_copy(p)
     h = parent(p)
-    h´ = wrap(h, phases)
+    h´ = torus(h, phases)
     ams = modifiers(p)
     L = latdim(lattice(h))
     S = SMatrix{L,L,Int}(I)[SVector(ua), :] # dnnew = S * dnold
     ptrmap = pointer_map(h, h´, S)    # [[(ptr´ of har´[S*dn]) for ptr in har] for har in h]
     harmap = harmonics_map(h, h´, S)  # [(index of har´[S*dn]) for har in h]
-    ams´ = wrap_modifier.(ams, Ref(ptrmap), Ref(harmap))
+    ams´ = stitch_modifier.(ams, Ref(ptrmap), Ref(harmap))
     p´ = hamiltonian(h´, ams´...)
     return p´
 end
@@ -621,13 +621,13 @@ end
 
 harmonics_map(h, h´, S) = [last(harmonic_index(h´, S*dcell(har))) for har in harmonics(h)]
 
-function wrap_modifier(m::AppliedOnsiteModifier, ptrmap, _)
+function stitch_modifier(m::AppliedOnsiteModifier, ptrmap, _)
     ptrs´ = first(ptrmap)
     p´ = [(ptrs´[ptr], r, orbs) for (ptr, r, orbs) in pointers(m)]
     return AppliedOnsiteModifier(m, p´)
 end
 
-function wrap_modifier(m::AppliedHoppingModifier, ptrmap, harmap)
+function stitch_modifier(m::AppliedHoppingModifier, ptrmap, harmap)
     ps = pointers(m)
     ps´ = [similar(first(ps), 0) for _ in 1:maximum(harmap)]
     for (i, p) in enumerate(ps), (ptr, r, dr, orborbs) in p

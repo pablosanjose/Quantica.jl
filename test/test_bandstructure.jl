@@ -129,7 +129,7 @@ end
     @test m isa Quantica.Mesh
 
     s = spectrum(b, (pi, pi))
-    s´ = spectrum(wrap(h, (pi, pi)))
+    s´ = spectrum(torus(h, (pi, pi)))
     s´´ = spectrum(h, (pi, pi))
     ϵs, ψs = ES.LinearAlgebra()(Matrix(h((pi, pi))))
     @test s isa Quantica.Spectrum

@@ -1019,27 +1019,28 @@ plusadjoint
 
 """
 
-    wrap(h::AbstractHamiltonian, (ϕ₁, ϕ₂,...))
+    torus(h::AbstractHamiltonian, (ϕ₁, ϕ₂,...))
 
 For an `h` of lattice dimension `L` and a set of `L` Bloch phases `ϕ = (ϕ₁, ϕ₂,...)`,
-contruct a new zero-dimensional `h´::AbstractHamiltonian` for all Bravais vectors have been
-eliminated by wrapping the lattice onto itself along the corresponding Bravais vector.
-Intercell hoppings along wrapped directions will pick up a Bloch phase `exp(-iϕ⋅dn)`.
+contruct a new `h´::AbstractHamiltonian` on a bounded torus, i.e. with all Bravais
+vectors eliminated by stitching the lattice onto itself along the corresponding Bravais
+vector. Intercell hoppings along stitched directions will pick up a Bloch phase
+`exp(-iϕ⋅dn)`.
 
 If a number `L´` of phases `ϕᵢ` are `:` instead of numbers, the corresponding Bravais
-vectors will not be wrapped, and the resulting `h´` will have a finite lattice dimension
+vectors will not be stitched, and the resulting `h´` will have a finite lattice dimension
 `L´`.
 
 ## Currying
 
-    h |> wrap((ϕ₁, ϕ₂,...))
+    h |> torus((ϕ₁, ϕ₂,...))
 
-Currying syntax equivalent to `wrap(h, (ϕ₁, ϕ₂,...))`.
+Currying syntax equivalent to `torus(h, (ϕ₁, ϕ₂,...))`.
 
 # Examples
 
 ```jldoctest
-julia> h2D = HP.graphene(); h1D = wrap(h2D, (:, 0.2))
+julia> h2D = HP.graphene(); h1D = torus(h2D, (:, 0.2))
 Hamiltonian{Float64,2,1}: Hamiltonian on a 1D Lattice in 2D space
   Bloch harmonics  : 3
   Harmonic size    : 2 × 2
@@ -1056,7 +1057,7 @@ true
 # See also
     `hamiltonian`, `supercell`
 """
-wrap
+torus
 
 """
     unflat(dn)
