@@ -255,7 +255,7 @@ end
 
 function subbands_diagonalize!(data)
     baseverts = vertices(data.basemesh)
-    meter = Progress(length(baseverts), "Step 1 - Diagonalizing: ")
+    meter = Progress(length(baseverts); desc = "Step 1 - Diagonalizing: ")
     push!(data.coloffsets, 0) # first element
     if length(data.solvers) > 1
         Threads.@threads :static for i in eachindex(baseverts)
@@ -327,7 +327,7 @@ end
 #region
 
 function subbands_knit!(data)
-    meter = Progress(length(data.eigens), "Step 2 - Knitting: ")
+    meter = Progress(length(data.eigens); desc = "Step 2 - Knitting: ")
     for isrcbase in eachindex(data.eigens)
         for idstbase in neighbors_forward(data.basemesh, isrcbase)
             knit_seam!(data, isrcbase, idstbase)
@@ -401,8 +401,8 @@ function subbands_patch!(data)
     queue_frustrated!(data)
     data.warn && isempty(data.defects) &&
         @warn "Trying to patch $(length(data.frustrated)) band dislocations without a list `defects` of defect positions."
-    meter = data.patches < Inf ? Progress(data.patches, "Step 3 - Patching: ") :
-                                 ProgressUnknown("Step 3 - Patching: ")
+    meter = data.patches < Inf ? Progress(data.patches; desc = "Step 3 - Patching: ") :
+                                 ProgressUnknown(; desc = "Step 3 - Patching: ")
     newcols = 0
     done = false
     while !isempty(data.frustrated) && !done
@@ -567,7 +567,7 @@ function subbands_split!(data)
         # vsinds are the subband index of each vertex index
         # svinds is lists of band vertex indices that belong to the same subband
         vsinds, svinds = subsets(data.bandneighs)
-        meter = Progress(length(svinds), "Step 4 - Splitting: ")
+        meter = Progress(length(svinds); desc = "Step 4 - Splitting: ")
         new2old = sortperm(vsinds)
         old2new = invperm(new2old)
         offset = 0
@@ -607,7 +607,7 @@ end
 
 function subband_projectors!(data)
     nsimps = sum(s -> length(simplices(s)), data.subbands)
-    meter = Progress(nsimps, "Step 5 - Projectors: ")
+    meter = Progress(nsimps; desc = "Step 5 - Projectors: ")
     if data.projectors
         for s in data.subbands
             subband_projectors!(s, data.hf, meter, data.showprogress)

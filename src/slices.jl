@@ -5,12 +5,15 @@
 
 Base.getindex(lat::Lattice; kw...) = lat[siteselector(; kw...)]
 
+Base.getindex(lat::Lattice, ls::LatticeSlice) = ls
+
 Base.getindex(lat::Lattice, ss::SiteSelector) = lat[apply(ss, lat)]
 
 Base.getindex(lat::Lattice, ::UnboundedSiteSelector) = lat[siteselector(; cells = zerocell(lat))]
 
 function Base.getindex(lat::Lattice, as::AppliedSiteSelector)
-    latslice = LatticeSlice(lat)
+    L = latdim(lat)
+    csites = CellSites{L,Vector{Int}}[]
     sinds = Int[]
     foreach_cell(as) do cell
         isempty(sinds) || (sinds = Int[])
@@ -21,14 +24,15 @@ function Base.getindex(lat::Lattice, as::AppliedSiteSelector)
         if isempty(cs)
             return false
         else
-            push!(subcells(latslice), cs)
+            push!(csites, cs)
             return true
         end
     end
-    return latslice
+    cellsdict = CellSitesDict{L}(cell.(csites), csites)
+    return LatticeSlice(lat, cellsdict)
 end
 
-Base.getindex(l::Lattice, c::CellSites) = LatticeSlice(l, [apply(c, l)])
+Base.getindex(l::Lattice, c::CellIndices) = LatticeSlice(l, [apply(c, l)])
 
 Base.getindex(ls::LatticeSlice; kw...) = getindex(ls, siteselector(; kw...))
 
@@ -37,7 +41,7 @@ Base.getindex(ls::LatticeSlice, ss::SiteSelector) = getindex(ls, apply(ss, paren
 # return cell, siteindex of the i-th site of LatticeSlice
 function Base.getindex(l::LatticeSlice, i::Integer)
     offset = 0
-    for scell in subcells(l)
+    for scell in cellsdict(l)
         ninds = length(siteindices(scell))
         if ninds + offset < i
             offset += ninds
@@ -55,7 +59,7 @@ function Base.getindex(latslice::LatticeSlice, as::AppliedSiteSelector)
     latslice´ = LatticeSlice(lat)
     sinds = Int[]
     j = 0
-    for subcell in subcells(latslice)
+    for subcell in cellsdict(latslice)
         dn = cell(subcell)
         cs = CellSites(dn, sinds)
         for i in siteindices(subcell)
@@ -66,7 +70,7 @@ function Base.getindex(latslice::LatticeSlice, as::AppliedSiteSelector)
             end
         end
         if !isempty(cs)
-            push!(subcells(latslice´), cs)
+            push!(cellsdict(latslice´), cs)
             sinds = Int[]  #start new site list
         end
     end
@@ -97,10 +101,9 @@ function Base.getindex(h::Hamiltonian, ls::LatticeSlice, post = (hij, cij) -> hi
         colsite = siteindices(colcs)
         for har in hars
             rowcell = colcell + dcell(har)
-            s = findsubcell(rowcell, ls)
-            s === nothing && continue
-            (ind, rowoffset) = s
-            rowsubcell = subcells(ls, ind)
+            rowsubcell = findsubcell(rowcell, ls)
+            rowsubcell === nothing && continue
+            rowoffset = offsets(ls, rowcell)
             rowsubcellinds = siteindices(rowsubcell)
             # rowsubcellinds are the site indices in original unitcell for subcell = rowcell
             # rowoffset is the latslice site offset for the rowsubcellinds sites
@@ -110,7 +113,7 @@ function Base.getindex(h::Hamiltonian, ls::LatticeSlice, post = (hij, cij) -> hi
                 hrow = hrows[ptr]
                 for (irow, rowsubcellind) in enumerate(rowsubcellinds)
                     if hrow == rowsubcellind
-                        rowcs = cellsite(rowcell, hrow)
+                        rowcs = CellSite(rowcell, hrow)
                         hij, cij = nonzeros(hmat)[ptr], (rowcs, colcs)
                         # hrow is the original unitcell site index for row.
                         # We need the latslice site index lsrow
@@ -125,36 +128,6 @@ function Base.getindex(h::Hamiltonian, ls::LatticeSlice, post = (hij, cij) -> hi
     return sparse(builder, nrows, ncols)
 end
 
-#endregion
-
-############################################################################################
-# findsubcell(c, ::LatticeSlice) and Base.in
-#region
-
-# returns (subcellindex, siteoffset), or nothing if not found
-function findsubcell(cell´::SVector, l::LatticeSlice)
-    offset = 0
-    for (i, sc) in enumerate(subcells(l))
-        if cell´ == cell(sc)
-            return i, offset  # since cells are unique
-        else
-            offset += nsites(sc)
-        end
-    end
-    return nothing
-end
-
-## Unused
-# findsite(i::Integer, s::CellSites) = findfirst(==(i), siteindices(s))
-# function findsite((i, dn)::Tuple{Int,SVector}, ls::LatticeSlice)
-#     s = findsubcell(dn, ls)
-#     s === nothing && return nothing
-#     j = findsite(i, subcells(ls, first(s)))
-#     j === nothing && return nothing
-#     return last(s) + j
-# end
-
-Base.in(idn::Tuple{Int,SVector}, ls::LatticeSlice) = findsite(idn, ls) !== nothing
 
 #endregion
 
@@ -162,69 +135,30 @@ Base.in(idn::Tuple{Int,SVector}, ls::LatticeSlice) = findsite(idn, ls) !== nothi
 # combine, combine! and intersect!
 #region
 
-combine(ls::LatticeSlice, lss::LatticeSlice...) =
-    combine!(LatticeSlice(parent(ls)), ls, lss...)
-
-## unused
-# combine(os::OrbitalSlice{L}, oss::OrbitalSlice{L}...) where {L} =
-#     combine!(OrbitalSlice{L}(), os, oss...)
-
-# combine!(os::OrbitalSlice, oss::OrbitalSlice...) =
-#     OrbitalSlice(combine_subcells!(subcells(os), subcells.(oss)...))
-
-function combine!(ls0::S, lss::S...) where {L,S<:LatticeSlice{<:Any,<:Any,L}}
-    lat = parent(ls0)
+function combine(ls::S, lss::S...) where {S<:LatticeSlice}
+    lat = parent(ls)
     all(l -> l === lat, parent.(lss)) ||
-        argerror("Cannot combine LatticeBlocks of different lattices")
-    isempty(lss) || all(isempty, lss) || combine_subcells!(subcells(ls0), subcells.(lss)...)
-    return ls0
+        argerror("Cannot combine LatticeSlices of different lattices")
+    sc = combine(cellsdict.((ls, lss...))...)
+    return LatticeSlice(lat, sc)
 end
 
-## unused
-# combine_subcells(scs::Vector{S}...) where {L,S<:CellSites{L}} = combine_subcells!(S[], scs...)
+combine(d) = d
 
-function combine_subcells!(sc0::Vector{S}, scs::Vector{S}...) where {L, S<:CellSites{L}}
-    allcellinds = Tuple{SVector{L,Int},Int}[]
-    for scells in (sc0, scs...), scell in scells, ind in siteindices(scell)
-        push!(allcellinds, (cell(scell), ind))
-    end
-    sort!(allcellinds)
-    unique!(allcellinds)
+combine(d1::D, d2::D, ds::D...) where {D<:CellIndicesDict} =
+    mergewith(combine_subcells, d1, d2, ds...)
 
-    currentcell = first(first(allcellinds))
-    scell = CellSites(currentcell)
-    scells = sc0
-    empty!(scells)
-    push!(scells, scell)
-    for (c, i) in allcellinds
-        if c == currentcell
-            push!(siteindices(scell), i)
-        else
-            scell = CellSites(c)
-            push!(siteindices(scell), i)
-            push!(scells, scell)
-            currentcell = c
-        end
-    end
-    return sc0
+combine_subcells(c::C, cs::C...) where {C<:CellSites} =
+    CellSites(cell(c), union(siteindices(c), siteindices.(cs)...))
+
+combine_subcells(c::C, cs::C...) where {C<:CellOrbitals} =
+    CellOrbitals(cell(c), union(orbindices(c), orbindices.(cs)...))
+
+function combine_subcells(c::C, cs::C...) where {C<:CellOrbitalsGrouped}
+    groups´ = merge(orbgroups(c), orbgroups.(cs)...)
+    indices´ = union(orbindices(c), orbindices.(cs)...)
+    return CellIndices(cell(c), indices´, OrbitalLikeGrouped(groups´))
 end
-
-# Unused?
-# function Base.intersect!(ls::L, ls´::L) where {L<:LatticeSlice}
-#     for subcell in subcells(ls)
-#         found = false
-#         for subcell´ in subcells(ls´)
-#             if cell(subcell) == cell(subcell´)
-#                 intersect!(siteindices(subcell), siteindices(subcell´))
-#                 found = true
-#                 break
-#             end
-#         end
-#         found || empty!(subcell)
-#     end
-#     deleteif!(isempty, subcells(ls))
-#     return ls
-# end
 
 #endregion
 
@@ -234,54 +168,73 @@ end
 #region
 
 function grow(ls::LatticeSlice, h::AbstractHamiltonian)
-    parent(ls) === lattice(h) ||
-        argerror("Tried to grow a LatticeSlice with a Hamiltonian defined on a different Lattice")
-    ls´ = LatticeSlice(parent(ls))
-    for sc in subcells(ls)
-        c = cell(sc)
+    checksamelattice(ls, h)
+    cdict = grow(cellsdict(ls), h)
+    return LatticeSlice(parent(ls), cdict)
+end
+
+function growdiff(ls::LatticeSlice, h::AbstractHamiltonian)
+    checksamelattice(ls, h)
+    cdict = cellsdict(ls)
+    cdict´ = grow(cdict, h)
+    setdiff!(cdict´, cdict)
+    return LatticeSlice(parent(ls), cdict´)
+end
+
+checksamelattice(ls, h) = parent(ls) === lattice(h) ||
+    argerror("Tried to grow a LatticeSlice with a Hamiltonian defined on a different Lattice")
+
+function grow(css::CellSitesDict{L}, h::AbstractHamiltonian) where {L}
+    css´ = CellSitesDict{L}()
+    for cs in css
+        c = cell(cs)
         for har in harmonics(h)
-            mat = matrix(har)
             c´ = c + dcell(har)
-            s = findsubcell(c´, ls´)
+            s = findsubcell(c´, css´)
             if s === nothing
-                sc´ = CellSites(c´)
-                push!(subcells(ls´), sc´)
+                cs´ = CellSites(c´)
+                insert!(css´, c´, cs´)
             else
-                sc´ = subcells(ls´, first(s))
+                cs´ = s
             end
-            for col in siteindices(sc), ptr in nzrange(mat, col)
+            mat = unflat(har)
+            for col in siteindices(cs), ptr in nzrange(mat, col)
                 row = rowvals(mat)[ptr]
-                push!(siteindices(sc´), row)
+                push!(siteindices(cs´), row)
             end
         end
     end
-    for sc in subcells(ls´)
-        unique!(sort!(siteindices(sc)))
+    for cs in css´
+        unique!(sort!(siteindices(cs)))
     end
-    return ls´
+    return CellSitesDict{L}(cell.(css´), css´)
 end
 
-growdiff(ls::LatticeSlice, h::AbstractHamiltonian) = setdiff!(grow(ls, h), ls)
-
-function Base.setdiff!(ls::LatticeSlice, ls0::LatticeSlice)
-    for sc in subcells(ls)
-        s = findsubcell(cell(sc), ls0)
-        s === nothing && continue
-        sc0 = subcells(ls0, first(s))
-        setdiff!(siteindices(sc), siteindices(sc0))
+function Base.setdiff!(cdict::CellSitesDict, cdict0::CellSitesDict)
+    for cs in cdict
+        cs0 = findsubcell(cell(cs), cdict0)
+        cs0 === nothing && continue
+        setdiff!(siteindices(cs), siteindices(cs0))
     end
-    deleteif!(isempty, subcells(ls))
-    return ls
+    deleteif!(isempty, cdict)
+    return cdict
+end
+
+function deleteif!(test, d::Dictionary)
+    for (key, val) in pairs(d)
+        test(val) && delete!(d, key)
+    end
+    return d
 end
 
 #endregion
 
 ############################################################################################
-# convert LatticeSlice to a 0D Lattice
+# convert SiteSlice to a 0D Lattice
 #    build a 0D Lattice using the sites in LatticeSlice
 #region
 
-function lattice0D(ls::LatticeSlice{T,E}, store = missing) where {T,E}
+function lattice0D(ls::LatticeSlice, store = missing)
     lat = parent(ls)
     missing_or_empty!(store)
     sls = [sublat(collect(sublatsites(ls, s, store)); name = sublatname(lat, s))
@@ -293,7 +246,7 @@ end
 function sublatsites(l::LatticeSlice, s::Integer, store = missing)
     n = 0
     gen = ((missing_or_push!(store, n); site(lattice(l), i, cell(subcell)))
-        for subcell in subcells(l) for i in siteindices(subcell)
+        for subcell in cellsdict(l) for i in siteindices(subcell)
         if (n += 1; i in siterange(lattice(l), s)))
     return gen
 end
@@ -307,35 +260,125 @@ missing_or_push!(v, n) = push!(v, n)
 #endregion
 
 ############################################################################################
-# convert a LatticeSlice to an OrbitalSlice and CellSites to CellOrbs
+# reordered_site_orbitals
+#   convert a list of site indices for an OrbitalSliceGrouped or CellOrbitalsGroupedDict
+#   to a list of their of orbital indices
 #region
 
-orbslice(x, g::GreenSolution) = orbslice(x, hamiltonian(g))
-orbslice(x, h::AbstractHamiltonian) = orbslice(x, blockstructure(h))
-orbslice(sc::CellSites, bs::OrbitalBlockStructure) = _orbslice((sc,), bs)
-orbslice(scs::Vector{<:CellSites}, bs::OrbitalBlockStructure) = _orbslice(scs, bs)
-orbslice(ls::LatticeSlice, bs::OrbitalBlockStructure) = _orbslice(subcells(ls), bs)
-
-function _orbslice(subcells, bs::OrbitalBlockStructure)
-    subcells = [cellorbs(sc, bs) for sc in subcells]
-    return OrbitalSlice(subcells)
+function reordered_site_orbitals(siteinds, orbs::Union{OrbitalSliceGrouped,CellOrbitalsGroupedDict})
+    rngs = collect(orbranges(orbs)) # consecutive ranges of orbitals for each site in orbs
+    orbinds = Int[]                      # will store the reotdered orbital indices for each site
+    for siteind in siteinds
+        append!(orbinds, rngs[siteind])
+    end
+    return orbinds
 end
 
-cellorbs(sc::CellSites, g::GreenSolution) = cellorbs(sc, blockstructure(hamiltonian(g)))
-cellorbs(sc::CellSites, h::AbstractHamiltonian) = cellorbs(sc, blockstructure(h))
+#endregion
 
-function cellorbs(sc::CellSites, bs::OrbitalBlockStructure)
-    orbinds = Int[]
-    orbrngs = UnitRange{Int}[]
-    offset = 0
-    for i in siteindices(sc)
-        irng = flatrange(bs, i)
-        len = length(irng)
-        append!(orbinds, irng)
-        push!(orbrngs, offset+1:offset+len)
-        offset += len
+############################################################################################
+# sites_to_orbs: convert sites to orbitals, preserving site groups if possible
+#   conversion rules:
+#       - SiteSlice to an OrbitalSliceGrouped
+#       - CellSitesDict to a CellOrbitalsGroupedDict
+#       - CellSites to a CellOrbitalsGrouped
+#       - Union{Integer,Colon} to a CellOrbitalsGrouped
+#   no-op rules (site-rouping of ungrouped Orbitals is not possible in general):
+#       - AnyOrbitalSlice
+#       - AnyCellOrbitalsDict
+#       - AnyCellOrbitals
+# sites_to_orbs_flat: converts sites to orbitals, without site groups
+#   conversion rules:
+#       - SiteSlice to an OrbitalSlice
+#region
+
+## no-ops
+
+sites_to_orbs(s::AnyOrbitalSlice, _) = s
+sites_to_orbs(c::AnyCellOrbitalsDict, _) = c
+sites_to_orbs(c::AnyCellOrbitals, _) = c
+
+## convert SiteSlice -> OrbitalSliceGrouped/OrbitalSlice
+Contacts
+sites_to_orbs(s::SiteSelector, g) = sites_to_orbs(lattice(g)[s], g)
+sites_to_orbs(kw::NamedTuple, g) = sites_to_orbs(getindex(lattice(g); kw...), g)
+sites_to_orbs(i::Integer, g) = orbslice(selfenergies(contacts(g), i))
+sites_to_orbs(l::SiteSlice, g) =
+    OrbitalSliceGrouped(lattice(l), sites_to_orbs(cellsdict(l), blockstructure(g)))
+
+sites_to_orbs_flat(l::SiteSlice, g) =
+    OrbitalSlice(lattice(l), sites_to_orbs_flat(cellsdict(l), blockstructure(g)))
+
+## convert CellSitesDict to CellOrbitalsGroupedDict/CellOrbitalsDict
+
+sites_to_orbs(c::CellSitesDict, g) = sites_to_orbs(c, blockstructure(g))
+
+function sites_to_orbs(cellsdict::CellSitesDict{L}, os::OrbitalBlockStructure) where {L}
+    # inference fails if cellsdict is empty, so we need to specify eltype
+    co = CellOrbitalsGrouped{L,Vector{Int}}[sites_to_orbs(cellsites, os) for cellsites in cellsdict]
+    return CellOrbitalsGroupedDict(co)
+end
+
+sites_to_orbs_flat(c::CellSitesDict, g) = sites_to_orbs_flat(c, blockstructure(g))
+
+function sites_to_orbs_flat(cellsdict::CellSitesDict{L}, os::OrbitalBlockStructure) where {L}
+    # inference fails if cellsdict is empty, so we need to specify eltype
+    co = CellOrbitals{L,Vector{Int}}[sites_to_orbs_flat(cellsites, os) for cellsites in cellsdict]
+    return CellOrbitalsDict(co)
+end
+
+## convert CellSites -> CellOrbitalsGrouped
+
+sites_to_orbs(c::CellSites, g) = sites_to_orbs(c, blockstructure(g))
+
+function sites_to_orbs(cs::CellSites, os::OrbitalBlockStructure)
+    sites = siteindices(cs)
+    groups = _groups(sites, os) # sites, orbranges
+    orbinds = _orbinds(sites, groups, os)
+    return CellIndices(cell(cs), orbinds, OrbitalLikeGrouped(Dictionary(groups...)))
+end
+
+function sites_to_orbs_flat(cs::CellSites, os::OrbitalBlockStructure)
+    sites = siteindices(cs)
+    orbinds = _orbinds(sites, os)
+    return CellIndices(cell(cs), orbinds, OrbitalLike())
+end
+
+_groups(i::Integer, os) = [i], [flatrange(os, i)]
+_groups(::Colon, os) = _groups(siterange(os), os)
+
+function _groups(sites, os)
+    siteinds = Int[]
+    orbranges = UnitRange{Int}[]
+    sizehint!(siteinds, length(sites))
+    sizehint!(orbranges, length(sites))
+    for site in sites
+        rng = flatrange(os, site)
+        push!(siteinds, site)
+        push!(orbranges, rng)
     end
-    return CellOrbitals(cell(sc), orbinds, orbrngs)
+    return siteinds, orbranges
+end
+
+_orbinds(sites::Union{Integer,Colon,AbstractUnitRange}, _, os) = flatrange(os, sites)
+
+function _orbinds(_, (sites, orbrngs), os)  # reuse precomputed groups
+    orbinds = Int[]
+    sizehint!(orbinds, length(sites))
+    for rng in orbrngs
+        append!(orbinds, rng)
+    end
+    return orbinds
+end
+
+function _orbinds(sites, os)
+    orbinds = Int[]
+    sizehint!(orbinds, length(sites))
+    for i in sites
+        rng = flatrange(os, i)
+        append!(orbinds, rng)
+    end
+    return orbinds
 end
 
 #endregion

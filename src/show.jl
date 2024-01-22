@@ -61,7 +61,7 @@ Base.summary(::LatticeSlice{T,E,L}) where {T,E,L} =
 function Base.show(io::IO, ls::LatticeSlice)
     i = get(io, :indent, "")
     print(io, i, summary(ls), "\n",
-"$i  Cells       : $(length(subcells(ls)))
+"$i  Cells       : $(length(cellsdict(ls)))
 $i  Cell range  : $(isempty(ls) ? "empty" : boundingbox(ls))
 $i  Total sites : $(nsites(ls))")
 end
@@ -309,7 +309,7 @@ function Base.show(io::IO, g::GreenFunction)
 "$i  Solver          : $(typename(solver(g)))
 $i  Contacts        : $(length(Σs))
 $i  Contact solvers : $(display_as_tuple(typename.(solver.(Σs))))
-$i  Contact sizes   : $(display_as_tuple(nsites.(latslice.(Σs))))", "\n")
+$i  Contact sizes   : $(display_as_tuple(nsites.(orbslice.(Σs))))", "\n")
     ioindent = IOContext(io, :indent => i * "  ")
     show(ioindent, parent(g))
 end

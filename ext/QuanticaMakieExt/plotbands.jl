@@ -185,7 +185,7 @@ function plotmeshes!(plot, mp::MeshPrimitives{<:Any,3})
         if !ishidden((:wireframe, :simplices), plot)
             color´ = darken.(mp.colors, plot[:nodedarken][])
             poly!(plot, mp.verts, simps; color = mp.colors, inspectable = false, transparency,
-                 strokewidth = plot[:size][], shading = true)
+                 strokewidth = plot[:size][])
         else
             mesh!(plot, mp.verts, simps; color = mp.colors, inspectable = false, transparency)
         end

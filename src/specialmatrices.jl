@@ -460,11 +460,8 @@ end
 function inverse_green_mat(blocks, hdim, contacts)
     Σs = selfenergies(contacts)
     extoffset = hdim
-    # we need to switch from contactinds(contacts) (relative to merged contact orbslice)
-    # to unitcinds (relative to parent unitcell)
-    unitcinds = contact_orbinds_to_unitcell(contacts)   # see types.jl
-    # holds all non-extended orbital indices
-    unitcindsall = unique!(sort!(reduce(vcat, unitcinds)))
+    unitcinds = [orbindices(only(cellsdict(contacts, i))) for i in 1:ncontacts(contacts)]
+    unitcindsall = orbindices(only(cellsdict(contacts)))
     checkcontactindices(unitcindsall, hdim)
     solvers = solver.(Σs)
     Σblocks = selfenergyblocks(extoffset, unitcinds, 1, (), solvers...)

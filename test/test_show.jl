@@ -23,7 +23,7 @@
         @test nothing === show(stdout, Quantica.slice(b, (0,0)))
         @test nothing === show(stdout, Quantica.slice(b, (0,0)))
         @test nothing === show(stdout, g)
-        @test nothing === show(stdout, g[cells = (0,0)])
+        @test nothing === show(stdout, g[cells = ()])
         @test nothing === show(stdout, g(0.1))
         @test nothing === show(stdout, ldos(g[1]))
         @test nothing === show(stdout, ldos(g(0.1)))

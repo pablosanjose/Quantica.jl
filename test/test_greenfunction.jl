@@ -69,6 +69,13 @@ end
     # contacts that don't include all sublattices
     h = lattice(sublat(0, name = :L), sublat(1, name = :R)) |> hamiltonian
     @test h |> attach(onsite(ω->1), sublats = :L) |> greenfunction isa GreenFunction
+
+    # multiple contacts
+    h0 = LP.square(type = Float32) |> hopping(1)
+    hc = h0 |> supercell(region = RP.rectangle((2, 2)))
+    glead = h0 |> supercell((1,0), region = r -> -1 <= r[2] <= 1) |> attach(nothing; cells = SA[1]) |> greenfunction(GS.Schur(boundary = 0));
+    g = hc |> attach(glead, region = r -> r[1] == 1) |> attach(glead, region = r -> r[1] == -1, reverse = true)  |> attach(onsite(ω->1), region = r -> r == SA[0,0]) |> greenfunction
+    @test Quantica.ncontacts(g) == 3
 end
 
 @testset "greenfunction KPM" begin

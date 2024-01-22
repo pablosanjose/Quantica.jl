@@ -63,7 +63,7 @@ checkplotdim(::PlotArgumentType{E}) where {E} =
 
 ## plotlattice defaults
 
-const plotlat_default_figure = (; resolution = (1200, 1200), fontsize = 40)
+const plotlat_default_figure = (; size = (1200, 1200), fontsize = 40)
 
 const plotlat_default_axis3D = (;
     xlabel = "x", ylabel = "y", zlabel = "z",
@@ -86,7 +86,7 @@ const plotlat_default_3D =
 
 ## plotbands defaults
 
-const plotbands_default_figure = (; resolution = (1200, 1200), fontsize = 40)
+const plotbands_default_figure = (; size = (1200, 1200), fontsize = 40)
 
 const plotbands_default_axis3D = (;
     xlabel = "ϕ₁", ylabel = "ϕ₂", zlabel = "ε",

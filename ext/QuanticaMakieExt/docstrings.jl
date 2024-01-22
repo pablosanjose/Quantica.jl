@@ -21,7 +21,7 @@ cycling over them if necessary.
 
 ## Keywords
 
-- `figure`: keywords to pass onto the plot `Figure` (e.g. `resolution` or `fontsize`, see `Makie.Figure`)
+- `figure`: keywords to pass onto the plot `Figure` (e.g. `size` or `fontsize`, see `Makie.Figure`)
 - `axis`: keywords to pass on to the plot axis (see `Makie.LScene`, `Makie.Axis3` or `Makie.Axis` for options)
 - `fancyaxis::Bool`: for 3D plots, whether to use `Makie.LScene` (supports zoom+pan) instead of `Makie.Axis3`
 - `inspector::Bool`: whether to enable interactive tooltips of plot elements
@@ -158,11 +158,11 @@ Equivalent to `qplotdefaults(; defaults...)`
 
 # Examples
 ```jldoctest
-julia> qplotdefaults(figure = (resolution = (1000, 1000),))
-(user_default_figure = (resolution = (1000, 1000),), user_default_axis2D = NamedTuple(), user_default_axis3D = NamedTuple(), user_default_lscene = NamedTuple(), user_default_inspector = NamedTuple())
+julia> qplotdefaults(figure = (size = (1000, 1000),))
+(user_default_figure = (size = (1000, 1000),), user_default_axis2D = NamedTuple(), user_default_axis3D = NamedTuple(), user_default_lscene = NamedTuple(), user_default_inspector = NamedTuple())
 
 julia> qplotdefaults(axis2D = (xlabel = "X",), inspector = (fontsize = 30,))
-(user_default_figure = (resolution = (1000, 1000),), user_default_axis2D = (xlabel = "X",), user_default_axis3D = NamedTuple(), user_default_lscene = NamedTuple(), user_default_inspector = (fontsize = 30,))
+(user_default_figure = (size = (1000, 1000),), user_default_axis2D = (xlabel = "X",), user_default_axis3D = NamedTuple(), user_default_lscene = NamedTuple(), user_default_inspector = (fontsize = 30,))
 ```
 """
 qplotdefaults

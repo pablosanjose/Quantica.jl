@@ -1398,11 +1398,11 @@ julia> gdisk = HP.graphene(a0 = 1, dim = 3) |> supercell(region = RP.circle(10))
 attach
 
 """
-    cellsites(cell_indices, site_indices)
+    cellsites(cell_index, site_indices)
 
-Simple selector of sites with given `site_indices` in a given cell at `cell_indices`. Here,
+Simple selector of sites with given `site_indices` in a given cell at `cell_index`. Here,
 `site_indices` can be an index, a collection of integers or `:` (for all sites), and
-`cell_indices` should be a collection of `L` integers, where `L` is the lattice dimension.
+`cell_index` should be a collection of `L` integers, where `L` is the lattice dimension.
 
 # See also
     `siteselector`

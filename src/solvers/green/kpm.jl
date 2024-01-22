@@ -25,7 +25,7 @@ empty_mulist(ket::Matrix{C}, order) where {C<:Complex} =
     [zeros(C, size(ket, 2), size(ket, 2)) for _ in 1:(order + 1)]
 
 function momentaKPM(h, ket, (center, halfwidth); order = 10, kernel = I)
-    pmeter = Progress(order, "Computing moments: ")
+    pmeter = Progress(order; desc = "Computing moments: ")
     builder = KPMBuilder(h, kernel, ket, (center, halfwidth), order)
     mulist = addmomentaKPM!(builder, pmeter)
     jackson!(mulist)
@@ -195,6 +195,15 @@ function band_ceter_halfwidth(h, ::Missing, padfactor)
     @warn  "Computed real bandrange = ($emin, $emax)"
     bandCH = 0.5 * (emin + emax), 0.5 * (emax - emin) * padfactor
     return bandCH
+end
+
+function contact_basis(h::AbstractHamiltonian{T}, contacts) where {T}
+    n = flatsize(h)
+    # Orbital indices in merged contacts, all belonging to a single unit cell
+    mergedorbinds = orbindices(only(cellsdict(contacts)))
+    basis = zeros(Complex{T}, n, length(mergedorbinds))
+    one!(basis, mergedorbinds)
+    return basis
 end
 
 #endregion

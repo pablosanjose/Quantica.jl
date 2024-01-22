@@ -41,23 +41,22 @@ end
 # the lead, but using the correct site order of hparent
 function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurEmptyLead; reverse = false, transform = missing, kw...)
     sel = siteselector(; kw...)
-    lsparent = lattice(hparent)[sel]
+    lsparent = sites_to_orbs(lattice(hparent)[sel], hparent)
     schursolver = solver(glead)
     fsolver = schurfactorsolver(schursolver)
     isfinite(schursolver.boundary) ||
         argerror("The form attach(h, glead; sites...) assumes a semi-infinite lead, but got `boundary = Inf`")
     # we obtain latslice of open surface in gL/gR
     gunit = reverse ? schursolver.gL : schursolver.gR
-    blocksizes(blockstructure(hamiltonian(gunit))) == blocksizes(blockstructure(hparent)) ||
+    blocksizes(blockstructure(gunit)) == blocksizes(blockstructure(hparent)) ||
         argerror("The orbital structure of parent and lead Hamiltonians do not match. Maybe you meant to use `attach(h, g1D, coupling; sites...)`?")
     # This is a SelfEnergy for a lead unit cell with a SelfEnergySchurSolver
     Σlead = only(selfenergies(contacts(gunit)))
-    lslead = latslice(Σlead)
+    lslead = orbslice(Σlead)
     # find lead site index in lslead for each site in lsparent
     leadsites, displacement = lead_siteind_foreach_parent_siteind(lsparent, lslead, transform)
-    # convert lead site indices to lead orbital indices using lead's ContactBlockStructure
-    leadcbs = blockstructure(contacts(gunit))
-    leadorbs = contact_sites_to_orbitals(leadsites, leadcbs)
+    # convert lead site indices to lead orbital indices using lead's ContactOrbitals
+    leadorbs = reordered_site_orbitals(leadsites, cellsdict(contactorbitals(gunit)))
     # translate glead unitcell by displacement, so it overlaps sel sites (modulo transform)
     hlead = copy(parent(glead))
     transform === missing || Quantica.transform!(hlead, transform)
@@ -182,7 +181,7 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead,
 
     # combine gunit and parent sites into lat0
     sel = siteselector(; kw...)
-    lsparent = lattice(hparent)[sel]
+    lsparent = sites_to_orbs(lattice(hparent)[sel], hparent)
     lat0parent = lattice0D(lsparent)
     lat0 = combine(lat0parent, lat0lead)
     nparent, ntotal = nsites(lat0parent), nsites(lat0)
@@ -239,7 +238,7 @@ minimal_callsafe_copy(s::SelfEnergyCouplingSchurSolver) =
 #region
 
 function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead; reverse = false, transform = missing, sites...)
-    blocksizes(blockstructure(hamiltonian(glead))) == blocksizes(blockstructure(hparent)) ||
+    blocksizes(blockstructure(glead)) == blocksizes(blockstructure(hparent)) ||
         argerror("The orbital structure of parent and lead Hamiltonians do not match")
     # find boundary ± 1
     schursolver = solver(glead)
@@ -249,13 +248,12 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead;
     xunit = boundary + ifelse(reverse, -1, 1)
     gslice = glead[cells = SA[xunit]]
     # lattice slices for parent and lead unit cell
-    lsparent = getindex(lattice(hparent); sites...)
+    lsparent = sites_to_orbs(getindex(lattice(hparent); sites...), hparent)
     lslead = lattice(glead)[cells = SA[xunit]]
     # find lead site index in lslead for each site in lsparent
     leadsites, displacement = lead_siteind_foreach_parent_siteind(lsparent, lslead, transform)
-    # convert lead site indices to lead orbital indices using lead's ContactBlockStructure
-    leadbs = blockstructure(glead)                              # This is a BlockStructure
-    leadorbs = contact_sites_to_orbitals(leadsites, leadbs)
+    # convert lead site indices to lead orbital indices using lead's ContactOrbitals
+    leadorbs = reordered_site_orbitals(leadsites, cellsdict(contactorbitals(glead)))
     # build V and V´ as a leadorbs reordering of inter-cell harmonics of hlead
     hlead = copy(hamiltonian(glead))  # careful, not parent, which could be a ParametricHamiltonian
     h₊₁, h₋₁ = hlead[SA[1]], hlead[SA[-1]]

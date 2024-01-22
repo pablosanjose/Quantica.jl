@@ -113,7 +113,7 @@ julia> qplot(lat, hide = nothing)
     GLMakie.jl is optimized for interactive GPU-accelerated, rasterized plots. If you need to export to PDF for publications or display plots inside a Jupyter notebook, use CairoMakie.jl instead, which in general renders non-interactive, but vector-based plots.
 
 !!! tip "User-defined defaults for `qplot`"
-    The command `qplotdefaults(; axis, figure)` can be used to define the default value of `figure` and `axis` keyword arguments of `qplot`. Example: to fix the resolution of all subsequent plots, do `qplotdefaults(; figure = (resolution = (1000, 1000),))`.
+    The command `qplotdefaults(; axis, figure)` can be used to define the default value of `figure` and `axis` keyword arguments of `qplot`. Example: to fix the size of all subsequent plots, do `qplotdefaults(; figure = (size = (1000, 1000),))`.
 
 ## [SiteSelectors](@id siteselectors)
 
