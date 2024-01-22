@@ -147,8 +147,12 @@ combine(d) = d
 
 # TODO: when/if https://github.com/andyferris/Dictionaries.jl/pull/130 is merged
 # this should become simply mergewith(combine_subcells, d1, d2, ds...)
-combine(d1::D, d2::D, ds::D...) where {D<:CellIndicesDict} =
-    foldl(mergewith!(combine_subcells), (d2, ds...), init = copy(d1))
+function combine(d1::D, d2::D, ds::D...) where {D<:CellIndicesDict}
+    # mergewith(combine_subcells, d1, d2, ds...)
+    out = similar(copy(keys(d1), keytype(D)), valtype(D))
+    copyto!(out, d1)
+    return foldl(mergewith!(combine_subcells), (d2, ds...), init = out)
+end
 
 combine_subcells(c::C, cs::C...) where {C<:CellSites} =
     CellSites(cell(c), union(siteindices(c), siteindices.(cs)...))
