@@ -15,6 +15,8 @@ rdr((r1, r2)::Pair) = (0.5 * (r1 + r2), r2 - r1)
 @inline tupleflatten(x0::Tuple, x1, xs...) = tupleflatten((x0..., x1), xs...)
 @inline tupleflatten(x0::Tuple, x1::Tuple, xs...) = tupleflatten((x0..., x1...), xs...)
 
+tuplefill(x, ::Val{N}) where {N} = ntuple(Returns(x), Val(N))
+
 padtuple(t, x, N) = ntuple(i -> i <= length(t) ? t[i] : x, N)
 
 @inline tupletake(x, ::Val{N}) where {N} = ntuple(i -> x[i], Val(N))

@@ -82,17 +82,16 @@ end
 
 #endregion
 
-# ############################################################################################
-# # Block sanitizers
-# #region
+############################################################################################
+# CellIndices sanitizers
+#region
 
-# sanitize_block(S::Type{<:Number}, s, _) = convert(S, first(s))
-# sanitize_block(S::Type{<:SMatrix}, s::SMatrix, size) = sanitize_SMatrix(S, s, size)
-# sanitize_block(::Type{S}, s::Number, size) where {S<:SMatrix} = sanitize_SMatrix(S, S(s*I), size)
-# sanitize_block(::Type{S}, s::UniformScaling, size) where {S<:SMatrix} =
-#     sanitize_SMatrix(S, S(s), size)
+# an inds::Tuple fails some tests because convert(Tuple, ::UnitRange) doesnt exist, but
+# convert(SVector, ::UnitRange) does. Used e.g. in compute_or_retrieve_green @ sparselu.jl
+sanitize_cellindices(inds::Tuple) = SVector(inds)
+sanitize_cellindices(inds) = inds
 
-# #endregion
+#endregion
 
 ############################################################################################
 # Supercell sanitizers
@@ -115,11 +114,11 @@ sanitize_supercell(::Val{L}, v) where {L} =
 # Eigen sanitizers
 #region
 
-sanitize_eigen(ε, Ψ) = Eigen(sorteigs!(ε, Ψ)...)
 sanitize_eigen(ε::AbstractVector, Ψs::AbstractVector{<:AbstractVector}) =
     sanitize_eigen(ε, hcat(Ψs...))
-sanitize_eigen(ε::AbstractVector{<:Real}, Ψ::AbstractMatrix) =
-    sanitize_eigen(complex.(ε), Ψ)
+sanitize_eigen(ε, Ψ) = Eigen(sorteigs!(sanitize_eigen(ε), sanitize_eigen(Ψ))...)
+sanitize_eigen(x::AbstractArray{<:Real}) = complex.(x)
+sanitize_eigen(x::AbstractArray{<:Complex}) = x
 
 function sorteigs!(ϵ::AbstractVector, ψ::AbstractMatrix)
     p = Vector{Int}(undef, length(ϵ))

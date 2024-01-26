@@ -7,25 +7,24 @@ struct AppliedSparseLUGreenSolver{C} <:AppliedGreenSolver
 end
 
 mutable struct SparseLUSlicer{C} <:GreenSlicer{C}
-    fact::SparseArrays.UMFPACK.UmfpackLU{C,Int}  # of full system plus extended orbs
-    nonextrng::UnitRange{Int}                    # range of non-extended orbital indices
-    unitcinds::Vector{Vector{Int}}               # non-extended fact indices per contact
-    unitcindsall::Vector{Int}                    # merged and uniqued unitcinds
-    source::Matrix{C}                            # preallocation for ldiv! source @ contacts
-    unitg::Matrix{C}                             # lazy storage of a full ldiv! solve of all (nonextrng) sites
-    function SparseLUSlicer{C}(fact, nonextrng, unitcinds, unitcindsall, source) where {C}
+    fact::SparseArrays.UMFPACK.UmfpackLU{ComplexF64,Int}  # of full system plus extended orbs
+    nonextrng::UnitRange{Int}       # range of non-extended orbital indices
+    unitcinds::Vector{Vector{Int}}  # non-extended fact indices per contact
+    unitcindsall::Vector{Int}       # merged and uniqued unitcinds
+    source64::Matrix{ComplexF64}    # preallocation for ldiv! source @ contacts
+    sourceC::Matrix{C}              # alias of source64 or C conversion
+    unitg::Matrix{C}                # lazy storage of a full ldiv! solve of all (nonextrng) sites
+    function SparseLUSlicer{C}(fact, nonextrng, unitcinds, unitcindsall, source64) where {C}
         s = new()
-        s.fact = fact
+        s.fact = fact   # Note that there is no SparseArrays.UMFPACK.UmfpackLU{ComplexF32}
         s.nonextrng = nonextrng
         s.unitcinds = unitcinds
         s.unitcindsall = unitcindsall
-        s.source = source
+        s.source64 = source64
+        s.sourceC = convert(Matrix{C}, source64)
         return s
     end
 end
-
-SparseLUSlicer(fact::Factorization{C}, nonextrng, unitcinds, unitcindsall, source) where {C} =
-    SparseLUSlicer{C}(fact, nonextrng, unitcinds, unitcindsall, source)
 
 #region ## API ##
 
@@ -40,8 +39,8 @@ unitcellinds_contacts_merged(s::SparseLUSlicer) = s.unitcindsall
 minimal_callsafe_copy(s::AppliedSparseLUGreenSolver) =
     AppliedSparseLUGreenSolver(minimal_callsafe_copy(s.invgreen))
 
-minimal_callsafe_copy(s::SparseLUSlicer) =
-    SparseLUSlicer(s.fact, s.nonextrng, s.unitcinds, s.unitcindsall, copy(s.source))
+minimal_callsafe_copy(s::SparseLUSlicer{C}) where {C} =
+    SparseLUSlicer{C}(s.fact, s.nonextrng, s.unitcinds, s.unitcindsall, copy(s.source64))
 
 #endregion
 
@@ -65,7 +64,7 @@ function (s::AppliedSparseLUGreenSolver{C})(ω, Σblocks, contactorbitals) where
     nonextrng = orbrange(invgreen)
     unitcinds = invgreen.unitcinds
     unitcindsall = invgreen.unitcindsall
-    source = s.invgreen.source
+    source64 = convert(Matrix{ComplexF64}, s.invgreen.source)
     # the H0 and Σs inside invgreen have already been updated by the parent call!(g, ω; ...)
     update!(invgreen, ω)
     igmat = matrix(invgreen)
@@ -76,7 +75,7 @@ function (s::AppliedSparseLUGreenSolver{C})(ω, Σblocks, contactorbitals) where
         argerror("Encountered a singular G⁻¹(ω) at ω = $ω, cannot factorize")
     end
 
-    so = SparseLUSlicer{C}(fact, nonextrng, unitcinds, unitcindsall, source)
+    so = SparseLUSlicer{C}(fact, nonextrng, unitcinds, unitcindsall, source64)
     return so
 end
 
@@ -91,42 +90,48 @@ end
 function Base.view(s::SparseLUSlicer, i::Integer, j::Integer)
     dstinds = unitcellinds_contacts(s, i)
     srcinds = unitcellinds_contacts(s, j)
-    source = view(s.source, :, 1:length(srcinds))
-    return compute_or_retrieve_green(s, dstinds, srcinds, source)
+    source64 = view(s.source64, :, 1:length(srcinds))
+    sourceC = view(s.sourceC, :, 1:length(srcinds))
+    return compute_or_retrieve_green(s, dstinds, srcinds, source64, sourceC)
 end
 
 Base.view(s::SparseLUSlicer, ::Colon, ::Colon) =
-    compute_or_retrieve_green(s, s.unitcindsall, s.unitcindsall, s.source)
+    compute_or_retrieve_green(s, s.unitcindsall, s.unitcindsall, s.source64, s.sourceC)
 
-function Base.view(s::SparseLUSlicer, i::CellOrbitals, j::CellOrbitals)
-    # cannot use s.source, because it has only ncols = number of orbitals in contacts
-    source = similar_source(s, j)
-    v = compute_or_retrieve_green(s, orbindices(i), orbindices(j), source)
+function Base.view(s::SparseLUSlicer{C}, i::CellOrbitals, j::CellOrbitals) where {C}
+    # cannot use s.source64, because it has only ncols = number of orbitals in contacts
+    source64 = similar_source64(s, j)
+    sourceC = convert(Matrix{C}, source64)  # will alias if C == ComplexF64
+    v = compute_or_retrieve_green(s, orbindices(i), orbindices(j), source64, sourceC)
     return v
 end
 
 # Implements cache for full ldiv! solve (unitg)
-function compute_or_retrieve_green(s::SparseLUSlicer{C}, dstinds, srcinds, source) where {C}
+# source64 and sourceC are of size (total_orbs_including_extended, length(srcinds))
+function compute_or_retrieve_green(s::SparseLUSlicer{C}, dstinds, srcinds, source64, sourceC) where {C}
     if isdefined(s, :unitg)
         g = view(s.unitg, dstinds, srcinds)
     else
         fact = s.fact
-        allinds = 1:size(fact, 1)
-        one!(source, srcinds)
-        gext = ldiv!(fact, source)
+        allinds = 1:size(fact, 1) # axes not defined on SparseArrays.UMFPACK.UmfpackLU
+        one!(source64, srcinds)
+        gext = ldiv!(fact, source64)
+        sourceC === gext || copy!(sourceC, gext)  # required when C != ComplexF64
+        # allinds may include extended orbs -> exclude them from the view
         dstinds´ = ifelse(dstinds === allinds, s.nonextrng, dstinds)
-        g = view(gext, dstinds´, :)
+        srcinds´ = convert(typeof(srcinds), 1:length(srcinds))
+        g = view(sourceC, dstinds´, srcinds´)
         if srcinds === allinds
-            s.unitg = copy(view(gext, s.nonextrng, s.nonextrng))
+            s.unitg = copy(view(gext, s.nonextrng, s.nonextrng))     # exclude extended orbs
         end
     end
     return g
 end
 
-similar_source(s::SparseLUSlicer, ::CellOrbitals{<:Any,Colon}) =
-    similar(s.source, size(s.source, 1), maximum(s.nonextrng))
-similar_source(s::SparseLUSlicer, j::CellOrbitals) =
-    similar(s.source, size(s.source, 1), norbitals(j))
+similar_source64(s::SparseLUSlicer, ::CellOrbitals{<:Any,Colon}) =
+    similar(s.source64, size(s.source64, 1), maximum(s.nonextrng))
+similar_source64(s::SparseLUSlicer, j::CellOrbitals) =
+    similar(s.source64, size(s.source64, 1), norbitals(j))
 
 # getindex must return a Matrix
 Base.getindex(s::SparseLUSlicer, i::CellOrbitals, j::CellOrbitals) = copy(view(s, i, j))
