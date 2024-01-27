@@ -15,6 +15,9 @@ Base.convert(::Type{T}, l::CellSites) where T<:CellSites = T(l)
 Base.convert(::Type{T}, l::T) where T<:AbstractHamiltonian = l
 Base.convert(::Type{T}, l::AbstractHamiltonian) where T<:AbstractHamiltonian = T(l)
 
+Base.convert(::Type{T}, l::T) where T<:Mesh = l
+Base.convert(::Type{T}, l::Mesh) where T<:Mesh = T(l)
+
 # Constructors for conversion
 Sublat{T,E}(s::Sublat, name = s.name) where {T<:AbstractFloat,E} =
     Sublat{T,E}([sanitize_SVector(SVector{E,T}, site) for site in sites(s)], name)
@@ -39,6 +42,9 @@ function ParametricHamiltonian{E}(ph::ParametricHamiltonian) where {E}
     pars = parameters(ph)
     return ParametricHamiltonian(hparent, h, ms, ptrs, pars)
 end
+
+Mesh{S}(m::Mesh) where {S} =
+    Mesh(convert(Vector{S}, vertices(m)), neighbors(m), simplices(m))
 
 # We need this to promote different sublats into common dimensionality and type to combine
 # into a lattice

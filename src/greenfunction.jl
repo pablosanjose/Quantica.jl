@@ -31,23 +31,30 @@ default_green_solver(::AbstractHamiltonian) = GS.Bands()
 (g::GreenSlice)(; params...) = minimal_callsafe_copy(call!(g; params...))
 (g::GreenSlice)(ω; params...) = copy(call!(g, ω; params...))
 
-call!(g::GreenFunction, ω::Real; params...) = call!(g, retarded_omega(ω, solver(g)); params...)
+function call!(g::GreenFunction{T}, ω::Real; params...) where {T}
+    ω´ = retarded_omega(real_or_complex_typed(T, ω), solver(g))
+    return call!(g, ω´; params...)
+end
 
-function call!(g::GreenFunction, ω::Complex; params...)
+function call!(g::GreenFunction{T}, ω::Complex; params...) where {T}
+    ω´ = real_or_complex_typed(T, ω)
     h = parent(g)
     contacts´ = contacts(g)
     call!(h; params...)
-    Σblocks = call!(contacts´, ω; params...)
+    Σblocks = call!(contacts´, ω´; params...)
     corbs = contactorbitals(contacts´)
-    slicer = solver(g)(ω, Σblocks, corbs)
+    slicer = solver(g)(ω´, Σblocks, corbs)
     return GreenSolution(g, slicer, Σblocks, corbs)
 end
 
 call!(g::GreenSlice; params...) =
     GreenSlice(call!(greenfunction(g); params...), slicerows(g), slicecols(g))
 
-call!(g::GreenSlice, ω; params...) =
-    call!(greenfunction(g), ω; params...)[slicerows(g), slicecols(g)]
+call!(g::GreenSlice{T}, ω; params...) where {T} =
+    call!(greenfunction(g), real_or_complex_typed(T, ω); params...)[slicerows(g), slicecols(g)]
+
+real_or_complex_typed(::Type{T}, ω::Real) where {T<:Real} = convert(T, ω)
+real_or_complex_typed(::Type{T}, ω::Complex) where {T<:Real} = convert(Complex{T}, ω)
 
 retarded_omega(ω::T, s::AppliedGreenSolver) where {T<:Real} =
     ω + im * sqrt(eps(float(T))) * needs_omega_shift(s)
@@ -434,7 +441,7 @@ Base.view(s::TMatrixSlicer, ::Colon, ::Colon) = view(s.gcontacts, :, :)
 
 function Base.getindex(s::TMatrixSlicer, i::CellOrbitals, j::CellOrbitals)
     g0 = s.g0slicer
-    g0ij = g0[i, j]
+    g0ij = ensure_mutable_matrix(g0[i, j])
     tkk´ = s.tmatrix
     isempty(tkk´) && return g0ij
     k = s.contactorbs
@@ -443,6 +450,9 @@ function Base.getindex(s::TMatrixSlicer, i::CellOrbitals, j::CellOrbitals)
     gij = mul!(g0ij, g0ik, tkk´ * g0k´j, 1, 1)  # = g0ij + g0ik * tkk´ * g0k´j
     return gij
 end
+
+ensure_mutable_matrix(m::SMatrix) = Matrix(m)
+ensure_mutable_matrix(m::AbstractMatrix) = m
 
 minimal_callsafe_copy(s::TMatrixSlicer) = TMatrixSlicer(minimal_callsafe_copy(s.g0slicer),
     s.tmatrix, s.gcontacts, s.contactorbs)

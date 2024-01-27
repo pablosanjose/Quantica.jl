@@ -6,16 +6,16 @@ module HamiltonianPresets
 
 using Quantica, LinearAlgebra
 
-function graphene(; a0 = 0.246, range = a0/sqrt(3), t0 = 2.7, β = 3, dim = 2, type = Float64, names = (:A, :B), kw...)
+function graphene(; a0 = 0.246, range = neighbors(1), t0 = 2.7, β = 3, dim = 2, type = Float64, names = (:A, :B), kw...)
     lat = LatticePresets.honeycomb(; a0, dim, type, names)
     h = hamiltonian(lat,
-        hopping((r, dr) -> t0 * exp(-β*(sqrt(3) * norm(dr)/a0 - 1)) * I,range = range); kw...)
+        hopping((r, dr) -> t0 * exp(-β*(sqrt(3) * norm(dr)/a0 - 1)) * I, range = range); kw...)
     return h
 end
 
 function twisted_bilayer_graphene(;
     twistindex = 1, twistindices = (twistindex, 1), a0 = 0.246,
-    interlayerdistance = 1.36a0, rangeintralayer = a0/sqrt(3), rangeinterlayer = 4a0/sqrt(3),
+    interlayerdistance = 1.36a0, rangeintralayer = neighbors(1), rangeinterlayer = 4a0/sqrt(3),
     hopintra = 2.70 * I, hopinter = 0.48, modelintra = hopping(hopintra, range = rangeintralayer),
     type = Float64, names = (:Ab, :Bb, :At, :Bt),
     kw...)

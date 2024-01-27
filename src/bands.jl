@@ -61,8 +61,9 @@ end
 
 bands(rng, rngs...; kw...) = h -> bands(h, rng, rngs...; kw...)
 
-bands(h::Union{Function,AbstractHamiltonian}, rng, rngs...; kw...) =
-    bands(h, mesh(rng, rngs...); kw...)
+bands(h::Function, rng, rngs...; kw...) = bands(h, mesh(rng, rngs...); kw...)
+bands(h::AbstractHamiltonian{T}, rng, rngs::Vararg{Any,L´}; kw...) where {T,L´} =
+    bands(h, convert(Mesh{SVector{L´+1,T}}, mesh(rng, rngs...)); kw...)
 
 bands(h::AbstractHamiltonian{<:Any,<:Any,L}; kw...) where {L} =
     bands(h, default_band_ticks(Val(L))...; kw...)
@@ -660,10 +661,13 @@ end
 function simplex_projector(hkav, verts, vind, εav, mindeg)
     φ = states(verts[vind])
     hproj = φ' * hkav * φ
-    _, P = eigen!(Hermitian(hproj), sortby = ε -> abs(ε - εav))
+    _, P = maybe_eigen!(Hermitian(hproj), sortby = ε -> abs(ε - εav))
     Pthin = view(P, :, 1:mindeg)
     return φ * Pthin
 end
+
+maybe_eigen!(A::AbstractMatrix{<:LinearAlgebra.BlasComplex}; kw...) = eigen!(A; kw...)
+maybe_eigen!(A; kw...) = eigen(A; kw...)    # generic fallback for e.g. Complex16
 
 #endregion
 

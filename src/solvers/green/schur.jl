@@ -7,8 +7,8 @@
 #region
 
 struct SchurWorkspace{C}
-    GL::Matrix{C}
-    GR::Matrix{C}
+    GL::Matrix{ComplexF64}
+    GR::Matrix{ComplexF64}
     LG::Matrix{C}
     RG::Matrix{C}
     A::Matrix{C}
@@ -34,10 +34,10 @@ struct SchurFactorsSolver{T,B}
     linds::Vector{Int}                                # orbital indices on left surface
     rinds::Vector{Int}                                # orbital indices on right surface
     sinds::Vector{Int}                                # orbital indices on the smallest surface (left for l<=r, right for l>r)
-    L::Matrix{Complex{T}}                             # l<=r ? PL : PL*H' === hp PR  (n × min(l,r))
-    R::Matrix{Complex{T}}                             # l<=r ? PR*H === hm PL : PR   (n × min(l,r))
-    R´L´::Matrix{Complex{T}}                          # [R'; -L']. L and R must be dense for iG \ (L,R)
-    tmp::SchurWorkspace{Complex{T}}
+    L::Matrix{ComplexF64}                             # l<=r ? PL : PL*H' === hp PR  (n × min(l,r))
+    R::Matrix{ComplexF64}                             # l<=r ? PR*H === hm PL : PR   (n × min(l,r))
+    R´L´::Matrix{ComplexF64}                          # [R'; -L']. L and R must be dense for iG \ (L,R)
+    tmp::SchurWorkspace{Complex{T}}                   # L, R, R´L´ need 64bit
 end
 
 #region ## Constructors ##
@@ -58,8 +58,8 @@ function SchurFactorsSolver(h::Hamiltonian{T,<:Any,1}, shift = one(Complex{T})) 
 end
 
 function SchurWorkspace{C}((n, d), l, r) where {C}
-    GL = Matrix{C}(undef, n, d)
-    GR = Matrix{C}(undef, n, d)
+    GL = Matrix{ComplexF64}(undef, n, d)
+    GR = Matrix{ComplexF64}(undef, n, d)
     LG = Matrix{C}(undef, d, n)
     RG = Matrix{C}(undef, d, n)
     A = Matrix{C}(undef, 2d, 2d)
@@ -94,19 +94,19 @@ function left_right_projectors(hm::SparseMatrixCSC, hp::SparseMatrixCSC)
     linds = stored_cols(hm)
     rinds = stored_cols(hp)
     # dense projectors
-    o = one(eltype(hp)) * I
+    o = one(ComplexF64) * I
     allrows = 1:size(hp,1)
     l_leq_r = length(linds) <= length(rinds)
     PR = o[allrows, rinds]
     PL = o[allrows, linds]
     if l_leq_r
         sinds = linds
-        R = Matrix(hm[:, linds])  # R = PR H = hm PL
+        R = Matrix{ComplexF64}(hm[:, linds])  # R = PR H = hm PL
         L = PL
     else
         sinds = rinds
         R = PR
-        L = Matrix(hp[:, rinds])  # L = PL H' = hp PR
+        L = Matrix{ComplexF64}(hp[:, rinds])  # L = PL H' = hp PR
     end
     return linds, rinds, L, R, sinds, l_leq_r
 end
@@ -481,10 +481,10 @@ function Base.getproperty(s::SchurGreenSlicer, f::Symbol)
     return getfield(s, f)
 end
 
-# note that g.source is taller than L, R, due to extended sites, but of >= witdth
+# note that g.sourceC is taller than L, R, due to extended sites, but of >= witdth
 # size(L, 2) = size(R, 2) = min(l, r) = d (deflated surface)
 function extended_ldiv!(gL::Matrix{C}, g::SparseLUSlicer, L) where {C}
-    Lext = view(g.source, :, axes(L, 2))
+    Lext = view(g.source64, :, axes(L, 2))
     fill!(Lext, zero(C))
     copyto!(Lext, CartesianIndices(L), L, CartesianIndices(L))
     copy!(gL, view(ldiv!(g.fact, Lext), axes(L)...))
@@ -492,7 +492,7 @@ function extended_ldiv!(gL::Matrix{C}, g::SparseLUSlicer, L) where {C}
 end
 
 function extended_rdiv!(L´g::Matrix{C}, L, g::SparseLUSlicer) where {C}
-    Lext = view(g.source, :, axes(L, 2))
+    Lext = view(g.source64, :, axes(L, 2))
     fill!(Lext, zero(C))
     copyto!(Lext, CartesianIndices(L), L, CartesianIndices(L))
     copy!(L´g, view(ldiv!(g.fact', Lext), axes(L)...)')
@@ -503,8 +503,11 @@ end
 
 #region ## API ##
 
-Base.getindex(s::SchurGreenSlicer, i::CellOrbitals, j::CellOrbitals) =
-    isinf(s.boundary) ? inf_schur_slice(s, i, j) : semi_schur_slice(s, i, j)
+function Base.getindex(s::SchurGreenSlicer, i::CellOrbitals, j::CellOrbitals)
+    G = isinf(s.boundary) ? inf_schur_slice(s, i, j) : semi_schur_slice(s, i, j)
+    # for type-stability with SVector indices
+    return maybe_SMatrix(G, orbindices(i), orbindices(j))
+end
 
 function inf_schur_slice(s::SchurGreenSlicer, i::CellOrbitals, j::CellOrbitals)
     rows, cols = orbindices(i), orbindices(j)
@@ -569,6 +572,9 @@ function semi_schur_slice(s::SchurGreenSlicer{C}, i, j) where {C}
         return Gₙₘ
     end
 end
+
+maybe_SMatrix(G::Matrix, rows::SVector{L}, cols::SVector{L´}) where {L,L´} = SMatrix{L,L´}(G)
+maybe_SMatrix(G, rows, cols) = G
 
 # TODO: Perhaps too conservative
 function minimal_callsafe_copy(s::SchurGreenSlicer)
