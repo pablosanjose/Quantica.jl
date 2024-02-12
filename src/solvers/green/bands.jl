@@ -592,7 +592,7 @@ struct BoundaryOrbs{L}
 end
 
 struct AppliedBandsGreenSolver{B<:Union{Missing,BoundaryOrbs},SB<:Subband,SS<:SubbandSimplices} <: AppliedGreenSolver
-    subband::SB                        # single (non-split) subband
+    subband::SB                         # single (non-split) subband
     subbandsimps::SS                    # BandSimplices in subband
     boundaryorbs::B                     # missing or BoundaryOrbs
 end
@@ -711,9 +711,9 @@ end
 
 #region ## call ##
 
-function (s::AppliedBandsGreenSolver)(ω, Σblocks, cblockstruct)
+function (s::AppliedBandsGreenSolver)(ω, Σblocks, corbitals)
     g0slicer = BandsGreenSlicer(complex(ω), s)
-    gslicer = maybe_TMatrixSlicer(g0slicer, Σblocks, cblockstruct)
+    gslicer = maybe_TMatrixSlicer(g0slicer, Σblocks, corbitals)
     return gslicer
 end
 

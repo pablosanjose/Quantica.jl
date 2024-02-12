@@ -386,11 +386,11 @@ function minimal_callsafe_copy(s::AppliedSchurGreenSolver{<:Any,<:Any,<:Any,<:An
     return s´
 end
 
-function (s::AppliedSchurGreenSolver)(ω, Σblocks, cblockstruct)
+function (s::AppliedSchurGreenSolver)(ω, Σblocks, corbitals)
     # call! fsolver once for all the g's
     call!(s.fsolver, ω)
     g0slicer = SchurGreenSlicer(ω, s)
-    gslicer = maybe_TMatrixSlicer(g0slicer, Σblocks, cblockstruct)
+    gslicer = maybe_TMatrixSlicer(g0slicer, Σblocks, corbitals)
     return gslicer
 end
 
@@ -421,9 +421,9 @@ mutable struct SchurGreenSlicer{C,A<:AppliedSchurGreenSolver}  <: GreenSlicer{C}
     boundary::C
     L::Matrix{C}
     R::Matrix{C}
-    G₋₁₋₁::SparseLUSlicer{C}
-    G₁₁::SparseLUSlicer{C}
-    G∞₀₀::SparseLUSlicer{C}
+    G₋₁₋₁::SparseLUGreenSlicer{C}
+    G₁₁::SparseLUGreenSlicer{C}
+    G∞₀₀::SparseLUGreenSlicer{C}
     L´G∞₀₀::Matrix{C}
     R´G∞₀₀::Matrix{C}
     G₁₁L::Matrix{C}
@@ -483,7 +483,7 @@ end
 
 # note that g.source is taller than L, R, due to extended sites, but of >= witdth
 # size(L, 2) = size(R, 2) = min(l, r) = d (deflated surface)
-function extended_ldiv!(gL::Matrix{C}, g::SparseLUSlicer, L) where {C}
+function extended_ldiv!(gL::Matrix{C}, g::SparseLUGreenSlicer, L) where {C}
     Lext = view(g.source, :, axes(L, 2))
     fill!(Lext, zero(C))
     copyto!(Lext, CartesianIndices(L), L, CartesianIndices(L))
@@ -491,7 +491,7 @@ function extended_ldiv!(gL::Matrix{C}, g::SparseLUSlicer, L) where {C}
     return gL
 end
 
-function extended_rdiv!(L´g::Matrix{C}, L, g::SparseLUSlicer) where {C}
+function extended_rdiv!(L´g::Matrix{C}, L, g::SparseLUGreenSlicer) where {C}
     Lext = view(g.source, :, axes(L, 2))
     fill!(Lext, zero(C))
     copyto!(Lext, CartesianIndices(L), L, CartesianIndices(L))

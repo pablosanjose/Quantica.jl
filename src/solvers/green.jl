@@ -5,11 +5,12 @@
 #   All new s::AppliedGreenSolver must implement (with Σblock a [possibly nested] tuple of MatrixBlock's)
 #      - s(ω, Σblocks, ::ContactOrbitals) -> GreenSlicer
 #      - minimal_callsafe_copy(s)
-#      - optional: needs_omega_shift(s) (with a true fallback)
+#      - optional: needs_omega_shift(s) (has a `true` default fallback)
 #   A gs::GreenSlicer's allows to compute G[gi, gi´]::AbstractMatrix for indices gi
-#   To do this, it must implement
-#      - view(gs, ::Int, ::Int) -> g(ω; kw...) between specific contacts (has missing fallback)
-#      - view(gs, ::Colon, ::Colon) -> g(ω; kw...) between all contacts (has missing fallback)
+#   To do this, it must implement contact slicing (unless it relies on TMatrixSlicer)
+#      - view(gs, ::Int, ::Int) -> g(ω; kw...) between specific contacts (has error fallback)
+#      - view(gs, ::Colon, ::Colon) -> g(ω; kw...) between all contacts (has error fallback)
+#   It must also implement generic slicing, and minimal copying
 #      - gs[i::CellOrbitals, j::CellOrbitals] -> must return a Matrix for type stability
 #      - minimal_callsafe_copy(gs)
 #   The user-facing indexing API accepts:
@@ -67,6 +68,12 @@ end
 #     return (ϵmin, ϵmax)
 # end
 
+struct Spectrum{K} <:AbstractGreenSolver
+    spectrumkw::K
+end
+
+Spectrum(; spectrumkw...) = Spectrum(NamedTuple(spectrumkw))
+
 struct Bands{B<:Union{Missing,Pair},A,K} <: AbstractGreenSolver
     bandsargs::A    # sorted to make slices easier
     bandskw::K
@@ -84,6 +91,7 @@ end # module
 const GS = GreenSolvers
 
 include("green/sparselu.jl")
+include("green/spectrum.jl")
 include("green/schur.jl")
 include("green/kpm.jl")
 include("green/bands.jl")
