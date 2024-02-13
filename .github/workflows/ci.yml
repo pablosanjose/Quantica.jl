@@ -5,6 +5,9 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+permissions:
+  actions: write
+  contents: read
 jobs:
   test:
     if: github.event_name == 'push' && contains(toJson(github.event.commits), '[skip test]') == false && contains(toJson(github.event.commits), '[skip tests]') == false
@@ -14,23 +17,24 @@ jobs:
       matrix:
         version:
           - '1'
-          # - 'nightly'
+          - 'nightly'
         os:
           - ubuntu-latest
           - macOS-latest
           - windows-latest
         arch:
           - x64
-          - x86
-        exclude:
-          - os: macOS-latest
-            arch: x86
+          # - x86   ## Currently broken on nightly due to OutOfMemoryError()
+        # exclude:
+        #   - os: macOS-latest
+        #     arch: x86
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v1
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
+      - uses: julia-actions/cache@v1
       - uses: julia-actions/julia-buildpkg@latest
       - uses: julia-actions/julia-runtest@latest
       - uses: julia-actions/julia-uploadcodecov@latest

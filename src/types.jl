@@ -316,14 +316,17 @@ const AnyOrbitalSlice = Union{OrbitalSlice,OrbitalSliceGrouped}
 #region ## Constructors ##
 
 CellSite(cell, ind::Int) = CellIndices(sanitize_SVector(Int, cell), ind, SiteLike())
-CellSites(cell, inds = Int[]) = CellIndices(sanitize_SVector(Int, cell), inds, SiteLike())
+CellSites(cell, inds = Int[]) = CellIndices(sanitize_SVector(Int, cell), sanitize_cellindices(inds), SiteLike())
 # exported lowercase constructor for general inds
 cellsites(cell, inds) = CellSites(cell, inds)
 
 CellOrbitals(cell, inds = Int[]) =
-    CellIndices(sanitize_SVector(Int, cell), inds, OrbitalLike())
+    CellIndices(sanitize_SVector(Int, cell), sanitize_cellindices(inds), OrbitalLike())
 CellOrbital(cell, ind::Int) =
     CellIndices(sanitize_SVector(Int, cell), ind, OrbitalLike())
+
+CellOrbitalsGrouped(cell, inds, groups::Dictionary) =
+    CellIndices(sanitize_SVector(Int, cell), sanitize_cellindices(inds), OrbitalLikeGrouped(groups))
 
 # LatticeSlice from an AbstractVector of CellIndices
 LatticeSlice(lat::Lattice, cs::AbstractVector{<:CellIndices}) =

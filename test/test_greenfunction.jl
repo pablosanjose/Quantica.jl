@@ -174,6 +174,36 @@ end
     end
 end
 
+@testset "greenfunction 32bit" begin
+    # GS.Bands
+    # skip for older versions due to https://github.com/JuliaLang/julia/issues/53054
+    # which makes solve not deterministic when adding sufficiently many band simplices
+    if VERSION >= v"1.11.0-DEV.632"
+        h = HP.graphene(type = Float32)
+        s = GS.Bands()
+        testgreen(h, s)
+    end
+    h = HP.graphene(type = Float32, a0 = 1) |> supercell(10) |> supercell
+    s = GS.SparseLU()
+    testgreen(h, s)
+
+    # GS.Schur
+    h = HP.graphene(type = Float32, a0 = 1) |> supercell((1,-1), region = r -> 0<=r[2]<=3)
+    s = GS.Schur()
+    testgreen(h, s)
+    s = GS.Schur(boundary = -1)
+    testgreen(h, s)
+
+    # GS.KPM
+    g = HP.graphene(a0 = 1, t0 = 1, orbitals = (2,1), type = Float32) |>
+        supercell(region = RP.circle(20)) |>
+        attach(nothing, region = RP.circle(1)) |> greenfunction(GS.KPM(order = 300, bandrange = (-3.1, 3.1)))
+    ρs = ldos(g[1], kernel = missing)
+    for ω in -3:0.1:3
+        @test all(>=(0), ρs(ω))
+    end
+end
+
 @testset "diagonal slicing" begin
     g = HP.graphene(a0 = 1, t0 = 1, orbitals = (2,1)) |> supercell((2,-2), region = r -> 0<=r[2]<=5) |>
         attach(nothing, cells = 2, region = r -> 0<=r[2]<=2) |> attach(nothing, cells = 3) |>

@@ -7,7 +7,6 @@
 struct AppliedSparseLUGreenSolver{C} <:AppliedGreenSolver
     invgreen::InverseGreenBlockSparse{C}
 end
-
 mutable struct SparseLUGreenSlicer{C} <:GreenSlicer{C}
     fact::SparseArrays.UMFPACK.UmfpackLU{C,Int}  # of full system plus extended orbs (don't deepcopy this!)
     nonextrng::UnitRange{Int}                    # range of non-extended orbital indices
@@ -17,7 +16,7 @@ mutable struct SparseLUGreenSlicer{C} <:GreenSlicer{C}
     unitg::Matrix{C}                             # lazy storage of a full ldiv! solve of all (nonextrng) sites
     function SparseLUGreenSlicer{C}(fact, nonextrng, unitcinds, unitcindsall, source) where {C}
         s = new()
-        s.fact = fact
+        s.fact = fact   # Note that there is no SparseArrays.UMFPACK.UmfpackLU{ComplexF32}
         s.nonextrng = nonextrng
         s.unitcinds = unitcinds
         s.unitcindsall = unitcindsall
@@ -68,7 +67,7 @@ function (s::AppliedSparseLUGreenSolver{C})(ω, Σblocks, contactorbitals) where
     nonextrng = orbrange(invgreen)
     unitcinds = invgreen.unitcinds
     unitcindsall = invgreen.unitcindsall
-    source = s.invgreen.source
+    source64 = convert(Matrix{ComplexF64}, s.invgreen.source)
     # the H0 and Σs inside invgreen have already been updated by the parent call!(g, ω; ...)
     update!(invgreen, ω)
     igmat = matrix(invgreen)
@@ -94,8 +93,9 @@ end
 function Base.view(s::SparseLUGreenSlicer, i::Integer, j::Integer)
     dstinds = unitcellinds_contacts(s, i)
     srcinds = unitcellinds_contacts(s, j)
-    source = view(s.source, :, 1:length(srcinds))
-    return compute_or_retrieve_green(s, dstinds, srcinds, source)
+    source64 = view(s.source64, :, 1:length(srcinds))
+    sourceC = view(s.sourceC, :, 1:length(srcinds))
+    return compute_or_retrieve_green(s, dstinds, srcinds, source64, sourceC)
 end
 
 Base.view(s::SparseLUGreenSlicer, ::Colon, ::Colon) =
@@ -114,13 +114,16 @@ function compute_or_retrieve_green(s::SparseLUGreenSlicer{C}, dstinds, srcinds, 
         g = view(s.unitg, dstinds, srcinds)
     else
         fact = s.fact
-        allinds = 1:size(fact, 1)
-        one!(source, srcinds)
-        gext = ldiv!(fact, source)
+        allinds = 1:size(fact, 1) # axes not defined on SparseArrays.UMFPACK.UmfpackLU
+        one!(source64, srcinds)
+        gext = ldiv!(fact, source64)
+        sourceC === gext || copy!(sourceC, gext)  # required when C != ComplexF64
+        # allinds may include extended orbs -> exclude them from the view
         dstinds´ = ifelse(dstinds === allinds, s.nonextrng, dstinds)
-        g = view(gext, dstinds´, :)
+        srcinds´ = convert(typeof(srcinds), 1:length(srcinds))
+        g = view(sourceC, dstinds´, srcinds´)
         if srcinds === allinds
-            s.unitg = copy(view(gext, s.nonextrng, s.nonextrng))
+            s.unitg = copy(view(gext, s.nonextrng, s.nonextrng))     # exclude extended orbs
         end
     end
     return g

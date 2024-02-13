@@ -157,7 +157,7 @@ combine_subcells(c::C, cs::C...) where {C<:CellOrbitals} =
 function combine_subcells(c::C, cs::C...) where {C<:CellOrbitalsGrouped}
     groups´ = merge(orbgroups(c), orbgroups.(cs)...)
     indices´ = union(orbindices(c), orbindices.(cs)...)
-    return CellIndices(cell(c), indices´, OrbitalLikeGrouped(groups´))
+    return CellOrbitalsGrouped(cell(c), indices´, groups´)
 end
 
 #endregion
@@ -299,7 +299,7 @@ sites_to_orbs(c::AnyCellOrbitalsDict, _) = c
 sites_to_orbs(c::AnyCellOrbitals, _) = c
 
 ## convert SiteSlice -> OrbitalSliceGrouped/OrbitalSlice
-Contacts
+
 sites_to_orbs(s::SiteSelector, g) = sites_to_orbs(lattice(g)[s], g)
 sites_to_orbs(kw::NamedTuple, g) = sites_to_orbs(getindex(lattice(g); kw...), g)
 sites_to_orbs(i::Integer, g) = orbslice(selfenergies(contacts(g), i))
@@ -335,13 +335,13 @@ function sites_to_orbs(cs::CellSites, os::OrbitalBlockStructure)
     sites = siteindices(cs)
     groups = _groups(sites, os) # sites, orbranges
     orbinds = _orbinds(sites, groups, os)
-    return CellIndices(cell(cs), orbinds, OrbitalLikeGrouped(Dictionary(groups...)))
+    return CellOrbitalsGrouped(cell(cs), orbinds, Dictionary(groups...))
 end
 
 function sites_to_orbs_flat(cs::CellSites, os::OrbitalBlockStructure)
     sites = siteindices(cs)
     orbinds = _orbinds(sites, os)
-    return CellIndices(cell(cs), orbinds, OrbitalLike())
+    return CellOrbitals(cell(cs), orbinds)
 end
 
 _groups(i::Integer, os) = [i], [flatrange(os, i)]

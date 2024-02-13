@@ -143,7 +143,7 @@ struct BandSimplex{D,T,S1<:SVector{<:Any,<:Real},S2<:SMatrix{<:Any,D,<:Real},S3<
     ei::S1        # eᵢ::SVector{D´,T} = energy of vertex i
     kij::S2       # kᵢ[j]::SMatrix{D´,D,T,DD´} = coordinate j of momentum for vertex i
     eij::S3       # ϵᵢʲ::SMatrix{D´,D´,T,D´D´} = e_j - e_i
-    dual::S1      # dual::SVector{D´,T}, first hyperdual coefficient
+    dualphi::S1   # dual::SVector{D´,T}, first hyperdual coefficient
     VD::T         # D!V = |det(kᵢʲ - kᵢ⁰)|
     refex::R      # Ref to Series expansions for necessary functions
 end
@@ -178,9 +178,10 @@ function BandSimplex(ei::SVector{D´,T}, kij::SMatrix{D´,D,T}, refex = Ref(Expa
     ei, eij = snap_and_diff(ei)
     k0 = kij[1, :]
     U = kij[SVector{D}(2:D´),:]' .- k0          # edges as columns
-    VD = abs(det(U)) / (2π)^D
-    dual = generate_dual(eij)
-    return BandSimplex(ei, kij, eij, dual, VD, refex)
+    VD = T(abs(det(U)) / (2π)^D)
+    ones = [one(T) for _ in Combinations(D´, 3)]
+    dualphi = generate_dual_phi(eij, ones)
+    return BandSimplex(ei, kij, eij, dualphi, VD, refex)
 end
 
 # make similar ei[i] exactly the same, and compute the pairwise difference
@@ -196,13 +197,30 @@ function snap_and_diff(es)
     return ess, chop(ess' .- ess)
 end
 
-function generate_dual(eij::SMatrix{D´,D´,T}) where {D´,T}
-    dual = rand(SVector{D´,T})
-    iszero(eij) && return dual
-    while !is_valid_dual(dual, eij)
-        dual = rand(SVector{D´,T})
-    end
+# e_j such that e^j_k are all nonzero
+generate_dual_e(::Type{SVector{D´,T}}) where {D´,T} = SVector(ntuple(i -> T(i^2), Val(D´)))
+
+# dϕ such that d_ijk = e^j_k dϕ^j_l - e^j_l dϕ^j_k are all as close to 1 as possible
+function generate_dual_phi(eij::SMatrix{D´,D´,T}, ones) where {D´,T}
+    As = (SVector(ntuple(i -> dual_face(eij, face, i), Val(D´))) for face in Combinations(D´, 3))
+    As´ = Iterators.filter(!iszero, As)
+    isempty(As´) && return generate_dual_e(SVector{D´,T})
+    A = transpose(stack(As´))
+    ones´ = size(A, 1) == length(ones) ? ones : ones[1:size(A,1)]
+    dual = SVector{D´, T}(A \ ones´)
     return dual
+end
+
+function dual_face(emat, (j, k, l), i)
+    if i == j
+        return emat[k,l]
+    elseif i  == k
+        return emat[l,j]
+    elseif i == l
+        return emat[j,k]
+    else
+        return zero(eltype(emat))
+    end
 end
 
 # check whether iszero(eʲₖφʲₗ - φʲₖeʲₗ) for nonzero e's
@@ -244,13 +262,13 @@ NaN_to_Inf(x::T) where {T} = ifelse(isnan(x), T(Inf), x)
 # g_integrals_local: zero-dn g₀(ω) and gⱼ(ω) with normal or hyperdual numbers for φ
 #region
 
-function g_integrals_local(s::BandSimplex{D,T}, ω, ::Val{N} = Val(0)) where {D,T,N}
+function g_integrals_local(s::BandSimplex{<:Any,<:Any,SVector{D´,T}}, ω, ::Val{N} = Val(0)) where {D´,T,N}
     eⱼ = s.ei
     eₖʲ = s.eij
     g₀, gⱼ = begin
         if N > 0 || is_degenerate(eₖʲ)
-            eⱼ´ = s.dual
-            order = ifelse(N > 0, N, D+1)
+            eⱼ´ = generate_dual_e(SVector{D´,T})
+            order = ifelse(N > 0, N, D´)
             eⱼseries = Series{order}.(eⱼ, eⱼ´)
             g_integrals_local_e(s, ω, eⱼseries)
         else
@@ -314,7 +332,7 @@ end
 
 # imaginary log with branchcut in the lower plane
 logim(x::Complex) = iszero(imag(x)) ? logim(real(x)) : log(-im * x)
-logim(x::Real) =  log(abs(x)) - im * 0.5π * sign(x)
+logim(x::T) where {T<:Real} = log(abs(x)) - im * T(0.5π) * sign(x)
 logim(x, ex) = logim(x)
 
 # required for local degenerate case (expansion of logim(Δ::Series, ex))
@@ -344,7 +362,7 @@ function g_integrals_nonlocal(s::BandSimplex{D,T}, ω, dn, ::Val{N} = Val(0)) wh
         ## This dynamical estimate of the order is not type-stable. Not worth it
         # order = N == 0 ? simplex_degeneracy(ϕₖʲ, eₖʲ) + 1 : N
         # if order > 1
-            ϕⱼ´ = s.dual
+            ϕⱼ´ = s.dualphi
             ϕⱼseries = Series{order}.(ϕⱼ, ϕⱼ´)
             g_integrals_nonlocal_ϕ(s, ω, ϕⱼseries)
         else
@@ -416,7 +434,7 @@ function g_integrals_nonlocal_ϕ(s::BandSimplex{D,T}, ω::Number, ϕⱼ) where {
         Δ0 = chop(first(Δⱼ))
         if iszero(Δ0)
             g₀ = zero(complex(T))
-            gⱼ = SVector(ntuple(Returns(g₀), Val(D)))
+            gⱼ = ntuple(Returns(g₀), Val(D))
         else
             Δ0⁻¹ = inv(Δ0)
             γⱼ = αₖʲγⱼ[1,:]                         # if eₖʲ == 0, then αₖʲ == 1
@@ -426,7 +444,7 @@ function g_integrals_nonlocal_ϕ(s::BandSimplex{D,T}, ω::Number, ϕⱼ) where {
             g₀ = q * sum(scalar.(λⱼ))
             gⱼ = ntuple(Val(D)) do j
                 q * scalar(λⱼ[j+1] + im * sum(λₖʲ[:,j+1] - transpose(λₖʲ)[:,j+1]))
-            end |> SVector
+            end
         end
     else
         αₖʲγⱼeϕⱼ = αₖʲγⱼ .* transpose(eϕⱼ)          # αₖʲγⱼeϕⱼ :: SMatrix{D´,D´}
@@ -438,9 +456,9 @@ function g_integrals_nonlocal_ϕ(s::BandSimplex{D,T}, ω::Number, ϕⱼ) where {
         g₀ = q´ * sum(scalar.(Λⱼ))
         gⱼ = ntuple(Val(D)) do j
             q´ * scalar(Λⱼ[j+1] + im * sum(Λₖʲ[:,j+1] - transpose(Λₖʲ)[:,j+1]))
-        end |> SVector
+        end
     end
-    return g₀, gⱼ
+    return Complex{T}(g₀), SVector{D,Complex{T}}(gⱼ)
 end
 
 # Series of cis(ϕ)
@@ -531,13 +549,13 @@ function J_scalar(t::T, e, Δ, ex) where {T<:Real}
     iszero(e) && return zero(complex(T))
     tΔ = t * Δ
     J = iszero(tΔ) ? logim(Δ) : cis(tΔ) * J_integral(tΔ, t, Δ)
-    return J
+    return Complex{T}(J)
 end
 
 function J_scalar(t::Series{N,T}, e, Δ, ex) where {N,T<:Real}
     iszero(e) && return zero(Series{N,Complex{T}})
     N´ = N - 1
-    C = complex(T)
+    C = Complex{T}
     iszero(Δ) && return Series{N}(C(Inf))
     t₀ = t[0]
     tΔ = t₀ * Δ
@@ -567,11 +585,11 @@ function J_scalar(t::Series{N,T}, e, Δ, ex) where {N,T<:Real}
     return rescale(EJ, t[1] * Δ)
 end
 
-function J_integral(tΔ, t, Δ)
+function J_integral(tΔ, t::T, Δ) where {T}
     J = iszero(imag(tΔ)) ?
-        cosint(abs(tΔ)) - im*sinint(real(tΔ)) - im*0.5π*sign(Δ) :
-        -gamma(0, im*tΔ) - im*0.5π*(sign(real(Δ))+sign(real(tΔ)))
-    return J
+        cosint(abs(tΔ)) - im*sinint(real(tΔ)) - im*T(0.5π)*sign(Δ) :
+        -gamma(0, im*tΔ) - im*T(0.5π)*(sign(real(Δ))+sign(real(tΔ)))
+    return Complex{T}(J)
 end
 
 #endregion
@@ -841,7 +859,7 @@ function muladd_ψPψ⁺!(gmat, α, ψ, ψPdict, pind, orbs)
 end
 
 function muladd_ψPψ⁺!(gmat, α, ψ, (rows, cols)::Tuple)
-    if size(ψ,1) == length(rows) == length(cols)
+    if size(ψ, 1) == length(rows) == length(cols)
         mul!(gmat, ψ, ψ', α, 1)
     else
         ψrows = view_or_copy(ψ, rows, :)
