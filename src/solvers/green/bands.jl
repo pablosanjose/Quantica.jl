@@ -610,7 +610,7 @@ struct BoundaryOrbs{L}
 end
 
 struct AppliedBandsGreenSolver{B<:Union{Missing,BoundaryOrbs},SB<:Subband,SS<:SubbandSimplices} <: AppliedGreenSolver
-    subband::SB                        # single (non-split) subband
+    subband::SB                         # single (non-split) subband
     subbandsimps::SS                    # BandSimplices in subband
     boundaryorbs::B                     # missing or BoundaryOrbs
 end
@@ -655,6 +655,7 @@ bands(g::GreenFunction{<:Any,<:Any,<:Any,<:AppliedBandsGreenSolver}) = g.solver.
 #region ## apply ##
 
 function apply(s::GS.Bands,  h::AbstractHamiltonian{T,<:Any,L}, cs::Contacts) where {T,L}
+    L == 0 && argerror("Cannot use GreenSolver.Bands with 0D AbstractHamiltonians")
     ticks = s.bandsargs
     kw = s.bandskw
     b = bands(h, ticks...; kw..., projectors = true, split = false)
@@ -729,9 +730,9 @@ end
 
 #region ## call ##
 
-function (s::AppliedBandsGreenSolver)(ω, Σblocks, cblockstruct)
+function (s::AppliedBandsGreenSolver)(ω, Σblocks, corbitals)
     g0slicer = BandsGreenSlicer(complex(ω), s)
-    gslicer = maybe_TMatrixSlicer(g0slicer, Σblocks, cblockstruct)
+    gslicer = maybe_TMatrixSlicer(g0slicer, Σblocks, corbitals)
     return gslicer
 end
 

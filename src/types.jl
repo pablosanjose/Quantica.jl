@@ -1292,6 +1292,9 @@ flatrange(h::AbstractHamiltonian, name::Symbol) =
 zerocell(h::AbstractHamiltonian) = zerocell(lattice(h))
 zerocellsites(h::AbstractHamiltonian, i) = zerocellsites(lattice(h), i)
 
+# OpenHamiltonian is not <: AbstractHamiltonian
+ncontacts(h::AbstractHamiltonian) = 0
+
 function harmonic_index(h::AbstractHamiltonian, dn)
     for (i, har) in enumerate(harmonics(h))
         dcell(har) == dn && return har, i
@@ -1770,6 +1773,8 @@ lattice(oh::OpenHamiltonian) = lattice(oh.h)
 
 zerocell(h::OpenHamiltonian) = zerocell(parent(h))
 
+ncontacts(h::OpenHamiltonian) = length(selfenergies(h))
+
 attach(Σ::SelfEnergy) = oh -> attach(oh, Σ)
 attach(args...; kw...) = oh -> attach(oh, args...; kw...)
 attach(oh::OpenHamiltonian, args...; kw...) = attach(oh, SelfEnergy(oh.h, args...; kw...))
@@ -1843,8 +1848,11 @@ offsets(c::Contacts) = offsets(c.orbitals)
 offsets(c::ContactOrbitals) = c.offsets
 
 selfenergies(c::Contacts) = c.selfenergies
-selfenergies(c::Contacts, i::Integer) = 1 <= i <= length(c) ? c.selfenergies[i] :
-    argerror("Cannot get contact $i, there are $(length(c)) contacts")
+selfenergies(c::Contacts, i::Integer) = check_contact_index(i, c) && c.selfenergies[i]
+
+# c::Union{Contacts,ContactOrbitals} here
+check_contact_index(i, c) = 1 <= i <= ncontacts(c) ||
+    argerror("Cannot get contact $i, there are $(ncontacts(c)) contacts")
 
 contactorbitals(c::Contacts) = c.orbitals
 
@@ -1864,10 +1872,9 @@ orbgroups(c::ContactOrbitals, i) = orbgroups(c.corbsdict[i])
 orbranges(c::ContactOrbitals) = orbranges(c.orbsdict)
 orbranges(c::ContactOrbitals, i) = orbranges(c.corbsdict[i])
 
-
 Base.isempty(c::Contacts) = isempty(selfenergies(c))
 
-Base.length(c::Contacts) = length(selfenergies(c))
+# Base.length(c::Contacts) = length(selfenergies(c)) # unused
 
 minimal_callsafe_copy(s::Contacts) =
     Contacts(minimal_callsafe_copy.(s.selfenergies), s.orbitals, s.orbslice)

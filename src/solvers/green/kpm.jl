@@ -210,10 +210,10 @@ end
 
 #region ## call ##
 
-function (s::AppliedKPMGreenSolver{T})(ω, Σblocks, cblockstruct) where {T}
+function (s::AppliedKPMGreenSolver{T})(ω, Σblocks, corbitals) where {T}
     g0contacts = KPMgreen(s.momenta, ω, s.bandCH)
     # since KPMgreen does not implement indexing, we rely on TMatrixSlicer
-    gslicer = TMatrixSlicer(g0contacts, Σblocks, cblockstruct)
+    gslicer = TMatrixSlicer(g0contacts, Σblocks, corbitals)
     return gslicer
 end
 
