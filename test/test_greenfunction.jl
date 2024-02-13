@@ -1,4 +1,4 @@
-using Quantica: GreenFunction, GreenSlice, GreenSolution, zerocell, CellOrbitals
+using Quantica: GreenFunction, GreenSlice, GreenSolution, zerocell, CellOrbitals, ncontacts
 
 function testgreen(h, s; kw...)
     ω = 0.2
@@ -10,7 +10,8 @@ function testgreen(h, s; kw...)
     L = Quantica.latdim(lattice(h))
     z = zero(SVector{L,Int})
     o = Quantica.unitvector(1, SVector{L,Int})
-    locs = (cellsites(z, :), cellsites(z, 2:3), cellsites(z, 2), cellsites(o, :), CellOrbitals(o, 1), CellOrbitals(z, 2:3))
+    conts = ntuple(identity, ncontacts(h))
+    locs = (cellsites(z, :), cellsites(z, 2:3), cellsites(z, 2), cellsites(o, :), CellOrbitals(o, 1), CellOrbitals(z, 2:3), conts...)
     for loc in locs, loc´ in locs
         gs = g[loc, loc´]
         @test gs isa GreenSlice
@@ -25,10 +26,11 @@ end
 @testset "basic greenfunctions" begin
     h0 = LP.honeycomb() |> hamiltonian(hopping(SA[0 1; 1 0]), orbitals = 2) |> supercell(region = RP.circle(10))
     s0 = GS.SparseLU()
+    s0´ = GS.Spectrum()
     h1 = LP.square() |> hamiltonian(@onsite((; o = 1) -> o*I) + hopping(SA[0 1; 1 0]), orbitals = 2) |> supercell((1,0), region = r -> abs(r[2]) < 2)
     s1 = GS.Schur()
     s1´ = GS.Schur(boundary = -1)
-    for (h, s) in zip((h0, h1, h1), (s0, s1, s1´))
+    for (h, s) in zip((h0, h0, h1, h1), (s0, s0´, s1, s1´))
         testgreen(h, s; o = 2)
     end
     # This ensures that flat_sync! is called with multiorbitals when call!-ing ph upon calling g
@@ -42,6 +44,7 @@ end
 
     h0 = LP.square() |> hamiltonian(hopping(SA[0 1; 1 0]), orbitals = 2) |> supercell(region = RP.circle(10))
     s0 = GS.SparseLU()
+    s0´ = GS.Spectrum()
     h1 = LP.square() |> hamiltonian(@onsite((; o = 1) -> o*I) + hopping(SA[0 1; 1 0]), orbitals = 2) |> supercell((1,0), region = r -> abs(r[2]) < 2)
     s1 = GS.Schur()
     s1´ = GS.Schur(boundary = -1)
@@ -49,13 +52,13 @@ end
     # non-hermitian Σ model
     mod = @onsite((ω, r; o = 1) -> (o - im*ω)*I) +
           plusadjoint(@onsite((ω; p=1)-> p*I) +  @hopping((ω, r, dr; t = 1) -> im*dr[1]*t*I; range = 1))
-    g0, g1´ = greenfunction(h0, s0), greenfunction(h1, s1´)
-    for (h, s) in zip((h0, h1, h1), (s0, s1, s1´))
+    g0, g0´, g1´ = greenfunction(h0, s0), greenfunction(h0, s0´), greenfunction(h1, s1´)
+    for (h, s) in zip((h0, h0, h1, h1), (s0, s0´, s1, s1´))
         oh = h |> attach(nothing; sites´...)
         testgreen(oh, s)
         oh = h |> attach(mod; sites´...)
         testgreen(oh, s)
-        for glead in (g0, g1´)
+        for glead in (g0, g0´, g1´)
             oh = h |> attach(glead[sites´], hopping(I; range = (1,2)); sites´...)
             testgreen(oh, s)
             L´ = Quantica.latdim(lattice(parent(glead)))
@@ -66,6 +69,11 @@ end
             testgreen(oh, s)
         end
     end
+
+    # SparseLU and Spectrum are equivalent
+    @test g0[(; region = RP.circle(2)), (; region = RP.circle(3))](0.2) ≈
+          g0´[(; region = RP.circle(2)), (; region = RP.circle(3))](0.2)
+
     # contacts that don't include all sublattices
     h = lattice(sublat(0, name = :L), sublat(1, name = :R)) |> hamiltonian
     @test h |> attach(onsite(ω->1), sublats = :L) |> greenfunction isa GreenFunction

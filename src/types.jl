@@ -1289,6 +1289,9 @@ flatrange(h::AbstractHamiltonian, name::Symbol) =
 zerocell(h::AbstractHamiltonian) = zerocell(lattice(h))
 zerocellsites(h::AbstractHamiltonian, i) = zerocellsites(lattice(h), i)
 
+# OpenHamiltonian is not <: AbstractHamiltonian
+ncontacts(h::AbstractHamiltonian) = 0
+
 function harmonic_index(h::AbstractHamiltonian, dn)
     for (i, har) in enumerate(harmonics(h))
         dcell(har) == dn && return har, i
@@ -1766,6 +1769,8 @@ hamiltonian(oh::OpenHamiltonian) = oh.h
 lattice(oh::OpenHamiltonian) = lattice(oh.h)
 
 zerocell(h::OpenHamiltonian) = zerocell(parent(h))
+
+ncontacts(h::OpenHamiltonian) = length(selfenergies(h))
 
 attach(Σ::SelfEnergy) = oh -> attach(oh, Σ)
 attach(args...; kw...) = oh -> attach(oh, args...; kw...)
