@@ -212,7 +212,7 @@ end
 
 function (s::AppliedKPMGreenSolver{T})(ω, Σblocks, corbitals) where {T}
     g0contacts = KPMgreen(s.momenta, ω, s.bandCH)
-    # since KPMgreen does not implement indexing, we rely on TMatrixSlicer
+    # We rely on TMatrixSlicer to incorporate contact self-energies
     gslicer = TMatrixSlicer(g0contacts, Σblocks, corbitals)
     return gslicer
 end
