@@ -130,8 +130,9 @@ Base.getindex(s::GreenSlicer, i::AnyCellOrbitals, j::AnyCellOrbitals = i) =
 Base.getindex(s::GreenSlicer, ::CellOrbitals, ::CellOrbitals) =
     argerror("getindex of $(nameof(typeof(s))) not implemented")
 
-# fallback to missing for GreenSlicers that don't implement view
-Base.view(::GreenSlicer, args...) = missing
+# fallback, for GreenSlicers that don't implement view
+Base.view(g::GreenSlicer, args...) =
+    argerror("GreenSlicer of type $(nameof(typeof(g))) doesn't implement view")
 
 # must ensure that orbindices is not a scalar, to consistently obtain a Matrix
 sanitize_cellorbs(c::CellOrbitals) = c
@@ -481,8 +482,8 @@ end
 
 function GreenSolutionCache(gω::GreenSolution{T,<:Any,L}) where {T,L}
     cache = Dict{Tuple{SVector{L,Int},SVector{L,Int},Int},Matrix{Complex{T}}}()
-    gmat = gω[:]    # may be missing if solver does not support (or doesn't have) contacts
-    if gmat !== missing
+    if ncontacts(gω) > 0
+        gmat = gω[:]    # may be missing if solver does not support (or doesn't have) contacts
         g = parent(gω)
         h = hamiltonian(g)
         bs = blockstructure(h)

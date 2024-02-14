@@ -1519,6 +1519,8 @@ solvers. The alias `GS` can be used in place of `GS`. Currently supported solver
 possible keyword arguments are
 
 - `GS.SparseLU()` : Direct inversion solver for 0D Hamiltonians using a `SparseArrays.lu(hmat)` factorization
+- `GS.Spectrum(; spectrum_kw...)` : Diagonalization solver for 0D Hamiltonians using `spectrum(h; spectrum_kw...)`
+    - `spectrum_kw...` : keyword arguments passed on to `spectrum`
 - `GS.Schur(; boundary = Inf)` : Solver for 1D Hamiltonians based on a deflated, generalized Schur factorization
     - `boundary` : 1D cell index of a boundary cell, or `Inf` for no boundaries. Equivalent to removing that specific cell from the lattice when computing the Green function.
 - `GS.KPM(; order = 100, bandrange = missing, kernel = I)` : Kernel polynomial method solver for 0D Hamiltonians
