@@ -35,13 +35,13 @@ mul_tau!(tau::Vector, g) = (g .*= tau)
 tauz_diag(i, normalsize) = ifelse(iseven(fld1(i, normalsize)), -1, 1)
 taue_diag(i, normalsize) = ifelse(iseven(fld1(i, normalsize)), 0, 1)
 
-check_contact_slice(gs) = (slicerows(gs) isa Integer && slicecols(gs) isa Integer) ||
+check_contact_slice(gs) = (rows(gs) isa Integer && cols(gs) isa Integer) ||
     argerror("Please use a Green slice of the form `g[i::Integer, j::Integer]` or `g[i::Integer]`")
 
-check_same_contact_slice(gs) = (slicerows(gs) isa Integer && slicecols(gs) === slicerows(gs)) ||
+check_same_contact_slice(gs) = (rows(gs) isa Integer && cols(gs) === rows(gs)) ||
     argerror("Please use a Green slice of the form `g[i::Integer]`")
 
-check_different_contact_slice(gs) = (slicerows(gs) isa Integer && slicecols(gs) != slicerows(gs)) ||
+check_different_contact_slice(gs) = (rows(gs) isa Integer && cols(gs) != rows(gs)) ||
     argerror("Please use a Green slice of the form `g[i::Integer, j::Integer] with `i ≠ j`")
 
 #endregion
@@ -146,7 +146,7 @@ end
 ldos(gω::GreenSolution; kernel = I) = LocalSpectralDensitySolution(gω, kernel)
 
 function ldos(gs::GreenSlice{T}; kernel = I) where {T}
-    slicerows(gs) === slicecols(gs) ||
+    rows(gs) === cols(gs) ||
         argerror("Cannot take ldos of a GreenSlice with rows !== cols")
     return LocalSpectralDensitySlice(gs, kernel)
 end
@@ -175,10 +175,10 @@ Base.getindex(d::LocalSpectralDensitySolution{T}, i) where {T} =
 
 # fallback through LocalSpectralDensitySolution - overload to allow a more efficient path
 function call!(d::LocalSpectralDensitySlice{T}, ω; params...) where {T}
-    sites = slicerows(d.gs)
+    orbslice_or_contact = first(orbinds_or_contactinds(d.gs))
     gω = call!(parent(d.gs), ω; params...)
     l = ldos(gω; kernel = d.kernel)
-    return l[sites]
+    return l[orbslice_or_contact]
 end
 
 #endregion
@@ -215,10 +215,10 @@ current(gω::GreenSolution; direction = missing, charge = -I) =
     CurrentDensitySolution(gω, charge, GreenSolutionCache(gω), sanitize_direction(direction, gω))
 
 function current(gs::GreenSlice; direction = missing, charge = -I)
-    slicerows(gs) === slicecols(gs) ||
+    rows(gs) === cols(gs) ||
         argerror("Cannot currently take ldos of a GreenSlice with rows !== cols")
     g = parent(gs)
-    orbslice = sites_to_orbs(slicerows(gs), g)
+    orbslice = orbrows(gs)
     return CurrentDensitySlice(g, charge, orbslice, sanitize_direction(direction, g))
 end
 
@@ -310,8 +310,8 @@ end
 
 function conductance(gs::GreenSlice{T}; nambu = false) where {T}
     check_contact_slice(gs)
-    i = slicerows(gs)
-    j = slicecols(gs)
+    i = rows(gs)
+    j = cols(gs)
     g = parent(gs)
     ni = norbitals(contactorbitals(g), i)
     nj = norbitals(contactorbitals(g), j)
@@ -513,7 +513,7 @@ end
 
 function josephson(gs::GreenSlice{T}, ωmax; phases = missing, imshift = missing, atol = 1e-7, opts...) where {T}
     check_same_contact_slice(gs)
-    contact = slicerows(gs)
+    contact = rows(gs)
     g = parent(gs)
     Σfull = similar_contactΣ(g)
     Σ = similar_contactΣ(g, contact)

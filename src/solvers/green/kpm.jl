@@ -240,9 +240,9 @@ function densitymatrix(s::AppliedKPMGreenSolver, gs::GreenSlice{T}) where {T}
 end
 
 function slice_momenta(momenta, gs)
-    rows = _maybe_contactinds(gs, slicerows(gs))
-    cols = _maybe_contactinds(gs, slicecols(gs))
-    momenta´ = [view(m, rows, cols) for m in momenta]
+    r = _maybe_contactinds(gs, rows(gs))
+    c = _maybe_contactinds(gs, cols(gs))
+    momenta´ = [view(m, r, c) for m in momenta]
     return momenta´
 end
 

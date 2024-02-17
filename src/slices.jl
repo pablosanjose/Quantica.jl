@@ -292,6 +292,9 @@ end
 #       - SiteSlice to an OrbitalSlice
 #region
 
+
+#region ## sites_to_orbs
+
 ## no-ops
 
 sites_to_orbs(s::AnyOrbitalSlice, _) = s
@@ -301,18 +304,19 @@ sites_to_orbs(c::AnyCellOrbitals, _) = c
 # unused
 # sites_to_orbs_nogroups(cs::CellOrbitals, _) =  cs
 
-## convert SiteSlice -> OrbitalSliceGrouped/OrbitalSlice
+## DiagIndices
+
+sites_to_orbs(d::DiagIndices, g) = DiagIndices(sites_to_orbs(parent(d), g), kernel(d))
+
+## convert SiteSlice -> OrbitalSliceGrouped
 
 sites_to_orbs(kw::NamedTuple, g) = sites_to_orbs(siteselector(; kw...), g)
 sites_to_orbs(s::SiteSelector, g) = sites_to_orbs(lattice(g)[s], g)
-sites_to_orbs(i::Integer, g) = orbslice(selfenergies(contacts(g), i))
+sites_to_orbs(i::Union{Colon,Integer}, g) = orbslice(contacts(g), i)
 sites_to_orbs(l::SiteSlice, g) =
     OrbitalSliceGrouped(lattice(l), sites_to_orbs(cellsdict(l), blockstructure(g)))
 
-sites_to_orbs_nogroups(l::SiteSlice, g) =
-    OrbitalSlice(lattice(l), sites_to_orbs_nogroups(cellsdict(l), blockstructure(g)))
-
-## convert CellSitesDict to CellOrbitalsGroupedDict/CellOrbitalsDict
+## convert CellSitesDict to CellOrbitalsGroupedDict
 
 sites_to_orbs(c::CellSitesDict, g) = sites_to_orbs(c, blockstructure(g))
 
@@ -322,15 +326,7 @@ function sites_to_orbs(cellsdict::CellSitesDict{L}, os::OrbitalBlockStructure) w
     return CellOrbitalsGroupedDict(co)
 end
 
-sites_to_orbs_nogroups(c::CellSitesDict, g) = sites_to_orbs_nogroups(c, blockstructure(g))
-
-function sites_to_orbs_nogroups(cellsdict::CellSitesDict{L}, os::OrbitalBlockStructure) where {L}
-    # inference fails if cellsdict is empty, so we need to specify eltype
-    co = CellOrbitals{L,Vector{Int}}[sites_to_orbs_nogroups(cellsites, os) for cellsites in cellsdict]
-    return CellOrbitalsDict(co)
-end
-
-## convert CellSites -> CellOrbitalsGrouped or CellOrbitals
+## convert CellSites -> CellOrbitalsGrouped
 
 sites_to_orbs(c::CellSites, g) = sites_to_orbs(c, blockstructure(g))
 
@@ -340,6 +336,27 @@ function sites_to_orbs(cs::CellSites, os::OrbitalBlockStructure)
     orbinds = _orbinds(sites, groups, os)
     return CellOrbitalsGrouped(cell(cs), orbinds, Dictionary(groups...))
 end
+
+#endregion
+
+#region ## sites_to_orbs_nogroups
+
+## convert SiteSlice -> OrbitalSlice
+
+sites_to_orbs_nogroups(l::SiteSlice, g) =
+    OrbitalSlice(lattice(l), sites_to_orbs_nogroups(cellsdict(l), blockstructure(g)))
+
+## convert CellSitesDict to CellOrbitalsDict
+
+sites_to_orbs_nogroups(c::CellSitesDict, g) = sites_to_orbs_nogroups(c, blockstructure(g))
+
+function sites_to_orbs_nogroups(cellsdict::CellSitesDict{L}, os::OrbitalBlockStructure) where {L}
+    # inference fails if cellsdict is empty, so we need to specify eltype
+    co = CellOrbitals{L,Vector{Int}}[sites_to_orbs_nogroups(cellsites, os) for cellsites in cellsdict]
+    return CellOrbitalsDict(co)
+end
+
+## convert CellSites -> CellOrbitals
 
 function sites_to_orbs_nogroups(cs::CellSites, os::OrbitalBlockStructure)
     sites = siteindices(cs)
@@ -352,7 +369,9 @@ end
 # unused
 # sites_to_orbs_nogroups(cs::CellOrbitalsGrouped, _) = CellOrbitals(cell(cs), orbindices(cs))
 
-## core functions
+#endregion
+
+#region ## CORE FUNCTIONS
 
 _groups(i::Integer, os) = [i], [flatrange(os, i)]
 _groups(::Colon, os) = _groups(siterange(os), os)
@@ -391,4 +410,5 @@ function _orbinds(sites, os)
     return orbinds
 end
 
+#endregion
 #endregion

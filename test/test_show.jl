@@ -35,4 +35,10 @@
     h = first(hs)
     g = greenfunction(supercell(h) |> attach(@onsite(ω -> im*I)) |> attach(nothing))
     @test nothing === show(stdout, josephson(g[1], 2))
+    @test nothing === show(stdout, densitymatrix(g[1], 2))
+    h = supercell(h, 3) |> supercell
+    g = greenfunction(supercell(h) |> attach(nothing), GS.KPM())
+    @test nothing === show(stdout, densitymatrix(g[1]))
+    g = greenfunction(supercell(h) |> attach(@onsite(ω -> im*I)) |> attach(nothing), GS.Spectrum())
+    @test nothing === show(stdout, densitymatrix(g[1]))
 end

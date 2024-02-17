@@ -31,30 +31,35 @@ default_green_solver(::AbstractHamiltonian) = GS.Bands()
 (g::GreenSlice)(; params...) = minimal_callsafe_copy(call!(g; params...))
 (g::GreenSlice)(ω; params...) = copy(call!(g, ω; params...))
 
-function call!(g::GreenFunction{T}, ω::Real; params...) where {T}
-    ω´ = retarded_omega(real_or_complex_typed(T, ω), solver(g))
+call!(g::G, ω; params...) where {T,G<:Union{GreenFunction{T},GreenSlice{T}}} =
+    call!(g, real_or_complex_promote(T, ω); params...)
+
+function call!(g::GreenFunction{T}, ω::T; params...) where {T}
+    ω´ = retarded_omega(ω, solver(g))
     return call!(g, ω´; params...)
 end
 
-function call!(g::GreenFunction{T}, ω::Complex; params...) where {T}
-    ω´ = real_or_complex_typed(T, ω)
+function call!(g::GreenFunction{T}, ω::Complex{T}; params...) where {T}
     h = parent(g)
     contacts´ = contacts(g)
     call!(h; params...)
-    Σblocks = call!(contacts´, ω´; params...)
+    Σblocks = call!(contacts´, ω; params...)
     corbs = contactorbitals(contacts´)
-    slicer = solver(g)(ω´, Σblocks, corbs)
+    slicer = solver(g)(ω, Σblocks, corbs)
     return GreenSolution(g, slicer, Σblocks, corbs)
 end
 
 call!(g::GreenSlice; params...) =
-    GreenSlice(call!(greenfunction(g); params...), slicerows(g), slicecols(g))
+    GreenSlice(call!(greenfunction(g); params...), greenindices(g)...)
 
-call!(g::GreenSlice{T}, ω; params...) where {T} =
-    call!(greenfunction(g), real_or_complex_typed(T, ω); params...)[slicerows(g), slicecols(g)]
+call!(g::GreenSlice{T}, ω::T; params...) where {T} =
+    call!(g, retarded_omega(ω, solver(parent(g))); params...)
 
-real_or_complex_typed(::Type{T}, ω::Real) where {T<:Real} = convert(T, ω)
-real_or_complex_typed(::Type{T}, ω::Complex) where {T<:Real} = convert(Complex{T}, ω)
+call!(g::GreenSlice{T}, ω::Complex{T}; params...) where {T} =
+    call!(greenfunction(g), ω; params...)[orbinds_or_contactinds(g)...]
+
+real_or_complex_promote(::Type{T}, ω::Real) where {T<:Real} = convert(T, ω)
+real_or_complex_promote(::Type{T}, ω::Complex) where {T<:Real} = convert(Complex{T}, ω)
 
 retarded_omega(ω::T, s::AppliedGreenSolver) where {T<:Real} =
     ω + im * sqrt(eps(float(T))) * needs_omega_shift(s)
@@ -85,12 +90,7 @@ call!_output(c::Contacts) = selfenergyblocks(c)
 #   We convert any index down to cellorbs to pass to slicer, except contacts (Int, Colon)
 #region
 
-Base.getindex(g::GreenFunction, i::Union{Integer,Colon,DiagIndices}, j::Union{Integer,Colon,DiagIndices} = i) =
-    GreenSlice(g, i, j)
-Base.getindex(g::GreenFunction, i, j) =
-    GreenSlice(g, sites_to_orbs(i, g), sites_to_orbs(j, g))
-Base.getindex(g::GreenFunction, i) =
-    (i´ = sites_to_orbs(i, g); GreenSlice(g, i´, i´))
+Base.getindex(g::GreenFunction, i, j = i) = GreenSlice(g, i, j)
 Base.getindex(g::GreenFunction; kw...) = g[siteselector(; kw...)]
 Base.getindex(g::GreenFunction, kw::NamedTuple) = g[siteselector(; kw...)]
 
@@ -100,11 +100,9 @@ Base.getindex(g::GreenSolution, kw::NamedTuple) = g[getindex(lattice(g); kw...)]
 Base.view(g::GreenSolution, i::Integer, j::Integer = i) = view(slicer(g), i, j)
 Base.view(g::GreenSolution, i::Colon, j::Colon = i) = view(slicer(g), i, j)
 
-Base.getindex(g::GreenSolution, i::Integer, j::Integer = i) = copy_or_missing(view(g, i, j))
-Base.getindex(g::GreenSolution, ::Colon, ::Colon = :) = copy_or_missing(view(g, :, :))
-
-copy_or_missing(::Missing) = missing
-copy_or_missing(x) = copy(x)
+# fastpath for intra and inter-contact
+Base.getindex(g::GreenSolution, i::Integer, j::Integer = i) = copy(view(g, i, j))
+Base.getindex(g::GreenSolution, ::Colon, ::Colon = :) = copy(view(g, :, :))
 
 # conversion down to CellOrbitals. See sites_to_orbs in slices.jl
 Base.getindex(g::GreenSolution, i, j) = getindex(g, sites_to_orbs(i, g), sites_to_orbs(j, g))

@@ -1940,23 +1940,36 @@ struct DiagIndices{K,V}   # represents Green indices to return only diagonal ele
     kernel::K
 end
 
+struct GreenIndices{I,R}
+    inds::I
+    orbinds::R  # orbinds = sites_to_orbs(inds)
+end
+
 # Obtained with gs = g[; siteselection...]
 # Alows call!(gs, ω; params...) or gs(ω; params...)
 #   required to do e.g. h |> attach(g´[sites´], couplingmodel; sites...)
-struct GreenSlice{T,E,L,G<:GreenFunction{T,E,L},R,C}
+struct GreenSlice{T,E,L,G<:GreenFunction{T,E,L},R<:GreenIndices,C<:GreenIndices}
     parent::G
     rows::R
     cols::C
-    function GreenSlice{T,E,L,G,R,C}(parent, rows, cols) where {T,E,L,G<:GreenFunction{T,E,L},R,C}
-        if rows isa DiagIndices || cols isa DiagIndices
-            rows === cols || argerror("Diagonal indices should be identical for rows and columns")
-        end
-        return new(parent, rows, cols)
-    end
 end
 
-GreenSlice(parent::G, rows::R, cols::C) where {T,E,L,G<:GreenFunction{T,E,L},R,C} =
-    GreenSlice{T,E,L,G,R,C}(parent, rows, cols)
+#region ## Constuctors ##
+
+function GreenSlice(parent, rows, cols)
+    if rows isa DiagIndices || cols isa DiagIndices
+        rows === cols || argerror("Diagonal indices should be identical for rows and columns")
+    end
+    rows´ = greenindices(rows, parent)
+    cols´ = cols === rows ? rows´ : greenindices(cols, parent)
+    return GreenSlice(parent, rows´, cols´)
+end
+
+# see sites_to_orbs in slices.jl
+greenindices(inds, g) = GreenIndices(inds, sites_to_orbs(inds, g))
+greenindices(g::GreenSlice) = g.rows, g.cols
+
+#endregion
 
 #region ## API ##
 
@@ -1973,10 +1986,10 @@ lattice(g::Union{GreenFunction,GreenSolution,GreenSlice}) = lattice(g.parent)
 
 latslice(g::GreenFunction, i) = orbslice(g.contacts, i)
 
-function latslice(g::GreenFunction, ls::LatticeSlice)
-    lattice(g) === lattice(ls) || internalerror("latslice: parent lattice mismatch")
-    return ls
-end
+# function latslice(g::GreenFunction, ls::LatticeSlice)
+#     lattice(g) === lattice(ls) || internalerror("latslice: parent lattice mismatch")
+#     return ls
+# end
 # latslice(g::GreenFunction, is::SiteSelector) = lattice(g)[is]
 # latslice(g::GreenFunction; kw...) = latslice(g, siteselector(; kw...))
 
@@ -2013,9 +2026,19 @@ contactinds(g::Union{GreenSolution,GreenSlice}, i...) = contactinds(contactorbit
 
 greenfunction(g::GreenSlice) = g.parent
 
-slicerows(g::GreenSlice) = g.rows
+rows(g::GreenSlice) = g.rows.inds
 
-slicecols(g::GreenSlice) = g.cols
+cols(g::GreenSlice) = g.cols.inds
+
+orbrows(g::GreenSlice) = g.rows.orbinds
+
+orbcols(g::GreenSlice) = g.cols.orbinds
+
+# ifelse(rows && cols are contacts, (rows, cols), (orbrows, orbcols))
+# I.e: if rows, cols are contact indices retrieve them instead of orbslices.
+orbinds_or_contactinds(g) = orbinds_or_contactinds(rows(g), cols(g), orbrows(g), orbcols(g))
+orbinds_or_contactinds(r::Union{Colon,Integer}, c::Union{Colon,Integer}, _, _) = (r, c)
+orbinds_or_contactinds(_, _, or, oc) = (or, oc)
 
 Base.parent(g::GreenFunction) = g.parent
 Base.parent(g::GreenSolution) = g.parent
@@ -2028,8 +2051,8 @@ flatsize(g::GreenFunction, i...) = flatsize(g.parent, i...)
 flatsize(g::GreenSolution, i...) = flatsize(g.parent, i...)
 
 function similar_Matrix(gs::GreenSlice{T}) where {T}
-    m = norbitals(sites_to_orbs(slicerows(gs), gs))
-    n = norbitals(sites_to_orbs(slicecols(gs), gs))
+    m = norbitals(orbrows(gs))
+    n = norbitals(orbcols(gs))
     return Matrix{Complex{T}}(undef, m, n)
 end
 

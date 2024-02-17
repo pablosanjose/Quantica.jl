@@ -80,9 +80,10 @@ end
 ## Constructor
 
 function densitymatrix(s::AppliedSpectrumGreenSolver, gs::GreenSlice)
-    # SpectrumGreenSlicer is 0D
-    i, j = only(cellsdict(slicerows(gs))), only(cellsdict(slicerows(gs)))
-    oi, oj = orbindices(i), orbindices(j)   # because GreenSlice already converted to orbs
+    # SpectrumGreenSlicer is 0D, so there is a single cellorbs in dict.
+    # If rows/cols are contacts, we need their orbrows/orbcols (unlike for gs(ω; params...))
+    i, j = only(cellsdict(orbrows(gs))), only(cellsdict(orbcols(gs)))
+    oi, oj = orbindices(i), orbindices(j)
     es, psis = spectrum(s)
     solver = DensityMatrixSpectrumSolver(es, _maybe_view(psis, oi), _maybe_view(psis, oj))
     return DensityMatrix(solver)

@@ -11,8 +11,8 @@ function testgreen(h, s; kw...)
     z = zero(SVector{L,Int})
     o = Quantica.unitvector(1, SVector{L,Int})
     conts = ntuple(identity, ncontacts(h))
-    locs = (cellsites(z, :), cellsites(z, 2), cellsites(z, 1:2), cellsites(z, (1,2)),
-            cellsites(o, :), CellOrbitals(o, 1), CellOrbitals(z, 1:2), CellOrbitals(z, SA[2,1]),
+    locs = (cellsites(z, :), cellsites(z, 2), cellsites(o, 1:2), cellsites(o, (1,2)),
+            CellOrbitals(o, 1), CellOrbitals(z, 1:2), CellOrbitals(z, SA[2,1]),
             conts...)
     for loc in locs, loc´ in locs
         gs = g[loc, loc´]
@@ -281,6 +281,12 @@ end
     ρ1, ρ2, ρ3 = densitymatrix(gLU[reg], (-3,3)), densitymatrix(gSpectrum[reg]), densitymatrix(gKPM[1])
     @test ρ1() ≈ ρ2() atol = 0.00001
     @test ρ2() ≈ ρ3() atol = 0.00001
+    gLU´ = h |> attach(nothing; reg...) |> greenfunction(GS.SparseLU());
+    ρ1´ = densitymatrix(gLU´[1], (-3, 3))
+    @test ρ1() ≈ ρ1´()
+    gSpectrum´ = h |> attach(nothing; reg...) |> greenfunction(GS.Spectrum());
+    ρ2´ = densitymatrix(gSpectrum´[1])
+    @test ρ2() ≈ ρ2´()
 
     glead = LP.square() |> hamiltonian(hopping(1)) |> supercell((0,1), region = r -> -1 <= r[1] <= 1) |> attach(nothing; cells = SA[10]) |> greenfunction(GS.Schur(boundary = 0));
     contact1 = r -> r[1] ≈ 5 && -1 <= r[2] <= 1
