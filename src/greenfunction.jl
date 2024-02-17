@@ -482,8 +482,9 @@ end
 
 function GreenSolutionCache(gω::GreenSolution{T,<:Any,L}) where {T,L}
     cache = Dict{Tuple{SVector{L,Int},SVector{L,Int},Int},Matrix{Complex{T}}}()
+    # if contacts exists, we preallocate columns for each of their sites
     if ncontacts(gω) > 0
-        gmat = gω[:]    # may be missing if solver does not support (or doesn't have) contacts
+        gmat = gω[:]
         g = parent(gω)
         h = hamiltonian(g)
         bs = blockstructure(h)

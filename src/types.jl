@@ -187,7 +187,7 @@ struct SiteSelector{F,S,C}
     cells::C
 end
 
-const UnboundedSiteSelector = SiteSelector{Missing,Missing,Missing}
+const SiteSelectorAll = SiteSelector{Missing,Missing,Missing}
 
 struct AppliedSiteSelector{T,E,L}
     lat::Lattice{T,E,L}
@@ -1736,6 +1736,10 @@ solver(Σ::SelfEnergy) = Σ.solver
 
 plottables(Σ::SelfEnergy) = Σ.plottables
 
+has_selfenergy(s::SelfEnergy) = has_selfenergy(solver(s))
+has_selfenergy(s::AbstractSelfEnergySolver) = true
+# see nothing.jl for override for the case of SelfEnergyEmptySolver
+
 call!(Σ::SelfEnergy; params...) = SelfEnergy(call!(Σ.solver; params...), Σ.orbslice)
 call!(Σ::SelfEnergy, ω; params...) = call!(Σ.solver, ω; params...)
 
@@ -1850,6 +1854,8 @@ offsets(c::ContactOrbitals) = c.offsets
 selfenergies(c::Contacts) = c.selfenergies
 selfenergies(c::Contacts, i::Integer) = check_contact_index(i, c) && c.selfenergies[i]
 
+has_selfenergy(c::Contacts) = any(has_selfenergy, selfenergies(c))
+
 # c::Union{Contacts,ContactOrbitals} here
 check_contact_index(i, c) = 1 <= i <= ncontacts(c) ||
     argerror("Cannot get contact $i, there are $(ncontacts(c)) contacts")
@@ -1961,19 +1967,20 @@ Base.parent(i::DiagIndices) = i.inds
 
 kernel(i::DiagIndices) = i.kernel
 
-hamiltonian(g::GreenFunction) = hamiltonian(g.parent)
-hamiltonian(g::GreenSolution) = hamiltonian(g.parent)
+hamiltonian(g::Union{GreenFunction,GreenSolution,GreenSlice}) = hamiltonian(g.parent)
 
-lattice(g::GreenFunction) = lattice(g.parent)
-lattice(g::GreenSolution) = lattice(g.parent)
+lattice(g::Union{GreenFunction,GreenSolution,GreenSlice}) = lattice(g.parent)
 
 latslice(g::GreenFunction, i) = orbslice(g.contacts, i)
+
 function latslice(g::GreenFunction, ls::LatticeSlice)
     lattice(g) === lattice(ls) || internalerror("latslice: parent lattice mismatch")
     return ls
 end
 # latslice(g::GreenFunction, is::SiteSelector) = lattice(g)[is]
 # latslice(g::GreenFunction; kw...) = latslice(g, siteselector(; kw...))
+
+zerocell(g::Union{GreenFunction,GreenSolution,GreenSlice}) = zerocell(lattice(g))
 
 solver(g::GreenFunction) = g.solver
 
@@ -1987,17 +1994,22 @@ slicer(g::GreenSolution) = g.slicer
 
 selfenergies(g::GreenSolution) = g.contactΣs
 
+has_selfenergy(g::Union{GreenFunction,GreenSlice,GreenSolution}) =
+    has_selfenergy(contacts(g))
+
 contactorbitals(g::GreenFunction) = contactorbitals(g.contacts)
 contactorbitals(g::GreenSolution) = g.contactorbs
+contactorbitals(g::GreenSlice) = contactorbitals(parent(g))
 
 blockstructure(g::GreenFunction) = blockstructure(hamiltonian(g))
 blockstructure(g::GreenSolution) = blockstructure(hamiltonian(g))
+blockstructure(g::GreenSlice) = blockstructure(parent(g))
 
 norbitals(g::GreenFunction) = norbitals(g.parent)
 norbitals(g::GreenSlice) = norbitals(g.parent.parent)
 
 contactinds(g::GreenFunction, i...) = contactinds(contacts(g), i...)
-contactinds(g::GreenSolution, i...) = contactinds(contactorbitals(g), i...)
+contactinds(g::Union{GreenSolution,GreenSlice}, i...) = contactinds(contactorbitals(g), i...)
 
 greenfunction(g::GreenSlice) = g.parent
 
@@ -2014,6 +2026,12 @@ Base.size(g::GreenSolution, i...) = size(g.parent, i...)
 
 flatsize(g::GreenFunction, i...) = flatsize(g.parent, i...)
 flatsize(g::GreenSolution, i...) = flatsize(g.parent, i...)
+
+function similar_Matrix(gs::GreenSlice{T}) where {T}
+    m = norbitals(sites_to_orbs(slicerows(gs), gs))
+    n = norbitals(sites_to_orbs(slicecols(gs), gs))
+    return Matrix{Complex{T}}(undef, m, n)
+end
 
 copy_lattice(g::GreenFunction) = GreenFunction(copy_lattice(g.parent), g.solver, g.contacts)
 copy_lattice(g::GreenSolution) = GreenSolution(

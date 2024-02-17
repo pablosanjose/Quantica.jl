@@ -21,6 +21,8 @@ call!(s::SelfEnergyEmptySolver, ω; params...) = s.emptymat
 
 call!_output(s::SelfEnergyEmptySolver) = s.emptymat
 
+has_selfenergy(::SelfEnergyEmptySolver) = false
+
 minimal_callsafe_copy(s::SelfEnergyEmptySolver) = s
 
 #endregion

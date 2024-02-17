@@ -113,7 +113,7 @@ end
 function call!(I::Integrator; params...)
     fx! = (y, x) -> (y .= call!(I.integrand, x; params...))
     result, err = quadgk!(fx!, I.result, I.points...; I.opts...)
-    result´ = I.post.(result)
+    result´ = I.post(result)  # note: post-processing is not element-wise & can be in-place
     return result´
 end
 
@@ -186,7 +186,7 @@ end
 
 ############################################################################################
 # current: current density Jᵢⱼ(ω) as a function of a charge operator
-#   d = current(::GreenSolution[, dir]; charge)      -> d[sites...]::SparseMatrixCSC{SVector{E,T}}
+#   d = current(::GreenSolution[, dir]; charge) -> d[sites...]::SparseMatrixCSC{SVector{E,T}}
 #   d = current(::GreenSlice[, dir]; charge) -> d(ω; params...)::SparseMatrixCSC{SVector{E,T}}
 #   Computes the zero-temperature equilibrium current density Jᵢⱼ from site j to site i
 #       Jᵢⱼ(ω) = (2/h) rᵢⱼ Re Tr[(Hᵢⱼgʳⱼᵢ - gʳᵢⱼHⱼᵢ)Q]
@@ -400,6 +400,73 @@ end
 #endregion
 #endregion
 
+############################################################################################
+# densitymatrix: equilibrium (static) ρ::DensityMatrix
+#   ρ = densitymatrix(g::GreenSlice, (ωmin, ωmax); opts...)
+#   ρ(mu, kBT = 0; params...) gives the DensityMatrix that is solved with an integral over (ωmin, ωmax)
+#       ρ(mu, kBT; params...) = -(1/π) Im ∫dω f(ω) g(ω; params...)
+#   ρ = densitymatrix(g::GreenSlice; opts...) uses a GreenSolver-specific algorithm
+#   Keywords opts are passed to QuadGK.quadgk for the integral or the algorithm used
+#region
+
+struct DensityMatrix{S}
+    solver::S
+end
+
+# Default solver (integration in complex plane)
+struct DensityMatrixIntegratorSolver{I}
+    ifunc::I
+end
+
+#region ## Constructors ##
+
+(ρ::DensityMatrix)(mu = 0, kBT = 0; params...) = ρ.solver(mu, kBT; params...)
+
+(s::DensityMatrixIntegratorSolver)(mu, kBT; params...) = s.ifunc(mu, kBT; params...)
+
+# redirects to specialized method
+densitymatrix(gs::GreenSlice; kw...) = densitymatrix(solver(parent(gs)), gs::GreenSlice; kw...)
+
+# generic fallback
+densitymatrix(s::AppliedGreenSolver, gs::GreenSlice; kw...) =
+    argerror("Dedicated `densitymatrix` algorithm not implemented for $(nameof(typeof(s))). Use generic one instead.")
+
+# default integrator solver
+densitymatrix(g::GreenSlice, ωmax::Number; opts...) = densitymatrix(g, (-ωmax, ωmax); opts...)
+
+function densitymatrix(gs::GreenSlice{T}, (ωmin, ωmax)::Tuple; imshift = missing, atol = 1e-7, opts...) where {T}
+    result = similar_Matrix(gs)
+    opts´ = (; imshift, slope = 1, post = gf_to_rho!, atol, opts...)
+    integratorfunc(mu, kBT; params...) = iszero(kBT) ?
+        Integrator(result, GFermi(gs, T(mu), T(kBT)), (ωmin, mu); opts´...)(; params...) :
+        Integrator(result, GFermi(gs, T(mu), T(kBT)), (ωmin, mu, ωmax); opts´...)(; params...)
+    return DensityMatrix(DensityMatrixIntegratorSolver(integratorfunc))
+end
+
+function gf_to_rho!(x)
+    x .= x .- x'
+    x .*= -1/(2π*im)
+    return x
+end
+
+#endregion
+
+#region ## API ##
+
+struct GFermi{G<:GreenSlice,T}
+    gs::G
+    mu::T
+    kBT::T
+end
+
+function call!(gf::GFermi, ω; params...)
+    gω = call!(gf.gs, ω; params...)
+    f = fermi(ω - gf.mu, gf.kBT)
+    gω .*= f
+    return gω
+end
+
+#endregion
 
 ############################################################################################
 # josephson
@@ -429,24 +496,37 @@ struct JosephsonDensity{T<:AbstractFloat,P<:Union{Missing,AbstractArray},G<:Gree
     cisτz::Vector{Complex{T}}   # preallocated workspace
 end
 
+struct Josephson{S}
+    solver::S
+end
+
+# default solver (integration in complex plane)
+struct JosephsonIntegratorSolver{I}
+    ifunc::I
+end
+
 #region ## Constructors ##
 
-function josephson(gs::GreenSlice{T}, ωmax; kBT = 0.0, phases = missing, imshift = missing, atol = 1e-7, opts...) where {T}
+(j::Josephson)(kBT = 0; params...) = j.solver(kBT; params...)
+
+(s::JosephsonIntegratorSolver)(kBT; params...) = s.ifunc(kBT; params...)
+
+function josephson(gs::GreenSlice{T}, ωmax; phases = missing, imshift = missing, atol = 1e-7, opts...) where {T}
     check_same_contact_slice(gs)
     contact = slicerows(gs)
     g = parent(gs)
-    kBT´ = T(kBT)
     Σfull = similar_contactΣ(g)
     Σ = similar_contactΣ(g, contact)
     normalsize = normal_size(hamiltonian(g))
     tauz = tauz_diag.(axes(Σ, 1), normalsize)
     phases´, traces = sanitize_phases_traces(phases, T)
-    jd = JosephsonDensity(g, kBT´, contact, tauz, phases´,
+    jd(kBT) = JosephsonDensity(g, T(kBT), contact, tauz, phases´,
         traces, Σfull, Σ, similar(Σ), similar(Σ), similar(Σ), similar(tauz, Complex{T}))
-    integrator = iszero(kBT) ?
-        Integrator(traces, jd, (-ωmax, 0); imshift, slope = 1, post = real, atol, opts...) :
-        Integrator(traces, jd, (-ωmax, 0, ωmax); imshift, slope = 1, post = real, atol, opts...)
-    return integrator
+    opts´ = (; imshift, slope = 1, post = real, atol, opts...)
+    ifunc(kBT; params...) = iszero(kBT) ?
+        Integrator(traces, jd(kBT), (-ωmax, 0); opts´...)(; params...) :
+        Integrator(traces, jd(kBT), (-ωmax, 0, ωmax); opts´...)(; params...)
+    return Josephson(JosephsonIntegratorSolver(ifunc))
 end
 
 sanitize_phases_traces(::Missing, ::Type{T}) where {T} = missing, missing

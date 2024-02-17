@@ -1347,10 +1347,11 @@ Add self-energy `Σᵢⱼ(ω)` defined by a `model` composed of parametric terms
 
     attach(h, nothing; sites...)
 
-Add null self-energy `Σᵢⱼ(ω) = 0` on selected sites, which in effect simply amounts to
-defining a contact on said sites, but does not lead to any dressing the Green function. This
-is useful for some `GreenFunction` solvers such as `GS.KPM` (see `greenfunction`), which
-need to know the sites of interest beforehand (the contact sites in this case).
+Add a `nothing` contact with a null self-energy `Σᵢⱼ(ω) = 0` on selected sites, which in
+effect simply amounts to labeling those sites with a contact number, but does not lead to
+any dressing the Green function. This is useful for some `GreenFunction` solvers such as
+`GS.KPM` (see `greenfunction`), which need to know the sites of interest beforehand (the
+contact sites in this case).
 
     attach(h, g1D::GreenFunction; reverse = false, transform = identity, sites...)
 
@@ -1521,6 +1522,7 @@ possible keyword arguments are
 - `GS.SparseLU()` : Direct inversion solver for 0D Hamiltonians using a `SparseArrays.lu(hmat)` factorization
 - `GS.Spectrum(; spectrum_kw...)` : Diagonalization solver for 0D Hamiltonians using `spectrum(h; spectrum_kw...)`
     - `spectrum_kw...` : keyword arguments passed on to `spectrum`
+    - This solver does not accept ParametricHamiltonians. Convert to Hamiltonian with `h(; params...)` first.
 - `GS.Schur(; boundary = Inf)` : Solver for 1D Hamiltonians based on a deflated, generalized Schur factorization
     - `boundary` : 1D cell index of a boundary cell, or `Inf` for no boundaries. Equivalent to removing that specific cell from the lattice when computing the Green function.
 - `GS.KPM(; order = 100, bandrange = missing, kernel = I)` : Kernel polynomial method solver for 0D Hamiltonians
@@ -1531,7 +1533,7 @@ possible keyword arguments are
 - `GS.Bands(bands_arguments; boundary = missing, bands_kw...)`: solver based on the integration of bandstructure simplices
     - `bands_arguments`: positional arguments passed on to `bands`
     - `bands_kw`: keyword arguments passed on to `bands`
-    - `boundary`: either `missing` (no boundary), or `dir => cell_pos`, where `dir::Integer` is the Bravais vector normal to the boundary, and `cell_pos::Integer` the value of cell indices `cells[dir]` that define the boundary (i.e. `cells[dir] <= cell_pos` are vaccum)
+    - `boundary`: either `missing` (no boundary), or `dir => cell_pos` (single boundary), where `dir::Integer` is the Bravais vector normal to the boundary, and `cell_pos::Integer` the value of cell indices `cells[dir]` that define the boundary (i.e. `cells[dir] <= cell_pos` are vaccum)
     - This solver only allows zero or one boundary. WARNING: if a boundary is used, the algorithm may become unstable for very fine band meshes.
 
 """
@@ -1564,7 +1566,7 @@ julia> g(1)[diagonal(:)]                            # g diagonal on all contact 
  -0.10919028169083328 - 0.08398577667508969im
    -0.109190281684109 - 0.08398577667508969im
 
-julia> g(1)[diagonal(:, kernel = SA[1 0; 0 -1])]    # σz spin density at ω = 1
+julia> g(1)[diagonal(:, kernel = SA[1 0; 0 -1])]    # σz spin spectral density at ω = 1
 2-element Vector{ComplexF64}:
   6.724287793247186e-12 + 2.7755575615628914e-17im
  -6.724273915459378e-12 + 0.0im
@@ -1637,6 +1639,57 @@ true
 
 """
 ldos
+
+"""
+
+    densitymatrix(gs::GreenSlice; opts...)
+
+Compute a `ρ::DensityMatrix` at thermal equilibrium on sites encoded in `gs`. The actual
+matrix for given system parameters `params`, and for a given chemical potential `mu` and
+temperature `kBT` is obtained by calling `ρ(mu = 0, kBT = 0; params...)`. The algorithm used is
+specialized for the GreenSolver used, if available. In this case, `opts` are options for
+said algorithm.
+
+    densitymatrix(gs::GreenSlice, (ωmin, ωmax); opts...)
+
+As above, but using a generic algorithm that relies on numerical integration along a contour
+in the complex plane, between points `(ωmin, ωmax)`, which should be chosen so as to
+encompass the full system bandwidth. Keywords `opts...` are passed to the `QuadGK.quadgk`
+integration routine.
+
+    densitymatrix(gs::GreenSlice, ωmax::Number; opts...)
+
+As above with `ωmin = -ωmax`.
+
+## Full evaluation
+
+    ρ(μ = 0, kBT = 0; params...)   # where ρ::DensityMatrix
+
+Evaluate the density matrix at chemical potential `μ` and temperature `kBT` (in the same
+units as the Hamiltonian) for the given `g` parameters `params`, if any.
+
+## Algorithms
+
+Currently, the following GreenSolvers implement dedicated densitymatrix algorithms:
+
+- `GS.Spectrum`: based on summation occupation-weigthed eigenvectors. No `opts`.
+- `GS.KPM`: based on the Chebyshev expansion of the Fermi function. Currently only works for zero temperature and only supports `nothing` contacts (see `attach`).
+
+# Example
+```
+julia> g = HP.graphene(a0 = 1) |> supercell(region = RP.circle(10)) |> greenfunction(GS.Spectrum());
+
+julia> ρ = densitymatrix(g[region = RP.circle(0.5)])
+DensityMatrix: density matrix on specified sites with solver of type DensityMatrixSpectrumSolver
+
+julia> ρ()  # with mu = kBT = 0 by default
+2×2 Matrix{ComplexF64}:
+       0.5+0.0im  -0.262865+0.0im
+ -0.262865+0.0im        0.5+0.0im
+```
+
+"""
+densitymatrix
 
 """
     current(h::AbstractHamiltonian; charge = -I, direction = 1)
@@ -1804,24 +1857,23 @@ true
 transmission
 
 """
-    josephson(gs::GreenSlice, ωmax; kBT = 0.0, phases = missing, imshift = missing, slope = 1, post = real, atol = 1e-7, quadgk_opts...)
+    josephson(gs::GreenSlice, ωmax; phases = missing, imshift = missing, slope = 1, post = real, atol = 1e-7, quadgk_opts...)
 
 For a `gs = g[i::Integer]` slice of the `g::GreenFunction` of a hybrid junction, build a
-partially evaluated object `J::Integrator` representing the equilibrium (static) Josephson
-current `I_J` flowing into `g` through contact `i`, integrated from `-ωmax` to `ωmax` (or
-from `-ωmax` to `0` at zero temperature `kBT = 0`). The result of `I_J` is given in units of
-`qe/h` (`q` is the dimensionless carrier charge). `I_J` can be written as ``I_J = Re ∫ dω
-f(ω) j(ω)``, where ``j(ω) = (qe/h) × 2Tr[(ΣʳᵢGʳ - GʳΣʳᵢ)τz]``.
+`J::Josephson` object representing the equilibrium (static) Josephson current `I_J` flowing
+into `g` through contact `i`, integrated from `-ωmax` to `ωmax`. The result of `I_J` is
+given in units of `qe/h` (`q` is the dimensionless carrier charge). `I_J` can be written as
+``I_J = Re ∫ dω f(ω) j(ω)``, where ``j(ω) = (qe/h) × 2Tr[(ΣʳᵢGʳ - GʳΣʳᵢ)τz]``.
 
 ## Full evaluation
 
-    J(; params...)
+    J(kBT = 0; params...)   # where J::Josephson
 
-Evaluate the Josephson current `I_J` for the given `g` parameters `params`, if any.
+Evaluate the current `I_J` at temperature `kBT` (in the same units as the Hamiltonian) for
+the given `g` parameters `params`, if any.
 
 ## Keywords
 
-- `kBT` : temperature in same energy units as the Hamiltonian
 - `phases` : collection of superconducting phase biases to apply to the contact, so as to efficiently compute the full current-phase relation `[I_J(ϕ) for ϕ in phases]`. Note that each phase bias `ϕ` is applied by a `[cis(-ϕ/2) 0; 0 cis(ϕ/2)]` rotation to the self energy, which is almost free. If `missing`, a single `I_J` is returned.
 - `imshift`: if `missing` the initial and final integration points `± ωmax` are shifted by `im * sqrt(eps(ωmax))`, to avoid the real axis. Otherwise a shift `im*imshift` is applied (may be zero if `ωmax` is greater than the bandwidth).
 - `slope`: if non-zero, the integration will be performed along a piecewise-linear path in the complex plane `(-ωmax, -ωmax/2 * (1+slope*im), 0, ωmax/2 * (1+slope*im), ωmax)`, taking advantage of the holomorphic integrand `f(ω) j(ω)` and the Cauchy Integral Theorem for faster convergence.
@@ -1837,27 +1889,20 @@ julia> glead = LP.square() |> hamiltonian(onsite(0.0005 * SA[0 1; 1 0]) + hoppin
 julia> g0 = LP.square() |> hamiltonian(hopping(SA[1 0; 0 -1]), orbitals = 2) |> supercell(region = r->-2<r[2]<2 && r[1]≈0) |> attach(glead, reverse = true) |> attach(glead) |> greenfunction;
 
 julia> J = josephson(g0[1], 4; phases = subdiv(0, pi, 10))
-Integrator: Complex-plane integrator
-  Integration path    : (-4.0 + 1.4901161193847656e-8im, -2.0 + 2.000000014901161im, 0.0 + 1.4901161193847656e-8im)
-  Integration options : (atol = 1.0e-7,)
-  Integrand:          :
-  JosephsonDensity{Float64} : Equilibrium (dc) Josephson current observable before integration over energy
-    kBT                     : 0.0
-    Contact                 : 1
-    Number of phase shifts  : 10
+Josephson: equilibrium Josephson current at a specific contact using solver of type JosephsonIntegratorSolver
 
-julia> J()
+julia> J(0.0)
 10-element Vector{Float64}:
- -8.240920080846876e-16
-  0.0016315088241543722
-  0.003213820056116566
-  0.004699191781509914
-  0.006042752632291697
-  0.007203835441100842
-  0.008147188939637184
-  0.008844017741697798
-  0.009272686486294741
-  9.310666393245707e-13
+ -4.497874185217862e-16
+  0.0016315088241548356
+  0.003213820056116977
+  0.004699191781510337
+  0.006042752632292157
+  0.007203835441101561
+  0.008147188939637824
+  0.008844017741699536
+  0.009272686486297674
+ -1.3101026101755857e-12
 ```
 
 # See also

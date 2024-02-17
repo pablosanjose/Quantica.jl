@@ -128,32 +128,6 @@ end
 #endregion
 
 ############################################################################################
-# KPM observables
-#   h = rescaled(H) = (H - ω0)/β
-#   G_H(ω) = 1/(ω-H) = 1/(ω - β*h - ω0*I) = β⁻¹/((ω - ω0)/β - h) = β⁻¹ G_h((ω-ω0)/β)
-#region
-
-function KPMgreen(momenta::Vector{<:Matrix}, ω, (ω0, β) = (0, 1))
-    β⁻¹ = 1/β
-    ω´ =  (ω - ω0) * β⁻¹
-    g0 = zero(first(momenta))
-    for (i, μi) in enumerate(momenta)
-        g0n = β⁻¹ * KPMgreen_coefficient(i - 1, ω´)
-        g0 .+= g0n .* μi
-    end
-    return g0
-end
-
-function KPMgreen_coefficient(n, ω)
-    σ = ifelse(imag(ω) < 0, -1, 1)
-    ωc = complex(ω)
-    g0n = -2 * im * σ * cis(-n * σ * acos(ωc)) / (ifelse(iszero(n), 2, 1) * sqrt(1 - ωc^2))
-    return g0n
-end
-
-#endregion
-
-############################################################################################
 # AppliedKPMGreenSolver
 #region
 
@@ -212,11 +186,87 @@ end
 
 function (s::AppliedKPMGreenSolver{T})(ω, Σblocks, corbitals) where {T}
     g0contacts = KPMgreen(s.momenta, ω, s.bandCH)
-    # We rely on TMatrixSlicer to incorporate contact self-energies
+    # We rely on TMatrixSlicer to incorporate contact self-energie, and to slice contacts
     gslicer = TMatrixSlicer(g0contacts, Σblocks, corbitals)
     return gslicer
 end
 
 #endregion
+#endregion
 
+############################################################################################
+# KPM Green
+#   h = rescaled(H) = (H - ω0)/Δ, where (ω0, Δ) = bandsCH = (center, halfwidth)
+#   G_H(ω) = 1/(ω-H) = 1/(ω - Δ*h - ω0*I) = Δ⁻¹/((ω - ω0)/Δ - h) = Δ⁻¹ G_h((ω-ω0)/Δ)
+#region
+
+function KPMgreen(momenta::Vector{<:Matrix}, ω, (ω0, Δ) = (0, 1))
+    Δ⁻¹ = 1/Δ
+    ω´ =  (ω - ω0) * Δ⁻¹
+    g0 = zero(first(momenta))
+    for (i, μi) in enumerate(momenta)
+        g0n = Δ⁻¹ * KPMgreen_coefficient(i - 1, ω´)
+        g0 .+= g0n .* μi
+    end
+    return g0
+end
+
+function KPMgreen_coefficient(n, ω)
+    σ = ifelse(imag(ω) < 0, -1, 1)
+    ωc = complex(ω)
+    g0n = -2 * im * σ * cis(-n * σ * acos(ωc)) / (ifelse(iszero(n), 2, 1) * sqrt(1 - ωc^2))
+    return g0n
+end
+
+#endregion
+
+############################################################################################
+# densitymatrix
+#   specialized DensityMatrix method for GS.KPM
+#region
+
+struct DensityMatrixKPMSolver{T,M}
+    momenta::Vector{M}
+    bandCH::Tuple{T,T}
+end
+
+## Constructor
+
+function densitymatrix(s::AppliedKPMGreenSolver, gs::GreenSlice{T}) where {T}
+    has_selfenergy(gs) && argerror("The KPM densitymatrix solver currently support only `nothing` contacts")
+    momenta = slice_momenta(s.momenta, gs)
+    solver = DensityMatrixKPMSolver(momenta, s.bandCH)
+    return DensityMatrix(solver)
+end
+
+function slice_momenta(momenta, gs)
+    rows = _maybe_contactinds(gs, slicerows(gs))
+    cols = _maybe_contactinds(gs, slicecols(gs))
+    momenta´ = [view(m, rows, cols) for m in momenta]
+    return momenta´
+end
+
+_maybe_contactinds(gs, ::Colon) = Colon()
+_maybe_contactinds(gs, i::Integer) = contactinds(gs, i)
+_maybe_contactinds(gs, _) = throw(argerror("KPM doesn't support generic indexing"))
+
+## call
+
+function (d::DensityMatrixKPMSolver)(mu, kBT; params...)
+    ω0, Δ = d.bandCH
+    kBT´ = kBT / Δ
+    mu´ = (mu - ω0) / Δ
+    if kBT´ ≈ 0
+        ϕ = acos(mu´)
+        ρ = copy(first(d.momenta)) * (1-ϕ/π)
+        for n in 1:length(d.momenta)-1
+            @. ρ += d.momenta[n+1] * 2 * (sin(π*n)-sin(n*ϕ))/(π*n)
+        end
+    else
+        throw(argerror("KPM densitymatrix currently doesn't support finite temperatures"))
+    end
+    return ρ
+end
+
+#endregion
 #endregion
