@@ -376,7 +376,7 @@ function Base.show(io::IO, I::Integrator)
     print(io, i, summary(I), "\n",
 "$i  Integration path    : $(points(I))
 $i  Integration options : $(display_namedtuple(options(I)))
-$i  Integrand:          :\n")
+$i  Integrand           : ")
     ioindent = IOContext(io, :indent => i * "  ")
     show(ioindent, integrand(I))
 end
@@ -389,19 +389,46 @@ display_namedtuple(nt::NamedTuple) = isempty(nt) ? "()" : "$nt"
 #endregion
 
 ############################################################################################
-# Josephson
+# Josephson (integrand)
 #region
 
 function Base.show(io::IO, J::JosephsonDensity)
     i = get(io, :indent, "")
-    print(io, i, summary(J), "\n",
+    print(io, summary(J), "\n",
 "$i  kBT                     : $(temperature(J))
 $i  Contact                 : $(contact(J))
 $i  Number of phase shifts  : $(numphaseshifts(J))")
 end
 
-Base.summary(::JosephsonDensity{T}) where {T} =
-    "JosephsonDensity{$T} : Equilibrium (dc) Josephson current observable before integration over energy"
+Base.summary(::JosephsonDensity{T}) where {T} = "JosephsonDensity{$T}"
+
+#endregion
+
+############################################################################################
+# DensityMatrix
+#region
+
+function Base.show(io::IO, d::DensityMatrix)
+    i = get(io, :indent, "")
+    print(io, summary(d))
+end
+
+Base.summary(::DensityMatrix{S}) where {S} =
+    "DensityMatrix: density matrix on specified sites using solver of type $(nameof(S))"
+
+#endregion
+
+############################################################################################
+# Josephson
+#region
+
+function Base.show(io::IO, j::Josephson)
+    i = get(io, :indent, "")
+    print(io, summary(j))
+end
+
+Base.summary(::Josephson{S}) where {S} =
+    "Josephson: equilibrium Josephson current at a specific contact using solver of type $(nameof(S))"
 
 #endregion
 

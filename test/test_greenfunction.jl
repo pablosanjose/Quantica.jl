@@ -11,8 +11,8 @@ function testgreen(h, s; kw...)
     z = zero(SVector{L,Int})
     o = Quantica.unitvector(1, SVector{L,Int})
     conts = ntuple(identity, ncontacts(h))
-    locs = (cellsites(z, :), cellsites(z, 2), cellsites(z, 1:2), cellsites(z, (1,2)),
-            cellsites(o, :), CellOrbitals(o, 1), CellOrbitals(z, 1:2), CellOrbitals(z, SA[2,1]),
+    locs = (cellsites(z, :), cellsites(z, 2), cellsites(o, 1:2), cellsites(o, (1,2)),
+            CellOrbitals(o, 1), CellOrbitals(z, 1:2), CellOrbitals(z, SA[2,1]),
             conts...)
     for loc in locs, loc´ in locs
         gs = g[loc, loc´]
@@ -97,6 +97,9 @@ end
     h = supercell(h)
     @test_throws ArgumentError greenfunction(h, GS.Schur())
     @test_throws ArgumentError greenfunction(h, GS.Bands())
+    h = LP.honeycomb() |> @onsite((; o = 1) -> o*I) |> supercell
+    @test_throws ArgumentError greenfunction(h, GS.Spectrum())
+    @test greenfunction(h(), GS.Spectrum()) isa GreenFunction
 end
 
 @testset "greenfunction KPM" begin
@@ -258,12 +261,32 @@ function testjosephson(g0)
 end
 
 @testset "greenfunction observables" begin
+    # single-orbital vs two-orbital
     g1 = LP.square() |> supercell((1,0), region = r->-2<r[2]<2) |> hamiltonian(@hopping((r, dr; B = 0.1) -> I * cis(B * dr' * SA[r[2],-r[1]])), orbitals = 1) |> greenfunction(GS.Schur(boundary = 0));
     g2 = LP.square() |> supercell((1,0), region = r->-2<r[2]<2) |> hamiltonian(@hopping((r, dr; B = 0.1) -> I * cis(B * dr' * SA[r[2],-r[1]])), orbitals = 2) |> greenfunction(GS.Schur(boundary = 0));
     J1 = current(g1[cells = SA[1]])
     J2 = current(g2[cells = SA[1]])
     @test size(J1(0.2)) == size(J2(0.2)) == (3, 3)
     @test 2*J1(0.2; B = 0.1) ≈ J2(0.2; B = 0.1)
+
+    ρ = densitymatrix(g1[cells = SA[1]], 5)
+    @test all(≈(0.5), diag(ρ(0, 0; B=0.3))) # half filling
+    ρ = densitymatrix(g1[cells = SA[1]], 7)
+    @test all(<(0.96), real(diag(ρ(4, 1; B=0.1)))) # thermal depletion
+    h = LP.honeycomb() |> hopping(1) |> supercell(region = RP.circle(10))
+    reg = (; region = RP.circle(0.5))
+    gLU = h |> greenfunction(GS.SparseLU());
+    gSpectrum = h |> greenfunction(GS.Spectrum());
+    gKPM = h |> attach(nothing; reg...) |> greenfunction(GS.KPM(order = 100000, bandrange = (-3,3)));
+    ρ1, ρ2, ρ3 = densitymatrix(gLU[reg], (-3,3)), densitymatrix(gSpectrum[reg]), densitymatrix(gKPM[1])
+    @test ρ1() ≈ ρ2() atol = 0.00001
+    @test ρ2() ≈ ρ3() atol = 0.00001
+    gLU´ = h |> attach(nothing; reg...) |> greenfunction(GS.SparseLU());
+    ρ1´ = densitymatrix(gLU´[1], (-3, 3))
+    @test ρ1() ≈ ρ1´()
+    gSpectrum´ = h |> attach(nothing; reg...) |> greenfunction(GS.Spectrum());
+    ρ2´ = densitymatrix(gSpectrum´[1])
+    @test ρ2() ≈ ρ2´()
 
     glead = LP.square() |> hamiltonian(hopping(1)) |> supercell((0,1), region = r -> -1 <= r[1] <= 1) |> attach(nothing; cells = SA[10]) |> greenfunction(GS.Schur(boundary = 0));
     contact1 = r -> r[1] ≈ 5 && -1 <= r[2] <= 1

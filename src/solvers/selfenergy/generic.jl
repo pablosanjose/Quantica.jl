@@ -35,9 +35,9 @@ end
 #region ## API ##
 
 function SelfEnergy(hparent::AbstractHamiltonian, gslice::GreenSlice, model::AbstractModel; sites...)
-    slicerows(gslice) === slicecols(gslice) ||
+    rows(gslice) === cols(gslice) ||
         argerror("To attach a Greenfunction with `attach(h, g[cols, rows], coupling; ...)`, we must have `cols == rows`")
-    lsbath = sites_to_orbs(latslice(parent(gslice), slicerows(gslice)), parent(gslice))
+    lsbath = orbrows(gslice)
     lat0bath = lattice0D(lsbath)
     lsparent = sites_to_orbs(getindex(lattice(hparent); sites...), hparent)
     lat0parent = lattice0D(lsparent)

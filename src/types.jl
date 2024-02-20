@@ -187,7 +187,7 @@ struct SiteSelector{F,S,C}
     cells::C
 end
 
-const UnboundedSiteSelector = SiteSelector{Missing,Missing,Missing}
+const SiteSelectorAll = SiteSelector{Missing,Missing,Missing}
 
 struct AppliedSiteSelector{T,E,L}
     lat::Lattice{T,E,L}
@@ -1736,6 +1736,10 @@ solver(Σ::SelfEnergy) = Σ.solver
 
 plottables(Σ::SelfEnergy) = Σ.plottables
 
+has_selfenergy(s::SelfEnergy) = has_selfenergy(solver(s))
+has_selfenergy(s::AbstractSelfEnergySolver) = true
+# see nothing.jl for override for the case of SelfEnergyEmptySolver
+
 call!(Σ::SelfEnergy; params...) = SelfEnergy(call!(Σ.solver; params...), Σ.orbslice)
 call!(Σ::SelfEnergy, ω; params...) = call!(Σ.solver, ω; params...)
 
@@ -1850,6 +1854,8 @@ offsets(c::ContactOrbitals) = c.offsets
 selfenergies(c::Contacts) = c.selfenergies
 selfenergies(c::Contacts, i::Integer) = check_contact_index(i, c) && c.selfenergies[i]
 
+has_selfenergy(c::Contacts) = any(has_selfenergy, selfenergies(c))
+
 # c::Union{Contacts,ContactOrbitals} here
 check_contact_index(i, c) = 1 <= i <= ncontacts(c) ||
     argerror("Cannot get contact $i, there are $(ncontacts(c)) contacts")
@@ -1934,23 +1940,36 @@ struct DiagIndices{K,V}   # represents Green indices to return only diagonal ele
     kernel::K
 end
 
+struct GreenIndices{I,R}
+    inds::I
+    orbinds::R  # orbinds = sites_to_orbs(inds)
+end
+
 # Obtained with gs = g[; siteselection...]
 # Alows call!(gs, ω; params...) or gs(ω; params...)
 #   required to do e.g. h |> attach(g´[sites´], couplingmodel; sites...)
-struct GreenSlice{T,E,L,G<:GreenFunction{T,E,L},R,C}
+struct GreenSlice{T,E,L,G<:GreenFunction{T,E,L},R<:GreenIndices,C<:GreenIndices}
     parent::G
     rows::R
     cols::C
-    function GreenSlice{T,E,L,G,R,C}(parent, rows, cols) where {T,E,L,G<:GreenFunction{T,E,L},R,C}
-        if rows isa DiagIndices || cols isa DiagIndices
-            rows === cols || argerror("Diagonal indices should be identical for rows and columns")
-        end
-        return new(parent, rows, cols)
-    end
 end
 
-GreenSlice(parent::G, rows::R, cols::C) where {T,E,L,G<:GreenFunction{T,E,L},R,C} =
-    GreenSlice{T,E,L,G,R,C}(parent, rows, cols)
+#region ## Constuctors ##
+
+function GreenSlice(parent, rows, cols)
+    if rows isa DiagIndices || cols isa DiagIndices
+        rows === cols || argerror("Diagonal indices should be identical for rows and columns")
+    end
+    rows´ = greenindices(rows, parent)
+    cols´ = cols === rows ? rows´ : greenindices(cols, parent)
+    return GreenSlice(parent, rows´, cols´)
+end
+
+# see sites_to_orbs in slices.jl
+greenindices(inds, g) = GreenIndices(inds, sites_to_orbs(inds, g))
+greenindices(g::GreenSlice) = g.rows, g.cols
+
+#endregion
 
 #region ## API ##
 
@@ -1961,19 +1980,20 @@ Base.parent(i::DiagIndices) = i.inds
 
 kernel(i::DiagIndices) = i.kernel
 
-hamiltonian(g::GreenFunction) = hamiltonian(g.parent)
-hamiltonian(g::GreenSolution) = hamiltonian(g.parent)
+hamiltonian(g::Union{GreenFunction,GreenSolution,GreenSlice}) = hamiltonian(g.parent)
 
-lattice(g::GreenFunction) = lattice(g.parent)
-lattice(g::GreenSolution) = lattice(g.parent)
+lattice(g::Union{GreenFunction,GreenSolution,GreenSlice}) = lattice(g.parent)
 
 latslice(g::GreenFunction, i) = orbslice(g.contacts, i)
-function latslice(g::GreenFunction, ls::LatticeSlice)
-    lattice(g) === lattice(ls) || internalerror("latslice: parent lattice mismatch")
-    return ls
-end
+
+# function latslice(g::GreenFunction, ls::LatticeSlice)
+#     lattice(g) === lattice(ls) || internalerror("latslice: parent lattice mismatch")
+#     return ls
+# end
 # latslice(g::GreenFunction, is::SiteSelector) = lattice(g)[is]
 # latslice(g::GreenFunction; kw...) = latslice(g, siteselector(; kw...))
+
+zerocell(g::Union{GreenFunction,GreenSolution,GreenSlice}) = zerocell(lattice(g))
 
 solver(g::GreenFunction) = g.solver
 
@@ -1987,23 +2007,38 @@ slicer(g::GreenSolution) = g.slicer
 
 selfenergies(g::GreenSolution) = g.contactΣs
 
+has_selfenergy(g::Union{GreenFunction,GreenSlice,GreenSolution}) =
+    has_selfenergy(contacts(g))
+
 contactorbitals(g::GreenFunction) = contactorbitals(g.contacts)
 contactorbitals(g::GreenSolution) = g.contactorbs
+contactorbitals(g::GreenSlice) = contactorbitals(parent(g))
 
 blockstructure(g::GreenFunction) = blockstructure(hamiltonian(g))
 blockstructure(g::GreenSolution) = blockstructure(hamiltonian(g))
+blockstructure(g::GreenSlice) = blockstructure(parent(g))
 
 norbitals(g::GreenFunction) = norbitals(g.parent)
 norbitals(g::GreenSlice) = norbitals(g.parent.parent)
 
 contactinds(g::GreenFunction, i...) = contactinds(contacts(g), i...)
-contactinds(g::GreenSolution, i...) = contactinds(contactorbitals(g), i...)
+contactinds(g::Union{GreenSolution,GreenSlice}, i...) = contactinds(contactorbitals(g), i...)
 
 greenfunction(g::GreenSlice) = g.parent
 
-slicerows(g::GreenSlice) = g.rows
+rows(g::GreenSlice) = g.rows.inds
 
-slicecols(g::GreenSlice) = g.cols
+cols(g::GreenSlice) = g.cols.inds
+
+orbrows(g::GreenSlice) = g.rows.orbinds
+
+orbcols(g::GreenSlice) = g.cols.orbinds
+
+# ifelse(rows && cols are contacts, (rows, cols), (orbrows, orbcols))
+# I.e: if rows, cols are contact indices retrieve them instead of orbslices.
+orbinds_or_contactinds(g) = orbinds_or_contactinds(rows(g), cols(g), orbrows(g), orbcols(g))
+orbinds_or_contactinds(r::Union{Colon,Integer}, c::Union{Colon,Integer}, _, _) = (r, c)
+orbinds_or_contactinds(_, _, or, oc) = (or, oc)
 
 Base.parent(g::GreenFunction) = g.parent
 Base.parent(g::GreenSolution) = g.parent
@@ -2014,6 +2049,12 @@ Base.size(g::GreenSolution, i...) = size(g.parent, i...)
 
 flatsize(g::GreenFunction, i...) = flatsize(g.parent, i...)
 flatsize(g::GreenSolution, i...) = flatsize(g.parent, i...)
+
+function similar_Matrix(gs::GreenSlice{T}) where {T}
+    m = norbitals(orbrows(gs))
+    n = norbitals(orbcols(gs))
+    return Matrix{Complex{T}}(undef, m, n)
+end
 
 copy_lattice(g::GreenFunction) = GreenFunction(copy_lattice(g.parent), g.solver, g.contacts)
 copy_lattice(g::GreenSolution) = GreenSolution(

@@ -14,23 +14,81 @@ See the corresponding docstrings for full usage instructions. Here we will prese
 
 ## Local density of states (LDOS)
 
-Let us compute the LDOS in a cavity like in the previous section. Instead of computing the Green function between a contact to an arbitrary point, we can construct an object `ρ = ldos(g(ω))` without any contacts. By using a small imaginary part in `ω`, we broaden the discrete spectrum, and obtain a finite LDOS. Then, we can pass `ρ` directly as a site shader to `qplot`
+Let us compute the LDOS in a cavity like in the previous section. Instead of computing the Green function between a contact to an arbitrary point, we can construct an object `d = ldos(g(ω))` without any contacts. By using a small imaginary part in `ω`, we broaden the discrete spectrum, and obtain a finite LDOS. Then, we can pass `d` directly as a site shader to `qplot`
 ```julia
 julia> h = LP.square() |> onsite(4) - hopping(1) |> supercell(region = r -> norm(r) < 40*(1+0.2*cos(5*atan(r[2],r[1]))));
 
-julia> g = h|> greenfunction;
+julia> g = h |> greenfunction;
 
-julia> ρ = ldos(g(0.1 + 0.001im))
+julia> d = ldos(g(0.1 + 0.001im))
 LocalSpectralDensitySolution{Float64} : local density of states at fixed energy and arbitrary location
   kernel   : LinearAlgebra.UniformScaling{Bool}(true)
 
-julia> qplot(h, hide = :hops, sitecolor = ρ, siteradius = ρ, minmaxsiteradius = (0, 2), sitecolormap = :balance)
+julia> qplot(h, hide = :hops, sitecolor = d, siteradius = d, minmaxsiteradius = (0, 2), sitecolormap = :balance)
 ```
 ```@raw html
 <img src="../../assets/star_shape_ldos.png" alt="LDOS" width="400" class="center"/>
 ```
 
-Note that `ρ[sites...]` produces a vector with the LDOS at sites defined by `siteselector(; sites...)` (`ρ[]` is the ldos over all sites). We can also define a `kernel` to be traced over orbitals to obtain the spectral density of site-local observables (see `diagonal` slicing in the preceding section).
+Note that `d[sites...]` produces a vector with the LDOS at sites defined by `siteselector(; sites...)` (`d[]` is the ldos over all sites). We can also define a `kernel` to be traced over orbitals to obtain the spectral density of site-local observables (see `diagonal` slicing in the preceding section).
+
+We can also compute the convolution of the density of states with the Fermi distribution `f(ω)=1/(exp((ω-μ)/kBT) + 1)`, which yields the density matrix in thermal equilibrium, at a given temperature `kBT` and chemical potential `μ`. This is computed with `ρ = densitymatrix(gs, (ωmin, ωmax); kBT = kBT, mu = μ)`. Here `gs = g[sites...]` is a `GreenSlice`, and `(ωmin, ωmax)` are integration bounds (they should span the full bandwidth of the system). Then, `ρ(; params...)` will yield a matrix over the selected `sites` for a set of model `params`.
+```julia
+julia> ρ = densitymatrix(g[region = RP.circle(1)], (-0.1, 8.1), mu = 4)
+Integrator: Complex-plane integrator
+  Integration path    : (-0.1 + 1.4901161193847656e-8im, 1.95 + 2.050000014901161im, 4.0 + 1.4901161193847656e-8im)
+  Integration options : (atol = 1.0e-7,)
+  Integrand           : GFermi{Float64}
+    kBT               : 0.0
+
+julia> @time ρ(4)
+  5.436825 seconds (57.99 k allocations: 5.670 GiB, 1.54% gc time)
+5×5 Matrix{ComplexF64}:
+          0.5+0.0im          -7.34893e-10-3.94035e-15im  0.204478+1.9366e-14im   -7.34889e-10-1.44892e-15im  -5.70089e-10+5.48867e-15im
+ -7.34893e-10+3.94035e-15im           0.5+0.0im          0.200693-2.6646e-14im   -5.70089e-10-1.95251e-15im  -7.34891e-10-2.13804e-15im
+     0.204478-1.9366e-14im       0.200693+2.6646e-14im        0.5+0.0im              0.200693+3.55692e-14im      0.204779-4.27255e-14im
+ -7.34889e-10+1.44892e-15im  -5.70089e-10+1.95251e-15im  0.200693-3.55692e-14im           0.5+0.0im          -7.34885e-10-3.49861e-15im
+ -5.70089e-10-5.48867e-15im  -7.34891e-10+2.13804e-15im  0.204779+4.27255e-14im  -7.34885e-10+3.49861e-15im           0.5+0.0im
+```
+
+Note that the diagonal is `0.5`, indicating half-filling.
+
+The default algorithm used here is slow, as it relies on numerical integration in the complex plane. Some GreenSolvers have more efficient implementations. If they exist, they can be accessed by omitting the `(ωmin, ωmax)` argument. For example, using `GS.Spectrum`:
+```julia
+julia> @time g = h |> greenfunction(GS.Spectrum());
+ 38.024189 seconds (2.81 M allocations: 2.929 GiB, 0.33% gc time, 1.86% compilation time)
+
+julia> ρ = densitymatrix(g[region = RP.circle(1)])
+DensityMatrix: density matrix on specified sites with solver of type DensityMatrixSpectrumSolver
+
+julia> @time ρ(4)
+  0.000723 seconds (8 allocations: 430.531 KiB)
+5×5 Matrix{ComplexF64}:
+          0.5+0.0im  -2.21437e-15+0.0im  0.204478+0.0im   2.67668e-15+0.0im   3.49438e-16+0.0im
+ -2.21437e-15+0.0im           0.5+0.0im  0.200693+0.0im  -1.40057e-15+0.0im  -2.92995e-15+0.0im
+     0.204478+0.0im      0.200693+0.0im       0.5+0.0im      0.200693+0.0im      0.204779+0.0im
+  2.67668e-15+0.0im  -1.40057e-15+0.0im  0.200693+0.0im           0.5+0.0im   1.81626e-15+0.0im
+  3.49438e-16+0.0im  -2.92995e-15+0.0im  0.204779+0.0im   1.81626e-15+0.0im           0.5+0.0im
+```
+
+Note, however, that the computation of `g` is much slower in this case, due to the need of a full diagonalization. A better algorithm choice in this case is `GS.KPM`. It requires, however, that we define the region for the density matrix beforehand, as a `nothing` contact.
+```julia
+julia> @time g = h |> attach(nothing, region = RP.circle(1)) |> greenfunction(GS.KPM(order = 10000, bandrange = (0,8)));
+Computing moments: 100%|█████████████████████████████████████████████████████████████████████████████████| Time: 0:00:01
+  1.704793 seconds (31.04 k allocations: 11.737 MiB)
+
+julia> ρ = densitymatrix(g[1])
+DensityMatrix: density matrix on specified sites with solver of type DensityMatrixKPMSolver
+
+julia> @time ρ(4)
+  0.006521 seconds (2 allocations: 992 bytes)
+5×5 Matrix{ComplexF64}:
+         0.5+0.0im  2.15097e-17+0.0im   0.20456+0.0im  2.15097e-17+0.0im   3.9251e-17+0.0im
+ 2.15097e-17+0.0im          0.5+0.0im  0.200631+0.0im  1.05873e-16+0.0im  1.70531e-18+0.0im
+     0.20456+0.0im     0.200631+0.0im       0.5+0.0im     0.200631+0.0im      0.20482+0.0im
+ 2.15097e-17+0.0im  1.05873e-16+0.0im  0.200631+0.0im          0.5+0.0im  1.70531e-18+0.0im
+  3.9251e-17+0.0im  1.70531e-18+0.0im   0.20482+0.0im  1.70531e-18+0.0im          0.5+0.0im
+```
 
 ## Current
 
