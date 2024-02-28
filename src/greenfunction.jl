@@ -32,7 +32,7 @@ default_green_solver(::AbstractHamiltonian) = GS.Bands()
 (g::GreenSlice)(ω; params...) = copy(call!(g, ω; params...))
 
 call!(g::G, ω; params...) where {T,G<:Union{GreenFunction{T},GreenSlice{T}}} =
-    call!(g, real_or_complex_promote(T, ω); params...)
+    call!(g, real_or_complex_convert(T, ω); params...)
 
 function call!(g::GreenFunction{T}, ω::T; params...) where {T}
     ω´ = retarded_omega(ω, solver(g))
@@ -58,8 +58,8 @@ call!(g::GreenSlice{T}, ω::T; params...) where {T} =
 call!(g::GreenSlice{T}, ω::Complex{T}; params...) where {T} =
     call!(greenfunction(g), ω; params...)[orbinds_or_contactinds(g)...]
 
-real_or_complex_promote(::Type{T}, ω::Real) where {T<:Real} = convert(T, ω)
-real_or_complex_promote(::Type{T}, ω::Complex) where {T<:Real} = convert(Complex{T}, ω)
+real_or_complex_convert(::Type{T}, ω::Real) where {T<:Real} = convert(T, ω)
+real_or_complex_convert(::Type{T}, ω::Complex) where {T<:Real} = convert(Complex{T}, ω)
 
 retarded_omega(ω::T, s::AppliedGreenSolver) where {T<:Real} =
     ω + im * sqrt(eps(float(T))) * needs_omega_shift(s)
@@ -97,8 +97,11 @@ Base.getindex(g::GreenFunction, kw::NamedTuple) = g[siteselector(; kw...)]
 Base.getindex(g::GreenSolution; kw...) = g[getindex(lattice(g); kw...)]
 Base.getindex(g::GreenSolution, kw::NamedTuple) = g[getindex(lattice(g); kw...)]
 
-Base.view(g::GreenSolution, i::Integer, j::Integer = i) = view(slicer(g), i, j)
-Base.view(g::GreenSolution, i::Colon, j::Colon = i) = view(slicer(g), i, j)
+# wrapped view for end user consumption
+Base.view(g::GreenSolution, i::Integer, j::Integer = i) =
+    OrbitalSliceMatrix(view(slicer(g), i, j), sites_to_orbs.((i,j), Ref(g)))
+Base.view(g::GreenSolution, i::Colon, j::Colon = i) =
+    OrbitalSliceMatrix(view(slicer(g), i, j), sites_to_orbs.((i,j), Ref(g)))
 
 # fastpath for intra and inter-contact
 Base.getindex(g::GreenSolution, i::Integer, j::Integer = i) = copy(view(g, i, j))
@@ -107,6 +110,12 @@ Base.getindex(g::GreenSolution, ::Colon, ::Colon = :) = copy(view(g, :, :))
 # conversion down to CellOrbitals. See sites_to_orbs in slices.jl
 Base.getindex(g::GreenSolution, i, j) = getindex(g, sites_to_orbs(i, g), sites_to_orbs(j, g))
 Base.getindex(g::GreenSolution, i) = (i´ = sites_to_orbs(i, g); getindex(g, i´, i´))
+
+# wrapped matrix for end user consumption
+Base.getindex(g::GreenSolution, i::OrbitalSliceGrouped, j::OrbitalSliceGrouped) =
+    OrbitalSliceMatrix(
+        mortar((g[si, sj] for si in cellsdict(i), sj in cellsdict(j))),
+    (i, j))
 
 Base.getindex(g::GreenSolution, i::AnyOrbitalSlice, j::AnyOrbitalSlice) =
     mortar((g[si, sj] for si in cellsdict(i), sj in cellsdict(j)))
@@ -145,11 +154,15 @@ sanitize_cellorbs(c::CellOrbitalsGrouped) = CellOrbitals(cell(c), orbindices(c))
 #region
 
 Base.getindex(gω::GreenSolution{T}, i::DiagIndices, ::DiagIndices = i) where {T} =
-    append_diagonal!(Complex{T}[], gω, parent(i), kernel(i))
+    append_diagonal!(Complex{T}[], gω, parent(i), kernel(i)) |>
+        maybe_OrbitalSliceArray(sites_to_orbs(i, gω))
 
 # If i::Union{SiteSlice,CellSites}, convert to orbitals
 append_diagonal!(d, gω, i, kernel; kw...) =
     append_diagonal!(d, gω, sites_to_orbs(i, gω), kernel; kw...)
+
+append_diagonal!(d, gω, s::OrbitalSlice, kernel; kw...) =
+    append_diagonal!(d, gω, cellsdict(s), kernel; kw...)    # no OrbitalSliceVector here
 
 append_diagonal!(d, gω, s::AnyOrbitalSlice, kernel; kw...) =
     append_diagonal!(d, gω, cellsdict(s), kernel; kw...)
@@ -193,6 +206,9 @@ apply_kernel(kernel::UniformScaling, v) = kernel.λ * tr(v)
 apply_kernel(kernel::Number, v) = kernel * tr(v)
 apply_kernel(kernel::Diagonal, v::AbstractMatrix) = sum(i -> kernel[i] * v[i, i], eachindex(kernel))
 apply_kernel(kernel::Diagonal, v::Number) = only(kernel) * v
+
+maybe_scalarize(s::OrbitalSliceGrouped, kernel::Missing) = s
+maybe_scalarize(s::OrbitalSliceGrouped, kernel) = scalarize(s)
 
 #endregion
 

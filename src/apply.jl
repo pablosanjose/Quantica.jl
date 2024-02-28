@@ -298,10 +298,15 @@ end
 
 apply(c::CellSites{L,Vector{Int}}, ::Lattice{<:Any,<:Any,L}) where {L} = c
 
+apply(c::CellSites{L,Int}, ::Lattice{<:Any,<:Any,L}) where {L} = c
+
 apply(c::CellSites{L,Colon}, l::Lattice{<:Any,<:Any,L}) where {L} =
     CellSites(cell(c), collect(siterange(l)))
 
 apply(c::CellSites{L}, l::Lattice{<:Any,<:Any,L}) where {L} =
     CellSites(cell(c), [i for i in siteindices(c) if i in siterange(l)])
+
+apply(::CellSites{L}, l::Lattice{<:Any,<:Any,L´}) where {L,L´} =
+    argerror("Cell sites must have $(L´)-dimensional cell indices")
 
 #endregion

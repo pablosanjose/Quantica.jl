@@ -1601,8 +1601,8 @@ the retarded Green function at a given site `i`.
     ρs(ω; params...)
 
 Given a partially evaluated `ρω::LocalSpectralDensitySolution` or
-`ρs::LocalSpectralDensitySlice`, build a vector `[ρ₁(ω), ρ₂(ω)...]` of fully evaluated local
-densities of states.
+`ρs::LocalSpectralDensitySlice`, build an `OrbitalSliceVector` `[ρ₁(ω), ρ₂(ω)...]` of fully
+evaluated local densities of states. See `OrbitalSliceVector` for further details.
 
 # Example
 ```
@@ -1622,7 +1622,7 @@ GreenFunction{Float64,2,0}: Green function of a Hamiltonian{Float64,2,0}
     Coordination     : 2.94065
 
 julia> ldos(g(0.2))[1]
-6-element Vector{Float64}:
+6-element OrbitalSliceVector{Vector{Float64}}:
  0.036802204179316955
  0.034933055722650375
  0.03493305572265026
@@ -1635,7 +1635,7 @@ true
 ```
 
 # See also
-    `greenfunction`, `diagonal`, `current`, `conductance`, `josephson`, `transmission`
+    `greenfunction`, `diagonal`, `current`, `conductance`, `josephson`, `transmission`, `OrbitalSliceVector`
 
 """
 ldos
@@ -1666,7 +1666,8 @@ As above with `ωmin = -ωmax`.
     ρ(μ = 0, kBT = 0; params...)   # where ρ::DensityMatrix
 
 Evaluate the density matrix at chemical potential `μ` and temperature `kBT` (in the same
-units as the Hamiltonian) for the given `g` parameters `params`, if any.
+units as the Hamiltonian) for the given `g` parameters `params`, if any. The result is given
+as an `OrbitalSliceMatrix`, see its docstring for further details.
 
 ## Algorithms
 
@@ -1683,7 +1684,7 @@ julia> ρ = densitymatrix(g[region = RP.circle(0.5)])
 DensityMatrix: density matrix on specified sites with solver of type DensityMatrixSpectrumSolver
 
 julia> ρ()  # with mu = kBT = 0 by default
-2×2 Matrix{ComplexF64}:
+2×2 OrbitalSliceMatrix{Matrix{ComplexF64}}:
        0.5+0.0im  -0.262865+0.0im
  -0.262865+0.0im        0.5+0.0im
 ```
@@ -1731,6 +1732,9 @@ retarded Green function between said sites.
 Given a partially evaluated `Jω::CurrentDensitySolution` or `ρs::CurrentDensitySlice`, build
 a sparse matrix `Jᵢⱼ(ω)` along the specified `direction` of fully evaluated local current
 densities.
+
+Note: Evaluating the current density returns a `SparseMatrixCSC` currently, instead of a
+`OrbitalSliceMatrix`, since the latter is designed for dense arrays.
 
 # Example
 
@@ -1909,3 +1913,87 @@ julia> J(0.0)
     `greenfunction`,`ldos`, `current`, `conductance`, `transmission`
 """
 josephson
+
+"""
+    OrbitalSliceArray <: AbstractArray
+
+A type of `AbstractArray` defined over a set of orbitals (see also `orbaxes`). It wraps a
+regular array that can be obtained with `parent(::OrbitalSliceArray)`, and supports all the
+general AbstractArray interface. In addition, it also supports indexing using
+`siteselector`s and `cellindices`. `OrbitalSliceVector` and `OrbitalSliceMatrix` are special
+cases of `OrbitalSliceArray` of dimension 1 and 2 respectively.
+
+This is the common output type produced by `GreenFunctions` and most observables.
+
+Note that for `m::OrbitalSliceMatrix`, `mat[i]` is equivalent to `mat[i,i]`, and `mat[;
+sel...]` is equivalent to `mat[(; sel...), (; sel...)]`.
+
+# `siteselector` indexing
+
+    mat[(; rowsites...), (; colsites...)]
+    mat[rowsel::SiteSelector, colsel::SiteSelector]
+
+If we index an `OrbitalSliceMatrix` with `s::NamedTuple` or a `siteselector(; s...)`, we
+obtain a new `OrbitalSliceMatrix` over the orbitals of the selected sites.
+
+# `cellsites` indexing
+
+    mat[cellsites(cell_index, site_indices)]
+    mat[cellsites(row_cell_index, row_site_indices), cellsites(col_cell_index, col_site_indices)]
+
+If we index an `OrbitalSliceMatrix` with `cellsites`, we obtain an unwrapped `Matrix` over
+the sites with `site_indices` within cell with `cell_index`. Here `site_indices` can be
+an `Int`, a container of `Int`, or a `:` (for all sites in the unit cell). If any of the
+specified sites are not already in `orbaxes(mat)`, indexing will throw an error.
+
+Note that in this case we do not obtain a new `OrbitalSliceMatrix`. This behavior is
+required for performance, as re-wrapping in a new `OrbitalSliceMatrix` requires recomputing
+and allocating the new `orbaxes`.
+
+    view(mat, rows::CellSites, cols::Cellsites = rows)
+
+Like the above, but returns a view instead of a copy of the indexed orbital matrix.
+
+Note: `diagonal` indexing is currently not supported by `OrbitalSliceArray`.
+
+# Examples
+
+```
+julia> g = LP.linear() |> hamiltonian(hopping(SA[0 1; 1 0]) + onsite(I), orbitals = 2) |> supercell(4) |> greenfunction;
+
+julia> mat = g(0.2)[region = r -> 2<=r[1]<=4]
+6×6 OrbitalSliceMatrix{Matrix{ComplexF64}}:
+ -1.93554e-9-0.545545im          0.0-0.0im               0.0-0.0im              -0.5+0.218218im          0.4+0.37097im           0.0+0.0im
+         0.0-0.0im       -1.93554e-9-0.545545im         -0.5+0.218218im          0.0-0.0im               0.0+0.0im               0.4+0.37097im
+         0.0-0.0im              -0.5+0.218218im  -1.93554e-9-0.545545im          0.0-0.0im               0.0+0.0im              -0.5+0.218218im
+        -0.5+0.218218im          0.0-0.0im               0.0-0.0im       -1.93554e-9-0.545545im         -0.5+0.218218im          0.0+0.0im
+         0.4+0.37097im           0.0+0.0im               0.0+0.0im              -0.5+0.218218im  -1.93554e-9-0.545545im          0.0-0.0im
+         0.0+0.0im               0.4+0.37097im          -0.5+0.218218im          0.0+0.0im               0.0-0.0im       -1.93554e-9-0.545545im
+
+julia> mat[(; cells = SA[1]), (; cells = SA[0])]
+2×4 OrbitalSliceMatrix{Matrix{ComplexF64}}:
+ 0.4+0.37097im  0.0+0.0im       0.0+0.0im       -0.5+0.218218im
+ 0.0+0.0im      0.4+0.37097im  -0.5+0.218218im   0.0+0.0im
+
+julia> mat[cellsites(SA[1], 1)]
+2×2 Matrix{ComplexF64}:
+ -1.93554e-9-0.545545im          0.0-0.0im
+         0.0-0.0im       -1.93554e-9-0.545545im
+```
+
+# See also
+    `siteselector`, `cellindices`, `orbaxes`
+
+"""
+OrbitalSliceArray, OrbitalSliceVector, OrbitalSliceMatrix
+
+
+"""
+    diagonal(args...)
+
+Wrapper over indices `args` used to obtain the diagonal of a `gω::GreenSolution`. If `d =
+diagonal(sel)`, then `gω[d] = diag(gω[sel, sel])`, although in most cases the computation
+is done more efficiently internally.
+
+"""
+diagonal

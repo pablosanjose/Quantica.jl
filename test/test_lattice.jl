@@ -1,4 +1,4 @@
-using Quantica: Sublat, Lattice, transform!, translate!
+using Quantica: Sublat, Lattice, transform!, translate!, nsites
 
 @testset "Internal API" begin
     s = sublat((0,0,0))
@@ -164,13 +164,23 @@ end
     lat = LP.honeycomb() |> supercell(2)
     ls1 = lat[sublats = :B, region = RP.ellipse((10, 20), (0, 1/√3))]
     ls2 = lat[sublats = :A, region = RP.ellipse((10, 20))]
+    ls3 = lat[region = RP.ellipse((10, 20))]
     @test length(ls1) == length(ls2)
     @test ls2[2] isa Tuple{SVector{2, Int}, Int}
     ls = ls1[sublats = :B]
     @test isempty(ls)
+    ls = ls3[sublats = :B, region = RP.ellipse((1, 2))]
+    @test !isempty(ls)
+    ls´ = ls3[(; sublats = :B, region = RP.ellipse((1, 2)))]
+    @test nsites(ls) == nsites(ls´)
     ls = lat[cells = n -> 5 < norm(n) < 10]
     @test !isempty(Quantica.cells(ls)) && all(n -> 5 < norm(n) < 10, Quantica.cells(ls))
     ls = lat[region = r -> 5 < norm(r) < 10]
     @test !isempty(Quantica.cells(ls)) && all(r -> 5 < norm(r) < 10, Quantica.sites(ls))
-
+    ls = lat[cellsites(SA[1,0], 1:3)]
+    @test ls isa Quantica.SiteSlice
+    @test nsites(ls) == 3
+    ls = lat[cellsites(SA[1,0], 2)]
+    @test ls isa Quantica.SiteSlice
+    @test nsites(ls) == 1
 end

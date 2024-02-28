@@ -2,11 +2,13 @@
 # selector constructors
 #region
 
+siteselector(s::NamedTuple) = siteselector(; s...)
 siteselector(; region = missing, sublats = missing, cells = missing) =
     SiteSelector(region, sublats, cells)
 siteselector(s::SiteSelector; region = s.region, sublats = s.sublats, cells = s.cells) =
     SiteSelector(region, sublats, cells)
 
+hopselector(h::NamedTuple) = hopselector(; h...)
 hopselector(; region = missing, sublats = missing, dcells = missing, range = neighbors(1)) =
     HopSelector(region, sublats, dcells, range)
 hopselector(s::HopSelector; region = s.region, sublats = s.sublats, dcells = s.dcells, range = s.range) =

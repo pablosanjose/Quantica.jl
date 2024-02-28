@@ -131,7 +131,7 @@ function _hoppingprimitives(ls::LatticeSlice{<:Any,E}, h, opts, siteradii) where
     hp = HoppingPrimitives{E}()
     hp´ = HoppingPrimitives{E}()
     lat = parent(ls)
-    sdict = sitedict(ls)
+    sdict = Quantica.siteindexdict(ls)
     for (j´, cs) in enumerate(Quantica.cellsites(ls))
         nj = Quantica.cell(cs)
         j = Quantica.siteindex(cs)
@@ -144,7 +144,7 @@ function _hoppingprimitives(ls::LatticeSlice{<:Any,E}, h, opts, siteradii) where
             for ptr in nzrange(mat, j)
                 i = rows[ptr]
                 Quantica.isonsite((i, j), dn) && continue
-                i´ = get(sdict, (i, ni), nothing)
+                i´ = get(sdict, Quantica.CellSite(ni, i), nothing)
                 if i´ === nothing
                     opts´ = maybe_getindex.(opts, j´)
                     push_hopprimitive!(hp´, opts´, lat, (i, j), (ni, nj), siteradius, mat[i, j], false)
@@ -157,9 +157,6 @@ function _hoppingprimitives(ls::LatticeSlice{<:Any,E}, h, opts, siteradii) where
     end
     return hp, hp´
 end
-
-sitedict(ls::LatticeSlice) =
-    Dict([(Quantica.siteindex(cs), Quantica.cell(cs)) => j for (j, cs) in enumerate(Quantica.cellsites(ls))])
 
 maybe_evaluate_observable(o::Quantica.IndexableObservable, ls) = o[ls]
 maybe_evaluate_observable(x, ls) = x

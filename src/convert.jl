@@ -23,7 +23,10 @@ Sublat{T,E}(s::Sublat, name = s.name) where {T<:AbstractFloat,E} =
     Sublat{T,E}([sanitize_SVector(SVector{E,T}, site) for site in sites(s)], name)
 
 CellSites{L,V}(c::CellSites) where {L,V} =
-    CellSites{L,V}(convert(SVector{L,Int}, cell(c)), convert(V, siteindices(c)))
+    CellIndices(convert(SVector{L,Int}, cell(c)), convert(V, siteindices(c)), SiteLike())
+
+CellSites{L,V}(c::CellSite) where {L,V<:Vector} =
+    CellIndices(convert(SVector{L,Int}, cell(c)), convert(V, [siteindices(c)]), SiteLike())
 
 function Hamiltonian{E}(h::Hamiltonian) where {E}
     lat = lattice(h)

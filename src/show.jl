@@ -55,16 +55,23 @@ displayname(s::Sublat) = sublatname(s) == Symbol(:_) ? "pending" : string(":", s
 # LatticeSlice
 #region
 
-Base.summary(::LatticeSlice{T,E,L}) where {T,E,L} =
-    "LatticeSlice{$T,$E,$L} : collection of subcells for a $(L)D lattice in $(E)D space"
+Base.summary(::SiteSlice{T,E,L}) where {T,E,L} =
+    "SiteSlice{$T,$E,$L} : collection of subcells of sites for a $(L)D lattice in $(E)D space"
+
+Base.summary(::OrbitalSliceGrouped{T,E,L}) where {T,E,L} =
+    "OrbitalSliceGrouped{$T,$E,$L} : collection of subcells of orbitals (grouped by sites) for a $(L)D lattice in $(E)D space"
+
 
 function Base.show(io::IO, ls::LatticeSlice)
     i = get(io, :indent, "")
     print(io, i, summary(ls), "\n",
 "$i  Cells       : $(length(cellsdict(ls)))
 $i  Cell range  : $(isempty(ls) ? "empty" : boundingbox(ls))
-$i  Total sites : $(nsites(ls))")
+$i  Total sites : $(missing_or_nsites(ls))")
 end
+
+missing_or_nsites(::OrbitalSlice) = "unknown"
+missing_or_nsites(s) = nsites(s)
 
 #endregion
 

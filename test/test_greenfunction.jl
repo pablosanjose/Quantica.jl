@@ -125,6 +125,7 @@ end
     @test all(>(0), ρflat)
     ρs = ldos(g[1], kernel = I)
     ρ = ρs(ω)
+    @test ρ isa OrbitalSliceVector
     @test sum(ρ) ≈ sum(ρflat)
     @test (length(ρflat), length(ρ)) == (9, 6)
 
@@ -225,6 +226,7 @@ end
         attach(nothing, cells = 2, region = r -> 0<=r[2]<=2) |> attach(nothing, cells = 3) |>
         greenfunction(GS.Schur(boundary = -2))
     ω = 0.6
+    @test g[diagonal(2)](ω) isa OrbitalSliceVector
     @test g[diagonal(2)](ω) == g(ω)[diagonal(2)]
     @test size(g[diagonal(1)](ω)) == (12,)
     @test size(g[diagonal(1, kernel = I)](ω)) == (8,)
@@ -233,6 +235,35 @@ end
     @test length(g[diagonal(cells = 2:3)](ω)) == 72
     @test length(g[diagonal(cells = 2:3, kernel = I)](ω)) == 48
     @test ldos(g[1])(ω) ≈ -imag.(g[diagonal(1; kernel = I)](ω)) ./ π
+end
+
+@testset "OrbitalSliceArray slicing" begin
+    g = LP.linear() |> hopping(1) + onsite(1) |> supercell(4) |> greenfunction
+    gmat = g[cells = SA[2]](0.2)
+    @test gmat isa Quantica.OrbitalSliceMatrix
+    @test size(gmat) == (4, 4)
+    gmat´ = gmat[cells = SA[1]]
+    @test gmat´ isa Quantica.OrbitalSliceMatrix
+    @test isempty(gmat´)
+    gmat = g[(; cells = SA[2]), cellsites(SA[1], 1:2)](0.2)
+    @test gmat isa Matrix
+    @test size(gmat) == (4, 2)
+    gmat = g[(; cells = SA[1]), (; region = r -> 3<=r[1]<=5)](0.2)
+    @test gmat isa Quantica.OrbitalSliceMatrix
+    @test size(gmat) == (4, 3)
+    gmat´ = gmat[(; cells = SA[1]), (; cells = SA[0])]
+    @test gmat´ isa Quantica.OrbitalSliceMatrix
+    @test size(gmat´) == (4, 1)
+    gmat´ = gmat[(; cells = SA[1])]
+    @test gmat´ isa Quantica.OrbitalSliceMatrix
+    @test size(gmat´) == (4, 2)
+    @test_throws Quantica.Dictionaries.IndexError gmat[cellsites(SA[1],:)]  # `:` means all sites in cell
+    gmat´ = gmat[cellsites(SA[1], 1:2)]
+    @test gmat´ isa Matrix
+    @test size(gmat´) == (2, 2)
+    c = cellsites(SA[1], 1)
+    view(gmat, c)
+    @test (@allocations view(gmat, c)) <= 2
 end
 
 function testcond(g0; nambu = false)
@@ -287,6 +318,13 @@ end
     gSpectrum´ = h |> attach(nothing; reg...) |> greenfunction(GS.Spectrum());
     ρ2´ = densitymatrix(gSpectrum´[1])
     @test ρ2() ≈ ρ2´()
+
+    ρ = densitymatrix(g2[(; cells = SA[0]), (; cells = SA[1])], 5)
+    ρ0 = ρ(0, 0; B=0.3)
+    @test ρ0 isa OrbitalSliceMatrix
+    @test iszero(ρ0)        # rows are on boundary
+    @test ρ0[cellsites(SA[0], 1), cellsites(SA[1], 1)] isa Matrix
+    @test size(view(ρ0, cellsites(SA[0], 1), cellsites(SA[1], 1))) == (2, 2)
 
     glead = LP.square() |> hamiltonian(hopping(1)) |> supercell((0,1), region = r -> -1 <= r[1] <= 1) |> attach(nothing; cells = SA[10]) |> greenfunction(GS.Schur(boundary = 0));
     contact1 = r -> r[1] ≈ 5 && -1 <= r[2] <= 1
