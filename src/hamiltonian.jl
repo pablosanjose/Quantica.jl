@@ -480,7 +480,9 @@ function nhoppings(h::AbstractHamiltonian)
     return count
 end
 
-nonsites(h::AbstractHamiltonian) = nnzdiag(h[unflat()])
+nonsites(h::Hamiltonian) = nnzdiag(h[unflat()])
+# avoid call!, since params can have no default
+nonsites(h::ParametricHamiltonian) = nonsites(hamiltonian(h))
 
 coordination(h::AbstractHamiltonian) = iszero(nhoppings(h)) ? 0.0 : round(nhoppings(h) / nsites(lattice(h)), digits = 5)
 
