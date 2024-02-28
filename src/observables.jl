@@ -64,22 +64,23 @@ end
 #   The path is piecewise linear in the form of a sawtooth with a given ± slope
 #region
 
-struct Integrator{I,T,P,O<:NamedTuple,F}
+struct Integrator{I,T,P,O<:NamedTuple,M,F}
     integrand::I    # call!(integrand, ω::Complex; params...)::Union{Number,Array{Number}}
     points::P       # a tuple of complex points that form the sawtooth integration path
     result::T       # can be missing (for scalar integrand) or a mutable type (nonscalar)
     opts::O         # kwargs for quadgk
+    omegamap::M     # function that maps ω to parameters
     post::F         # function to apply to the integrand at the end of integration
 end
 
 #region ## Constructor ##
 
-function Integrator(result, f, pts::NTuple{<:Any,Number}; imshift = missing, post = identity, slope = 1, opts...)
+function Integrator(result, f, pts::NTuple{<:Any,Number}; omegamap = Returns((;)), imshift = missing, post = identity, slope = 1, opts...)
     imshift´ = imshift === missing ?
         sqrt(eps(promote_type(typeof.(float.(real.(pts)))...))) : float(imshift)
     pts´ = iszero(slope) ? pts .+ (im * imshift´) : sawtooth(imshift´, slope, pts)
     opts´ = NamedTuple(opts)
-    return Integrator(f, pts´, result, opts´, post)
+    return Integrator(f, pts´, result, opts´, omegamap, post)
 end
 
 Integrator(f, pts::NTuple{<:Any,Number}; kw...) = Integrator(missing, f, pts; kw...)
@@ -103,7 +104,7 @@ options(I::Integrator) = I.opts
 ## call! ##
 # scalar version
 function call!(I::Integrator{<:Any,Missing}; params...)
-    fx = x -> call!(I.integrand, x; params...)
+    fx = x -> call!(I.integrand, x; I.omegamap(x)..., params...)
     result, err = quadgk(fx, I.points...; I.opts...)
     result´ = I.post(result)
     return result´
@@ -111,7 +112,7 @@ end
 
 # nonscalar version
 function call!(I::Integrator; params...)
-    fx! = (y, x) -> (y .= call!(I.integrand, x; params...))
+    fx! = (y, x) -> (y .= call!(I.integrand, x; I.omegamap(x)..., params...))
     result, err = quadgk!(fx!, I.result, I.points...; I.opts...)
     result´ = I.post(result)  # note: post-processing is not element-wise & can be in-place
     return result´
@@ -437,9 +438,9 @@ densitymatrix(s::AppliedGreenSolver, gs::GreenSlice; kw...) =
 # default integrator solver
 densitymatrix(gs::GreenSlice, ωmax::Number; opts...) = densitymatrix(gs, (-ωmax, ωmax); opts...)
 
-function densitymatrix(gs::GreenSlice{T}, (ωmin, ωmax)::Tuple; imshift = missing, atol = 1e-7, opts...) where {T}
+function densitymatrix(gs::GreenSlice{T}, (ωmin, ωmax)::Tuple; omegamap = Returns((;)), imshift = missing, atol = 1e-7, opts...) where {T}
     result = similar_Matrix(gs)
-    opts´ = (; imshift, slope = 1, post = gf_to_rho!, atol, opts...)
+    opts´ = (; omegamap, imshift, slope = 1, post = gf_to_rho!, atol, opts...)
     integratorfunc(mu, kBT; params...) = iszero(kBT) ?
         Integrator(result, GFermi(gs, T(mu), T(kBT)), (ωmin, mu); opts´...)(; params...) :
         Integrator(result, GFermi(gs, T(mu), T(kBT)), (ωmin, mu, ωmax); opts´...)(; params...)
@@ -514,7 +515,7 @@ end
 
 (s::JosephsonIntegratorSolver)(kBT; params...) = s.ifunc(kBT; params...)
 
-function josephson(gs::GreenSlice{T}, ωmax; phases = missing, imshift = missing, atol = 1e-7, opts...) where {T}
+function josephson(gs::GreenSlice{T}, ωmax; omegamap = Returns((;)), phases = missing, imshift = missing, atol = 1e-7, opts...) where {T}
     check_same_contact_slice(gs)
     contact = rows(gs)
     g = parent(gs)
@@ -525,7 +526,7 @@ function josephson(gs::GreenSlice{T}, ωmax; phases = missing, imshift = missing
     phases´, traces = sanitize_phases_traces(phases, T)
     jd(kBT) = JosephsonDensity(g, T(kBT), contact, tauz, phases´,
         traces, Σfull, Σ, similar(Σ), similar(Σ), similar(Σ), similar(tauz, Complex{T}))
-    opts´ = (; imshift, slope = 1, post = real, atol, opts...)
+    opts´ = (; omegamap, imshift, slope = 1, post = real, atol, opts...)
     ifunc(kBT; params...) = iszero(kBT) ?
         Integrator(traces, jd(kBT), (-ωmax, 0); opts´...)(; params...) :
         Integrator(traces, jd(kBT), (-ωmax, 0, ωmax); opts´...)(; params...)
