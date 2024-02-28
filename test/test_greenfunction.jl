@@ -38,6 +38,9 @@ end
     # This ensures that flat_sync! is called with multiorbitals when call!-ing ph upon calling g
     g = LP.square() |> hamiltonian(@onsite(()->I), orbitals = 2) |> supercell |> greenfunction
     @test g[](0.0 + 0im) ≈ SA[-1 0; 0 -1]
+    g = LP.linear() |> hopping(0) + @onsite((;ω=0) -> ω)|> greenfunction;
+    @test only(g[cellsites(SA[1],1)](1.0; ω = 0)) ≈ 1.0   atol = 0.000001
+    @test only(g[cellsites(SA[1],1)](1.0; ω = -1)) ≈ 0.5  atol = 0.000001
 end
 
 @testset "greenfunction with contacts" begin
