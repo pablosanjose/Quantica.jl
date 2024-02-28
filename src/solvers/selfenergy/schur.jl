@@ -58,7 +58,7 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurEmpty
     # convert lead site indices to lead orbital indices using lead's ContactOrbitals
     leadorbs = reordered_site_orbitals(leadsites, cellsdict(contactorbitals(gunit)))
     # translate glead unitcell by displacement, so it overlaps sel sites (modulo transform)
-    hlead = copy(parent(glead))
+    hlead = copy_lattice(parent(glead)) # don't copy, since you would break === link to fsolver
     transform === missing || Quantica.transform!(hlead, transform)
     translate!(hlead, displacement)
     solver´ = SelfEnergySchurSolver(fsolver, hlead, reverse, leadorbs)
