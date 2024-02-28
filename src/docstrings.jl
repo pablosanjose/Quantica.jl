@@ -1650,12 +1650,14 @@ temperature `kBT` is obtained by calling `ρ(mu = 0, kBT = 0; params...)`. The a
 specialized for the GreenSolver used, if available. In this case, `opts` are options for
 said algorithm.
 
-    densitymatrix(gs::GreenSlice, (ωmin, ωmax); opts...)
+    densitymatrix(gs::GreenSlice, (ωmin, ωmax); opts..., quadgk_opts...)
+    densitymatrix(gs::GreenSlice, (ωpoints...); opts..., quadgk_opts...)
 
 As above, but using a generic algorithm that relies on numerical integration along a contour
-in the complex plane, between points `(ωmin, ωmax)`, which should be chosen so as to
-encompass the full system bandwidth. Keywords `opts...` are passed to the `QuadGK.quadgk`
-integration routine.
+in the complex plane, between points `(ωmin, ωmax)` (or along a polygonal path connecting
+`ωpoints`), which should be chosen so as to encompass the full system bandwidth. Keywords
+`quadgk_opts` are passed to the `QuadGK.quadgk` integration routine. See below for
+additiona `opts`.
 
     densitymatrix(gs::GreenSlice, ωmax::Number; opts...)
 
@@ -1669,12 +1671,19 @@ Evaluate the density matrix at chemical potential `μ` and temperature `kBT` (in
 units as the Hamiltonian) for the given `g` parameters `params`, if any. The result is given
 as an `OrbitalSliceMatrix`, see its docstring for further details.
 
-## Algorithms
+## Algorithms and keywords
+
+The generic integration algorithm allows for the following `opts` (see also `josephson`):
+
+- `omegamap`: a function `ω -> (; params...)` that translates `ω` at each point in the integration contour to a set of system parameters. Useful for `ParametricHamiltonians` which include terms `Σ(ω)` that depend on a parameter `ω` (one would then use `omegamap = ω -> (; ω)`). Default: `ω -> (;)`, i.e. no mapped parameters.
+- `imshift`: a small imaginary shift to add to the integration contour. Default: `sqrt(eps)` for the relevant number type.
+- `post`: a function to apply to the result of the integration. Default: `identity`.
+- `slope`: the integration contour is a sawtooth path connecting `(ωmin, ωmax)`, or more generally `ωpoints`, which are usually real numbers encompasing the system's bandwidth. Between each pair of points the path increases and then decreases linearly with the given `slope`. Default: `1.0`.
 
 Currently, the following GreenSolvers implement dedicated densitymatrix algorithms:
 
 - `GS.Spectrum`: based on summation occupation-weigthed eigenvectors. No `opts`.
-- `GS.KPM`: based on the Chebyshev expansion of the Fermi function. Currently only works for zero temperature and only supports `nothing` contacts (see `attach`).
+- `GS.KPM`: based on the Chebyshev expansion of the Fermi function. Currently only works for zero temperature and only supports `nothing` contacts (see `attach`). No `opts`.
 
 # Example
 ```
@@ -1861,7 +1870,7 @@ true
 transmission
 
 """
-    josephson(gs::GreenSlice, ωmax; phases = missing, imshift = missing, slope = 1, post = real, atol = 1e-7, quadgk_opts...)
+    josephson(gs::GreenSlice, ωmax; omegamap = ω -> (;), phases = missing, imshift = missing, slope = 1, post = real, atol = 1e-7, quadgk_opts...)
 
 For a `gs = g[i::Integer]` slice of the `g::GreenFunction` of a hybrid junction, build a
 `J::Josephson` object representing the equilibrium (static) Josephson current `I_J` flowing
@@ -1878,6 +1887,7 @@ the given `g` parameters `params`, if any.
 
 ## Keywords
 
+- `omegamap`: a function `ω -> (; params...)` that translates `ω` at each point in the integration contour to a set of system parameters. Useful for `ParametricHamiltonians` which include terms `Σ(ω)` that depend on a parameter `ω` (one would then use `omegamap = ω -> (; ω)`). Default: `ω -> (;)`, i.e. no mapped parameters.
 - `phases` : collection of superconducting phase biases to apply to the contact, so as to efficiently compute the full current-phase relation `[I_J(ϕ) for ϕ in phases]`. Note that each phase bias `ϕ` is applied by a `[cis(-ϕ/2) 0; 0 cis(ϕ/2)]` rotation to the self energy, which is almost free. If `missing`, a single `I_J` is returned.
 - `imshift`: if `missing` the initial and final integration points `± ωmax` are shifted by `im * sqrt(eps(ωmax))`, to avoid the real axis. Otherwise a shift `im*imshift` is applied (may be zero if `ωmax` is greater than the bandwidth).
 - `slope`: if non-zero, the integration will be performed along a piecewise-linear path in the complex plane `(-ωmax, -ωmax/2 * (1+slope*im), 0, ωmax/2 * (1+slope*im), ωmax)`, taking advantage of the holomorphic integrand `f(ω) j(ω)` and the Cauchy Integral Theorem for faster convergence.
@@ -1888,11 +1898,11 @@ the given `g` parameters `params`, if any.
 # Examples
 
 ```
-julia> glead = LP.square() |> hamiltonian(onsite(0.0005 * SA[0 1; 1 0]) + hopping(SA[1 0; 0 -1]), orbitals = 2) |> supercell((1,0), region = r->-2<r[2]<2) |> greenfunction(GS.Schur(boundary = 0));
+julia> glead = LP.square() |> hamiltonian(@onsite((; ω = 0) -> 0.0005 * SA[0 1; 1 0] + im*ω*I) + hopping(SA[1 0; 0 -1]), orbitals = 2) |> supercell((1,0), region = r->-2<r[2]<2) |> greenfunction(GS.Schur(boundary = 0));
 
 julia> g0 = LP.square() |> hamiltonian(hopping(SA[1 0; 0 -1]), orbitals = 2) |> supercell(region = r->-2<r[2]<2 && r[1]≈0) |> attach(glead, reverse = true) |> attach(glead) |> greenfunction;
 
-julia> J = josephson(g0[1], 4; phases = subdiv(0, pi, 10))
+julia> J = josephson(g0[1], 4; omegamap = ω -> (;ω), phases = subdiv(0, pi, 10))
 Josephson: equilibrium Josephson current at a specific contact using solver of type JosephsonIntegratorSolver
 
 julia> J(0.0)

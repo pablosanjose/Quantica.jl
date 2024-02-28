@@ -167,7 +167,6 @@ end
 
 ## Unused
 # function foreach_site(f, sel::AppliedSiteSelector, ls::LatticeSlice)
-#     @show 1
 #     lat = parent(ls)
 #     islice = 0
 #     for scell in subcells(ls)
