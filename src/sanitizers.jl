@@ -88,8 +88,16 @@ end
 
 # an inds::Tuple fails some tests because convert(Tuple, ::UnitRange) doesnt exist, but
 # convert(SVector, ::UnitRange) does. Used e.g. in compute_or_retrieve_green @ sparselu.jl
-sanitize_cellindices(inds::Tuple) = SVector(inds)
-sanitize_cellindices(inds) = inds
+# We should also demand indices to be unique, since siteindsdict cannot have duplicates
+sanitize_cellindices(inds::Tuple) = SVector(_check_unique(inds))
+sanitize_cellindices(inds) = _check_unique(inds)
+
+_check_unique(x::Colon) = x
+
+function _check_unique(inds)
+    allunique(inds) || argerror("Cell indices should be unique")
+    return inds
+end
 
 #endregion
 

@@ -169,7 +169,8 @@ Base.getindex(d::LocalSpectralDensitySolution, s::SiteSelector) =
     d[getindex(lattice(d.gω), s)]
 
 Base.getindex(d::LocalSpectralDensitySolution{T}, i) where {T} =
-    append_diagonal!(T[], d.gω, i, d.kernel, post = x -> -imag(x)/π)  # see greenfunction.jl
+    append_diagonal!(T[], d.gω, i, d.kernel, post = x -> -imag(x)/π) |>
+        maybe_OrbitalSliceArray(sites_to_orbs(i, d.gω)) # see greenfunction.jl
 
 (d::LocalSpectralDensitySlice)(ω; params...) = copy(call!(d, ω; params...))
 
@@ -240,9 +241,9 @@ charge(d::Union{CurrentDensitySolution,CurrentDensitySlice}) = d.charge
 direction(d::Union{CurrentDensitySolution,CurrentDensitySlice}) = d.direction
 
 Base.getindex(d::CurrentDensitySolution; kw...) = d[getindex(lattice(d.gω); kw...)]
-Base.getindex(d::CurrentDensitySolution, ls::LatticeSlice) = current_matrix(d.gω, ls, d)
 Base.getindex(d::CurrentDensitySolution, scell::CellSites) = d[lattice(hamiltonian(d.gω))[scell]]
 Base.getindex(d::CurrentDensitySolution, i::Union{Integer,Colon}) = d[latslice(parent(d.gω), i)]
+Base.getindex(d::CurrentDensitySolution, ls::LatticeSlice) = current_matrix(d.gω, ls, d)
 
 # no call! support here
 function (d::CurrentDensitySlice)(ω; params...)
@@ -409,8 +410,9 @@ end
 #   Keywords opts are passed to QuadGK.quadgk for the integral or the algorithm used
 #region
 
-struct DensityMatrix{S}
+struct DensityMatrix{S,G<:GreenSlice}
     solver::S
+    gs::G
 end
 
 # Default solver (integration in complex plane)
@@ -420,7 +422,8 @@ end
 
 #region ## Constructors ##
 
-(ρ::DensityMatrix)(mu = 0, kBT = 0; params...) = ρ.solver(mu, kBT; params...)
+(ρ::DensityMatrix)(mu = 0, kBT = 0; params...) = ρ.solver(mu, kBT; params...) |>
+    maybe_OrbitalSliceArray(axes(ρ.gs))
 
 (s::DensityMatrixIntegratorSolver)(mu, kBT; params...) = s.ifunc(mu, kBT; params...)
 
@@ -432,7 +435,7 @@ densitymatrix(s::AppliedGreenSolver, gs::GreenSlice; kw...) =
     argerror("Dedicated `densitymatrix` algorithm not implemented for $(nameof(typeof(s))). Use generic one instead.")
 
 # default integrator solver
-densitymatrix(g::GreenSlice, ωmax::Number; opts...) = densitymatrix(g, (-ωmax, ωmax); opts...)
+densitymatrix(gs::GreenSlice, ωmax::Number; opts...) = densitymatrix(gs, (-ωmax, ωmax); opts...)
 
 function densitymatrix(gs::GreenSlice{T}, (ωmin, ωmax)::Tuple; imshift = missing, atol = 1e-7, opts...) where {T}
     result = similar_Matrix(gs)
@@ -440,7 +443,7 @@ function densitymatrix(gs::GreenSlice{T}, (ωmin, ωmax)::Tuple; imshift = missi
     integratorfunc(mu, kBT; params...) = iszero(kBT) ?
         Integrator(result, GFermi(gs, T(mu), T(kBT)), (ωmin, mu); opts´...)(; params...) :
         Integrator(result, GFermi(gs, T(mu), T(kBT)), (ωmin, mu, ωmax); opts´...)(; params...)
-    return DensityMatrix(DensityMatrixIntegratorSolver(integratorfunc))
+    return DensityMatrix(DensityMatrixIntegratorSolver(integratorfunc), gs)
 end
 
 function gf_to_rho!(x)

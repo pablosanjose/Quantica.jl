@@ -152,7 +152,7 @@ We first define a single lead `Greenfunction` and the central Hamiltonian
 ```julia
 julia> glead = LP.square() |> onsite(4) - hopping(1) |> supercell((1, 0), region = r -> abs(r[2]) <= 5/2) |> greenfunction(GS.Schur(boundary = 0));
 
-julia> hcentral = LP.square() |> onsite(4) - hopping(1) |> supercell(region = RP.circle(10) | RP.rectangle((22, 5)) | RP.rectangle((5, 22)))
+julia> hcentral = LP.square() |> onsite(4) - hopping(1) |> supercell(region = RP.circle(10) | RP.rectangle((22, 5)) | RP.rectangle((5, 22)));
 ```
 The two rectangles overlayed on the circle above create the stubs where the leads will be attached:
 ```@raw html
@@ -199,7 +199,7 @@ Note that since we did not specify the `solver` in `greenfunction`, the `L=0` de
 As explained above, a `g::GreenFunction` represents a Green function of an `OpenHamiltonian` (i.e. `AbstractHamiltonian` with zero or more self-energies), but it does so for any energy `ω` or lattice sites.
     - To specify `ω` (plus any parameters `params` in the underlying `AbstractHamiltonian`) we use the syntax `g(ω; params...)`, which yields an `gω::GreenSolution`
     - To specify source (`sⱼ`) and drain (`sᵢ`) sites we use the syntax `g[sᵢ, sⱼ]` or `g[sᵢ] == g[sᵢ,sᵢ]`, which yields a `gs::GreenSlice`. `sᵢ` and `sⱼ` can be `SiteSelectors(; sites...)`, or an integer denoting a specific contact (i.e. sites with an attached self-energy) or `:` denoting all contacts merged together.
-    - If we specify both of the above we get the Green function between the orbitals of the specified sites at the specified energy, in the form of a `Matrix`
+    - If we specify both of the above we get the Green function between the orbitals of the specified sites at the specified energy, in the form of an `OrbitalSliceMatrix`, which is a special `AbstractMatrix` that knows about the orbitals in the lattice over which its matrix elements are defined.
 
 Let us see this in action using the example from the previous section
 ```julia
@@ -210,17 +210,17 @@ julia> g(0.2)
 GreenSolution{Float64,2,0}: Green function at arbitrary positions, but at a fixed energy
 
 julia> g(0.2)[1, 3]
-5×5 Matrix{ComplexF64}:
- -0.370342-0.0778282im   0.0575525-0.211484im   0.0245456-0.129385im     0.174425-0.155446im       0.100593+0.0134301im
- 0.0575525-0.211484im   -0.0619157+0.0480224im   0.156603+0.256013im    -0.342883+0.0760708im    -0.0414971+0.0510385im
- 0.0245456-0.129385im     0.156603+0.256013im    -0.13008-0.156987im     0.129202-0.139979im       0.155843-0.0597696im
-  0.174425-0.155446im    -0.342883+0.0760708im   0.129202-0.139979im   -0.0515859+0.000612582im   0.0298279+0.109486im
-  0.100593+0.0134301im  -0.0414971+0.0510385im   0.155843-0.0597696im   0.0298279+0.109486im     0.00445114+0.0242172im
+5×5 OrbitalSliceMatrix{Matrix{ComplexF64}}:
+ -2.56906+0.000123273im  -4.28767+0.00020578im   -4.88512+0.000234514im  -4.28534+0.00020578im    -2.5664+0.000123273im
+ -4.28767+0.00020578im   -7.15613+0.00034351im   -8.15346+0.000391475im  -7.15257+0.00034351im    -4.2836+0.000205781im
+ -4.88512+0.000234514im  -8.15346+0.000391475im  -9.29002+0.000446138im  -8.14982+0.000391476im  -4.88095+0.000234514im
+ -4.28534+0.00020578im   -7.15257+0.00034351im   -8.14982+0.000391476im  -7.14974+0.000343511im  -4.28211+0.000205781im
+  -2.5664+0.000123273im   -4.2836+0.000205781im  -4.88095+0.000234514im  -4.28211+0.000205781im  -2.56469+0.000123273im
 
-  julia> g(0.2)[siteselector(region = RP.circle(1, (0.5, 0))), 3]
-2×5 Matrix{ComplexF64}:
- -0.0051739-0.0122979im  0.258992+0.388052im   0.01413-0.192581im  0.258992+0.388052im   -0.0051739-0.0122979im
-   0.265667+0.296249im   0.171343-0.022414im  0.285251+0.348008im  0.171247+0.0229456im   0.0532086+0.24404im
+julia> g(0.2)[siteselector(region = RP.circle(1, (0.5, 0))), 3]
+2×5 OrbitalSliceMatrix{Matrix{ComplexF64}}:
+ 0.0749214+3.15744e-8im   0.124325+5.27948e-8im   0.141366+6.01987e-8im   0.124325+5.27948e-8im  0.0749214+3.15744e-8im
+ -0.374862+2.15287e-5im  -0.625946+3.5938e-5im   -0.712983+4.09561e-5im  -0.624747+3.59379e-5im   -0.37348+2.15285e-5im
 ```
 
 ### Diagonal slices
@@ -242,20 +242,24 @@ GreenFunction{Float64,2,2}: Green function of a Hamiltonian{Float64,2,2}
     Coordination     : 3.0
 
 julia> g(0.5)[diagonal(cells = (0, 0))]
-4-element Vector{ComplexF64}:
- -0.34973634684887517 - 0.3118358260293383im
-  -0.3497363468428337 - 0.3118358260293383im
-   -0.349736346839396 - 0.31183582602933824im
- -0.34973634684543714 - 0.3118358260293383im
+4-element OrbitalSliceVector{Vector{ComplexF64}}:
+  -0.3497363468480622 - 0.3118358260294266im
+  -0.3497363468271048 - 0.31183582602942655im
+  -0.3497363468402952 - 0.31183582602942667im
+ -0.34973634686125243 - 0.3118358260294267im
 ```
-Note that we get a vector, which is equal to the diagonal `diag(g(0.5)[cells = (0, 0)])`. Like the `g` Matrix, this vector is resolved in orbitals, of which there are two per site and four per unit cell in this case. Using `diagonal(sᵢ; kernel = K)` we can collect all the orbitals of different sites, and compute `tr(g[site, site] * K)` for a given matrix `K`. This is useful to obtain spectral densities. In the above example, and interpreting the two orbitals per site as the electron spin, we could obtain the spin density along the `x` axis, say, using `σx = SA[0 1; 1 0]` as `kernel`,
+
+Note that we get an `OrbitalSliceVector`, which is equal to the diagonal `diag(g(0.5)[cells = (0, 0)])`. Like the `g` `OrbitalSliceMatrix`, this vector is resolved in orbitals, of which there are two per site and four per unit cell in this case. Using `diagonal(sᵢ; kernel = K)` we can collect all the orbitals of different sites, and compute `tr(g[site, site] * K)` for a given matrix `K`. This is useful to obtain spectral densities. In the above example, and interpreting the two orbitals per site as the electron spin, we could obtain the spin density along the `x` axis, say, using `σx = SA[0 1; 1 0]` as `kernel`,
 ```julia
 julia> g(0.5)[diagonal(cells = (0, 0), kernel = SA[0 1; 1 0])]
-2-element Vector{ComplexF64}:
- -1.1268039540527714e-11 - 2.3843717644870095e-17im
-   1.126802874880133e-11 + 1.9120152589671175e-17im
+2-element OrbitalSliceVector{Vector{ComplexF64}}:
+   4.26186044627701e-12 - 2.2846013280115095e-17im
+ -4.261861877528737e-12 + 1.9177925470610777e-17im
 ```
 which is zero in this spin-degenerate case
+
+!!! tip "Slicing `OrbitalSliceArray`s"
+    An `v::OrbitalSliceVector` and `m::OrbitalSliceMatrix` are both `a::OrbitalSliceArray`, and wrap conventional arrays, with e.g. conventional `axes`. They also provide, however, `orbaxes(a)`, which are a tuple of `OrbitalSliceGrouped`. These are `LatticeSlice`s that represent orbitals grouped by sites. They allow an interesting additional functionality. You can index `v[sitelector(...)]` or `m[rowsiteselector, colsiteselector]` to obtain a new `OrbitalSliceArray` of the selected rows and cols. The full machinery of `siteselector` applies. One can also use a lower-level `v[cellsites(cell_index, site_indices)]` to obtain an unwrapped `AbstractArray`, without building new `orbaxes`. See `OrbitalSliceArray` for further details.
 
 ## Visualizing a Green function
 

@@ -236,7 +236,7 @@ function densitymatrix(s::AppliedKPMGreenSolver, gs::GreenSlice{T}) where {T}
     has_selfenergy(gs) && argerror("The KPM densitymatrix solver currently support only `nothing` contacts")
     momenta = slice_momenta(s.momenta, gs)
     solver = DensityMatrixKPMSolver(momenta, s.bandCH)
-    return DensityMatrix(solver)
+    return DensityMatrix(solver, gs)
 end
 
 function slice_momenta(momenta, gs)

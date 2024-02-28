@@ -1,4 +1,3 @@
-
 ############################################################################################
 # slice of Lattice and LatticeSlice - returns a LatticeSlice
 #region
@@ -9,6 +8,7 @@ Base.getindex(lat::Lattice, ls::LatticeSlice) = ls
 
 Base.getindex(lat::Lattice, ss::SiteSelector) = lat[apply(ss, lat)]
 
+# Special case for unbounded selector
 Base.getindex(lat::Lattice, ::SiteSelectorAll) = lat[siteselector(; cells = zerocell(lat))]
 
 function Base.getindex(lat::Lattice, as::AppliedSiteSelector)
@@ -36,7 +36,10 @@ Base.getindex(l::Lattice, c::CellIndices) = LatticeSlice(l, [apply(c, l)])
 
 Base.getindex(ls::LatticeSlice; kw...) = getindex(ls, siteselector(; kw...))
 
-Base.getindex(ls::LatticeSlice, ss::SiteSelector) = getindex(ls, apply(ss, parent(ls)))
+Base.getindex(ls::LatticeSlice, kw::NamedTuple) = getindex(ls, siteselector(; kw...))
+
+Base.getindex(ls::LatticeSlice, ss::SiteSelector, args...) =
+    getindex(ls, apply(ss, parent(ls)), args...)
 
 # return cell, siteindex of the i-th site of LatticeSlice
 function Base.getindex(l::LatticeSlice, i::Integer)
@@ -53,29 +56,76 @@ function Base.getindex(l::LatticeSlice, i::Integer)
     return zerocell(lattice(l)), 0
 end
 
-# indexlist is populated with latslice indices of selected sites
-function Base.getindex(latslice::LatticeSlice, as::AppliedSiteSelector)
+function Base.getindex(latslice::SiteSlice, as::AppliedSiteSelector)
     lat = parent(latslice)
-    latslice´ = LatticeSlice(lat)
+    L = latdim(lat)
+    cellsdict´ = CellSitesDict{L}()
     sinds = Int[]
-    j = 0
     for subcell in cellsdict(latslice)
         dn = cell(subcell)
-        cs = CellSites(dn, sinds)
+        subcell´ = CellSites(dn, sinds)
         for i in siteindices(subcell)
-            j += 1
             r = site(lat, i, dn)
             if (i, r, dn) in as
-                push!(siteindices(cs), i)
+                push!(siteindices(subcell´), i)
             end
         end
-        if !isempty(cs)
-            push!(cellsdict(latslice´), cs)
-            sinds = Int[]  #start new site list
+        if !isempty(subcell´)
+            set!(cellsdict´, cell(subcell´), subcell´)
+            sinds = Int[]  # start new site list
         end
     end
-    return latslice´
+    return SiteSlice(lat, cellsdict´)
 end
+
+function Base.getindex(latslice::OrbitalSliceGrouped, as::AppliedSiteSelector)
+    lat = parent(latslice)
+    L = latdim(lat)
+    cellsdict´ = CellOrbitalsGroupedDict{L}()
+    oinds = Int[]
+    ogroups = Dictionary{Int,UnitRange{Int}}()
+    for subcell in cellsdict(latslice)
+        dn = cell(subcell)
+        subcell´ = CellOrbitalsGrouped(dn, oinds, ogroups)
+        orbs´ = orbindices(subcell´)
+        for (i, orbrng) in pairs(orbgroups(subcell))
+            r = site(lat, i, dn)
+            if (i, r, dn) in as
+                append!(orbs´, orbrng)
+                set!(ogroups, i, orbrng)
+            end
+        end
+        if !isempty(subcell´)
+            set!(cellsdict´, cell(subcell´), subcell´)
+            # start new orb list
+            oinds = Int[]
+            ogroups = Dictionary{Int,UnitRange{Int}}()
+        end
+    end
+    return OrbitalSliceGrouped(lat, cellsdict´)
+end
+
+# function Base.getindex(latslice::OrbitalSliceGrouped, cs::CellSites)
+#     lat = parent(latslice)
+#     cs´ = apply(cs, lat)
+#     dn = cell(cs´)
+#     cd = cellsdict(latslice)
+#     groups = haskey(cd, dn) ? orbgroups(cd[dn]) : argerror("cell not found in lattice slice")
+#     groups´ = Dictionary{Int,UnitRange{Int}}()
+#     orbs´ = Int[]
+#     for i in siteindices(cs´)
+#         if haskey(groups, i)
+#             orbrange = groups[i]
+#             append!(orbs´, orbrange)
+#             set!(groups´, i, orbrange)
+#         else
+#             argerror("cellsite not found in lattice slice")
+#         end
+#     end
+#     cellsorbs´ = CellOrbitalsGrouped(dn, orbs´, groups´)
+#     cellsdict´ = cellinds_to_dict(cellsorbs´)
+#     return OrbitalSliceGrouped(lat, cellsdict´)
+# end
 
 #endregion
 
@@ -251,12 +301,6 @@ function sublatsites(l::LatticeSlice, s::Integer, store = missing)
     return gen
 end
 
-missing_or_empty!(::Missing) = missing
-missing_or_empty!(v) = empty!(v)
-
-missing_or_push!(::Missing, _) = missing
-missing_or_push!(v, n) = push!(v, n)
-
 #endregion
 
 ############################################################################################
@@ -278,20 +322,8 @@ end
 
 ############################################################################################
 # sites_to_orbs: convert sites to orbitals, preserving site groups if possible
-#   conversion rules:
-#       - SiteSlice to an OrbitalSliceGrouped
-#       - CellSitesDict to a CellOrbitalsGroupedDict
-#       - CellSites to a CellOrbitalsGrouped
-#       - Union{Integer,Colon} to a CellOrbitalsGrouped
-#   no-op rules (site-rouping of ungrouped Orbitals is not possible in general):
-#       - AnyOrbitalSlice
-#       - AnyCellOrbitalsDict
-#       - AnyCellOrbitals
 # sites_to_orbs_nogroups: converts sites to orbitals, without site groups
-#   conversion rules:
-#       - SiteSlice to an OrbitalSlice
 #region
-
 
 #region ## sites_to_orbs
 
@@ -315,6 +347,7 @@ sites_to_orbs(s::SiteSelector, g) = sites_to_orbs(lattice(g)[s], g)
 sites_to_orbs(i::Union{Colon,Integer}, g) = orbslice(contacts(g), i)
 sites_to_orbs(l::SiteSlice, g) =
     OrbitalSliceGrouped(lattice(l), sites_to_orbs(cellsdict(l), blockstructure(g)))
+sites_to_orbs(l::SiteSlice, s::OrbitalSliceGrouped) = s[l]
 
 ## convert CellSitesDict to CellOrbitalsGroupedDict
 
@@ -323,7 +356,7 @@ sites_to_orbs(c::CellSitesDict, g) = sites_to_orbs(c, blockstructure(g))
 function sites_to_orbs(cellsdict::CellSitesDict{L}, os::OrbitalBlockStructure) where {L}
     # inference fails if cellsdict is empty, so we need to specify eltype
     co = CellOrbitalsGrouped{L,Vector{Int}}[sites_to_orbs(cellsites, os) for cellsites in cellsdict]
-    return CellOrbitalsGroupedDict(co)
+    return cellinds_to_dict(co)
 end
 
 ## convert CellSites -> CellOrbitalsGrouped
@@ -353,7 +386,7 @@ sites_to_orbs_nogroups(c::CellSitesDict, g) = sites_to_orbs_nogroups(c, blockstr
 function sites_to_orbs_nogroups(cellsdict::CellSitesDict{L}, os::OrbitalBlockStructure) where {L}
     # inference fails if cellsdict is empty, so we need to specify eltype
     co = CellOrbitals{L,Vector{Int}}[sites_to_orbs_nogroups(cellsites, os) for cellsites in cellsdict]
-    return CellOrbitalsDict(co)
+    return cellinds_to_dict(co)
 end
 
 ## convert CellSites -> CellOrbitals
@@ -411,4 +444,16 @@ function _orbinds(sites, os)
 end
 
 #endregion
+#endregion
+
+############################################################################################
+# Utilities
+#region
+
+missing_or_empty!(::Missing) = missing
+missing_or_empty!(v) = empty!(v)
+
+missing_or_push!(::Missing, _) = missing
+missing_or_push!(v, n) = push!(v, n)
+
 #endregion

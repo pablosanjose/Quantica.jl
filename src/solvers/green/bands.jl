@@ -632,7 +632,7 @@ function coupled_orbslice(condition, h, seedcell, dir)
     lat = lattice(h)
     ls = grow(lat[CellSites(seedcell, :)], h)
     sc´ = [projected_cellsites(c, dir) for c in cellsdict(ls) if condition(cell(c)[dir])]
-    sslice = SiteSlice(lat, CellSitesDict(sc´))
+    sslice = SiteSlice(lat, cellinds_to_dict(sc´))
     oslice = sites_to_orbs_nogroups(sslice, h)
     return oslice
 end

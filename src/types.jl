@@ -273,7 +273,8 @@ struct SiteLike end
 struct OrbitalLike end
 
 struct OrbitalLikeGrouped
-    groups::Dictionary{Int,UnitRange{Int}} # site => range of inds in parent
+    groups::Dictionary{Int,UnitRange{Int}}  # site => range of inds in parent
+                                            # (non-selected sites are not present)
 end
 
 struct CellIndices{L,I,G<:Union{SiteLike,OrbitalLike,OrbitalLikeGrouped}}
@@ -299,12 +300,14 @@ struct LatticeSlice{T,E,L,C<:CellIndices{L}}
     lat::Lattice{T,E,L}
     cellsdict::CellIndicesDict{L,C}
     offsets::Dictionary{SVector{L,Int},Int}    # offset from number of indices in each cell
+    siteindsdict::Dictionary{CellSite{L},UnitRange{Int}}    # index range in slice per site
     function LatticeSlice{T,E,L,C}(lat, cellsdict) where {T,E,L,C}
         all(cs -> allunique(cs.inds), cellsdict) || argerror("CellSlice cells must be unique")
         offsetsvec = lengths_to_offsets(length, cellsdict)
         pop!(offsetsvec)    # remove last entry, so there is one offset per cellsdict value
         offsets = Dictionary(cell.(cellsdict), offsetsvec)
-        return new(lat, cellsdict, offsets)
+        siteindsdict = siteindexdict(cellsdict)
+        return new(lat, cellsdict, offsets, siteindsdict)
     end
 end
 
@@ -330,11 +333,22 @@ CellOrbitalsGrouped(cell, inds, groups::Dictionary) =
 
 # LatticeSlice from an AbstractVector of CellIndices
 LatticeSlice(lat::Lattice, cs::AbstractVector{<:CellIndices}) =
-    LatticeSlice(lat, CellIndicesDict(cs))
+    LatticeSlice(lat, cellinds_to_dict(cs))
 
-# Vector{CellIndices} to Dictionary(cell=>cellind)
-(::Type{<:CellIndicesDict})(cs::AbstractVector{C}) where {L,C<:CellIndices{L}} =
+# CellIndices to Dictionary(cell=>cellind)
+cellinds_to_dict(cs::AbstractVector{C}) where {L,C<:CellIndices{L}} =
     CellIndicesDict{L,C}(cell.(cs), cs)
+cellinds_to_dict(cs::CellIndices{L}) where {L} = cellinds_to_dict(SVector(cs))
+# don't allow single-cellsites in dictionaries (it polutes the LatticeSlice type diversity)
+cellinds_to_dict(cs::AbstractVector{C}) where {L,C<:CellSite{L}} =
+    cellinds_to_dict(CellSites{L,Vector{Int}}.(cs))
+
+# make OrbitalSliceGrouped scalar (i.e. groups are siteindex => siteindex:siteindex)
+scalarize(s::OrbitalSliceGrouped) = OrbitalSliceGrouped(s.lat, scalarize(s.cellsdict))
+scalarize(d::CellOrbitalsGroupedDict) = scalarize.(d)
+scalarize(c::CellOrbitalsGrouped) =
+    CellOrbitalsGrouped(c.cell, collect(keys(c.type.groups)),
+        dictionary(i => i:i for i in keys(c.type.groups)))
 
 # outer constructor for LatticeSlice
 LatticeSlice(lat::Lattice{T,E,L}, cellsdict::CellIndicesDict{L,C}) where {T,E,L,C} =
@@ -346,10 +360,12 @@ OrbitalSlice(lat::Lattice{T,E,L}, cellsdict::CellIndicesDict{L,C}) where {T,E,L,
 OrbitalSliceGrouped(lat::Lattice{T,E,L}, cellsdict::CellIndicesDict{L,C}) where {T,E,L,C<:CellOrbitalsGrouped} =
     LatticeSlice{T,E,L,C}(lat, cellsdict)
 
-# empty constructors - see also slices.jl
-LatticeSlice(l::Lattice{<:Any,<:Any,L}) where {L} = LatticeSlice(l, CellSitesDict{L}())
-OrbitalSlice(l::Lattice{<:Any,<:Any,L}) where {L} = LatticeSlice(l, CellOrbitalsDict{L}())
-OrbitalSliceGrouped(l::Lattice{<:Any,<:Any,L}) where {L} = LatticeSlice(l, CellOrbitalsGroupedDict{L}())
+# ranges of inds, where inds are orbital indices for orbgroupeddict, site indices otherwise
+siteindexdict(cs::CellOrbitalsGroupedDict) = Dictionary(cellsites(cs), orbranges(cs))
+# empty siteindexdict when sites are not known
+siteindexdict(::CellOrbitalsDict{L}) where {L} = Dictionary{CellSite{L}, UnitRange{Int}}()
+# For CellSitesDict, site indices are used
+siteindexdict(cs::CellSitesDict) = dictionary(c => i:i for (i, c) in enumerate(cellsites(cs)))
 
 #endregion
 
@@ -362,6 +378,15 @@ siteindices(s::CellOrbitalsGrouped) = keys(s.type.groups)
 orbindices(s::AnyCellOrbitals) = s.inds
 siteindex(s::CellSite) = s.inds
 orbindex(s::CellOrbital) = s.inds
+
+indexcollection(l::LatticeSlice, c::CellSite) = siteindexdict(l)[c]
+indexcollection(l::LatticeSlice, cs::CellSites) =
+    [j for i in siteindices(cs) for j in indexcollection(l, CellSite(cell(cs), i))]
+indexcollection(lold::LatticeSlice, lnew::LatticeSlice) =
+    [j for s in cellsites(lnew) for j in indexcollection(lold, s)]
+
+siteindexdict(l::LatticeSlice) = l.siteindsdict
+siteindexdict(l::OrbitalSlice) = missing        # in this case, cellsites are not known
 
 cellsdict(l::LatticeSlice) = l.cellsdict
 cellsdict(l::LatticeSlice, cell) = l.cellsdict[cell]
@@ -396,7 +421,7 @@ sites(l::LatticeSlice) =
 
 # single-site (CellSite) iterator
 cellsites(cs::Union{SiteSlice,OrbitalSliceGrouped}) = cellsites(cs.cellsdict)
-cellsites(cdict::Union{CellSitesDict,CellOrbitalsGroupedDict}) =
+cellsites(cdict::CellIndicesDict) =
     (CellSite(cell(cinds), i) for cinds in cdict for i in siteindices(cinds))
 
 # single-orbital (CellOrbital) iterator
@@ -406,10 +431,11 @@ cellorbs(codict::Union{CellOrbitalsDict,CellOrbitalsGroupedDict}) =
 
 # orbitals in unit cell for each site
 orbgroups(s::CellOrbitalsGrouped) = s.type.groups
+orbgroups(s::CellOrbitalsGrouped, i::Integer) = s.type.groups[i]
 orbgroups(d::CellOrbitalsGroupedDict) = (orbrng for corbs in d for orbrng in orbgroups(corbs))
 orbgroups(cs::OrbitalSliceGrouped) = orbgroups(cellsdict(cs))
 
-# consecutive index ranges for sites orbitals in slice
+# set of consecutive orbital ranges for each site in slice
 orbranges(cs::OrbitalSliceGrouped) = orbranges(cellsdict(cs))
 orbranges(cs::Union{CellOrbitalsGrouped, CellOrbitalsGroupedDict}) = Iterators.accumulate(
     (rng, rng´) -> maximum(rng)+1:maximum(rng)+length(rng´), orbgroups(cs), init = 0:0)
@@ -1709,7 +1735,7 @@ call!(s::WrappedExtendedSelfEnergySolver; params...) = s
 
 struct SelfEnergy{T,E,L,S<:AbstractSelfEnergySolver,P<:Tuple}
     solver::S                                # returns AbstractMatrix block(s) over latslice
-    orbslice::OrbitalSliceGrouped{T,E,L}               # sites on each unitcell with a selfenergy
+    orbslice::OrbitalSliceGrouped{T,E,L}     # sites on each unitcell with a selfenergy
     plottables::P                            # objects to be plotted to visualize SelfEnergy
     function SelfEnergy{T,E,L,S,P}(solver, orbslice, plottables) where {T,E,L,S<:AbstractSelfEnergySolver,P<:Tuple}
         isempty(orbslice) && argerror("Cannot create a self-energy over an empty LatticeSlice")
@@ -2034,6 +2060,8 @@ orbrows(g::GreenSlice) = g.rows.orbinds
 
 orbcols(g::GreenSlice) = g.cols.orbinds
 
+Base.axes(g::GreenSlice) = (orbrows(g), orbcols(g))
+
 # ifelse(rows && cols are contacts, (rows, cols), (orbrows, orbcols))
 # I.e: if rows, cols are contact indices retrieve them instead of orbslices.
 orbinds_or_contactinds(g) = orbinds_or_contactinds(rows(g), cols(g), orbrows(g), orbcols(g))
@@ -2080,7 +2108,7 @@ Base.:(==)(g::GreenSlice, g´::GreenSlice) = function_not_defined("==")
 
 ############################################################################################
 # Operator - Hamiltonian-like operator representing observables other than a Hamiltonian
-#   see observables.jl for specific constructors
+#   It works as a wrapper of an AbstractHamiltonian, see observables.jl for constructors
 #region
 
 struct Operator{H<:AbstractHamiltonian}
@@ -2098,5 +2126,104 @@ call!(c::Operator, φ...; kw...) = call!(c.h, φ...; kw...)
 Base.getindex(c::Operator, i...) = getindex(c.h, i...)
 
 #endregion
+
+############################################################################################
+# OrbitalSliceArray - array type over orbital slice
+#   orbaxes is a tuple of OrbitalSlice's or Missing's, one per dimension
+#   if missing, the dimension does not span orbitals but something else
+#region
+
+struct OrbitalSliceArray{C,N,M<:AbstractArray{C,N},A<:NTuple{N,Union{OrbitalSliceGrouped,Missing}}} <: AbstractArray{C,N}
+    parent::M
+    orbaxes::A
+end
+
+const OrbitalSliceVector{C,V,A} = OrbitalSliceArray{C,1,V,A}
+const OrbitalSliceMatrix{C,M,A} = OrbitalSliceArray{C,2,M,A}
+
+OrbitalSliceVector(v::AbstractVector, axes) = OrbitalSliceArray(v, axes)
+OrbitalSliceMatrix(m::AbstractMatrix, axes) = OrbitalSliceArray(m, axes)
+
+orbaxes(a::OrbitalSliceArray) = a.orbaxes
+
+# AbstractArray interface
+Base.parent(a::OrbitalSliceArray) = a.parent
+Base.size(a::OrbitalSliceArray) = size(a.parent)
+Base.getindex(a::OrbitalSliceArray, i::Int) = getindex(a.parent, i)
+Base.getindex(a::OrbitalSliceArray, I::Vararg{Int, N}) where {N} = getindex(a.parent, I...)
+Base.IndexStyle(::Type{T}) where {M,T<:OrbitalSliceArray{<:Any,<:Any,M}} = IndexStyle(M)
+Base.setindex!(a::OrbitalSliceArray, v, i::Int) = setindex!(a.parent, v, i)
+Base.setindex!(a::OrbitalSliceArray, v, I::Vararg{Int, N}) where {N} = setindex!(a.parent, v, I...)
+Base.iterate(a::OrbitalSliceArray) = iterate(a.parent)
+Base.iterate(a::OrbitalSliceArray, state) = iterate(a.parent, state)
+Base.length(a::OrbitalSliceArray) = length(a.parent)
+# doesn't make sense to keep orbaxes in similar (dimensions could change)
+Base.similar(a::OrbitalSliceArray, t::Tuple) = similar(a.parent, t)
+Base.copy(a::OrbitalSliceArray) = OrbitalSliceArray(copy(a.parent), a.orbaxes)
+
+# Additional indexing over sites
+Base.getindex(a::OrbitalSliceMatrix; sites...) = getindex(a, siteselector(; sites...))
+Base.getindex(a::OrbitalSliceMatrix, i::NamedTuple, j::NamedTuple = i) =
+    getindex(a, siteselector(i), siteselector(j))
+Base.getindex(a::OrbitalSliceMatrix, i::NamedTuple, j::SiteSelector) =
+    getindex(a, siteselector(i), j)
+Base.getindex(a::OrbitalSliceMatrix, i::SiteSelector, j::NamedTuple) =
+    getindex(a, i, siteselector(j))
+
+# SiteSelector: return a new OrbitalSliceMatrix
+function Base.getindex(a::OrbitalSliceMatrix, i::SiteSelector, j::SiteSelector = i)
+    rowslice, colslice = orbaxes(a)
+    rowslice´, colslice´ = rowslice[i], colslice[j]
+    rows = collect(indexcollection(rowslice, rowslice´))
+    cols = i === j && rowslice === colslice ? rows : indexcollection(colslice, colslice´)
+    m = parent(a)[rows, cols]
+    return OrbitalSliceMatrix(m, (rowslice´, colslice´))
+end
+
+# CellSites: return an unwrapped Matrix or a view thereof (non-allocating)
+Base.getindex(a::OrbitalSliceMatrix, i::CellSites, j::CellSites = i) = copy(view(a, i, j))
+
+function Base.view(a::OrbitalSliceMatrix, i::CellSites, j::CellSites = i)
+    rowslice, colslice = orbaxes(a)
+    i´, j´ = apply(i, lattice(rowslice)), apply(j, lattice(colslice))
+    rows = indexcollection(rowslice, i´)
+    cols = j === i && rowslice === colslice ? rows : indexcollection(colslice, j´)
+    return view(a.parent, rows, cols)
+end
+
+# For simplified printing
+function Base.showarg(io::IO, ::OrbitalSliceMatrix{<:Any,M}, toplevel) where {M}
+    toplevel || print(io, "::")
+    print(io,  "OrbitalSliceMatrix{$M}")
+end
+
+function Base.showarg(io::IO, ::OrbitalSliceVector{<:Any,M}, toplevel) where {M}
+    toplevel || print(io, "::")
+    print(io,  "OrbitalSliceVector{$M}")
+end
+
+## conversion
+
+maybe_OrbitalSliceArray(i) = x -> maybe_OrbitalSliceArray(x, i)
+
+maybe_OrbitalSliceArray(x::AbstractVector, i) = maybe_OrbitalSliceVector(x, i)
+maybe_OrbitalSliceArray(x::AbstractMatrix, i) = maybe_OrbitalSliceMatrix(x, i)
+
+maybe_OrbitalSliceVector(x, i::DiagIndices{Missing,<:OrbitalSliceGrouped}) =
+    maybe_OrbitalSliceVector(x, parent(i))
+maybe_OrbitalSliceVector(x, i::DiagIndices{<:Any,<:OrbitalSliceGrouped}) =
+    maybe_OrbitalSliceVector(x, scalarize(parent(i)))
+maybe_OrbitalSliceVector(x, i::OrbitalSliceGrouped) = OrbitalSliceVector(x, (i,))
+
+# fallback
+maybe_OrbitalSliceVector(x, i) = x
+
+maybe_OrbitalSliceMatrix(x, i::OrbitalSliceGrouped) =
+    maybe_OrbitalSliceMatrix(x, (i, i))
+maybe_OrbitalSliceMatrix(x, (i, j)::Tuple{OrbitalSliceGrouped,OrbitalSliceGrouped}) =
+    OrbitalSliceMatrix(x, (i, j))
+
+# fallback
+maybe_OrbitalSliceMatrix(x, i) = x
 
 #endregion

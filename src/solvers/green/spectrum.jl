@@ -86,7 +86,7 @@ function densitymatrix(s::AppliedSpectrumGreenSolver, gs::GreenSlice)
     oi, oj = orbindices(i), orbindices(j)
     es, psis = spectrum(s)
     solver = DensityMatrixSpectrumSolver(es, _maybe_view(psis, oi), _maybe_view(psis, oj))
-    return DensityMatrix(solver)
+    return DensityMatrix(solver, gs)
 end
 
 ## API
