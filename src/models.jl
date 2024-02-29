@@ -111,9 +111,11 @@ function parse_term(f, msg)
             spacial = false
         end
         # fix := to :kw in [...; param = ...]
-        f2 = f1.args[1]
-        if !spacial && f2 isa Expr && f2.head == :parameters
-            replace_equal_to_kw!.(f2.args)
+        if !spacial && !isempty(f1.args)
+            f2 = f1.args[1]
+            if f2 isa Expr && f2.head == :parameters
+                replace_equal_to_kw!.(f2.args)
+            end
         end
     end
     d = ExprTools.splitdef(f)
