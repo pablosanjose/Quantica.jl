@@ -453,15 +453,15 @@ function applymodifiers!(h, m::AppliedHoppingModifier{B}; kw...) where {B<:SMatr
         nz = nonzeros(unflat(har))
         if is_spacial(m)    # Branch outside loop
             @simd for p in ptrs
-                (ptr, r, dr, si, sj, orborb) = p
-                val = view(nz[ptr], 1:orborb, 1:orborb)  # this might be suboptimal - do we need view?
-                @inbounds nz[ptr] = m(val, r, dr, orborb; kw...)
+                (ptr, r, dr, si, sj, (oi, oj)) = p
+                val = view(nz[ptr], 1:oi, 1:oj)  # this might be suboptimal - do we need view?
+                @inbounds nz[ptr] = m(val, r, dr, (oi, oj); kw...)
             end
         else
             @simd for p in ptrs
-                (ptr, r, dr, si, sj, orborb) = p
-                val = view(nz[ptr], 1:orborb, 1:orborb)
-                @inbounds nz[ptr] = m(val, si, sj, orborb; kw...)
+                (ptr, r, dr, si, sj, (oi, oj)) = p
+                val = view(nz[ptr], 1:oi, 1:oj)
+                @inbounds nz[ptr] = m(val, si, sj, (oi, oj); kw...)
             end
         end
     end

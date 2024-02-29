@@ -102,6 +102,19 @@ end
 #endregion
 
 ############################################################################################
+# block sanitizers
+#   if a is the result of indexing an OrbitalSliceArray with an CellSitePos, ensure it can
+#   be the result of a model term function. Required for e.g. mean-field models.
+#region
+
+sanitize_block(::Type{C}, a) where {C<:Number} = complex(C)(only(a))
+sanitize_block(::Type{C}, a) where {C<:SMatrix} = C(a)
+# here we assume a is already of the correct size and let if fail later otherwise
+sanitize_block(::Type{C}, a) where {C<:SMatrixView} = a
+
+#endregion
+
+############################################################################################
 # Supercell sanitizers
 #region
 

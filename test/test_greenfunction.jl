@@ -346,3 +346,14 @@ end
     testcond(g0; nambu = true)
     testjosephson(g0)
 end
+
+@testset "mean-field models" begin
+    h0 = LP.honeycomb() |> supercell(2) |> supercell |> hamiltonian(onsite(0I) + hopping(I), orbitals = (1,2))
+    ρ0 = densitymatrix(greenfunction(h0, GS.Spectrum())[cells = SA[]])();
+    h = h0 |> @onsite!([o, s; ρ = ρ0, t] -> o + t*ρ[s])
+    @test diag(h(t = 2)[()]) ≈ 2*diag(ρ0) atol = 0.0000001
+    h = h0 |> @hopping!([t, si, sj; ρ = ρ0, α = 2] -> α*ρ[si, sj])
+    @test h() isa Quantica.Hamiltonian
+    diff = (h()[()] - 2ρ0) .* h()[()]
+    @test iszero(diff)
+end

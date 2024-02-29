@@ -294,9 +294,6 @@ SMatrixView{N,M,T}(mat) where {N,M,T} = SMatrixView{N,M,T,N*M}(mat)
 
 SMatrixView(::Type{SMatrix{N,M,T,NM}}) where {N,M,T,NM} = SMatrixView{N,M,T,NM}
 
-MatrixElementType(::Type{C}, a) where {C<:Number} = complex(C)(only(a))
-MatrixElementType(::Type{C}, a) where {C<:MatrixElementNonscalarType} = C(a)
-
 #endregion
 
 #region ## API ##
@@ -597,14 +594,13 @@ struct ParametricHoppingTerm{N,S<:Union{HopSelector,AppliedHopSelector},F<:Param
 end
 
 const AbstractParametricTerm{N} = Union{ParametricOnsiteTerm{N},ParametricHoppingTerm{N}}
+const AppliedParametricTerm{N} = Union{ParametricOnsiteTerm{N,<:AppliedSiteSelector},
+                                       ParametricHoppingTerm{N,<:AppliedHopSelector}}
 
 struct ParametricModel{T<:NTuple{<:Any,AbstractParametricTerm},M<:TightbindingModel} <: AbstractModel
     npmodel::M  # non-parametric model to use as base
     terms::T    # Collection of `AbstractParametricTerm`s
 end
-
-const AppliedParametricTerm{N} = Union{ParametricOnsiteTerm{N,<:AppliedSiteSelector},
-                                       ParametricHoppingTerm{N,<:AppliedHopSelector}}
 
 ## BlockModels ##
 
@@ -653,6 +649,13 @@ parameters(t::AbstractParametricTerm) = t.f.params
 coefficient(t::OnsiteTerm) = t.coefficient
 coefficient(t::HoppingTerm) = t.coefficient
 coefficient(t::AbstractParametricTerm) = t.coefficient
+
+narguments(t::OnsiteTerm{<:Function}) = 1
+narguments(t::HoppingTerm{<:Function}) = 2
+narguments(t::OnsiteTerm) = 0
+narguments(t::HoppingTerm) = 0
+narguments(t::AbstractParametricTerm) = narguments(t.f)
+narguments(::ParametricFunction{N}) where {N} = N
 
 Base.parent(m::InterblockModel) = m.model
 
@@ -797,6 +800,8 @@ pointers(m::AppliedModifier) = m.ptrs
 blocktype(m::AppliedModifier) = m.blocktype
 
 is_spacial(m::AbstractModifier) = m.spacial
+
+narguments(m::AbstractModifier) = narguments(m.f)
 
 @inline (m::AppliedOnsiteModifier{B,1})(o, r, orbs; kw...) where {B} =
     mask_block(B, m.f.f(o; kw...), (orbs, orbs))
@@ -2231,7 +2236,7 @@ Base.getindex(a::OrbitalSliceMatrix, i::AnyCellSites, j::AnyCellSites = i) =
     copy(view(a, i, j))
 
 Base.getindex(a::OrbitalSliceMatrix, i::C, j::C = i) where {B,C<:CellSitePos{<:Any,<:Any,<:Any,B}} =
-    MatrixElementType(B, view(a, i, j))
+    sanitize_block(B, view(a, i, j))
 
 function Base.view(a::OrbitalSliceMatrix, i::AnyCellSites, j::AnyCellSites = i)
     rowslice, colslice = orbaxes(a)
