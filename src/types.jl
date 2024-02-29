@@ -350,7 +350,7 @@ end
 
 const CellSites{L,I} = CellIndices{L,I,SiteLike}
 const CellSite{L} = CellIndices{L,Int,SiteLike}
-const CellSitePos{T,E,L,B} = CellIndices{L,Int,SiteLikePos{T,E,B}} # for non-spacial models
+const CellSitePos{T,E,L,B} = CellIndices{L,Int,SiteLikePos{T,E,B}} # for non-spatial models
 const AnyCellSite = Union{CellSite,CellSitePos}
 const AnyCellSites = Union{CellSites,CellSitePos}
 
@@ -488,7 +488,7 @@ findsubcell(cell::SVector, l::LatticeSlice) = findsubcell(cell, cellsdict(l))
 
 boundingbox(l::LatticeSlice) = boundingbox(keys(cellsdict(l)))
 
-# interface for non-spacial models
+# interface for non-spatial models
 pos(s::CellSitePos) = s.type.r
 ind(s::CellSitePos) = s.inds
 cell(s::CellSitePos) = s.cell
@@ -583,14 +583,14 @@ struct ParametricOnsiteTerm{N,S<:Union{SiteSelector,AppliedSiteSelector},F<:Para
     f::F
     selector::S
     coefficient::T
-    spacial::Bool   # If true, f is a function of position r. Otherwise it takes a single CellSite
+    spatial::Bool   # If true, f is a function of position r. Otherwise it takes a single CellSite
 end
 
 struct ParametricHoppingTerm{N,S<:Union{HopSelector,AppliedHopSelector},F<:ParametricFunction{N},T<:Number} <: AbstractModelTerm
     f::F
     selector::S
     coefficient::T
-    spacial::Bool   # If true, f is a function of positions r, dr. Otherwise it takes two CellSite's
+    spatial::Bool   # If true, f is a function of positions r, dr. Otherwise it takes two CellSite's
 end
 
 const AbstractParametricTerm{N} = Union{ParametricOnsiteTerm{N},ParametricHoppingTerm{N}}
@@ -661,8 +661,8 @@ Base.parent(m::InterblockModel) = m.model
 
 block(m::InterblockModel) = m.block
 
-is_spacial(t::AbstractParametricTerm) = t.spacial
-is_spacial(t) = true
+is_spatial(t::AbstractParametricTerm) = t.spatial
+is_spatial(t) = true
 
 ## call API##
 
@@ -686,12 +686,12 @@ is_spacial(t) = true
 # orbital structure, not only to a site selection
 function (t::ParametricOnsiteTerm{N})(; kw...) where {N}
     f = ParametricFunction{N}((args...) -> t.f(args...; kw...)) # no params
-    return ParametricOnsiteTerm(f, t.selector, t.coefficient, t.spacial)
+    return ParametricOnsiteTerm(f, t.selector, t.coefficient, t.spatial)
 end
 
 function (t::ParametricHoppingTerm{N})(; kw...) where {N}
     f = ParametricFunction{N}((args...) -> t.f(args...; kw...)) # no params
-    return ParametricHoppingTerm(f, t.selector, t.coefficient, t.spacial)
+    return ParametricHoppingTerm(f, t.selector, t.coefficient, t.spatial)
 end
 
 ## Model term algebra
@@ -713,9 +713,9 @@ Base.:-(m::AbstractModel, m´::AbstractModel) = m + (-m´)
 Base.:*(x::Number, o::OnsiteTerm) = OnsiteTerm(o.f, o.selector, x * o.coefficient)
 Base.:*(x::Number, t::HoppingTerm) = HoppingTerm(t.f, t.selector, x * t.coefficient)
 Base.:*(x::Number, o::ParametricOnsiteTerm) =
-    ParametricOnsiteTerm(o.f, o.selector, x * o.coefficient, o.spacial)
+    ParametricOnsiteTerm(o.f, o.selector, x * o.coefficient, o.spatial)
 Base.:*(x::Number, t::ParametricHoppingTerm) =
-    ParametricHoppingTerm(t.f, t.selector, x * t.coefficient, t.spacial)
+    ParametricHoppingTerm(t.f, t.selector, x * t.coefficient, t.spatial)
 
 Base.adjoint(m::TightbindingModel) = TightbindingModel(adjoint.(terms(m))...)
 Base.adjoint(m::ParametricModel) = ParametricModel(adjoint.(terms(m))...)
@@ -726,12 +726,12 @@ Base.adjoint(t::HoppingTerm) = HoppingTerm(t.f', t.selector', t.coefficient')
 
 function Base.adjoint(o::ParametricOnsiteTerm{N}) where {N}
     f = ParametricFunction{N}((args...; kw...) -> o.f(args...; kw...)', o.f.params)
-    return ParametricOnsiteTerm(f, o.selector, o.coefficient', o.spacial)
+    return ParametricOnsiteTerm(f, o.selector, o.coefficient', o.spatial)
 end
 
 function Base.adjoint(t::ParametricHoppingTerm{N}) where {N}
     f = ParametricFunction{N}((args...; kw...) -> t.f(args...; kw...)', t.f.params)
-    return ParametricHoppingTerm(f, t.selector, t.coefficient', t.spacial)
+    return ParametricHoppingTerm(f, t.selector, t.coefficient', t.spatial)
 end
 
 #endregion
@@ -746,7 +746,7 @@ abstract type AbstractModifier end
 struct OnsiteModifier{N,S<:SiteSelector,F<:ParametricFunction{N}} <: AbstractModifier
     f::F
     selector::S
-    spacial::Bool
+    spatial::Bool
 end
 
 struct AppliedOnsiteModifier{B,N,R<:SVector,F<:ParametricFunction{N},S<:SiteSelector,P<:CellSitePos} <: AbstractModifier
@@ -755,13 +755,13 @@ struct AppliedOnsiteModifier{B,N,R<:SVector,F<:ParametricFunction{N},S<:SiteSele
     f::F
     ptrs::Vector{Tuple{Int,R,P,Int}}
     # [(ptr, r, si, norbs)...] for each selected site, dn = 0 harmonic
-    spacial::Bool   # If true, f is a function of position r. Otherwise it takes a single CellSite
+    spatial::Bool   # If true, f is a function of position r. Otherwise it takes a single CellSite
 end
 
 struct HoppingModifier{N,S<:HopSelector,F<:ParametricFunction{N}} <: AbstractModifier
     f::F
     selector::S
-    spacial::Bool  # If true, f is a function of positions r, dr. Otherwise it takes two CellSite's
+    spatial::Bool  # If true, f is a function of positions r, dr. Otherwise it takes two CellSite's
 end
 
 struct AppliedHoppingModifier{B,N,R<:SVector,F<:ParametricFunction{N},S<:HopSelector,P<:CellSitePos} <: AbstractModifier
@@ -770,7 +770,7 @@ struct AppliedHoppingModifier{B,N,R<:SVector,F<:ParametricFunction{N},S<:HopSele
     f::F
     ptrs::Vector{Vector{Tuple{Int,R,R,P,P,Tuple{Int,Int}}}}
     # [[(ptr, r, dr, si, sj, (norbs, norbs´)), ...], ...] for each selected hop on each harmonic
-    spacial::Bool  # If true, f is a function of positions r, dr. Otherwise it takes two CellSite's
+    spatial::Bool  # If true, f is a function of positions r, dr. Otherwise it takes two CellSite's
 end
 
 const Modifier = Union{OnsiteModifier,HoppingModifier}
@@ -779,10 +779,10 @@ const AppliedModifier = Union{AppliedOnsiteModifier,AppliedHoppingModifier}
 #region ## Constructors ##
 
 AppliedOnsiteModifier(m::AppliedOnsiteModifier, ptrs) =
-    AppliedOnsiteModifier(m.parentselector, m.blocktype, m.f, ptrs, m.spacial)
+    AppliedOnsiteModifier(m.parentselector, m.blocktype, m.f, ptrs, m.spatial)
 
 AppliedHoppingModifier(m::AppliedHoppingModifier, ptrs) =
-    AppliedHoppingModifier(m.parentselector, m.blocktype, m.f, ptrs, m.spacial)
+    AppliedHoppingModifier(m.parentselector, m.blocktype, m.f, ptrs, m.spatial)
 
 #endregion
 
@@ -799,7 +799,7 @@ pointers(m::AppliedModifier) = m.ptrs
 
 blocktype(m::AppliedModifier) = m.blocktype
 
-is_spacial(m::AbstractModifier) = m.spacial
+is_spatial(m::AbstractModifier) = m.spatial
 
 narguments(m::AbstractModifier) = narguments(m.f)
 
@@ -813,10 +813,10 @@ narguments(m::AbstractModifier) = narguments(m.f)
 @inline (m::AppliedHoppingModifier{B,3})(t, r, dr, orborb; kw...) where {B} =
     mask_block(B, m.f.f(t, r, dr; kw...), orborb)
 
-Base.similar(m::A) where {A <: AppliedModifier} = A(m.blocktype, m.f, similar(m.ptrs, 0), m.spacial)
+Base.similar(m::A) where {A <: AppliedModifier} = A(m.blocktype, m.f, similar(m.ptrs, 0), m.spatial)
 
-Base.parent(m::AppliedOnsiteModifier) = OnsiteModifier(m.f, m.parentselector, m.spacial)
-Base.parent(m::AppliedHoppingModifier) = HoppingModifier(m.f, m.parentselector, m.spacial)
+Base.parent(m::AppliedOnsiteModifier) = OnsiteModifier(m.f, m.parentselector, m.spatial)
+Base.parent(m::AppliedHoppingModifier) = HoppingModifier(m.f, m.parentselector, m.spatial)
 
 #endregion
 #endregion

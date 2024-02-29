@@ -172,7 +172,7 @@ function applyterm!(builder, block, term::AppliedOnsiteTerm)
     foreach_site(sel, dn0) do s, i, r
         isinblock(i, block) || return nothing
         n = bsizes[s]
-        if is_spacial(term)
+        if is_spatial(term)
             vr = term(r, n)
             push!(ijv, (i, i, vr))
         else
@@ -196,7 +196,7 @@ function applyterm!(builder, block, term::AppliedHoppingTerm)
             isinblock(i, j, block) || return nothing
             ni = bsizes[si]
             nj = bsizes[sj]
-            if is_spacial(term)
+            if is_spatial(term)
                 vr = term(r, dr, (ni, nj))
                 push!(ijv, (i, j, vr))
             else
@@ -398,7 +398,7 @@ applymodifiers!(h, m::Modifier; kw...) = applymodifiers!(h, apply(m, h); kw...)
 
 function applymodifiers!(h, m::AppliedOnsiteModifier; kw...)
     nz = nonzeros(unflat(first(harmonics(h))))
-    if is_spacial(m)    # Branch outside loop
+    if is_spatial(m)    # Branch outside loop
         @simd for p in pointers(m)
             (ptr, r, s, norbs) = p
             @inbounds nz[ptr] = m(nz[ptr], r, norbs; kw...)   # @inbounds too risky?
@@ -414,7 +414,7 @@ end
 
 function applymodifiers!(h, m::AppliedOnsiteModifier{B}; kw...) where {B<:SMatrixView}
     nz = nonzeros(unflat(first(harmonics(h))))
-    if is_spacial(m)    # Branch outside loop
+    if is_spatial(m)    # Branch outside loop
         @simd for p in pointers(m)
             (ptr, r, s, norbs) = p
             val = view(nz[ptr], 1:norbs, 1:norbs)  # this might be suboptimal - do we need view?
@@ -433,7 +433,7 @@ end
 function applymodifiers!(h, m::AppliedHoppingModifier; kw...)
     for (har, ptrs) in zip(harmonics(h), pointers(m))
         nz = nonzeros(unflat(har))
-        if is_spacial(m)    # Branch outside loop
+        if is_spatial(m)    # Branch outside loop
             @simd for p in ptrs
                 (ptr, r, dr, si, sj, orborb) = p
                 @inbounds nz[ptr] = m(nz[ptr], r, dr, orborb; kw...)
@@ -451,7 +451,7 @@ end
 function applymodifiers!(h, m::AppliedHoppingModifier{B}; kw...) where {B<:SMatrixView}
     for (har, ptrs) in zip(harmonics(h), pointers(m))
         nz = nonzeros(unflat(har))
-        if is_spacial(m)    # Branch outside loop
+        if is_spatial(m)    # Branch outside loop
             @simd for p in ptrs
                 (ptr, r, dr, si, sj, (oi, oj)) = p
                 val = view(nz[ptr], 1:oi, 1:oj)  # this might be suboptimal - do we need view?

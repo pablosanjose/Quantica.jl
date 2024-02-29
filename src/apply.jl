@@ -130,10 +130,10 @@ end
 apply(m::TightbindingModel, latos) = TightbindingModel(apply.(terms(m), Ref(latos)))
 
 apply(t::ParametricOnsiteTerm, lat::Lattice) =
-    ParametricOnsiteTerm(functor(t), apply(selector(t), lat), coefficient(t), is_spacial(t))
+    ParametricOnsiteTerm(functor(t), apply(selector(t), lat), coefficient(t), is_spatial(t))
 
 apply(t::ParametricHoppingTerm, lat::Lattice) =
-    ParametricHoppingTerm(functor(t), apply(selector(t), lat), coefficient(t), is_spacial(t))
+    ParametricHoppingTerm(functor(t), apply(selector(t), lat), coefficient(t), is_spatial(t))
 
 apply(m::ParametricModel, lat) = ParametricModel(apply.(terms(m), Ref(lat)))
 
@@ -152,8 +152,8 @@ function apply(m::OnsiteModifier, h::Hamiltonian, shifts = missing)
     asel = apply(sel, lattice(h))
     ptrs = pointers(h, asel, shifts)
     B = blocktype(h)
-    spacial = is_spacial(m)
-    return AppliedOnsiteModifier(sel, B, f, ptrs, spacial)
+    spatial = is_spatial(m)
+    return AppliedOnsiteModifier(sel, B, f, ptrs, spatial)
 end
 
 function apply(m::HoppingModifier, h::Hamiltonian, shifts = missing)
@@ -162,8 +162,8 @@ function apply(m::HoppingModifier, h::Hamiltonian, shifts = missing)
     asel = apply(sel, lattice(h))
     ptrs = pointers(h, asel, shifts)
     B = blocktype(h)
-    spacial = is_spacial(m)
-    return AppliedHoppingModifier(sel, B, f, ptrs, spacial)
+    spatial = is_spatial(m)
+    return AppliedHoppingModifier(sel, B, f, ptrs, spatial)
 end
 
 function pointers(h::Hamiltonian{T,E,L,B}, s::AppliedSiteSelector{T,E,L}, shifts) where {T,E,L,B}
