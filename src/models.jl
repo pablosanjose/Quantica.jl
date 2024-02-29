@@ -42,28 +42,28 @@ _hopping(t::ParametricHoppingTerm; kw...) =
 
 # version with site selector kwargs
 macro onsite(kw, f)
-    f, N, params, spatial = parse_term(f, "Only @onsite(args -> body; kw...) syntax supported. Mind the `;`.")
+    f, N, params, spatial = parse_term(f, "Only @onsite(args -> body; kw...) syntax supported (or with -->). Mind the `;`.")
     return esc(:(Quantica.ParametricModel(Quantica.ParametricOnsiteTerm(
         Quantica.ParametricFunction{$N}($f, $(params)), Quantica.siteselector($kw), 1, $(spatial)))))
 end
 
 # version without site selector kwargs
 macro onsite(f)
-    f, N, params, spatial = parse_term(f, "Only @onsite(args -> body; kw...) syntax supported.  Mind the `;`.")
+    f, N, params, spatial = parse_term(f, "Only @onsite(args -> body; kw...) syntax supported (or with -->). Mind the `;`.")
     return esc(:(Quantica.ParametricModel(Quantica.ParametricOnsiteTerm(
             Quantica.ParametricFunction{$N}($f, $(params)), Quantica.siteselector(), 1, $(spatial)))))
 end
 
 # version with hop selector kwargs
 macro hopping(kw, f)
-    f, N, params, spatial = parse_term(f, "Only @hopping(args -> body; kw...) syntax supported. Mind the `;`.")
+    f, N, params, spatial = parse_term(f, "Only @hopping(args -> body; kw...) syntax supported (or with -->). Mind the `;`.")
     return esc(:(Quantica.ParametricModel(Quantica.ParametricHoppingTerm(
         Quantica.ParametricFunction{$N}($f, $(params)), Quantica.hopselector($kw), 1, $(spatial)))))
 end
 
 # version without hop selector kwargs
 macro hopping(f)
-    f, N, params, spatial = parse_term(f, "Only @hopping(args -> body; kw...) syntax supported. Mind the `;`.")
+    f, N, params, spatial = parse_term(f, "Only @hopping(args -> body; kw...) syntax supported (or with -->). Mind the `;`.")
     return esc(:(Quantica.ParametricModel(Quantica.ParametricHoppingTerm(
         Quantica.ParametricFunction{$N}($f, $(params)), Quantica.hopselector(), 1, $(spatial)))))
 end
@@ -71,23 +71,23 @@ end
 ## Model modifiers ##
 
 macro onsite!(kw, f)
-    f, N, params, spatial = parse_term(f, "Only @onsite!(args -> body; kw...) syntax supported. Mind the `;`.")
+    f, N, params, spatial = parse_term(f, "Only @onsite!(args -> body; kw...) syntax supported (or with -->). Mind the `;`.")
     return esc(:(Quantica.OnsiteModifier(Quantica.ParametricFunction{$N}($f, $(params)), Quantica.siteselector($kw), $(spatial))))
 end
 
 macro onsite!(f)
-    f, N, params, spatial = parse_term(f, "Only @onsite!(args -> body; kw...) syntax supported.  Mind the `;`.")
+    f, N, params, spatial = parse_term(f, "Only @onsite!(args -> body; kw...) syntax supported (or with -->).  Mind the `;`.")
     return esc(:(Quantica.OnsiteModifier(Quantica.ParametricFunction{$N}($f, $(params)), Quantica.siteselector(), $(spatial))))
 end
 
 # Since the default hopping range is neighbors(1), we need change the default to Inf for @hopping!
 macro hopping!(kw, f)
-    f, N, params, spatial = parse_term(f, "Only @hopping!(args -> body; kw...) syntax supported. Mind the `;`.")
+    f, N, params, spatial = parse_term(f, "Only @hopping!(args -> body; kw...) syntax supported (or with -->). Mind the `;`.")
     return esc(:(Quantica.HoppingModifier(Quantica.ParametricFunction{$N}($f, $(params)), Quantica.hopselector_infrange($kw), $(spatial))))
 end
 
 macro hopping!(f)
-    f, N, params, spatial = parse_term(f, "Only @hopping!(args -> body; kw...) syntax supported. Mind the `;`.")
+    f, N, params, spatial = parse_term(f, "Only @hopping!(args -> body; kw...) syntax supported (or with -->). Mind the `;`.")
     return esc(:(Quantica.HoppingModifier(Quantica.ParametricFunction{$N}($f, $(params)), Quantica.hopselector_infrange(), $(spatial))))
 end
 
@@ -98,26 +98,10 @@ end
 
 # Extracts normalized f, number of arguments and kwarg names from an anonymous function f
 function parse_term(f, msg)
-    (f isa Expr && f.head == :->) || throw(ArgumentError(msg))
-    # change [...] -> ... to (...) -> ..., and record change in spatial
-    spatial = true
-    f1 = f.args[1]
-    if f1 isa Expr
-        if f1.head == :vect
-            f1.head = :tuple
-            spatial = false
-        elseif f1.head == :vcat
-            f1.head = :block
-            spatial = false
-        end
-        # fix := to :kw in [...; param = ...]
-        if !spatial && !isempty(f1.args)
-            f2 = f1.args[1]
-            if f2 isa Expr && f2.head == :parameters
-                replace_equal_to_kw!.(f2.args)
-            end
-        end
-    end
+    (f isa Expr && (f.head == :-> || f.head == :-->)) || throw(ArgumentError(msg))
+    # change --> to -> and record change in spatial
+    spatial = f.head == :->
+    !spatial && (f.head = :->)
     d = ExprTools.splitdef(f)
     # process keyword arguments, add splat
     kwargs = convert(Vector{Any}, get!(d, :kwargs, []))
