@@ -22,9 +22,9 @@ _onsite(o::OnsiteTerm; kw...) =
 _hopping(t::HoppingTerm; kw...) =
     TightbindingModel(HoppingTerm(functor(t), hopselector(selector(t); kw...), coefficient(t)))
 _onsite(o::ParametricOnsiteTerm; kw...) =
-    ParametricModel(ParametricOnsiteTerm(functor(o), siteselector(selector(o); kw...), coefficient(o)))
+    ParametricModel(ParametricOnsiteTerm(functor(o), siteselector(selector(o); kw...), coefficient(o), is_spacial(o)))
 _hopping(t::ParametricHoppingTerm; kw...) =
-    ParametricModel(ParametricHoppingTerm(functor(t), hopselector(selector(t); kw...), coefficient(t)))
+    ParametricModel(ParametricHoppingTerm(functor(t), hopselector(selector(t); kw...), coefficient(t), is_spacial(t)))
 
 #endregion
 
@@ -42,59 +42,82 @@ _hopping(t::ParametricHoppingTerm; kw...) =
 
 # version with site selector kwargs
 macro onsite(kw, f)
-    f, N, params = get_f_N_params(f, "Only @onsite(args -> body; kw...) syntax supported. Mind the `;`.")
+    f, N, params, spacial = parse_term(f, "Only @onsite(args -> body; kw...) syntax supported. Mind the `;`.")
     return esc(:(Quantica.ParametricModel(Quantica.ParametricOnsiteTerm(
-        Quantica.ParametricFunction{$N}($f, $(params)), Quantica.siteselector($kw), 1))))
+        Quantica.ParametricFunction{$N}($f, $(params)), Quantica.siteselector($kw), 1, $(spacial)))))
 end
 
 # version without site selector kwargs
 macro onsite(f)
-    f, N, params = get_f_N_params(f, "Only @onsite(args -> body; kw...) syntax supported.  Mind the `;`.")
+    f, N, params, spacial = parse_term(f, "Only @onsite(args -> body; kw...) syntax supported.  Mind the `;`.")
     return esc(:(Quantica.ParametricModel(Quantica.ParametricOnsiteTerm(
-            Quantica.ParametricFunction{$N}($f, $(params)), Quantica.siteselector(), 1))))
+            Quantica.ParametricFunction{$N}($f, $(params)), Quantica.siteselector(), 1, $(spacial)))))
 end
 
 # version with hop selector kwargs
 macro hopping(kw, f)
-    f, N, params = get_f_N_params(f, "Only @hopping(args -> body; kw...) syntax supported. Mind the `;`.")
+    f, N, params, spacial = parse_term(f, "Only @hopping(args -> body; kw...) syntax supported. Mind the `;`.")
     return esc(:(Quantica.ParametricModel(Quantica.ParametricHoppingTerm(
-        Quantica.ParametricFunction{$N}($f, $(params)), Quantica.hopselector($kw), 1))))
+        Quantica.ParametricFunction{$N}($f, $(params)), Quantica.hopselector($kw), 1, $(spacial)))))
 end
 
 # version without hop selector kwargs
 macro hopping(f)
-    f, N, params = get_f_N_params(f, "Only @hopping(args -> body; kw...) syntax supported. Mind the `;`.")
+    f, N, params, spacial = parse_term(f, "Only @hopping(args -> body; kw...) syntax supported. Mind the `;`.")
     return esc(:(Quantica.ParametricModel(Quantica.ParametricHoppingTerm(
-        Quantica.ParametricFunction{$N}($f, $(params)), Quantica.hopselector(), 1))))
+        Quantica.ParametricFunction{$N}($f, $(params)), Quantica.hopselector(), 1, $(spacial)))))
 end
 
 ## Model modifiers ##
 
 macro onsite!(kw, f)
-    f, N, params = get_f_N_params(f, "Only @onsite!(args -> body; kw...) syntax supported. Mind the `;`.")
-    return esc(:(Quantica.OnsiteModifier(Quantica.ParametricFunction{$N}($f, $(params)), Quantica.siteselector($kw))))
+    f, N, params, spacial = parse_term(f, "Only @onsite!(args -> body; kw...) syntax supported. Mind the `;`.")
+    return esc(:(Quantica.OnsiteModifier(Quantica.ParametricFunction{$N}($f, $(params)), Quantica.siteselector($kw), $(spacial))))
 end
 
 macro onsite!(f)
-    f, N, params = get_f_N_params(f, "Only @onsite!(args -> body; kw...) syntax supported.  Mind the `;`.")
-    return esc(:(Quantica.OnsiteModifier(Quantica.ParametricFunction{$N}($f, $(params)), Quantica.siteselector())))
+    f, N, params, spacial = parse_term(f, "Only @onsite!(args -> body; kw...) syntax supported.  Mind the `;`.")
+    return esc(:(Quantica.OnsiteModifier(Quantica.ParametricFunction{$N}($f, $(params)), Quantica.siteselector(), $(spacial))))
 end
 
 # Since the default hopping range is neighbors(1), we need change the default to Inf for @hopping!
 macro hopping!(kw, f)
-    f, N, params = get_f_N_params(f, "Only @hopping!(args -> body; kw...) syntax supported. Mind the `;`.")
-    return esc(:(Quantica.HoppingModifier(Quantica.ParametricFunction{$N}($f, $(params)), Quantica.hopselector_infrange($kw))))
+    f, N, params, spacial = parse_term(f, "Only @hopping!(args -> body; kw...) syntax supported. Mind the `;`.")
+    return esc(:(Quantica.HoppingModifier(Quantica.ParametricFunction{$N}($f, $(params)), Quantica.hopselector_infrange($kw), $(spacial))))
 end
 
 macro hopping!(f)
-    f, N, params = get_f_N_params(f, "Only @hopping!(args -> body; kw...) syntax supported. Mind the `;`.")
-    return esc(:(Quantica.HoppingModifier(Quantica.ParametricFunction{$N}($f, $(params)), Quantica.hopselector_infrange())))
+    f, N, params, spacial = parse_term(f, "Only @hopping!(args -> body; kw...) syntax supported. Mind the `;`.")
+    return esc(:(Quantica.HoppingModifier(Quantica.ParametricFunction{$N}($f, $(params)), Quantica.hopselector_infrange(), $(spacial))))
+end
+
+# Replaces syntax [..; ...] -> ... to (...; ...) -> ..., and returns true if found
+function parse_spacial(f)
+    return f, true
 end
 
 # Extracts normalized f, number of arguments and kwarg names from an anonymous function f
-function get_f_N_params(f, msg)
+function parse_term(f, msg)
     (f isa Expr && f.head == :->) || throw(ArgumentError(msg))
+    # change [...] -> ... to (...) -> ..., and record change in spacial
+    spacial = true
+    f1 = f.args[1]
+    if f1 isa Expr
+        if f1.head == :vect
+            f1.head = :tuple
+            spacial = false
+        elseif f1.head == :vcat
+            f1.head = :block
+            spacial = false
+        end
+        # fix := to :kw in [...; param = ...]
+        f2 = f1.args[1]
+        if !spacial && f2 isa Expr && f2.head == :parameters
+            replace_equal_to_kw!.(f2.args)
+        end
+    end
     d = ExprTools.splitdef(f)
+    # process keyword arguments, add splat
     kwargs = convert(Vector{Any}, get!(d, :kwargs, []))
     d[:kwargs] = kwargs  # in case it wasn't Vector{Any} originally
     if isempty(kwargs)
@@ -110,8 +133,11 @@ function get_f_N_params(f, msg)
     end
     N = haskey(d, :args) ? length(d[:args]) : 0
     f´ = ExprTools.combinedef(d)
-    return f´, N, params
+    return f´, N, params, spacial
 end
+
+replace_equal_to_kw!(ex::Expr) = ex.head == :(=) && (ex.head = :kw)
+replace_equal_to_kw!(ex) = nothing
 
 get_kwname(x::Symbol) = x
 get_kwname(x::Expr) = x.head === :kw ? x.args[1] : x.head  # x.head == :...
@@ -122,6 +148,7 @@ hopselector_infrange(; kw...) = hopselector(; range = Inf, kw...)
 
 ############################################################################################
 # @onsite, @hopping conversions
+#   each ParametricTerm gets converted, using `basemodel` and `modifier`, into two pieces
 #region
 
 zero_model(term::ParametricOnsiteTerm) =
@@ -132,13 +159,13 @@ zero_model(term::ParametricHoppingTerm) =
 function modifier(term::ParametricOnsiteTerm{N}) where {N}
     f = (o, args...; kw...) -> o + term(args...; kw...)
     pf = ParametricFunction{N+1}(f, parameters(term))
-    return OnsiteModifier(pf, selector(term))
+    return OnsiteModifier(pf, selector(term), is_spacial(term))
 end
 
 function modifier(term::ParametricHoppingTerm{N}) where {N}
     f = (t, args...; kw...) -> t + term(args...; kw...)
     pf = ParametricFunction{N+1}(f, parameters(term))
-    return HoppingModifier(pf, selector(term))
+    return HoppingModifier(pf, selector(term), is_spacial(term))
 end
 
 basemodel(m::ParametricModel) = nonparametric(m) + TightbindingModel(zero_model.(terms(m)))
@@ -153,14 +180,14 @@ function model_ω_to_param(term::ParametricOnsiteTerm{N}, default = 0) where {N}
     # parameters(term) only needed for reporting, we omit adding :ω_internal
     f = (args...; ω_internal = default, kw...) -> term(ω_internal, args...; kw...)
     pf = ParametricFunction{N-1}(f, parameters(term))
-    return ParametricOnsiteTerm(pf, selector(term), coefficient(term))
+    return ParametricOnsiteTerm(pf, selector(term), coefficient(term), is_spacial(term))
 end
 
 function model_ω_to_param(term::ParametricHoppingTerm{N}, default = 0) where {N}
     # parameters(term) only needed for reporting, we omit adding :ω_internal
     f = (args...; ω_internal = default, kw...) -> term(ω_internal, args...; kw...)
     pf = ParametricFunction{N-1}(f, parameters(term))
-    return ParametricHoppingTerm(pf, selector(term), coefficient(term))
+    return ParametricHoppingTerm(pf, selector(term), coefficient(term), is_spacial(term))
 end
 
 #endregion

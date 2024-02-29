@@ -21,10 +21,9 @@ using Statistics: mean
 using QuadGK
 using SpecialFunctions
 
-export sublat, bravais_matrix, lattice, sites, supercell,
-       hopping, onsite, @onsite, @hopping, @onsite!, @hopping!, plusadjoint, neighbors,
-       siteselector, hopselector, diagonal,
-       hamiltonian,
+export sublat, bravais_matrix, lattice, sites, supercell, hamiltonian,
+       hopping, onsite, @onsite, @hopping, @onsite!, @hopping!, pos, ind, cell,
+       plusadjoint, neighbors, siteselector, hopselector, diagonal,
        unflat, torus, transform, translate, combine,
        spectrum, energies, states, bands, subdiv,
        greenfunction, selfenergy, attach, contact, cellsites,

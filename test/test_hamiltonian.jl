@@ -117,8 +117,10 @@ end
 end
 
 @testset "models" begin
-    mo = (onsite(1), onsite(r-> r[1]), @onsite((; o) -> o), @onsite((r; o) -> r[1]*o))
-    mh = (hopping(1), hopping((r, dr)-> im*dr[1]), @hopping((; t) -> t), @hopping((r, dr; t) -> r[1]*t))
+    mo = (onsite(1), onsite(r-> r[1]), @onsite((; o) -> o), @onsite((r; o) -> r[1]*o),
+         @onsite([s; o] -> pos(s)[1]*o))
+    mh = (hopping(1), hopping((r, dr)-> im*dr[1]), @hopping((; t) -> t), @hopping((r, dr; t) -> r[1]*t),
+        hopping([si, sj]-> im*ind(si)), @hopping([si, sj; t] -> pos(sj)[1]*t))
     for o in mo, h in mh
         @test length(Quantica.allterms(-o - 2*h)) == 2
         @test Quantica.ParametricModel(o+h) isa Quantica.ParametricModel

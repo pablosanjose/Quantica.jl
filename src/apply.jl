@@ -130,10 +130,10 @@ end
 apply(m::TightbindingModel, latos) = TightbindingModel(apply.(terms(m), Ref(latos)))
 
 apply(t::ParametricOnsiteTerm, lat::Lattice) =
-    ParametricOnsiteTerm(functor(t), apply(selector(t), lat), coefficient(t))
+    ParametricOnsiteTerm(functor(t), apply(selector(t), lat), coefficient(t), is_spacial(t))
 
 apply(t::ParametricHoppingTerm, lat::Lattice) =
-    ParametricHoppingTerm(functor(t), apply(selector(t), lat), coefficient(t))
+    ParametricHoppingTerm(functor(t), apply(selector(t), lat), coefficient(t), is_spacial(t))
 
 apply(m::ParametricModel, lat) = ParametricModel(apply.(terms(m), Ref(lat)))
 
@@ -152,7 +152,8 @@ function apply(m::OnsiteModifier, h::Hamiltonian, shifts = missing)
     asel = apply(sel, lattice(h))
     ptrs = pointers(h, asel, shifts)
     B = blocktype(h)
-    return AppliedOnsiteModifier(sel, B, f, ptrs)
+    spacial = is_spacial(m)
+    return AppliedOnsiteModifier(sel, B, f, ptrs, spacial)
 end
 
 function apply(m::HoppingModifier, h::Hamiltonian, shifts = missing)
@@ -161,14 +162,16 @@ function apply(m::HoppingModifier, h::Hamiltonian, shifts = missing)
     asel = apply(sel, lattice(h))
     ptrs = pointers(h, asel, shifts)
     B = blocktype(h)
-    return AppliedHoppingModifier(sel, B, f, ptrs)
+    spacial = is_spacial(m)
+    return AppliedHoppingModifier(sel, B, f, ptrs, spacial)
 end
 
-function pointers(h::Hamiltonian{T,E}, s::AppliedSiteSelector{T,E}, shifts) where {T,E}
+function pointers(h::Hamiltonian{T,E,L,B}, s::AppliedSiteSelector{T,E,L}, shifts) where {T,E,L,B}
     isempty(cells(s)) || argerror("Cannot constrain cells in an onsite modifier, cell periodicity is assumed.")
-    ptr_r = Tuple{Int,SVector{E,T},Int}[]
+    ptrs = Tuple{Int,SVector{E,T},CellSitePos{T,E,L},Int}[]
     lat = lattice(h)
     har0 = first(harmonics(h))
+    dn0 = zerocell(lat)
     umat = unflat(har0)
     rows = rowvals(umat)
     norbs = norbitals(h)
@@ -179,19 +182,20 @@ function pointers(h::Hamiltonian{T,E}, s::AppliedSiteSelector{T,E}, shifts) wher
         r = apply_shift(shifts, r, col)
         if (scol, r) in s
             n = norbs[scol]
-            push!(ptr_r, (p, r, n))
+            sp = CellSitePos(dn0, col, r, B)
+            push!(ptrs, (p, r, sp, n))
         end
     end
-    return ptr_r
+    return ptrs
 end
 
-function pointers(h::Hamiltonian{T,E}, s::AppliedHopSelector{T,E}, shifts) where {T,E}
+function pointers(h::Hamiltonian{T,E,L,B}, s::AppliedHopSelector{T,E,L}, shifts) where {T,E,L,B}
     hars = harmonics(h)
-    ptr_r_dr = [Tuple{Int,SVector{E,T},SVector{E,T},Tuple{Int,Int}}[] for _ in hars]
+    ptrs = [Tuple{Int,SVector{E,T},SVector{E,T},CellSitePos{T,E,L},CellSitePos{T,E,L},Tuple{Int,Int}}[] for _ in hars]
     lat = lattice(h)
     dn0 = zerocell(lat)
     norbs = norbitals(h)
-    for (har, ptr_r_dr) in zip(hars, ptr_r_dr)
+    for (har, ptrs) in zip(hars, ptrs)
         mh = unflat(har)
         rows = rowvals(mh)
         for scol in sublats(lat), col in siterange(lat, scol), p in nzrange(mh, col)
@@ -205,11 +209,12 @@ function pointers(h::Hamiltonian{T,E}, s::AppliedHopSelector{T,E}, shifts) where
             if (scol => srow, (r, dr), dn) in s
                 ncol = norbs[scol]
                 nrow = norbs[srow]
-                push!(ptr_r_dr, (p, r, dr, (nrow, ncol)))
+                srow, scol = CellSitePos(dn, row, rrow, B), CellSitePos(dn0, col, rcol, B)
+                push!(ptrs, (p, r, dr, srow, scol, (nrow, ncol)))
             end
         end
     end
-    return ptr_r_dr
+    return ptrs
 end
 
 apply_shift(::Missing, r, _) = r
@@ -288,17 +293,15 @@ function apply_map(mapping, hf::Function, ::Type{S}) where {T,S<:SVector{<:Any,T
     return FunctionWrapper{SparseMatrixCSC{Complex{T},Int},Tuple{S}}(sfunc)
 end
 
-
 #endregion
-
 
 ############################################################################################
 # apply CellSites
 #region
 
-apply(c::CellSites{L,Vector{Int}}, ::Lattice{<:Any,<:Any,L}) where {L} = c
+apply(c::AnyCellSite, ::Lattice{<:Any,<:Any,L}) where {L} = c
 
-apply(c::CellSites{L,Int}, ::Lattice{<:Any,<:Any,L}) where {L} = c
+apply(c::CellSites{L,Vector{Int}}, ::Lattice{<:Any,<:Any,L}) where {L} = c
 
 apply(c::CellSites{L,Colon}, l::Lattice{<:Any,<:Any,L}) where {L} =
     CellSites(cell(c), collect(siterange(l)))

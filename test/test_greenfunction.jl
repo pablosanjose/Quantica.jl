@@ -55,7 +55,7 @@ end
     s1´ = GS.Schur(boundary = -1)
     sites´ = (; region = r -> abs(r[2]) < 2 && r[1] == 0)
     # non-hermitian Σ model
-    mod = @onsite((ω, r; o = 1) -> (o - im*ω)*I) +
+    mod = @onsite((ω, r; o = 1) -> (o - im*ω)*I) + @onsite([ω, s; o = 1, b = 2] -> o*b*pos(s)[1]*I)
           plusadjoint(@onsite((ω; p=1)-> p*I) +  @hopping((ω, r, dr; t = 1) -> im*dr[1]*t*I; range = 1))
     g0, g0´, g1´ = greenfunction(h0, s0), greenfunction(h0, s0´), greenfunction(h1, s1´)
     for (h, s) in zip((h0, h0, h1, h1), (s0, s0´, s1, s1´))

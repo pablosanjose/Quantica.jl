@@ -92,6 +92,8 @@ lattice(b::AbstractHamiltonianBuilder) = b.lat
 
 blockstructure(b::AbstractHamiltonianBuilder) = b.blockstruct
 
+blocktype(::AbstractHamiltonianBuilder{<:Any,<:Any,<:Any,B}) where {B} = B
+
 harmonics(b::AbstractHamiltonianBuilder) = b.harmonics
 
 function Base.getindex(b::AbstractHamiltonianBuilder{<:Any,<:Any,L}, dn::SVector{L,Int}) where {L}
@@ -166,11 +168,18 @@ function applyterm!(builder, block, term::AppliedOnsiteTerm)
     ijv = builder[dn0]
     bs = blockstructure(builder)
     bsizes = blocksizes(bs)
+    B = blocktype(builder)
     foreach_site(sel, dn0) do s, i, r
         isinblock(i, block) || return nothing
         n = bsizes[s]
-        v = term(r, n)
-        push!(ijv, (i, i, v))
+        if is_spacial(term)
+            vr = term(r, n)
+            push!(ijv, (i, i, vr))
+        else
+            sitei = CellSitePos(dn0, i, r, B)
+            vs = term(sitei, n)
+            push!(ijv, (i, i, vs))
+        end
     end
     return nothing
 end
@@ -180,14 +189,22 @@ function applyterm!(builder, block, term::AppliedHoppingTerm)
     sel = selector(term)
     bs = blockstructure(builder)
     bsizes = blocksizes(bs)
+    B = blocktype(builder)
     foreach_cell(sel) do dn
         ijv = builder[dn]
         found = foreach_hop(sel, trees, dn) do (si, sj), (i, j), (r, dr)
             isinblock(i, j, block) || return nothing
             ni = bsizes[si]
             nj = bsizes[sj]
-            v = term(r, dr, (ni, nj))
-            push!(ijv, (i, j, v))
+            if is_spacial(term)
+                vr = term(r, dr, (ni, nj))
+                push!(ijv, (i, j, vr))
+            else
+                sitei = CellSitePos(dn, i, r + 0.5*dr, B)
+                sitej = CellSite(zero(dn), j, r - 0.5*dr, B)
+                vs = term(sitei, sitej, (ni, nj))
+                push!(ijv, (i, j, vs))
+            end
         end
         return found
     end
@@ -381,19 +398,34 @@ applymodifiers!(h, m::Modifier; kw...) = applymodifiers!(h, apply(m, h); kw...)
 
 function applymodifiers!(h, m::AppliedOnsiteModifier; kw...)
     nz = nonzeros(unflat(first(harmonics(h))))
-    @simd for p in pointers(m)
-        (ptr, r, norbs) = p
-        @inbounds nz[ptr] = m(nz[ptr], r, norbs; kw...)   # @inbounds too risky?
+    if is_spacial(m)    # Branch outside loop
+        @simd for p in pointers(m)
+            (ptr, r, s, norbs) = p
+            @inbounds nz[ptr] = m(nz[ptr], r, norbs; kw...)   # @inbounds too risky?
+        end
+    else
+        @simd for p in pointers(m)
+            (ptr, r, s, norbs) = p
+            @inbounds nz[ptr] = m(nz[ptr], s, norbs; kw...)
+        end
     end
     return h
 end
 
 function applymodifiers!(h, m::AppliedOnsiteModifier{B}; kw...) where {B<:SMatrixView}
     nz = nonzeros(unflat(first(harmonics(h))))
-    @simd for p in pointers(m)
-        (ptr, r, norbs) = p
-        val = view(nz[ptr], 1:norbs, 1:norbs)  # this might be suboptimal - do we need view?
-        @inbounds nz[ptr] = m(val, r, norbs; kw...)      # this allocates, currently unavoidable
+    if is_spacial(m)    # Branch outside loop
+        @simd for p in pointers(m)
+            (ptr, r, s, norbs) = p
+            val = view(nz[ptr], 1:norbs, 1:norbs)  # this might be suboptimal - do we need view?
+            @inbounds nz[ptr] = m(val, r, norbs; kw...)   # @inbounds too risky?
+        end
+    else
+        @simd for p in pointers(m)
+            (ptr, r, s, norbs) = p
+            val = view(nz[ptr], 1:norbs, 1:norbs)
+            @inbounds nz[ptr] = m(val, s, norbs; kw...)
+        end
     end
     return h
 end
@@ -401,9 +433,16 @@ end
 function applymodifiers!(h, m::AppliedHoppingModifier; kw...)
     for (har, ptrs) in zip(harmonics(h), pointers(m))
         nz = nonzeros(unflat(har))
-        @simd for p in ptrs
-            (ptr, r, dr, orborb) = p
-            @inbounds nz[ptr] = m(nz[ptr], r, dr, orborb; kw...)
+        if is_spacial(m)    # Branch outside loop
+            @simd for p in ptrs
+                (ptr, r, dr, si, sj, orborb) = p
+                @inbounds nz[ptr] = m(nz[ptr], r, dr, orborb; kw...)
+            end
+        else
+            @simd for p in ptrs
+                (ptr, r, dr, si, sj, orborb) = p
+                @inbounds nz[ptr] = m(nz[ptr], si, sj, orborb; kw...)
+            end
         end
     end
     return h
@@ -412,10 +451,18 @@ end
 function applymodifiers!(h, m::AppliedHoppingModifier{B}; kw...) where {B<:SMatrixView}
     for (har, ptrs) in zip(harmonics(h), pointers(m))
         nz = nonzeros(unflat(har))
-        @simd for p in ptrs
-            (ptr, r, dr, (norbs, norbs´)) = p
-            val = view(nz[ptr], 1:norbs, 1:norbs´)    # this might be suboptimal - do we need view?
-            @inbounds nz[ptr] = m(val, r, dr, (norbs, norbs´); kw...) # this allocates, unavoidable
+        if is_spacial(m)    # Branch outside loop
+            @simd for p in ptrs
+                (ptr, r, dr, si, sj, orborb) = p
+                val = view(nz[ptr], 1:orborb, 1:orborb)  # this might be suboptimal - do we need view?
+                @inbounds nz[ptr] = m(val, r, dr, orborb; kw...)
+            end
+        else
+            @simd for p in ptrs
+                (ptr, r, dr, si, sj, orborb) = p
+                val = view(nz[ptr], 1:orborb, 1:orborb)
+                @inbounds nz[ptr] = m(val, si, sj, orborb; kw...)
+            end
         end
     end
     return h
@@ -625,17 +672,17 @@ harmonics_map(h, h´, S) = [last(harmonic_index(h´, S*dcell(har))) for har in h
 
 function stitch_modifier(m::AppliedOnsiteModifier, ptrmap, _)
     ptrs´ = first(ptrmap)
-    p´ = [(ptrs´[ptr], r, orbs) for (ptr, r, orbs) in pointers(m)]
+    p´ = [(ptrs´[ptr], r, s, orbs) for (ptr, r, s, orbs) in pointers(m)]
     return AppliedOnsiteModifier(m, p´)
 end
 
 function stitch_modifier(m::AppliedHoppingModifier, ptrmap, harmap)
     ps = pointers(m)
     ps´ = [similar(first(ps), 0) for _ in 1:maximum(harmap)]
-    for (i, p) in enumerate(ps), (ptr, r, dr, orborbs) in p
+    for (i, p) in enumerate(ps), (ptr, r, dr, si, sj, orborbs) in p
         i´ = harmap[i]
         ptrs´ = ptrmap[i]
-        push!(ps´[i´], (ptrs´[ptr], r, dr, orborbs))
+        push!(ps´[i´], (ptrs´[ptr], r, dr, si, sj, orborbs))
     end
     sort!.(ps´)
     check_ptr_duplicates(first(ps´))
