@@ -168,7 +168,7 @@ end
 
 function pointers(h::Hamiltonian{T,E,L,B}, s::AppliedSiteSelector{T,E,L}, shifts) where {T,E,L,B}
     isempty(cells(s)) || argerror("Cannot constrain cells in an onsite modifier, cell periodicity is assumed.")
-    ptrs = Tuple{Int,SVector{E,T},CellSitePos{T,E,L},Int}[]
+    ptrs = Tuple{Int,SVector{E,T},CellSitePos{T,E,L,B},Int}[]
     lat = lattice(h)
     har0 = first(harmonics(h))
     dn0 = zerocell(lat)
@@ -191,7 +191,7 @@ end
 
 function pointers(h::Hamiltonian{T,E,L,B}, s::AppliedHopSelector{T,E,L}, shifts) where {T,E,L,B}
     hars = harmonics(h)
-    ptrs = [Tuple{Int,SVector{E,T},SVector{E,T},CellSitePos{T,E,L},CellSitePos{T,E,L},Tuple{Int,Int}}[] for _ in hars]
+    ptrs = [Tuple{Int,SVector{E,T},SVector{E,T},CellSitePos{T,E,L,B},CellSitePos{T,E,L,B},Tuple{Int,Int}}[] for _ in hars]
     lat = lattice(h)
     dn0 = zerocell(lat)
     norbs = norbitals(h)
