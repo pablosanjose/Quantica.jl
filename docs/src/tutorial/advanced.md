@@ -89,3 +89,6 @@ julia> (ρsol, ρerror, iters) = @time afps(ρf(hρ; U = 0.4), real(ρ0), tol = 
 
 !!! note "Bring your own fixed-point solution!"
     Note that fixed-point calculations can be tricky, and the search algorithm can have a huge impact in convergence (if the problem converges at all!). For this reason, Quantica.jl does not provide built-in fixed-point routines, only the functionality to write functions such as `ρf` above.
+
+!!! tip "Sparse mean fields"
+    The method explained above to build a Hamiltonian supports all the `SiteSelector` and `HopSelector` functionality of conventional models. Therefore, although the density matrix computed above is dense, its application to the Hamiltonian is sparse: it only touches the onsite matrix elements. Likewise, we could for example use `@hopping!` with a finite `range` to apply a Fock mean field within a finite range. In the future we will support built-in Hartree-Fock model presets with adjustable sparsity.
