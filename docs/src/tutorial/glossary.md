@@ -29,6 +29,5 @@ This is a summary of the type of objects you will be studying.
 - **`GreenFunction`**: an `OpenHamiltonian` combined with a `GreenSolver`, which is an algorithm that can in general compute the retarded or advanced Green function at any energy between any subset of sites of the underlying lattice.
   - **`GreenSlice`**: a `GreenFunction` evaluated on a specific set of sites, but at an unspecified energy
   - **`GreenSolution`**: a `GreenFunction` evaluated at a specific energy, but on an unspecified set of sites
-- **`Observable`**: a physical observable that can be expressed in terms of a `GreenFunction`.
-
-  Examples of supported observables include local density of states, current density, transmission probability, conductance and Josephson current
+- **`OrbitalSliceArray`**: an `AbstractArray` that can be indexed with a `SiteSelector`, in addition to the usual scalar indexing. Particular cases are `OrbitalSliceMatrix` and `OrbitalSliceVector`. This is the most common type obtained from `GreenFunction`s and observables obtained from them.
+- **Observables**: Supported observables, obtained from Green functions using various algorithms, include **local density of states**, **density matrices**, **current densities**, **transmission probabilities**, **conductance** and **Josephson currents**

@@ -120,7 +120,8 @@ ParametricModel: model with 1 term
     Hopping range     : Neighbors(1)
     Reverse hops      : false
     Coefficient       : 1
-    Parameters        : [:B, :t]
+    Argument type     : spatial
+    Parameters        : [:Bz, :t]
 ```
 
 One can linearly combine parametric and non-parametric models freely, omit parameter default values, and use any of the functional argument forms described for `onsite` and `hopping` (although not the constant argument form):
@@ -134,6 +135,7 @@ ParametricModel: model with 2 terms
     Hopping range     : Neighbors(1)
     Reverse hops      : false
     Coefficient       : -4
+    Argument type     : spatial
     Parameters        : [:t]
   OnsiteTerm{Int64}:
     Region            : any
@@ -141,6 +143,10 @@ ParametricModel: model with 2 terms
     Cells             : any
     Coefficient       : 2
 ```
+
+!!! tip "Non-spatial parametric models with -->"
+    The `->` in the above parametric models `@onsite` and `@hopping`, but also in the modifiers below, can be changed to `-->`. This indicates that the function arguments are no longer treated as site or link positions `r` and `dr`, but as objects `i, j` representing destination and source sites. This allows to address sites directly instead of through their spatial location. See the Mean Field section for further details.
+
 
 ## Modifiers
 
@@ -160,6 +166,7 @@ HoppingModifier{ParametricFunction{3}}:
   Cell distances    : any
   Hopping range     : Inf
   Reverse hops      : false
+  Argument type     : spatial
   Parameters        : [:B]
 ```
 The difference with `model_perierls` is that `model_perierls!` will never add any new hoppings. It will only modify previously existing hoppings in a model. Modifiers are not models themselves, and cannot be summed to other models. They are instead meant to be applied sequentially after applying a model.

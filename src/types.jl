@@ -263,12 +263,77 @@ Base.NamedTuple(s::HopSelector) =
 #endregion
 
 ############################################################################################
+# MatrixElementTypes
+#region
+
+struct SMatrixView{N,M,T,NM}
+    s::SMatrix{N,M,T,NM}
+    SMatrixView{N,M,T,NM}(mat) where {N,M,T,NM} = new(sanitize_SMatrix(SMatrix{N,M,T}, mat))
+end
+
+const MatrixElementType{T} = Union{
+    Complex{T},
+    SMatrix{N,N,Complex{T}} where {N},
+    SMatrixView{N,N,Complex{T}} where {N}}
+
+const MatrixElementUniformType{T} = Union{
+    Complex{T},
+    SMatrix{N,N,Complex{T}} where {N}}
+
+const MatrixElementNonscalarType{T,N} = Union{
+    SMatrix{N,N,Complex{T}},
+    SMatrixView{N,N,Complex{T}}}
+
+#region ## Constructors ##
+
+SMatrixView(mat::SMatrix{N,M,T,NM}) where {N,M,T,NM} = SMatrixView{N,M,T,NM}(mat)
+
+SMatrixView{N,M}(mat::AbstractMatrix{T}) where {N,M,T} = SMatrixView{N,M,T}(mat)
+
+SMatrixView{N,M,T}(mat) where {N,M,T} = SMatrixView{N,M,T,N*M}(mat)
+
+SMatrixView(::Type{SMatrix{N,M,T,NM}}) where {N,M,T,NM} = SMatrixView{N,M,T,NM}
+
+#endregion
+
+#region ## API ##
+
+unblock(s::SMatrixView) = s.s
+unblock(s) = s
+
+Base.parent(s::SMatrixView) = s.s
+
+Base.view(s::SMatrixView, i...) = view(s.s, i...)
+
+Base.getindex(s::SMatrixView, i...) = getindex(s.s, i...)
+
+Base.zero(::Type{SMatrixView{N,M,T,NM}}) where {N,M,T,NM} = SMatrixView(zero(SMatrix{N,M,T,NM}))
+Base.zero(::S) where {S<:SMatrixView} = zero(S)
+
+Base.adjoint(s::SMatrixView) = SMatrixView(s.s')
+
+Base.:+(s::SMatrixView...) = SMatrixView(+(parent.(s)...))
+Base.:-(s::SMatrixView) = SMatrixView(-parent.(s))
+Base.:*(s::SMatrixView, x::Number) = SMatrixView(parent(s) * x)
+Base.:*(x::Number, s::SMatrixView) = SMatrixView(x * parent(s))
+
+Base.:(==)(s::SMatrixView, s´::SMatrixView) = parent(s) == parent(s´)
+
+#endregion
+#endregion
+
+############################################################################################
 # LatticeSlice - see slices.jl for methods
 #   Encodes subsets of sites (or orbitals) of a lattice in different cells. Produced e.g. by
 #   lat[siteselector]. No ordering is guaranteed, but cells and sites must both be unique
 #region
 
 struct SiteLike end
+
+struct SiteLikePos{T,E,B<:MatrixElementType{T}}
+    r::SVector{E,T}
+    blocktype::Type{B}
+end
 
 struct OrbitalLike end
 
@@ -277,16 +342,20 @@ struct OrbitalLikeGrouped
                                             # (non-selected sites are not present)
 end
 
-struct CellIndices{L,I,G<:Union{SiteLike,OrbitalLike,OrbitalLikeGrouped}}
+struct CellIndices{L,I,G<:Union{SiteLike,SiteLikePos,OrbitalLike,OrbitalLikeGrouped}}
     cell::SVector{L,Int}
     inds::I    # can be anything: Int, Colon, Vector{Int}, etc.
     type::G    # can be SiteLike, OrbitalLike or OrbitalLikeGrouped
 end
 
 const CellSites{L,I} = CellIndices{L,I,SiteLike}
+const CellSite{L} = CellIndices{L,Int,SiteLike}
+const CellSitePos{T,E,L,B} = CellIndices{L,Int,SiteLikePos{T,E,B}} # for non-spatial models
+const AnyCellSite = Union{CellSite,CellSitePos}
+const AnyCellSites = Union{CellSites,CellSitePos}
+
 const CellOrbitals{L,I} = CellIndices{L,I,OrbitalLike}
 const CellOrbitalsGrouped{L,I} = CellIndices{L,I,OrbitalLikeGrouped}
-const CellSite{L} = CellSites{L,Int}
 const CellOrbital{L} = CellIndices{L,Int,OrbitalLike}
 const AnyCellOrbitals = Union{CellOrbital,CellOrbitals,CellOrbitalsGrouped}
 
@@ -319,6 +388,7 @@ const AnyOrbitalSlice = Union{OrbitalSlice,OrbitalSliceGrouped}
 #region ## Constructors ##
 
 CellSite(cell, ind::Int) = CellIndices(sanitize_SVector(Int, cell), ind, SiteLike())
+CellSite(c::CellSitePos) = CellSite(c.cell, c.inds)
 CellSites(cell, inds = Int[]) = CellIndices(sanitize_SVector(Int, cell), sanitize_cellindices(inds), SiteLike())
 # exported lowercase constructor for general inds
 cellsites(cell, inds) = CellSites(cell, inds)
@@ -330,6 +400,9 @@ CellOrbital(cell, ind::Int) =
 
 CellOrbitalsGrouped(cell, inds, groups::Dictionary) =
     CellIndices(sanitize_SVector(Int, cell), sanitize_cellindices(inds), OrbitalLikeGrouped(groups))
+
+# B <: MatrixElementType{T}
+CellSitePos(cell, ind, r, B) = CellIndices(sanitize_SVector(Int, cell), ind, SiteLikePos(r, B))
 
 # LatticeSlice from an AbstractVector of CellIndices
 LatticeSlice(lat::Lattice, cs::AbstractVector{<:CellIndices}) =
@@ -376,9 +449,10 @@ lattice(ls::LatticeSlice) = ls.lat
 siteindices(s::CellSites) = s.inds
 siteindices(s::CellOrbitalsGrouped) = keys(s.type.groups)
 orbindices(s::AnyCellOrbitals) = s.inds
-siteindex(s::CellSite) = s.inds
+siteindex(s::AnyCellSite) = s.inds
 orbindex(s::CellOrbital) = s.inds
 
+indexcollection(l::LatticeSlice, c::CellSitePos) = siteindexdict(l)[CellSite(c)]
 indexcollection(l::LatticeSlice, c::CellSite) = siteindexdict(l)[c]
 indexcollection(l::LatticeSlice, cs::CellSites) =
     [j for i in siteindices(cs) for j in indexcollection(l, CellSite(cell(cs), i))]
@@ -413,6 +487,11 @@ findsubcell(cell::SVector, d::CellIndicesDict) = get(d, cell, nothing)
 findsubcell(cell::SVector, l::LatticeSlice) = findsubcell(cell, cellsdict(l))
 
 boundingbox(l::LatticeSlice) = boundingbox(keys(cellsdict(l)))
+
+# interface for non-spatial models
+pos(s::CellSitePos) = s.type.r
+ind(s::CellSitePos) = s.inds
+cell(s::CellSitePos) = s.cell
 
 # iterators
 
@@ -504,23 +583,24 @@ struct ParametricOnsiteTerm{N,S<:Union{SiteSelector,AppliedSiteSelector},F<:Para
     f::F
     selector::S
     coefficient::T
+    spatial::Bool   # If true, f is a function of position r. Otherwise it takes a single CellSite
 end
 
 struct ParametricHoppingTerm{N,S<:Union{HopSelector,AppliedHopSelector},F<:ParametricFunction{N},T<:Number} <: AbstractModelTerm
     f::F
     selector::S
     coefficient::T
+    spatial::Bool   # If true, f is a function of positions r, dr. Otherwise it takes two CellSite's
 end
 
 const AbstractParametricTerm{N} = Union{ParametricOnsiteTerm{N},ParametricHoppingTerm{N}}
+const AppliedParametricTerm{N} = Union{ParametricOnsiteTerm{N,<:AppliedSiteSelector},
+                                       ParametricHoppingTerm{N,<:AppliedHopSelector}}
 
 struct ParametricModel{T<:NTuple{<:Any,AbstractParametricTerm},M<:TightbindingModel} <: AbstractModel
     npmodel::M  # non-parametric model to use as base
     terms::T    # Collection of `AbstractParametricTerm`s
 end
-
-const AppliedParametricTerm{N} = Union{ParametricOnsiteTerm{N,<:AppliedSiteSelector},
-                                       ParametricHoppingTerm{N,<:AppliedHopSelector}}
 
 ## BlockModels ##
 
@@ -570,9 +650,19 @@ coefficient(t::OnsiteTerm) = t.coefficient
 coefficient(t::HoppingTerm) = t.coefficient
 coefficient(t::AbstractParametricTerm) = t.coefficient
 
+narguments(t::OnsiteTerm{<:Function}) = 1
+narguments(t::HoppingTerm{<:Function}) = 2
+narguments(t::OnsiteTerm) = 0
+narguments(t::HoppingTerm) = 0
+narguments(t::AbstractParametricTerm) = narguments(t.f)
+narguments(::ParametricFunction{N}) where {N} = N
+
 Base.parent(m::InterblockModel) = m.model
 
 block(m::InterblockModel) = m.block
+
+is_spatial(t::AbstractParametricTerm) = t.spatial
+is_spatial(t) = true
 
 ## call API##
 
@@ -596,12 +686,12 @@ block(m::InterblockModel) = m.block
 # orbital structure, not only to a site selection
 function (t::ParametricOnsiteTerm{N})(; kw...) where {N}
     f = ParametricFunction{N}((args...) -> t.f(args...; kw...)) # no params
-    return ParametricOnsiteTerm(f, t.selector, t.coefficient)
+    return ParametricOnsiteTerm(f, t.selector, t.coefficient, t.spatial)
 end
 
 function (t::ParametricHoppingTerm{N})(; kw...) where {N}
     f = ParametricFunction{N}((args...) -> t.f(args...; kw...)) # no params
-    return ParametricHoppingTerm(f, t.selector, t.coefficient)
+    return ParametricHoppingTerm(f, t.selector, t.coefficient, t.spatial)
 end
 
 ## Model term algebra
@@ -623,9 +713,9 @@ Base.:-(m::AbstractModel, m´::AbstractModel) = m + (-m´)
 Base.:*(x::Number, o::OnsiteTerm) = OnsiteTerm(o.f, o.selector, x * o.coefficient)
 Base.:*(x::Number, t::HoppingTerm) = HoppingTerm(t.f, t.selector, x * t.coefficient)
 Base.:*(x::Number, o::ParametricOnsiteTerm) =
-    ParametricOnsiteTerm(o.f, o.selector, x * o.coefficient)
+    ParametricOnsiteTerm(o.f, o.selector, x * o.coefficient, o.spatial)
 Base.:*(x::Number, t::ParametricHoppingTerm) =
-    ParametricHoppingTerm(t.f, t.selector, x * t.coefficient)
+    ParametricHoppingTerm(t.f, t.selector, x * t.coefficient, t.spatial)
 
 Base.adjoint(m::TightbindingModel) = TightbindingModel(adjoint.(terms(m))...)
 Base.adjoint(m::ParametricModel) = ParametricModel(adjoint.(terms(m))...)
@@ -636,12 +726,12 @@ Base.adjoint(t::HoppingTerm) = HoppingTerm(t.f', t.selector', t.coefficient')
 
 function Base.adjoint(o::ParametricOnsiteTerm{N}) where {N}
     f = ParametricFunction{N}((args...; kw...) -> o.f(args...; kw...)', o.f.params)
-    return ParametricOnsiteTerm(f, o.selector, o.coefficient')
+    return ParametricOnsiteTerm(f, o.selector, o.coefficient', o.spatial)
 end
 
 function Base.adjoint(t::ParametricHoppingTerm{N}) where {N}
     f = ParametricFunction{N}((args...; kw...) -> t.f(args...; kw...)', t.f.params)
-    return ParametricHoppingTerm(f, t.selector, t.coefficient')
+    return ParametricHoppingTerm(f, t.selector, t.coefficient', t.spatial)
 end
 
 #endregion
@@ -656,27 +746,31 @@ abstract type AbstractModifier end
 struct OnsiteModifier{N,S<:SiteSelector,F<:ParametricFunction{N}} <: AbstractModifier
     f::F
     selector::S
+    spatial::Bool
 end
 
-struct AppliedOnsiteModifier{B,N,R<:SVector,F<:ParametricFunction{N},S<:SiteSelector} <: AbstractModifier
+struct AppliedOnsiteModifier{B,N,R<:SVector,F<:ParametricFunction{N},S<:SiteSelector,P<:CellSitePos} <: AbstractModifier
     parentselector::S        # unapplied selector, needed to grow a ParametricHamiltonian
     blocktype::Type{B}  # These are needed to cast the modification to the sublat block type
     f::F
-    ptrs::Vector{Tuple{Int,R,Int}}
-    # [(ptr, r, norbs)...] for each selected site, dn = 0 harmonic
+    ptrs::Vector{Tuple{Int,R,P,Int}}
+    # [(ptr, r, si, norbs)...] for each selected site, dn = 0 harmonic
+    spatial::Bool   # If true, f is a function of position r. Otherwise it takes a single CellSite
 end
 
 struct HoppingModifier{N,S<:HopSelector,F<:ParametricFunction{N}} <: AbstractModifier
     f::F
     selector::S
+    spatial::Bool  # If true, f is a function of positions r, dr. Otherwise it takes two CellSite's
 end
 
-struct AppliedHoppingModifier{B,N,R<:SVector,F<:ParametricFunction{N},S<:HopSelector} <: AbstractModifier
+struct AppliedHoppingModifier{B,N,R<:SVector,F<:ParametricFunction{N},S<:HopSelector,P<:CellSitePos} <: AbstractModifier
     parentselector::S        # unapplied selector, needed to grow a ParametricHamiltonian
     blocktype::Type{B}  # These are needed to cast the modification to the sublat block type
     f::F
-    ptrs::Vector{Vector{Tuple{Int,R,R,Tuple{Int,Int}}}}
-    # [[(ptr, r, dr, (norbs, norbs´)), ...], ...] for each selected hop on each harmonic
+    ptrs::Vector{Vector{Tuple{Int,R,R,P,P,Tuple{Int,Int}}}}
+    # [[(ptr, r, dr, si, sj, (norbs, norbs´)), ...], ...] for each selected hop on each harmonic
+    spatial::Bool  # If true, f is a function of positions r, dr. Otherwise it takes two CellSite's
 end
 
 const Modifier = Union{OnsiteModifier,HoppingModifier}
@@ -685,10 +779,10 @@ const AppliedModifier = Union{AppliedOnsiteModifier,AppliedHoppingModifier}
 #region ## Constructors ##
 
 AppliedOnsiteModifier(m::AppliedOnsiteModifier, ptrs) =
-    AppliedOnsiteModifier(m.parentselector, m.blocktype, m.f, ptrs)
+    AppliedOnsiteModifier(m.parentselector, m.blocktype, m.f, ptrs, m.spatial)
 
 AppliedHoppingModifier(m::AppliedHoppingModifier, ptrs) =
-    AppliedHoppingModifier(m.parentselector, m.blocktype, m.f, ptrs)
+    AppliedHoppingModifier(m.parentselector, m.blocktype, m.f, ptrs, m.spatial)
 
 #endregion
 
@@ -705,6 +799,10 @@ pointers(m::AppliedModifier) = m.ptrs
 
 blocktype(m::AppliedModifier) = m.blocktype
 
+is_spatial(m::AbstractModifier) = m.spatial
+
+narguments(m::AbstractModifier) = narguments(m.f)
+
 @inline (m::AppliedOnsiteModifier{B,1})(o, r, orbs; kw...) where {B} =
     mask_block(B, m.f.f(o; kw...), (orbs, orbs))
 @inline (m::AppliedOnsiteModifier{B,2})(o, r, orbs; kw...) where {B} =
@@ -715,10 +813,10 @@ blocktype(m::AppliedModifier) = m.blocktype
 @inline (m::AppliedHoppingModifier{B,3})(t, r, dr, orborb; kw...) where {B} =
     mask_block(B, m.f.f(t, r, dr; kw...), orborb)
 
-Base.similar(m::A) where {A <: AppliedModifier} = A(m.blocktype, m.f, similar(m.ptrs, 0))
+Base.similar(m::A) where {A <: AppliedModifier} = A(m.blocktype, m.f, similar(m.ptrs, 0), m.spatial)
 
-Base.parent(m::AppliedOnsiteModifier) = OnsiteModifier(m.f, m.parentselector)
-Base.parent(m::AppliedHoppingModifier) = HoppingModifier(m.f, m.parentselector)
+Base.parent(m::AppliedOnsiteModifier) = OnsiteModifier(m.f, m.parentselector, m.spatial)
+Base.parent(m::AppliedHoppingModifier) = HoppingModifier(m.f, m.parentselector, m.spatial)
 
 #endregion
 #endregion
@@ -727,11 +825,6 @@ Base.parent(m::AppliedHoppingModifier) = HoppingModifier(m.f, m.parentselector)
 # OrbitalBlockStructure
 #    Block structure for Hamiltonians, sorted by sublattices
 #region
-
-struct SMatrixView{N,M,T,NM}
-    s::SMatrix{N,M,T,NM}
-    SMatrixView{N,M,T,NM}(mat) where {N,M,T,NM} = new(sanitize_SMatrix(SMatrix{N,M,T}, mat))
-end
 
 struct OrbitalBlockStructure{B}
     blocksizes::Vector{Int}       # number of orbitals per site in each sublattice
@@ -744,28 +837,7 @@ struct OrbitalBlockStructure{B}
     end
 end
 
-const MatrixElementType{T} = Union{
-    Complex{T},
-    SMatrix{N,N,Complex{T}} where {N},
-    SMatrixView{N,N,Complex{T}} where {N}}
-
-const MatrixElementUniformType{T} = Union{
-    Complex{T},
-    SMatrix{N,N,Complex{T}} where {N}}
-
-const MatrixElementNonscalarType{T,N} = Union{
-    SMatrix{N,N,Complex{T}},
-    SMatrixView{N,N,Complex{T}}}
-
 #region ## Constructors ##
-
-SMatrixView(mat::SMatrix{N,M,T,NM}) where {N,M,T,NM} = SMatrixView{N,M,T,NM}(mat)
-
-SMatrixView{N,M}(mat::AbstractMatrix{T}) where {N,M,T} = SMatrixView{N,M,T}(mat)
-
-SMatrixView{N,M,T}(mat) where {N,M,T} = SMatrixView{N,M,T,N*M}(mat)
-
-SMatrixView(::Type{SMatrix{N,M,T,NM}}) where {N,M,T,NM} = SMatrixView{N,M,T,NM}
 
 @inline function OrbitalBlockStructure(T, orbitals, subsizes)
     orbitals´ = sanitize_orbitals(orbitals) # <:Union{Val,distinct_collection}
@@ -804,7 +876,7 @@ flatsize(b::OrbitalBlockStructure) = blocksizes(b)' * subsizes(b)
 flatsize(b::OrbitalBlockStructure{B}, ls::SiteSlice) where {B<:Union{Complex,SMatrix}} =
     length(ls) * blocksize(b)
 flatsize(b::OrbitalBlockStructure, ls::SiteSlice) = sum(cs -> flatsize(b, cs), cellsites(ls); init = 0)
-flatsize(b::OrbitalBlockStructure, cs::CellSite) = blocksize(b, siteindex(cs))
+flatsize(b::OrbitalBlockStructure, cs::AnyCellSite) = blocksize(b, siteindex(cs))
 
 unflatsize(b::OrbitalBlockStructure) = sum(subsizes(b))
 
@@ -890,27 +962,6 @@ unflatindex_and_blocksize(::OrbitalBlockStructure{<:Number}, iflat::Integer) = (
 
 Base.copy(b::OrbitalBlockStructure{B}) where {B} =
     OrbitalBlockStructure{B}(copy(blocksizes(b)), copy(subsizes(b)))
-
-unblock(s::SMatrixView) = s.s
-unblock(s) = s
-
-Base.parent(s::SMatrixView) = s.s
-
-Base.view(s::SMatrixView, i...) = view(s.s, i...)
-
-Base.getindex(s::SMatrixView, i...) = getindex(s.s, i...)
-
-Base.zero(::Type{SMatrixView{N,M,T,NM}}) where {N,M,T,NM} = SMatrixView(zero(SMatrix{N,M,T,NM}))
-Base.zero(::S) where {S<:SMatrixView} = zero(S)
-
-Base.adjoint(s::SMatrixView) = SMatrixView(s.s')
-
-Base.:+(s::SMatrixView...) = SMatrixView(+(parent.(s)...))
-Base.:-(s::SMatrixView) = SMatrixView(-parent.(s))
-Base.:*(s::SMatrixView, x::Number) = SMatrixView(parent(s) * x)
-Base.:*(x::Number, s::SMatrixView) = SMatrixView(x * parent(s))
-
-Base.:(==)(s::SMatrixView, s´::SMatrixView) = parent(s) == parent(s´)
 
 Base.:(==)(b::OrbitalBlockStructure{B}, b´::OrbitalBlockStructure{B}) where {B} =
     b.blocksizes == b´.blocksizes && b.subsizes == b´.subsizes
@@ -2128,7 +2179,7 @@ Base.getindex(c::Operator, i...) = getindex(c.h, i...)
 #endregion
 
 ############################################################################################
-# OrbitalSliceArray - array type over orbital slice
+# OrbitalSliceArray: array type over orbital slice - see specialmatrices.jl
 #   orbaxes is a tuple of OrbitalSlice's or Missing's, one per dimension
 #   if missing, the dimension does not span orbitals but something else
 #region
@@ -2146,84 +2197,6 @@ OrbitalSliceMatrix(m::AbstractMatrix, axes) = OrbitalSliceArray(m, axes)
 
 orbaxes(a::OrbitalSliceArray) = a.orbaxes
 
-# AbstractArray interface
 Base.parent(a::OrbitalSliceArray) = a.parent
-Base.size(a::OrbitalSliceArray) = size(a.parent)
-Base.getindex(a::OrbitalSliceArray, i::Int) = getindex(a.parent, i)
-Base.getindex(a::OrbitalSliceArray, I::Vararg{Int, N}) where {N} = getindex(a.parent, I...)
-Base.IndexStyle(::Type{T}) where {M,T<:OrbitalSliceArray{<:Any,<:Any,M}} = IndexStyle(M)
-Base.setindex!(a::OrbitalSliceArray, v, i::Int) = setindex!(a.parent, v, i)
-Base.setindex!(a::OrbitalSliceArray, v, I::Vararg{Int, N}) where {N} = setindex!(a.parent, v, I...)
-Base.iterate(a::OrbitalSliceArray) = iterate(a.parent)
-Base.iterate(a::OrbitalSliceArray, state) = iterate(a.parent, state)
-Base.length(a::OrbitalSliceArray) = length(a.parent)
-# doesn't make sense to keep orbaxes in similar (dimensions could change)
-Base.similar(a::OrbitalSliceArray, t::Tuple) = similar(a.parent, t)
-Base.copy(a::OrbitalSliceArray) = OrbitalSliceArray(copy(a.parent), a.orbaxes)
-
-# Additional indexing over sites
-Base.getindex(a::OrbitalSliceMatrix; sites...) = getindex(a, siteselector(; sites...))
-Base.getindex(a::OrbitalSliceMatrix, i::NamedTuple, j::NamedTuple = i) =
-    getindex(a, siteselector(i), siteselector(j))
-Base.getindex(a::OrbitalSliceMatrix, i::NamedTuple, j::SiteSelector) =
-    getindex(a, siteselector(i), j)
-Base.getindex(a::OrbitalSliceMatrix, i::SiteSelector, j::NamedTuple) =
-    getindex(a, i, siteselector(j))
-
-# SiteSelector: return a new OrbitalSliceMatrix
-function Base.getindex(a::OrbitalSliceMatrix, i::SiteSelector, j::SiteSelector = i)
-    rowslice, colslice = orbaxes(a)
-    rowslice´, colslice´ = rowslice[i], colslice[j]
-    rows = collect(indexcollection(rowslice, rowslice´))
-    cols = i === j && rowslice === colslice ? rows : indexcollection(colslice, colslice´)
-    m = parent(a)[rows, cols]
-    return OrbitalSliceMatrix(m, (rowslice´, colslice´))
-end
-
-# CellSites: return an unwrapped Matrix or a view thereof (non-allocating)
-Base.getindex(a::OrbitalSliceMatrix, i::CellSites, j::CellSites = i) = copy(view(a, i, j))
-
-function Base.view(a::OrbitalSliceMatrix, i::CellSites, j::CellSites = i)
-    rowslice, colslice = orbaxes(a)
-    i´, j´ = apply(i, lattice(rowslice)), apply(j, lattice(colslice))
-    rows = indexcollection(rowslice, i´)
-    cols = j === i && rowslice === colslice ? rows : indexcollection(colslice, j´)
-    return view(a.parent, rows, cols)
-end
-
-# For simplified printing
-function Base.showarg(io::IO, ::OrbitalSliceMatrix{<:Any,M}, toplevel) where {M}
-    toplevel || print(io, "::")
-    print(io,  "OrbitalSliceMatrix{$M}")
-end
-
-function Base.showarg(io::IO, ::OrbitalSliceVector{<:Any,M}, toplevel) where {M}
-    toplevel || print(io, "::")
-    print(io,  "OrbitalSliceVector{$M}")
-end
-
-## conversion
-
-maybe_OrbitalSliceArray(i) = x -> maybe_OrbitalSliceArray(x, i)
-
-maybe_OrbitalSliceArray(x::AbstractVector, i) = maybe_OrbitalSliceVector(x, i)
-maybe_OrbitalSliceArray(x::AbstractMatrix, i) = maybe_OrbitalSliceMatrix(x, i)
-
-maybe_OrbitalSliceVector(x, i::DiagIndices{Missing,<:OrbitalSliceGrouped}) =
-    maybe_OrbitalSliceVector(x, parent(i))
-maybe_OrbitalSliceVector(x, i::DiagIndices{<:Any,<:OrbitalSliceGrouped}) =
-    maybe_OrbitalSliceVector(x, scalarize(parent(i)))
-maybe_OrbitalSliceVector(x, i::OrbitalSliceGrouped) = OrbitalSliceVector(x, (i,))
-
-# fallback
-maybe_OrbitalSliceVector(x, i) = x
-
-maybe_OrbitalSliceMatrix(x, i::OrbitalSliceGrouped) =
-    maybe_OrbitalSliceMatrix(x, (i, i))
-maybe_OrbitalSliceMatrix(x, (i, j)::Tuple{OrbitalSliceGrouped,OrbitalSliceGrouped}) =
-    OrbitalSliceMatrix(x, (i, j))
-
-# fallback
-maybe_OrbitalSliceMatrix(x, i) = x
 
 #endregion

@@ -117,8 +117,17 @@ end
 end
 
 @testset "models" begin
-    mo = (onsite(1), onsite(r-> r[1]), @onsite((; o) -> o), @onsite((r; o) -> r[1]*o))
-    mh = (hopping(1), hopping((r, dr)-> im*dr[1]), @hopping((; t) -> t), @hopping((r, dr; t) -> r[1]*t))
+    mo = (onsite(1), onsite(r-> r[1]), @onsite((; o) -> o), @onsite((r; o=2) -> r[1]*o),
+         @onsite((s; o, p) --> pos(s)[1]*o))
+    mh = (hopping(1), hopping((r, dr)-> im*dr[1]), @hopping((; t) -> t), @hopping((r, dr; t) -> r[1]*t),
+        @hopping((si, sj) --> im*ind(si)), @hopping((si, sj; t, p = 2) --> pos(sj)[1]*t))
+    argso, argsh = (0, 1, 0, 1, 1), (0, 2, 0, 2, 2, 2)
+    for (o, no) in zip(mo, argso)
+        @test Quantica.narguments(only(Quantica.terms(o))) == no
+    end
+    for (h, nh) in zip(mh, argsh)
+        @test Quantica.narguments(only(Quantica.terms(h))) == nh
+    end
     for o in mo, h in mh
         @test length(Quantica.allterms(-o - 2*h)) == 2
         @test Quantica.ParametricModel(o+h) isa Quantica.ParametricModel
@@ -329,7 +338,12 @@ end
     h0 = LP.square() |> hopping(1) |> supercell(3) |> @hopping!((t, r, dr; A = SA[1,2]) -> t*cis(A'dr))
     h = torus(h0, (0.2,:))
     @test h0((0.2, 0.3)) ≈ h((0.3,))
+    # non-spatial models
+    h = LP.linear() |> @hopping((i,j) --> ind(i) + ind(j)) + @onsite((i; k = 1) --> pos(i)[k])
+    @test ishermitian(h())
+
 end
+
 
 @testset "hamiltonian nrange" begin
     lat = LatticePresets.honeycomb(a0 = 2)

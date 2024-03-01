@@ -55,8 +55,8 @@ end
     s1´ = GS.Schur(boundary = -1)
     sites´ = (; region = r -> abs(r[2]) < 2 && r[1] == 0)
     # non-hermitian Σ model
-    mod = @onsite((ω, r; o = 1) -> (o - im*ω)*I) +
-          plusadjoint(@onsite((ω; p=1)-> p*I) +  @hopping((ω, r, dr; t = 1) -> im*dr[1]*t*I; range = 1))
+    mod = @onsite((ω, r; o = 1) -> (o - im*ω)*I) + @onsite((ω, s; o = 1, b = 2) --> o*b*pos(s)[1]*I) +
+          plusadjoint(@onsite((ω; p=1)-> p*I) + @hopping((ω, r, dr; t = 1) -> im*dr[1]*t*I; range = 1))
     g0, g0´, g1´ = greenfunction(h0, s0), greenfunction(h0, s0´), greenfunction(h1, s1´)
     for (h, s) in zip((h0, h0, h1, h1), (s0, s0´, s1, s1´))
         oh = h |> attach(nothing; sites´...)
@@ -329,6 +329,11 @@ end
     @test ρ0[cellsites(SA[0], 1), cellsites(SA[1], 1)] isa Matrix
     @test size(view(ρ0, cellsites(SA[0], 1), cellsites(SA[1], 1))) == (2, 2)
 
+    # Diagonal slicing not yet supported
+    @test_broken densitymatrix(g1[diagonal(cells = SA[1])], 5)
+    @test_broken densitymatrix(gSpectrum[diagonal(cells = SA[])])
+    @test_broken densitymatrix(gKPM[diagonal(1)])
+
     glead = LP.square() |> hamiltonian(hopping(1)) |> supercell((0,1), region = r -> -1 <= r[1] <= 1) |> attach(nothing; cells = SA[10]) |> greenfunction(GS.Schur(boundary = 0));
     contact1 = r -> r[1] ≈ 5 && -1 <= r[2] <= 1
     contact2 = r -> r[2] ≈ 5 && -1 <= r[1] <= 1
@@ -345,4 +350,19 @@ end
     g0 = LP.square() |> hamiltonian(hopping(I), orbitals = 2) |> supercell(region = RP.square(10)) |> attach(glead, reverse = true; region = contact2) |> attach(glead; region = contact1) |> greenfunction;
     testcond(g0; nambu = true)
     testjosephson(g0)
+end
+
+@testset "mean-field models" begin
+    h1 = LP.honeycomb() |> supercell(2) |> supercell |> hamiltonian(onsite(0I) + hopping(I), orbitals = 1)
+    h2 = LP.honeycomb() |> supercell(2) |> supercell |> hamiltonian(onsite(0I) + hopping(I), orbitals = 2)
+    h3 = LP.honeycomb() |> supercell(2) |> supercell |> hamiltonian(onsite(0I) + hopping(I), orbitals = (1,2))
+    for h0 in (h1, h2, h3)
+        ρ0 = densitymatrix(greenfunction(h0, GS.Spectrum())[cells = SA[]])();
+        h = h0 |> @onsite!((o, s; ρ = ρ0, t) --> o + t*ρ[s])
+        @test diag(h(t = 2)[()]) ≈ 2*diag(ρ0) atol = 0.0000001
+        h = h0 |> @hopping!((t, si, sj; ρ = ρ0, α = 2) --> α*ρ[si, sj])
+        @test h() isa Quantica.Hamiltonian
+        diff = (h()[()] - 2ρ0) .* h()[()]
+        @test iszero(diff)
+    end
 end
