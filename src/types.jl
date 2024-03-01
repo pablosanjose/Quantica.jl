@@ -2246,17 +2246,6 @@ function Base.view(a::OrbitalSliceMatrix, i::AnyCellSites, j::AnyCellSites = i)
     return view(a.parent, rows, cols)
 end
 
-# For simplified printing
-function Base.showarg(io::IO, ::OrbitalSliceMatrix{<:Any,M}, toplevel) where {M}
-    toplevel || print(io, "::")
-    print(io,  "OrbitalSliceMatrix{$M}")
-end
-
-function Base.showarg(io::IO, ::OrbitalSliceVector{<:Any,M}, toplevel) where {M}
-    toplevel || print(io, "::")
-    print(io,  "OrbitalSliceVector{$M}")
-end
-
 ## conversion
 
 maybe_OrbitalSliceArray(i) = x -> maybe_OrbitalSliceArray(x, i)

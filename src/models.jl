@@ -122,9 +122,6 @@ function parse_term(f, msg)
     return f´, N, params, spatial
 end
 
-replace_equal_to_kw!(ex::Expr) = ex.head == :(=) && (ex.head = :kw)
-replace_equal_to_kw!(ex) = nothing
-
 get_kwname(x::Symbol) = x
 get_kwname(x::Expr) = x.head === :kw ? x.args[1] : x.head  # x.head == :...
 

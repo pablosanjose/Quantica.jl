@@ -475,3 +475,21 @@ Base.summary(::CurrentDensitySlice{T}) where {T} =
     "CurrentDensitySlice{$T} : current density at a fixed location and arbitrary energy"
 
 #endregion
+
+############################################################################################
+# OrbitalSliceMatrix
+#region
+
+# For simplified printing of the array typename
+
+function Base.showarg(io::IO, ::OrbitalSliceMatrix{<:Any,M}, toplevel) where {M}
+    toplevel || print(io, "::")
+    print(io,  "OrbitalSliceMatrix{$M}")
+end
+
+function Base.showarg(io::IO, ::OrbitalSliceVector{<:Any,M}, toplevel) where {M}
+    toplevel || print(io, "::")
+    print(io,  "OrbitalSliceVector{$M}")
+end
+
+#endregion

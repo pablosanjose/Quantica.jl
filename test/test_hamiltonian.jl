@@ -338,7 +338,12 @@ end
     h0 = LP.square() |> hopping(1) |> supercell(3) |> @hopping!((t, r, dr; A = SA[1,2]) -> t*cis(A'dr))
     h = torus(h0, (0.2,:))
     @test h0((0.2, 0.3)) ≈ h((0.3,))
+    # non-spatial models
+    h = LP.linear() |> @hopping((i,j) --> ind(i) + ind(j)) + @onsite((i; k = 1) --> pos(i)[k])
+    @test ishermitian(h())
+
 end
+
 
 @testset "hamiltonian nrange" begin
     lat = LatticePresets.honeycomb(a0 = 2)

@@ -172,14 +172,9 @@ function applyterm!(builder, block, term::AppliedOnsiteTerm)
     foreach_site(sel, dn0) do s, i, r
         isinblock(i, block) || return nothing
         n = bsizes[s]
-        if is_spatial(term)
-            vr = term(r, n)
-            push!(ijv, (i, i, vr))
-        else
-            sitei = CellSitePos(dn0, i, r, B)
-            vs = term(sitei, n)
-            push!(ijv, (i, i, vs))
-        end
+        # conventional terms are never non-spatial, only modifiers can be
+        vr = term(r, n)
+        push!(ijv, (i, i, vr))
     end
     return nothing
 end
@@ -196,15 +191,9 @@ function applyterm!(builder, block, term::AppliedHoppingTerm)
             isinblock(i, j, block) || return nothing
             ni = bsizes[si]
             nj = bsizes[sj]
-            if is_spatial(term)
-                vr = term(r, dr, (ni, nj))
-                push!(ijv, (i, j, vr))
-            else
-                sitei = CellSitePos(dn, i, r + 0.5*dr, B)
-                sitej = CellSite(zero(dn), j, r - 0.5*dr, B)
-                vs = term(sitei, sitej, (ni, nj))
-                push!(ijv, (i, j, vs))
-            end
+            # conventional terms are never non-spatial, only modifiers can be
+            vr = term(r, dr, (ni, nj))
+            push!(ijv, (i, j, vr))
         end
         return found
     end
