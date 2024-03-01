@@ -940,6 +940,7 @@ OnsiteModifier{ParametricFunction{1}}:
   Region            : any
   Sublattices       : any
   Cells             : any
+  Argument type     : spatial
   Parameters        : [:W]
 
 julia> LP.honeycomb() |> hamiltonian(model) |> supercell(10) |> hamiltonian(disorder)
@@ -998,6 +999,7 @@ HoppingModifier{ParametricFunction{3}}:
   Cell distances    : any
   Hopping range     : Inf
   Reverse hops      : false
+  Argument type     : spatial
   Parameters        : [:A]
 
 julia> LP.honeycomb() |> hamiltonian(model) |> supercell(10) |> hamiltonian(peierls)
