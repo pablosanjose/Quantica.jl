@@ -44,6 +44,10 @@ check_same_contact_slice(gs) = (rows(gs) isa Integer && cols(gs) === rows(gs)) |
 check_different_contact_slice(gs) = (rows(gs) isa Integer && cols(gs) != rows(gs)) ||
     argerror("Please use a Green slice of the form `g[i::Integer, j::Integer] with `i ≠ j`")
 
+check_nodiag_axes(gs::GreenSlice) = check_nodiag_axes(rows(gs)), check_nodiag_axes(rows(gs))
+check_nodiag_axes(::DiagIndices) = argerror("Diagonal indexing not yet supported for this function")
+check_nodiag_axes(_) = nothing
+
 #endregion
 
 ############################################################################################
@@ -429,7 +433,8 @@ end
 (s::DensityMatrixIntegratorSolver)(mu, kBT; params...) = s.ifunc(mu, kBT; params...)
 
 # redirects to specialized method
-densitymatrix(gs::GreenSlice; kw...) = densitymatrix(solver(parent(gs)), gs::GreenSlice; kw...)
+densitymatrix(gs::GreenSlice; kw...) =
+    densitymatrix(solver(parent(gs)), gs::GreenSlice; kw...)
 
 # generic fallback
 densitymatrix(s::AppliedGreenSolver, gs::GreenSlice; kw...) =
@@ -439,6 +444,7 @@ densitymatrix(s::AppliedGreenSolver, gs::GreenSlice; kw...) =
 densitymatrix(gs::GreenSlice, ωmax::Number; opts...) = densitymatrix(gs, (-ωmax, ωmax); opts...)
 
 function densitymatrix(gs::GreenSlice{T}, (ωmin, ωmax)::Tuple; omegamap = Returns((;)), imshift = missing, atol = 1e-7, opts...) where {T}
+    check_nodiag_axes(gs)
     result = similar_Matrix(gs)
     opts´ = (; omegamap, imshift, slope = 1, post = gf_to_rho!, atol, opts...)
     integratorfunc(mu, kBT; params...) = iszero(kBT) ?
@@ -516,6 +522,7 @@ end
 (s::JosephsonIntegratorSolver)(kBT; params...) = s.ifunc(kBT; params...)
 
 function josephson(gs::GreenSlice{T}, ωmax; omegamap = Returns((;)), phases = missing, imshift = missing, atol = 1e-7, opts...) where {T}
+    check_nodiag_axes(gs)
     check_same_contact_slice(gs)
     contact = rows(gs)
     g = parent(gs)

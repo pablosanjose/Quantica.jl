@@ -140,6 +140,7 @@ function Base.show(io::IO, t::Union{AbstractModelTerm,Modifier})
         print(io, "\n", "$(i)  Coefficient       : $(t.coefficient)")
     end
     if t isa AbstractParametricTerm || t isa Modifier
+        print(io, "\n", "$(i)  Argument type     : $(display_argument_type(t))")
         print(io, "\n", "$(i)  Parameters        : $(parameters(t))")
     end
 end
@@ -152,6 +153,8 @@ Base.summary(::ParametricOnsiteTerm{N}) where {N} = "ParametricOnsiteTerm{Parame
 Base.summary(::ParametricHoppingTerm{N}) where {N} = "ParametricHoppingTerm{ParametricFunction{$N}}"
 Base.summary(::OnsiteModifier{N}) where {N} = "OnsiteModifier{ParametricFunction{$N}}:"
 Base.summary(::HoppingModifier{N}) where {N} = "HoppingModifier{ParametricFunction{$N}}:"
+
+display_argument_type(t) = is_spatial(t) ? "spatial" : "non-spatial"
 
 #endregion
 

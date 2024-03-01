@@ -91,11 +91,6 @@ macro hopping!(f)
     return esc(:(Quantica.HoppingModifier(Quantica.ParametricFunction{$N}($f, $(params)), Quantica.hopselector_infrange(), $(spatial))))
 end
 
-# Replaces syntax [..; ...] -> ... to (...; ...) -> ..., and returns true if found
-function parse_spatial(f)
-    return f, true
-end
-
 # Extracts normalized f, number of arguments and kwarg names from an anonymous function f
 function parse_term(f, msg)
     (f isa Expr && (f.head == :-> || f.head == :-->)) || throw(ArgumentError(msg))

@@ -23,7 +23,8 @@ makedocs(;
             "Hamiltonians" => "tutorial/hamiltonians.md",
             "Bandstructures" => "tutorial/bandstructures.md",
             "GreenFunctions" => "tutorial/greenfunctions.md",
-            "Observables" => "tutorial/observables.md"
+            "Observables" => "tutorial/observables.md",
+            "Advanced topics" => "tutorial/advanced.md"
             ],
         "Examples" => "examples.md",
         "API" => "api.md",

@@ -2200,17 +2200,20 @@ orbaxes(a::OrbitalSliceArray) = a.orbaxes
 # AbstractArray interface
 Base.parent(a::OrbitalSliceArray) = a.parent
 Base.size(a::OrbitalSliceArray) = size(a.parent)
-Base.getindex(a::OrbitalSliceArray, i::Int) = getindex(a.parent, i)
-Base.getindex(a::OrbitalSliceArray, I::Vararg{Int, N}) where {N} = getindex(a.parent, I...)
-Base.IndexStyle(::Type{T}) where {M,T<:OrbitalSliceArray{<:Any,<:Any,M}} = IndexStyle(M)
-Base.setindex!(a::OrbitalSliceArray, v, i::Int) = setindex!(a.parent, v, i)
-Base.setindex!(a::OrbitalSliceArray, v, I::Vararg{Int, N}) where {N} = setindex!(a.parent, v, I...)
-Base.iterate(a::OrbitalSliceArray) = iterate(a.parent)
-Base.iterate(a::OrbitalSliceArray, state) = iterate(a.parent, state)
+Base.iterate(a::OrbitalSliceArray, i...) = iterate(a.parent, i...)
 Base.length(a::OrbitalSliceArray) = length(a.parent)
-# doesn't make sense to keep orbaxes in similar (dimensions could change)
-Base.similar(a::OrbitalSliceArray, t::Tuple) = similar(a.parent, t)
+Base.IndexStyle(::Type{T}) where {M,T<:OrbitalSliceArray{<:Any,<:Any,M}} = IndexStyle(M)
+Base.similar(a::OrbitalSliceArray) = OrbitalSliceArray(similar(a.parent), orbaxes(a))
+Base.similar(a::OrbitalSliceArray, t::Type) = OrbitalSliceArray(similar(a.parent, t), orbaxes(a))
+# doesn't make sense to keep orbaxes in similar with different dimensions.
+Base.similar(a::OrbitalSliceArray, dims::Tuple) = similar(a.parent, dims)
 Base.copy(a::OrbitalSliceArray) = OrbitalSliceArray(copy(a.parent), a.orbaxes)
+Base.@propagate_inbounds Base.getindex(a::OrbitalSliceArray, i::Int) =
+    getindex(a.parent, i)
+Base.@propagate_inbounds Base.getindex(a::OrbitalSliceArray, I::Vararg{Int, N}) where {N} =
+    getindex(a.parent, I...)
+Base.@propagate_inbounds Base.setindex!(a::OrbitalSliceArray, v, i::Int) = setindex!(a.parent, v, i)
+Base.@propagate_inbounds Base.setindex!(a::OrbitalSliceArray, v, I::Vararg{Int, N}) where {N} = setindex!(a.parent, v, I...)
 
 # Additional indexing over sites
 Base.getindex(a::OrbitalSliceMatrix; sites...) = getindex(a, siteselector(; sites...))
@@ -2245,6 +2248,28 @@ function Base.view(a::OrbitalSliceMatrix, i::AnyCellSites, j::AnyCellSites = i)
     cols = j === i && rowslice === colslice ? rows : indexcollection(colslice, j´)
     return view(a.parent, rows, cols)
 end
+
+## broadcasting
+
+# following the manual: https://docs.julialang.org/en/v1/manual/interfaces/#man-interface-array
+
+Broadcast.BroadcastStyle(::Type{<:OrbitalSliceArray}) = Broadcast.ArrayStyle{OrbitalSliceArray}()
+
+Base.similar(bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{OrbitalSliceArray}}, ::Type{ElType}) where {ElType} =
+    OrbitalSliceArray(similar(Array{ElType}, axes(bc)), orbaxes(find_osa(bc)))
+
+find_osa(bc::Base.Broadcast.Broadcasted) = find_osa(bc.args)
+find_osa(args::Tuple) = find_osa(find_osa(args[1]), Base.tail(args))
+find_osa(x) = x
+find_osa(::Tuple{}) = nothing
+find_osa(a::OrbitalSliceArray, rest) = a
+find_osa(::Any, rest) = find_osa(rest)
+
+# taken from https://github.com/JuliaArrays/OffsetArrays.jl/blob/756e839563c88faa4ebe4ff971286747863aaff0/src/OffsetArrays.jl#L469
+
+Base.dataids(A::OrbitalSliceArray) = Base.dataids(parent(A))
+Broadcast.broadcast_unalias(dest::OrbitalSliceArray, src::OrbitalSliceArray) =
+    parent(dest) === parent(src) ? src : Broadcast.unalias(dest, src)
 
 ## conversion
 

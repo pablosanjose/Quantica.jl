@@ -82,6 +82,7 @@ end
 function densitymatrix(s::AppliedSpectrumGreenSolver, gs::GreenSlice)
     # SpectrumGreenSlicer is 0D, so there is a single cellorbs in dict.
     # If rows/cols are contacts, we need their orbrows/orbcols (unlike for gs(ω; params...))
+    check_nodiag_axes(gs)
     i, j = only(cellsdict(orbrows(gs))), only(cellsdict(orbcols(gs)))
     oi, oj = orbindices(i), orbindices(j)
     es, psis = spectrum(s)

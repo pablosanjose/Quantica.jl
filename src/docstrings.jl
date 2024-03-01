@@ -779,6 +779,16 @@ params...)`, to obtain a regular `Hamiltonian` without reconstructing it from sc
 
 Special form of a parametric onsite potential meant to model a self-energy (see `attach`).
 
+    @onsite((i; params...) --> ...; sites...)
+    @onsite((ω, i; params...) --> ...; sites...)
+
+The `-->` syntax allows to treat the argument `i` as a site index, instead of a position. In
+fact, the type of `i` is `CellSitePos`, so they can be used to index `OrbitalSliceArray`s
+(see doctrings for details). The functions `pos(i)`, `cell(i)` and `ind(i)` yield the
+position, cell and site index of the site. This syntax is useful to implement models that
+depend on observables (in the form of `OrbitalSliceArray`s), like in self-consistent mean
+field calculations.
+
 ## Model algebra
 
 Parametric models can be combined using `+`, `-` and `*`, or conjugated with `'`, e.g.
@@ -794,12 +804,14 @@ ParametricModel: model with 2 terms
     Sublattices       : A
     Cells             : any
     Coefficient       : 1
+    Argument type     : spatial
     Parameters        : [:dμ]
   ParametricOnsiteTerm{ParametricFunction{0}}
     Region            : any
     Sublattices       : B
     Cells             : any
     Coefficient       : 1
+    Argument type     : spatial
     Parameters        : [:dμ]
 
 julia> LP.honeycomb() |> supercell(2) |> hamiltonian(model, orbitals = 2)
@@ -815,7 +827,7 @@ ParametricHamiltonian{Float64,2,2}: Parametric Hamiltonian on a 2D Lattice in 2D
 ```
 
 # See also
-    `onsite`, `hopping`, `@hopping`, `@onsite!`, `@hopping!`, `attach`, `hamiltonian`
+    `onsite`, `hopping`, `@hopping`, `@onsite!`, `@hopping!`, `attach`, `hamiltonian`, `OrbitalSliceArray`
 """
 macro onsite end
 
@@ -845,6 +857,17 @@ params...)`, to obtain a regular `Hamiltonian` without reconstructing it from sc
 
 Special form of a parametric hopping amplitude meant to model a self-energy (see `attach`).
 
+    @hopping((i, j; params...) --> ...; sites...)
+    @hopping((ω, i, j; params...) --> ...; sites...)
+
+The `-->` syntax allows to treat the arguments `i, j` as a site indices, instead of a
+positions. Here `i` is the destination (row) and `j` the source (column) site. In fact, the
+type of `i` and `j` is `CellSitePos`, so they can be used to index `OrbitalSliceArray`s (see
+doctrings for details). The functions `pos(i)`, `cell(i)` and `ind(i)` yield the position,
+cell and site index of the site. This syntax is useful to implement models that depend on
+observables (in the form of `OrbitalSliceArray`s), like in self-consistent mean field
+calculations.
+
 ## Model algebra
 
 Parametric models can be combined using `+`, `-` and `*`, or conjugated with `'`, e.g.
@@ -862,6 +885,7 @@ ParametricModel: model with 1 term
     Hopping range     : Neighbors(1)
     Reverse hops      : false
     Coefficient       : 1
+    Argument type     : spatial
     Parameters        : [:t, :A]
 
 julia> LP.honeycomb() |> supercell(2) |> hamiltonian(model)
@@ -877,7 +901,7 @@ ParametricHamiltonian{Float64,2,2}: Parametric Hamiltonian on a 2D Lattice in 2D
 ```
 
 # See also
-    `onsite`, `hopping`, `@onsite`, `@onsite!`, `@hopping!`, `attach`, `hamiltonian`
+    `onsite`, `hopping`, `@onsite`, `@onsite!`, `@hopping!`, `attach`, `hamiltonian`, `OrbitalSliceArray`
 """
 macro hopping end
 
@@ -899,6 +923,15 @@ particular, if no onsite model has been applied to a specific site, its onsite p
 will be zero, and will not be modified by any `@onsite!` modifier. Conversely, if an onsite
 model has been applied, `@onsite!` may modify the onsite potential even if it is zero. The
 same applies to `@hopping!`.
+
+    @onsite((o, i; params...) --> ...; sites...)
+
+The `-->` syntax allows to treat the argument `i` as a site index, instead of a position. In
+fact, the type of `i` is `CellSitePos`, so they can be used to index `OrbitalSliceArray`s
+(see doctrings for details). The functions `pos(i)`, `cell(i)` and `ind(i)` yield the
+position, cell and site index of the site. This syntax is useful to implement models that
+depend on observables (in the form of `OrbitalSliceArray`s), like in self-consistent mean
+field calculations.
 
 # Examples
 ```jldoctest
@@ -922,7 +955,7 @@ ParametricHamiltonian{Float64,2,2}: Parametric Hamiltonian on a 2D Lattice in 2D
 ```
 
 # See also
-    `onsite`, `hopping`, `@onsite`, `@hopping`, `@hopping!`, `hamiltonian`
+    `onsite`, `hopping`, `@onsite`, `@hopping`, `@hopping!`, `hamiltonian`, `OrbitalSliceArray`
 """
 macro onsite! end
 
@@ -945,6 +978,16 @@ particular, if no onsite model has been applied to a specific site, its onsite p
 will be zero, and will not be modified by any `@onsite!` modifier. Conversely, if an onsite
 model has been applied, `@onsite!` may modify the onsite potential even if it is zero. The
 same applies to `@hopping!`.
+
+    @hopping!((t, i, j; params...) --> ...; sites...)
+
+The `-->` syntax allows to treat the arguments `i, j` as a site indices, instead of a
+positions. Here `i` is the destination (row) and `j` the source (column) site. In fact, the
+type of `i` and `j` is `CellSitePos`, so they can be used to index `OrbitalSliceArray`s (see
+doctrings for details). The functions `pos(i)`, `cell(i)` and `ind(i)` yield the position,
+cell and site index of the site. This syntax is useful to implement models that depend on
+observables (in the form of `OrbitalSliceArray`s), like in self-consistent mean field
+calculations.
 
 # Examples
 ```jldoctest
@@ -970,7 +1013,7 @@ ParametricHamiltonian{Float64,2,2}: Parametric Hamiltonian on a 2D Lattice in 2D
 ```
 
 # See also
-    `onsite`, `hopping`, `@onsite`, `@hopping`, `@onsite!`, `hamiltonian`
+    `onsite`, `hopping`, `@onsite`, `@hopping`, `@onsite!`, `hamiltonian`, `OrbitalSliceArray`
 """
 macro hopping! end
 
