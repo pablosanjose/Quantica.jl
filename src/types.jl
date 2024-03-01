@@ -2179,7 +2179,7 @@ Base.getindex(c::Operator, i...) = getindex(c.h, i...)
 #endregion
 
 ############################################################################################
-# OrbitalSliceArray - array type over orbital slice
+# OrbitalSliceArray: array type over orbital slice - see specialmatrices.jl
 #   orbaxes is a tuple of OrbitalSlice's or Missing's, one per dimension
 #   if missing, the dimension does not span orbitals but something else
 #region
@@ -2197,102 +2197,6 @@ OrbitalSliceMatrix(m::AbstractMatrix, axes) = OrbitalSliceArray(m, axes)
 
 orbaxes(a::OrbitalSliceArray) = a.orbaxes
 
-# AbstractArray interface
 Base.parent(a::OrbitalSliceArray) = a.parent
-Base.size(a::OrbitalSliceArray) = size(a.parent)
-Base.iterate(a::OrbitalSliceArray, i...) = iterate(a.parent, i...)
-Base.length(a::OrbitalSliceArray) = length(a.parent)
-Base.IndexStyle(::Type{T}) where {M,T<:OrbitalSliceArray{<:Any,<:Any,M}} = IndexStyle(M)
-Base.similar(a::OrbitalSliceArray) = OrbitalSliceArray(similar(a.parent), orbaxes(a))
-Base.similar(a::OrbitalSliceArray, t::Type) = OrbitalSliceArray(similar(a.parent, t), orbaxes(a))
-# doesn't make sense to keep orbaxes in similar with different dimensions.
-Base.similar(a::OrbitalSliceArray, dims::Tuple) = similar(a.parent, dims)
-Base.copy(a::OrbitalSliceArray) = OrbitalSliceArray(copy(a.parent), a.orbaxes)
-Base.@propagate_inbounds Base.getindex(a::OrbitalSliceArray, i::Int) =
-    getindex(a.parent, i)
-Base.@propagate_inbounds Base.getindex(a::OrbitalSliceArray, I::Vararg{Int, N}) where {N} =
-    getindex(a.parent, I...)
-Base.@propagate_inbounds Base.setindex!(a::OrbitalSliceArray, v, i::Int) = setindex!(a.parent, v, i)
-Base.@propagate_inbounds Base.setindex!(a::OrbitalSliceArray, v, I::Vararg{Int, N}) where {N} = setindex!(a.parent, v, I...)
-
-# Additional indexing over sites
-Base.getindex(a::OrbitalSliceMatrix; sites...) = getindex(a, siteselector(; sites...))
-Base.getindex(a::OrbitalSliceMatrix, i::NamedTuple, j::NamedTuple = i) =
-    getindex(a, siteselector(i), siteselector(j))
-Base.getindex(a::OrbitalSliceMatrix, i::NamedTuple, j::SiteSelector) =
-    getindex(a, siteselector(i), j)
-Base.getindex(a::OrbitalSliceMatrix, i::SiteSelector, j::NamedTuple) =
-    getindex(a, i, siteselector(j))
-
-# SiteSelector: return a new OrbitalSliceMatrix
-function Base.getindex(a::OrbitalSliceMatrix, i::SiteSelector, j::SiteSelector = i)
-    rowslice, colslice = orbaxes(a)
-    rowslice´, colslice´ = rowslice[i], colslice[j]
-    rows = collect(indexcollection(rowslice, rowslice´))
-    cols = i === j && rowslice === colslice ? rows : indexcollection(colslice, colslice´)
-    m = parent(a)[rows, cols]
-    return OrbitalSliceMatrix(m, (rowslice´, colslice´))
-end
-
-# CellSites: return an unwrapped Matrix or a view thereof (non-allocating)
-Base.getindex(a::OrbitalSliceMatrix, i::AnyCellSites, j::AnyCellSites = i) =
-    copy(view(a, i, j))
-
-Base.getindex(a::OrbitalSliceMatrix, i::C, j::C = i) where {B,C<:CellSitePos{<:Any,<:Any,<:Any,B}} =
-    sanitize_block(B, view(a, i, j))
-
-function Base.view(a::OrbitalSliceMatrix, i::AnyCellSites, j::AnyCellSites = i)
-    rowslice, colslice = orbaxes(a)
-    i´, j´ = apply(i, lattice(rowslice)), apply(j, lattice(colslice))
-    rows = indexcollection(rowslice, i´)
-    cols = j === i && rowslice === colslice ? rows : indexcollection(colslice, j´)
-    return view(a.parent, rows, cols)
-end
-
-## broadcasting
-
-# following the manual: https://docs.julialang.org/en/v1/manual/interfaces/#man-interface-array
-
-Broadcast.BroadcastStyle(::Type{<:OrbitalSliceArray}) = Broadcast.ArrayStyle{OrbitalSliceArray}()
-
-Base.similar(bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{OrbitalSliceArray}}, ::Type{ElType}) where {ElType} =
-    OrbitalSliceArray(similar(Array{ElType}, axes(bc)), orbaxes(find_osa(bc)))
-
-find_osa(bc::Base.Broadcast.Broadcasted) = find_osa(bc.args)
-find_osa(args::Tuple) = find_osa(find_osa(args[1]), Base.tail(args))
-find_osa(x) = x
-find_osa(::Tuple{}) = nothing
-find_osa(a::OrbitalSliceArray, rest) = a
-find_osa(::Any, rest) = find_osa(rest)
-
-# taken from https://github.com/JuliaArrays/OffsetArrays.jl/blob/756e839563c88faa4ebe4ff971286747863aaff0/src/OffsetArrays.jl#L469
-
-Base.dataids(A::OrbitalSliceArray) = Base.dataids(parent(A))
-Broadcast.broadcast_unalias(dest::OrbitalSliceArray, src::OrbitalSliceArray) =
-    parent(dest) === parent(src) ? src : Broadcast.unalias(dest, src)
-
-## conversion
-
-maybe_OrbitalSliceArray(i) = x -> maybe_OrbitalSliceArray(x, i)
-
-maybe_OrbitalSliceArray(x::AbstractVector, i) = maybe_OrbitalSliceVector(x, i)
-maybe_OrbitalSliceArray(x::AbstractMatrix, i) = maybe_OrbitalSliceMatrix(x, i)
-
-maybe_OrbitalSliceVector(x, i::DiagIndices{Missing,<:OrbitalSliceGrouped}) =
-    maybe_OrbitalSliceVector(x, parent(i))
-maybe_OrbitalSliceVector(x, i::DiagIndices{<:Any,<:OrbitalSliceGrouped}) =
-    maybe_OrbitalSliceVector(x, scalarize(parent(i)))
-maybe_OrbitalSliceVector(x, i::OrbitalSliceGrouped) = OrbitalSliceVector(x, (i,))
-
-# fallback
-maybe_OrbitalSliceVector(x, i) = x
-
-maybe_OrbitalSliceMatrix(x, i::OrbitalSliceGrouped) =
-    maybe_OrbitalSliceMatrix(x, (i, i))
-maybe_OrbitalSliceMatrix(x, (i, j)::Tuple{OrbitalSliceGrouped,OrbitalSliceGrouped}) =
-    OrbitalSliceMatrix(x, (i, j))
-
-# fallback
-maybe_OrbitalSliceMatrix(x, i) = x
 
 #endregion
