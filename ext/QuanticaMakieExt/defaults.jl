@@ -63,17 +63,17 @@ checkplotdim(::PlotArgumentType{E}) where {E} =
 
 ## plotlattice defaults
 
-const plotlat_default_figure = (; size = (1200, 1200), fontsize = 40)
+const plotlat_default_figure = (; size = (870, 1200), fontsize = 20)
 
 const plotlat_default_axis3D = (;
     xlabel = "x", ylabel = "y", zlabel = "z",
     xticklabelcolor = :gray, yticklabelcolor = :gray, zticklabelcolor = :gray,
     xspinewidth = 0.2, yspinewidth = 0.2, zspinewidth = 0.2,
     xlabelrotation = 0, ylabelrotation = 0, zlabelrotation = 0,
-    xticklabelsize = 30, yticklabelsize = 30, zticklabelsize = 30,
-    xlabelsize = 35, ylabelsize = 35, zlabelsize = 35,
+    xticklabelsize = 18, yticklabelsize = 18, zticklabelsize = 18,
+    xlabelsize = 25, ylabelsize = 25, zlabelsize = 25,
     xlabelfont = :italic, ylabelfont = :italic, zlabelfont = :italic,
-    perspectiveness = 0.0, aspect = :data)
+    perspectiveness = 0.3, aspect = :data)
 
 const plotlat_default_axis2D = (; xlabel = "x", ylabel = "y", autolimitaspect = 1)
 
@@ -86,15 +86,15 @@ const plotlat_default_3D =
 
 ## plotbands defaults
 
-const plotbands_default_figure = (; size = (1200, 1200), fontsize = 40)
+const plotbands_default_figure = (; size = (870, 1200), fontsize = 20)
 
 const plotbands_default_axis3D = (;
     xlabel = "ϕ₁", ylabel = "ϕ₂", zlabel = "ε",
     xticklabelcolor = :gray, yticklabelcolor = :gray, zticklabelcolor = :gray,
     xspinewidth = 0.2, yspinewidth = 0.2, zspinewidth = 0.2,
     xlabelrotation = 0, ylabelrotation = 0, zlabelrotation = 0,
-    xticklabelsize = 30, yticklabelsize = 30, zticklabelsize = 30,
-    xlabelsize = 35, ylabelsize = 35, zlabelsize = 35,
+    xticklabelsize = 18, yticklabelsize = 18, zticklabelsize = 18,
+    xlabelsize = 25, ylabelsize = 25, zlabelsize = 25,
     xlabelfont = :italic, ylabelfont = :italic, zlabelfont = :italic,
     perspectiveness = 0.4, aspect = :data)
 
@@ -109,6 +109,6 @@ const plotbands_default_3D =
 
 ## inspector defaults
 
-const default_inspector = (; fontsize = 20)
+const default_inspector = (; fontsize = 15)
 
 #endregion
