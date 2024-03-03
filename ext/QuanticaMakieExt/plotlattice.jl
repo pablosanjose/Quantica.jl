@@ -20,10 +20,10 @@
         hopcolor = missing,          # accepts ((i,j), (r,dr)) -> float, IndexableObservable
         hopopacity = missing,        # accepts ((i,j), (r,dr)) -> float, IndexableObservable
         minmaxhopradius = (0.0, 0.1),
-        hopradius = 0.03,            # accepts ((i,j), (r,dr)) -> float, IndexableObservable
+        hopradius = 0.01,            # accepts ((i,j), (r,dr)) -> float, IndexableObservable
         hopdarken = 0.85,
         hopcolormap = :Spectral_9,
-        hoppixels = 6,
+        hoppixels = 2,
         selector = missing,
         hide = :cell, # :hops, :sites, :bravais, :cell, :axes, :shell, :all
         isAxis3 = false       # for internal use, undocumented
