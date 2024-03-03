@@ -20,12 +20,13 @@
         hopcolor = missing,          # accepts ((i,j), (r,dr)) -> float, IndexableObservable
         hopopacity = missing,        # accepts ((i,j), (r,dr)) -> float, IndexableObservable
         minmaxhopradius = (0.0, 0.1),
-        hopradius = 0.03,            # accepts ((i,j), (r,dr)) -> float, IndexableObservable
+        hopradius = 0.01,            # accepts ((i,j), (r,dr)) -> float, IndexableObservable
         hopdarken = 0.85,
         hopcolormap = :Spectral_9,
-        hoppixels = 6,
+        hoppixels = 2,
         selector = missing,
         hide = :cell, # :hops, :sites, :bravais, :cell, :axes, :shell, :all
+        isAxis3 = false       # for internal use, undocumented
     )
 end
 
@@ -38,24 +39,26 @@ end
 function Quantica.qplot(h::PlotLatticeArgumentType;
     fancyaxis = true, axis = axis_defaults(h, fancyaxis), figure = user_default_figure, inspector = false, plotkw...)
     fig, ax = empty_fig_axis(h; fancyaxis, axis, figure)
-    plotlattice!(ax, h; plotkw...)
+    isAxis3 = ax isa Axis3
+    plotlattice!(ax, h; isAxis3, plotkw...)
     inspector && DataInspector(; default_inspector..., user_default_inspector...)
     return fig
 end
 
 function Quantica.qplot(g::GreenFunction; fancyaxis = true, axis = axis_defaults(g, fancyaxis), figure = user_default_figure, inspector = false, children = missing, plotkw...)
     fig, ax = empty_fig_axis(g; fancyaxis, axis, figure)
+    isAxis3 = ax isa Axis3
     Σkws = Iterators.cycle(parse_children(children))
     Σs = Quantica.selfenergies(Quantica.contacts(g))
     for (Σ, childkw) in zip(Σs, Σkws)
         primitives = selfenergy_plottable(Quantica.solver(Σ), Quantica.plottables(Σ)...; childkw...)
         for (prim, primkw) in primitives
-            plotlattice!(ax, prim; plotkw..., primkw..., childkw...)
+            plotlattice!(ax, prim; isAxis3, plotkw..., primkw..., childkw...)
         end
     end
     # Makie BUG: To allow inspector to show topmost tooltip, it should be transparent
     # if other layers (here the leads) are transparent
-    plotlattice!(ax, parent(g); plotkw..., force_transparency = inspector && !isempty(Σs))
+    plotlattice!(ax, parent(g); isAxis3, plotkw..., force_transparency = inspector && !isempty(Σs))
     inspector && DataInspector(; default_inspector..., user_default_inspector...)
     return fig
 end
@@ -122,7 +125,7 @@ function _siteprimitives(ls::LatticeSlice{<:Any,E}, h, opts, opacityflag) where 
 end
 
 function hoppingprimitives(ls, h, siteradii, plot)   # function barrier
-    opts = (plot[:hopcolor][], plot[:hopopacity][], plot[:shellopacity][], plot[:hopradius][])
+    opts = (plot[:hopcolor][], plot[:hopopacity][], plot[:shellopacity][], plot[:hopradius][], plot[:flat][])
     opts´ = maybe_evaluate_observable.(opts, Ref(ls))
     return _hoppingprimitives(ls, h, opts´, siteradii)
 end
@@ -191,8 +194,8 @@ push_sitehue!(sp, ::Makie.Colorant, i, r, s) = push!(sp.hues, 0f0)
 push_sitehue!(sp, sitecolor, i, r, s) = argerror("Unrecognized sitecolor")
 
 push_siteopacity!(sp, ::Missing, bop, i, r, flag) = push!(sp.opacities, flag ? 1.0 : bop)
-push_siteopacity!(sp, siteopacity::Real, bop, i, r, flag) = push!(sp.opacities, siteopacity)
-push_siteopacity!(sp, siteopacity::Function, bop, i, r, flag) = push!(sp.opacities, siteopacity(i, r))
+push_siteopacity!(sp, siteopacity::Real, bop, i, r, flag) = push!(sp.opacities, flag ? siteopacity : bop)
+push_siteopacity!(sp, siteopacity::Function, bop, i, r, flag) = push!(sp.opacities, flag ? siteopacity(i, r) : bop)
 push_siteopacity!(sp, siteopacity, bop, i, r, flag) = argerror("Unrecognized siteradius")
 
 push_siteradius!(sp, siteradius::Real, i, r) = push!(sp.radii, siteradius)
@@ -202,10 +205,14 @@ push_siteradius!(sp, siteradius, i, r) = argerror("Unrecognized siteradius")
 push_sitetooltip!(sp, i, r, mat) = push!(sp.tooltips, matrixstring(i, mat))
 push_sitetooltip!(sp, i, r) = push!(sp.tooltips, positionstring(i, r))
 
-function push_hopprimitive!(hp, (hopcolor, hopopacity, shellopacity, hopradius), lat, (i, j), (ni, nj), radius, matij, opacityflag)
+function push_hopprimitive!(hp, (hopcolor, hopopacity, shellopacity, hopradius, flat), lat, (i, j), (ni, nj), radius, matij, opacityflag)
     src, dst = Quantica.site(lat, j, nj), Quantica.site(lat, i, ni)
-    opacityflag && (dst = (src + dst)/2)
-    src += normalize(dst - src) * radius
+    # If end site is opaque (not in outer shell), dst is midpoint, since the inverse hop will be plotted too
+    # otherwise it is shifted by radius´ = radius minus hopradius correction if flat = false, and src also
+    radius´ = flat ? radius : sqrt(radius^2-hopradius^2)
+    unitvec = normalize(dst - src)
+    dst = opacityflag ? (src + dst)/2 : dst - unitvec * radius´
+    src = src + unitvec * radius´
     r, dr = (src + dst)/2, (dst - src)
     sj = Quantica.sitesublat(lat, j)
     push!(hp.centers, r)
@@ -276,9 +283,10 @@ primitive_color(color, extrema, colormap, pcolor::Makie.Colorant) =
 primitive_color(color, extrema, colormap, _) =
     RGBAf(colormap[normalize_range(color, extrema)])
 
-# opacity == missing means reduced opacity in shell
-primitite_opacity(α, extrema, ::Missing) = α
-primitite_opacity(α, extrema, _) = normalize_range(α, extrema)
+# opacity::Function should be scaled
+primitite_opacity(α, extrema, ::Function) = normalize_range(α, extrema)
+# otherwise (opacity::Union{Missing,Real}) we leave it fixed
+primitite_opacity(α, extrema, _) = α
 
 ## update_radii! ##
 
@@ -488,11 +496,10 @@ end
 
 function plotsites_flat!(plot::PlotLattice, sp::SitePrimitives, transparency)
     inspector_label = (self, i, r) -> sp.tooltips[i]
-    markersize = 2*sp.radii
+    sizefactor = ifelse(plot[:isAxis3][] && plot[:flat][], 0.5, sqrt(2))
+    markersize = 2*sp.radii*sizefactor
     scatter!(plot, sp.centers;
         markersize,
-        # Circle required until https://github.com/MakieOrg/Makie.jl/pull/3281 is merged
-        marker = Circle,
         color = sp.colors,
         markerspace = :data,
         strokewidth = plot[:siteoutline][],
@@ -505,9 +512,10 @@ end
 function plothops_shaded!(plot::PlotLattice, hp::HoppingPrimitives, transparency)
     inspector_label = (self, i, r) -> hp.tooltips[i]
     scales = primitive_scales(hp, plot)
-    cyl = Cylinder(Point3f(0., 0., -1.0), Point3f(0., 0, 1.0), Float32(1))
+    cyl = Cylinder(Point3f(0., 0., -1), Point3f(0., 0, 1), Float32(1))
+    vectors = Quantica.sanitize_SVector.(SVector{3,Float32}, hp.vectors) # convert to 3D
     meshscatter!(plot, hp.centers; color = hp.colors,
-        rotations = hp.vectors, markersize = scales, marker = cyl,
+        rotations = vectors, markersize = scales, marker = cyl,
         transparency,
         inspector_label)
     return plot
