@@ -12,7 +12,7 @@
         sitecolor = missing,         # accepts (i, r) -> float, IndexableObservable
         siteopacity = missing,       # accepts (i, r) -> float, IndexableObservable
         minmaxsiteradius = (0.0, 0.5),
-        siteradius = 0.25,           # accepts (i, r) -> float, IndexableObservable
+        siteradius = 0.2,            # accepts (i, r) -> float, IndexableObservable
         siteoutline = 2,
         siteoutlinedarken = 0.6,
         sitedarken = 0.0,
@@ -25,8 +25,11 @@
         hopcolormap = :Spectral_9,
         hoppixels = 2,
         selector = missing,
-        hide = :cell, # :hops, :sites, :bravais, :cell, :axes, :shell, :all
-        isAxis3 = false       # for internal use, undocumented
+        hide = :cell,               # :hops, :sites, :bravais, :cell, :axes, :shell, :all
+        isAxis3 = false,            # for internal use, to fix marker scaling
+        marker = :auto,
+        children = missing,
+        inspector = false
     )
 end
 
@@ -39,26 +42,8 @@ end
 function Quantica.qplot(h::PlotLatticeArgumentType;
     fancyaxis = true, axis = axis_defaults(h, fancyaxis), figure = user_default_figure, inspector = false, plotkw...)
     fig, ax = empty_fig_axis(h; fancyaxis, axis, figure)
-    isAxis3 = ax isa Axis3
-    plotlattice!(ax, h; isAxis3, plotkw...)
-    inspector && DataInspector(; default_inspector..., user_default_inspector...)
-    return fig
-end
-
-function Quantica.qplot(g::GreenFunction; fancyaxis = true, axis = axis_defaults(g, fancyaxis), figure = user_default_figure, inspector = false, children = missing, plotkw...)
-    fig, ax = empty_fig_axis(g; fancyaxis, axis, figure)
-    isAxis3 = ax isa Axis3
-    Σkws = Iterators.cycle(parse_children(children))
-    Σs = Quantica.selfenergies(Quantica.contacts(g))
-    for (Σ, childkw) in zip(Σs, Σkws)
-        primitives = selfenergy_plottable(Quantica.solver(Σ), Quantica.plottables(Σ)...; childkw...)
-        for (prim, primkw) in primitives
-            plotlattice!(ax, prim; isAxis3, plotkw..., primkw..., childkw...)
-        end
-    end
-    # Makie BUG: To allow inspector to show topmost tooltip, it should be transparent
-    # if other layers (here the leads) are transparent
-    plotlattice!(ax, parent(g); isAxis3, plotkw..., force_transparency = inspector && !isempty(Σs))
+    plotkw´ = (isAxis3 = ax isa Axis3, inspector, plotkw...)   # isAxis3 necessary to fix marker scaling
+    plotlattice!(ax, h; plotkw´...)
     inspector && DataInspector(; default_inspector..., user_default_inspector...)
     return fig
 end
@@ -68,6 +53,32 @@ Quantica.qplot!(x::PlotLatticeArgumentType; kw...) = plotlattice!(x; kw...)
 parse_children(::Missing) = (NamedTuple(),)
 parse_children(p::Tuple) = p
 parse_children(p::NamedTuple) = (p,)
+
+function green_selector(g)
+    mincell, maxcell = green_bounding_box(g)
+    s = siteselector(cells = n -> all(mincell .<= n .<= maxcell))
+    return s
+end
+
+not_boundary_selector(g) = siteselector(cells = n -> !isboundarycell(n, g))
+
+green_bounding_box(g) =
+    broaden_bounding_box(Quantica.boundingbox(g), Quantica.boundaries(g)...)
+
+function broaden_bounding_box((mincell, maxcell)::Tuple{SVector{N},SVector{N}}, (dir, cell), bs...) where {N}
+    isfinite(cell) || return (mincell, maxcell)
+    mincell´ = SVector(ntuple(i -> i == dir ? min(mincell[i], cell + 1) : mincell[i], Val(N)))
+    maxcell´ = SVector(ntuple(i -> i == dir ? max(maxcell[i], cell - 1) : maxcell[i], Val(N)))
+    return mincell´, maxcell´
+end
+
+broaden_bounding_box(bb) = bb
+
+isboundarycell(n, g) = any(((dir, cell),) -> n[dir] == cell, Quantica.boundaries(g))
+
+get_plottables_and_kws(Σp::Tuple) = (Σp, NamedTuple())
+get_plottables_and_kws(Σp::Quantica.FrankenTuple) = (Tuple(Σp), NamedTuple(Σp))
+get_plottables_and_kws(Σp) = ((Σp,), NamedTuple())
 
 #endregion
 
@@ -104,13 +115,13 @@ SitePrimitives{E}() where {E} =
 HoppingPrimitives{E}() where {E} =
     HoppingPrimitives(Point{E,Float32}[], Vec{E,Float32}[], Tuple{Int,Int}[], Float32[], Float32[], Float32[], String[], RGBAf[])
 
-function siteprimitives(ls, h, plot, opacityflag)   # function barrier
+function siteprimitives(ls, h, plot, is_shell)   # function barrier
     opts = (plot[:sitecolor][], plot[:siteopacity][], plot[:shellopacity][], plot[:siteradius][])
     opts´ = maybe_evaluate_observable.(opts, Ref(ls))
-    return _siteprimitives(ls, h, opts´, opacityflag)
+    return _siteprimitives(ls, h, opts´, is_shell)
 end
 
-function _siteprimitives(ls::LatticeSlice{<:Any,E}, h, opts, opacityflag) where {E}
+function _siteprimitives(ls::LatticeSlice{<:Any,E}, h, opts, is_shell) where {E}
     sp = SitePrimitives{E}()
     mat = Quantica.matrix(first(harmonics(h)))
     lat = parent(ls)
@@ -119,22 +130,23 @@ function _siteprimitives(ls::LatticeSlice{<:Any,E}, h, opts, opacityflag) where 
         i = Quantica.siteindex(cs)
         # in case opts contains some array over latslice (from an observable)
         opts´ = maybe_getindex.(opts, i´)
-        push_siteprimitive!(sp, opts´, lat, i, ni, mat[i, i], opacityflag)
+        push_siteprimitive!(sp, opts´, lat, i, ni, mat[i, i], is_shell)
     end
     return sp
 end
 
-function hoppingprimitives(ls, h, siteradii, plot)   # function barrier
+function hoppingprimitives(ls, ls´, h, siteradii, plot)   # function barrier
     opts = (plot[:hopcolor][], plot[:hopopacity][], plot[:shellopacity][], plot[:hopradius][], plot[:flat][])
     opts´ = maybe_evaluate_observable.(opts, Ref(ls))
-    return _hoppingprimitives(ls, h, opts´, siteradii)
+    return _hoppingprimitives(ls, ls´, h, opts´, siteradii)
 end
 
-function _hoppingprimitives(ls::LatticeSlice{<:Any,E}, h, opts, siteradii) where {E}
+function _hoppingprimitives(ls::LatticeSlice{<:Any,E}, ls´, h, opts, siteradii) where {E}
     hp = HoppingPrimitives{E}()
     hp´ = HoppingPrimitives{E}()
     lat = parent(ls)
     sdict = Quantica.siteindexdict(ls)
+    sdict´ = Quantica.siteindexdict(ls´)
     for (j´, cs) in enumerate(Quantica.cellsites(ls))
         nj = Quantica.cell(cs)
         j = Quantica.siteindex(cs)
@@ -148,9 +160,11 @@ function _hoppingprimitives(ls::LatticeSlice{<:Any,E}, h, opts, siteradii) where
                 i = rows[ptr]
                 Quantica.isonsite((i, j), dn) && continue
                 i´ = get(sdict, Quantica.CellSite(ni, i), nothing)
-                if i´ === nothing
-                    opts´ = maybe_getindex.(opts, j´)
-                    push_hopprimitive!(hp´, opts´, lat, (i, j), (ni, nj), siteradius, mat[i, j], false)
+                if i´ === nothing   # dst is not in latslice
+                    if haskey(sdict´, Quantica.CellSite(ni, i))  # dst is in latslice´
+                        opts´ = maybe_getindex.(opts, j´)
+                        push_hopprimitive!(hp´, opts´, lat, (i, j), (ni, nj), siteradius, mat[i, j], false)
+                    end
                 else
                     opts´ = maybe_getindex.(opts, i´, j´)
                     push_hopprimitive!(hp, opts´, lat, (i, j), (ni, nj), siteradius, mat[i, j], true)
@@ -174,13 +188,13 @@ maybe_getindex(v, i, j) = v
 
 ## push! ##
 
-function push_siteprimitive!(sp, (sitecolor, siteopacity, shellopacity, siteradius), lat, i, ni, matii, opacityflag)
+function push_siteprimitive!(sp, (sitecolor, siteopacity, shellopacity, siteradius), lat, i, ni, matii, is_shell)
     r = Quantica.site(lat, i, ni)
     s = Quantica.sitesublat(lat, i)
     push!(sp.centers, r)
     push!(sp.indices, i)
     push_sitehue!(sp, sitecolor, i, r, s)
-    push_siteopacity!(sp, siteopacity, shellopacity, i, r, opacityflag)
+    push_siteopacity!(sp, siteopacity, shellopacity, i, r, is_shell)
     push_siteradius!(sp, siteradius, i, r)
     push_sitetooltip!(sp, i, r, matii)
     return sp
@@ -193,10 +207,11 @@ push_sitehue!(sp, ::Symbol, i, r, s) = push!(sp.hues, 0f0)
 push_sitehue!(sp, ::Makie.Colorant, i, r, s) = push!(sp.hues, 0f0)
 push_sitehue!(sp, sitecolor, i, r, s) = argerror("Unrecognized sitecolor")
 
-push_siteopacity!(sp, ::Missing, bop, i, r, flag) = push!(sp.opacities, flag ? 1.0 : bop)
-push_siteopacity!(sp, siteopacity::Real, bop, i, r, flag) = push!(sp.opacities, flag ? siteopacity : bop)
-push_siteopacity!(sp, siteopacity::Function, bop, i, r, flag) = push!(sp.opacities, flag ? siteopacity(i, r) : bop)
-push_siteopacity!(sp, siteopacity, bop, i, r, flag) = argerror("Unrecognized siteradius")
+push_siteopacity!(sp, ::Missing, shellopacity, i, r, is_shell) = push!(sp.opacities, is_shell ? 1.0 : shellopacity)
+push_siteopacity!(sp, ::Missing, ::Missing, i, r, is_shell) = push!(sp.opacities, 1.0)
+push_siteopacity!(sp, siteopacity::Real, shellopacity, i, r, is_shell) = push!(sp.opacities, is_shell ? siteopacity : shellopacity)
+push_siteopacity!(sp, siteopacity::Function, shellopacity, i, r, is_shell) = push!(sp.opacities, is_shell ? siteopacity(i, r) : shellopacity)
+push_siteopacity!(sp, siteopacity, shellopacity, i, r, is_shell) = argerror("Unrecognized siteradius")
 
 push_siteradius!(sp, siteradius::Real, i, r) = push!(sp.radii, siteradius)
 push_siteradius!(sp, siteradius::Function, i, r) = push!(sp.radii, siteradius(i, r))
@@ -205,13 +220,13 @@ push_siteradius!(sp, siteradius, i, r) = argerror("Unrecognized siteradius")
 push_sitetooltip!(sp, i, r, mat) = push!(sp.tooltips, matrixstring(i, mat))
 push_sitetooltip!(sp, i, r) = push!(sp.tooltips, positionstring(i, r))
 
-function push_hopprimitive!(hp, (hopcolor, hopopacity, shellopacity, hopradius, flat), lat, (i, j), (ni, nj), radius, matij, opacityflag)
+function push_hopprimitive!(hp, (hopcolor, hopopacity, shellopacity, hopradius, flat), lat, (i, j), (ni, nj), radius, matij, is_shell)
     src, dst = Quantica.site(lat, j, nj), Quantica.site(lat, i, ni)
     # If end site is opaque (not in outer shell), dst is midpoint, since the inverse hop will be plotted too
     # otherwise it is shifted by radius´ = radius minus hopradius correction if flat = false, and src also
     radius´ = flat ? radius : sqrt(radius^2-hopradius^2)
     unitvec = normalize(dst - src)
-    dst = opacityflag ? (src + dst)/2 : dst - unitvec * radius´
+    dst = is_shell ? (src + dst)/2 : dst - unitvec * radius´
     src = src + unitvec * radius´
     r, dr = (src + dst)/2, (dst - src)
     sj = Quantica.sitesublat(lat, j)
@@ -219,7 +234,7 @@ function push_hopprimitive!(hp, (hopcolor, hopopacity, shellopacity, hopradius, 
     push!(hp.vectors, dr)
     push!(hp.indices, (i, j))
     push_hophue!(hp, hopcolor, (i, j), (r, dr), sj)
-    push_hopopacity!(hp, hopopacity, shellopacity, (i, j), (r, dr), opacityflag)
+    push_hopopacity!(hp, hopopacity, shellopacity, (i, j), (r, dr), is_shell)
     push_hopradius!(hp, hopradius, (i, j), (r, dr))
     push_hoptooltip!(hp, (i, j), matij)
     return hp
@@ -232,10 +247,11 @@ push_hophue!(hp, ::Symbol, ij, rdr, s) = push!(hp.hues, 0f0)
 push_hophue!(hp, ::Makie.Colorant, ij, rdr, s) = push!(hp.hues, 0f0)
 push_hophue!(hp, hopcolor, ij, rdr, s) = argerror("Unrecognized hopcolor")
 
-push_hopopacity!(hp, ::Missing, bop, ij, rdr, opacityflag) = push!(hp.opacities, opacityflag ? 1.0 : bop)
-push_hopopacity!(hp, hopopacity::Real, bop, ij, rdr, opacityflag) = push!(hp.opacities, hopopacity)
-push_hopopacity!(hp, hopopacity::Function, bop, ij, rdr, opacityflag) = push!(hp.opacities, hopopacity(ij, rdr))
-push_hopopacity!(hp, hopopacity, bop, ij, rdr, opacityflag) = argerror("Unrecognized hopradius")
+push_hopopacity!(hp, ::Missing, shellopacity, ij, rdr, is_shell) = push!(hp.opacities, is_shell ? 1.0 : shellopacity)
+push_hopopacity!(hp, ::Missing, ::Missing, ij, rdr, is_shell) = push!(hp.opacities, 1.0)
+push_hopopacity!(hp, hopopacity::Real, shellopacity, ij, rdr, is_shell) = push!(hp.opacities, hopopacity)
+push_hopopacity!(hp, hopopacity::Function, shellopacity, ij, rdr, is_shell) = push!(hp.opacities, hopopacity(ij, rdr))
+push_hopopacity!(hp, hopopacity, shellopacity, ij, rdr, is_shell) = argerror("Unrecognized hopradius")
 
 push_hopradius!(hp, hopradius::Real, ij, rdr) = push!(hp.radii, hopradius)
 push_hopradius!(hp, hopradius::Function, ij, rdr) = push!(hp.radii, hopradius(ij, rdr))
@@ -366,7 +382,7 @@ primitive_linewidth(normr, hopradius, hoppixels) = hoppixels * normr
 #endregion
 
 ############################################################################################
-# PlotLattice for AbstractHamiltonian and Lattice
+# PlotLattice for different arguments
 #region
 
 function Makie.plot!(plot::PlotLattice{Tuple{L}}) where {L<:Lattice}
@@ -388,7 +404,7 @@ function Makie.plot!(plot::PlotLattice{Tuple{L}}) where {L<:ParametricHamiltonia
     return plotlattice!(plot, h; plot.attributes...)
 end
 
-function Makie.plot!(plot::PlotLattice{Tuple{H}}) where {T,E,H<:Hamiltonian{T,E}}
+function Makie.plot!(plot::PlotLattice{Tuple{H}}) where {H<:Hamiltonian}
     h = to_value(plot[1])
     lat = Quantica.lattice(h)
     sel = sanitize_selector(plot[:selector][], lat)
@@ -397,21 +413,46 @@ function Makie.plot!(plot::PlotLattice{Tuple{H}}) where {T,E,H<:Hamiltonian{T,E}
 end
 
 # For E < 2 Hamiltonians, promote to 2D
-function Makie.plot!(plot::PlotLattice{Tuple{H}}) where {T,H<:Hamiltonian{T,1}}
+function Makie.plot!(plot::PlotLattice{Tuple{H}}) where {H<:Hamiltonian{<:Any,1}}
     h = Hamiltonian{2}(to_value(plot[1]))
     return plotlattice!(plot, h; plot.attributes...)
 end
 
-function Makie.plot!(plot::PlotLattice{Tuple{H,S}}) where {E,L,H<:Hamiltonian{<:Any,E,L},S<:LatticeSlice}
+function Makie.plot!(plot::PlotLattice{Tuple{H,S}}) where {H<:Hamiltonian{<:Any,1},S<:LatticeSlice}
+    h = Hamiltonian{2}(to_value(plot[1]))
+    lat = Quantica.lattice(h)
+    l = Quantica.unsafe_replace_lattice(to_value(plot[2]), lat)
+    return plotlattice!(plot, h, l; plot.attributes...)
+end
+
+function Makie.plot!(plot::PlotLattice{Tuple{H,S,S´}}) where {H<:Hamiltonian{<:Any,1},S<:LatticeSlice,S´<:LatticeSlice}
+    h = Hamiltonian{2}(to_value(plot[1]))
+    lat = Quantica.lattice(h)
+    l  = Quantica.unsafe_replace_lattice(to_value(plot[2]), lat)
+    l´ = Quantica.unsafe_replace_lattice(to_value(plot[3]), lat)
+    return plotlattice!(plot, h, l, l´; plot.attributes...)
+end
+
+function Makie.plot!(plot::PlotLattice{Tuple{H,S}}) where {H<:Hamiltonian,S<:LatticeSlice}
     h = to_value(plot[1])
     latslice = to_value(plot[2])
-    lat = Quantica.lattice(h)
     latslice´ = Quantica.growdiff(latslice, h)
+    return plotlattice!(plot, h, latslice, latslice´; plot.attributes...)
+end
+
+function Makie.plot!(plot::PlotLattice{Tuple{H,S,S´}}) where {H<:Hamiltonian,S<:LatticeSlice,S´<:LatticeSlice}
+    h = to_value(plot[1])
+    latslice = to_value(plot[2])    # selected sites
+    latslice´ = to_value(plot[3])   # shell around sites
+    lat = Quantica.lattice(h)
+
+    # if e.g. `plot[:sitecolor][] == :hopcolor`, replace with `plot[:hopcolor][]`
+    resolve_cross_references!(plot)
 
     hidesites = ishidden((:sites, :all), plot)
     hidehops = ishidden((:hops, :hoppings, :links, :all), plot)
     hidebravais = ishidden((:bravais, :all), plot)
-    hideshell = ishidden((:shell, :all), plot) || iszero(L)
+    hideshell = ishidden((:shell, :all), plot) || iszero(Quantica.latdim(h))
 
     # plot bravais axes
     if !hidebravais
@@ -433,7 +474,7 @@ function Makie.plot!(plot::PlotLattice{Tuple{H,S}}) where {E,L,H<:Hamiltonian{<:
     # collect hops
     if !hidehops
         radii = hidesites ? () : sp.radii
-        hp, hp´ = hoppingprimitives(latslice, h, radii, plot)
+        hp, hp´ = hoppingprimitives(latslice, latslice´, h, radii, plot)
         if hideshell
             update_colors!(hp, plot)
             update_radii!(hp, plot)
@@ -471,6 +512,36 @@ function Makie.plot!(plot::PlotLattice{Tuple{H,S}}) where {E,L,H<:Hamiltonian{<:
     return plot
 end
 
+function Makie.plot!(plot::PlotLattice{Tuple{G}}) where {G<:GreenFunction}
+    children = plot[:children][]
+    g = to_value(plot[1])
+    Σkws = Iterators.cycle(parse_children(children))
+    Σs = Quantica.selfenergies(Quantica.contacts(g))
+    bsel = not_boundary_selector(g)
+    # plot lattice
+    gsel = haskey(plot, :selector) && plot[:selector][] !== missing ?
+        plot[:selector][] : green_selector(g)
+    h = hamiltonian(g)
+    latslice = lattice(h)[gsel]
+    latslice´ = Quantica.growdiff(latslice, h)
+    latslice´ = latslice´[bsel]
+    latslice = latslice[bsel]
+    hideh = Quantica.tupleflatten(:cell, :bravais, plot[:hide][])
+    plotkw´´ = (; hopopacity = 0.2, siteopacity = 0.2, shellopacity = 0.07, plot.attributes...,
+        hide = hideh)
+    plotlattice!(plot, h, latslice, latslice´; plotkw´´...)
+    # plot contacts
+    for (Σ, Σkw) in zip(Σs, Σkws)
+        Σplottables = Quantica.selfenergy_plottables(Σ, bsel)
+        marker = !plot[:flat][] ? Rect3f(Vec3f(-0.5), Vec3f(1)) : Rect2
+        for Σp in Σplottables
+            plottables, kws = get_plottables_and_kws(Σp)
+            plotlattice!(plot, plottables...; plot.attributes..., marker, kws..., Σkw...)
+        end
+    end
+    return plot
+end
+
 sanitize_selector(::Missing, lat) = Quantica.siteselector(; cells = Quantica.zerocell(lat))
 sanitize_selector(s::Quantica.SiteSelector, lat) = s
 sanitize_selector(s, lat) = argerror("Specify a site selector with `selector = siteselector(; kw...)`")
@@ -487,7 +558,15 @@ end
 
 function plotsites_shaded!(plot::PlotLattice, sp::SitePrimitives, transparency)
     inspector_label = (self, i, r) -> sp.tooltips[i]
-    meshscatter!(plot, sp.centers; color = sp.colors, markersize = sp.radii,
+    sizefactor = 1.0
+    if plot[:marker][] == :auto  # circle markers
+        marker = (;)
+    else
+        marker = (; marker = plot[:marker][])
+        sizefactor *= sqrt(2)
+    end
+    markersize = sizefactor * sp.radii
+    meshscatter!(plot, sp.centers; color = sp.colors, markersize, marker...,
             space = :data,
             transparency,
             inspector_label)
@@ -497,9 +576,15 @@ end
 function plotsites_flat!(plot::PlotLattice, sp::SitePrimitives, transparency)
     inspector_label = (self, i, r) -> sp.tooltips[i]
     sizefactor = ifelse(plot[:isAxis3][] && plot[:flat][], 0.5, sqrt(2))
+    if plot[:marker][] == :auto  # circle markers
+        marker = (;)
+    else
+        marker = (; marker = plot[:marker][])
+        sizefactor *= 0.5
+    end
     markersize = 2*sp.radii*sizefactor
     scatter!(plot, sp.centers;
-        markersize,
+        markersize, marker...,
         color = sp.colors,
         markerspace = :data,
         strokewidth = plot[:siteoutline][],
@@ -599,40 +684,6 @@ numberstring(x) = isreal(x) ? string(" ", real(x)) : isimag(x) ? string(" ", ima
 
 isreal(x) = all(o -> imag(o) ≈ 0, x)
 isimag(x) = all(o -> real(o) ≈ 0, x)
-
-#endregion
-
-
-############################################################################################
-# selfenergy_plottable
-#   Build plottable objects pi for each type of SelfEnergy (identified by its solver), and
-#   associated qplot keywords
-#region
-
-selfenergy_plottable(::Quantica.AbstractSelfEnergySolver; kw...) = ()
-
-function selfenergy_plottable(solver::Quantica.SelfEnergyModelSolver, ph; kw...)
-    p1, k1 = ph, (; siteoutline = 7)
-    return ((p1, k1),)
-end
-
-function selfenergy_plottable(s::Quantica.SelfEnergySchurSolver,
-    hlead; kw...)
-    p1, k1 = hlead, (; selector = siteselector())
-    return ((p1, k1),)
-end
-
-function selfenergy_plottable(s::Quantica.SelfEnergyCouplingSchurSolver,
-    hcoupling, hlead;  kw...)
-    p1, k1 = hlead, (; selector = siteselector())
-    p2, k2 = hcoupling, (; siteoutline = 7)
-    return ((p1, k1), (p2, k2))
-end
-
-function selfenergy_plottable(s::Quantica.SelfEnergyGenericSolver, hcoupling; kw...)
-    p1, k1 = hcoupling, (; siteoutline = 7)
-    return ((p1, k1),)
-end
 
 #endregion
 

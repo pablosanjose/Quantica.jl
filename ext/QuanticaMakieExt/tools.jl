@@ -20,6 +20,7 @@ dnshell(::Lattice{<:Any,<:Any,L}, span = -1:1) where {L} =
 
 ishidden(s, plot::Union{PlotLattice,PlotBands}) = ishidden(s, plot[:hide][])
 ishidden(s, ::Nothing) = false
+ishidden(s, ::Pair) = false     # for cellsites => function
 ishidden(s::Symbol, hide::Symbol) = s === hide
 ishidden(s::Symbol, hides::Tuple) = s in hides
 ishidden(ss, hides) = any(s -> ishidden(s, hides), ss)
@@ -34,5 +35,22 @@ safeextrema(v) = isempty(v) ? (Float32(0), Float32(1)) : extrema(v)
 has_transparencies(x::Real) = !(x ≈ 1)
 has_transparencies(::Missing) = false
 has_transparencies(x) = true
+
+function resolve_cross_references!(plot::PlotLattice)
+    names = (:shellopacity, :siteopacity, :hopopacity, :cellopacity, :sitecolor, :hopcolor, :siteradius, :hopradius)
+    for name in names
+        property = plot[name][]
+        if property isa Symbol && property in names
+            plot[name][] = plot[property][]
+
+        end
+    end
+    foreach(names) do name
+        property = plot[name][]
+        property isa Symbol && property in names && argerror("Cyclic reference in plot properties")
+    end
+    return plot
+end
+
 
 #endregion

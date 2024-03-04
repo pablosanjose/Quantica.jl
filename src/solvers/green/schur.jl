@@ -318,6 +318,8 @@ AppliedSchurGreenSolver{G,G∞}(fsolver::SchurFactorsSolver{T,B}, boundary, ohL:
 
 schurfactorsolver(s::AppliedSchurGreenSolver) = s.fsolver
 
+boundaries(s::AppliedSchurGreenSolver) = (1 => s.boundary,)
+
 #endregion
 
 #region ## getproperty ##
@@ -341,17 +343,17 @@ end
 
 #region ## apply ##
 
-function apply(s::GS.Schur, h::AbstractHamiltonian1D, contacts::Contacts)
+function apply(s::GS.Schur, h::AbstractHamiltonian1D{T}, contacts::Contacts) where {T}
     h´ = hamiltonian(h)
     fsolver = SchurFactorsSolver(h´, s.shift)
     h0 = unitcell_hamiltonian(h)
-    boundary = round(only(s.boundary))
+    boundary = T(round(only(s.boundary)))
     rsites = stored_cols(hamiltonian(h)[unflat(1)])
     lsites = stored_cols(hamiltonian(h)[unflat(-1)])
     orbslice_l = sites_to_orbs(lattice(h0)[cellsites((), lsites)], h)
     orbslice_r = sites_to_orbs(lattice(h0)[cellsites((), rsites)], h)
-    ΣR_solver = SelfEnergySchurSolver(fsolver, h, :R)
-    ΣL_solver = SelfEnergySchurSolver(fsolver, h, :L)
+    ΣR_solver = SelfEnergySchurSolver(fsolver, h, :R, boundary)
+    ΣL_solver = SelfEnergySchurSolver(fsolver, h, :L, boundary)
     ΣL = SelfEnergy(ΣL_solver, orbslice_l)
     ΣR = SelfEnergy(ΣR_solver, orbslice_r)
 

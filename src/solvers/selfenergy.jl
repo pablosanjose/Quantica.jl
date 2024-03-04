@@ -10,6 +10,9 @@
 #       Note: `params` are only needed in cases where s adds new parameters that must be
 #       applied (e.g. SelfEnergyModelSolver). Otherwise one must assume that any parent
 #       ParametricHamiltonian to GreenFunction has already been call!-ed before calling s.
+#   Optional: AbstractSelfEnergySolver's can also implement `selfenergy_plottables`
+#     - selfenergy_plottables(s::AbstractSelfEnergySolver, parent_latslice, boundary_sel)
+#       -> collection of tuples to be passed to plotlattice!(axis, tup...) for visualization
 ############################################################################################
 
 ############################################################################################
@@ -19,8 +22,14 @@
 #   SelfEnergy wraps the corresponding SelfEnergySolver, be it Regular or Extended
 ############################################################################################
 
+selfenergy_plottables(s::SelfEnergy, boundaryselector) =
+    selfenergy_plottables(s.solver, orbslice(s), boundaryselector)
+
+# fallback
+selfenergy_plottables(s::AbstractSelfEnergySolver, parent_latslice, boundaryselector) =
+    (parent_latslice[boundaryselector],)
+
 include("selfenergy/nothing.jl")
 include("selfenergy/model.jl")
 include("selfenergy/schur.jl")
 include("selfenergy/generic.jl")
-

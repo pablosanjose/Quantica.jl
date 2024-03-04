@@ -11,6 +11,7 @@ struct SelfEnergySchurSolver{T,B,V<:Union{Missing,Vector{Int}},H<:AbstractHamilt
     fsolver::SchurFactorsSolver{T,B}
     hlead::H
     isleftside::Bool
+    boundary::T
     leadtoparent::V  # orbital index in parent for each orbital in open lead surface
                      # so that Σlead[leadtoparent, leadtoparent] == Σparent
 end
@@ -18,8 +19,8 @@ end
 
 #region ## Constructors ##
 
-SelfEnergySchurSolver(fsolver::SchurFactorsSolver, hlead, side::Symbol, parentinds = missing) =
-    SelfEnergySchurSolver(fsolver, hlead, isleftside(side), parentinds)
+SelfEnergySchurSolver(fsolver::SchurFactorsSolver, hlead, side::Symbol, boundary, parentinds = missing) =
+    SelfEnergySchurSolver(fsolver, hlead, isleftside(side), boundary, parentinds)
 
 function isleftside(side)
     if side == :L
@@ -44,7 +45,8 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurEmpty
     lsparent = sites_to_orbs(lattice(hparent)[sel], hparent)
     schursolver = solver(glead)
     fsolver = schurfactorsolver(schursolver)
-    isfinite(schursolver.boundary) ||
+    boundary = schursolver.boundary
+    isfinite(boundary) ||
         argerror("The form attach(h, glead; sites...) assumes a semi-infinite lead, but got `boundary = Inf`")
     # we obtain latslice of open surface in gL/gR
     gunit = reverse ? schursolver.gL : schursolver.gR
@@ -61,11 +63,9 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurEmpty
     hlead = copy_lattice(parent(glead)) # don't copy, since you would break === link to fsolver
     transform === missing || Quantica.transform!(hlead, transform)
     translate!(hlead, displacement)
-    solver´ = SelfEnergySchurSolver(fsolver, hlead, reverse, leadorbs)
-
-    reverse && Base.reverse!(hlead)
-    plottables = (hlead,)
-    return SelfEnergy(solver´, lsparent, plottables)
+    reverse && Base.reverse!(hlead)  # only flips bravais vectors in place
+    solver´ = SelfEnergySchurSolver(fsolver, hlead, reverse, boundary, leadorbs)
+    return SelfEnergy(solver´, lsparent)
 end
 
 # find ordering of lslead sites that match lsparent sites, modulo a displacement
@@ -109,7 +109,13 @@ maybe_match_parent(factors, ::Missing) = factors
 
 minimal_callsafe_copy(s::SelfEnergySchurSolver) =
     SelfEnergySchurSolver(minimal_callsafe_copy(s.fsolver), minimal_callsafe_copy(s.hlead),
-        s.isleftside, s.leadtoparent)
+        s.isleftside, s.boundary, s.leadtoparent)
+
+function selfenergy_plottables(s::SelfEnergySchurSolver, ls::LatticeSlice, bsel::SiteSelector)
+    p1 = s.hlead, lattice(s.hlead)[cells = SA[1]]
+    p2 = (ls[bsel], )
+    return p1, p2
+end
 
 #endregion
 
@@ -162,7 +168,7 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead,
     schursolver = solver(glead)
     gunit = copy_lattice(reverse ? schursolver.gL : schursolver.gR)
     lat0lead = lattice(gunit)            # lat0lead is the zero cell of parent(glead)
-    hlead = copy(parent(glead))          # hlead is used only for plottables
+    hlead = copy_lattice(parent(glead))
 
     # move hlead and lat0lead to the left or right of boundary (if boundary is finite)
     boundary = schursolver.boundary
@@ -182,6 +188,7 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead,
     # combine gunit and parent sites into lat0
     sel = siteselector(; kw...)
     lsparent = sites_to_orbs(lattice(hparent)[sel], hparent)
+    isempty(lsparent) && argerror("No sites selected in the parent lattice")
     lat0parent = lattice0D(lsparent)
     lat0 = combine(lat0parent, lat0lead)
     nparent, ntotal = nsites(lat0parent), nsites(lat0)
@@ -196,9 +203,8 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead,
     solver´ = extended_or_regular_solver(Σs, gslice, gunit, hcoupling, nparent)
 
     reverse && Base.reverse!(hlead)
-    plottables = (hcoupling, hlead)
 
-    return SelfEnergy(solver´, lsparent, plottables)
+    return SelfEnergy(solver´, lsparent)
 end
 
 # No contacts -> Extended solver
@@ -227,6 +233,13 @@ minimal_callsafe_copy(s::SelfEnergyCouplingSchurSolver) =
         minimal_callsafe_copy(s.g⁻¹),
         minimal_callsafe_copy(s.V))
 
+function selfenergy_plottables(s::SelfEnergyCouplingSchurSolver, ls::LatticeSlice, bsel::SiteSelector)
+    p1 = ftuple(s.hcoupling; hide = :sites)
+    p2 = hamiltonian(s.gunit)
+    p3 = ls[bsel]
+    return (p1, p2, p3)
+end
+
 #endregion
 
 #endregion
@@ -249,22 +262,27 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead;
     gslice = glead[cells = SA[xunit]]
     # lattice slices for parent and lead unit cell
     lsparent = sites_to_orbs(getindex(lattice(hparent); sites...), hparent)
-    lslead = lattice(glead)[cells = SA[xunit]]
+    # The above is currently broken when unitcell surface does not match full unit cell. Perhaps use some version of this:
+    # Compute lslead as lead unicell surface:
+    #   gL and gR are unitcell GreenFunctions with ΣL and ΣR, but same ordering as gslice
+        gunit = reverse ? schursolver.gL : schursolver.gR
+        Σlead = only(selfenergies(contacts(gunit)))
+        lslead = orbslice(Σlead)
     # find lead site index in lslead for each site in lsparent
     leadsites, displacement = lead_siteind_foreach_parent_siteind(lsparent, lslead, transform)
+    displacement += bravais_matrix(hamiltonian(glead)) * SA[xunit]
     # convert lead site indices to lead orbital indices using lead's ContactOrbitals
     leadorbs = reordered_site_orbitals(leadsites, cellsdict(contactorbitals(glead)))
     # build V and V´ as a leadorbs reordering of inter-cell harmonics of hlead
-    hlead = copy(hamiltonian(glead))  # careful, not parent, which could be a ParametricHamiltonian
+    hlead = copy_lattice(hamiltonian(glead))  # careful, not parent, which could be a ParametricHamiltonian
     h₊₁, h₋₁ = hlead[SA[1]], hlead[SA[-1]]
     V  = SparseMatrixView(view(h₊₁, :, leadorbs))
     V´ = SparseMatrixView(view(h₋₁, leadorbs, :))
-    solver´ = SelfEnergyGenericSolver(gslice, hlead, V´, V)
-
+    transform === missing || Quantica.transform!(hlead, transform)
+    translate!(hlead, displacement)
     reverse && Base.reverse!(hlead)
-    plottables = (hlead,)
-
-    return SelfEnergy(solver´, lsparent, plottables)
+    solver´ = SelfEnergyGenericSolver(gslice, hlead, V´, V)
+    return SelfEnergy(solver´, lsparent)
 end
 
 #endregion

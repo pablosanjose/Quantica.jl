@@ -9,17 +9,19 @@
 # apply selector
 #region
 
-function apply(s::SiteSelector, lat::Lattice{T,E,L}) where {T,E,L}
+apply(s::Union{SiteSelector,HopSelector}, l::LatticeSlice) = apply(s, parent(l), cells(l))
+
+function apply(s::SiteSelector, lat::Lattice{T,E,L}, cells...) where {T,E,L}
     region = r -> applied_region(r, s.region)
     intsublats = recursive_apply(name -> sublatindex_or_zero(lat, name), s.sublats)
     sublats = recursive_push!(Int[], intsublats)
-    cells = recursive_push!(SVector{L,Int}[], sanitize_cells(s.cells, Val(L)))
+    cells = recursive_push!(SVector{L,Int}[], sanitize_cells(s.cells, Val(L)), cells...)
     unique!(sort!(sublats))
     unique!(sort!(cells))
     return AppliedSiteSelector{T,E,L}(lat, region, sublats, cells)
 end
 
-function apply(s::HopSelector, lat::Lattice{T,E,L}) where {T,E,L}
+function apply(s::HopSelector, lat::Lattice{T,E,L}, cells...) where {T,E,L}
     rmin, rmax = sanitize_minmaxrange(s.range, lat)
     L > 0 && s.dcells === missing && rmax === missing &&
         throw(ErrorException("Tried to apply an infinite-range HopSelector on an unbounded lattice"))
@@ -27,7 +29,7 @@ function apply(s::HopSelector, lat::Lattice{T,E,L}) where {T,E,L}
     region = (r, dr) -> applied_region((r, sign*dr), s.region)
     intsublats = recursive_apply(names -> sublatindex_or_zero(lat, names), s.sublats)
     sublats = recursive_push!(Pair{Int,Int}[], intsublats)
-    dcells = recursive_push!(SVector{L,Int}[], sanitize_cells(s.dcells, Val(L)))
+    dcells = recursive_push!(SVector{L,Int}[], sanitize_cells(s.dcells, Val(L)), cells...)
     unique!(sublats)
     unique!(dcells)
     if s.adjoint
@@ -92,7 +94,7 @@ function recursive_push!(v::Vector{Pair{T,T}}, (xs, ys)::Pair) where {T}
     return v
 end
 
-# for cells::Function
+# for cells::Function without list of cells
 function recursive_push!(v::Vector{SVector{L,Int}}, fcell::Function) where {L}
     iter = BoxIterator(zero(SVector{L,Int}))
     keepgoing = true
@@ -108,6 +110,16 @@ function recursive_push!(v::Vector{SVector{L,Int}}, fcell::Function) where {L}
     end
     return v
 end
+
+# for cells::Function with a list of cells (from a LatticeSlice)
+function recursive_push!(v::Vector{SVector{L,Int}}, fcell::Function, cells) where {L}
+    for cell in cells
+        fcell(cell) && push!(v, cell)
+    end
+    return v
+end
+
+recursive_push!(v::Vector, f, cells) = recursive_push!(v, f)
 
 #endregion
 

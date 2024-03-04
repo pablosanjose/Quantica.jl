@@ -34,8 +34,7 @@ function SelfEnergy(h::AbstractHamiltonian, model::AbstractModel; kw...)
     siteslice = lattice(h)[sel]
     orbslice = sites_to_orbs(siteslice, h)
     solver = SelfEnergyModelSolver(h, model, siteslice, orbslice)
-    plottables = (solver.ph,)
-    return SelfEnergy(solver, orbslice, plottables)
+    return SelfEnergy(solver, orbslice)
 end
 
 function call!(s::SelfEnergyModelSolver, ω; params...)

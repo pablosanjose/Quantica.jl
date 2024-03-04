@@ -378,6 +378,9 @@ struct LatticeSlice{T,E,L,C<:CellIndices{L}}
         siteindsdict = siteindexdict(cellsdict)
         return new(lat, cellsdict, offsets, siteindsdict)
     end
+    function LatticeSlice{T,E,L,C}(lat, cellsdict, offsets, siteindsdict) where {T,E,L,C}
+        return new(lat, cellsdict, offsets, siteindsdict)
+    end
 end
 
 const SiteSlice{T,E,L} = LatticeSlice{T,E,L,CellSites{L,Vector{Int}}}
@@ -439,6 +442,9 @@ siteindexdict(cs::CellOrbitalsGroupedDict) = Dictionary(cellsites(cs), orbranges
 siteindexdict(::CellOrbitalsDict{L}) where {L} = Dictionary{CellSite{L}, UnitRange{Int}}()
 # For CellSitesDict, site indices are used
 siteindexdict(cs::CellSitesDict) = dictionary(c => i:i for (i, c) in enumerate(cellsites(cs)))
+
+unsafe_replace_lattice(l::LatticeSlice{T,E,L,C}, lat::Lattice{T,E´,L}) where {T,E,E´,L,C} =
+    LatticeSlice{T,E´,L,C}(lat, cellsdict(l), offsets(l), siteindexdict(l))
 
 #endregion
 
@@ -526,6 +532,8 @@ Base.length(l::LatticeSlice) = nsites(l)
 Base.length(c::CellIndices) = length(c.inds)
 
 Base.parent(ls::LatticeSlice) = ls.lat
+
+Base.copy(ls::LatticeSlice) = LatticeSlice(ls.lat, copy(ls.cellsdict))
 
 #endregion
 #endregion
@@ -1784,24 +1792,20 @@ call!(s::WrappedExtendedSelfEnergySolver; params...) = s
 #     - SelfEnergy(h::AbstractHamiltonian, sargs...; kw...) -> SelfEnergy
 #region
 
-struct SelfEnergy{T,E,L,S<:AbstractSelfEnergySolver,P<:Tuple}
+struct SelfEnergy{T,E,L,S<:AbstractSelfEnergySolver}
     solver::S                                # returns AbstractMatrix block(s) over latslice
     orbslice::OrbitalSliceGrouped{T,E,L}     # sites on each unitcell with a selfenergy
-    plottables::P                            # objects to be plotted to visualize SelfEnergy
-    function SelfEnergy{T,E,L,S,P}(solver, orbslice, plottables) where {T,E,L,S<:AbstractSelfEnergySolver,P<:Tuple}
+    function SelfEnergy{T,E,L,S}(solver, orbslice) where {T,E,L,S<:AbstractSelfEnergySolver}
         isempty(orbslice) && argerror("Cannot create a self-energy over an empty LatticeSlice")
-        return new(solver, orbslice, plottables)
+        return new(solver, orbslice)
     end
 end
 
 #region ## Constructors ##
 
-# no-plottables fallback
-SelfEnergy(solver::AbstractSelfEnergySolver, orbslice::OrbitalSliceGrouped) =
-    SelfEnergy(solver, orbslice, ())
 
-SelfEnergy(solver::S, orbslice::OrbitalSliceGrouped{T,E,L}, plottables::P) where {T,E,L,S<:AbstractSelfEnergySolver,P<:Tuple} =
-    SelfEnergy{T,E,L,S,P}(solver, orbslice, plottables)
+SelfEnergy(solver::S, orbslice::OrbitalSliceGrouped{T,E,L}) where {T,E,L,S<:AbstractSelfEnergySolver} =
+    SelfEnergy{T,E,L,S}(solver, orbslice)
 
 #endregion
 
@@ -1810,8 +1814,6 @@ SelfEnergy(solver::S, orbslice::OrbitalSliceGrouped{T,E,L}, plottables::P) where
 orbslice(Σ::SelfEnergy) = Σ.orbslice
 
 solver(Σ::SelfEnergy) = Σ.solver
-
-plottables(Σ::SelfEnergy) = Σ.plottables
 
 has_selfenergy(s::SelfEnergy) = has_selfenergy(solver(s))
 has_selfenergy(s::AbstractSelfEnergySolver) = true
@@ -1939,6 +1941,7 @@ check_contact_index(i, c) = 1 <= i <= ncontacts(c) ||
 
 contactorbitals(c::Contacts) = c.orbitals
 
+orbslice(c::Contacts) = c.orbslice
 orbslice(c::Contacts, ::Colon) = c.orbslice
 orbslice(c::Contacts, i::Integer) = orbslice(selfenergies(c, i))
 
@@ -1954,6 +1957,8 @@ orbgroups(c::ContactOrbitals, i) = orbgroups(c.corbsdict[i])
 
 orbranges(c::ContactOrbitals) = orbranges(c.orbsdict)
 orbranges(c::ContactOrbitals, i) = orbranges(c.corbsdict[i])
+
+boundingbox(c::Contacts) = boundingbox(orbslice(c))
 
 Base.isempty(c::Contacts) = isempty(selfenergies(c))
 
@@ -2134,6 +2139,13 @@ function similar_Matrix(gs::GreenSlice{T}) where {T}
     n = norbitals(orbcols(gs))
     return Matrix{Complex{T}}(undef, m, n)
 end
+
+boundaries(g::GreenFunction) = boundaries(solver(g))
+# fallback
+boundaries(g::AppliedGreenSolver) = ()
+
+boundingbox(g::GreenFunction) = isempty(contacts(g)) ?
+    (zerocell(lattice(g)), zerocell(lattice(g))) : boundingbox(contacts(g))
 
 copy_lattice(g::GreenFunction) = GreenFunction(copy_lattice(g.parent), g.solver, g.contacts)
 copy_lattice(g::GreenSolution) = GreenSolution(
