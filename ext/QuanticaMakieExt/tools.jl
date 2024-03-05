@@ -11,7 +11,7 @@ end
 
 darken(colors::Vector, v = 0.66) = darken.(colors, Ref(v))
 
-transparent(rgba::RGBAf, v = 0.5) = RGBAf(rgba.r, rgba.g, rgba.b, rgba.alpha * v)
+transparent(rgba::RGBAf, v = 0.5) = RGBAf(rgba.r, rgba.g, rgba.b, clamp(rgba.alpha * v, 0f0, 1f0))
 
 maybedim(color, dn, dimming) = iszero(dn) ? color : transparent(color, 1 - dimming)
 

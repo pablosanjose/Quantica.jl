@@ -111,9 +111,9 @@ minimal_callsafe_copy(s::SelfEnergySchurSolver) =
     SelfEnergySchurSolver(minimal_callsafe_copy(s.fsolver), minimal_callsafe_copy(s.hlead),
         s.isleftside, s.boundary, s.leadtoparent)
 
-function selfenergy_plottables(s::SelfEnergySchurSolver, ls::LatticeSlice, bsel::SiteSelector)
-    p1 = s.hlead, lattice(s.hlead)[cells = SA[1]]
-    p2 = (ls[bsel], )
+function selfenergy_plottables(s::SelfEnergySchurSolver, ls::LatticeSlice)
+    p1 = ftuple(s.hlead; selector = siteselector(cells = SA[1]))
+    p2 = (ls, )
     return p1, p2
 end
 
@@ -233,10 +233,10 @@ minimal_callsafe_copy(s::SelfEnergyCouplingSchurSolver) =
         minimal_callsafe_copy(s.g⁻¹),
         minimal_callsafe_copy(s.V))
 
-function selfenergy_plottables(s::SelfEnergyCouplingSchurSolver, ls::LatticeSlice, bsel::SiteSelector)
+function selfenergy_plottables(s::SelfEnergyCouplingSchurSolver, ls::LatticeSlice)
     p1 = ftuple(s.hcoupling; hide = :sites)
     p2 = hamiltonian(s.gunit)
-    p3 = ls[bsel]
+    p3 = ls
     return (p1, p2, p3)
 end
 

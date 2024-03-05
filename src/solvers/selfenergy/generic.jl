@@ -71,9 +71,9 @@ minimal_callsafe_copy(s::SelfEnergyGenericSolver) =
         minimal_callsafe_copy(s.V),
         copy(s.V´g), copy(s.Σ))
 
-function selfenergy_plottables(s::SelfEnergyGenericSolver, ls::LatticeSlice, bsel::SiteSelector)
-    p1 = ftuple(s.hcoupling)
-    p2 = ls[bsel]
+function selfenergy_plottables(s::SelfEnergyGenericSolver, ls::LatticeSlice)
+    p1 = s.hcoupling
+    p2 = ls
     return (p1, p2)
 end
 

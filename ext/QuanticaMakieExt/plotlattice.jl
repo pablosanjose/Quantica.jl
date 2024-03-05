@@ -56,7 +56,7 @@ function green_selector(g)
     return s
 end
 
-not_boundary_selector(g) = siteselector(cells = n -> !isboundarycell(n, g))
+boundary_selector(g) = siteselector(cells = n -> isboundarycell(n, g))
 
 green_bounding_box(g) =
     broaden_bounding_box(Quantica.boundingbox(g), Quantica.boundaries(g)...)
@@ -512,22 +512,22 @@ function Makie.plot!(plot::PlotLattice{Tuple{G}}) where {G<:GreenFunction}
     g = to_value(plot[1])
     Σkws = Iterators.cycle(parse_children(plot[:children]))
     Σs = Quantica.selfenergies(Quantica.contacts(g))
-    bsel = not_boundary_selector(g)
     # plot lattice
     gsel = haskey(plot, :selector) && plot[:selector][] !== missing ?
         plot[:selector][] : green_selector(g)
     h = hamiltonian(g)
     latslice = lattice(h)[gsel]
     latslice´ = Quantica.growdiff(latslice, h)
-    latslice´ = latslice´[bsel]
-    latslice = latslice[bsel]
     hideh = Quantica.tupleflatten(:cell, :bravais, plot[:hide][])
     plotkw´´ = (; hopopacity = 0.2, siteopacity = 0.2, shellopacity = 0.07, plot.attributes...,
         hide = hideh)
+    bsel = boundary_selector(g)
+    # plot cells
+    plotlattice!(plot, h, latslice´[bsel]; hide = (:axes, :sites, :hops), cellcolor = RGBAf(1.0,0.0,0.0,1.0), cellopacity = 0.5)
     plotlattice!(plot, h, latslice, latslice´; plotkw´´...)
     # plot contacts
     for (Σ, Σkw) in zip(Σs, Σkws)
-        Σplottables = Quantica.selfenergy_plottables(Σ, bsel)
+        Σplottables = Quantica.selfenergy_plottables(Σ)
         marker = !plot[:flat][] ? Rect3f(Vec3f(-0.5), Vec3f(1)) : Rect2
         for Σp in Σplottables
             plottables, kws = get_plottables_and_kws(Σp)
@@ -646,6 +646,7 @@ function plotbravais!(plot::PlotLattice, lat::Lattice{<:Any,E,L}, latslice) wher
             mrect = GeometryBasics.mesh(rect, pointtype=Point{E,Float32}, facetype=QuadFace{Int})
             vertices = mrect.position
             vertices .= Ref(r0) .+ Ref(mat) .* (vertices0 .+ Ref(cell))
+            @show colface, coledge
             mesh!(plot, mrect; color = colface, transparency = true, inspectable = false)
             wireframe!(plot, mrect; color = coledge, transparency = true, strokewidth = 1, inspectable = false)
         end
