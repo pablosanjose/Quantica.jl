@@ -197,6 +197,12 @@ end
         @test all(>=(0), ldos(gc[1])(0.2))
         @test all(>=(0), ldos(gc[region = RP.circle(2)])(0.2))
     end
+    # Issue #252
+    g = LP.honeycomb() |> hopping(1, range = 3) |> supercell((1,-1), (1,1)) |>
+        attach(nothing, region = RP.circle(1, SA[2,3])) |> attach(nothing, region = RP.circle(1, SA[3,-3])) |>
+        greenfunction(GS.Bands(subdiv(-π, π, 13), subdiv(-π, π, 13), boundary = 2=>-3))
+    @test g isa GreenFunction
+    @test iszero(g[cells = SA[1,-3]](0.2))
 end
 
 @testset "greenfunction 32bit" begin

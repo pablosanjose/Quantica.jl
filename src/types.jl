@@ -395,6 +395,8 @@ CellSite(c::CellSitePos) = CellSite(c.cell, c.inds)
 CellSites(cell, inds = Int[]) = CellIndices(sanitize_SVector(Int, cell), sanitize_cellindices(inds), SiteLike())
 # exported lowercase constructor for general inds
 cellsites(cell, inds) = CellSites(cell, inds)
+# no check for unique inds
+unsafe_cellsites(cell, inds) = CellIndices(cell, inds, SiteLike())
 
 CellOrbitals(cell, inds = Int[]) =
     CellIndices(sanitize_SVector(Int, cell), sanitize_cellindices(inds), OrbitalLike())
@@ -414,6 +416,8 @@ LatticeSlice(lat::Lattice, cs::AbstractVector{<:CellIndices}) =
 # CellIndices to Dictionary(cell=>cellind)
 cellinds_to_dict(cs::AbstractVector{C}) where {L,C<:CellIndices{L}} =
     CellIndicesDict{L,C}(cell.(cs), cs)
+cellinds_to_dict(cells::AbstractVector{SVector{L,Int}}, cs::AbstractVector{C}) where {L,C<:CellIndices{L}} =
+    CellIndicesDict{L,C}(cells, cs)
 cellinds_to_dict(cs::CellIndices{L}) where {L} = cellinds_to_dict(SVector(cs))
 # don't allow single-cellsites in dictionaries (it polutes the LatticeSlice type diversity)
 cellinds_to_dict(cs::AbstractVector{C}) where {L,C<:CellSite{L}} =
