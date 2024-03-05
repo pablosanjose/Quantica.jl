@@ -194,6 +194,7 @@ struct AppliedSiteSelector{T,E,L}
     region::FunctionWrapper{Bool,Tuple{SVector{E,T}}}
     sublats::Vector{Int}
     cells::Vector{SVector{L,Int}}
+    isnull::Bool    # if isnull, the selector selects nothing, regardless of other fields
 end
 
 struct HopSelector{F,S,D,R}
@@ -210,6 +211,7 @@ struct AppliedHopSelector{T,E,L}
     sublats::Vector{Pair{Int,Int}}
     dcells::Vector{SVector{L,Int}}
     range::Tuple{T,T}
+    isnull::Bool    # if isnull, the selector selects nothing, regardless of other fields
 end
 
 struct Neighbors
@@ -251,6 +253,9 @@ iswithinrange(dr, (rmin, rmax)::Tuple{Real,Real}) =  ifelse(sign(rmin)*rmin^2 <=
 
 isbelowrange(dr, s::AppliedHopSelector) = isbelowrange(dr, s.range)
 isbelowrange(dr, (rmin, rmax)::Tuple{Real,Real}) =  ifelse(dr'dr < rmin^2, true, false)
+
+isnull(s::AppliedSiteSelector) = s.isnull
+isnull(s::AppliedHopSelector) = s.isnull
 
 Base.adjoint(s::HopSelector) = HopSelector(s.region, s.sublats, s.dcells, s.range, !s.adjoint)
 
@@ -1295,11 +1300,13 @@ Base.size(h::Harmonic, i...) = size(matrix(h), i...)
 
 Base.isless(h::Harmonic, h´::Harmonic) = sum(abs2, dcell(h)) < sum(abs2, dcell(h´))
 
-Base.zero(h::Harmonic{<:Any,<:Any,B}) where B = Harmonic(zero(dcell(h)), zero(matrix(h)))
+Base.zero(h::Harmonic{<:Any,<:Any,B}) where {B} = Harmonic(zero(dcell(h)), zero(matrix(h)))
 
 Base.copy(h::Harmonic) = Harmonic(dcell(h), copy(matrix(h)))
 
 Base.:(==)(h::Harmonic, h´::Harmonic) = h.dn == h´.dn && unflat(h.h) == unflat(h´.h)
+
+Base.iszero(h::Harmonic) = iszero(flat(h))
 
 #endregion
 #endregion
@@ -1427,6 +1434,7 @@ end
 
 Base.size(h::Hamiltonian, i...) = size(bloch(h), i...)
 Base.axes(h::Hamiltonian, i...) = axes(bloch(h), i...)
+Base.iszero(h::Hamiltonian) = all(iszero, harmonics(h))
 
 Base.copy(h::Hamiltonian) = Hamiltonian(
     copy(lattice(h)), copy(blockstructure(h)), copy.(harmonics(h)), copy(bloch(h)))

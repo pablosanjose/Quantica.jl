@@ -24,12 +24,12 @@ neighbors(n::Int, lat::Lattice) = nrange(n, lat)
 #region
 
 function Base.in((s, r)::Tuple{Int,SVector{E,T}}, sel::AppliedSiteSelector{T,E}) where {T,E}
-    return inregion(r, sel) &&
+    return !isnull(sel) && inregion(r, sel) &&
            insublats(s, sel)
 end
 
 function Base.in((s, r, cell)::Tuple{Int,SVector{E,T},SVector{L,Int}}, sel::AppliedSiteSelector{T,E,L}) where {T,E,L}
-    return incells(cell, sel) &&
+    return !isnull(sel) && incells(cell, sel) &&
            inregion(r, sel) &&
            insublats(s, sel)
 end
@@ -51,7 +51,7 @@ end
 # end
 
 function Base.in(((sj, si), (r, dr), dcell)::Tuple{Pair,Tuple,SVector}, sel::AppliedHopSelector)
-    return !isonsite(dr) &&
+    return !isnull(sel) && !isonsite(dr) &&
             indcells(dcell, sel) &&
             insublats(sj => si, sel) &&
             iswithinrange(dr, sel) &&
@@ -70,6 +70,7 @@ isonsite(dr) = iszero(dr)
 # foreach_cell(f,...) should be called with a boolean function f that returns whether the
 # cell should be mark as accepted when BoxIterated
 function foreach_cell(f, sel::AppliedSiteSelector)
+    isnull(sel) && return nothing
     lat = lattice(sel)
     cells_list = cells(sel)
     if isempty(cells_list)      # no cells specified
@@ -92,6 +93,7 @@ end
 
 
 function foreach_cell(f, sel::AppliedHopSelector)
+    isnull(sel) && return nothing
     lat = lattice(sel)
     dcells_list = dcells(sel)
     if isempty(dcells_list) # no dcells specified
@@ -109,6 +111,7 @@ function foreach_cell(f, sel::AppliedHopSelector)
 end
 
 function foreach_site(f, sel::AppliedSiteSelector, cell::SVector)
+    isnull(sel) && return nothing
     lat = lattice(sel)
     for s in sublats(lat)
         insublats(s, sel) || continue
@@ -122,6 +125,7 @@ function foreach_site(f, sel::AppliedSiteSelector, cell::SVector)
 end
 
 function foreach_hop(f, sel::AppliedHopSelector, kdtrees::Vector{<:KDTree}, ni::SVector = zerocell(lattice(sel)))
+    isnull(sel) && return nothing
     lat = lattice(sel)
     _, rmax = sel.range
     # source cell at origin

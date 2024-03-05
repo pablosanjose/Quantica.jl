@@ -18,7 +18,11 @@ function apply(s::SiteSelector, lat::Lattice{T,E,L}, cells...) where {T,E,L}
     cells = recursive_push!(SVector{L,Int}[], sanitize_cells(s.cells, Val(L)), cells...)
     unique!(sort!(sublats))
     unique!(sort!(cells))
-    return AppliedSiteSelector{T,E,L}(lat, region, sublats, cells)
+    # isnull: to distinguish in a type-stable way between s.cells === missing and no-selected-cells
+    # and the same for sublats
+    isnull = (s.cells !== missing && isempty(cells)) ||
+        (s.sublats !== missing && isempty(sublats))
+    return AppliedSiteSelector{T,E,L}(lat, region, sublats, cells, isnull)
 end
 
 function apply(s::HopSelector, lat::Lattice{T,E,L}, cells...) where {T,E,L}
@@ -36,7 +40,9 @@ function apply(s::HopSelector, lat::Lattice{T,E,L}, cells...) where {T,E,L}
         sublats .= reverse.(sublats)
         dcells .*= -1
     end
-    return AppliedHopSelector{T,E,L}(lat, region, sublats, dcells, (rmin, rmax))
+    isnull = (s.dcells !== missing && isempty(dcells)) ||
+        (s.sublats !== missing && isempty(sublats))
+    return AppliedHopSelector{T,E,L}(lat, region, sublats, dcells, (rmin, rmax), isnull)
 end
 
 sublatindex_or_zero(lat, ::Missing) = missing
@@ -66,7 +72,8 @@ applyrange(r::Real, lat) = r
 padrange(r::Real, m) = isfinite(r) ? float(r) + m * sqrt(eps(float(r))) : float(r)
 
 applied_region(r, ::Missing) = true
-applied_region((r, dr)::Tuple{SVector,SVector}, region::Function) = ifelse(region(r, dr), true, false)
+applied_region((r, dr)::Tuple{SVector,SVector}, region::Function) =
+    ifelse(region(r, dr), true, false)
 applied_region(r::SVector, region::Function) = ifelse(region(r), true, false)
 
 recursive_apply(f, t::Tuple) = recursive_apply.(f, t)
@@ -181,6 +188,7 @@ end
 function pointers(h::Hamiltonian{T,E,L,B}, s::AppliedSiteSelector{T,E,L}, shifts) where {T,E,L,B}
     isempty(cells(s)) || argerror("Cannot constrain cells in an onsite modifier, cell periodicity is assumed.")
     ptrs = Tuple{Int,SVector{E,T},CellSitePos{T,E,L,B},Int}[]
+    isnull(s) && return ptrs
     lat = lattice(h)
     har0 = first(harmonics(h))
     dn0 = zerocell(lat)
@@ -204,6 +212,7 @@ end
 function pointers(h::Hamiltonian{T,E,L,B}, s::AppliedHopSelector{T,E,L}, shifts) where {T,E,L,B}
     hars = harmonics(h)
     ptrs = [Tuple{Int,SVector{E,T},SVector{E,T},CellSitePos{T,E,L,B},CellSitePos{T,E,L,B},Tuple{Int,Int}}[] for _ in hars]
+    isnull(s) && return ptrs
     lat = lattice(h)
     dn0 = zerocell(lat)
     norbs = norbitals(h)

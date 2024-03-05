@@ -14,18 +14,20 @@ Base.getindex(lat::Lattice, ::SiteSelectorAll) = lat[siteselector(; cells = zero
 function Base.getindex(lat::Lattice, as::AppliedSiteSelector)
     L = latdim(lat)
     csites = CellSites{L,Vector{Int}}[]
-    sinds = Int[]
-    foreach_cell(as) do cell
-        isempty(sinds) || (sinds = Int[])
-        cs = CellSites(cell, sinds)
-        foreach_site(as, cell) do s, i, r
-            push!(siteindices(cs), i)
-        end
-        if isempty(cs)
-            return false
-        else
-            push!(csites, cs)
-            return true
+    if !isnull(as)
+        sinds = Int[]
+        foreach_cell(as) do cell
+            isempty(sinds) || (sinds = Int[])
+            cs = CellSites(cell, sinds)
+            foreach_site(as, cell) do s, i, r
+                push!(siteindices(cs), i)
+            end
+            if isempty(cs)
+                return false
+            else
+                push!(csites, cs)
+                return true
+            end
         end
     end
     cellsdict = CellSitesDict{L}(cell.(csites), csites)
@@ -60,6 +62,7 @@ function Base.getindex(latslice::SiteSlice, as::AppliedSiteSelector)
     lat = parent(latslice)
     L = latdim(lat)
     cellsdict´ = CellSitesDict{L}()
+    isnull(as) && return SiteSlice(lat, cellsdict´)
     sinds = Int[]
     for subcell in cellsdict(latslice)
         dn = cell(subcell)
@@ -82,6 +85,7 @@ function Base.getindex(latslice::OrbitalSliceGrouped, as::AppliedSiteSelector)
     lat = parent(latslice)
     L = latdim(lat)
     cellsdict´ = CellOrbitalsGroupedDict{L}()
+    isnull(as) && return OrbitalSliceGrouped(lat, cellsdict´)
     oinds = Int[]
     ogroups = Dictionary{Int,UnitRange{Int}}()
     for subcell in cellsdict(latslice)
