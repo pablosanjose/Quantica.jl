@@ -56,13 +56,20 @@ Render a finite subset of sites in a lattice and its Bravais vectors.
 Render the lattice on which `h` is defined, together with all hoppings in the form of
 inter-site links.
 
+    plotlattice(h::GreenFunction; kw...)
+
+Render the lattice on which `h` is defined, together with all hoppings in the form of
+inter-site links, and a representation of contacts.
+
 ## Keywords
 
 - `flat = true`: whether to render sites and hops as flat circles and lines, or as 3D meshes
-- `force_transparency = false`: whether to disable occlusion of all non-transparent elements
+- `force_transparency = false`: whether to disable occlusion of all non-transparent elements. Useful in case `inspector` tooltips are occluded.
 - `shellopacity = 0.07`: opacity of elements surrounding the unitcell or the set of selected sites (dubbed "shell")
 - `cellopacity = 0.03`: opacity of the unitcell's boundingbox
 - `cellcolor = RGBAf(0,0,1)`: color of the unitcell's boundingbox
+- `boundarycolor = RGBAf(1,0,0)`: color of boundary cells for GreenFunction plots
+- `boundaryopacity = 0.07`: opacity of boundary cells for GreenFunction plots
 - `sitecolor = missing`: color of sites, as a index in `sitecolormap`, a named color, a `Makie.Colorant`, or as a site shader (see below). If `missing`, cycle through `sitecolormap`.
 - `sitecolormap = :Spectral_9`: colormap to use for `sitecolor` (see options in https://tinyurl.com/cschemes)
 - `siteopacity = missing`: opacity of sites, as a real between 0 and 1, or as a site shader (see below). If `missing`, obey `shellopacity`.
@@ -79,7 +86,8 @@ inter-site links.
 - `minmaxhopradius = (0, 0.1)`: if `hopdradius` is a shader, minimum and maximum hop radius.
 - `hopdarken = 0.85`: darkening factor for hops
 - `selector = missing`: an optional `siteselector(; sites...)` to filter which sites are shown (see `siteselector`)
-- `hide = (:cell,)`: collection of elements to hide, to choose from `(:hops, :sites, :hops, :bravais, :cell, :axes, :shell, :all)`. It can also be an empty collection or `nothing` to show all elements.
+- `hide = (:cell,)`: collection of elements to hide, to choose from `(:hops, :sites, :hops, :bravais, :cell, :axes, :shell, :boundary, :contacts, :all)`. It can also be an empty collection or `nothing` to show all elements.
+- `children = missing`: collection of `NamedTuple`s of any of the above keywords to be applied (cyclically) to contacts in GreenFunction plots
 
 ## Shaders
 

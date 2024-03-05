@@ -37,7 +37,8 @@ has_transparencies(::Missing) = false
 has_transparencies(x) = true
 
 function resolve_cross_references!(plot::PlotLattice)
-    names = (:shellopacity, :siteopacity, :hopopacity, :cellopacity, :sitecolor, :hopcolor, :siteradius, :hopradius)
+    names = (:shellopacity, :siteopacity, :hopopacity, :cellcolor, :cellopacity,
+        :boundarycolor, :boundaryopacity, :sitecolor, :hopcolor, :siteradius, :hopradius)
     for name in names
         property = plot[name][]
         if property isa Symbol && property in names

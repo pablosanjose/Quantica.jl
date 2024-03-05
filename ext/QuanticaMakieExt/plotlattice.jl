@@ -9,6 +9,8 @@
         shellopacity = 0.07,
         cellopacity = 0.03,
         cellcolor = RGBAf(0,0,1),
+        boundarycolor = RGBAf(1,0,0),
+        boundaryopacity = 0.07,
         sitecolor = missing,         # accepts (i, r) -> float, IndexableObservable
         siteopacity = missing,       # accepts (i, r) -> float, IndexableObservable
         minmaxsiteradius = (0.0, 0.5),
@@ -25,7 +27,7 @@
         hopcolormap = :Spectral_9,
         hoppixels = 2,
         selector = missing,
-        hide = :cell,               # :hops, :sites, :bravais, :cell, :axes, :shell, :all
+        hide = :cell,               # :hops, :sites, :bravais, :cell, :axes, :shell, :boundary, :contacts, :all
         isAxis3 = false,            # for internal use, to fix marker scaling
         marker = :auto,
         children = missing,
@@ -510,28 +512,39 @@ end
 
 function Makie.plot!(plot::PlotLattice{Tuple{G}}) where {G<:GreenFunction}
     g = to_value(plot[1])
-    Σkws = Iterators.cycle(parse_children(plot[:children]))
-    Σs = Quantica.selfenergies(Quantica.contacts(g))
-    # plot lattice
     gsel = haskey(plot, :selector) && plot[:selector][] !== missing ?
         plot[:selector][] : green_selector(g)
     h = hamiltonian(g)
     latslice = lattice(h)[gsel]
     latslice´ = Quantica.growdiff(latslice, h)
-    hideh = Quantica.tupleflatten(:cell, :bravais, plot[:hide][])
-    plotkw´´ = (; hopopacity = 0.2, siteopacity = 0.2, shellopacity = 0.07, plot.attributes...,
-        hide = hideh)
-    bsel = boundary_selector(g)
+
+    # plot boundary
+    if !ishidden((:boundary, :boundaries), plot)
+        bsel = boundary_selector(g)
+        blatslice = latslice[bsel]
+        blatslice´ = latslice´[bsel]
+        isempty(blatslice) || plotlattice!(plot, h, blatslice; hide = (:axes, :sites, :hops), cellcolor = :boundarycolor, cellopacity = :boundaryopacity)
+        isempty(blatslice´) || plotlattice!(plot, h, blatslice´; hide = (:axes, :sites, :hops), cellcolor = :boundarycolor, cellopacity = :boundaryopacity)
+    end
+
     # plot cells
-    plotlattice!(plot, h, latslice´[bsel]; hide = (:axes, :sites, :hops), cellcolor = RGBAf(1.0,0.0,0.0,1.0), cellopacity = 0.5)
-    plotlattice!(plot, h, latslice, latslice´; plotkw´´...)
+    # Makie BUG: To allow inspector to show topmost tooltip, it could be made transparent
+    # if other layers (here the leads) are transparent
+    #   force_transparency = plot[:inspector][] && !isempty(Σs) && !ishidden((:contact, :contacts), plot)
+    plotlattice!(plot, h, latslice, latslice´; plot.attributes...)
+
     # plot contacts
-    for (Σ, Σkw) in zip(Σs, Σkws)
-        Σplottables = Quantica.selfenergy_plottables(Σ)
-        marker = !plot[:flat][] ? Rect3f(Vec3f(-0.5), Vec3f(1)) : Rect2
-        for Σp in Σplottables
-            plottables, kws = get_plottables_and_kws(Σp)
-            plotlattice!(plot, plottables...; plot.attributes..., marker, kws..., Σkw...)
+    if !ishidden((:contact, :contacts), plot)
+        Σkws = Iterators.cycle(parse_children(plot[:children]))
+        Σs = Quantica.selfenergies(Quantica.contacts(g))
+        hideΣ = Quantica.tupleflatten(:bravais, plot[:hide][])
+        for (Σ, Σkw) in zip(Σs, Σkws)
+            Σplottables = Quantica.selfenergy_plottables(Σ)
+            marker = !plot[:flat][] ? Rect3f(Vec3f(-0.5), Vec3f(1)) : Rect2
+            for Σp in Σplottables
+                plottables, kws = get_plottables_and_kws(Σp)
+                plotlattice!(plot, plottables...; plot.attributes..., hide = hideΣ, marker, kws..., Σkw...)
+            end
         end
     end
     return plot
@@ -646,8 +659,7 @@ function plotbravais!(plot::PlotLattice, lat::Lattice{<:Any,E,L}, latslice) wher
             mrect = GeometryBasics.mesh(rect, pointtype=Point{E,Float32}, facetype=QuadFace{Int})
             vertices = mrect.position
             vertices .= Ref(r0) .+ Ref(mat) .* (vertices0 .+ Ref(cell))
-            @show colface, coledge
-            mesh!(plot, mrect; color = colface, transparency = true, inspectable = false)
+            mesh!(plot, mrect; color = colface, transparency = true, shading = NoShading, inspectable = false)
             wireframe!(plot, mrect; color = coledge, transparency = true, strokewidth = 1, inspectable = false)
         end
     end
