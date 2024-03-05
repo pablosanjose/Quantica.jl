@@ -88,6 +88,7 @@ function supercell_sitelist!!(sitelist, masklist, smatperp, seedperp, lat, appli
     masklist´ = copy(masklist)
     empty!(masklist)
     empty!(sitelist)
+    isnull(applied_selector) && return nothing
     cs = cells(applied_selector)
     csbool = zeros(Bool, length(cs))
     iter = BoxIterator(seedperp)

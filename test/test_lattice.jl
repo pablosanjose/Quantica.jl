@@ -183,4 +183,12 @@ end
     ls = lat[cellsites(SA[1,0], 2)]
     @test ls isa Quantica.SiteSlice
     @test nsites(ls) == 1
+    # test the difference between a null selector and an unspecified one
+    ls = lat[cells = SVector{2,Int}[]]
+    @test isempty(ls)
+    ls = lat[cells = missing]
+    @test !isempty(ls)
+    ls = lat[region = RP.circle(4)]
+    ls´ = ls[cells = n -> !isreal(n[1])]
+    @test isempty(ls´)
 end

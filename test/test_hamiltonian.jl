@@ -341,7 +341,11 @@ end
     # non-spatial models
     h = LP.linear() |> @hopping((i,j) --> ind(i) + ind(j)) + @onsite((i; k = 1) --> pos(i)[k])
     @test ishermitian(h())
-
+    # null selectors
+    h0 = LP.square() |> onsite(0) + hopping(0) |> supercell(3) |> @onsite!((t, r) -> 1; sublats = Symbol[])
+    @test iszero(h0())
+    h0 = LP.square() |> hopping(0) |> supercell(3) |> @hopping!((t, r, dr) -> 1; dcells = SVector{2,Int}[])
+    @test iszero(h0())
 end
 
 
