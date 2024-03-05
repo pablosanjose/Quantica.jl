@@ -50,10 +50,6 @@ end
 
 Quantica.qplot!(x::PlotLatticeArgumentType; kw...) = plotlattice!(x; kw...)
 
-parse_children(::Missing) = (NamedTuple(),)
-parse_children(p::Tuple) = p
-parse_children(p::NamedTuple) = (p,)
-
 function green_selector(g)
     mincell, maxcell = green_bounding_box(g)
     s = siteselector(cells = n -> all(mincell .<= n .<= maxcell))
@@ -513,9 +509,8 @@ function Makie.plot!(plot::PlotLattice{Tuple{H,S,S´}}) where {H<:Hamiltonian,S<
 end
 
 function Makie.plot!(plot::PlotLattice{Tuple{G}}) where {G<:GreenFunction}
-    children = plot[:children][]
     g = to_value(plot[1])
-    Σkws = Iterators.cycle(parse_children(children))
+    Σkws = Iterators.cycle(parse_children(plot[:children]))
     Σs = Quantica.selfenergies(Quantica.contacts(g))
     bsel = not_boundary_selector(g)
     # plot lattice
@@ -541,6 +536,12 @@ function Makie.plot!(plot::PlotLattice{Tuple{G}}) where {G<:GreenFunction}
     end
     return plot
 end
+
+parse_children(::Missing) = (NamedTuple(),)
+parse_children(p::Tuple) = p
+parse_children(p::NamedTuple) = (p,)
+parse_children(p::Attributes) = parse_children(NamedTuple(p))
+parse_children(p::Observable) = parse_children(p[])
 
 sanitize_selector(::Missing, lat) = Quantica.siteselector(; cells = Quantica.zerocell(lat))
 sanitize_selector(s::Quantica.SiteSelector, lat) = s
