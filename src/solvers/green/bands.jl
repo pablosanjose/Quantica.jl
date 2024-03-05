@@ -631,14 +631,48 @@ end
 function coupled_orbslice(condition, h, seedcell, dir)
     lat = lattice(h)
     ls = grow(lat[CellSites(seedcell, :)], h)
-    sc´ = [projected_cellsites(c, dir) for c in cellsdict(ls) if condition(cell(c)[dir])]
-    sslice = SiteSlice(lat, cellinds_to_dict(sc´))
+    (cells, inds) = group_projected_cell_indices(condition, dir, cellsdict(ls))
+    cdict = cellinds_to_dict(cells, unsafe_cellsites.(cells, inds)) # no uniqueness check here
+    sslice = SiteSlice(lat, cdict)  # here we get an (unnecessary) uniqueness check
     oslice = sites_to_orbs_nogroups(sslice, h)
     return oslice
 end
 
-projected_cellsites(c::CellSites{L}, dir) where {L} =
-    CellSites(cell(c)[dir] * unitvector(dir, SVector{L,Int}), siteindices(c))
+projected_cell(cell::SVector{L,Int}, dir) where {L} =
+    cell[dir] * unitvector(dir, SVector{L,Int})
+
+# A merged version of:
+# [(projected_cell(cell(c), dir), inds(c))  for c in cellsdict(ls) if condition(cell(c)[dir])]
+function group_projected_cell_indices(condition, dir, d::CellSitesDict{L}) where {L}
+    keys´ = SVector{L,Int}[]
+    indvals´ = Vector{Int}[]
+    if !isempty(d)
+        # get [cell => cellsites(cell, inds)...]
+        ps = collect(pairs(d))
+        # get [projcell => cellsites(cell, inds)...]
+        map!(kv -> projected_cell(first(kv), dir) => last(kv), ps, ps)
+        # remove those pcells that do not satisfy condition
+        filter!(kv -> condition(first(kv)[dir]), ps)
+        # sort by projcell
+        sort!(ps, by = first)
+        # Do an append!-merge of equal projcells
+        key´ = first(first(ps))
+        indval´ = Int[]
+        for (key, val) in ps
+            if key != key´
+                push!(keys´, key´)
+                push!(indvals´, unique!(sort!(indval´)))
+                key´ = key
+                indval´ = copy(siteindices(val))
+            else
+                append!(indval´, siteindices(val))
+            end
+        end
+        push!(keys´, key´)
+        push!(indvals´, unique!(sort!(indval´)))
+    end
+    return keys´, indvals´
+end
 
 #endregion
 
@@ -804,10 +838,10 @@ function inf_band_slice!(gmat, ω, (si, sj)::Tuple, args...)   # si, sj can be o
         inf_band_slice!(gmat, ω, (i, j), args...)
     else
         offsetj = 0
-        for j in cellsdict(sj)
+        for j in get_multiple_cellorbs(sj)
             offseti = 0
             nj = norbitals(j)
-            for i in cellsdict(si)
+            for i in get_multiple_cellorbs(si)
                 ni = norbitals(i)
                 gv = view(gmat, offseti+1:offseti+ni, offsetj+1:offsetj+nj)
                 inf_band_slice!(gv, ω, (i, j), args...)
@@ -821,6 +855,9 @@ end
 
 get_single_cellorbs(c::CellOrbitals) = c
 get_single_cellorbs(c::OrbitalSlice) = only(cellsdict(c))
+
+get_multiple_cellorbs(c::CellOrbitals) = (c,)
+get_multiple_cellorbs(c::LatticeSlice) = cellsdict(c)
 
 # Gᵢⱼ(k∥) = G⁰ᵢⱼ(k∥) - G⁰ᵢᵦ(k∥)G⁰ᵦᵦ(k∥)⁻¹G⁰ᵦⱼ(k∥), where β are removed sites at boundary
 function semi_band_slice(s::BandsGreenSlicer{C}, i::CellOrbitals{L}, j::CellOrbitals{L}) where {C,L}
