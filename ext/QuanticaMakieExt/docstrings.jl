@@ -59,7 +59,7 @@ inter-site links.
 ## Keywords
 
 - `flat = true`: whether to render sites and hops as flat circles and lines, or as 3D meshes
-- `force_transparency = false`: whether to disable occussion of all non-transparent elements
+- `force_transparency = false`: whether to disable occlusion of all non-transparent elements
 - `shellopacity = 0.07`: opacity of elements surrounding the unitcell or the set of selected sites (dubbed "shell")
 - `cellopacity = 0.03`: opacity of the unitcell's boundingbox
 - `cellcolor = RGBAf(0,0,1)`: color of the unitcell's boundingbox

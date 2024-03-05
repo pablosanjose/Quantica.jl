@@ -1404,9 +1404,12 @@ Add a self-energy `Σ(ω) = h₋₁⋅g1D(ω)[surface]⋅h₁` corresponding to 
 (i.e. with a finite `boundary`, see `greenfunction`), where `h₁` and `h₋₁` are intercell
 couplings, and `g1D` is the lead `GreenFunction`. The `g1D(ω)` is taken at the `suface`
 unitcell, either adjacent to the `boundary` on its positive side (if `reverse = false`) or
-on its negative side (if `reverse = true`). The positions of the selected `sites` in `h`
-must match, modulo an arbitrary displacement, those of the lead unit cell, after applying
-`transform` to the latter. If they don't, use the `attach` syntax below.
+on its negative side (if `reverse = true`). Note that `reverse` only flips the direction we
+extend the lattice to form the lead, but does not flip the unit cell (use `transform` for
+that). The positions of the selected `sites` in `h` must match, modulo an arbitrary
+displacement, those of the left or right unit cell surface of the lead (i.e. sites coupled
+to the adjacent unit cells), after applying `transform` to the latter. If they don't match,
+use the `attach` syntax below.
 
 Advanced: If the `g1D` does not have any self-energies, the produced self-energy is in fact
 an `ExtendedSelfEnergy`, which is numerically more stable than a naive implementation of

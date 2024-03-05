@@ -25,15 +25,19 @@ end
     @test lines(g) isa Makie.FigureAxisPlot
     @test_throws BoundsError lines(lattice(h), 3)
     h = LP.linear() |> hamiltonian(@hopping(()->I), orbitals = 2)
-    @test qplot(g) isa Figure
+    @test qplot(h) isa Figure
     g = LP.linear() |> hamiltonian(hopping(I), orbitals = 2) |> attach(@onsite(ω->im*I), cells = 1) |> attach(@onsite(ω->im*I), cells = 4) |> greenfunction
-    @test qplot(g, cells = -10:10) isa Figure
+    @test qplot(g, selector = siteselector(; cells = -10:10)) isa Figure
     # matrix shader
     gx1 = abs2.(g(0.01)[siteselector(cells = 1:10), 1])
     @test qplot(g, selector = siteselector(cells = 1:10), sitecolor = gx1) isa Figure
     # vector shader
     gx1´ = vec(sum(gx1, dims = 2))
     @test qplot(g, selector = siteselector(cells = 1:10), sitecolor = gx1´) isa Figure
+    # green with leads
+    glead = LP.honeycomb() |> hopping(1, range = 1) |> supercell((1,-1), region = r -> 0<=r[2]<=5) |> attach(nothing, cells = SA[5]) |> greenfunction(GS.Schur(boundary = 0));
+    g = LP.honeycomb() |> hopping(1) |> supercell(region = r -> -6<=r[1]<=6 && 0<=r[2]<=5) |> attach(glead, region = r -> r[1] > 4.9) |> greenfunction;
+    @test qplot(g, shellopacity = 0.3) isa Figure
 end
 
 @testset "plot bands" begin

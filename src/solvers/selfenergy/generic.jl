@@ -48,8 +48,7 @@ function SelfEnergy(hparent::AbstractHamiltonian, gslice::GreenSlice, model::Abs
     hcoupling = hamiltonian(lat0, interblockmodel;
         orbitals = vcat(norbitals(hparent), norbitals(gslice)))
     solver´ = SelfEnergyGenericSolver(gslice, hcoupling, nparent)
-    plottables = (hcoupling,)
-    return SelfEnergy(solver´, lsparent, plottables)
+    return SelfEnergy(solver´, lsparent)
 end
 
 function call!(s::SelfEnergyGenericSolver, ω; params...)
@@ -72,8 +71,11 @@ minimal_callsafe_copy(s::SelfEnergyGenericSolver) =
         minimal_callsafe_copy(s.V),
         copy(s.V´g), copy(s.Σ))
 
+function selfenergy_plottables(s::SelfEnergyGenericSolver, ls::LatticeSlice, bsel::SiteSelector)
+    p1 = ftuple(s.hcoupling)
+    p2 = ls[bsel]
+    return (p1, p2)
+end
+
 #endregion
-
-
-
 #endregion

@@ -650,6 +650,9 @@ needs_omega_shift(s::AppliedBandsGreenSolver) = false
 
 bands(g::GreenFunction{<:Any,<:Any,<:Any,<:AppliedBandsGreenSolver}) = g.solver.subband
 
+boundaries(s::AppliedBandsGreenSolver{Missing}) =  ()
+boundaries(s::AppliedBandsGreenSolver) = (s.boundaryorbs.boundary,)
+
 #endregion
 
 #region ## apply ##

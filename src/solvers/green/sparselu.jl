@@ -4,7 +4,7 @@
 #   ization, possibly using inverse-free self-energies (using extended sites).
 #region
 
-struct AppliedSparseLUGreenSolver{C} <:AppliedGreenSolver
+struct AppliedSparseLUGreenSolver{C} <: AppliedGreenSolver
     invgreen::InverseGreenBlockSparse{C}
 end
 

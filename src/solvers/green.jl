@@ -20,6 +20,8 @@
 #      - cellsites(cell::Tuple, slat::Symbol)::Subcell -> Whole sublattice in a cell
 #      - cellsites(cell::Tuple, :) ~ cell::Union{NTuple,SVector} -> All sites in a cell
 #      - sel::SiteSelector ~ NamedTuple -> forms a LatticeSlice
+#   Optional: to properly plot boundaries, an ::AbstractGreenSolver may also implement
+#      - boundaries(s::AbstractGreenSolver) -> collection of (dir => cell)::Pair{Int,Int}
 ############################################################################################
 
 module GreenSolvers

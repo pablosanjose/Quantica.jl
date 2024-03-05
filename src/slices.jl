@@ -39,7 +39,7 @@ Base.getindex(ls::LatticeSlice; kw...) = getindex(ls, siteselector(; kw...))
 Base.getindex(ls::LatticeSlice, kw::NamedTuple) = getindex(ls, siteselector(; kw...))
 
 Base.getindex(ls::LatticeSlice, ss::SiteSelector, args...) =
-    getindex(ls, apply(ss, parent(ls)), args...)
+    getindex(ls, apply(ss, ls), args...)
 
 # return cell, siteindex of the i-th site of LatticeSlice
 function Base.getindex(l::LatticeSlice, i::Integer)
@@ -234,7 +234,7 @@ end
 checksamelattice(ls, h) = parent(ls) === lattice(h) ||
     argerror("Tried to grow a LatticeSlice with a Hamiltonian defined on a different Lattice")
 
-function grow(css::CellSitesDict{L}, h::AbstractHamiltonian) where {L}
+function grow(css::Union{CellSitesDict{L},CellOrbitalsGroupedDict{L}}, h::AbstractHamiltonian) where {L}
     css´ = CellSitesDict{L}()
     for cs in css
         c = cell(cs)
@@ -260,7 +260,7 @@ function grow(css::CellSitesDict{L}, h::AbstractHamiltonian) where {L}
     return CellSitesDict{L}(cell.(css´), css´)
 end
 
-function Base.setdiff!(cdict::CellSitesDict, cdict0::CellSitesDict)
+function Base.setdiff!(cdict::CellSitesDict, cdict0::Union{CellSitesDict,CellOrbitalsGroupedDict})
     for cs in cdict
         cs0 = findsubcell(cell(cs), cdict0)
         cs0 === nothing && continue
