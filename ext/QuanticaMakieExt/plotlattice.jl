@@ -581,7 +581,8 @@ end
 broaden_bounding_box(mm::Tuple) = mm
 
 function boundary_bounding_box(::Val{L}, (dir, cell), bs...) where {L}
-    m = SVector(ntuple(i -> i == dir ? cell + 1 : 0, Val(L)))
+    cell´ = isfinite(cell) ? cell + 1 : 0
+    m = SVector(ntuple(i -> i == dir ? cell´ : 0, Val(L)))
     return broaden_bounding_box((m, m), bs...)
 end
 
