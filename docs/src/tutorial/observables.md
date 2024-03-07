@@ -247,7 +247,7 @@ Integrator: Complex-plane integrator
     Contact                 : 1
     Number of phase shifts  : 0
 
-julia> qplot(g)
+julia> qplot(g, children = (; sitecolor = :blue))
 ```
 ```@raw html
 <img src="../../assets/josephson_lat.png" alt="Josephson junction" width="400" class="center"/>

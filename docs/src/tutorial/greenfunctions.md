@@ -191,6 +191,8 @@ julia> qplot(g, children = (; selector = siteselector(; cells = 1:5), sitecolor 
 
 Note that since we did not specify the `solver` in `greenfunction`, the `L=0` default `GS.SparseLU()` was taken.
 
+We can also visualize `glead`, which is defined on a 1D lattice with a boundary. Boundary cells are shown by default in red
+
 !!! tip "The GreenFunction <-> AbstractHamiltonian relation"
     Its important un appreciate that a `g::GreenFunction` represents the retarded Green function between sites in a given `AbstractHamiltonian`, but not on sites of the coupled `AbstractHamiltonians` of its attached self-energies. Therefore, `gcentral` above cannot yield observables in the leads (blue sites above), only on the red sites. To obtain observables in a given lead, its `GreenFunction` must be constructed, with an attached self-energy coming from the central region plus the other three leads.
 

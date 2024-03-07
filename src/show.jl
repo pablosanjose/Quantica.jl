@@ -96,19 +96,22 @@ function print_selector(io::IO, s::SiteSelector)
     i = get(io, :indent, "")
     print(io,
 "$(i)  Region            : $(s.region === missing ? "any" : "Function")
-$(i)  Sublattices       : $(s.sublats === missing ? "any" : s.sublats)
-$(i)  Cells             : $(s.cells === missing ? "any" : s.cells)")
+$(i)  Sublattices       : $(s.sublats === missing ? "any" : display_maybe_function(s.sublats))
+$(i)  Cells             : $(s.cells === missing ? "any" : display_maybe_function(s.cells))")
 end
 
 function print_selector(io::IO, s::HopSelector)
     i = get(io, :indent, "")
     print(io,
 "$(i)  Region            : $(s.region === missing ? "any" : "Function")
-$(i)  Sublattice pairs  : $(s.sublats === missing ? "any" : s.sublats)
-$(i)  Cell distances    : $(s.dcells === missing ? "any" : s.dcells)
+$(i)  Sublattice pairs  : $(s.sublats === missing ? "any" : display_maybe_function(s.sublats))
+$(i)  Cell distances    : $(s.dcells === missing ? "any" : display_maybe_function(s.dcells))
 $(i)  Hopping range     : $(displayrange(s.range))
 $(i)  Reverse hops      : $(s.adjoint)")
 end
+
+display_maybe_function(::Function) = "Function"
+display_maybe_function(x) = x
 
 #endregion
 
