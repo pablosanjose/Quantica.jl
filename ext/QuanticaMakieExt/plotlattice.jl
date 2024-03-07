@@ -9,10 +9,13 @@
         shellopacity = 0.07,
         cellopacity = 0.03,
         cellcolor = RGBAf(0,0,1),
+        boundarycolor = RGBAf(1,0,0),
+        boundaryopacity = 0.07,
         sitecolor = missing,         # accepts (i, r) -> float, IndexableObservable
         siteopacity = missing,       # accepts (i, r) -> float, IndexableObservable
         minmaxsiteradius = (0.0, 0.5),
         siteradius = 0.2,            # accepts (i, r) -> float, IndexableObservable
+        siteradiusfactor = 1.0,      # independent multiplier to apply to siteradius
         siteoutline = 2,
         siteoutlinedarken = 0.6,
         sitedarken = 0.0,
@@ -25,7 +28,7 @@
         hopcolormap = :Spectral_9,
         hoppixels = 2,
         selector = missing,
-        hide = :cell,               # :hops, :sites, :bravais, :cell, :axes, :shell, :all
+        hide = :cell,               # :hops, :sites, :bravais, :cell, :axes, :shell, :boundary, :contacts, :all
         isAxis3 = false,            # for internal use, to fix marker scaling
         marker = :auto,
         children = missing,
@@ -49,32 +52,6 @@ function Quantica.qplot(h::PlotLatticeArgumentType;
 end
 
 Quantica.qplot!(x::PlotLatticeArgumentType; kw...) = plotlattice!(x; kw...)
-
-function green_selector(g)
-    mincell, maxcell = green_bounding_box(g)
-    s = siteselector(cells = n -> all(mincell .<= n .<= maxcell))
-    return s
-end
-
-not_boundary_selector(g) = siteselector(cells = n -> !isboundarycell(n, g))
-
-green_bounding_box(g) =
-    broaden_bounding_box(Quantica.boundingbox(g), Quantica.boundaries(g)...)
-
-function broaden_bounding_box((mincell, maxcell)::Tuple{SVector{N},SVector{N}}, (dir, cell), bs...) where {N}
-    isfinite(cell) || return (mincell, maxcell)
-    mincell´ = SVector(ntuple(i -> i == dir ? min(mincell[i], cell + 1) : mincell[i], Val(N)))
-    maxcell´ = SVector(ntuple(i -> i == dir ? max(maxcell[i], cell - 1) : maxcell[i], Val(N)))
-    return mincell´, maxcell´
-end
-
-broaden_bounding_box(bb) = bb
-
-isboundarycell(n, g) = any(((dir, cell),) -> n[dir] == cell, Quantica.boundaries(g))
-
-get_plottables_and_kws(Σp::Tuple) = (Σp, NamedTuple())
-get_plottables_and_kws(Σp::Quantica.FrankenTuple) = (Tuple(Σp), NamedTuple(Σp))
-get_plottables_and_kws(Σp) = ((Σp,), NamedTuple())
 
 #endregion
 
@@ -510,28 +487,46 @@ end
 
 function Makie.plot!(plot::PlotLattice{Tuple{G}}) where {G<:GreenFunction}
     g = to_value(plot[1])
-    Σkws = Iterators.cycle(parse_children(plot[:children]))
-    Σs = Quantica.selfenergies(Quantica.contacts(g))
-    bsel = not_boundary_selector(g)
-    # plot lattice
     gsel = haskey(plot, :selector) && plot[:selector][] !== missing ?
         plot[:selector][] : green_selector(g)
     h = hamiltonian(g)
     latslice = lattice(h)[gsel]
     latslice´ = Quantica.growdiff(latslice, h)
-    latslice´ = latslice´[bsel]
-    latslice = latslice[bsel]
-    hideh = Quantica.tupleflatten(:cell, :bravais, plot[:hide][])
-    plotkw´´ = (; hopopacity = 0.2, siteopacity = 0.2, shellopacity = 0.07, plot.attributes...,
-        hide = hideh)
-    plotlattice!(plot, h, latslice, latslice´; plotkw´´...)
+    L = Quantica.latdim(h)
+    squaremarker = !plot[:flat][] ? Rect3f(Vec3f(-0.5), Vec3f(1)) : Rect2
+
+    # plot boundary as cells
+    if !ishidden((:boundary, :boundaries), plot)
+        bsel = boundary_selector(g)
+        blatslice = latslice[bsel]
+        blatslice´ = latslice´[bsel]
+        if L > 1
+            bkws = (; plot.attributes..., hide = (:axes, :sites, :hops), cellcolor = :boundarycolor, cellopacity = :boundaryopacity)
+            isempty(blatslice) || plotlattice!(plot, blatslice; bkws...)
+            isempty(blatslice´) || plotlattice!(plot, blatslice´; bkws...)
+        end
+        hideB = Quantica.tupleflatten(:bravais, plot[:hide][])
+        bkws´ = (; plot.attributes..., hide = hideB, sitecolor = :boundarycolor, siteopacity = :boundaryopacity,
+            siteradiusfactor = sqrt(2), marker = squaremarker)
+        isempty(blatslice) || plotlattice!(plot, blatslice; bkws´...)
+        isempty(blatslice´) || plotlattice!(plot, blatslice´; bkws´...)
+
+    end
+
+    # plot cells
+    plotlattice!(plot, h, latslice, latslice´; plot.attributes...)
+
     # plot contacts
-    for (Σ, Σkw) in zip(Σs, Σkws)
-        Σplottables = Quantica.selfenergy_plottables(Σ, bsel)
-        marker = !plot[:flat][] ? Rect3f(Vec3f(-0.5), Vec3f(1)) : Rect2
-        for Σp in Σplottables
-            plottables, kws = get_plottables_and_kws(Σp)
-            plotlattice!(plot, plottables...; plot.attributes..., marker, kws..., Σkw...)
+    if !ishidden((:contact, :contacts), plot)
+        Σkws = Iterators.cycle(parse_children(plot[:children]))
+        Σs = Quantica.selfenergies(Quantica.contacts(g))
+        hideΣ = Quantica.tupleflatten(:bravais, plot[:hide][])
+        for (Σ, Σkw) in zip(Σs, Σkws)
+            Σplottables = Quantica.selfenergy_plottables(Σ)
+            for Σp in Σplottables
+                plottables, kws = get_plottables_and_kws(Σp)
+                plotlattice!(plot, plottables...; plot.attributes..., hide = hideΣ, marker = squaremarker, kws..., Σkw...)
+            end
         end
     end
     return plot
@@ -557,9 +552,54 @@ function joint_colors_radii_update!(p, p´, plot)
     return nothing
 end
 
+############################################################################################
+# green_selector and boundary_selector: sites plotted for green functions
+#region
+
+function green_selector(g)
+    mincell, maxcell = green_bounding_box(g)
+    s = siteselector(cells = n -> all(mincell .<= n .<= maxcell))
+    return s
+end
+
+boundary_selector(g) = siteselector(cells = n -> isboundarycell(n, g))
+
+function green_bounding_box(g)
+    L = Quantica.latdim(hamiltonian(g))
+    return isempty(Quantica.contacts(g)) ?
+        boundary_bounding_box(Val(L), Quantica.boundaries(g)...) :
+        broaden_bounding_box(Quantica.boundingbox(g), Quantica.boundaries(g)...)
+end
+
+function broaden_bounding_box((mincell, maxcell)::Tuple{SVector{N},SVector{N}}, (dir, cell), bs...) where {N}
+    isfinite(cell) || return (mincell, maxcell)
+    mincell´ = SVector(ntuple(i -> i == dir ? min(mincell[i], cell + 1) : mincell[i], Val(N)))
+    maxcell´ = SVector(ntuple(i -> i == dir ? max(maxcell[i], cell - 1) : maxcell[i], Val(N)))
+    return broaden_bounding_box((mincell´, maxcell´), bs...)
+end
+
+broaden_bounding_box(mm::Tuple) = mm
+
+function boundary_bounding_box(::Val{L}, (dir, cell), bs...) where {L}
+    m = SVector(ntuple(i -> i == dir ? cell + 1 : 0, Val(L)))
+    return broaden_bounding_box((m, m), bs...)
+end
+
+isboundarycell(n, g) = any(((dir, cell),) -> n[dir] == cell, Quantica.boundaries(g))
+
+get_plottables_and_kws(Σp::Tuple) = (Σp, NamedTuple())
+get_plottables_and_kws(Σp::Quantica.FrankenTuple) = (Tuple(Σp), NamedTuple(Σp))
+get_plottables_and_kws(Σp) = ((Σp,), NamedTuple())
+
+#endregion
+
+############################################################################################
+# core plotting methods
+#region
+
 function plotsites_shaded!(plot::PlotLattice, sp::SitePrimitives, transparency)
     inspector_label = (self, i, r) -> sp.tooltips[i]
-    sizefactor = 1.0
+    sizefactor = plot[:siteradiusfactor][]
     if plot[:marker][] == :auto  # circle markers
         marker = (;)
     else
@@ -574,10 +614,11 @@ function plotsites_shaded!(plot::PlotLattice, sp::SitePrimitives, transparency)
     return plot
 end
 
-function plotsites_flat!(plot::PlotLattice, sp::SitePrimitives, transparency)
+function plotsites_flat!(plot::PlotLattice, sp::SitePrimitives{E}, transparency) where {E}
     inspector_label = (self, i, r) -> sp.tooltips[i]
-    sizefactor = ifelse(plot[:isAxis3][] && plot[:flat][], 0.5, sqrt(2))
-    if plot[:marker][] == :auto  # circle markers
+    sizefactor = ifelse(plot[:isAxis3][] && plot[:flat][], 0.5, sqrt(2)) * plot[:siteradiusfactor][]
+
+    if plot[:marker][] == :auto  # default circular markers
         marker = (;)
     else
         marker = (; marker = plot[:marker][])
@@ -632,9 +673,8 @@ function plotbravais!(plot::PlotLattice, lat::Lattice{<:Any,E,L}, latslice) wher
             arrows!(plot, [r0], [v]; color, inspectable = false)
         end
     end
-
     if !ishidden((:cell, :cells), plot) && L > 1
-        cellcolor = plot[:cellcolor][]
+        cellcolor = parse(RGBAf, plot[:cellcolor][])
         colface = transparent(cellcolor, plot[:cellopacity][])
         coledge = transparent(cellcolor, 5 * plot[:cellopacity][])
         rect = Rect{L,Int}(Point{L,Int}(0), Point{L,Int}(1))
@@ -646,7 +686,7 @@ function plotbravais!(plot::PlotLattice, lat::Lattice{<:Any,E,L}, latslice) wher
             mrect = GeometryBasics.mesh(rect, pointtype=Point{E,Float32}, facetype=QuadFace{Int})
             vertices = mrect.position
             vertices .= Ref(r0) .+ Ref(mat) .* (vertices0 .+ Ref(cell))
-            mesh!(plot, mrect; color = colface, transparency = true, inspectable = false)
+            mesh!(plot, mrect; color = colface, transparency = true, shading = NoShading, inspectable = false)
             wireframe!(plot, mrect; color = coledge, transparency = true, strokewidth = 1, inspectable = false)
         end
     end

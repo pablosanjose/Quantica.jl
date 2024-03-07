@@ -38,6 +38,13 @@ end
     glead = LP.honeycomb() |> hopping(1, range = 1) |> supercell((1,-1), region = r -> 0<=r[2]<=5) |> attach(nothing, cells = SA[5]) |> greenfunction(GS.Schur(boundary = 0));
     g = LP.honeycomb() |> hopping(1) |> supercell(region = r -> -6<=r[1]<=6 && 0<=r[2]<=5) |> attach(glead, region = r -> r[1] > 4.9) |> greenfunction;
     @test qplot(g, shellopacity = 0.3) isa Figure
+    hlead = LP.square() |> supercell((1,0), region = r -> 0 <= r[2] < 2) |> hopping(1)
+    glead = LP.square() |> onsite(4) - hopping(1) |> supercell((1, 0), region = r -> abs(r[2]) <= 5/2) |> attach(nothing, cells = SA[2]) |> greenfunction(GS.Schur(boundary = -2))
+    @test qplot(glead, siteradius = 0.25, children = (; sitecolor = :blue)) isa Figure
+    g = LP.honeycomb() |> hopping(1, range = 1) |>
+        attach(nothing, region = RP.circle(1, SA[2,3])) |> attach(nothing, region = RP.circle(1, SA[3,-3])) |>
+        greenfunction(GS.Bands(subdiv(-π, π, 13), subdiv(-π, π, 13), boundary = 2=>-3))
+    @test qplot(g) isa Figure
 end
 
 @testset "plot bands" begin
