@@ -361,6 +361,10 @@ end
     g0 = LP.square() |> hamiltonian(hopping(I), orbitals = 2) |> supercell(region = RP.square(10)) |> attach(glead, reverse = true; region = contact2) |> attach(glead; region = contact1) |> greenfunction;
     testcond(g0; nambu = true)
     testjosephson(g0)
+
+    # test fermi at zero temperature
+    g = LP.linear() |> hopping(1) |> supercell(3) |> supercell |> greenfunction(GS.Spectrum())
+    @test ρ = diag(densitymatrix(g[])()) ≈ [0.5, 0.5, 0.5]
 end
 
 @testset "mean-field models" begin

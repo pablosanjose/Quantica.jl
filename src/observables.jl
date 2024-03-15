@@ -4,8 +4,8 @@
 
 abstract type IndexableObservable end  # any type that can be sliced into (current and ldos)
 
-fermi(ω::C, kBT = 0) where {C} =
-    iszero(kBT) ? ifelse(real(ω) <= 0, C(1), C(0)) : C(1/(exp(ω/kBT) + 1))
+fermi(ω::C, kBT = 0; atol = sqrt(eps(real(C)))) where {C} =
+    iszero(kBT) ? ifelse(abs(ω) < atol, C(0.5), ifelse(real(ω) <= 0, C(1), C(0))) : C(1/(exp(ω/kBT) + 1))
 
 normal_size(h::AbstractHamiltonian) = normal_size(blockstructure(h))
 
