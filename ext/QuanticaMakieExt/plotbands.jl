@@ -7,8 +7,8 @@
         colormap = :Spectral_9,
         color = missing,
         opacity = 1.0,
-        size = 2,
-        minmaxsize = (0,6),
+        size = 1,
+        minmaxsize = (0, 6),
         nodesizefactor = 4,
         nodedarken = 0.0,
         hide = ()   # :nodes, :bands, :wireframe

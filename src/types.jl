@@ -2019,7 +2019,7 @@ struct GreenFunction{T,E,L,S<:AppliedGreenSolver,H<:AbstractHamiltonian{T,E,L},C
 end
 
 # Obtained with gω = call!(g::GreenFunction, ω; params...) or g(ω; params...)
-# Allows gω[contact(i), contact(j)] for i,j integer Σs indices ("contacts")
+# Allows gω[i, j] for i,j integer Σs indices ("contacts")
 # Allows gω[cell, cell´] using T-matrix, with cell::Union{SVector,CellSites}
 # Allows also view(gω, ...)
 struct GreenSolution{T,E,L,S<:GreenSlicer,G<:GreenFunction{T,E,L},Σs}
