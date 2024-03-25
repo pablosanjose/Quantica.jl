@@ -197,7 +197,7 @@ function push_hopprimitive!(hp, (hopcolor, hopopacity, shellopacity, hopradius, 
     src, dst = Quantica.site(lat, j, nj), Quantica.site(lat, i, ni)
     # If end site is opaque (not in outer shell), dst is midpoint, since the inverse hop will be plotted too
     # otherwise it is shifted by radius´ = radius minus hopradius correction if flat = false, and src also
-    radius´ = flat ? radius : sqrt(radius^2-hopradius^2)
+    radius´ = flat ? radius : sqrt(max(0, radius^2 - hopradius^2))
     unitvec = normalize(dst - src)
     dst = is_shell ? (src + dst)/2 : dst - unitvec * radius´
     src = src + unitvec * radius´
