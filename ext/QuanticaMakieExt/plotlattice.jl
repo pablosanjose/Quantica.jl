@@ -151,12 +151,12 @@ end
 maybe_evaluate_observable(o::Quantica.IndexableObservable, ls) = o[ls]
 maybe_evaluate_observable(x, ls) = x
 
-maybe_getindex(v::AbstractVector, i) = v[i]
-maybe_getindex(m::AbstractMatrix, i) = sum(view(m, i, :))
-maybe_getindex(m::Quantica.AbstractSparseMatrixCSC, i) = sum(view(nonzeros(m), nzrange(m, i)))
+maybe_getindex(v::AbstractVector{<:Number}, i) = v[i]
+maybe_getindex(m::AbstractMatrix{<:Number}, i) = sum(view(m, i, :))
+maybe_getindex(m::Quantica.AbstractSparseMatrixCSC{<:Number}, i) = sum(view(nonzeros(m), nzrange(m, i)))
 maybe_getindex(v, i) = v
-maybe_getindex(v::AbstractVector, i, j) = 0.5*(v[i] + v[j])
-maybe_getindex(m::AbstractMatrix, i, j) = m[i, j]
+maybe_getindex(v::AbstractVector{<:Number}, i, j) = 0.5*(v[i] + v[j])
+maybe_getindex(m::AbstractMatrix{<:Number}, i, j) = m[i, j]
 maybe_getindex(v, i, j) = v
 
 ## push! ##
@@ -173,7 +173,7 @@ function push_siteprimitive!(sp, (sitecolor, siteopacity, shellopacity, siteradi
     return sp
 end
 
-push_sitehue!(sp, ::Missing, i, r, s) = push!(sp.hues, s)
+push_sitehue!(sp, ::Union{Missing,Tuple,AbstractVector}, i, r, s) = push!(sp.hues, s)
 push_sitehue!(sp, sitecolor::Real, i, r, s) = push!(sp.hues, sitecolor)
 push_sitehue!(sp, sitecolor::Function, i, r, s) = push!(sp.hues, sitecolor(i, r))
 push_sitehue!(sp, ::Symbol, i, r, s) = push!(sp.hues, 0f0)
@@ -213,7 +213,7 @@ function push_hopprimitive!(hp, (hopcolor, hopopacity, shellopacity, hopradius, 
     return hp
 end
 
-push_hophue!(hp, ::Missing, ij, rdr, s) = push!(hp.hues, s)
+push_hophue!(hp, ::Union{Missing,Tuple,AbstractVector}, ij, rdr, s) = push!(hp.hues, s)
 push_hophue!(hp, hopcolor::Real, ij, rdr, s) = push!(hp.hues, hopcolor)
 push_hophue!(hp, hopcolor::Function, ij, rdr, s) = push!(hp.hues, hopcolor(ij, rdr))
 push_hophue!(hp, ::Symbol, ij, rdr, s) = push!(hp.hues, 0f0)
@@ -263,14 +263,19 @@ function update_colors!(p, extremahues, extremaops, pcolor, popacity, colormap, 
 end
 
 # color == missing means sublat color
-primitive_color(color, extrema, colormap, ::Missing) =
-    RGBAf(colormap[mod1(round(Int, color), length(colormap))])
-primitive_color(color, extrema, colormap, colorname::Symbol) =
-    parse(RGBAf, colorname)
-primitive_color(color, extrema, colormap, pcolor::Makie.Colorant) =
-    convert(RGBAf, pcolor)
-primitive_color(color, extrema, colormap, _) =
-    RGBAf(colormap[normalize_range(color, extrema)])
+primitive_color(colorindex, extrema, colormap, ::Missing) =
+    RGBAf(colormap[mod1(round(Int, colorindex), length(colormap))])
+primitive_color(colorindex, extrema, colormap, colorname::Symbol) =
+    parse_color(colorname)
+primitive_color(colorindex, extrema, colormap, pcolor::Makie.Colorant) =
+    parse_color(pcolor)
+primitive_color(colorindex, extrema, colormap, colors::Union{Tuple,AbstractVector}) =
+    parse_color(colors[mod1(round(Int, colorindex), length(colors))])
+primitive_color(colorindex, extrema, colormap, _) =
+    parse_color(colormap[normalize_range(colorindex, extrema)])
+
+parse_color(colorname::Symbol) = parse(RGBAf, colorname)
+parse_color(color::Makie.Colorant) = convert(RGBAf, color)
 
 # opacity::Function should be scaled
 primitite_opacity(α, extrema, ::Function) = normalize_range(α, extrema)
