@@ -80,6 +80,9 @@ struct HoppingPrimitives{E}
     colors::Vector{RGBAf}
 end
 
+const ColorOrSymbol = Union{Symbol, Makie.Colorant}
+const ColorsPerSublat = Union{NTuple{<:Any,ColorOrSymbol}, AbstractVector{<:ColorOrSymbol}}
+
 #region ## Constructors ##
 
 SitePrimitives{E}() where {E} =
@@ -151,16 +154,17 @@ end
 maybe_evaluate_observable(o::Quantica.IndexableObservable, ls) = o[ls]
 maybe_evaluate_observable(x, ls) = x
 
-maybe_getindex(v::AbstractVector, i) = v[i]
-maybe_getindex(m::AbstractMatrix, i) = sum(view(m, i, :))
-maybe_getindex(m::Quantica.AbstractSparseMatrixCSC, i) = sum(view(nonzeros(m), nzrange(m, i)))
+maybe_getindex(v::AbstractVector{<:Number}, i) = v[i]
+maybe_getindex(m::AbstractMatrix{<:Number}, i) = sum(view(m, i, :))
+maybe_getindex(m::Quantica.AbstractSparseMatrixCSC{<:Number}, i) = sum(view(nonzeros(m), nzrange(m, i)))
 maybe_getindex(v, i) = v
-maybe_getindex(v::AbstractVector, i, j) = 0.5*(v[i] + v[j])
-maybe_getindex(m::AbstractMatrix, i, j) = m[i, j]
+maybe_getindex(v::AbstractVector{<:Number}, i, j) = 0.5*(v[i] + v[j])
+maybe_getindex(m::AbstractMatrix{<:Number}, i, j) = m[i, j]
 maybe_getindex(v, i, j) = v
 
 ## push! ##
 
+# sitecolor here could be a color, a symbol, a vector/tuple of either, a number, a function, or missing
 function push_siteprimitive!(sp, (sitecolor, siteopacity, shellopacity, siteradius), lat, i, ni, matii, is_shell)
     r = Quantica.site(lat, i, ni)
     s = Quantica.sitesublat(lat, i)
@@ -173,7 +177,7 @@ function push_siteprimitive!(sp, (sitecolor, siteopacity, shellopacity, siteradi
     return sp
 end
 
-push_sitehue!(sp, ::Missing, i, r, s) = push!(sp.hues, s)
+push_sitehue!(sp, ::Union{Missing,ColorsPerSublat}, i, r, s) = push!(sp.hues, s)
 push_sitehue!(sp, sitecolor::Real, i, r, s) = push!(sp.hues, sitecolor)
 push_sitehue!(sp, sitecolor::Function, i, r, s) = push!(sp.hues, sitecolor(i, r))
 push_sitehue!(sp, ::Symbol, i, r, s) = push!(sp.hues, 0f0)
@@ -193,11 +197,12 @@ push_siteradius!(sp, siteradius, i, r) = argerror("Unrecognized siteradius")
 push_sitetooltip!(sp, i, r, mat) = push!(sp.tooltips, matrixstring(i, mat))
 push_sitetooltip!(sp, i, r) = push!(sp.tooltips, positionstring(i, r))
 
+# hopcolor here could be a color, a symbol, a vector/tuple of either, a number, a function, or missing
 function push_hopprimitive!(hp, (hopcolor, hopopacity, shellopacity, hopradius, flat), lat, (i, j), (ni, nj), radius, matij, is_shell)
     src, dst = Quantica.site(lat, j, nj), Quantica.site(lat, i, ni)
     # If end site is opaque (not in outer shell), dst is midpoint, since the inverse hop will be plotted too
     # otherwise it is shifted by radius´ = radius minus hopradius correction if flat = false, and src also
-    radius´ = flat ? radius : sqrt(radius^2-hopradius^2)
+    radius´ = flat ? radius : sqrt(max(0, radius^2 - hopradius^2))
     unitvec = normalize(dst - src)
     dst = is_shell ? (src + dst)/2 : dst - unitvec * radius´
     src = src + unitvec * radius´
@@ -213,7 +218,7 @@ function push_hopprimitive!(hp, (hopcolor, hopopacity, shellopacity, hopradius, 
     return hp
 end
 
-push_hophue!(hp, ::Missing, ij, rdr, s) = push!(hp.hues, s)
+push_hophue!(hp, ::Union{Missing,ColorsPerSublat}, ij, rdr, s) = push!(hp.hues, s)
 push_hophue!(hp, hopcolor::Real, ij, rdr, s) = push!(hp.hues, hopcolor)
 push_hophue!(hp, hopcolor::Function, ij, rdr, s) = push!(hp.hues, hopcolor(ij, rdr))
 push_hophue!(hp, ::Symbol, ij, rdr, s) = push!(hp.hues, 0f0)
@@ -263,14 +268,19 @@ function update_colors!(p, extremahues, extremaops, pcolor, popacity, colormap, 
 end
 
 # color == missing means sublat color
-primitive_color(color, extrema, colormap, ::Missing) =
-    RGBAf(colormap[mod1(round(Int, color), length(colormap))])
-primitive_color(color, extrema, colormap, colorname::Symbol) =
-    parse(RGBAf, colorname)
-primitive_color(color, extrema, colormap, pcolor::Makie.Colorant) =
-    convert(RGBAf, pcolor)
-primitive_color(color, extrema, colormap, _) =
-    RGBAf(colormap[normalize_range(color, extrema)])
+primitive_color(colorindex, extrema, colormap, ::Missing) =
+    RGBAf(colormap[mod1(round(Int, colorindex), length(colormap))])
+primitive_color(colorindex, extrema, colormap, colorname::Symbol) =
+    parse_color(colorname)
+primitive_color(colorindex, extrema, colormap, pcolor::Makie.Colorant) =
+    parse_color(pcolor)
+primitive_color(colorindex, extrema, colormap, colors::ColorsPerSublat) =
+    parse_color(colors[mod1(round(Int, colorindex), length(colors))])
+primitive_color(colorindex, extrema, colormap, _) =
+    parse_color(colormap[normalize_range(colorindex, extrema)])
+
+parse_color(colorname::Symbol) = parse(RGBAf, colorname)
+parse_color(color::Makie.Colorant) = convert(RGBAf, color)
 
 # opacity::Function should be scaled
 primitite_opacity(α, extrema, ::Function) = normalize_range(α, extrema)

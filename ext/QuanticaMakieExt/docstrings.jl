@@ -70,7 +70,7 @@ inter-site links, and a representation of contacts.
 - `cellcolor = RGBAf(0,0,1)`: color of the unitcell's boundingbox
 - `boundarycolor = RGBAf(1,0,0)`: color of boundary cells for GreenFunction plots
 - `boundaryopacity = 0.07`: opacity of boundary cells for GreenFunction plots
-- `sitecolor = missing`: color of sites, as a index in `sitecolormap`, a named color, a `Makie.Colorant`, or as a site shader (see below). If `missing`, cycle through `sitecolormap`.
+- `sitecolor = missing`: color of sites, as a index in `sitecolormap`, a named color, a `Makie.Colorant`, a collection of either, or as a site shader (see below). If `missing`, cycle through `sitecolormap`. If a collection, cycle through that.
 - `sitecolormap = :Spectral_9`: colormap to use for `sitecolor` (see options in https://tinyurl.com/cschemes)
 - `siteopacity = missing`: opacity of sites, as a real between 0 and 1, or as a site shader (see below). If `missing`, obey `shellopacity`.
 - `siteradius = 0.25`: radius of sites as a real in units of lattice dimensions, or as a site shader (see below)
@@ -78,7 +78,7 @@ inter-site links, and a representation of contacts.
 - `siteoutline = 2`: thickness of the outline around flat sites
 - `siteoutlinedarken = 0.6`: darkening factor of the outline around flat sites
 - `sitedarken = 0.0`: darkening factor for sites
-- `hopcolor = missing`: color of hops, as a index in `hopcolormap`, a named color, a `Makie.Colorant`, or as a hop shader (see below).If `missing`, cycle through `sitecolormap`.
+- `hopcolor = missing`: color of hops, as a index in `hopcolormap`, a named color, a `Makie.Colorant`, a collection of either, or as a hop shader (see below). If `missing`, cycle through `sitecolormap`. If a collection, cycle through that.
 - `hopcolormap = :Spectral_9`: colormap to use for `hopcolor` (see options in https://tinyurl.com/cschemes)
 - `hopopacity = missing`: opacity of hops, as a real between 0 and 1, or as a hop shader (see below)
 - `hopradius = 0.03`: radius of hops as a real number in units of lattice dimensions, or as a hop shader (see below)
