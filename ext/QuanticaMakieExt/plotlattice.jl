@@ -80,6 +80,9 @@ struct HoppingPrimitives{E}
     colors::Vector{RGBAf}
 end
 
+const ColorOrSymbol = Union{Symbol, Makie.Colorant}
+const ColorsPerSublat = Union{NTuple{<:Any,ColorOrSymbol}, AbstractVector{<:ColorOrSymbol}}
+
 #region ## Constructors ##
 
 SitePrimitives{E}() where {E} =
@@ -161,6 +164,7 @@ maybe_getindex(v, i, j) = v
 
 ## push! ##
 
+# sitecolor here could be a color, a symbol, a vector/tuple of either, a number, a function, or missing
 function push_siteprimitive!(sp, (sitecolor, siteopacity, shellopacity, siteradius), lat, i, ni, matii, is_shell)
     r = Quantica.site(lat, i, ni)
     s = Quantica.sitesublat(lat, i)
@@ -173,7 +177,7 @@ function push_siteprimitive!(sp, (sitecolor, siteopacity, shellopacity, siteradi
     return sp
 end
 
-push_sitehue!(sp, ::Union{Missing,Tuple,AbstractVector}, i, r, s) = push!(sp.hues, s)
+push_sitehue!(sp, ::Union{Missing,ColorsPerSublat}, i, r, s) = push!(sp.hues, s)
 push_sitehue!(sp, sitecolor::Real, i, r, s) = push!(sp.hues, sitecolor)
 push_sitehue!(sp, sitecolor::Function, i, r, s) = push!(sp.hues, sitecolor(i, r))
 push_sitehue!(sp, ::Symbol, i, r, s) = push!(sp.hues, 0f0)
@@ -193,6 +197,7 @@ push_siteradius!(sp, siteradius, i, r) = argerror("Unrecognized siteradius")
 push_sitetooltip!(sp, i, r, mat) = push!(sp.tooltips, matrixstring(i, mat))
 push_sitetooltip!(sp, i, r) = push!(sp.tooltips, positionstring(i, r))
 
+# hopcolor here could be a color, a symbol, a vector/tuple of either, a number, a function, or missing
 function push_hopprimitive!(hp, (hopcolor, hopopacity, shellopacity, hopradius, flat), lat, (i, j), (ni, nj), radius, matij, is_shell)
     src, dst = Quantica.site(lat, j, nj), Quantica.site(lat, i, ni)
     # If end site is opaque (not in outer shell), dst is midpoint, since the inverse hop will be plotted too
@@ -213,7 +218,7 @@ function push_hopprimitive!(hp, (hopcolor, hopopacity, shellopacity, hopradius, 
     return hp
 end
 
-push_hophue!(hp, ::Union{Missing,Tuple,AbstractVector}, ij, rdr, s) = push!(hp.hues, s)
+push_hophue!(hp, ::Union{Missing,ColorsPerSublat}, ij, rdr, s) = push!(hp.hues, s)
 push_hophue!(hp, hopcolor::Real, ij, rdr, s) = push!(hp.hues, hopcolor)
 push_hophue!(hp, hopcolor::Function, ij, rdr, s) = push!(hp.hues, hopcolor(ij, rdr))
 push_hophue!(hp, ::Symbol, ij, rdr, s) = push!(hp.hues, 0f0)
@@ -269,7 +274,7 @@ primitive_color(colorindex, extrema, colormap, colorname::Symbol) =
     parse_color(colorname)
 primitive_color(colorindex, extrema, colormap, pcolor::Makie.Colorant) =
     parse_color(pcolor)
-primitive_color(colorindex, extrema, colormap, colors::Union{Tuple,AbstractVector}) =
+primitive_color(colorindex, extrema, colormap, colors::ColorsPerSublat) =
     parse_color(colors[mod1(round(Int, colorindex), length(colors))])
 primitive_color(colorindex, extrema, colormap, _) =
     parse_color(colormap[normalize_range(colorindex, extrema)])
