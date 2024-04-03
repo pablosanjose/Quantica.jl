@@ -179,8 +179,7 @@ function BandSimplex(ei::SVector{D´,T}, kij::SMatrix{D´,D,T}, refex = Ref(Expa
     k0 = kij[1, :]
     U = kij[SVector{D}(2:D´),:]' .- k0          # edges as columns
     VD = T(abs(det(U)) / (2π)^D)
-    ones = [one(T) for _ in Combinations(D´, 3)]
-    dualphi = generate_dual_phi(eij, ones)
+    dualphi = generate_dual_phi(eij)
     return BandSimplex(ei, kij, eij, dualphi, VD, refex)
 end
 
@@ -200,40 +199,14 @@ end
 # e_j such that e^j_k are all nonzero
 generate_dual_e(::Type{SVector{D´,T}}) where {D´,T} = SVector(ntuple(i -> T(i^2), Val(D´)))
 
-# dϕ such that d_ijk = e^j_k dϕ^j_l - e^j_l dϕ^j_k are all as close to 1 as possible
-function generate_dual_phi(eij::SMatrix{D´,D´,T}, ones) where {D´,T}
-    As = (SVector(ntuple(i -> dual_face(eij, face, i), Val(D´))) for face in Combinations(D´, 3))
-    As´ = Iterators.filter(!iszero, As)
-    isempty(As´) && return generate_dual_e(SVector{D´,T})
-    A = transpose(stack(As´))
-    ones´ = size(A, 1) == length(ones) ? ones : ones[1:size(A,1)]
-    dual = SVector{D´, T}(A \ ones´)
-    return dual
-end
-
-function dual_face(emat, (j, k, l), i)
-    if i == j
-        return emat[k,l]
-    elseif i  == k
-        return emat[l,j]
-    elseif i == l
-        return emat[j,k]
-    else
-        return zero(eltype(emat))
-    end
-end
-
-# check whether iszero(eʲₖφʲₗ - φʲₖeʲₗ) for nonzero e's
-function is_valid_dual(phi, es)
-    phis = phi' .- phi
-    for j in axes(es, 2), k in axes(es, 1), l in axes(es, 1)
-        l != k != j && l != k || continue
-        eʲₖ = es[k,j]
-        eʲₗ = es[l,j]
-        (iszero(eʲₖ) || iszero(eʲₗ)) && continue
-        eʲₖ * phis[l, j] ≈ phis[k, j] * eʲₗ && return false
-    end
-    return true
+# dϕ such that M = tʲ₁tʲ₂tʲ₃...(tʲ₁-tʲ₂)(tʲ₁-tʲ₃)...(tʲ₂-tʲ₃)... is maximal
+# This is a (pseudo-)vandermonde determinant, and tʲₖ = dϕʲₖ/eʲₖ
+# The empirical solution turns out to be tʲₙ ≈ normalize((-1)ⁿsqrt((1+n^2)/2)) (n != j, e.g. j = 0)
+function generate_dual_phi(eij::SMatrix{D´,D´,T}) where {D´,T}
+    t⁰ₙ = SVector(ntuple(n -> T((-1)^n*sqrt(0.5*(1 + n^2))), Val(D´-1)))
+    t⁰ₙ = SVector(zero(T), normalize(t⁰ₙ)...)
+    dϕₙ = multiply_if_nonzero.(t⁰ₙ, eij[:, 1])
+    return dϕₙ
 end
 
 #endregion
@@ -473,6 +446,7 @@ end
 cis_scalar(s, ex) = cis(s)
 
 divide_if_nonzero(a, b) = iszero(b) ? a : a/b
+multiply_if_nonzero(a, b) = iszero(b) ? a : a*b
 
 function αγ_matrix(ϕedges::S, tedges::S, eedges::SMatrix{D´,D´}) where {D´,S<:SMatrix{D´,D´}}
     js = ks = SVector{D´}(1:D´)
