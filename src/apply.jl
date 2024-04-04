@@ -264,7 +264,7 @@ function apply(solver::AbstractEigenSolver, h::AbstractHamiltonian, ::Type{S}, m
     end
     # issue #235: for some reason, unless this is called, h´ may be GC'ed despite the
     # asolver closure in some systems, leading to segfaults. TODO: why this is needed?
-    @static (Sys.islinux() && v"1.10" <= VERSION < v"1.11.0-alpha1" && sfunc(zero(S)))
+    @static (Sys.ARCH === :x86_64 && !Sys.iswindows() && v"1.10" <= VERSION < v"1.11.0-alpha1" && sfunc(zero(S)))
     asolver = AppliedEigenSolver(FunctionWrapper{EigenComplex{T},Tuple{S}}(sfunc))
     return asolver
 end
