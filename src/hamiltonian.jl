@@ -1,166 +1,63 @@
 ############################################################################################
-# Hamiltonian builders
+# add!(::IJVBuilder, ...)
+# add!(::ParametricHamiltonianBuilder, ...)
+#   add matrix elements to a builder before assembly into a (Parametric)Hamiltonian
 #region
 
-abstract type AbstractHamiltonianBuilder{T,E,L,B} end
+add!(m::TightbindingModel) = b -> add!(b, m)
 
-abstract type AbstractBuilderHarmonic{L,B} end
-
-struct IJVHarmonic{L,B} <: AbstractBuilderHarmonic{L,B}
-    dn::SVector{L,Int}
-    collector::IJV{B}
+# direct site indexing
+function add!(b::Union{IJVBuilder,ParametricHamiltonianBuilder}, val, c::CellSites, d::CellSites)
+    ijv = b[cell(d) - cell(c)]
+    B = blocktype(b)
+    val´ = mask_block(B, val)   # Warning: we don't check matrix size here, just conversion to B
+    add!(ijv, val´, siteindices(c), siteindices(d))
+    return b
 end
 
-mutable struct CSCHarmonic{L,B} <: AbstractBuilderHarmonic{L,B}
-    dn::SVector{L,Int}
-    collector::CSC{B}
+function add!(b::Union{IJVBuilder,ParametricHamiltonianBuilder}, val, c::CellSites)
+    ijv = b[zero(cell(c))]
+    B = blocktype(b)
+    val´ = mask_block(B, val)   # Warning: we don't check matrix size here, just conversion to B
+    add!(ijv, val´, siteindices(c))
+    return b
 end
 
-struct IJVBuilder{T,E,L,B} <: AbstractHamiltonianBuilder{T,E,L,B}
-    lat::Lattice{T,E,L}
-    blockstruct::OrbitalBlockStructure{B}
-    harmonics::Vector{IJVHarmonic{L,B}}
-    kdtrees::Vector{KDTree{SVector{E,T},Euclidean,T}}
-end
+add!(ijv::IJV, v, i::Integer, j::Integer = i) = push!(ijv, (i, j, v))
 
-struct CSCBuilder{T,E,L,B} <: AbstractHamiltonianBuilder{T,E,L,B}
-    lat::Lattice{T,E,L}
-    blockstruct::OrbitalBlockStructure{B}
-    harmonics::Vector{CSCHarmonic{L,B}}
-end
-
-## Constructors ##
-
-function CSCBuilder(lat::Lattice{<:Any,<:Any,L}, blockstruct::OrbitalBlockStructure{B}) where {L,B}
-    harmonics = CSCHarmonic{L,B}[]
-    return CSCBuilder(lat, blockstruct, harmonics)
-end
-
-function IJVBuilder(lat::Lattice{T,E,L}, blockstruct::OrbitalBlockStructure{B}) where {E,T,L,B}
-    harmonics = IJVHarmonic{L,B}[]
-    kdtrees = Vector{KDTree{SVector{E,T},Euclidean,T}}(undef, nsublats(lat))
-    return IJVBuilder(lat, blockstruct, harmonics, kdtrees)
-end
-
-function IJVBuilder(lat::Lattice{T}, hams::AbstractHamiltonian...) where {T}
-    orbs = vcat(norbitals.(hams)...)
-    bs = OrbitalBlockStructure(T, orbs, sublatlengths(lat))
-    builder = IJVBuilder(lat, bs)
-    push_ijvharmonics!(builder, hams...)
-    return builder
-end
-
-push_ijvharmonics!(builder, ::OrbitalBlockStructure) = builder
-push_ijvharmonics!(builder) = builder
-
-function push_ijvharmonics!(builder::IJVBuilder, hs::AbstractHamiltonian...)
-    bharmonics = builder.harmonics
-    offset = 0
-    for h in hs
-        for har in harmonics(h)
-            ijv = builder[dcell(har)]
-            hmat = unflat(matrix(har))
-            I,J,V = findnz(hmat)
-            append!(ijv, (I .+ offset, J .+ offset, V))
-        end
-        offset += nsites(lattice(h))
+function add!(ijv::IJV, v, is, js)
+    foreach(Iterators.product(is, js)) do (i, j)
+        push!(ijv, (i, j, v))
     end
-    return builder
+    return ijv
 end
 
-empty_harmonic(b::CSCBuilder{<:Any,<:Any,L,B}, dn) where {L,B} =
-    CSCHarmonic{L,B}(dn, CSC{B}(nsites(b.lat)))
-
-empty_harmonic(::IJVBuilder{<:Any,<:Any,L,B}, dn) where {L,B} =
-    IJVHarmonic{L,B}(dn, IJV{B}())
-
-## API ##
-
-collector(har::AbstractBuilderHarmonic) = har.collector  # for IJVHarmonic and CSCHarmonic
-
-dcell(har::AbstractBuilderHarmonic) = har.dn
-
-kdtrees(b::IJVBuilder) = b.kdtrees
-
-finalizecolumn!(b::CSCBuilder, x...) =
-    foreach(har -> finalizecolumn!(collector(har), x...), b.harmonics)
-
-Base.isempty(h::IJVHarmonic) = isempty(collector(h))
-Base.isempty(s::CSCHarmonic) = isempty(collector(s))
-
-lattice(b::AbstractHamiltonianBuilder) = b.lat
-
-blockstructure(b::AbstractHamiltonianBuilder) = b.blockstruct
-
-blocktype(::AbstractHamiltonianBuilder{<:Any,<:Any,<:Any,B}) where {B} = B
-
-harmonics(b::AbstractHamiltonianBuilder) = b.harmonics
-
-function Base.getindex(b::AbstractHamiltonianBuilder{<:Any,<:Any,L}, dn::SVector{L,Int}) where {L}
-    hars = b.harmonics
-    for har in hars
-        dcell(har) == dn && return collector(har)
+function add!(ijv::IJV, v, is)
+    foreach(is) do i
+        push!(ijv, (i, i, v))
     end
-    har = empty_harmonic(b, dn)
-    push!(hars, har)
-    return collector(har)
+    return ijv
 end
 
-function SparseArrays.sparse(builder::AbstractHamiltonianBuilder{T,<:Any,L,B}) where {T,L,B}
-    HT = Harmonic{T,L,B}
-    b = blockstructure(builder)
-    n = nsites(lattice(builder))
-    hars = HT[sparse(b, har, n, n) for har in harmonics(builder) if !isempty(har)]
-    return hars
+
+# block may be a tuple of row-col index ranges, to restrict application of model
+function add!(b::Union{IJVBuilder,ParametricHamiltonianBuilder}, model::TightbindingModel, block = missing)
+    lat = lattice(b)
+    bs = blockstructure(b)
+    amodel = apply(model, (lat, bs))
+    addterm!.(Ref(b), Ref(block), terms(amodel))
+    return b
 end
 
-function SparseArrays.sparse(b::OrbitalBlockStructure{B}, har::AbstractBuilderHarmonic{L,B}, m::Integer, n::Integer) where {L,B}
-    s = sparse(collector(har), m, n)
-    return Harmonic(dcell(har), HybridSparseMatrix(b, s))
+function add!(b::ParametricHamiltonianBuilder, model::ParametricModel, block = missing)
+    m0 = basemodel(model)
+    ms = modifier.(terms(model))
+    add!(b, m0, block)
+    push!(b, ms...)
+    return b
 end
 
-#endregion
-
-############################################################################################
-# hamiltonian
-#region
-
-(model::AbstractModel)(lat::Lattice) = hamiltonian(lat, model)
-(modifier::Modifier)(h::AbstractHamiltonian) = hamiltonian(h, modifier)
-
-hamiltonian(args...; kw...) = lat -> hamiltonian(lat, args...; kw...)
-
-hamiltonian(lat::Lattice, m0::TightbindingModel, m::Modifier, ms::Modifier...; kw...) =
-    parametric(hamiltonian(lat, m0; kw...), m, ms...)
-
-hamiltonian(lat::Lattice, m0::ParametricModel, ms::Modifier...; kw...) =
-    parametric(hamiltonian(lat, basemodel(m0); kw...), modifier.(terms(m0))..., ms...)
-
-hamiltonian(lat::Lattice, m::Modifier, ms::Modifier...; kw...) =
-    parametric(hamiltonian(lat; kw...), m, ms...)
-
-hamiltonian(h::AbstractHamiltonian, m::AbstractModifier, ms::AbstractModifier...) =
-    parametric(h, m, ms...)
-
-hamiltonian(lat::Lattice, m::AbstractBlockModel{<:TightbindingModel}; kw...) =
-    hamiltonian(lat, parent(m), block(m); kw...)
-
-hamiltonian(lat::Lattice, m::AbstractBlockModel{<:ParametricModel}; kw...) = parametric(
-    hamiltonian(lat, basemodel(parent(m)), block(m); kw...),
-    modifier.(terms(parent(m)))...)
-
-# Base.@constprop :aggressive may be needed for type-stable non-Val orbitals?
-function hamiltonian(lat::Lattice{T}, m::TightbindingModel = TightbindingModel(), block = missing; orbitals = Val(1)) where {T}
-    blockstruct = OrbitalBlockStructure(T, orbitals, sublatlengths(lat))
-    builder = IJVBuilder(lat, blockstruct)
-    apmod = apply(m, (lat, blockstruct))
-    # using foreach here foils precompilation of applyterm! for some reason
-    applyterm!.(Ref(builder), Ref(block), terms(apmod))
-    hars = sparse(builder)
-    return Hamiltonian(lat, blockstruct, hars)
-end
-
-function applyterm!(builder, block, term::AppliedOnsiteTerm)
+function addterm!(builder, block, term::AppliedOnsiteTerm)
     sel = selector(term)
     isempty(cells(sel)) || argerror("Cannot constrain cells in an onsite term, cell periodicity is assumed.")
     lat = lattice(builder)
@@ -168,7 +65,6 @@ function applyterm!(builder, block, term::AppliedOnsiteTerm)
     ijv = builder[dn0]
     bs = blockstructure(builder)
     bsizes = blocksizes(bs)
-    B = blocktype(builder)
     foreach_site(sel, dn0) do s, i, r
         isinblock(i, block) || return nothing
         n = bsizes[s]
@@ -179,12 +75,11 @@ function applyterm!(builder, block, term::AppliedOnsiteTerm)
     return nothing
 end
 
-function applyterm!(builder, block, term::AppliedHoppingTerm)
+function addterm!(builder, block, term::AppliedHoppingTerm)
     trees = kdtrees(builder)
     sel = selector(term)
     bs = blockstructure(builder)
     bsizes = blocksizes(bs)
-    B = blocktype(builder)
     foreach_cell(sel) do dn
         ijv = builder[dn]
         found = foreach_hop(sel, trees, dn) do (si, sj), (i, j), (r, dr)
@@ -216,6 +111,50 @@ end
 isinblock(i, j, rng) = isinblock(i, rng) && isinblock(j, rng)
 isinblock(i, ::Missing) = true
 isinblock(i, rng) = i in rng
+
+#endregion
+
+############################################################################################
+# hamiltonian
+#region
+
+(model::AbstractModel)(lat::Lattice) = hamiltonian(lat, model)
+(modifier::Modifier)(h::AbstractHamiltonian) = hamiltonian(h, modifier)
+
+hamiltonian(args...; kw...) = lat -> hamiltonian(lat, args...; kw...)
+
+hamiltonian(h::AbstractHamiltonian, m::AbstractModifier, ms::AbstractModifier...) =
+    parametric(h, m, ms...)
+
+hamiltonian(lat::Lattice, m0::TightbindingModel, m::Modifier, ms::Modifier...; kw...) =
+    parametric(hamiltonian(lat, m0; kw...), m, ms...)
+
+hamiltonian(lat::Lattice, m0::ParametricModel, ms::Modifier...; kw...) =
+    parametric(hamiltonian(lat, basemodel(m0); kw...), modifier.(terms(m0))..., ms...)
+
+hamiltonian(lat::Lattice, m::Modifier, ms::Modifier...; kw...) =
+    parametric(hamiltonian(lat; kw...), m, ms...)
+
+hamiltonian(lat::Lattice, m::AbstractBlockModel{<:TightbindingModel}; kw...) =
+    hamiltonian(lat, parent(m), block(m); kw...)
+
+hamiltonian(lat::Lattice, m::AbstractBlockModel{<:ParametricModel}; kw...) = parametric(
+    hamiltonian(lat, basemodel(parent(m)), block(m); kw...),
+    modifier.(terms(parent(m)))...)
+
+function hamiltonian(lat::Lattice{T}, m::TightbindingModel = TightbindingModel(), block = missing; orbitals = Val(1)) where {T}
+    b = IJVBuilder(lat, orbitals)
+    add!(b, m, block)
+    return hamiltonian(b)
+end
+
+hamiltonian(b::IJVBuilder) = Hamiltonian(lattice(b), blockstructure(b), sparse(b))
+
+hamiltonian(b::ParametricHamiltonianBuilder) =
+    maybe_parametric(hamiltonian(parent(b)), modifiers(b)...)
+
+maybe_parametric(h) = h                                     # without modifiers
+maybe_parametric(h, m, ms...) = parametric(h, m, ms...)     # with modifiers
 
 #endregion
 
@@ -553,7 +492,7 @@ function combine(hams::AbstractHamiltonian{T}...; coupling = TightbindingModel()
     interblockmodel = interblock(coupling, hams...)
     model´, blocks´ = parent(interblockmodel), block(interblockmodel)
     apmod = apply(model´, (lat, blockstruct))
-    applyterm!.(Ref(builder), Ref(blocks´), terms(apmod))
+    addterm!.(Ref(builder), Ref(blocks´), terms(apmod))
     hars = sparse(builder)
     ham = Hamiltonian(lat, blockstruct, hars)
     ms = tupleflatten(modifiers.(hams)...)

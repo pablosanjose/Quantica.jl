@@ -1,4 +1,5 @@
-using Quantica: Hamiltonian, ParametricHamiltonian, sites, nsites, nonsites, nhoppings, coordination, flat, hybrid, transform!, nnz, nonzeros
+using Quantica: Hamiltonian, ParametricHamiltonian, ParametricHamiltonianBuilder,
+      sites, nsites, nonsites, nhoppings, coordination, flat, hybrid, transform!, nnz, nonzeros
 
 @testset "basic hamiltonians" begin
     presets = (LatticePresets.linear, LatticePresets.square, LatticePresets.triangular, LatticePresets.honeycomb,
@@ -409,4 +410,33 @@ end
     @test cp ≈ cm'
     @test all(x -> x[1] ≈ x[2]', zip(nonzeros(cp), nonzeros(cm)))
     @test all(x -> iszero(real(x)), nonzeros(cp))
+end
+
+@testset "hamiltonian builder" begin
+    b = LP.linear() |> Quantica.builder(orbitals = 2)
+    @test b isa ParametricHamiltonianBuilder
+    @test hamiltonian(b) isa Hamiltonian
+    Quantica.add!(b, hopping(2I))
+    Quantica.add!(b, @onsite((; w = 0) -> w*I))
+    Quantica.add!(b, SA[0 1; 1 0], cellsites(SA[0], 1))
+    @test length(Quantica.modifiers(b)) == 1
+    h = hamiltonian(b)
+    @test h(w=3)[()] == 3*I + SA[0 1; 1 0]
+    push!(b, @onsite!((o; w = 0) -> o*w))
+    @test length(Quantica.modifiers(b)) == 2
+    h = hamiltonian(b)
+    @test h(w=3)[()] == 9*I + + SA[0 3; 3 0]
+    b = LP.honeycomb() |> Quantica.builder(orbitals = (1,2))
+    Quantica.add!(b, SA[0 1; 1 0], cellsites(SA[0,0], 2))
+    Quantica.add!(b, 2, cellsites(SA[0,0], 1))
+    h = hamiltonian(b)
+    @test h[()] == SA[2 0 0; 0 0 1; 0 1 0]
+    b = LP.honeycomb() |> Quantica.builder(orbitals = (1,2))
+    Quantica.add!(b, 2I, cellsites(SA[0,0], 1:2))
+    h = hamiltonian(b)
+    @test h[()] == 2I
+    b = LP.honeycomb() |> Quantica.builder
+    Quantica.add!(b, 2, cellsites(SA[0,0], 1:2), cellsites(SA[0,0], 1:2))
+    h = hamiltonian(b)
+    @test all(isequal(2), h[()])
 end

@@ -146,13 +146,23 @@ function Base.setindex!(b::HybridSparseMatrix, val::AbstractVecOrMat, i::Integer
     return val
 end
 
+checkstored(mat, i, j) = i in view(rowvals(mat), nzrange(mat, j)) ||
+    throw(ArgumentError("Adding new structural elements is not allowed"))
+
+#endregion
+
+############################################################################################
+# mask_block
+#   converts input to a specific block type B (with or without size check)
+#region
+
 @inline mask_block(::Type{B}, val::UniformScaling, size = (N, N)) where {T,N,B<:MatrixElementNonscalarType{T,N}} =
     mask_block(B, sanitize_SMatrix(SMatrix{N,N,T}, SMatrix{N,N}(val), size))
 
 @inline mask_block(::Type{B}, val::UniformScaling, size...) where {B<:Number} =
     convert(B, val.λ)
 
-@inline mask_block(::Type{B}, val, size...) where {B<:Number} = convert(B, only(val)) # conversion not needed
+@inline mask_block(::Type{B}, val, size...) where {B<:Number} = convert(B, only(val)) # conversion not needed?
 
 @inline function mask_block(B, val, size)
     @boundscheck(checkmatrixsize(val, size)) # tools.jl
@@ -177,9 +187,6 @@ mask_block(t, val) = argerror("Unexpected block size")
 
 size_or_1x1(::Number) = (1, 1)
 size_or_1x1(val) = size(val)
-
-checkstored(mat, i, j) = i in view(rowvals(mat), nzrange(mat, j)) ||
-    throw(ArgumentError("Adding new structural elements is not allowed"))
 
 #endregion
 
