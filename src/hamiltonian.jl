@@ -1,13 +1,12 @@
 ############################################################################################
 # add!(::IJVBuilder, ...)
-# add!(::ParametricHamiltonianBuilder, ...)
 #   add matrix elements to a builder before assembly into a (Parametric)Hamiltonian
 #region
 
 add!(m::TightbindingModel) = b -> add!(b, m)
 
 # direct site indexing
-function add!(b::Union{IJVBuilder,ParametricHamiltonianBuilder}, val, c::CellSites, d::CellSites)
+function add!(b::IJVBuilder, val, c::CellSites, d::CellSites)
     ijv = b[cell(d) - cell(c)]
     B = blocktype(b)
     val´ = mask_block(B, val)   # Warning: we don't check matrix size here, just conversion to B
@@ -15,7 +14,7 @@ function add!(b::Union{IJVBuilder,ParametricHamiltonianBuilder}, val, c::CellSit
     return b
 end
 
-function add!(b::Union{IJVBuilder,ParametricHamiltonianBuilder}, val, c::CellSites)
+function add!(b::IJVBuilder, val, c::CellSites)
     ijv = b[zero(cell(c))]
     B = blocktype(b)
     val´ = mask_block(B, val)   # Warning: we don't check matrix size here, just conversion to B
@@ -41,7 +40,7 @@ end
 
 
 # block may be a tuple of row-col index ranges, to restrict application of model
-function add!(b::Union{IJVBuilder,ParametricHamiltonianBuilder}, model::TightbindingModel, block = missing)
+function add!(b::IJVBuilder, model::TightbindingModel, block = missing)
     lat = lattice(b)
     bs = blockstructure(b)
     amodel = apply(model, (lat, bs))
@@ -49,7 +48,7 @@ function add!(b::Union{IJVBuilder,ParametricHamiltonianBuilder}, model::Tightbin
     return b
 end
 
-function add!(b::ParametricHamiltonianBuilder, model::ParametricModel, block = missing)
+function add!(b::IJVBuilderWithModifiers, model::ParametricModel, block = missing)
     m0 = basemodel(model)
     ms = modifier.(terms(model))
     add!(b, m0, block)
@@ -150,11 +149,11 @@ end
 
 hamiltonian(b::IJVBuilder) = Hamiltonian(lattice(b), blockstructure(b), sparse(b))
 
-hamiltonian(b::ParametricHamiltonianBuilder) =
-    maybe_parametric(hamiltonian(parent(b)), modifiers(b)...)
+hamiltonian(b::IJVBuilderWithModifiers) =
+    maybe_parametric(Hamiltonian(lattice(b), blockstructure(b), sparse(b)), modifiers(b)...)
 
-maybe_parametric(h) = h                                     # without modifiers
-maybe_parametric(h, m, ms...) = parametric(h, m, ms...)     # with modifiers
+maybe_parametric(h) = h
+maybe_parametric(h, m, ms...) = parametric(h, m, ms...)
 
 #endregion
 
@@ -319,6 +318,8 @@ function reset_to_parent!(ph)
     end
     return ph
 end
+
+applymodifiers!(h; kw...) = h
 
 applymodifiers!(h, m, m´, ms...; kw...) = applymodifiers!(applymodifiers!(h, m; kw...), m´, ms...; kw...)
 
@@ -485,19 +486,20 @@ unitcell_hamiltonian(ph::ParametricHamiltonian) = unitcell_hamiltonian(hamiltoni
 # combine
 #region
 
-function combine(hams::AbstractHamiltonian{T}...; coupling = TightbindingModel()) where {T}
+function combine(hams::Hamiltonian{T}...; coupling::TightbindingModel = TightbindingModel()) where {T}
     lat = combine(lattice.(hams)...)
     builder = IJVBuilder(lat, hams...)
-    blockstruct = blockstructure(builder)
     interblockmodel = interblock(coupling, hams...)
     model´, blocks´ = parent(interblockmodel), block(interblockmodel)
-    apmod = apply(model´, (lat, blockstruct))
-    addterm!.(Ref(builder), Ref(blocks´), terms(apmod))
-    hars = sparse(builder)
-    ham = Hamiltonian(lat, blockstruct, hars)
-    ms = tupleflatten(modifiers.(hams)...)
-    return hamiltonian(ham, ms...)
+    add!(builder, model´, blocks´)
+    return hamiltonian(builder)
 end
+
+combine(hams::AbstractHamiltonian...; kw...) =
+    argerror("Quantica can currently only combine Hamiltonians (not ParametricHamiltonians) using non-parametric couplings.")
+
+# The reason is that coupling and the modifiers of hams should only be applied to their
+# corresponding blocks, which we currently cannot express. Needs Selectors with indices.
 
 #endregion
 

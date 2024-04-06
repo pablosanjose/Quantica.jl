@@ -145,11 +145,12 @@ struct CSCHarmonic{L,B} <: AbstractHarmonicBuilder{L,B}
     collector::CSC{B}
 end
 
-struct IJVBuilder{T,E,L,B} <: AbstractHamiltonianBuilder{T,E,L,B}
+struct IJVBuilder{T,E,L,B,M<:Union{Missing,Vector{Any}}} <: AbstractHamiltonianBuilder{T,E,L,B}
     lat::Lattice{T,E,L}
     blockstruct::OrbitalBlockStructure{B}
     harmonics::Vector{IJVHarmonic{L,B}}
     kdtrees::Vector{KDTree{SVector{E,T},Euclidean,T}}
+    modifiers::M
 end
 
 struct CSCBuilder{T,E,L,B} <: AbstractHamiltonianBuilder{T,E,L,B}
@@ -158,6 +159,8 @@ struct CSCBuilder{T,E,L,B} <: AbstractHamiltonianBuilder{T,E,L,B}
     harmonics::Vector{CSCHarmonic{L,B}}
 end
 
+const IJVBuilderWithModifiers = IJVBuilder{<:Any,<:Any,<:Any,<:Any,Vector{Any}}
+
 ## Constructors ##
 
 function CSCBuilder(lat::Lattice{<:Any,<:Any,L}, blockstruct::OrbitalBlockStructure{B}) where {L,B}
@@ -165,21 +168,34 @@ function CSCBuilder(lat::Lattice{<:Any,<:Any,L}, blockstruct::OrbitalBlockStruct
     return CSCBuilder(lat, blockstruct, harmonics)
 end
 
-function IJVBuilder(lat::Lattice{T,E,L}, blockstruct::OrbitalBlockStructure{B}) where {E,T,L,B}
+IJVBuilder(lat::Lattice{T}, orbitals, modifiers = missing) where {T} =
+    IJVBuilder(lat, OrbitalBlockStructure(T, orbitals, sublatlengths(lat)), modifiers)
+
+function IJVBuilder(lat::Lattice{T,E,L}, blockstruct::OrbitalBlockStructure{B}, modifiers = missing) where {E,T,L,B}
     harmonics = IJVHarmonic{L,B}[]
     kdtrees = Vector{KDTree{SVector{E,T},Euclidean,T}}(undef, nsublats(lat))
-    return IJVBuilder(lat, blockstruct, harmonics, kdtrees)
+    return IJVBuilder(lat, blockstruct, harmonics, kdtrees, modifiers)
 end
 
-function IJVBuilder(lat::Lattice{T}, hams::AbstractHamiltonian...) where {T}
+# with no modifiers
+function IJVBuilder(lat::Lattice{T}, hams::Hamiltonian...) where {T}
     orbs = vcat(norbitals.(hams)...)
     builder = IJVBuilder(lat, orbs)
     push_ijvharmonics!(builder, hams...)
     return builder
 end
 
-IJVBuilder(lat::Lattice{T}, orbitals) where {T} =
-    IJVBuilder(lat, OrbitalBlockStructure(T, orbitals, sublatlengths(lat)))
+# with some modifiers
+function IJVBuilder(lat::Lattice{T}, hams::AbstractHamiltonian...) where {T}
+    orbs = vcat(norbitals.(hams)...)
+    builder = IJVBuilderWithModifiers(lat, orbs)
+    push_ijvharmonics!(builder, hams...)
+    unapplied_modifiers = tupleflatten(parent.(modifiers.(hams))...)
+    push!(builder, unapplied_modifiers...)
+    return builder
+end
+
+(::Type{IJVBuilderWithModifiers})(lat, orbitals) = IJVBuilder(lat, orbitals, Any[])
 
 push_ijvharmonics!(builder, ::OrbitalBlockStructure) = builder
 push_ijvharmonics!(builder) = builder
@@ -204,6 +220,10 @@ empty_harmonic(b::CSCBuilder{<:Any,<:Any,L,B}, dn) where {L,B} =
 empty_harmonic(::IJVBuilder{<:Any,<:Any,L,B}, dn) where {L,B} =
     IJVHarmonic{L,B}(dn, IJV{B}())
 
+builder(; kw...) = lat -> builder(lat; kw...)
+
+builder(lat::Lattice; orbitals = Val(1)) = IJVBuilderWithModifiers(lat, orbitals)
+
 ## API ##
 
 collector(har::AbstractHarmonicBuilder) = har.collector  # for IJVHarmonic and CSCHarmonic
@@ -211,6 +231,8 @@ collector(har::AbstractHarmonicBuilder) = har.collector  # for IJVHarmonic and C
 dcell(har::AbstractHarmonicBuilder) = har.dn
 
 kdtrees(b::IJVBuilder) = b.kdtrees
+
+modifiers(b::IJVBuilderWithModifiers) = b.modifiers
 
 finalizecolumn!(b::CSCBuilder, x...) =
     foreach(har -> finalizecolumn!(collector(har), x...), b.harmonics)
@@ -225,6 +247,12 @@ blockstructure(b::AbstractHamiltonianBuilder) = b.blockstruct
 blocktype(::AbstractHamiltonianBuilder{<:Any,<:Any,<:Any,B}) where {B} = B
 
 harmonics(b::AbstractHamiltonianBuilder) = b.harmonics
+
+Base.push!(b::IJVBuilderWithModifiers, ms::Modifier...) = push!(b.modifiers, ms...)
+
+Base.pop!(b::IJVBuilderWithModifiers) = pop!(b.modifiers)
+
+Base.empty!(b::IJVBuilderWithModifiers) = (empty!(b.harmonics); empty!(b.modifiers); b)
 
 Base.empty!(b::IJVBuilder) = (empty!(b.harmonics); b)
 
@@ -251,54 +279,4 @@ function SparseArrays.sparse(b::OrbitalBlockStructure{B}, har::AbstractHarmonicB
     return Harmonic(dcell(har), HybridSparseMatrix(b, s))
 end
 
-#endregion
-
-############################################################################################
-# ParametricHamiltonianBuilder - see src/hamiltonian.jl
-#   created with b = builder(lat::Lattice; orbitals = Val(1))
-#   implements: add!(b, AbstractModel), push!(b, ::Modifier...), hamiltonian(b), empty!(b)
-#   also add!(b, val, ::CellSites...) - for internal use only, not block size checks.
-#region
-
-struct ParametricHamiltonianBuilder{T,E,L,B}
-    ijvbuilder::IJVBuilder{T,E,L,B}
-    modifiers::Vector{Any}    # modifier list need to be mutable and abritrary
-end
-
-#region ## Constructors ##
-
-ParametricHamiltonianBuilder(ijvbuilder) = ParametricHamiltonianBuilder(ijvbuilder, Any[])
-
-#endregion
-
-#region ## API ##
-
-builder(; kw...) = lat -> builder(lat; kw...)
-
-builder(lat::Lattice; orbitals = Val(1)) =
-    ParametricHamiltonianBuilder(IJVBuilder(lat, orbitals))
-
-modifiers(b::ParametricHamiltonianBuilder) = b.modifiers
-
-blockstructure(b::ParametricHamiltonianBuilder) = blockstructure(b.ijvbuilder)
-
-lattice(b::ParametricHamiltonianBuilder) = lattice(b.ijvbuilder)
-
-kdtrees(b::ParametricHamiltonianBuilder) = kdtrees(b.ijvbuilder)
-
-blocktype(b::ParametricHamiltonianBuilder) = blocktype(b.ijvbuilder)
-
-Base.parent(b::ParametricHamiltonianBuilder) = b.ijvbuilder
-
-SparseArrays.sparse(b::ParametricHamiltonianBuilder) = sparse(b.ijvbuilder)
-
-Base.push!(b::ParametricHamiltonianBuilder, ms::Modifier...) = push!(b.modifiers, ms...)
-
-Base.pop!(b::ParametricHamiltonianBuilder) = pop!(b.modifiers)
-
-Base.empty!(b::ParametricHamiltonianBuilder) = (empty!(b.ijvbuilder); empty!(b.modifiers); b)
-
-Base.getindex(b::ParametricHamiltonianBuilder, dn::SVector) = b.ijvbuilder[dn]
-
-#endregion
 #endregion

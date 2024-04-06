@@ -1,4 +1,4 @@
-using Quantica: Hamiltonian, ParametricHamiltonian, ParametricHamiltonianBuilder,
+using Quantica: Hamiltonian, ParametricHamiltonian,
       sites, nsites, nonsites, nhoppings, coordination, flat, hybrid, transform!, nnz, nonzeros
 
 @testset "basic hamiltonians" begin
@@ -414,7 +414,7 @@ end
 
 @testset "hamiltonian builder" begin
     b = LP.linear() |> Quantica.builder(orbitals = 2)
-    @test b isa ParametricHamiltonianBuilder
+    @test b isa Quantica.IJVBuilder
     @test hamiltonian(b) isa Hamiltonian
     Quantica.add!(b, hopping(2I))
     Quantica.add!(b, @onsite((; w = 0) -> w*I))

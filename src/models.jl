@@ -183,7 +183,7 @@ interblock(m::AbstractModel, inds...) = isempty(intersect(inds...)) ?
 
 intrablock(m::AbstractModel, inds) = IntrablockModel(m, inds)
 
-function blockindices(hams::NTuple{N,<:Any}) where {N}
+function blockindices(hams::NTuple{N,Any}) where {N}
     offset = 0
     inds = ntuple(Val(N)) do i
         ns = nsites(lattice(hams[i]))
