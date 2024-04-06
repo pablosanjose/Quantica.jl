@@ -484,6 +484,9 @@ unitcell_hamiltonian(ph::ParametricHamiltonian) = unitcell_hamiltonian(hamiltoni
 
 ############################################################################################
 # combine
+#   We cannot combine anything with parameters. The reason is that coupling modifiers and
+#   modifiers of hams should only be applied to their corresponding blocks, which we
+#   currently cannot express. Needs e.g. Selectors with indices, or Modifiers with blocks.
 #region
 
 function combine(hams::Hamiltonian{T}...; coupling::TightbindingModel = TightbindingModel()) where {T}
@@ -497,9 +500,6 @@ end
 
 combine(hams::AbstractHamiltonian...; kw...) =
     argerror("Quantica can currently only combine Hamiltonians (not ParametricHamiltonians) using non-parametric couplings.")
-
-# The reason is that coupling and the modifiers of hams should only be applied to their
-# corresponding blocks, which we currently cannot express. Needs Selectors with indices.
 
 #endregion
 
