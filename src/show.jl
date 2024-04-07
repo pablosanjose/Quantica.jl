@@ -499,3 +499,25 @@ function Base.showarg(io::IO, ::OrbitalSliceVector{<:Any,M}, toplevel) where {M}
 end
 
 #endregion
+
+############################################################################################
+# IJVBuilder
+#region
+
+function Base.show(io::IO, b::IJVBuilder)
+    i = get(io, :indent, "")
+    print(io, i, summary(b), "\n",
+"$i  Harmonics    : $(length(harmonics(b)))
+$i  IJV tuples   : $(display_ijvs(b))
+$i  Element type : $(displaytype(blocktype(b)))
+$i  Modifiers    : $(display_modifiers(b))")
+end
+
+display_modifiers(b::IJVBuilder) = modifiers(b) === missing ? "missing" : length(modifiers(b))
+
+display_ijvs(b::IJVBuilder) = display_as_tuple(length.(collector.(harmonics(b))))
+
+Base.summary(::IJVBuilder{T,E,L}) where {T,E,L} =
+    "IJVBuilder{$T,$E,$L}: AbstractHamiltonian builder based on IJV tuples (row, col, value)"
+
+#endregion

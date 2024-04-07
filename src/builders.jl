@@ -26,6 +26,8 @@ Base.append!(ijv::IJV, (is, js, vs)) =
 
 Base.isempty(h::IJV) = length(h.i) == 0
 
+Base.length(h::IJV) = length(h.v)
+
 SparseArrays.sparse(c::IJV, m::Integer, n::Integer) = sparse(c.i, c.j, c.v, m, n)
 
 #endregion
