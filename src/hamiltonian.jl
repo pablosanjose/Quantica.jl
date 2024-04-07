@@ -406,7 +406,6 @@ call!_output(p::ParametricHamiltonian) = call!_output(hamiltonian(p))
 # indexing into AbstractHamiltonian (harmonic extraction) - see also slices.jl
 #region
 
-
 Base.getindex(h::AbstractHamiltonian, dn::Union{Tuple,Integer,SVector,AbstractVector}) =
     flat(h[hybrid(dn)])
 
@@ -480,7 +479,6 @@ end
 unitcell_hamiltonian(ph::ParametricHamiltonian) = unitcell_hamiltonian(hamiltonian(ph))
 
 #endregion
-
 
 ############################################################################################
 # combine

@@ -129,7 +129,7 @@ Base.isempty(s::CSC) = length(s.nzval) == 0
 #endregion
 
 ############################################################################################
-# Harmonic and Hamiltonian builders
+# IJVBuilder and CSCBuilder <: AbstractHamiltonianBuilder
 #region
 
 abstract type AbstractHarmonicBuilder{L,B} end

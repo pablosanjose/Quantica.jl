@@ -2184,21 +2184,54 @@ Base.:(==)(g::GreenSlice, g´::GreenSlice) = function_not_defined("==")
 ############################################################################################
 # Operator - Hamiltonian-like operator representing observables other than a Hamiltonian
 #   It works as a wrapper of an AbstractHamiltonian, see observables.jl for constructors
+# VectorOperator - like the above for a collection of AbstractHamiltonians
+# BarebonesOperator - same thing but with arbitrary element type and no support for call!
 #region
 
 struct Operator{H<:AbstractHamiltonian}
     h::H
 end
 
+struct VectorOperator{N,H<:NTuple{N,AbstractHamiltonian}}
+    hs::H
+end
+
+struct BarebonesHarmonic{L,B}
+    dn::SVector{L,Int}
+    h::SparseMatrixCSC{B,Int}
+end
+
+struct BarebonesOperator{L,B}
+    harmonics::Vector{BarebonesHarmonic{L,B}}
+end
+
 #region ## API ##
 
 hamiltonian(o::Operator) = o.h
+hamiltonian(o::VectorOperator) = o.hs
 
-(c::Operator)(φ...; kw...) = c.h(φ...; kw...)
+(o::Operator)(φ...; kw...) = o.h(φ...; kw...)
+(o::VectorOperator)(φ...; kw...) = SVector((h -> h(φ...; kw...)).(o.hs))
 
-call!(c::Operator, φ...; kw...) = call!(c.h, φ...; kw...)
+call!(o::Operator, φ...; kw...) = call!(o.h, φ...; kw...)
+call!(o::VectorOperator, φ...; kw...) = SVector((h -> call!(h, φ...; kw...)).(o.hs))
 
-Base.getindex(c::Operator, i...) = getindex(c.h, i...)
+Base.getindex(o::Operator, i...) = getindex(o.h, i...)
+Base.getindex(o::VectorOperator, i...) = SVector((h -> getindex(h, i...)).(o.hs))
+
+Base.getindex(o::BarebonesOperator{L}, dn, is...) where {L} =
+    getindex(o, sanitize_SVector(SVector{L,Int}, dn), is...)
+
+function Base.getindex(o::BarebonesOperator{L}, dn::SVector{L,Int}) where {L}
+    for h in o.harmonics
+        if dn == h.dn
+            return h.h
+        end
+    end
+    @boundscheck(boundserror(harmonics(h), dn))
+    # this is unreachable, but avoids allocations by having non-Union return type
+    return first(harmonics(h))
+end
 
 #endregion
 
