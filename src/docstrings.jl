@@ -1377,12 +1377,12 @@ function `g(ω) = (ω - h´ - Σ(ω))⁻¹` of the resulting `h´`, see `greenfu
 The different forms of `args` yield different types of self-energies `Σ`. Currently
 supported forms are:
 
-    attach(h, gs::GreenSlice, coupling::AbstractModel; transform = missing, sites...)
+    attach(h, gs::GreenSlice, coupling::AbstractModel; sites...)
 
 Adds a generic self-energy `Σ(ω) = V´⋅gs(ω)⋅V` on `h`'s `sites`, where `V` and `V´` are
-couplings (given by `coupling`) between said `sites` and the `LatticeSlice` in `gs` (after
-applying `transform` to the latter). Allowed forms of `gs` include both `g[bath_sites...]`
-and `g[contactind::Integer]` where `g` is any `GreenFunction`.
+couplings, given by `coupling`, between said `sites` and the `LatticeSlice` in `gs`. Allowed
+forms of `gs` include both `g[bath_sites...]` and `g[contactind::Integer]` where `g` is any
+`GreenFunction`.
 
     attach(h, model::ParametricModel; sites...)
 

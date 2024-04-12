@@ -34,7 +34,7 @@ end
 
 #region ## API ##
 
-function SelfEnergy(hparent::AbstractHamiltonian, gslice::GreenSlice, model::AbstractModel; transform = missing, sites...)
+function SelfEnergy(hparent::AbstractHamiltonian, gslice::GreenSlice, model::AbstractModel; sites...)
     rows(gslice) === cols(gslice) ||
         argerror("To attach a Greenfunction with `attach(h, g[cols, rows], coupling; ...)`, we must have `cols == rows`")
     lsbath = orbrows(gslice)
