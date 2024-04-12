@@ -40,7 +40,7 @@ function SelfEnergy(hparent::AbstractHamiltonian, gslice::GreenSlice, model::Abs
     lsbath = orbrows(gslice)
     lat0bath = lattice0D(lsbath)
     transform === missing || transform!(lat0bath, transform)
-    contactslice = lattice(hparent)[; sites...]
+    contactslice = lattice(hparent)[sites...]
     check_contact_slice(contactslice)  # in case it is empty
     lsparent = sites_to_orbs(contactslice, hparent)
     lat0parent = lattice0D(lsparent)
