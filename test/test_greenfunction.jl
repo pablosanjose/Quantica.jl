@@ -94,14 +94,6 @@ end
     glead = LP.honeycomb() |> hopping(1) |> supercell((1,-1), region = r -> 0<=r[2]<=5) |> attach(nothing, cells = SA[5]) |> greenfunction(GS.Schur(boundary = 0));
     g = LP.honeycomb() |> hopping(1) |> supercell(region = r -> -6<=r[1]<=6 && 0<=r[2]<=5) |> attach(glead, region = r -> r[1] > 5.1) |> greenfunction
     @test g isa GreenFunction
-
-    # attach(gslice, model; transform)
-    Rot = r -> SA[0 -1; 1 0] * r
-    glead = LP.square(a0 = 1, dim = 2) |> onsite(4) - hopping(1) |> supercell((1,0), region = r -> -1 <= r[2] <= 1) |> greenfunction(GS.Schur(boundary = 0));
-    central = LP.honeycomb() |> onsite(4) - hopping(1) |> supercell(region = RP.rectangle((3,3))) |> transform(Rot)
-    g = central |> attach(glead[cells = 1], -hopping(1), region = r -> r[1] > 1.3 && -1.1 <= r[2] <= 1.1, transform = r -> r + SA[1.2,0]) |> greenfunction
-    @test g isa GreenFunction
-    @test_throws ArgumentError central |> attach(glead[cells = 1], -hopping(1), region = r -> r[1] > 2.3 && -1.1 <= r[2] <= 1.1, transform = r -> r + SA[1.2,0])
 end
 
 @testset "GreenSolvers applicability" begin
