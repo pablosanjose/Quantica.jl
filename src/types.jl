@@ -162,6 +162,7 @@ latdim(::Lattice{<:Any,<:Any,L}) where {L} = L
 numbertype(::Sublat{T}) where {T} = T
 numbertype(::Lattice{T}) where {T} = T
 
+zerocell(::Bravais{<:Any,<:Any,L}) where {L} = zero(SVector{L,Int})
 zerocell(::Lattice{<:Any,<:Any,L}) where {L} = zero(SVector{L,Int})
 zerocellsites(l::Lattice, i) = cellsites(zerocell(l), i)
 
@@ -2204,6 +2205,14 @@ end
 struct BarebonesOperator{L,B}
     harmonics::Vector{BarebonesHarmonic{L,B}}
 end
+
+#region ## Constructors ##
+
+BarebonesOperator(harmonics::Vector) = BarebonesOperator(BarebonesHarmonic.(harmonics))
+
+BarebonesHarmonic(har::IJVHarmonic) = BarebonesHarmonic(cell(har), sparse(har))
+
+#endregion
 
 #region ## API ##
 

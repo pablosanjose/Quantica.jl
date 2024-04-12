@@ -237,6 +237,8 @@ modifiers(b::IJVBuilderWithModifiers) = b.modifiers
 finalizecolumn!(b::CSCBuilder, x...) =
     foreach(har -> finalizecolumn!(collector(har), x...), b.harmonics)
 
+nsites(b::AbstractHamiltonianBuilder) = nsites(lattice(b))
+
 Base.isempty(h::IJVHarmonic) = isempty(collector(h))
 Base.isempty(s::CSCHarmonic) = isempty(collector(s))
 
@@ -269,14 +271,56 @@ end
 function SparseArrays.sparse(builder::AbstractHamiltonianBuilder{T,<:Any,L,B}) where {T,L,B}
     HT = Harmonic{T,L,B}
     b = blockstructure(builder)
-    n = nsites(lattice(builder))
+    n = nsites(builder)
     hars = HT[sparse(b, har, n, n) for har in harmonics(builder) if !isempty(har)]
     return hars
 end
 
 function SparseArrays.sparse(b::OrbitalBlockStructure{B}, har::AbstractHarmonicBuilder{L,B}, m::Integer, n::Integer) where {L,B}
-    s = sparse(collector(har), m, n)
+    s = sparse(har, m, n)
     return Harmonic(dcell(har), HybridSparseMatrix(b, s))
 end
+
+SparseArrays.sparse(har::AbstractHarmonicBuilder{L,B}, m::Integer, n::Integer) =
+    sparse(collector(har), m, n)
+
+#endregion
+
+############################################################################################
+# WannierBuilder
+#region
+
+struct WannierBuilder{T,E,L,B} <: AbstractHamiltonianBuilder{T,E,L,B}
+    hbuilder::IJVBuilder{T,E,L,B,Missing}
+    rharmonics::Vector{IJVHarmonic{L,SVector{E,T}}}
+end
+
+#region ## Constructors ##
+
+wannier90(file::AbstractString) = WannierBuilder(file) # exported
+
+WannierBuilder(file::AbstractString) = WannierBuilder(file, load_bravais_wannier90(file))
+
+function WannierBuilder(file::AbstractString, bravais::Bravais{T,E,L}) where {T,E,L}
+    rharmonics = Vector{IJVHarmonic{L,SVector{E,T}}}
+    load_positions_wannier90!(rharmonics, file)
+    pos = diag(rharmonics[zerocell(bravais)])
+    lat = lattice(sublat(pos); bravais)
+    orbitals = Val(1)
+    hbuilder = IJVBuilder(lat, orbitals)
+    hharmonics = harmonics(IJVBuilder)
+    load_hamiltonian_wannier90!(hharmonics, file)
+    return WannierBuilder(hbuilder, rharmonics)
+end
+
+#endregion
+
+#region ## API ##
+
+hamiltonian(b::WannierBuilder) = hamiltonian(b.hbuilder)
+
+positions(b::WannierBuilder) = BarebonesOperator(h.rharmonics)
+
+#endregion
 
 #endregion
