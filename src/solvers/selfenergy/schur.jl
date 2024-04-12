@@ -51,7 +51,7 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurEmpty
     # we obtain latslice of open surface in gL/gR
     gunit = reverse ? schursolver.gL : schursolver.gR
     blocksizes(blockstructure(gunit)) == blocksizes(blockstructure(hparent)) ||
-        argerror("The orbital structure of parent and lead Hamiltonians do not match. Maybe you meant to use `attach(h, g1D, coupling; sites...)`?")
+        argerror("The orbital/sublattice structure of parent and lead Hamiltonians do not match. Maybe you meant to use `attach(h, g1D, coupling; sites...)`?")
     # This is a SelfEnergy for a lead unit cell with a SelfEnergySchurSolver
     Σlead = only(selfenergies(contacts(gunit)))
     lslead = orbslice(Σlead)
@@ -252,7 +252,7 @@ end
 
 function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead; reverse = false, transform = missing, sites...)
     blocksizes(blockstructure(glead)) == blocksizes(blockstructure(hparent)) ||
-        argerror("The orbital structure of parent and lead Hamiltonians do not match")
+        argerror("The orbital/sublattice structure of parent and lead Hamiltonians do not match")
     # find boundary ± 1
     schursolver = solver(glead)
     boundary = schursolver.boundary
