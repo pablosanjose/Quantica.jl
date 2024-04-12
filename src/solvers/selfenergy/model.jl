@@ -30,9 +30,9 @@ end
 #region ## API ##
 
 function SelfEnergy(h::AbstractHamiltonian, model::AbstractModel; kw...)
-    sel = siteselector(; kw...)
-    siteslice = lattice(h)[sel]
-    orbslice = sites_to_orbs(siteslice, h)
+    contactslice = getindex(lattice(h); kw...)
+    check_contact_slice(contactslice)  # in case it is empty
+    orbslice = sites_to_orbs(contactslice, h)
     solver = SelfEnergyModelSolver(h, model, siteslice, orbslice)
     return SelfEnergy(solver, orbslice)
 end
