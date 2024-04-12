@@ -1957,6 +1957,13 @@ check_contact_slice(s::LatticeSlice) =
 
 contactorbitals(c::Contacts) = c.orbitals
 
+function contact_orbslice(h; sites...)
+    contactslice = getindex(lattice(h); sites...)
+    check_contact_slice(contactslice)  # in case it is empty
+    lsparent = sites_to_orbs(contactslice, h)
+    return lsparent
+end
+
 orbslice(c::Contacts) = c.orbslice
 orbslice(c::Contacts, ::Colon) = c.orbslice
 orbslice(c::Contacts, i::Integer) = orbslice(selfenergies(c, i))

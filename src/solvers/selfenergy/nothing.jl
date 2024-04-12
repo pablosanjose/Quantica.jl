@@ -8,9 +8,7 @@ struct SelfEnergyEmptySolver{C} <: RegularSelfEnergySolver
 end
 
 function SelfEnergy(h::AbstractHamiltonian{T}, ::Nothing; kw...) where {T}
-    contactslice = getindex(lattice(h); kw...)
-    check_contact_slice(contactslice)  # in case it is empty
-    orbslice = sites_to_orbs(contactslice, h)
+    orbslice = contact_orbslice(h; kw...)
     norbs = norbitals(orbslice)
     emptyΣ = spzeros(Complex{T}, norbs, norbs)
     solver = SelfEnergyEmptySolver(emptyΣ)
