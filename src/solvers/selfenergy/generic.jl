@@ -34,12 +34,15 @@ end
 
 #region ## API ##
 
-function SelfEnergy(hparent::AbstractHamiltonian, gslice::GreenSlice, model::AbstractModel; sites...)
+function SelfEnergy(hparent::AbstractHamiltonian, gslice::GreenSlice, model::AbstractModel; transform = missing, sites...)
     rows(gslice) === cols(gslice) ||
         argerror("To attach a Greenfunction with `attach(h, g[cols, rows], coupling; ...)`, we must have `cols == rows`")
     lsbath = orbrows(gslice)
     lat0bath = lattice0D(lsbath)
-    lsparent = sites_to_orbs(getindex(lattice(hparent); sites...), hparent)
+    transform === missing || transform!(lat0bath, transform)
+    contactslice = lattice(hparent)[; sites...]
+    check_contact_slice(contactslice)  # in case it is empty
+    lsparent = sites_to_orbs(contactslice, hparent)
     lat0parent = lattice0D(lsparent)
     lat0 = combine(lat0parent, lat0bath)
     nparent, ntotal = nsites(lat0parent), nsites(lat0)
