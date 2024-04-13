@@ -20,6 +20,7 @@ using FrankenTuples
 using Statistics: mean
 using QuadGK
 using SpecialFunctions
+using DelimitedFiles
 
 export sublat, bravais_matrix, lattice, sites, supercell, hamiltonian,
        hopping, onsite, @onsite, @hopping, @onsite!, @hopping!, pos, ind, cell,
@@ -29,7 +30,8 @@ export sublat, bravais_matrix, lattice, sites, supercell, hamiltonian,
        greenfunction, selfenergy, attach, cellsites,
        plotlattice, plotlattice!, plotbands, plotbands!, qplot, qplot!, qplotdefaults,
        conductance, josephson, ldos, current, transmission, densitymatrix,
-       OrbitalSliceArray, OrbitalSliceVector, OrbitalSliceMatrix, orbaxes
+       OrbitalSliceArray, OrbitalSliceVector, OrbitalSliceMatrix, orbaxes,
+       wannier90
 
 export LatticePresets, LP, RegionPresets, RP, HamiltonianPresets, HP
 export EigenSolvers, ES, GreenSolvers, GS

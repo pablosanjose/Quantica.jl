@@ -24,7 +24,9 @@ Base.push!(ijv::IJV, (i, j, v)) =
 Base.append!(ijv::IJV, (is, js, vs)) =
     (append!(ijv.i, is); append!(ijv.j, js); append!(ijv.v, vs))
 
-Base.isempty(h::IJV) = length(h.i) == 0
+Base.isempty(s::IJV) = length(s) == 0
+
+Base.length(s::IJV) = length(s.v)
 
 SparseArrays.sparse(c::IJV, m::Integer, n::Integer) = sparse(c.i, c.j, c.v, m, n)
 
@@ -124,7 +126,9 @@ function SparseArrays.sparse(s::CSC, m::Integer, n::Integer)
     return SparseMatrixCSC(m, n, s.colptr, s.rowval, s.nzval)
 end
 
-Base.isempty(s::CSC) = length(s.nzval) == 0
+Base.isempty(s::CSC) = length(s) == 0
+
+Base.length(s::CSC) = length(s.nzval)
 
 #endregion
 
@@ -198,6 +202,7 @@ end
 (::Type{IJVBuilderWithModifiers})(lat, orbitals) = IJVBuilder(lat, orbitals, Any[])
 
 push_ijvharmonics!(builder, ::OrbitalBlockStructure) = builder
+push_ijvharmonics!(builder, hars::Vector{<:IJVHarmonic}) = copy!(builder.harmonics, hars)
 push_ijvharmonics!(builder) = builder
 
 function push_ijvharmonics!(builder::IJVBuilder, hs::AbstractHamiltonian...)
@@ -281,7 +286,7 @@ function SparseArrays.sparse(b::OrbitalBlockStructure{B}, har::AbstractHarmonicB
     return Harmonic(dcell(har), HybridSparseMatrix(b, s))
 end
 
-SparseArrays.sparse(har::AbstractHarmonicBuilder{L,B}, m::Integer, n::Integer) =
+SparseArrays.sparse(har::AbstractHarmonicBuilder, m::Integer, n::Integer) =
     sparse(collector(har), m, n)
 
 #endregion
@@ -290,26 +295,29 @@ SparseArrays.sparse(har::AbstractHarmonicBuilder{L,B}, m::Integer, n::Integer) =
 # WannierBuilder
 #region
 
-struct WannierBuilder{T,E,L,B} <: AbstractHamiltonianBuilder{T,E,L,B}
-    hbuilder::IJVBuilder{T,E,L,B,Missing}
-    rharmonics::Vector{IJVHarmonic{L,SVector{E,T}}}
+struct WannierBuilder <: AbstractHamiltonianBuilder{Float64,3,3,ComplexF64}
+    hbuilder::IJVBuilder{Float64,3,3,ComplexF64,Missing}
+    rharmonics::Vector{IJVHarmonic{3,SVector{3,ComplexF64}}}
+end
+
+struct Wannier90Data
+    bravais::SMatrix{3,3,Float64}
+    norbs::Int
+    ncells::Int
+    h::Vector{IJVHarmonic{3,ComplexF64}}             # must be dn-sorted, with (0,0,0) first
+    r::Vector{IJVHarmonic{3,SVector{3,ComplexF64}}}  # must be dn-sorted, with (0,0,0) first
 end
 
 #region ## Constructors ##
 
-wannier90(file::AbstractString) = WannierBuilder(file) # exported
+wannier90(file::AbstractString; kw...) = WannierBuilder(file; kw...) # exported
 
-WannierBuilder(file::AbstractString) = WannierBuilder(file, load_bravais_wannier90(file))
-
-function WannierBuilder(file::AbstractString, bravais::Bravais{T,E,L}) where {T,E,L}
-    rharmonics = Vector{IJVHarmonic{L,SVector{E,T}}}
-    load_positions_wannier90!(rharmonics, file)
-    pos = diag(rharmonics[zerocell(bravais)])
-    lat = lattice(sublat(pos); bravais)
-    orbitals = Val(1)
-    hbuilder = IJVBuilder(lat, orbitals)
-    hharmonics = harmonics(IJVBuilder)
-    load_hamiltonian_wannier90!(hharmonics, file)
+function WannierBuilder(file::AbstractString; kw...)
+    data = load_wannier90(file; kw...)
+    lat = lattice(data)
+    hbuilder = IJVBuilder(lat, Val(1)) # one orbital per site
+    push_ijvharmonics!(hbuilder, data.h)
+    rharmonics = data.r
     return WannierBuilder(hbuilder, rharmonics)
 end
 
@@ -319,7 +327,85 @@ end
 
 hamiltonian(b::WannierBuilder) = hamiltonian(b.hbuilder)
 
-positions(b::WannierBuilder) = BarebonesOperator(h.rharmonics)
+positions(b::WannierBuilder) = BarebonesOperator(b.rharmonics)
+
+#endregion
+
+#region ## Wannier90Data ##
+
+function load_wannier90(filename; htol = 1e-8, rtol = 1e-8)
+    f = open(filename, "r")
+    # skip header
+    readline(f)
+    # read Bravais
+    keep = true
+    brtxt = IOBuffer(readline(f; keep) * readline(f; keep) * readline(f; keep))
+    bravais = SMatrix{3,3}(readdlm(brtxt, Float64))
+    # read number of orbitals
+    norbs = parse(Int, readline(f))
+    # read number of cells
+    ncells = parse(Int, readline(f))
+    # skip symmetry degeneracies
+    while !eof(f)
+        isempty(readline(f)) && break
+    end
+    # read Hamiltonian
+    h = load_harmonics(f, Val(1), norbs, ncells; atol = htol)
+    # read positions
+    r = load_harmonics(f, Val(3), norbs, ncells; atol = rtol)
+    return Wannier90Data(bravais, norbs, ncells, h, r)
+end
+
+function load_harmonics(f, ::Val{N}, norbs, ncells; atol) where {N}
+    ncell = 0
+    B = builder_complex_type(Val(N))
+    hars = IJVHarmonic{3,B}[]
+    ijv = IJV{B}(norbs^2)
+    readtypes = tupleflatten(ntuple(Returns((Float64, Float64)), Val(N))...)
+    while !eof(f)
+        ncell += 1
+        line = readline(f)
+        dn = SVector{3,Int}(parse.(Int, split(line)))
+        for j in 1:norbs, i in 1:norbs
+            i´, j´, reims... = parse.((Int, Int, readtypes...), split(readline(f)))
+            i´ == i && j´ == j ||
+                argerror("load_wannier90: unexpected entry in file at element $((dn, i, j))")
+            v = build_complex(reims, Val(N))
+            push_if_nonzero!(ijv, (i, j, v), atol)
+        end
+        if !isempty(ijv)
+            push!(hars, IJVHarmonic(dn, ijv))
+            ijv = IJV{B}(norbs^2)    # allocate new IJV
+        end
+        isempty(readline(f)) ||
+            argerror("load_wannier90: unexpected line after harmonic $dn")
+        ncell == ncells && break
+    end
+    sort!(hars, by = ijv -> abs.(dcell(ijv)))
+    iszero(dcell(first(hars))) || pushfirst!(hars, IJVHarmonic(SA[0,0,0], IJV{B}()))
+    return hars
+end
+
+builder_complex_type(::Val{1}) = ComplexF64
+builder_complex_type(::Val{3}) = SVector{3,ComplexF64}
+
+build_complex((reh, imh), ::Val{1}) = ComplexF64(reh, imh)
+build_complex((rex, imx, rey, imy, rez, imz), ::Val{3}) =
+    SVector{3,ComplexF64}(ComplexF64(rex, imx), ComplexF64(rey, imy), ComplexF64(rez, imz))
+
+push_if_nonzero!(ijv::IJV{ComplexF64}, (i, j, v), htol) =
+    abs(v) > htol && push!(ijv, (i, j, v))
+push_if_nonzero!(ijv::IJV{SVector{3,ComplexF64}}, (i, j, v), rtol) =
+    (i == j || any(>(rtol), abs.(v))) && push!(ijv, (i, j, v))
+
+function lattice(data::Wannier90Data)
+    rs = SVector{3,Float64}[]
+    ijv = collector(first(data.r))
+    for (i, j, r) in zip(ijv.i, ijv.j, ijv.v)
+        i == j && push!(rs, real(r))
+    end
+    return lattice(sublat(rs); bravais = data.bravais')
+end
 
 #endregion
 

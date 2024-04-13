@@ -2210,7 +2210,7 @@ end
 
 BarebonesOperator(harmonics::Vector) = BarebonesOperator(BarebonesHarmonic.(harmonics))
 
-BarebonesHarmonic(har::IJVHarmonic) = BarebonesHarmonic(cell(har), sparse(har))
+BarebonesHarmonic(har) = BarebonesHarmonic(cell(har), sparse(har))
 
 #endregion
 
