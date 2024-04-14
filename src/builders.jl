@@ -391,13 +391,13 @@ end
 readline_realtypes(f, type::Type{<:Real}) = parse(type, readline(f))
 
 readline_realtypes(f, types::Type...) =
-    readline_realtypes(f, tupleflatten(realtype.(types)...))
+    # readline_realtypes(f, tupleflatten(realtype.(types)...)...)
+    readline_realtypes(f, realtypes(types...)...)
 
-function readline_realtypes(f, realtypes::NTuple{N,Type}) where {N}
+function readline_realtypes(f, realtypes::Vararg{<:Type{<:Real},N}) where {N}
     tokens = split(readline(f))
     # realtypes could be less than originally read tokens if we have reduced dimensionality
-    tokens´ = N < length(tokens) ? tokens[1:N] : tokens
-    reals = parse.(realtypes, tokens´)
+    reals = ntuple(i -> parse(realtypes[i], tokens[i]), Val(N))
     return reals
 end
 
@@ -406,6 +406,17 @@ realtype(::Type{Complex{T}}) where {T} = (T, T)
 realtype(::Type{SVector{N,T}}) where {N,T<:Real} = ntuple(Returns(T), Val(N))
 realtype(::Type{SVector{N,Complex{T}}}) where {N,T<:Real} =
     (t -> (t..., t...))(realtype(SVector{N,T}))
+
+# readline_realtypes(f::IOStream, types...) = readline_realtypes((), split(readline(f)), types...)
+# readline_realtypes(rs::Tuple, tokens, t, ts...) =
+#     readline_realtypes((rs..., tuplereal!(tokens, t)...), tokens, ts...)
+# readline_realtypes(rs::Tuple, tokens) = rs
+
+# function tuplereal!(tokens, ::Type{C}) where {T,C<:Complex{T}}
+#     r = parse(T, popfirst!(tokens))
+#     i = parse(T, popfirst!(tokens))
+#     (C(parse(T, )), parse(real(tokens[2])), parse(real(tokens[3])))
+
 
 build_complex((r, i), ::Type{B}) where {B<:Complex} = Complex(r, i)
 build_complex(ri, ::Type{B}) where {C<:Complex,N,B<:SVector{N,C}} =
