@@ -341,12 +341,12 @@ function load_wannier90(filename, ::Type{SVector{L,T}}; htol = 1e-8, rtol = 1e-8
         # skip header
         readline(f)
         # read Bravais vectors
-        brvecs3 = ntuple(_ -> readline_types(f, SVector{L,T}), Val(3))
-        brvecs = L < 3 ? ntuple(i -> brvecs3[i], Val(L)) : brvecs3
+        brvecs3 = ntuple(_ -> SVector{3,T}(readline_realtypes(f, SVector{3,T})), Val(3))
+        brvecs = L < 3 ? ntuple(i -> SMatrix{L,3}(I) * brvecs3[i], Val(L)) : brvecs3
         # read number of orbitals
-        norbs = readline_types(f, Int)
+        norbs = readline_realtypes(f, Int)
         # read number of cells
-        ncells = readline_types(f, Int)
+        ncells = readline_realtypes(f, Int)
         # skip symmetry degeneracies
         while !eof(f)
             isempty(readline(f)) && break
@@ -366,11 +366,12 @@ function load_harmonics(f, ::Val{L}, ::Type{B}, norbs, ncells; atol) where {L,B}
     ijv = IJV{B}(norbs^2)
     while !eof(f)
         ncell += 1
-        dn = readline_types(f, SVector{L,Int})
+        dn = SVector{L,Int}(readline_realtypes(f, SVector{L,Int}))
         for j in 1:norbs, i in 1:norbs
-            i´, j´, v = readline_types(f, Int, Int, B)
+            i´, j´, reims... = readline_realtypes(f, Int, Int, B)
             i´ == i && j´ == j ||
                 argerror("load_wannier90: unexpected entry in file at element $((dn, i, j))")
+            v = build_complex(reims, B)
             push_if_nonzero!(ijv, (i, j, v), atol)
         end
         if !isempty(ijv)
@@ -387,35 +388,16 @@ function load_harmonics(f, ::Val{L}, ::Type{B}, norbs, ncells; atol) where {L,B}
     return hars
 end
 
-# readline_types(f::IO, t) = only(readline_types(split(readline(f)), t))
-# readline_types(f::IO, t1, t2, ts...) =
-#     readline_types(split(readline(f)), t1, t2, ts...)
-# readline_types(v::Vector, ts...) = _readline_types((), v, ts...)
+readline_realtypes(f, type::Type{<:Real}) = parse(type, readline(f))
 
-# _readline_types(rs::Tuple, tokens, t, ts...) =
-#     _readline_types((rs..., poptype!(tokens, t)), tokens, ts...)
-# _readline_types(rs::Tuple, _) = rs
+readline_realtypes(f, types::Type...) =
+    readline_realtypes(f, tupleflatten(realtype.(types)...)...)
 
-# poptype!(tokens, ::Type{T}) where {T<:Real} = parse(T, popfirst!(tokens))
-
-# function poptype!(tokens, ::Type{C}) where {T,C<:Complex{T}}
-#     r = parse(T, popfirst!(tokens))
-#     i = parse(T, popfirst!(tokens))
-#     return C(r,i)
-# end
-
-# poptype!(tokens, ::Type{S}) where {N,T,S<:SVector{N,T}} =
-#     S(ntuple(_ -> poptype!(tokens, T), Val(N)))
-
-readline_types(f::IO, t1) = only(line_types(readline(f), t1))
-readline_types(f::IO, t1, t2, ts...) = line_types(readline(f), t1, t2, ts...)
-
-function line_types(s::String, types...)
-    tokens = split(s)
-    realtypes = tupleflatten(realtype.(types)...)
-    reals = parse_reals(tokens, realtypes...)
-    vals = reals_to_types(reals, types...)
-    return vals
+function readline_realtypes(f, realtypes::Vararg{<:Type{<:Real},N}) where {N}
+    tokens = split(readline(f))
+    # realtypes could be less than originally read tokens if we have reduced dimensionality
+    reals = ntuple(i -> parse(realtypes[i], tokens[i]), Val(N))
+    return reals
 end
 
 realtype(t::Type{<:Real}) = t
@@ -424,38 +406,9 @@ realtype(::Type{SVector{N,T}}) where {N,T<:Real} = ntuple(Returns(T), Val(N))
 realtype(::Type{SVector{N,Complex{T}}}) where {N,T<:Real} =
     (t -> (t..., t...))(realtype(SVector{N,T}))
 
-parse_reals(tokens, realtypes::Vararg{<:Type,N}) where {N} =
-    ntuple(i -> parse(realtypes[i], tokens[i]), Val(N))
-
-function reals_to_types(reals, types::Vararg{<:Type,N}) where {N}
-    offset = Ref(0)
-    return ntuple(i -> real_to_type!(offset, reals, types[i]), Val(N))
-end
-
-real_to_type!(offset, reals, ::Type{T}) where {T<:Real} =
-    (o = offset[]; offset[] += 1; T(reals[o+1]))
-real_to_type!(offset, reals, ::Type{C}) where {C<:Complex} =
-    (o = offset[]; offset[] += 2; C(reals[o+1], reals[o+2]))
-real_to_type!(offset, reals, ::Type{S}) where {N,T,S<:SVector{N,T}} =
-    S(ntuple(_ -> real_to_type!(offset, reals, T), Val(N)))
-
-# reals_to_types(offset::Int, reals, ::Type{T}, ts...) where {T<:Real} =
-#     (T(reals[offset+1]), reals_to_types(offset+1, reals, ts...)...)
-# reals_to_types(offset, reals, ::Type{C}, ts...) where {C<:Complex} =
-#     (C(reals[offset+1], reals[offset+2]), reals_to_types(offset+2, reals, ts...)...)
-# reals_to_types(offset, reals, ::Type{S}, ts...) where {N,T,S<:SVector{N,T}} =
-#     (ntuple(i->C(reals[offset+1], reals[offset+2]), reals_to_types(offset+2, reals, ts...)...)
-# reals_to_types(offset, reals) = ()
-
-
-# reals_to_types(, ::Type{<:Real}, ts...) = (r, reals_to_types(x, ts...))
-# reals_to_types((r, x...), ::Type{<:Real}, ts...) = (r, reals_to_types(x, ts...))
-
-# realtype(t::Type{<:Real}) = t
-# realtype(::Type{Complex{T}}) where {T} = (T, T)
-# realtype(::Type{SVector{N,T}}) where {N,T<:Real} = ntuple(Returns(T), Val(N))
-# realtype(::Type{SVector{N,Complex{T}}}) where {N,T<:Real} =
-#     (t -> (t..., t...))(realtype(SVector{N,T}))
+build_complex((r, i), ::Type{B}) where {B<:Complex} = Complex(r, i)
+build_complex(ri, ::Type{B}) where {C<:Complex,N,B<:SVector{N,C}} =
+    SVector{N,C}(ntuple(i -> C(ri[2i-1], ri[2i]), Val(N)))
 
 push_if_nonzero!(ijv::IJV{<:Number}, (i, j, v), htol) =
     abs(v) > htol && push!(ijv, (i, j, v))
