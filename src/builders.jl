@@ -295,17 +295,17 @@ SparseArrays.sparse(har::AbstractHarmonicBuilder, m::Integer, n::Integer) =
 # WannierBuilder
 #region
 
-struct WannierBuilder <: AbstractHamiltonianBuilder{Float64,3,3,ComplexF64}
-    hbuilder::IJVBuilder{Float64,3,3,ComplexF64,Missing}
-    rharmonics::Vector{IJVHarmonic{3,SVector{3,ComplexF64}}}
+struct WannierBuilder{T,L} <: AbstractHamiltonianBuilder{T,L,L,Complex{T}}
+    hbuilder::IJVBuilder{T,L,L,Complex{T},Missing}
+    rharmonics::Vector{IJVHarmonic{L,SVector{L,Complex{T}}}}
 end
 
-struct Wannier90Data
-    bravais::SMatrix{3,3,Float64}
+struct Wannier90Data{T,L}
+    brvecs::NTuple{L,SVector{L,T}}
     norbs::Int
     ncells::Int
-    h::Vector{IJVHarmonic{3,ComplexF64}}             # must be dn-sorted, with (0,0,0) first
-    r::Vector{IJVHarmonic{3,SVector{3,ComplexF64}}}  # must be dn-sorted, with (0,0,0) first
+    h::Vector{IJVHarmonic{L,Complex{T}}}             # must be dn-sorted, with (0,0,0) first
+    r::Vector{IJVHarmonic{L,SVector{L,Complex{T}}}}  # must be dn-sorted, with (0,0,0) first
 end
 
 #region ## Constructors ##
@@ -333,44 +333,45 @@ positions(b::WannierBuilder) = BarebonesOperator(b.rharmonics)
 
 #region ## Wannier90Data ##
 
-function load_wannier90(filename; htol = 1e-8, rtol = 1e-8)
-    f = open(filename, "r")
-    # skip header
-    readline(f)
-    # read Bravais
-    keep = true
-    brtxt = IOBuffer(readline(f; keep) * readline(f; keep) * readline(f; keep))
-    bravais = SMatrix{3,3}(readdlm(brtxt, Float64))
-    # read number of orbitals
-    norbs = parse(Int, readline(f))
-    # read number of cells
-    ncells = parse(Int, readline(f))
-    # skip symmetry degeneracies
-    while !eof(f)
-        isempty(readline(f)) && break
+load_wannier90(filename; type = Float64, dim = 3, kw...) =
+    load_wannier90(filename, postype(dim, type); kw...)
+
+function load_wannier90(filename, ::Type{SVector{L,T}}; htol = 1e-8, rtol = 1e-8) where {L,T}
+    data = open(filename, "r") do f
+        # skip header
+        readline(f)
+        # read Bravais vectors
+        brvecs3 = ntuple(_ -> SVector{3,T}(readline_realtypes(f, SVector{3,T})), Val(3))
+        brvecs = L < 3 ? ntuple(i -> SMatrix{L,3}(I) * brvecs3[i], Val(L)) : brvecs3
+        # read number of orbitals
+        norbs = readline_realtypes(f, Int)
+        # read number of cells
+        ncells = readline_realtypes(f, Int)
+        # skip symmetry degeneracies
+        while !eof(f)
+            isempty(readline(f)) && break
+        end
+        # read Hamiltonian
+        h = load_harmonics(f, Val(L), Complex{T}, norbs, ncells; atol = htol)
+        # read positions
+        r = load_harmonics(f, Val(L), SVector{L,Complex{T}}, norbs, ncells; atol = rtol)
+        return Wannier90Data(brvecs, norbs, ncells, h, r)
     end
-    # read Hamiltonian
-    h = load_harmonics(f, Val(1), norbs, ncells; atol = htol)
-    # read positions
-    r = load_harmonics(f, Val(3), norbs, ncells; atol = rtol)
-    return Wannier90Data(bravais, norbs, ncells, h, r)
+    return data
 end
 
-function load_harmonics(f, ::Val{N}, norbs, ncells; atol) where {N}
+function load_harmonics(f, ::Val{L}, ::Type{B}, norbs, ncells; atol) where {L,B}
     ncell = 0
-    B = builder_complex_type(Val(N))
-    hars = IJVHarmonic{3,B}[]
+    hars = IJVHarmonic{L,B}[]
     ijv = IJV{B}(norbs^2)
-    readtypes = tupleflatten(ntuple(Returns((Float64, Float64)), Val(N))...)
     while !eof(f)
         ncell += 1
-        line = readline(f)
-        dn = SVector{3,Int}(parse.(Int, split(line)))
+        dn = SVector{L,Int}(readline_realtypes(f, SVector{L,Int}))
         for j in 1:norbs, i in 1:norbs
-            i´, j´, reims... = parse.((Int, Int, readtypes...), split(readline(f)))
+            i´, j´, reims... = readline_realtypes(f, Int, Int, B)
             i´ == i && j´ == j ||
                 argerror("load_wannier90: unexpected entry in file at element $((dn, i, j))")
-            v = build_complex(reims, Val(N))
+            v = build_complex(reims, B)
             push_if_nonzero!(ijv, (i, j, v), atol)
         end
         if !isempty(ijv)
@@ -382,29 +383,47 @@ function load_harmonics(f, ::Val{N}, norbs, ncells; atol) where {N}
         ncell == ncells && break
     end
     sort!(hars, by = ijv -> abs.(dcell(ijv)))
-    iszero(dcell(first(hars))) || pushfirst!(hars, IJVHarmonic(SA[0,0,0], IJV{B}()))
+    iszero(dcell(first(hars))) ||
+        pushfirst!(hars, IJVHarmonic(zero(SVector{L,Int}), IJV{B}()))
     return hars
 end
 
-builder_complex_type(::Val{1}) = ComplexF64
-builder_complex_type(::Val{3}) = SVector{3,ComplexF64}
+readline_realtypes(f, type::Type{<:Real}) = parse(type, readline(f))
 
-build_complex((reh, imh), ::Val{1}) = ComplexF64(reh, imh)
-build_complex((rex, imx, rey, imy, rez, imz), ::Val{3}) =
-    SVector{3,ComplexF64}(ComplexF64(rex, imx), ComplexF64(rey, imy), ComplexF64(rez, imz))
+readline_realtypes(f, types::Type...) =
+    readline_realtypes(f, tupleflatten(realtype.(types)...))
 
-push_if_nonzero!(ijv::IJV{ComplexF64}, (i, j, v), htol) =
+function readline_realtypes(f, realtypes::NTuple{N,Type}) where {N}
+    tokens = split(readline(f))
+    # realtypes could be less than originally read tokens if we have reduced dimensionality
+    tokens´ = N < length(tokens) ? tokens[1:N] : tokens
+    reals = parse.(realtypes, tokens´)
+    return reals
+end
+
+realtype(t::Type{<:Real}) = t
+realtype(::Type{Complex{T}}) where {T} = (T, T)
+realtype(::Type{SVector{N,T}}) where {N,T<:Real} = ntuple(Returns(T), Val(N))
+realtype(::Type{SVector{N,Complex{T}}}) where {N,T<:Real} =
+    (t -> (t..., t...))(realtype(SVector{N,T}))
+
+build_complex((r, i), ::Type{B}) where {B<:Complex} = Complex(r, i)
+build_complex(ri, ::Type{B}) where {C<:Complex,N,B<:SVector{N,C}} =
+    SVector{N,C}(ntuple(i -> C(ri[2i-1], ri[2i]), Val(N)))
+
+push_if_nonzero!(ijv::IJV{<:Number}, (i, j, v), htol) =
     abs(v) > htol && push!(ijv, (i, j, v))
-push_if_nonzero!(ijv::IJV{SVector{3,ComplexF64}}, (i, j, v), rtol) =
+push_if_nonzero!(ijv::IJV{<:SVector}, (i, j, v), rtol) =
     (i == j || any(>(rtol), abs.(v))) && push!(ijv, (i, j, v))
 
-function lattice(data::Wannier90Data)
-    rs = SVector{3,Float64}[]
+function lattice(data::Wannier90Data{T,L}) where {T,L}
+    bravais = hcat(data.brvecs...)
+    rs = SVector{L,T}[]
     ijv = collector(first(data.r))
     for (i, j, r) in zip(ijv.i, ijv.j, ijv.v)
         i == j && push!(rs, real(r))
     end
-    return lattice(sublat(rs); bravais = data.bravais')
+    return lattice(sublat(rs); bravais)
 end
 
 #endregion
