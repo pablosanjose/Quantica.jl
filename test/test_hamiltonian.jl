@@ -359,7 +359,7 @@ end
     # Wannier90 coupling to dipole moments
     w = wannier90("wannier_test2_tb.dat"; dim = 2, htol = 1e-4, rtol = 1e-4)
     h = hamiltonian(w)
-    const R = sites(w)
+    R = sites(w)
     hE = h |> @onsite!((o, i; E = SA[0,0]) --> o + E'*R[i,i]) |> @hopping!((t, i, j; E = SA[0,0]) --> t + E'*R[i,j])
     @test hE() isa Hamiltonian{Float64,2,2}
 end
