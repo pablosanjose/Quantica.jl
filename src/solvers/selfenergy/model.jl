@@ -11,12 +11,12 @@ end
 
 #region ## Constructor ##
 
-function SelfEnergyModelSolver(h::AbstractHamiltonian, model::AbstractModel, siteslice::SiteSlice, orbslice::OrbitalSliceGrouped)
+function SelfEnergyModelSolver(h::AbstractHamiltonian, model::AbstractModel, orbslice::OrbitalSliceGrouped)
     modelω = model_ω_to_param(model)  # see models.jl - transforms ω into a ω_internal param
     siteinds = Int[]
-    # this converts siteslice to a 0D Lattice lat0
-    # and fills siteinds::Vector{Int} with the siteslice index for each lat0 site (i.e. for sites ordered by sublattices)
-    lat0 = lattice0D(siteslice, siteinds)
+    # this converts orbslice to a 0D Lattice lat0
+    # and fills siteinds::Vector{Int} with the site index for each lat0 site (i.e. for sites ordered by sublattices)
+    lat0 = lattice0D(orbslice, siteinds)
     # this is a 0D ParametricHamiltonian to build the Σ(ω) as a view over flat(ph(; ...))
     ph = hamiltonian(lat0, modelω; orbitals = norbitals(h)) # WARNING: type-unstable orbs
     # translation from orbitals in lat0 to orbslice indices
@@ -30,10 +30,8 @@ end
 #region ## API ##
 
 function SelfEnergy(h::AbstractHamiltonian, model::AbstractModel; kw...)
-    sel = siteselector(; kw...)
-    siteslice = lattice(h)[sel]
-    orbslice = sites_to_orbs(siteslice, h)
-    solver = SelfEnergyModelSolver(h, model, siteslice, orbslice)
+    orbslice = contact_orbslice(h; kw...)
+    solver = SelfEnergyModelSolver(h, model, orbslice)
     return SelfEnergy(solver, orbslice)
 end
 

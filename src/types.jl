@@ -1951,7 +1951,18 @@ has_selfenergy(c::Contacts) = any(has_selfenergy, selfenergies(c))
 check_contact_index(i, c) = 1 <= i <= ncontacts(c) ||
     argerror("Cannot get contact $i, there are $(ncontacts(c)) contacts")
 
+# for checks in contact construction
+check_contact_slice(s::LatticeSlice) =
+    isempty(s) && argerror("No contact sites found in selection")
+
 contactorbitals(c::Contacts) = c.orbitals
+
+function contact_orbslice(h; sites...)
+    contactslice = getindex(lattice(h); sites...)
+    check_contact_slice(contactslice)  # in case it is empty
+    lsparent = sites_to_orbs(contactslice, h)
+    return lsparent
+end
 
 orbslice(c::Contacts) = c.orbslice
 orbslice(c::Contacts, ::Colon) = c.orbslice

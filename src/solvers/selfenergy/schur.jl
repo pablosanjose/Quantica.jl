@@ -41,8 +41,7 @@ end
 # and if so, builds the extended Self Energy directly, using the same intercell coupling of
 # the lead, but using the correct site order of hparent
 function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurEmptyLead; reverse = false, transform = missing, kw...)
-    sel = siteselector(; kw...)
-    lsparent = sites_to_orbs(lattice(hparent)[sel], hparent)
+    lsparent = contact_orbslice(hparent; kw...)
     schursolver = solver(glead)
     fsolver = schurfactorsolver(schursolver)
     boundary = schursolver.boundary
@@ -186,8 +185,7 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead,
     end
 
     # combine gunit and parent sites into lat0
-    sel = siteselector(; kw...)
-    lsparent = sites_to_orbs(lattice(hparent)[sel], hparent)
+    lsparent = contact_orbslice(hparent; kw...)
     isempty(lsparent) && argerror("No sites selected in the parent lattice")
     lat0parent = lattice0D(lsparent)
     lat0 = combine(lat0parent, lat0lead)
@@ -261,7 +259,7 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead;
     xunit = boundary + ifelse(reverse, -1, 1)
     gslice = glead[cells = SA[xunit]]
     # lattice slices for parent and lead unit cell
-    lsparent = sites_to_orbs(getindex(lattice(hparent); sites...), hparent)
+    lsparent = contact_orbslice(hparent; sites...)
     # The above is currently broken when unitcell surface does not match full unit cell. Perhaps use some version of this:
     # Compute lslead as lead unicell surface:
     #   gL and gR are unitcell GreenFunctions with ΣL and ΣR, but same ordering as gslice
