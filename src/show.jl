@@ -165,7 +165,7 @@ display_argument_type(t) = is_spatial(t) ? "spatial" : "non-spatial"
 # Hamiltonian
 #region
 
-function Base.show(io::IO, h::Union{Hamiltonian,ParametricHamiltonian,Operator})
+function Base.show(io::IO, h::Union{Hamiltonian,ParametricHamiltonian,Operator,BarebonesOperator})
     i = get(io, :indent, "")
     print(io, i, summary(h), "\n", showstring(h, i))
     showextrainfo(io, i, h)
@@ -180,6 +180,12 @@ $i  Onsites          : $(nonsites(h))
 $i  Hoppings         : $(nhoppings(h))
 $i  Coordination     : $(round(coordination(h), digits = 5))"
 
+showstring(h::BarebonesOperator, i) =
+"$i  Bloch harmonics  : $(length(harmonics(h)))
+$i  Harmonic size    : $((n -> "$n × $n")(size(h, 1)))
+$i  Element type     : $(eltype(h))
+$i  Nonzero elements : $(nnz(h))"
+
 showstring(o::Operator, i) = showstring(hamiltonian(o), i)
 
 Base.summary(h::Hamiltonian{T,E,L}) where {T,E,L} =
@@ -190,6 +196,9 @@ Base.summary(h::ParametricHamiltonian{T,E,L}) where {T,E,L} =
 
 Base.summary(h::Operator{H}) where {T,E,L,H<:AbstractHamiltonian{T,E,L}} =
     "Operator{$T,$E,$L}: Operator on a $(L)D Lattice in $(E)D space"
+
+Base.summary(h::BarebonesOperator{L}) where {L} =
+    "BarebonesOperator{$L}: a simple collection of $(L)D Bloch harmonics"
 
 displaytype(::Type{S}) where {N,T,S<:SMatrix{N,N,T}} = "$N × $N blocks ($T)"
 displaytype(::Type{S}) where {N,T,S<:SMatrixView{N,N,T}} = "At most $N × $N blocks ($T)"
@@ -497,5 +506,21 @@ function Base.showarg(io::IO, ::OrbitalSliceVector{<:Any,M}, toplevel) where {M}
     toplevel || print(io, "::")
     print(io,  "OrbitalSliceVector{$M}")
 end
+
+#endregion
+
+############################################################################################
+# WannierBuilder
+#region
+
+function Base.show(io::IO, b::WannierBuilder)
+    i = get(io, :indent, "")
+    print(io, i, summary(b), "\n",
+"$i  cells      : $(ncells(b))
+$i  elements   : $(sum(length, harmonics(hbuilder(b))))")
+end
+
+Base.summary(::WannierBuilder{T,L}) where {T,L} =
+    "WannierBuilder{$T,$L} : $(L)-dimensional Hamiltonian builder of type $T from Wannier90 input"
 
 #endregion

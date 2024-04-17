@@ -28,7 +28,9 @@ Base.isempty(s::IJV) = length(s) == 0
 
 Base.length(s::IJV) = length(s.v)
 
+# cannot combine these two due to ambiguity with sparse(I, J, v::Number)
 SparseArrays.sparse(c::IJV, m::Integer, n::Integer) = sparse(c.i, c.j, c.v, m, n)
+SparseArrays.sparse(c::IJV) = sparse(c.i, c.j, c.v)
 
 #endregion
 
@@ -244,6 +246,10 @@ finalizecolumn!(b::CSCBuilder, x...) =
 
 nsites(b::AbstractHamiltonianBuilder) = nsites(lattice(b))
 
+ncells(b::AbstractHamiltonianBuilder) = length(harmonics(b))
+
+nelements(b::AbstractHamiltonianBuilder) = sum(length, harmonics(b))
+
 Base.isempty(h::IJVHarmonic) = isempty(collector(h))
 Base.isempty(s::CSCHarmonic) = isempty(collector(s))
 
@@ -254,6 +260,8 @@ blockstructure(b::AbstractHamiltonianBuilder) = b.blockstruct
 blocktype(::AbstractHamiltonianBuilder{<:Any,<:Any,<:Any,B}) where {B} = B
 
 harmonics(b::AbstractHamiltonianBuilder) = b.harmonics
+
+Base.length(b::AbstractHarmonicBuilder) = length(collector(b))
 
 Base.push!(b::IJVBuilderWithModifiers, ms::Modifier...) = push!(b.modifiers, ms...)
 
@@ -286,8 +294,10 @@ function SparseArrays.sparse(b::OrbitalBlockStructure{B}, har::AbstractHarmonicB
     return Harmonic(dcell(har), HybridSparseMatrix(b, s))
 end
 
-SparseArrays.sparse(har::AbstractHarmonicBuilder, m::Integer, n::Integer) =
+# cannot combine these two due to ambiguity with sparse(I, J, v::Number)
+SparseArrays.sparse(har::AbstractHarmonicBuilder, n::Integer, m::Integer) =
     sparse(collector(har), m, n)
+SparseArrays.sparse(har::AbstractHarmonicBuilder) = sparse(collector(har))
 
 #endregion
 
@@ -327,7 +337,11 @@ end
 
 hamiltonian(b::WannierBuilder) = hamiltonian(b.hbuilder)
 
-positions(b::WannierBuilder) = BarebonesOperator(b.rharmonics)
+sites(b::WannierBuilder) = BarebonesOperator(b.rharmonics)
+
+ncells(b::WannierBuilder) = ncells(b.hbuilder)
+
+hbuilder(b::WannierBuilder) = b.hbuilder
 
 #endregion
 
@@ -340,9 +354,9 @@ function load_wannier90(filename, ::Type{SVector{L,T}}; htol = 1e-8, rtol = 1e-8
     data = open(filename, "r") do f
         # skip header
         readline(f)
-        # read Bravais vectors
+        # read three Bravais 3D-vectors, keep L Bravais LD-vectors
         brvecs3 = ntuple(_ -> SVector{3,T}(readline_realtypes(f, SVector{3,T})), Val(3))
-        brvecs = L < 3 ? ntuple(i -> SMatrix{L,3}(I) * brvecs3[i], Val(L)) : brvecs3
+        brvecs  = ntuple(i -> brvecs3[i][SVector{L,Int}(1:L)], Val(L))
         # read number of orbitals
         norbs = readline_realtypes(f, Int)
         # read number of cells
@@ -352,29 +366,33 @@ function load_wannier90(filename, ::Type{SVector{L,T}}; htol = 1e-8, rtol = 1e-8
             isempty(readline(f)) && break
         end
         # read Hamiltonian
-        h = load_harmonics(f, Val(L), Complex{T}, norbs, ncells; atol = htol)
+        h = load_harmonics(f, Val(L), Complex{T}, norbs, ncells, htol)
         # read positions
-        r = load_harmonics(f, Val(L), SVector{L,Complex{T}}, norbs, ncells; atol = rtol)
+        r = load_harmonics(f, Val(L), SVector{L,Complex{T}}, norbs, ncells, rtol)
         return Wannier90Data(brvecs, norbs, ncells, h, r)
     end
     return data
 end
 
-function load_harmonics(f, ::Val{L}, ::Type{B}, norbs, ncells; atol) where {L,B}
+function load_harmonics(f, ::Val{L}, ::Type{B}, norbs, ncells, atol) where {L,B}
     ncell = 0
     hars = IJVHarmonic{L,B}[]
     ijv = IJV{B}(norbs^2)
     while !eof(f)
         ncell += 1
-        dn = SVector{L,Int}(readline_realtypes(f, SVector{L,Int}))
+        dn3D = SVector{3,Int}(readline_realtypes(f, SVector{3,Int}))
+        dn = dn3D[SVector{L,Int}(1:L)]
+        # if skip, read but not write harmonic (since it is along a non-projected axes)
+        skip = L < 3 && !iszero(dn3D[SVector{3-L,Int}(L+1:3)])
         for j in 1:norbs, i in 1:norbs
             i´, j´, reims... = readline_realtypes(f, Int, Int, B)
+            skip && continue
             i´ == i && j´ == j ||
                 argerror("load_wannier90: unexpected entry in file at element $((dn, i, j))")
             v = build_complex(reims, B)
-            push_if_nonzero!(ijv, (i, j, v), atol)
+            push_if_nonzero!(ijv, (i, j, v), dn, atol)
         end
-        if !isempty(ijv)
+        if !skip && !isempty(ijv)
             push!(hars, IJVHarmonic(dn, ijv))
             ijv = IJV{B}(norbs^2)    # allocate new IJV
         end
@@ -410,10 +428,10 @@ build_complex((r, i), ::Type{B}) where {B<:Complex} = Complex(r, i)
 build_complex(ri, ::Type{B}) where {C<:Complex,N,B<:SVector{N,C}} =
     SVector{N,C}(ntuple(i -> C(ri[2i-1], ri[2i]), Val(N)))
 
-push_if_nonzero!(ijv::IJV{<:Number}, (i, j, v), htol) =
+push_if_nonzero!(ijv::IJV{<:Number}, (i, j, v), dn, htol) =
     abs(v) > htol && push!(ijv, (i, j, v))
-push_if_nonzero!(ijv::IJV{<:SVector}, (i, j, v), rtol) =
-    (i == j || any(>(rtol), abs.(v))) && push!(ijv, (i, j, v))
+push_if_nonzero!(ijv::IJV{<:SVector}, (i, j, v), dn, rtol) =
+    (i == j && iszero(dn) || any(>(rtol), abs.(v))) && push!(ijv, (i, j, v))
 
 function lattice(data::Wannier90Data{T,L}) where {T,L}
     bravais = hcat(data.brvecs...)

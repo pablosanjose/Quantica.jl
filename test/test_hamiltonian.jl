@@ -1,4 +1,4 @@
-using Quantica: Hamiltonian, ParametricHamiltonian,
+using Quantica: Hamiltonian, ParametricHamiltonian, BarebonesOperator,
       sites, nsites, nonsites, nhoppings, coordination, flat, hybrid, transform!, nnz, nonzeros
 
 @testset "basic hamiltonians" begin
@@ -50,6 +50,15 @@ using Quantica: Hamiltonian, ParametricHamiltonian,
     @test Quantica.Quantica.nhoppings(h) == 48
     @test Hamiltonian{3}(h) isa Hamiltonian{<:Any,3}
     @test convert(Hamiltonian{3}, h) isa Hamiltonian{<:Any,3}
+    # wannier import
+    w = HP.wannier90("wannier_test_tb.dat", htol = 1e-4, rtol = 1e-4, dim = 2, type = Float32);
+    h = hamiltonian(w)
+    @test h isa Hamiltonian{Float32,2,2,ComplexF32}
+    R = sites(w)
+    @test R isa BarebonesOperator{2,SVector{2,ComplexF32}}
+    @test R[cellsites(SA[0,0],1)] isa SVector{2,ComplexF32}
+    @test_throws Quantica.Dictionaries.IndexError R[SA[1000,0]]
+    @test iszero(R[cellsites(SA[0,0],1), cellsites(SA[1000,0],1)])
 end
 
 @testset "hamiltonian orbitals" begin

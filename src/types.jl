@@ -2193,54 +2193,60 @@ struct Operator{H<:AbstractHamiltonian}
     h::H
 end
 
-struct VectorOperator{N,H<:NTuple{N,AbstractHamiltonian}}
-    hs::H
-end
-
 struct BarebonesHarmonic{L,B}
     dn::SVector{L,Int}
-    h::SparseMatrixCSC{B,Int}
+    mat::SparseMatrixCSC{B,Int}
 end
 
 struct BarebonesOperator{L,B}
-    harmonics::Vector{BarebonesHarmonic{L,B}}
+    harmonics::Dictionary{SVector{L,Int},BarebonesHarmonic{L,B}}
 end
 
 #region ## Constructors ##
 
-BarebonesOperator(harmonics::Vector) = BarebonesOperator(BarebonesHarmonic.(harmonics))
+BarebonesOperator(harmonics::Vector) =
+    BarebonesOperator(index(dcell, BarebonesHarmonic.(harmonics)))
 
-BarebonesHarmonic(har) = BarebonesHarmonic(cell(har), sparse(har))
+BarebonesHarmonic(har) = BarebonesHarmonic(dcell(har), sparse(har))
 
 #endregion
 
 #region ## API ##
 
 hamiltonian(o::Operator) = o.h
-hamiltonian(o::VectorOperator) = o.hs
+
+harmonics(o::BarebonesOperator) = o.harmonics
+
+matrix(h::BarebonesHarmonic) = h.mat
+
+dcell(h::BarebonesHarmonic) = h.dn
 
 (o::Operator)(φ...; kw...) = o.h(φ...; kw...)
-(o::VectorOperator)(φ...; kw...) = SVector((h -> h(φ...; kw...)).(o.hs))
 
 call!(o::Operator, φ...; kw...) = call!(o.h, φ...; kw...)
-call!(o::VectorOperator, φ...; kw...) = SVector((h -> call!(h, φ...; kw...)).(o.hs))
 
 Base.getindex(o::Operator, i...) = getindex(o.h, i...)
-Base.getindex(o::VectorOperator, i...) = SVector((h -> getindex(h, i...)).(o.hs))
 
-Base.getindex(o::BarebonesOperator{L}, dn, is...) where {L} =
-    getindex(o, sanitize_SVector(SVector{L,Int}, dn), is...)
+Base.eltype(::BarebonesOperator{<:Any,B}) where {B} = B
 
-function Base.getindex(o::BarebonesOperator{L}, dn::SVector{L,Int}) where {L}
-    for h in o.harmonics
-        if dn == h.dn
-            return h.h
-        end
-    end
-    @boundscheck(boundserror(harmonics(h), dn))
-    # this is unreachable, but avoids allocations by having non-Union return type
-    return first(harmonics(h))
+Base.size(o::BarebonesOperator, is...) = size(matrix(first(harmonics(o))), is...)
+
+Base.getindex(o::BarebonesOperator{L}, dn) where {L} =
+    getindex(o, sanitize_SVector(SVector{L,Int}, dn))
+
+Base.getindex(o::BarebonesOperator{L}, dn::SVector{L,Int}) where {L} =
+    matrix(harmonics(o)[dn])
+
+# Unlike o[dn][i, j], o[si::AnyCellSites, sj::AnyCellSites] returns a zero if !haskey(dn)
+function Base.getindex(o::BarebonesOperator, i::AnyCellSites, j::AnyCellSites = i)
+    dn = cell(j) - cell(i)
+    si, sj = siteindices(i), siteindices(j)
+    @boundscheck(1 <= si <= size(o, 1) && 1 <= sj <= size(o, 2) ||
+        throw(BoundsError(o, (si, sj))))
+    return haskey(harmonics(o), dn) ? o[dn][si, sj] : zero(eltype(o))
 end
+
+SparseArrays.nnz(h::BarebonesOperator) = sum(har -> nnz(matrix(har)), harmonics(h))
 
 #endregion
 

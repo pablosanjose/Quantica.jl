@@ -55,6 +55,8 @@ function twisted_bilayer_graphene(;
     return combine(hbot, htop; coupling = modelinter)
 end
 
+wannier90(args...; kw...) = Quantica.WannierBuilder(args...; kw...)    # API (extendable)
+
 end # module
 
 const HP = HamiltonianPresets

@@ -215,6 +215,12 @@ lattice `lat[sel...]` with some `siteselector` keywords `sel`. See also `lattice
 
 Note: the returned collections can be of different types (vectors, generators, views...)
 
+    sites(b::WannierBuilder)
+
+Returns the Wannier position matrix in the form of a `r::BarebonesOperator` object, which
+can be indexed as `r[s, s´]` to obtain matrix elements `⟨s|R|s´⟩` of the position operator
+`R` (a vector). Here `s` and `s´` represent site indices, constructued with `cellsites`.
+
 # Examples
 ```jldoctest
 julia> sites(LatticePresets.honeycomb(), :A)
@@ -223,7 +229,7 @@ julia> sites(LatticePresets.honeycomb(), :A)
 ```
 
 # See also
-    `lattice`, `siteselector`
+    `lattice`, `siteselector`, `cellsites`
 """
 sites
 
