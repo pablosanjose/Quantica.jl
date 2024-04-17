@@ -51,7 +51,7 @@ using Quantica: Hamiltonian, ParametricHamiltonian, BarebonesOperator,
     @test Hamiltonian{3}(h) isa Hamiltonian{<:Any,3}
     @test convert(Hamiltonian{3}, h) isa Hamiltonian{<:Any,3}
     # wannier import
-    w = HP.wannier90("wannier_test_tb.dat", htol = 1e-4, rtol = 1e-4, dim = 2, type = Float32);
+    w = wannier90("wannier_test_tb.dat", htol = 1e-4, rtol = 1e-4, dim = 2, type = Float32);
     h = hamiltonian(w)
     @test h isa Hamiltonian{Float32,2,2,ComplexF32}
     R = sites(w)

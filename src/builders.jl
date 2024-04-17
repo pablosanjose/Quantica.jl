@@ -341,6 +341,8 @@ end
 
 #region ## API ##
 
+wannier90(args...; kw...) = WannierBuilder(args...; kw...)    # API (extendable)
+
 hamiltonian(b::WannierBuilder) = hamiltonian(b.hbuilder)
 
 sites(b::WannierBuilder) = BarebonesOperator(b.rharmonics)

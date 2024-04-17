@@ -44,7 +44,7 @@
     @test nothing === show(stdout, densitymatrix(g[1]))
     g = greenfunction(supercell(h) |> attach(@onsite(ω -> im*I)) |> attach(nothing), GS.Spectrum())
     @test nothing === show(stdout, densitymatrix(g[1]))
-    w = HP.wannier90("wannier_test_tb.dat");
+    w = wannier90("wannier_test_tb.dat");
     @test nothing === show(stdout, w)
     @test nothing === show(stdout, sites(w))
 end

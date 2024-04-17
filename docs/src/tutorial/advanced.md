@@ -99,7 +99,7 @@ A common way to obtain quantitative tight-binding models of materials is to *Wan
 
 Quantica.jl includes a function that can import Wannier90 tight-binding files. By default these files are 3D systems
 ```
-julia> w = HP.wannier90("wannier_tb.dat")
+julia> w = wannier90("wannier_tb.dat")
 WannierBuilder{Float64,3} : 3-dimensional Hamiltonian builder of type Float64 from Wannier90 input
   cells      : 755
   elements   : 36388
@@ -107,7 +107,7 @@ WannierBuilder{Float64,3} : 3-dimensional Hamiltonian builder of type Float64 fr
 ```
 In this case, however, the model in the "wannier_tb.dat" file is a 2D MoS2 crystal. We can project out all out-of-plane matrix elements by specifying the dimension with `dim`. We can also drop any Hamiltonian matrix element smaller than, say `htol = 1e-5`, and any position matrix element of norm smaller than `rtol = 1e-4`. This greatly simplifies the problem
 ```
-julia> w = HP.wannier90("wannier_tb.dat"; dim = 2, htol = 1e-5, rtol = 1e-4)
+julia> w = wannier90("wannier_tb.dat"; dim = 2, htol = 1e-5, rtol = 1e-4)
 WannierBuilder{Float64,2} : 2-dimensional Hamiltonian builder of type Float64 from Wannier90 input
   cells      : 151
   elements   : 7510
@@ -155,7 +155,7 @@ julia> r[cellsites(SA[0,0], 1), cellsites(SA[0,0], 4)]
 
 It is possible to modify the imported Wannier90 models using the full Quantica.jl machinery. For example, we can add any `AbstractModel` to the Wannier90 model upon import just by passing it as a second argument
 ```
-julia> w = HP.wannier90("wannier_tb.dat", @onsite((; Δ = 0) -> Δ); dim = 2)
+julia> w = wannier90("wannier_tb.dat", @onsite((; Δ = 0) -> Δ); dim = 2)
 WannierBuilder{Float64,2} : 2-dimensional Hamiltonian builder of type Float64 from Wannier90 input
   cells      : 151
   elements   : 7560
