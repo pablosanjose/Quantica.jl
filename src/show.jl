@@ -162,7 +162,7 @@ display_argument_type(t) = is_spatial(t) ? "spatial" : "non-spatial"
 #endregion
 
 ############################################################################################
-# Hamiltonian
+# AbstractHamiltonian and Operators
 #region
 
 function Base.show(io::IO, h::Union{Hamiltonian,ParametricHamiltonian,Operator,BarebonesOperator})
@@ -517,7 +517,8 @@ function Base.show(io::IO, b::WannierBuilder)
     i = get(io, :indent, "")
     print(io, i, summary(b), "\n",
 "$i  cells      : $(ncells(b))
-$i  elements   : $(sum(length, harmonics(hbuilder(b))))")
+$i  elements   : $(sum(length, harmonics(hbuilder(b))))
+$i  modifiers  : $(length(modifiers(b)))")
 end
 
 Base.summary(::WannierBuilder{T,L}) where {T,L} =

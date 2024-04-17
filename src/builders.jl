@@ -306,7 +306,7 @@ SparseArrays.sparse(har::AbstractHarmonicBuilder) = sparse(collector(har))
 #region
 
 struct WannierBuilder{T,L} <: AbstractHamiltonianBuilder{T,L,L,Complex{T}}
-    hbuilder::IJVBuilder{T,L,L,Complex{T},Missing}
+    hbuilder::IJVBuilder{T,L,L,Complex{T},Vector{Any}}
     rharmonics::Vector{IJVHarmonic{L,SVector{L,Complex{T}}}}
 end
 
@@ -320,16 +320,22 @@ end
 
 #region ## Constructors ##
 
-wannier90(file::AbstractString; kw...) = WannierBuilder(file; kw...) # exported
-
 function WannierBuilder(file::AbstractString; kw...)
     data = load_wannier90(file; kw...)
     lat = lattice(data)
-    hbuilder = IJVBuilder(lat, Val(1)) # one orbital per site
+    hbuilder = builder(lat; orbitals = Val(1)) # one orbital per site
     push_ijvharmonics!(hbuilder, data.h)
     rharmonics = data.r
     return WannierBuilder(hbuilder, rharmonics)
 end
+
+function WannierBuilder(file, model::AbstractModel; kw...)
+    b = WannierBuilder(file; kw...)
+    add!(b.hbuilder, model)
+    return b
+end
+
+(m::Modifier)(b::WannierBuilder) = (push!(b, m); b)
 
 #endregion
 
@@ -343,6 +349,12 @@ ncells(b::WannierBuilder) = ncells(b.hbuilder)
 
 hbuilder(b::WannierBuilder) = b.hbuilder
 
+modifiers(b::WannierBuilder) = modifiers(b.hbuilder)
+
+Base.push!(b::WannierBuilder, m::Modifier) = push!(b.hbuilder, m)
+
+Base.pop!(b::WannierBuilder) = pop!(b.hbuilder)
+
 #endregion
 
 #region ## Wannier90Data ##
@@ -351,6 +363,7 @@ load_wannier90(filename; type = Float64, dim = 3, kw...) =
     load_wannier90(filename, postype(dim, type); kw...)
 
 function load_wannier90(filename, ::Type{SVector{L,T}}; htol = 1e-8, rtol = 1e-8) where {L,T}
+    L > 3 && argerror("dim = $L should be dim <= 3")
     data = open(filename, "r") do f
         # skip header
         readline(f)

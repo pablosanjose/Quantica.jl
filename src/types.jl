@@ -2241,10 +2241,15 @@ Base.getindex(o::BarebonesOperator{L}, dn::SVector{L,Int}) where {L} =
 function Base.getindex(o::BarebonesOperator, i::AnyCellSites, j::AnyCellSites = i)
     dn = cell(j) - cell(i)
     si, sj = siteindices(i), siteindices(j)
-    @boundscheck(1 <= si <= size(o, 1) && 1 <= sj <= size(o, 2) ||
-        throw(BoundsError(o, (si, sj))))
-    return haskey(harmonics(o), dn) ? o[dn][si, sj] : zero(eltype(o))
+    if haskey(harmonics(o), dn)
+        x = o[dn][si, sj]
+    else
+        checkbounds(Bool, matrix(first(harmonics(o))), si, sj)
+        x = zero(eltype(o))
+    end
+    return x
 end
+
 
 SparseArrays.nnz(h::BarebonesOperator) = sum(har -> nnz(matrix(har)), harmonics(h))
 
