@@ -356,6 +356,12 @@ end
     @test iszero(h0())
     h0 = LP.square() |> hopping(0) |> supercell(3) |> @hopping!((t, r, dr) -> 1; dcells = SVector{2,Int}[])
     @test iszero(h0())
+    # Wannier90 coupling to dipole moments
+    w = wannier90("wannier_test2_tb.dat"; dim = 2, htol = 1e-4, rtol = 1e-4)
+    h = hamiltonian(w)
+    const R = sites(w)
+    hE = h |> @onsite!((o, i; E = SA[0,0]) --> o + E'*R[i,i]) |> @hopping!((t, i, j; E = SA[0,0]) --> t + E'*R[i,j])
+    @test hE() isa Hamiltonian{Float64,2,2}
 end
 
 
