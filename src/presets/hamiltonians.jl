@@ -57,6 +57,8 @@ end
 
 wannier90(args...; kw...) = Quantica.WannierBuilder(args...; kw...)    # API (extendable)
 
+include("hamiltonians_docstrings.jl")
+
 end # module
 
 const HP = HamiltonianPresets

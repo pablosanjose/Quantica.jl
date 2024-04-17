@@ -462,7 +462,7 @@ unsafe_replace_lattice(l::LatticeSlice{T,E,L,C}, lat::Lattice{T,E´,L}) where {T
 
 lattice(ls::LatticeSlice) = ls.lat
 
-siteindices(s::CellSites) = s.inds
+siteindices(s::AnyCellSites) = s.inds
 siteindices(s::CellOrbitalsGrouped) = keys(s.type.groups)
 orbindices(s::AnyCellOrbitals) = s.inds
 siteindex(s::AnyCellSite) = s.inds
@@ -504,10 +504,9 @@ findsubcell(cell::SVector, l::LatticeSlice) = findsubcell(cell, cellsdict(l))
 
 boundingbox(l::LatticeSlice) = boundingbox(keys(cellsdict(l)))
 
-# interface for non-spatial models
+# interface for non-spatial models (cell already defined for CellIndices)
 pos(s::CellSitePos) = s.type.r
 ind(s::CellSitePos) = s.inds
-cell(s::CellSitePos) = s.cell
 
 # iterators
 

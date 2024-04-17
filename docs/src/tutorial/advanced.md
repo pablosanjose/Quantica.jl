@@ -155,7 +155,7 @@ julia> r[cellsites(SA[0,0], 1), cellsites(SA[0,0], 4)]
 
 It is possible to modify the imported Wannier90 models using the full Quantica.jl machinery. For example, we can add any `AbstractModel` to the Wannier90 model upon import just by passing it as a second argument
 ```
-julia> w = HP.wannier90("wannier_tb.dat", @onsite((r; o = 1) -> o + r[1]); dim = 2)
+julia> w = HP.wannier90("wannier_tb.dat", @onsite((; Δ = 0) -> Δ); dim = 2)
 WannierBuilder{Float64,2} : 2-dimensional Hamiltonian builder of type Float64 from Wannier90 input
   cells      : 151
   elements   : 7560
@@ -170,7 +170,7 @@ ParametricHamiltonian{Float64,2,2}: Parametric Hamiltonian on a 2D Lattice in 2D
   Onsites          : 10
   Hoppings         : 7540
   Coordination     : 754.0
-  Parameters       : [:o]
+  Parameters       : [:Δ]
 ```
 Note that since we used a `ParametricModel` with a single parametric term, this introduced one `modifier`, since ParametricModels are simply an ordinary base model plus one modifier for each parametric term. As a result, `h` is now parametric.
 
@@ -185,3 +185,15 @@ WannierBuilder{Float64,2} : 2-dimensional Hamiltonian builder of type Float64 fr
   elements   : 7560
   modifiers  : 2
 ```
+
+An interesting application of modifiers is the addition of an electric field that couples to the full `r` operator. In an strict tight-binding limit, we would add an electric field `E` simply as an onsite potential
+```
+julia> hE = h |> @onsite!((o, r; E = SA[0,0]) -> o + E'*r);
+```
+However, we actually have the full `r` operator now, which includes non-diagonal matrix elements. We can then incorporate the electric field term `E'*r` more precisely. We can do so using the `-->` syntax and the indexing functionality of the `r::BarebonesOperator` that we obtained from Wannier90
+```
+julia> hE = h |> @onsite!((o, i; E = SA[0,0]) --> o + E'*r[i,i]) |> @hopping!((t, i, j; E = SA[0,0]) --> t + E'*r[i,j]);
+```
+
+!!! note "Closures over non-constant objects"
+    Note that the above creates a closure over `r`, which is not `const`. As a result this would incur a small performance and allocation cost when evaluating `hE(E=...)`. We can avoid it e.g. by defining `r` as a constant, `const r = sites(w)`.
