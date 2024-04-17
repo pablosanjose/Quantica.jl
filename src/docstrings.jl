@@ -375,9 +375,9 @@ translate
 If all `lats` have compatible Bravais vectors, combine them into a single lattice.
 If necessary, sublattice names are renamed to remain unique.
 
-    combine(hams::AbstractHamiltonians...; coupling = TighbindingModel())
+    combine(hams::Hamiltonians...; coupling = TighbindingModel())
 
-Combine a collection `hams` of hamiltonians into one by combining their corresponding
+Combine a collection `hams` of Hamiltonians into one by combining their corresponding
 lattices, and optionally by adding a coupling between them, given by the hopping terms in
 `coupling`.
 

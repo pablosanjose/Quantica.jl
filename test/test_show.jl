@@ -44,4 +44,6 @@
     @test nothing === show(stdout, densitymatrix(g[1]))
     g = greenfunction(supercell(h) |> attach(@onsite(ω -> im*I)) |> attach(nothing), GS.Spectrum())
     @test nothing === show(stdout, densitymatrix(g[1]))
+    b = LP.honeycomb() |> Quantica.builder(orbitals = 2)
+    @test nothing === show(stdout, b)
 end
