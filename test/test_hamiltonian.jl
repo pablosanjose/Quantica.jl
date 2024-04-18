@@ -361,7 +361,7 @@ end
     @test iszero(R[cellsites(SA[0,0],1), cellsites(SA[1000,0],1)])
 
     # Wannier90 coupling to dipole moments
-    w = EP.wannier90("wannier_test2_tb.dat"; dim = 2, htol = 1e-4, rtol = 1e-4)
+    w = EP.wannier90("wannier_test2_tb.dat", onsite(2); dim = 2, htol = 1e-4, rtol = 1e-4) |> @onsite!((o; k = 1) -> o * k)
     h = hamiltonian(w)
     R = position(w)
     hE = h |> @onsite!((o, i; E = SA[0,0]) --> o + E'*R[i,i]) |> @hopping!((t, i, j; E = SA[0,0]) --> t + E'*R[i,j])
