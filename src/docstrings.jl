@@ -246,11 +246,14 @@ sites
 """
     position(b::ExternalPresets.WannierBuilder)
 
-Returns the Wannier position matrix in the form of a `r::BarebonesOperator` object, which
-can be indexed as `r[s, s´]` to obtain matrix elements `⟨s|R|s´⟩` of the position operator
-`R` (a vector). Here `s` and `s´` represent site indices, constructued with `cellsites`. To
-obtain the matrix between cells separated by `dn::SVector{L,Int}`, do `r[dn]`. The latter
-will throw an error if the `dn` harmonic is not present.
+Returns the position operator in the Wannier basis. It is given as a `r::BarebonesOperator`
+object, which can be indexed as `r[s, s´]` to obtain matrix elements `⟨s|R|s´⟩` of the
+position operator `R` (a vector). Here `s` and `s´` represent site indices, constructued
+with `cellsites`. To obtain the matrix between cells separated by `dn::SVector{L,Int}`, do
+`r[dn]`. The latter will throw an error if the `dn` harmonic is not present.
+
+# See also
+    `current`, `sites`
 """
 position
 
@@ -652,7 +655,7 @@ julia> h((0,0))
 ```
 
 # See also
-    `lattice`, `onsite`, `hopping`, `@onsite`, `@hopping`, `@onsite!`, `@hopping!`, `ishermitian`, `wannier90`
+    `lattice`, `onsite`, `hopping`, `@onsite`, `@hopping`, `@onsite!`, `@hopping!`, `ishermitian`
 """
 hamiltonian
 

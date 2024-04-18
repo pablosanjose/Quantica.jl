@@ -12,19 +12,19 @@ using Quantica
 
 using Quantica: IJVBuilder, IJVHarmonic, IJV, AbstractHamiltonianBuilder, AbstractModel,
     BarebonesOperator, Modifier, push_ijvharmonics!, postype, tupleflatten, dcell, ncells,
-    collector, builder, modifiers, harmonics
+    collector, builder, modifiers, harmonics, sanitize_Val, add!
 
-struct WannierBuilder{T,L} <: AbstractHamiltonianBuilder{T,L,L,Complex{T}}
-    hbuilder::IJVBuilder{T,L,L,Complex{T},Vector{Any}}
-    rharmonics::Vector{IJVHarmonic{L,SVector{L,Complex{T}}}}
+struct WannierBuilder{T,E,L} <: AbstractHamiltonianBuilder{T,L,L,Complex{T}}
+    hbuilder::IJVBuilder{T,E,L,Complex{T},Vector{Any}}
+    rharmonics::Vector{IJVHarmonic{L,SVector{E,Complex{T}}}}
 end
 
-struct Wannier90Data{T,L}
-    brvecs::NTuple{L,SVector{L,T}}
+struct Wannier90Data{T,E,L}
+    brvecs::NTuple{L,SVector{E,T}}
     norbs::Int
     ncells::Int
     h::Vector{IJVHarmonic{L,Complex{T}}}             # must be dn-sorted, with (0,0,0) first
-    r::Vector{IJVHarmonic{L,SVector{L,Complex{T}}}}  # must be dn-sorted, with (0,0,0) first
+    r::Vector{IJVHarmonic{L,SVector{E,Complex{T}}}}  # must be dn-sorted, with (0,0,0) first
 end
 
 #region ## Constructors ##
@@ -78,17 +78,17 @@ nelements(b::WannierBuilder) = sum(length, harmonics(b))
 
 #region ## Wannier90Data ##
 
-load_wannier90(filename; type = Float64, dim = 3, kw...) =
-    load_wannier90(filename, postype(dim, type); kw...)
+load_wannier90(filename; type = Float64, dim = Val(3), latdim = dim, kw...) =
+    load_wannier90(filename, sanitize_Val(latdim), postype(dim, type); kw...)
 
-function load_wannier90(filename, ::Type{SVector{L,T}}; htol = 1e-8, rtol = 1e-8) where {L,T}
+function load_wannier90(filename, ::Val{L}, ::Type{SVector{E,T}}; htol = 1e-8, rtol = 1e-8) where {L,E,T}
     L > 3 && argerror("dim = $L should be dim <= 3")
     data = open(filename, "r") do f
         # skip header
         readline(f)
         # read three Bravais 3D-vectors, keep L Bravais LD-vectors
         brvecs3 = ntuple(_ -> SVector{3,T}(readline_realtypes(f, SVector{3,T})), Val(3))
-        brvecs  = ntuple(i -> brvecs3[i][SVector{L,Int}(1:L)], Val(L))
+        brvecs  = ntuple(i -> brvecs3[i][SVector{E,Int}(1:E)], Val(L))
         # read number of orbitals
         norbs = readline_realtypes(f, Int)
         # read number of cells
@@ -100,7 +100,7 @@ function load_wannier90(filename, ::Type{SVector{L,T}}; htol = 1e-8, rtol = 1e-8
         # read Hamiltonian
         h = load_harmonics(f, Val(L), Complex{T}, norbs, ncells, htol)
         # read positions
-        r = load_harmonics(f, Val(L), SVector{L,Complex{T}}, norbs, ncells, rtol)
+        r = load_harmonics(f, Val(L), SVector{E,Complex{T}}, norbs, ncells, rtol)
         return Wannier90Data(brvecs, norbs, ncells, h, r)
     end
     return data
@@ -117,8 +117,8 @@ function load_harmonics(f, ::Val{L}, ::Type{B}, norbs, ncells, atol) where {L,B}
         # if skip, read but not write harmonic (since it is along a non-projected axes)
         skip = L < 3 && !iszero(dn3D[SVector{3-L,Int}(L+1:3)])
         for j in 1:norbs, i in 1:norbs
+            skip && (readline(f); continue)
             i´, j´, reims... = readline_realtypes(f, Int, Int, B)
-            skip && continue
             i´ == i && j´ == j ||
                 argerror("load_wannier90: unexpected entry in file at element $((dn, i, j))")
             v = build_complex(reims, B)
@@ -143,7 +143,7 @@ readline_realtypes(f, type::Type{<:Real}) = parse(type, readline(f))
 readline_realtypes(f, types::Type...) =
     readline_realtypes(f, tupleflatten(realtype.(types)...)...)
 
-function readline_realtypes(f, realtypes::Vararg{<:Type{<:Real},N}) where {N}
+function readline_realtypes(f, realtypes::Vararg{Type{<:Real},N}) where {N}
     tokens = split(readline(f))
     # realtypes could be less than originally read tokens if we have reduced dimensionality
     reals = ntuple(i -> parse(realtypes[i], tokens[i]), Val(N))
@@ -165,9 +165,9 @@ push_if_nonzero!(ijv::IJV{<:Number}, (i, j, v), dn, htol) =
 push_if_nonzero!(ijv::IJV{<:SVector}, (i, j, v), dn, rtol) =
     (i == j && iszero(dn) || any(>(rtol), abs.(v))) && push!(ijv, (i, j, v))
 
-function Quantica.lattice(data::Wannier90Data{T,L}) where {T,L}
+function Quantica.lattice(data::Wannier90Data{T,E}) where {T,E}
     bravais = hcat(data.brvecs...)
-    rs = SVector{L,T}[]
+    rs = SVector{E,T}[]
     ijv = collector(first(data.r))
     for (i, j, r) in zip(ijv.i, ijv.j, ijv.v)
         i == j && push!(rs, real(r))
@@ -187,8 +187,8 @@ $i  elements   : $(nelements(b))
 $i  modifiers  : $(length(modifiers(b)))")
 end
 
-Base.summary(::WannierBuilder{T,L}) where {T,L} =
-    "WannierBuilder{$T,$L} : $(L)-dimensional Hamiltonian builder from Wannier90 input of type $T"
+Base.summary(::WannierBuilder{T,E,L}) where {T,E,L} =
+    "WannierBuilder{$T,$E,$L} : $(L)D Hamiltonian builder from Wannier90 input with positions of type $T in $(E)D space"
 
 #endregion
 
