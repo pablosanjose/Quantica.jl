@@ -99,7 +99,7 @@ A common way to obtain quantitative tight-binding models of materials is to *Wan
 
 Quantica.jl includes a function that can import Wannier90 tight-binding files. By default these files are 3D systems
 ```
-julia> w = wannier90("wannier_tb.dat")
+julia> w = ExternalPresets.wannier90("wannier_tb.dat")
 WannierBuilder{Float64,3} : 3-dimensional Hamiltonian builder of type Float64 from Wannier90 input
   cells      : 755
   elements   : 36388
@@ -107,7 +107,7 @@ WannierBuilder{Float64,3} : 3-dimensional Hamiltonian builder of type Float64 fr
 ```
 In this case, however, the model in the "wannier_tb.dat" file is a 2D MoS2 crystal. We can project out all out-of-plane matrix elements by specifying the dimension with `dim`. We can also drop any Hamiltonian matrix element smaller than, say `htol = 1e-5`, and any position matrix element of norm smaller than `rtol = 1e-4`. This greatly simplifies the problem
 ```
-julia> w = wannier90("wannier_tb.dat"; dim = 2, htol = 1e-5, rtol = 1e-4)
+julia> w = ExternalPresets.wannier90("wannier_tb.dat"; dim = 2, htol = 1e-5, rtol = 1e-4)
 WannierBuilder{Float64,2} : 2-dimensional Hamiltonian builder of type Float64 from Wannier90 input
   cells      : 151
   elements   : 7510
@@ -155,7 +155,7 @@ julia> r[cellsites(SA[0,0], 1), cellsites(SA[0,0], 4)]
 
 It is possible to modify the imported Wannier90 models using the full Quantica.jl machinery. For example, we can add any `AbstractModel` to the Wannier90 model upon import just by passing it as a second argument
 ```
-julia> w = wannier90("wannier_tb.dat", @onsite((; Δ = 0) -> Δ); dim = 2)
+julia> w = EP.wannier90("wannier_tb.dat", @onsite((; Δ = 0) -> Δ); dim = 2)
 WannierBuilder{Float64,2} : 2-dimensional Hamiltonian builder of type Float64 from Wannier90 input
   cells      : 151
   elements   : 7560
@@ -175,7 +175,7 @@ ParametricHamiltonian{Float64,2,2}: Parametric Hamiltonian on a 2D Lattice in 2D
 Note that since we used a `ParametricModel` with a single parametric term, this introduced one `modifier`, since ParametricModels are simply an ordinary base model plus one modifier for each parametric term. As a result, `h` is now parametric.
 
 !!! note "Adding models after import"
-    Although the above is the recommended way to add a Quantica model to a Wannier90 model (i.e. explicitly at import time), one can also do the same with `Quantica.add!(Quantica.hbuilder(w), model)` to modify `w` in place after its creation. This employs internal functionality, so it is not recommended, as it could change without warning.
+    Although the above is the recommended way to add a Quantica model to a Wannier90 model (i.e. explicitly at import time), one can also do the same with `Quantica.add!(EP.hbuilder(w), model)` to modify `w` in place after its creation. This employs internal functionality, so it is not recommended, as it could change without warning.
 
 We can also use the following syntax apply one or more modifiers explicitly
 ```

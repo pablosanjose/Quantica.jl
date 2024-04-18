@@ -6,10 +6,11 @@ sanitize_Vector_of_Symbols(name::Symbol) = [name]
 sanitize_Vector_of_Symbols(names) = Symbol[convert(Symbol, name) for name in names]
 
 sanitize_orbitals(o::Val) = o
-
 sanitize_orbitals(o::Int) = Val(o)
-
 sanitize_orbitals(o) = allequal(o) ? Val(first(o)) : o
+
+sanitize_Val(o::Val) = o
+sanitize_Val(o) = Val(o)
 
 #endregion
 

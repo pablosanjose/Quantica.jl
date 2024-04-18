@@ -510,23 +510,6 @@ end
 #endregion
 
 ############################################################################################
-# WannierBuilder
-#region
-
-function Base.show(io::IO, b::WannierBuilder)
-    i = get(io, :indent, "")
-    print(io, i, summary(b), "\n",
-"$i  cells      : $(ncells(b))
-$i  elements   : $(sum(length, harmonics(hbuilder(b))))
-$i  modifiers  : $(length(modifiers(b)))")
-end
-
-Base.summary(::WannierBuilder{T,L}) where {T,L} =
-    "WannierBuilder{$T,$L} : $(L)-dimensional Hamiltonian builder of type $T from Wannier90 input"
-
-#endregion
-
-############################################################################################
 # IJVBuilder
 #region
 
