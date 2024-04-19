@@ -93,7 +93,7 @@ Lattice{Float16,2,2} : 2D lattice in 2D space
 ```
 
 !!! tip "Quantica's Presets library"
-    Quantica comes with four submodules that provide different kinds of presets: `LatticePresets` (`LP`), `HamiltonianPresets` (`HP`), `RegionPresets` (`RP`) and `ExternalPresets` (`EP`).`LP` provides a collection of standard lattices, `HP` some premade model Hamiltonians such as `HP.graphene` or `HP.twisted_bilayer_graphene`, `RP` some geometric regions such as `RP.circle` or `RP.cuboid`, and `EP` some importers of externally produced objects such as `EP.wannier90` to import Wannier90 files (see `Advanced` for details on the latter). This library of presets is expected to grow with time. The docstring for the submodule or the preset function can be queried for a description of the available options.
+    Quantica comes with four submodules that provide different kinds of presets: `LatticePresets` (`LP`), `HamiltonianPresets` (`HP`), `RegionPresets` (`RP`) and `ExternalPresets` (`EP`). `LP` provides a collection of standard lattices, `HP` some premade model Hamiltonians such as `HP.graphene` or `HP.twisted_bilayer_graphene`, `RP` some geometric regions such as `RP.circle` or `RP.cuboid`, and `EP` some importers of externally produced objects such as `EP.wannier90` to import Wannier90 files (see `Advanced` for details on the latter). This library of presets is expected to grow with time. The docstring for the submodule or the preset function can be queried for a description of the available options.
 
 ## Visualization
 
