@@ -109,8 +109,8 @@ supported importers are
 
     EP.wannier90(args...; kw...)
 
-For details on the arguments `args...` and keyword arguments `kw` see the corresponding
-docstring.
+For details on the arguments `args` and keyword arguments `kw` see the docstring for the
+corresponding function.
 
 # See also
     `LatticePresets`, `RegionPresets`, `HamiltonianPresets`
