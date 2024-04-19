@@ -33,14 +33,14 @@ Lattice{Float64,3,2} : 2D lattice in 3D space
 ```
 
 # See also
-    `RegionPresets`, `HamiltonianPresets`
+    `RegionPresets`, `HamiltonianPresets`, `ExternalPresets`
 """
 LatticePresets
 
 """
 `HamiltonianPresets` is a Quantica submodule containing several pre-defined Hamiltonians.
-The alias `HP` can be used in place of `LatticePresets`. Currently supported hamiltonians
-are
+The alias `HP` can be used in place of `HamiltonianPresets`. Currently supported
+hamiltonians are
 
     HP.graphene(; kw...)
     HP.twisted_bilayer_graphene(; kw...)
@@ -60,7 +60,7 @@ Hamiltonian{Float64,3,2}: Hamiltonian on a 2D Lattice in 3D space
 ```
 
 # See also
-    `LatticePresets`, `RegionPresets`
+    `LatticePresets`, `RegionPresets`, `ExternalPresets`
 
 """
 HamiltonianPresets
@@ -98,9 +98,25 @@ true
 ```
 
 # See also
-    `LatticePresets`, `HamiltonianPresets`
+    `LatticePresets`, `HamiltonianPresets`, `ExternalPresets`
 """
 RegionPresets
+
+"""
+`ExternalPresets` is a Quantica submodule containing utilities to import objects from
+external applications The alias `EP` can be used in place of `ExternalPresets`. Currently
+supported importers are
+
+    EP.wannier90(args...; kw...)
+
+For details on the arguments `args` and keyword arguments `kw` see the docstring for the
+corresponding function.
+
+# See also
+    `LatticePresets`, `RegionPresets`, `HamiltonianPresets`
+
+"""
+ExternalPresets
 
 """
     sublat(sites...; name::Symbol = :A)
@@ -223,9 +239,23 @@ julia> sites(LatticePresets.honeycomb(), :A)
 ```
 
 # See also
-    `lattice`, `siteselector`
+    `lattice`, `siteselector`, `cellsites`
 """
 sites
+
+"""
+    position(b::ExternalPresets.WannierBuilder)
+
+Returns the position operator in the Wannier basis. It is given as a `r::BarebonesOperator`
+object, which can be indexed as `r[s, s´]` to obtain matrix elements `⟨s|R|s´⟩` of the
+position operator `R` (a vector). Here `s` and `s´` represent site indices, constructued
+with `cellsites`. To obtain the matrix between cells separated by `dn::SVector{L,Int}`, do
+`r[dn]`. The latter will throw an error if the `dn` harmonic is not present.
+
+# See also
+    `current`, `sites`
+"""
+position
 
 """
     supercell(lat::Lattice{E,L}, v::NTuple{L,Integer}...; seed = missing, kw...)

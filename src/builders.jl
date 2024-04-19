@@ -24,11 +24,13 @@ Base.push!(ijv::IJV, (i, j, v)) =
 Base.append!(ijv::IJV, (is, js, vs)) =
     (append!(ijv.i, is); append!(ijv.j, js); append!(ijv.v, vs))
 
-Base.isempty(h::IJV) = length(h.i) == 0
+Base.isempty(s::IJV) = length(s) == 0
 
-Base.length(h::IJV) = length(h.v)
+Base.length(s::IJV) = length(s.v)
 
+# cannot combine these two due to ambiguity with sparse(I, J, v::Number)
 SparseArrays.sparse(c::IJV, m::Integer, n::Integer) = sparse(c.i, c.j, c.v, m, n)
+SparseArrays.sparse(c::IJV) = sparse(c.i, c.j, c.v)
 
 #endregion
 
@@ -126,12 +128,14 @@ function SparseArrays.sparse(s::CSC, m::Integer, n::Integer)
     return SparseMatrixCSC(m, n, s.colptr, s.rowval, s.nzval)
 end
 
-Base.isempty(s::CSC) = length(s.nzval) == 0
+Base.isempty(s::CSC) = length(s) == 0
+
+Base.length(s::CSC) = length(s.nzval)
 
 #endregion
 
 ############################################################################################
-# Harmonic and Hamiltonian builders
+# IJVBuilder and CSCBuilder <: AbstractHamiltonianBuilder
 #region
 
 abstract type AbstractHarmonicBuilder{L,B} end
@@ -200,6 +204,7 @@ end
 (::Type{IJVBuilderWithModifiers})(lat, orbitals) = IJVBuilder(lat, orbitals, Any[])
 
 push_ijvharmonics!(builder, ::OrbitalBlockStructure) = builder
+push_ijvharmonics!(builder, hars::Vector{<:IJVHarmonic}) = copy!(builder.harmonics, hars)
 push_ijvharmonics!(builder) = builder
 
 function push_ijvharmonics!(builder::IJVBuilder, hs::AbstractHamiltonian...)
@@ -239,6 +244,10 @@ modifiers(b::IJVBuilderWithModifiers) = b.modifiers
 finalizecolumn!(b::CSCBuilder, x...) =
     foreach(har -> finalizecolumn!(collector(har), x...), b.harmonics)
 
+nsites(b::AbstractHamiltonianBuilder) = nsites(lattice(b))
+
+ncells(b::AbstractHamiltonianBuilder) = length(harmonics(b))
+
 Base.isempty(h::IJVHarmonic) = isempty(collector(h))
 Base.isempty(s::CSCHarmonic) = isempty(collector(s))
 
@@ -249,6 +258,8 @@ blockstructure(b::AbstractHamiltonianBuilder) = b.blockstruct
 blocktype(::AbstractHamiltonianBuilder{<:Any,<:Any,<:Any,B}) where {B} = B
 
 harmonics(b::AbstractHamiltonianBuilder) = b.harmonics
+
+Base.length(b::AbstractHarmonicBuilder) = length(collector(b))
 
 Base.push!(b::IJVBuilderWithModifiers, ms::Modifier...) = push!(b.modifiers, ms...)
 
@@ -271,14 +282,19 @@ end
 function SparseArrays.sparse(builder::AbstractHamiltonianBuilder{T,<:Any,L,B}) where {T,L,B}
     HT = Harmonic{T,L,B}
     b = blockstructure(builder)
-    n = nsites(lattice(builder))
+    n = nsites(builder)
     hars = HT[sparse(b, har, n, n) for har in harmonics(builder) if !isempty(har)]
     return hars
 end
 
 function SparseArrays.sparse(b::OrbitalBlockStructure{B}, har::AbstractHarmonicBuilder{L,B}, m::Integer, n::Integer) where {L,B}
-    s = sparse(collector(har), m, n)
+    s = sparse(har, m, n)
     return Harmonic(dcell(har), HybridSparseMatrix(b, s))
 end
+
+# cannot combine these two due to ambiguity with sparse(I, J, v::Number)
+SparseArrays.sparse(har::AbstractHarmonicBuilder, n::Integer, m::Integer) =
+    sparse(collector(har), m, n)
+SparseArrays.sparse(har::AbstractHarmonicBuilder) = sparse(collector(har))
 
 #endregion

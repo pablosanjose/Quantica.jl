@@ -1,4 +1,4 @@
-using Quantica: Hamiltonian, ParametricHamiltonian,
+using Quantica: Hamiltonian, ParametricHamiltonian, BarebonesOperator,
       sites, nsites, nonsites, nhoppings, coordination, flat, hybrid, transform!, nnz, nonzeros
 
 @testset "basic hamiltonians" begin
@@ -349,6 +349,24 @@ end
     @test iszero(h0())
 end
 
+@testset "ExternalPresets.wannier90" begin
+    # wannier import
+    w = EP.wannier90("wannier_test_tb.dat", htol = 1e-4, rtol = 1e-4, dim = 2, type = Float32);
+    h = hamiltonian(w)
+    @test h isa Hamiltonian{Float32,2,2,ComplexF32}
+    R = position(w)
+    @test R isa BarebonesOperator{2,SVector{2,ComplexF32}}
+    @test R[cellsites(SA[0,0],1)] isa SVector{2,ComplexF32}
+    @test_throws Quantica.Dictionaries.IndexError R[SA[1000,0]]
+    @test iszero(R[cellsites(SA[0,0],1), cellsites(SA[1000,0],1)])
+
+    # Wannier90 coupling to dipole moments
+    w = EP.wannier90("wannier_test2_tb.dat", onsite(2); dim = 2, htol = 1e-4, rtol = 1e-4) |> @onsite!((o; k = 1) -> o * k)
+    h = hamiltonian(w)
+    R = position(w)
+    hE = h |> @onsite!((o, i; E = SA[0,0]) --> o + E'*R[i,i]) |> @hopping!((t, i, j; E = SA[0,0]) --> t + E'*R[i,j])
+    @test hE() isa Hamiltonian{Float64,2,2}
+end
 
 @testset "hamiltonian nrange" begin
     lat = LatticePresets.honeycomb(a0 = 2)

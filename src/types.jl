@@ -162,6 +162,7 @@ latdim(::Lattice{<:Any,<:Any,L}) where {L} = L
 numbertype(::Sublat{T}) where {T} = T
 numbertype(::Lattice{T}) where {T} = T
 
+zerocell(::Bravais{<:Any,<:Any,L}) where {L} = zero(SVector{L,Int})
 zerocell(::Lattice{<:Any,<:Any,L}) where {L} = zero(SVector{L,Int})
 zerocellsites(l::Lattice, i) = cellsites(zerocell(l), i)
 
@@ -461,7 +462,7 @@ unsafe_replace_lattice(l::LatticeSlice{T,E,L,C}, lat::Lattice{T,E´,L}) where {T
 
 lattice(ls::LatticeSlice) = ls.lat
 
-siteindices(s::CellSites) = s.inds
+siteindices(s::AnyCellSites) = s.inds
 siteindices(s::CellOrbitalsGrouped) = keys(s.type.groups)
 orbindices(s::AnyCellOrbitals) = s.inds
 siteindex(s::AnyCellSite) = s.inds
@@ -503,10 +504,9 @@ findsubcell(cell::SVector, l::LatticeSlice) = findsubcell(cell, cellsdict(l))
 
 boundingbox(l::LatticeSlice) = boundingbox(keys(cellsdict(l)))
 
-# interface for non-spatial models
+# interface for non-spatial models (cell already defined for CellIndices)
 pos(s::CellSitePos) = s.type.r
 ind(s::CellSitePos) = s.inds
-cell(s::CellSitePos) = s.cell
 
 # iterators
 
@@ -2195,21 +2195,73 @@ Base.:(==)(g::GreenSlice, g´::GreenSlice) = function_not_defined("==")
 ############################################################################################
 # Operator - Hamiltonian-like operator representing observables other than a Hamiltonian
 #   It works as a wrapper of an AbstractHamiltonian, see observables.jl for constructors
+# VectorOperator - like the above for a collection of AbstractHamiltonians
+# BarebonesOperator - same thing but with arbitrary element type and no support for call!
 #region
 
 struct Operator{H<:AbstractHamiltonian}
     h::H
 end
 
+struct BarebonesHarmonic{L,B}
+    dn::SVector{L,Int}
+    mat::SparseMatrixCSC{B,Int}
+end
+
+struct BarebonesOperator{L,B}
+    harmonics::Dictionary{SVector{L,Int},BarebonesHarmonic{L,B}}
+end
+
+#region ## Constructors ##
+
+BarebonesOperator(harmonics::Vector) =
+    BarebonesOperator(index(dcell, BarebonesHarmonic.(harmonics)))
+
+BarebonesHarmonic(har) = BarebonesHarmonic(dcell(har), sparse(har))
+
+#endregion
+
 #region ## API ##
 
 hamiltonian(o::Operator) = o.h
 
-(c::Operator)(φ...; kw...) = c.h(φ...; kw...)
+harmonics(o::BarebonesOperator) = o.harmonics
 
-call!(c::Operator, φ...; kw...) = call!(c.h, φ...; kw...)
+matrix(h::BarebonesHarmonic) = h.mat
 
-Base.getindex(c::Operator, i...) = getindex(c.h, i...)
+dcell(h::BarebonesHarmonic) = h.dn
+
+(o::Operator)(φ...; kw...) = o.h(φ...; kw...)
+
+call!(o::Operator, φ...; kw...) = call!(o.h, φ...; kw...)
+
+Base.getindex(o::Operator, i...) = getindex(o.h, i...)
+
+Base.eltype(::BarebonesOperator{<:Any,B}) where {B} = B
+
+Base.size(o::BarebonesOperator, is...) = size(matrix(first(harmonics(o))), is...)
+
+Base.getindex(o::BarebonesOperator{L}, dn) where {L} =
+    getindex(o, sanitize_SVector(SVector{L,Int}, dn))
+
+Base.getindex(o::BarebonesOperator{L}, dn::SVector{L,Int}) where {L} =
+    matrix(harmonics(o)[dn])
+
+# Unlike o[dn][i, j], o[si::AnyCellSites, sj::AnyCellSites] returns a zero if !haskey(dn)
+function Base.getindex(o::BarebonesOperator, i::AnyCellSites, j::AnyCellSites = i)
+    dn = cell(j) - cell(i)
+    si, sj = siteindices(i), siteindices(j)
+    if haskey(harmonics(o), dn)
+        x = o[dn][si, sj]
+    else
+        checkbounds(Bool, matrix(first(harmonics(o))), si, sj)
+        x = zero(eltype(o))
+    end
+    return x
+end
+
+
+SparseArrays.nnz(h::BarebonesOperator) = sum(har -> nnz(matrix(har)), harmonics(h))
 
 #endregion
 

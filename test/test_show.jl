@@ -46,4 +46,7 @@
     @test nothing === show(stdout, densitymatrix(g[1]))
     b = LP.honeycomb() |> Quantica.builder(orbitals = 2)
     @test nothing === show(stdout, b)
+    w = EP.wannier90("wannier_test_tb.dat");
+    @test nothing === show(stdout, w)
+    @test nothing === show(stdout, position(w))
 end

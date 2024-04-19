@@ -20,9 +20,11 @@ using FrankenTuples
 using Statistics: mean
 using QuadGK
 using SpecialFunctions
+using DelimitedFiles
 
 export sublat, bravais_matrix, lattice, sites, supercell, hamiltonian,
        hopping, onsite, @onsite, @hopping, @onsite!, @hopping!, pos, ind, cell,
+       position,
        plusadjoint, neighbors, siteselector, hopselector, diagonal,
        unflat, torus, transform, translate, combine,
        spectrum, energies, states, bands, subdiv,
@@ -31,7 +33,7 @@ export sublat, bravais_matrix, lattice, sites, supercell, hamiltonian,
        conductance, josephson, ldos, current, transmission, densitymatrix,
        OrbitalSliceArray, OrbitalSliceVector, OrbitalSliceMatrix, orbaxes
 
-export LatticePresets, LP, RegionPresets, RP, HamiltonianPresets, HP
+export LatticePresets, LP, RegionPresets, RP, HamiltonianPresets, HP, ExternalPresets, EP
 export EigenSolvers, ES, GreenSolvers, GS
 export @SMatrix, @SVector, SMatrix, SVector, SA
 export ishermitian, tr, I, norm, dot, diag, det
@@ -75,6 +77,8 @@ include("solvers/selfenergy.jl")
 include("presets/regions.jl")
 include("presets/lattices.jl")
 include("presets/hamiltonians.jl")
+include("presets/external.jl")
+include("presets/docstrings.jl")
 
 # include("precompile.jl")
 
