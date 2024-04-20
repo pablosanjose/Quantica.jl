@@ -25,9 +25,9 @@ end
 
 struct SchurFactorsSolver{T,B}
     shift::T                                          # called Ω in the scattering.pdf notes
-    hm::HybridSparseMatrix{T,B}
-    h0::HybridSparseMatrix{T,B}
-    hp::HybridSparseMatrix{T,B}
+    hm::HybridSparseMatrix{T,B}                       # aliases parent hamiltonian
+    h0::HybridSparseMatrix{T,B}                       # aliases parent hamiltonian
+    hp::HybridSparseMatrix{T,B}                       # aliases parent hamiltonian
     l_leq_r::Bool                                     # whether l <= r (left and right surface dims)
     iG::SparseMatrixCSC{Complex{T},Int}               # to store iG = ω - h0 - Σₐᵤₓ
     ptrs::Tuple{Vector{Int},Vector{Int},Vector{Int}}  # iG ptrs for h0 nzvals, diagonal and Σₐᵤₓ surface
@@ -82,7 +82,6 @@ function nearest_cell_harmonics(h)
     end
     is_nearest ||
         argerror("Too many or too few harmonics. Perhaps try `supercell` to ensure strictly nearest-cell harmonics.")
-
     hm, h0, hp = h[hybrid(-1)], h[hybrid(0)], h[hybrid(1)]
     flat(hm) == flat(hp)' ||
         argerror("The Hamiltonian should have h[1] == h[-1]' to use the Schur solver")
@@ -208,10 +207,13 @@ end
 checkmodes(whichmodes) = sum(whichmodes) == length(whichmodes) ÷ 2 ||
     argerror("Cannot differentiate retarded from advanced modes. Consider increasing imag(ω) or check that your Hamiltonian is Hermitian")
 
-minimal_callsafe_copy(s::SchurFactorsSolver) =
-    SchurFactorsSolver(s.shift, copy(s.hm), copy(s.h0), copy(s.hp), s.l_leq_r, copy(s.iG),
-    s.ptrs, s.linds, s.rinds, s.sinds, copy(s.L), copy(s.R), copy(s.R´L´),
-    minimal_callsafe_copy(s.tmp))
+function minimal_callsafe_copy(s::SchurFactorsSolver, parentham)
+    hm´, h0´, hp´ = nearest_cell_harmonics(parentham)
+    s´ = SchurFactorsSolver(s.shift, hm´, h0´, hp´, s.l_leq_r, copy(s.iG),
+        s.ptrs, s.linds, s.rinds, s.sinds, copy(s.L), copy(s.R), copy(s.R´L´),
+        minimal_callsafe_copy(s.tmp))
+    return s´
+end
 
 minimal_callsafe_copy(s::SchurWorkspace) =
     SchurWorkspace(copy.((s.GL, s.GR, s.LG, s.RG, s.A, s.B, s.Z11, s.Z21, s.Z11´, s.Z21´,
@@ -290,13 +292,13 @@ end
 # AppliedSchurGreenSolver
 #region
 
-# We delay initialization of some fields until they are first needed (which may be never)
+# Mutable: we delay initialization of some fields until they are first needed (which may be never)
 mutable struct AppliedSchurGreenSolver{T,B,O,O∞,G,G∞} <: AppliedGreenSolver
     fsolver::SchurFactorsSolver{T,B}
     boundary::T
-    ohL::O                  # OpenHamiltonian for unitcell with ΣL
-    ohR::O                  # OpenHamiltonian for unitcell with ΣR
-    oh∞::O∞                 # OpenHamiltonian for unitcell with ΣL + ΣR
+    ohL::O                  # OpenHamiltonian for unitcell with ΣL      (aliases parent h)
+    ohR::O                  # OpenHamiltonian for unitcell with ΣR      (aliases parent h)
+    oh∞::O∞                 # OpenHamiltonian for unitcell with ΣL + ΣR (aliases parent h)
     gL::G                   # Lazy field: GreenFunction for ohL
     gR::G                   # Lazy field: GreenFunction for ohR
     g∞::G∞                  # Lazy field: GreenFunction for oh∞
@@ -327,8 +329,8 @@ boundaries(s::AppliedSchurGreenSolver) = (1 => s.boundary,)
 function Base.getproperty(s::AppliedSchurGreenSolver, f::Symbol)
     if !isdefined(s, f)
         if f == :gL
-            s.gL = greenfunction(s.ohL, GS.SparseLU())
-        elseif f == :gR
+            s.gL = greenfunction(s.ohL, GS.SparseLU())  # oh's harmonics alias parent h, but
+        elseif f == :gR                                 # not used here until called with ω
             s.gR = greenfunction(s.ohR, GS.SparseLU())
         elseif f == :g∞
             s.g∞ = greenfunction(s.oh∞, GS.SparseLU())
@@ -346,8 +348,14 @@ end
 function apply(s::GS.Schur, h::AbstractHamiltonian1D{T}, contacts::Contacts) where {T}
     h´ = hamiltonian(h)
     fsolver = SchurFactorsSolver(h´, s.shift)
-    h0 = unitcell_hamiltonian(h)
     boundary = T(round(only(s.boundary)))
+    ohL, ohR, oh∞, G, G∞ = schur_openhams_types(fsolver, h, boundary)
+    solver = AppliedSchurGreenSolver{G,G∞}(fsolver, boundary, ohL, ohR, oh∞)
+    return solver
+end
+
+function schur_openhams_types(fsolver, h, boundary)
+    h0 = unitcell_hamiltonian(h)   # h0 is non-parametric, but will alias h.h first harmonic
     rsites = stored_cols(hamiltonian(h)[unflat(1)])
     lsites = stored_cols(hamiltonian(h)[unflat(-1)])
     orbslice_l = sites_to_orbs(lattice(h0)[cellsites((), lsites)], h)
@@ -356,20 +364,21 @@ function apply(s::GS.Schur, h::AbstractHamiltonian1D{T}, contacts::Contacts) whe
     ΣL_solver = SelfEnergySchurSolver(fsolver, h, :L, boundary)
     ΣL = SelfEnergy(ΣL_solver, orbslice_l)
     ΣR = SelfEnergy(ΣR_solver, orbslice_r)
-
+    # ohL, ohR, oh∞ have no parameters, but will be updated by call!(h; params...)
     ohL = attach(h0, ΣL)
     ohR = attach(h0, ΣR)
     oh∞ = ohR |> attach(ΣL)
     G, G∞ = green_type(h0, ΣL), green_type(h0, ΣL, ΣR)
-    solver = AppliedSchurGreenSolver{G,G∞}(fsolver, boundary, ohL, ohR, oh∞)
-    return solver
+    return ohL, ohR, oh∞, G, G∞
 end
 
 apply(::GS.Schur, h::AbstractHamiltonian, cs::Contacts) =
     argerror("Can only use GreenSolver.Schur with 1D AbstractHamiltonians")
 
+const Contacts0D{T,E,N,S} = Contacts{0,N,S,OrbitalSliceGrouped{T,E,0}}
+
 const GFUnit{T,E,H,N,S} =
-    GreenFunction{T,E,0,AppliedSparseLUGreenSolver{Complex{T}},H,Contacts{0,N,S,OrbitalSliceGrouped{T,E,0}}}
+    GreenFunction{T,E,0,AppliedSparseLUGreenSolver{Complex{T},Contacts0D{T,E,N,S}},H,Contacts0D{T,E,N,S}}
 
 green_type(::H,::S) where {T,E,H<:AbstractHamiltonian{T,E},S} =
     GFUnit{T,E,H,1,Tuple{S}}
@@ -380,14 +389,10 @@ green_type(::H,::S1,::S2) where {T,E,H<:AbstractHamiltonian{T,E},S1,S2} =
 
 #region ## call API ##
 
-function minimal_callsafe_copy(s::AppliedSchurGreenSolver{<:Any,<:Any,<:Any,<:Any,G,G∞}) where {G,G∞}
-    s´ = AppliedSchurGreenSolver{G,G∞}(s.fsolver, s.boundary,
-        minimal_callsafe_copy(s.ohL),
-        minimal_callsafe_copy(s.ohR),
-        minimal_callsafe_copy(s.oh∞))
-    isdefined(s, :gR) && (s´.gR = minimal_callsafe_copy(s.gR))
-    isdefined(s, :gL) && (s´.gL = minimal_callsafe_copy(s.gL))
-    isdefined(s, :g∞) && (s´.g∞ = minimal_callsafe_copy(s.g∞))
+function minimal_callsafe_copy(s::AppliedSchurGreenSolver, parentham)
+    fsolver´ = minimal_callsafe_copy(s.fsolver, parentham)
+    ohL´, ohR´, oh∞´, G, G∞ = schur_openhams_types(fsolver´, parentham, s.boundary)
+    s´ = AppliedSchurGreenSolver{G,G∞}(fsolver´, s.boundary, ohL´, ohR´, oh∞´)
     return s´
 end
 
@@ -426,9 +431,9 @@ mutable struct SchurGreenSlicer{C,A<:AppliedSchurGreenSolver}  <: GreenSlicer{C}
     boundary::C
     L::Matrix{C}
     R::Matrix{C}
-    G₋₁₋₁::SparseLUGreenSlicer{C}
-    G₁₁::SparseLUGreenSlicer{C}
-    G∞₀₀::SparseLUGreenSlicer{C}
+    G₋₁₋₁::SparseLUGreenSlicer{C}   # After call!(solver.fsolver, ω), these are independent
+    G₁₁::SparseLUGreenSlicer{C}     # of parent hamiltonian, as they only rely on
+    G∞₀₀::SparseLUGreenSlicer{C}    # call!_output(fsolver), which has been updated
     L´G∞₀₀::Matrix{C}
     R´G∞₀₀::Matrix{C}
     G₁₁L::Matrix{C}
@@ -455,6 +460,11 @@ function Base.getproperty(s::SchurGreenSlicer, f::Symbol)
     if !isdefined(s, f)
         solver = s.solver
         d = size(s.L, 2)
+        # the result of the following call!'s depends on the current value of h0
+        # which aliases the parent h. This is only a problem if `s`` was obtained through
+        # `gs = call!(g, ω; params...)`. In that case, doing call!(g, ω; params´...) before
+        # gs[sites...] will be call!-ing e.g. solver.g∞ with the wrong h0 (the one from
+        # params´...). However, if `gs = g(ω; params...)` a copy was made, so it is safe.
         if f == :G₋₁₋₁
             s.G₋₁₋₁ = slicer(call!(solver.gL, s.ω; skipsolve_internal = true))
         elseif f == :G₁₁
@@ -582,8 +592,8 @@ maybe_SMatrix(G::Matrix, rows::SVector{L}, cols::SVector{L´}) where {L,L´} = S
 maybe_SMatrix(G, rows, cols) = G
 
 # TODO: Perhaps too conservative
-function minimal_callsafe_copy(s::SchurGreenSlicer)
-    s´ = SchurGreenSlicer(s.ω, minimal_callsafe_copy(s.solver))
+function minimal_callsafe_copy(s::SchurGreenSlicer, parentham)
+    s´ = SchurGreenSlicer(s.ω, minimal_callsafe_copy(s.solver, parentham))
     isdefined(s, :G₋₁₋₁)    && (s´.G₋₁₋₁    = minimal_callsafe_copy(s.G₋₁₋₁))
     isdefined(s, :G₁₁)      && (s´.G₁₁      = minimal_callsafe_copy(s.G₁₁))
     isdefined(s, :G∞₀₀)     && (s´.G∞₀₀     = minimal_callsafe_copy(s.G∞₀₀))

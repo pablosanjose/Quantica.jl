@@ -652,7 +652,8 @@ end
 
 #region ## API ##
 
-minimal_callsafe_copy(s::AppliedBandsGreenSolver) = s   # solver is read-only
+# Parent hamiltonian needs to be non-parametric, so no need to alias
+minimal_callsafe_copy(s::AppliedBandsGreenSolver, parentham) = s
 
 needs_omega_shift(s::AppliedBandsGreenSolver) = false
 

@@ -40,7 +40,7 @@ function call!(g::GreenFunction{T}, ω::T; params...) where {T}
 end
 
 function call!(g::GreenFunction{T}, ω::Complex{T}; params...) where {T}
-    h = parent(g)
+    h = parent(g)   # not hamiltonian(h). We want the ParametricHamiltonian if it exists.
     contacts´ = contacts(g)
     call!(h; params...)
     Σblocks = call!(contacts´, ω; params...)
@@ -469,8 +469,8 @@ end
 ensure_mutable_matrix(m::SMatrix) = Matrix(m)
 ensure_mutable_matrix(m::AbstractMatrix) = m
 
-minimal_callsafe_copy(s::TMatrixSlicer) = TMatrixSlicer(minimal_callsafe_copy(s.g0slicer),
-    s.tmatrix, s.gcontacts, s.contactorbs)
+minimal_callsafe_copy(s::TMatrixSlicer, parentham) = TMatrixSlicer(
+    minimal_callsafe_copy(s.g0slicer, parentham), s.tmatrix, s.gcontacts, s.contactorbs)
 
 Base.view(::NothingSlicer, i::Union{Integer,Colon}...) =
     internalerror("view(::NothingSlicer): unreachable reached")

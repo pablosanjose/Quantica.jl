@@ -4,8 +4,9 @@
 #   ization, possibly using inverse-free self-energies (using extended sites).
 #region
 
-struct AppliedSparseLUGreenSolver{C} <: AppliedGreenSolver
+struct AppliedSparseLUGreenSolver{C,CT} <: AppliedGreenSolver
     invgreen::InverseGreenBlockSparse{C}
+    contacts::CT
 end
 
 mutable struct SparseLUGreenSlicer{C} <:GreenSlicer{C}
@@ -39,8 +40,11 @@ unitcellinds_contacts(s::SparseLUGreenSlicer, i::Integer) =
         argerror("Cannot access contact $i, there are $(length(s.unitcinds)) contacts")
 unitcellinds_contacts_merged(s::SparseLUGreenSlicer) = s.unitcindsall
 
-minimal_callsafe_copy(s::AppliedSparseLUGreenSolver) =
-    AppliedSparseLUGreenSolver(minimal_callsafe_copy(s.invgreen))
+function minimal_callsafe_copy(s::AppliedSparseLUGreenSolver, parentham)
+    contacts´ = minimal_callsafe_copy(s.contacts)
+    invgreen´ = inverse_green(parentham, contacts´)
+    return AppliedSparseLUGreenSolver(invgreen´, contacts´)
+end
 
 minimal_callsafe_copy(s::SparseLUGreenSlicer{C}) where {C} =
     SparseLUGreenSlicer{C}(s.fact, s.nonextrng, s.unitcinds, s.unitcindsall, copy(s.source64))
@@ -51,7 +55,7 @@ minimal_callsafe_copy(s::SparseLUGreenSlicer{C}) where {C} =
 
 function apply(::GS.SparseLU, h::AbstractHamiltonian0D, cs::Contacts)
     invgreen = inverse_green(h, cs)
-    return AppliedSparseLUGreenSolver(invgreen)
+    return AppliedSparseLUGreenSolver(invgreen, cs)
 end
 
 apply(::GS.SparseLU, h::AbstractHamiltonian, cs::Contacts) =

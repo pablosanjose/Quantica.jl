@@ -106,9 +106,12 @@ maybe_match_parent((V, ig, V´), leadtoparent) =
 
 maybe_match_parent(factors, ::Missing) = factors
 
-minimal_callsafe_copy(s::SelfEnergySchurSolver) =
-    SelfEnergySchurSolver(minimal_callsafe_copy(s.fsolver), minimal_callsafe_copy(s.hlead),
-        s.isleftside, s.boundary, s.leadtoparent)
+function minimal_callsafe_copy(s::SelfEnergySchurSolver)
+    hlead´ = minimal_callsafe_copy(s.hlead)
+    fsolver´ = minimal_callsafe_copy(s.fsolver, hlead´)
+    s´ = SelfEnergySchurSolver(fsolver´, hlead´, s.isleftside, s.boundary, s.leadtoparent)
+    return s´
+end
 
 function selfenergy_plottables(s::SelfEnergySchurSolver, ls::LatticeSlice)
     p1 = ftuple(s.hlead; selector = siteselector(cells = SA[1]))
@@ -129,7 +132,7 @@ end
 #       sites, but for Extended they need to be padded with zeros over the extended sites
 #region
 
-struct SelfEnergyCouplingSchurSolver{C,G,H,S<:SparseMatrixView,S´<:SparseMatrixView} <: ExtendedSelfEnergySolver
+mutable struct SelfEnergyCouplingSchurSolver{C,G,H,S<:SparseMatrixView,S´<:SparseMatrixView} <: ExtendedSelfEnergySolver
     gunit::G
     hcoupling::H
     V´::S´                              # aliases a view of hcoupling
@@ -223,13 +226,15 @@ end
 
 call!_output(s::SelfEnergyCouplingSchurSolver) = matrix(s.V´), matrix(s.g⁻¹), matrix(s.V)
 
-minimal_callsafe_copy(s::SelfEnergyCouplingSchurSolver) =
-    SelfEnergyCouplingSchurSolver(
-        minimal_callsafe_copy(s.gunit),
-        minimal_callsafe_copy(s.hcoupling),
-        minimal_callsafe_copy(s.V´),
-        minimal_callsafe_copy(s.g⁻¹),
-        minimal_callsafe_copy(s.V))
+function minimal_callsafe_copy(s::SelfEnergyCouplingSchurSolver)
+    hcoupling´ = minimal_callsafe_copy(s.hcoupling)
+    gunit´ = minimal_callsafe_copy(s.gunit)
+    s´ = SelfEnergyCouplingSchurSolver(gunit´, hcoupling´,
+        minimal_callsafe_copy(s.V´, hcoupling´),
+        inverse_green(solver(gunit´)),
+        minimal_callsafe_copy(s.V, hcoupling´))
+    return s´
+end
 
 function selfenergy_plottables(s::SelfEnergyCouplingSchurSolver, ls::LatticeSlice)
     p1 = ftuple(s.hcoupling; hide = :sites)

@@ -417,10 +417,8 @@ Base.getindex(h::AbstractHamiltonian, dn::HybridInds{<:Union{Integer,Tuple}}) =
 Base.getindex(h::AbstractHamiltonian{<:Any,<:Any,L}, ::HybridInds{Tuple{}}) where {L} =
     h[hybrid(zero(SVector{L,Int}))]
 
-function Base.getindex(h::ParametricHamiltonian{<:Any,<:Any,L}, dn::HybridInds{SVector{L,Int}}; params...) where {L}
-    h´ = call!(h; params...)
-    return getindex(h´, dn)
-end
+Base.getindex(h::ParametricHamiltonian{<:Any,<:Any,L}, dn::HybridInds{SVector{L,Int}}) where {L} =
+    getindex(hamiltonian(h), dn)
 
 function Base.getindex(h::Hamiltonian{<:Any,<:Any,L}, dn::HybridInds{SVector{L,Int}}) where {L}
     for har in harmonics(h)

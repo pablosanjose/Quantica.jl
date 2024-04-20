@@ -64,13 +64,16 @@ end
 
 call!_output(s::SelfEnergyGenericSolver) = s.Σ
 
-minimal_callsafe_copy(s::SelfEnergyGenericSolver) =
-    SelfEnergyGenericSolver(
-        minimal_callsafe_copy(s.hcoupling),
-        minimal_callsafe_copy(s.V´),
+function minimal_callsafe_copy(s::SelfEnergyGenericSolver)
+    hcoupling´ = minimal_callsafe_copy(s.hcoupling)
+    s´ = SelfEnergyGenericSolver(
+        hcoupling´,
+        minimal_callsafe_copy(s.V´, hcoupling´),
         minimal_callsafe_copy(s.gslice),
-        minimal_callsafe_copy(s.V),
+        minimal_callsafe_copy(s.V, hcoupling´),
         copy(s.V´g), copy(s.Σ))
+    return s´
+end
 
 function selfenergy_plottables(s::SelfEnergyGenericSolver, ls::LatticeSlice)
     p1 = s.hcoupling
