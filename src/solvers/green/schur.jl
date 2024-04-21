@@ -393,6 +393,9 @@ function minimal_callsafe_copy(s::AppliedSchurGreenSolver, parentham)
     fsolver´ = minimal_callsafe_copy(s.fsolver, parentham)
     ohL´, ohR´, oh∞´, G, G∞ = schur_openhams_types(fsolver´, parentham, s.boundary)
     s´ = AppliedSchurGreenSolver{G,G∞}(fsolver´, s.boundary, ohL´, ohR´, oh∞´)
+    isdefined(s, :gR) && (s´.gR = minimal_callsafe_copy(s.gR, parentham))
+    isdefined(s, :gL) && (s´.gL = minimal_callsafe_copy(s.gL, parentham))
+    isdefined(s, :g∞) && (s´.g∞ = minimal_callsafe_copy(s.g∞, parentham))
     return s´
 end
 
