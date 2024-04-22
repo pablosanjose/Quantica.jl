@@ -1868,6 +1868,8 @@ selfenergies(oh::OpenHamiltonian) = oh.selfenergies
 
 hamiltonian(oh::OpenHamiltonian) = oh.h
 
+default_hamiltonian(oh::OpenHamiltonian) = default_hamiltonian(oh.h)
+
 lattice(oh::OpenHamiltonian) = lattice(oh.h)
 
 zerocell(h::OpenHamiltonian) = zerocell(parent(h))
