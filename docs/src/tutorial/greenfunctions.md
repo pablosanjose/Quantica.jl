@@ -227,7 +227,7 @@ julia> g(0.2)[siteselector(region = RP.circle(1, (0.5, 0))), 3]
 ```
 
 !!! tip "Fixing parameters"
-    Just as we can fix all parameters of a `h::ParametricHamiltonian` with `h´=h(;params...)` (which produces a `h´::Hamiltonian` without any parametric dependencies), we can similarly fix all parameters in a `g::GreenFunction` (or `g::GreenSlice`) with `g(; params...)`, which produces a new `GreenFunction` (or `GreenSlice`). Note that, like in the case of `h`, this fixes *all* parameters. Any parameter that is not specify will be fixed to its default value.
+    In the same way we can fix all parameters of a `h::ParametricHamiltonian` with `h´=h(;params...)` (which produces a `h´::Hamiltonian` without any parametric dependencies), we can similarly fix all parameters in a `g::GreenFunction` (or `g::GreenSlice`) with `g(; params...)`, which produces a new `GreenFunction` (or `GreenSlice`). Note that, like in the case of `h`, this fixes *all* parameters. Any parameter that is not specify will be fixed to its default value.
 
 ### Diagonal slices
 There is a special form of slicing that requests just the diagonal of a given `g[sᵢ] == g[sᵢ,sᵢ]`. It uses the syntax `g[diagonal(sᵢ)]`. Let us see it in action in a multiorbital example in 2D
