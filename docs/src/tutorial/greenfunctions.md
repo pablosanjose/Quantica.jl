@@ -199,6 +199,7 @@ We can also visualize `glead`, which is defined on a 1D lattice with a boundary.
 ## Slicing and evaluation
 
 As explained above, a `g::GreenFunction` represents a Green function of an `OpenHamiltonian` (i.e. `AbstractHamiltonian` with zero or more self-energies), but it does so for any energy `ω` or lattice sites.
+
     - To specify `ω` (plus any parameters `params` in the underlying `AbstractHamiltonian`) we use the syntax `g(ω; params...)`, which yields an `gω::GreenSolution`
     - To specify source (`sⱼ`) and drain (`sᵢ`) sites we use the syntax `g[sᵢ, sⱼ]` or `g[sᵢ] == g[sᵢ,sᵢ]`, which yields a `gs::GreenSlice`. `sᵢ` and `sⱼ` can be `SiteSelectors(; sites...)`, or an integer denoting a specific contact (i.e. sites with an attached self-energy) or `:` denoting all contacts merged together.
     - If we specify both of the above we get the Green function between the orbitals of the specified sites at the specified energy, in the form of an `OrbitalSliceMatrix`, which is a special `AbstractMatrix` that knows about the orbitals in the lattice over which its matrix elements are defined.
@@ -224,6 +225,10 @@ julia> g(0.2)[siteselector(region = RP.circle(1, (0.5, 0))), 3]
  0.0749214+3.15744e-8im   0.124325+5.27948e-8im   0.141366+6.01987e-8im   0.124325+5.27948e-8im  0.0749214+3.15744e-8im
  -0.374862+2.15287e-5im  -0.625946+3.5938e-5im   -0.712983+4.09561e-5im  -0.624747+3.59379e-5im   -0.37348+2.15285e-5im
 ```
+
+!!! tip "Fixing parameters"
+    Just as we can fix all parameters of a `h::ParametricHamiltonian` with `h´=h(;params...)` (which produces a `h´::Hamiltonian` without any parametric dependencies), we can similarly fix all parameters in a `g::GreenFunction` (or `g::GreenSlice`) with `g(; params...)`, which produces a new `GreenFunction` (or `GreenSlice`). Note that, like in the case of `h`, this fixes *all* parameters. Any parameter that is not specify will be fixed to its default value.
+
 
 ### Diagonal slices
 There is a special form of slicing that requests just the diagonal of a given `g[sᵢ] == g[sᵢ,sᵢ]`. It uses the syntax `g[diagonal(sᵢ)]`. Let us see it in action in a multiorbital example in 2D
