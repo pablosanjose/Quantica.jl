@@ -6,14 +6,14 @@ specialized plot recipes:
 
 - `object::Lattice`             -> `plotlattice` (supports also `LatticeSlice`s)
 - `object::Hamiltonian`         -> `plotlattice` (supports also `ParametricHamiltonian`)
-- `object::GreenFunction`       -> `plotlattice` (see below)
+- `object::GreenFunction`       -> `plotlattice` (supports also `OpenHamiltonian`, see below)
 - `object::Bandstructure`       -> `plotbands`   (supports also slices of `Bandstructure`)
 - `object::Subband`             -> `plotbands`   (supports also collections of `Subbands`)
 
 Supported `Makie` backends include `GLMakie`, `CairoMakie`, `WGLMakie`, etc. Instead of
 `using Makie`, load a specific backend directly, e.g. `using GLMakie`.
 
-    qplot(g::GreenFunction; children = (plotkw₁::NamedTuple, plotkw₂::NamedTuple, ...), kw...)
+    qplot(g::Union{GreenFunction,OpenHamiltonian}; children = (plotkw₁::NamedTuple, plotkw₂::NamedTuple, ...), kw...)
 
 Render the parent Hamiltonian of `g`, along with a representation of each of `g`'s
 self-energies. Specific `plotkwᵢ` keywords for each self-energy can be given in `children`,
