@@ -1,5 +1,5 @@
 """
-    qplot(object; figure = (;), axis = (;), fancyaxis = true, inspector = false, plotkw...)
+    qplot(object; figure = (;), axis = (;), fancyaxis = true, inspector = true, plotkw...)
 
 Render a plot of `object` using the `Makie` package. Supported `object`s and associated
 specialized plot recipes:
