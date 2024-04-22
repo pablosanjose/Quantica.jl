@@ -1893,6 +1893,9 @@ Base.size(oh::OpenHamiltonian, i...) = size(oh.h, i...)
 
 Base.parent(oh::OpenHamiltonian) = oh.h
 
+boundingbox(oh::OpenHamiltonian) =
+    boundingbox(tupleflatten(boundingbox.(orbslice.(selfenergies(oh)))...))
+
 #endregion
 #endregion
 
@@ -2104,6 +2107,7 @@ ncontacts(g::Union{GreenSolution,GreenSlice}) = ncontacts(parent(g))
 
 slicer(g::GreenSolution) = g.slicer
 
+selfenergies(g::GreenFunction) = selfenergies(contacts(g))
 selfenergies(g::GreenSolution) = g.contactΣs
 
 has_selfenergy(g::Union{GreenFunction,GreenSlice,GreenSolution}) =
@@ -2158,8 +2162,8 @@ function similar_Matrix(gs::GreenSlice{T}) where {T}
 end
 
 boundaries(g::GreenFunction) = boundaries(solver(g))
-# fallback
-boundaries(g::AppliedGreenSolver) = ()
+# fallback (for solvers without boundaries, or for OpenHamiltonian)
+boundaries(_) = ()
 
 boundingbox(g::GreenFunction) = isempty(contacts(g)) ?
     (zerocell(lattice(g)), zerocell(lattice(g))) : boundingbox(contacts(g))

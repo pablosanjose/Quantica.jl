@@ -4,7 +4,7 @@ using Makie
 using Quantica
 using Makie.GeometryBasics
 using Makie.GeometryBasics: Ngon
-using Quantica: Lattice, LatticeSlice, AbstractHamiltonian, Hamiltonian,
+using Quantica: Lattice, LatticeSlice, AbstractHamiltonian, Hamiltonian, OpenHamiltonian,
       ParametricHamiltonian, Harmonic, Bravais, SVector, GreenFunction, GreenSolution,
       argerror, harmonics, sublats, siterange, site, norm,
       normalize, nsites, nzrange, rowvals, nonzeros, sanitize_SVector, default_hamiltonian
@@ -17,7 +17,8 @@ const PlotLatticeArgumentType{E} = Union{
     Lattice{<:Any,E},
     LatticeSlice{<:Any,E},
     AbstractHamiltonian{<:Any,E},
-    GreenFunction{<:Any,E}}
+    GreenFunction{<:Any,E},
+    OpenHamiltonian{<:Any,E}}
 
 const PlotBandsArgumentType{E} =
     Union{Quantica.Bandstructure{<:Any,E},
