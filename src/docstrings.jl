@@ -1558,6 +1558,12 @@ evaluated at fixed energy, parameters and positions. The matrix is a dense
 is flattened. Note that the resulting `m` can itself be indexed over collections of sites
 with `m[i, j]`, where `i, j` are `siteselector(; ss...)` or `ss::NamedTuple`.
 
+    view(gω, i::C, j::C == i)
+
+For any `gω::GreenSolution` and `C<:Union{Colon,Integer}`, obtain a view (of type
+`SubArray`, not `OrbitalSliceMatrix`) of the corresponding intra or inter-contact propagator
+`gω[i, j]` with minimal allocations.
+
 # Example
 ```jldoctest
 julia> g = LP.honeycomb() |> hamiltonian(@hopping((; t = 1) -> t)) |> supercell(region = RP.circle(10)) |> greenfunction(GS.SparseLU())
