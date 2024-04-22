@@ -21,10 +21,11 @@ end
 spectrum(s::AppliedSpectrumGreenSolver) = s.spectrum
 
 # Parent ham needs to be non-parametric, so no need to alias
-minimal_callsafe_copy(s::AppliedSpectrumGreenSolver, parentham) =
+minimal_callsafe_copy(s::AppliedSpectrumGreenSolver, parentham, parentcontacts) =
     AppliedSpectrumGreenSolver(s.spectrum)
 
-minimal_callsafe_copy(s::SpectrumGreenSlicer) = SpectrumGreenSlicer(s.ω, s.solver)
+minimal_callsafe_copy(s::SpectrumGreenSlicer, parentham, parentcontacts) =
+    SpectrumGreenSlicer(s.ω, s.solver)
 
 #endregion
 

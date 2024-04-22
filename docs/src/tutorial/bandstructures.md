@@ -18,7 +18,7 @@ States:
 The above destructuring syntax assigns eigenvalues and eigenvectors to `eᵢ` and `ψᵢ`, respectively. The available eigensolvers and their options can be checked in the `EigenSolvers` docstrings.
 
 !!! warning "Arpack solver is not thread-safe"
-    `EigenSolver.Arpack` relies on a Fortran library that is not currently thread-safe. If you launch Julia with multiple threads, they will not be used with this specific solver. Otherwise Arpack would segfault.
+    `EigenSolvers.Arpack` relies on a Fortran library that is not currently thread-safe. If you launch Julia with multiple threads, they will not be used with this specific solver. Otherwise Arpack would segfault.
 
 We define a "bandstructure" of an `h::AbstractHamiltonian` as a linear interpolation of its eigenpairs over a portion of the Brillouin zone, which is discretized with a base mesh of `ϕᵢ` values. At each `ϕᵢ` of the base mesh, the Bloch matrix `h(ϕᵢ)` is diagonalized with `spectrum`. The adjacent eigenpairs `eⱼ(ϕᵢ), ψⱼ(ϕᵢ)` are then connected ("stitched") together into a number of band meshes with vertices `(ϕᵢ..., eⱼ(ϕᵢ))` by maximizing the overlap of adjacent `ψⱼ(ϕᵢ)` (since the bands should be continuuous). Degenerate eigenpairs are collected into a single node of the band mesh.
 

@@ -231,7 +231,7 @@ function minimal_callsafe_copy(s::SelfEnergyCouplingSchurSolver)
     gunit´ = minimal_callsafe_copy(s.gunit)
     s´ = SelfEnergyCouplingSchurSolver(gunit´, hcoupling´,
         minimal_callsafe_copy(s.V´, hcoupling´),
-        inverse_green(solver(gunit´)),
+        inverse_green(solver(gunit´)),      # alias of the invgreen from the solver
         minimal_callsafe_copy(s.V, hcoupling´))
     return s´
 end

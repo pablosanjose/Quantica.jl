@@ -1273,10 +1273,6 @@ function update!(s::InverseGreenBlockSparse, ω)
     return update!(bsm)
 end
 
-minimal_callsafe_copy(s::InverseGreenBlockSparse, parentham, contacts) =
-    InverseGreenBlockSparse(minimal_callsafe_copy(s.mat, parentham, contacts), s.nonextrng, s.unitcinds,
-    s.unitcindsall, copy(s.source))
-
 #endregion
 #endregion
 
@@ -1818,10 +1814,6 @@ abstract type AppliedGreenSolver end
 # It should also be able to return contact G with G[]
 abstract type GreenSlicer{C<:Complex} end   # C is the eltype of the slice
 
-# fallback: slicers in general are already unaliased from parentham
-# SchurGreenSlicer is an exception, so it has an override in solvers/green/schur.jl
-minimal_callsafe_copy(s::GreenSlicer, parentham) = minimal_callsafe_copy(s)
-
 #endregion
 
 ############################################################################################
@@ -2190,15 +2182,17 @@ copy_lattice(g::GreenSlice) = GreenSlice(
 
 function minimal_callsafe_copy(g::GreenFunction)
     parent´ = minimal_callsafe_copy(g.parent)
-    solver´ = minimal_callsafe_copy(g.solver, parent´)
     contacts´ = minimal_callsafe_copy(g.contacts)
+    solver´ = minimal_callsafe_copy(g.solver, parent´, contacts´)
     return GreenFunction(parent´, solver´, contacts´)
 end
 
 function minimal_callsafe_copy(g::GreenSolution)
     parentg´ = minimal_callsafe_copy(g.parent)
-    g´ = GreenSolution(parentg´,
-        minimal_callsafe_copy(g.slicer, hamiltonian(parentg´)), g.contactΣs, g.contactorbs)
+    parentham = hamiltonian(parentg´)
+    parentcontacts = contacts(parentg´)
+    slicer´ = minimal_callsafe_copy(g.slicer, parentham, parentcontacts)
+    g´ = GreenSolution(parentg´, slicer´, g.contactΣs, g.contactorbs)
     return g´
 end
 

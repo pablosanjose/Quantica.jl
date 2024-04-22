@@ -4,9 +4,9 @@
 #   ization, possibly using inverse-free self-energies (using extended sites).
 #region
 
-struct AppliedSparseLUGreenSolver{C,CT} <: AppliedGreenSolver
-    invgreen::InverseGreenBlockSparse{C}
-    contacts::CT
+# invgreen aliases contacts (they are not implemented through a TMatrixSlicer)
+struct AppliedSparseLUGreenSolver{C} <: AppliedGreenSolver
+    invgreen::InverseGreenBlockSparse{C}    # aliases parent contacts
 end
 
 mutable struct SparseLUGreenSlicer{C} <:GreenSlicer{C}
@@ -40,10 +40,9 @@ unitcellinds_contacts(s::SparseLUGreenSlicer, i::Integer) =
         argerror("Cannot access contact $i, there are $(length(s.unitcinds)) contacts")
 unitcellinds_contacts_merged(s::SparseLUGreenSlicer) = s.unitcindsall
 
-function minimal_callsafe_copy(s::AppliedSparseLUGreenSolver, parentham)
-    contacts´ = minimal_callsafe_copy(s.contacts)
-    invgreen´ = inverse_green(parentham, contacts´)
-    return AppliedSparseLUGreenSolver(invgreen´, contacts´)
+function minimal_callsafe_copy(s::AppliedSparseLUGreenSolver, parentham, parentcontacts)
+    invgreen´ = inverse_green(parentham, parentcontacts)
+    return AppliedSparseLUGreenSolver(invgreen´)
 end
 
 #endregion
@@ -52,11 +51,11 @@ end
 
 function apply(::GS.SparseLU, h::AbstractHamiltonian0D, cs::Contacts)
     invgreen = inverse_green(h, cs)
-    return AppliedSparseLUGreenSolver(invgreen, cs)
+    return AppliedSparseLUGreenSolver(invgreen)
 end
 
 apply(::GS.SparseLU, h::AbstractHamiltonian, cs::Contacts) =
-    argerror("Can only use GreenSolver.SparseLU with 0D AbstractHamiltonians")
+    argerror("Can only use GreenSolvers.SparseLU with 0D AbstractHamiltonians")
 
 #endregion
 
@@ -146,12 +145,11 @@ Base.getindex(s::SparseLUGreenSlicer, i::CellOrbitals, j::CellOrbitals) = copy(v
 # the lazy unitg field only aliases source64 or a copy of it. It is not necessary to
 # maintain the alias, as this is just a prealloc for a full-cell slice. We don't even need
 # to copy it, since once it is computed, it is never modified, only read
-function minimal_callsafe_copy(s::SparseLUGreenSlicer{C}) where {C}
+function minimal_callsafe_copy(s::SparseLUGreenSlicer{C}, parentham, parentcontacts) where {C}
     s´ = SparseLUGreenSlicer{C}(s.fact, s.nonextrng, s.unitcinds, s.unitcindsall, copy(s.source64))
     isdefined(s, :unitg) && (s´.unitg = s.unitg)
     return s´
 end
-
 
 #endregion
 

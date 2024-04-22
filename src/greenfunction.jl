@@ -469,15 +469,16 @@ end
 ensure_mutable_matrix(m::SMatrix) = Matrix(m)
 ensure_mutable_matrix(m::AbstractMatrix) = m
 
-minimal_callsafe_copy(s::TMatrixSlicer, parentham) = TMatrixSlicer(
-    minimal_callsafe_copy(s.g0slicer, parentham), s.tmatrix, s.gcontacts, s.contactorbs)
+minimal_callsafe_copy(s::TMatrixSlicer, parentham, parentcontacts) = TMatrixSlicer(
+    minimal_callsafe_copy(s.g0slicer, parentham, parentcontacts),
+    s.tmatrix, s.gcontacts, s.contactorbs)
 
 Base.view(::NothingSlicer, i::Union{Integer,Colon}...) =
     internalerror("view(::NothingSlicer): unreachable reached")
 
 Base.getindex(::NothingSlicer, i::CellOrbitals...) = argerror("Slicer does not support generic indexing")
 
-minimal_callsafe_copy(s::NothingSlicer) = s
+minimal_callsafe_copy(s::NothingSlicer, parentham, parentcontacts) = s
 
 #endregion
 #endregion

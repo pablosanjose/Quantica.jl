@@ -22,11 +22,11 @@ This is a summary of the type of objects you will be studying.
   - `ParametricHamiltonian`: like the above, but using a `ParametricModel`, which makes it dependent on a set of free parameters that can be efficiently adjusted.
 
   An `h::AbstractHamiltonian` can be used to produce a Bloch matrix `h(ϕ; params...)` of the same size as the number of orbitals per unit cell, where `ϕ = [ϕᵢ...]` are Bloch phases and `params` are values for the free parameters, if any.
-- **`Spectrum`**: the set of eigenpairs (eigenvalues and corresponding eigenvectors) of a Bloch matrix. It can be computed with a number of `EigenSolver`s.
+- **`Spectrum`**: the set of eigenpairs (eigenvalues and corresponding eigenvectors) of a Bloch matrix. It can be computed with a number of `EigenSolvers`.
 - **`Bandstructure`**: a collection of spectra, evaluated over a discrete mesh (typically a discretization of the Brillouin zone), that is connected to its mesh neighbors into a linearly-interpolated approximation of the `AbstractHamiltonian`'s bandstructure.
 - **`SelfEnergy`**: an operator `Σ(ω)` defined to act on a `LatticeSlice` of an `AbstractHamiltonian` that depends on energy `ω`.
 - **`OpenHamiltonian`**: an `AbstractHamiltonian` combined with a set of `SelfEnergies`
-- **`GreenFunction`**: an `OpenHamiltonian` combined with a `GreenSolver`, which is an algorithm that can in general compute the retarded or advanced Green function at any energy between any subset of sites of the underlying lattice.
+- **`GreenFunction`**: an `OpenHamiltonian` combined with an `AbstractGreenSolver`, which is an algorithm that can in general compute the retarded or advanced Green function at any energy between any subset of sites of the underlying lattice.
   - **`GreenSlice`**: a `GreenFunction` evaluated on a specific set of sites, but at an unspecified energy
   - **`GreenSolution`**: a `GreenFunction` evaluated at a specific energy, but on an unspecified set of sites
 - **`OrbitalSliceArray`**: an `AbstractArray` that can be indexed with a `SiteSelector`, in addition to the usual scalar indexing. Particular cases are `OrbitalSliceMatrix` and `OrbitalSliceVector`. This is the most common type obtained from `GreenFunction`s and observables obtained from them.

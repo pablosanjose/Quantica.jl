@@ -414,4 +414,11 @@ end
     gs = Quantica.call!(g, 0.4, q = 0.1)
     parent(g)(q = 2)
     @test_broken gs[cells = 0] == m
+    # Ensure that g.solver.invgreen alias of parent contacts is not broken by minimal_callsafe_copy
+    glead = LP.linear() |> @onsite((; o = 1) -> o) - hopping(1) |> greenfunction(GS.Schur(boundary = 0));
+    g = LP.linear() |> -hopping(1) |> supercell |> attach(glead) |> greenfunction;
+    g´ = Quantica.minimal_callsafe_copy(g);
+    @test g´(0, o = 0)[] == g(0, o = 0)[]
+    @test g´(0, o = 1)[] == g(0, o = 1)[]
+
 end

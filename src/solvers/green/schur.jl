@@ -207,6 +207,8 @@ end
 checkmodes(whichmodes) = sum(whichmodes) == length(whichmodes) ÷ 2 ||
     argerror("Cannot differentiate retarded from advanced modes. Consider increasing imag(ω) or check that your Hamiltonian is Hermitian")
 
+# this does not include a parentcontacts because there are none
+# (SchurFactorsSolver is not an AppliedGreenSolver, so it may have different API)
 function minimal_callsafe_copy(s::SchurFactorsSolver, parentham)
     hm´, h0´, hp´ = nearest_cell_harmonics(parentham)
     s´ = SchurFactorsSolver(s.shift, hm´, h0´, hp´, s.l_leq_r, copy(s.iG),
@@ -373,12 +375,10 @@ function schur_openhams_types(fsolver, h, boundary)
 end
 
 apply(::GS.Schur, h::AbstractHamiltonian, cs::Contacts) =
-    argerror("Can only use GreenSolver.Schur with 1D AbstractHamiltonians")
-
-const Contacts0D{T,E,N,S} = Contacts{0,N,S,OrbitalSliceGrouped{T,E,0}}
+    argerror("Can only use GreenSolvers.Schur with 1D AbstractHamiltonians")
 
 const GFUnit{T,E,H,N,S} =
-    GreenFunction{T,E,0,AppliedSparseLUGreenSolver{Complex{T},Contacts0D{T,E,N,S}},H,Contacts0D{T,E,N,S}}
+    GreenFunction{T,E,0,AppliedSparseLUGreenSolver{Complex{T}},H,Contacts{0,N,S,OrbitalSliceGrouped{T,E,0}}}
 
 green_type(::H,::S) where {T,E,H<:AbstractHamiltonian{T,E},S} =
     GFUnit{T,E,H,1,Tuple{S}}
@@ -389,7 +389,7 @@ green_type(::H,::S1,::S2) where {T,E,H<:AbstractHamiltonian{T,E},S1,S2} =
 
 #region ## call API ##
 
-function minimal_callsafe_copy(s::AppliedSchurGreenSolver, parentham)
+function minimal_callsafe_copy(s::AppliedSchurGreenSolver, parentham, _)
     fsolver´ = minimal_callsafe_copy(s.fsolver, parentham)
     ohL´, ohR´, oh∞´, G, G∞ = schur_openhams_types(fsolver´, parentham, s.boundary)
     s´ = AppliedSchurGreenSolver{G,G∞}(fsolver´, s.boundary, ohL´, ohR´, oh∞´)
@@ -433,9 +433,9 @@ mutable struct SchurGreenSlicer{C,A<:AppliedSchurGreenSolver}  <: GreenSlicer{C}
     boundary::C
     L::Matrix{C}
     R::Matrix{C}
-    G₋₁₋₁::SparseLUGreenSlicer{C}   # After call!(solver.fsolver, ω), these are independent
-    G₁₁::SparseLUGreenSlicer{C}     # of parent hamiltonian, as they only rely on
-    G∞₀₀::SparseLUGreenSlicer{C}    # call!_output(fsolver), which has been updated
+    G₋₁₋₁::SparseLUGreenSlicer{C}   # These are independent of parent hamiltonian
+    G₁₁::SparseLUGreenSlicer{C}     # as they only rely on call!_output(fsolver)
+    G∞₀₀::SparseLUGreenSlicer{C}    # which is updated after call!(solver.fsolver, ω)
     L´G∞₀₀::Matrix{C}
     R´G∞₀₀::Matrix{C}
     G₁₁L::Matrix{C}
@@ -462,8 +462,8 @@ function Base.getproperty(s::SchurGreenSlicer, f::Symbol)
     if !isdefined(s, f)
         solver = s.solver
         d = size(s.L, 2)
-        # the result of the following call!'s depends on the current value of h0
-        # which aliases the parent h. This is only a problem if `s`` was obtained through
+        # Issue #268: the result of the following call!'s depends on the current value of h0
+        # which aliases the parent h. This is only a problem if `s` was obtained through
         # `gs = call!(g, ω; params...)`. In that case, doing call!(g, ω; params´...) before
         # gs[sites...] will be call!-ing e.g. solver.g∞ with the wrong h0 (the one from
         # params´...). However, if `gs = g(ω; params...)` a copy was made, so it is safe.
@@ -594,11 +594,11 @@ maybe_SMatrix(G::Matrix, rows::SVector{L}, cols::SVector{L´}) where {L,L´} = S
 maybe_SMatrix(G, rows, cols) = G
 
 # TODO: Perhaps too conservative
-function minimal_callsafe_copy(s::SchurGreenSlicer, parentham)
-    s´ = SchurGreenSlicer(s.ω, minimal_callsafe_copy(s.solver, parentham))
-    isdefined(s, :G₋₁₋₁)    && (s´.G₋₁₋₁    = minimal_callsafe_copy(s.G₋₁₋₁))
-    isdefined(s, :G₁₁)      && (s´.G₁₁      = minimal_callsafe_copy(s.G₁₁))
-    isdefined(s, :G∞₀₀)     && (s´.G∞₀₀     = minimal_callsafe_copy(s.G∞₀₀))
+function minimal_callsafe_copy(s::SchurGreenSlicer, parentham, parentcontacts)
+    s´ = SchurGreenSlicer(s.ω, minimal_callsafe_copy(s.solver, parentham, parentcontacts))
+    isdefined(s, :G₋₁₋₁)    && (s´.G₋₁₋₁    = minimal_callsafe_copy(s.G₋₁₋₁, parentham, parentcontacts))
+    isdefined(s, :G₁₁)      && (s´.G₁₁      = minimal_callsafe_copy(s.G₁₁, parentham, parentcontacts))
+    isdefined(s, :G∞₀₀)     && (s´.G∞₀₀     = minimal_callsafe_copy(s.G∞₀₀, parentham, parentcontacts))
     isdefined(s, :L´G∞₀₀)   && (s´.L´G∞₀₀   = copy(s.L´G∞₀₀))
     isdefined(s, :R´G∞₀₀)   && (s´.R´G∞₀₀   = copy(s.R´G∞₀₀))
     isdefined(s, :G₁₁L)     && (s´.G₁₁L     = copy(s.G₁₁L))
