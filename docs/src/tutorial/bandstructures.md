@@ -35,7 +35,7 @@ Bandstructure{Float64,3,2}: 3D Bandstructure over a 2-dimensional parameter spac
 ```
 The first argument is the `AbstractHamiltonian`. Here it is defined on an `L=2` dimensional lattice. The subsequent arguments are collections of Bloch phases on each of the `L` axes of the Brillouin zone, whose direct product `ϕ₁points` ⊗ `ϕ₂points` defines our base mesh of `ϕᵢ` points. Here it is a uniform 19×19 grid. We can once more use `qplot` to visualize the bandstructure, or more precisely the band meshes:
 ```julia
-julia> using GLMakie; qplot(b, inspector = true)
+julia> using GLMakie; qplot(b)
 ```
 ```@raw html
 <img src="../../assets/graphene_bands.png" alt="Graphene bands" width="400" class="center"/>

@@ -35,13 +35,13 @@ model =
 
 h = LatticePresets.honeycomb() |> model
 
-qplot(h, inspector = true)
+qplot(h)
 ```
 ```@raw html
 <img src="../../assets/latticeKM.png" alt="Kane-Mele lattice" width="350" class="center"/>
 ```
 
-The `inspector = true` keyword enables interactive tooltips in the visualization of `h` that allows to navigate each `onsite` and `hopping` amplitude graphically. Note that sites connected to the unit cell of `h` by some hopping are included, but are rendered with partial transparency by default.
+Interactive tooltips in the visualization of `h` are enabled by default (use keyword `inspector = false` to disable them). They allows to navigate each `onsite` and `hopping` amplitude graphically. Note that sites connected to the unit cell of `h` by some hopping are included, but are rendered with partial transparency by default.
 
 ## ParametricHamiltonians
 
