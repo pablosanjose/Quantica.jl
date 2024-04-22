@@ -498,7 +498,7 @@ function Makie.plot!(plot::PlotLattice{Tuple{G}}) where {G<:GreenFunction}
     g = to_value(plot[1])
     gsel = haskey(plot, :selector) && plot[:selector][] !== missing ?
         plot[:selector][] : green_selector(g)
-    h = hamiltonian(g)
+    h = default_hamiltonian(g)
     latslice = lattice(h)[gsel]
     latslice´ = Quantica.growdiff(latslice, h)
     L = Quantica.latdim(h)

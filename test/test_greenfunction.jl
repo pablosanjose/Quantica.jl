@@ -110,6 +110,17 @@ end
     @test (@allocations view(gs, 1, 2)) <= 2  # should be 1, but in some platforms/versions it could be 2
 end
 
+@testset "GreenFunction partial evaluation" begin
+    g = LP.linear() |> hamiltonian(@hopping((; q = 1) -> q*I), orbitals = 2) |> attach(@onsite((ω; p = 0) ->p*SA[0 1; 1 0]), cells = 1) |> greenfunction
+    g´ = g(p = 2)
+    h´, h = hamiltonian(g´), hamiltonian(g)
+    @test h´ !== h
+    @test h´ == h(p = 2)
+    @test g(0.2, p = 2)[] == g´(0.2)[]
+    @test g(0.2, p = 1)[] != g´(0.2, p = 1)[]       # p = 1 is ignored by g´, fixed to p = 2
+    @test solver(g) !== solver(parent(solver(g´)))  # no aliasing
+end
+
 @testset "GreenSolvers applicability" begin
     h = HP.graphene()
     @test_throws ArgumentError greenfunction(h, GS.Schur())
