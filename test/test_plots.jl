@@ -46,6 +46,10 @@ end
         attach(nothing, region = RP.circle(1, SA[2,3])) |> attach(nothing, region = RP.circle(1, SA[3,-3])) |>
         greenfunction(GS.Bands(subdiv(-π, π, 13), subdiv(-π, π, 13), boundary = 2=>-3))
     @test qplot(g) isa Figure
+    # Issue 200
+    g = LP.linear() |> hamiltonian(@hopping((; q = 1) -> q*I), orbitals = 2) |> attach(@onsite((ω; p = 0) ->p*SA[0 1; 1 0]), cells = 1) |> greenfunction
+    @test qplot(g) isa Figure
+    @test qplot(g(p = 3)) isa Figure
 end
 
 @testset "plot bands" begin

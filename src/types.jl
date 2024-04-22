@@ -1404,6 +1404,9 @@ function harmonic_index(h::AbstractHamiltonian, dn)
     return first(harmonics(h)), 1  # unreachable
 end
 
+# Unless params are given, it returns the Hamiltonian with defaults parameters
+default_hamiltonian(h::AbstractHamiltonian; params...) = h(; params...)
+
 ## Hamiltonian
 
 Hamiltonian(l::Lattice{T,E,L}, b::OrbitalBlockStructure{B}, h::Vector{Harmonic{T,L,B}}, bl) where {T,E,L,B} =
@@ -1769,33 +1772,12 @@ Base.length(b::Bandstructure) = length(b.subbands)
 #endregion
 
 ############################################################################################
-# SelfEnergy solvers - see solvers/selfenergy.jl for self-energy solvers
+# SelfEnergySolvers - see solvers/selfenergy.jl for self-energy solvers
 #region
 
 abstract type AbstractSelfEnergySolver end
 abstract type RegularSelfEnergySolver <: AbstractSelfEnergySolver end
 abstract type ExtendedSelfEnergySolver <: AbstractSelfEnergySolver end
-
-# Support for call!(s::AbstractSelfEnergySolver; params...) -> AbstractSelfEnergySolver
-## TODO: revisit to see if there is a better/simpler approach
-
-struct WrappedRegularSelfEnergySolver{F} <: RegularSelfEnergySolver
-    f::F
-end
-
-struct WrappedExtendedSelfEnergySolver{F} <: ExtendedSelfEnergySolver
-    f::F
-end
-
-call!(s::WrappedRegularSelfEnergySolver, ω; params...) = s.f(ω)
-call!(s::WrappedExtendedSelfEnergySolver, ω; params...) = s.f(ω)
-
-call!(s::RegularSelfEnergySolver; params...) =
-    WrappedRegularSelfEnergySolver(ω -> call!(s, ω; params...))
-call!(s::ExtendedSelfEnergySolver; params...) =
-    WrappedExtendedSelfEnergySolver(ω -> call!(s, ω; params...))
-call!(s::WrappedRegularSelfEnergySolver; params...) = s
-call!(s::WrappedExtendedSelfEnergySolver; params...) = s
 
 #endregion
 
@@ -1852,10 +1834,11 @@ has_selfenergy(s::SelfEnergy) = has_selfenergy(solver(s))
 has_selfenergy(s::AbstractSelfEnergySolver) = true
 # see nothing.jl for override for the case of SelfEnergyEmptySolver
 
-call!(Σ::SelfEnergy; params...) = SelfEnergy(call!(Σ.solver; params...), Σ.orbslice)
 call!(Σ::SelfEnergy, ω; params...) = call!(Σ.solver, ω; params...)
 
 call!_output(Σ::SelfEnergy) = call!_output(solver(Σ))
+
+(Σ::SelfEnergy)(; params...) = SelfEnergy(Σ.solver(; params...), Σ.orbslice)
 
 minimal_callsafe_copy(Σ::SelfEnergy) =
     SelfEnergy(minimal_callsafe_copy(Σ.solver), Σ.orbslice)
@@ -2089,7 +2072,12 @@ Base.parent(i::DiagIndices) = i.inds
 
 kernel(i::DiagIndices) = i.kernel
 
+# returns the Hamiltonian field
 hamiltonian(g::Union{GreenFunction,GreenSolution,GreenSlice}) = hamiltonian(g.parent)
+
+# Like the above, but it may not be === the field (it can be a copy with parameters applied)
+# needed for qplot(g(; params...))
+default_hamiltonian(g::GreenFunction) = default_hamiltonian(parent(g))  # default params
 
 lattice(g::Union{GreenFunction,GreenSolution,GreenSlice}) = lattice(g.parent)
 
