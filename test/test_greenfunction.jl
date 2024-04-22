@@ -107,7 +107,7 @@ end
     g = LP.linear() |> hopping(1) |> attach(@onsite((ω; p = 1) -> p), cells = 1) |> attach(@onsite((ω; p = 1) -> p), cells = 3) |> greenfunction
     gs = g(0.2)
     @test view(gs, 1, 2) isa SubArray
-    @test (@allocations view(gs, 1, 2)) == 1
+    @test (@allocations view(gs, 1, 2)) <= 2  # should be 1, but in some platforms/versions it could be 2
 end
 
 @testset "GreenSolvers applicability" begin
