@@ -329,8 +329,8 @@ boundaries(s::AppliedSchurGreenSolver) = (1 => s.boundary,)
 function Base.getproperty(s::AppliedSchurGreenSolver, f::Symbol)
     if !isdefined(s, f)
         if f == :gL
-            s.gL = greenfunction(s.ohL, GS.SparseLU())  # oh's harmonics alias parent h, but
-        elseif f == :gR                                 # not used here until called with ω
+            s.gL = greenfunction(s.ohL, GS.SparseLU())  # oh's harmonics alias parent h[()],
+        elseif f == :gR                                 # but not used until called with ω
             s.gR = greenfunction(s.ohR, GS.SparseLU())
         elseif f == :g∞
             s.g∞ = greenfunction(s.oh∞, GS.SparseLU())
@@ -393,9 +393,8 @@ function minimal_callsafe_copy(s::AppliedSchurGreenSolver, parentham)
     fsolver´ = minimal_callsafe_copy(s.fsolver, parentham)
     ohL´, ohR´, oh∞´, G, G∞ = schur_openhams_types(fsolver´, parentham, s.boundary)
     s´ = AppliedSchurGreenSolver{G,G∞}(fsolver´, s.boundary, ohL´, ohR´, oh∞´)
-    isdefined(s, :gR) && (s´.gR = minimal_callsafe_copy(s.gR, parentham))
-    isdefined(s, :gL) && (s´.gL = minimal_callsafe_copy(s.gL, parentham))
-    isdefined(s, :g∞) && (s´.g∞ = minimal_callsafe_copy(s.g∞, parentham))
+    # we don't copy the lazy fields gL, gR, g∞, even if already materialized, since they
+    # must be linked to ohL´, ohR´, oh∞´, not the old ones.
     return s´
 end
 
