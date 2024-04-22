@@ -5,7 +5,7 @@
 #     - call!(s::ExtendedSelfEnergySolver, ω; params...) -> (Vᵣₑ, gₑₑ⁻¹, Vₑᵣ) AbsMats
 #         With the extended case, the equivalent Σreg reads Σreg = VᵣₑgₑₑVₑᵣ
 #     - call!_output(s::AbstractSelfEnergySolver) -> object returned by call!(s, ω; kw...)
-#     - minimal_callsafe_copy(s::AbstractSelfEnergySolver)
+#     - minimal_callsafe_copy(s::AbstractSelfEnergySolver)  # no aliasing
 #   These AbstractMatrices are flat, defined on the LatticeSlice in parent SelfEnergy
 #       Note: `params` are only needed in cases where s adds new parameters that must be
 #       applied (e.g. SelfEnergyModelSolver). Otherwise one must assume that any parent
@@ -13,6 +13,7 @@
 #   Optional: AbstractSelfEnergySolver's can also implement `selfenergy_plottables`
 #     - selfenergy_plottables(s::AbstractSelfEnergySolver, parent_latslice)
 #       -> collection of tuples to be passed to plotlattice!(axis, tup...) for visualization
+#   Aliasing: AbstractSelfEnergySolver's are not allowed to alias anything from outside
 ############################################################################################
 
 ############################################################################################

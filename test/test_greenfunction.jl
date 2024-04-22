@@ -397,3 +397,28 @@ end
         @test iszero(diff)
     end
 end
+
+@testset "aliasing" begin
+    # Issue #267
+    g = LP.linear() |> hamiltonian(@hopping((; q = 1) -> q*I), orbitals = 2) |> greenfunction
+    g´ = Quantica.minimal_callsafe_copy(g)
+    @test g(0.2; q = 2)[cells = 1] == g´(0.2; q = 2)[cells = 1]
+    @test g´.solver.fsolver.h0 === g´.parent.h.harmonics[1].h
+    # The Schur slicer has uninitialized fields whose eventual value depends on the parent hamiltonian
+    # at call time, not creation time. This can produce bugs if Quantica.call!(g, ω; params...) is used.
+    # The exported g(ω; params...) syntax decouples the slicer's parent Hamiltonian, so it is safe.
+    g = LP.linear() |> hamiltonian(@onsite((; q = 1) -> q) + @hopping((; q = 1) -> q)) |> greenfunction
+    m = g(0.4, q = 0.1)[cells = 0]
+    gs = Quantica.call!(g, 0.4, q = 0.1)
+    @test gs[cells = 0] == m
+    gs = Quantica.call!(g, 0.4, q = 0.1)
+    parent(g)(q = 2)
+    @test_broken gs[cells = 0] == m
+    # Ensure that g.solver.invgreen alias of parent contacts is not broken by minimal_callsafe_copy
+    glead = LP.linear() |> @onsite((; o = 1) -> o) - hopping(1) |> greenfunction(GS.Schur(boundary = 0));
+    g = LP.linear() |> -hopping(1) |> supercell |> attach(glead) |> greenfunction;
+    g´ = Quantica.minimal_callsafe_copy(g);
+    @test g´(0, o = 0)[] == g(0, o = 0)[]
+    @test g´(0, o = 1)[] == g(0, o = 1)[]
+
+end

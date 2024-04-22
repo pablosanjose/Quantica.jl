@@ -9,7 +9,7 @@ where `i, j` are orbitals, `H` is the (possibly infinite) Hamiltonian matrix, an
 We split the problem of computing `Gʳᵢⱼ(ω)` of a given `h::AbstractHamiltonian` into four steps:
 
 1. Attach self-energies to `h` using the command `oh = attach(h, args...)`. This produces a new object `oh::OpenHamiltonian` with a number of `Contacts`, numbered `1` to `N`
-2. Use `g = greenfunction(oh, solver)` to build a `g::GreenFunction` representing `Gʳ` (at arbitrary `ω` and `i,j`), where `oh::OpenHamiltonian` and `solver::GreenSolver` (see `GreenSolvers` below for available solvers)
+2. Use `g = greenfunction(oh, solver)` to build a `g::GreenFunction` representing `Gʳ` (at arbitrary `ω` and `i,j`), where `oh::OpenHamiltonian` and `solver::AbstractGreenSolver` (see `GreenSolvers` below for available solvers)
 3. Evaluate `gω = g(ω; params...)` at fixed energy `ω` and model parameters, which produces a `gω::GreenSolution`
 4. Slice `gω[sᵢ, sⱼ]` or `gω[sᵢ] == gω[sᵢ, sᵢ]` to obtain `Gʳᵢⱼ(ω)` as a flat matrix, where `sᵢ, sⱼ` are either site selectors over sites spanning orbitals `i,j`, integers denoting contacts, `1` to `N`, or `:` denoting all contacts merged together.
 
@@ -48,7 +48,7 @@ julia> gω[cells = 1:2]  # we now ask for the Green function between orbitals in
   -0.2+0.846606im   -0.48-0.113394im    0.44+0.282715im  0.104-0.869285im
 ```
 
-Note that the result is a 4 x 4 matrix, because there are 2 orbitals (one per site) in each of the two unit cells. Note also that the Schur GreenSolver used here allows us to compute the Green function between distant cells with little overhead
+Note that the result is a 4 x 4 matrix, because there are 2 orbitals (one per site) in each of the two unit cells. Note also that the `GreenSolvers.Schur` used here allows us to compute the Green function between distant cells with little overhead
 ```julia
 julia> @time gω[cells = 1:2];
   0.000067 seconds (70 allocations: 6.844 KiB)
@@ -59,7 +59,7 @@ julia> @time gω[cells = (SA[10], SA[100000])];
 
 ## GreenSolvers
 
-The currently implemented `GreenSolver`s (abbreviated as `GS`) are the following
+The currently implemented `GreenSolvers` (abbreviated as `GS`) are the following
 
 - `GS.SparseLU()`
 

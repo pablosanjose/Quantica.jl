@@ -40,7 +40,7 @@ function call!(g::GreenFunction{T}, ω::T; params...) where {T}
 end
 
 function call!(g::GreenFunction{T}, ω::Complex{T}; params...) where {T}
-    h = parent(g)
+    h = parent(g)   # not hamiltonian(h). We want the ParametricHamiltonian if it exists.
     contacts´ = contacts(g)
     call!(h; params...)
     Σblocks = call!(contacts´, ω; params...)
@@ -139,7 +139,7 @@ Base.getindex(s::GreenSlicer, ::CellOrbitals, ::CellOrbitals) =
 
 # fallback, for GreenSlicers that don't implement view
 Base.view(g::GreenSlicer, args...) =
-    argerror("GreenSlicer of type $(nameof(typeof(g))) doesn't implement view")
+    argerror("GreenSlicer of type $(nameof(typeof(g))) doesn't implement view for these arguments")
 
 # must ensure that orbindices is not a scalar, to consistently obtain a Matrix
 sanitize_cellorbs(c::CellOrbitals) = c
@@ -469,7 +469,8 @@ end
 ensure_mutable_matrix(m::SMatrix) = Matrix(m)
 ensure_mutable_matrix(m::AbstractMatrix) = m
 
-minimal_callsafe_copy(s::TMatrixSlicer) = TMatrixSlicer(minimal_callsafe_copy(s.g0slicer),
+minimal_callsafe_copy(s::TMatrixSlicer, parentham, parentcontacts) = TMatrixSlicer(
+    minimal_callsafe_copy(s.g0slicer, parentham, parentcontacts),
     s.tmatrix, s.gcontacts, s.contactorbs)
 
 Base.view(::NothingSlicer, i::Union{Integer,Colon}...) =
@@ -477,7 +478,7 @@ Base.view(::NothingSlicer, i::Union{Integer,Colon}...) =
 
 Base.getindex(::NothingSlicer, i::CellOrbitals...) = argerror("Slicer does not support generic indexing")
 
-minimal_callsafe_copy(s::NothingSlicer) = s
+minimal_callsafe_copy(s::NothingSlicer, parentham, parentcontacts) = s
 
 #endregion
 #endregion

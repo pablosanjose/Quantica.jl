@@ -1000,8 +1000,10 @@ struct HybridSparseMatrix{T,B<:MatrixElementType{T}} <: SparseArrays.AbstractSpa
     blockstruct::OrbitalBlockStructure{B}
     unflat::SparseMatrixCSC{B,Int}
     flat::SparseMatrixCSC{Complex{T},Int}
-    sync_state::Base.RefValue{Int}  # 0 = in sync, 1 = flat needs sync, -1 = unflat needs sync, 2 = none initialized
-    ufnnz::Vector{Int}  # Number of stored nonzeros in unflat and flat - to guard against tampering
+    # 0 = in sync, 1 = flat needs sync, -1 = unflat needs sync, 2 = none initialized
+    sync_state::Base.RefValue{Int}
+    # Number of stored nonzeros in unflat and flat - to guard against tampering
+    ufnnz::Vector{Int}
 end
 
 #region ## Constructors ##
@@ -1113,6 +1115,10 @@ Base.size(s::SparseMatrixView, i...) = size(s.mat, i...)
 minimal_callsafe_copy(s::SparseMatrixView) =
     SparseMatrixView(view(copy(parent(s.matview)), s.matview.indices...), copy(s.mat), s.ptrs)
 
+minimal_callsafe_copy(s::SparseMatrixView, aliasham) =
+    SparseMatrixView(view(call!_output(aliasham), s.matview.indices...), copy(s.mat), s.ptrs)
+
+
 #endregion
 
 #endregion
@@ -1222,11 +1228,14 @@ isspzeros(b::SparseMatrixCSC) = iszero(nnz(b))
 isspzeros(b::Tuple) = all(isspzeros, b)
 isspzeros(b) = false
 
-minimal_callsafe_copy(s::BlockSparseMatrix) = BlockSparseMatrix(copy(s.mat), minimal_callsafe_copy.(s.blocks), s.ptrs)
+minimal_callsafe_copy(s::BlockSparseMatrix) =
+    BlockSparseMatrix(copy(s.mat), minimal_callsafe_copy.(s.blocks), s.ptrs)
 
-minimal_callsafe_copy(s::BlockMatrix) = BlockMatrix(copy(s.mat), minimal_callsafe_copy.(s.blocks))
+minimal_callsafe_copy(s::BlockMatrix) =
+    BlockMatrix(copy(s.mat), minimal_callsafe_copy.(s.blocks))
 
-minimal_callsafe_copy(m::MatrixBlock) = MatrixBlock(m.block, m.rows, m.cols, m.coefficient, copy_ifnotmissing(m.denseblock))
+minimal_callsafe_copy(m::MatrixBlock) =
+    MatrixBlock(m.block, m.rows, m.cols, m.coefficient, copy_ifnotmissing(m.denseblock))
 
 #endregion
 #endregion
@@ -1263,10 +1272,6 @@ function update!(s::InverseGreenBlockSparse, ω)
     Imat.diag .= ω   # Imat should be <: Diagonal
     return update!(bsm)
 end
-
-minimal_callsafe_copy(s::InverseGreenBlockSparse) =
-    InverseGreenBlockSparse(minimal_callsafe_copy(s.mat), s.nonextrng, s.unitcinds,
-    s.unitcindsall, copy(s.source))
 
 #endregion
 #endregion
@@ -1795,6 +1800,23 @@ call!(s::WrappedExtendedSelfEnergySolver; params...) = s
 #endregion
 
 ############################################################################################
+# Green solvers - see solvers/greensolvers.jl
+#region
+
+# Generic system-independent directives for solvers, e.g. GS.Schur()
+abstract type AbstractGreenSolver end
+
+# Application to a given OpenHamiltonian, but still independent from (ω; params...)
+# It should support call!(::AppliedGreenSolver, ω; params...) -> GreenSolution
+abstract type AppliedGreenSolver end
+
+# Solver with fixed ω and params that can compute G[subcell, subcell´] or G[cell, cell´]
+# It should also be able to return contact G with G[]
+abstract type GreenSlicer{C<:Complex} end   # C is the eltype of the slice
+
+#endregion
+
+############################################################################################
 # SelfEnergy - see solvers/selfenergy.jl
 #   Wraps an AbstractSelfEnergySolver and a SiteSlice
 #     -It produces Σs(ω)::AbstractMatrix defined over a SiteSlice
@@ -1814,7 +1836,6 @@ struct SelfEnergy{T,E,L,S<:AbstractSelfEnergySolver}
 end
 
 #region ## Constructors ##
-
 
 SelfEnergy(solver::S, orbslice::OrbitalSliceGrouped{T,E,L}) where {T,E,L,S<:AbstractSelfEnergySolver} =
     SelfEnergy{T,E,L,S}(solver, orbslice)
@@ -1987,27 +2008,10 @@ Base.isempty(c::Contacts) = isempty(selfenergies(c))
 
 # Base.length(c::Contacts) = length(selfenergies(c)) # unused
 
-minimal_callsafe_copy(s::Contacts) =
-    Contacts(minimal_callsafe_copy.(s.selfenergies), s.orbitals, s.orbslice)
+minimal_callsafe_copy(c::Contacts) =
+    Contacts(minimal_callsafe_copy.(c.selfenergies), c.orbitals, c.orbslice)
 
 #endregion
-
-#endregion
-
-############################################################################################
-# Green solvers - see solvers/greensolvers.jl
-#region
-
-# Generic system-independent directives for solvers, e.g. GS.Schur()
-abstract type AbstractGreenSolver end
-
-# Application to a given OpenHamiltonian, but still independent from (ω; params...)
-# It should support call!(::AppliedGreenSolver, ω; params...) -> GreenSolution
-abstract type AppliedGreenSolver end
-
-# Solver with fixed ω and params that can compute G[subcell, subcell´] or G[cell, cell´]
-# It should also be able to return contact G with G[]
-abstract type GreenSlicer{C<:Complex} end   # C is the eltype of the slice
 
 #endregion
 
@@ -2176,11 +2180,21 @@ copy_lattice(g::GreenSolution) = GreenSolution(
 copy_lattice(g::GreenSlice) = GreenSlice(
     copy_lattice(g.parent), g.rows, g.cols)
 
-minimal_callsafe_copy(g::GreenFunction) =
-    GreenFunction(minimal_callsafe_copy(g.parent), minimal_callsafe_copy(g.solver), minimal_callsafe_copy(g.contacts))
+function minimal_callsafe_copy(g::GreenFunction)
+    parent´ = minimal_callsafe_copy(g.parent)
+    contacts´ = minimal_callsafe_copy(g.contacts)
+    solver´ = minimal_callsafe_copy(g.solver, parent´, contacts´)
+    return GreenFunction(parent´, solver´, contacts´)
+end
 
-minimal_callsafe_copy(g::GreenSolution) =
-    GreenSolution(minimal_callsafe_copy(g.parent), minimal_callsafe_copy(g.slicer), g.contactΣs, g.contactorbs)
+function minimal_callsafe_copy(g::GreenSolution)
+    parentg´ = minimal_callsafe_copy(g.parent)
+    parentham = hamiltonian(parentg´)
+    parentcontacts = contacts(parentg´)
+    slicer´ = minimal_callsafe_copy(g.slicer, parentham, parentcontacts)
+    g´ = GreenSolution(parentg´, slicer´, g.contactΣs, g.contactorbs)
+    return g´
+end
 
 minimal_callsafe_copy(g::GreenSlice) =
     GreenSlice(minimal_callsafe_copy(g.parent), g.rows, g.cols)

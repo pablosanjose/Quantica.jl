@@ -1490,7 +1490,7 @@ Simple selector of sites with given `site_indices` in a given cell at `cell_inde
 cellsites
 
 """
-    greenfunction(h::Union{AbstractHamiltonian,OpenHamiltonian}, solver::GreenSolver)
+    greenfunction(h::Union{AbstractHamiltonian,OpenHamiltonian}, solver::AbstractGreenSolver)
 
 Build a `g::GreenFunction` of Hamiltonian `h` using `solver`. See `GreenSolvers` for
 available solvers. If `solver` is not provided, a default solver is chosen automatically

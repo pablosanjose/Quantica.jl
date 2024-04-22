@@ -652,7 +652,8 @@ end
 
 #region ## API ##
 
-minimal_callsafe_copy(s::AppliedBandsGreenSolver) = s   # solver is read-only
+# Parent hamiltonian needs to be non-parametric, so no need to alias
+minimal_callsafe_copy(s::AppliedBandsGreenSolver, parentham, parentcontacts) = s
 
 needs_omega_shift(s::AppliedBandsGreenSolver) = false
 
@@ -666,7 +667,7 @@ boundaries(s::AppliedBandsGreenSolver) = (s.boundaryorbs.boundary,)
 #region ## apply ##
 
 function apply(s::GS.Bands,  h::AbstractHamiltonian{T,<:Any,L}, cs::Contacts) where {T,L}
-    L == 0 && argerror("Cannot use GreenSolver.Bands with 0D AbstractHamiltonians")
+    L == 0 && argerror("Cannot use GreenSolvers.Bands with 0D AbstractHamiltonians")
     ticks = s.bandsargs
     kw = s.bandskw
     b = bands(h, ticks...; kw..., projectors = true, split = false)
@@ -888,7 +889,7 @@ view_or_copy(ψ, rows::Union{Colon,AbstractRange}, cols::Union{Colon,AbstractRan
     view(ψ, rows, cols)
 view_or_copy(ψ, rows, cols) = ψ[rows, cols]
 
-minimal_callsafe_copy(s::BandsGreenSlicer) = s  # it is read-only
+minimal_callsafe_copy(s::BandsGreenSlicer, parentham, parentcontacts) = s  # it is read-only
 
 #endregion
 

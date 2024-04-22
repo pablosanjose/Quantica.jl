@@ -4,7 +4,7 @@
 #     - apply(solver, h::AbstractHamiltonian, c::Contacts) -> AppliedGreenSolver
 #   All new s::AppliedGreenSolver must implement (with Σblock a [possibly nested] tuple of MatrixBlock's)
 #      - s(ω, Σblocks, ::ContactOrbitals) -> GreenSlicer
-#      - minimal_callsafe_copy(s)
+#      - minimal_callsafe_copy(s, parentham, parentcontacts)  # injects aliases from parent
 #      - optional: needs_omega_shift(s) (has a `true` default fallback)
 #   A gs::GreenSlicer's allows to compute G[gi, gi´]::AbstractMatrix for indices gi
 #   To do this, it must implement contact slicing (unless it relies on TMatrixSlicer)
@@ -12,7 +12,7 @@
 #      - view(gs, ::Colon, ::Colon) -> g(ω; kw...) between all contacts (has error fallback)
 #   It must also implement generic slicing, and minimal copying
 #      - gs[i::CellOrbitals, j::CellOrbitals] -> must return a Matrix for type stability
-#      - minimal_callsafe_copy(gs)
+#      - minimal_callsafe_copy(gs, parentham, parentcontacts)
 #   The user-facing indexing API accepts:
 #      - i::Integer -> Sites of Contact number i
 #      - cellsites(cell::Tuple, sind::Int)::Subcell -> Single site in a cell
@@ -22,6 +22,7 @@
 #      - sel::SiteSelector ~ NamedTuple -> forms a LatticeSlice
 #   Optional: to properly plot boundaries, an ::AbstractGreenSolver may also implement
 #      - boundaries(s::AbstractGreenSolver) -> collection of (dir => cell)::Pair{Int,Int}
+#   Aliasing: Green solvers may only alias fields from the parent Hamiltonian and Contacts
 ############################################################################################
 
 module GreenSolvers

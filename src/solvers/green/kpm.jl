@@ -140,7 +140,8 @@ end
 
 moments(s::AppliedKPMGreenSolver) = s.moments
 
-minimal_callsafe_copy(s::AppliedKPMGreenSolver) = AppliedKPMGreenSolver(copy(s.momenta), s.bandCH)
+# Parent ham needs to be non-parametric, so no need to alias
+minimal_callsafe_copy(s::AppliedKPMGreenSolver, parentham, parentcontacts) = s
 
 needs_omega_shift(s::AppliedKPMGreenSolver) = false
 

@@ -4,8 +4,9 @@
 #   ization, possibly using inverse-free self-energies (using extended sites).
 #region
 
+# invgreen aliases contacts (they are not implemented through a TMatrixSlicer)
 struct AppliedSparseLUGreenSolver{C} <: AppliedGreenSolver
-    invgreen::InverseGreenBlockSparse{C}
+    invgreen::InverseGreenBlockSparse{C}    # aliases parent contacts
 end
 
 mutable struct SparseLUGreenSlicer{C} <:GreenSlicer{C}
@@ -39,11 +40,10 @@ unitcellinds_contacts(s::SparseLUGreenSlicer, i::Integer) =
         argerror("Cannot access contact $i, there are $(length(s.unitcinds)) contacts")
 unitcellinds_contacts_merged(s::SparseLUGreenSlicer) = s.unitcindsall
 
-minimal_callsafe_copy(s::AppliedSparseLUGreenSolver) =
-    AppliedSparseLUGreenSolver(minimal_callsafe_copy(s.invgreen))
-
-minimal_callsafe_copy(s::SparseLUGreenSlicer{C}) where {C} =
-    SparseLUGreenSlicer{C}(s.fact, s.nonextrng, s.unitcinds, s.unitcindsall, copy(s.source64))
+function minimal_callsafe_copy(s::AppliedSparseLUGreenSolver, parentham, parentcontacts)
+    invgreen´ = inverse_green(parentham, parentcontacts)
+    return AppliedSparseLUGreenSolver(invgreen´)
+end
 
 #endregion
 
@@ -55,7 +55,7 @@ function apply(::GS.SparseLU, h::AbstractHamiltonian0D, cs::Contacts)
 end
 
 apply(::GS.SparseLU, h::AbstractHamiltonian, cs::Contacts) =
-    argerror("Can only use GreenSolver.SparseLU with 0D AbstractHamiltonians")
+    argerror("Can only use GreenSolvers.SparseLU with 0D AbstractHamiltonians")
 
 #endregion
 
@@ -102,9 +102,12 @@ Base.view(s::SparseLUGreenSlicer, ::Colon, ::Colon) =
     compute_or_retrieve_green(s, s.unitcindsall, s.unitcindsall, s.source64, s.sourceC)
 
 function Base.view(s::SparseLUGreenSlicer{C}, i::CellOrbitals, j::CellOrbitals) where {C}
-    # cannot use s.source64, because it has only ncols = number of orbitals in contacts
-    source64 = similar_source64(s, j)
-    sourceC = convert(Matrix{C}, source64)  # will alias if C == ComplexF64
+    # we only preallocate if we actually need to call ldiv! below (empty unitg cache)
+    must_call_ldiv! = !isdefined(s, :unitg)
+    # need similar because s.source64 has only ncols = number of orbitals in contacts
+    source64 = must_call_ldiv! ? similar_source64(s, j) : s.source64
+    # this will alias if C == ComplexF64
+    sourceC = must_call_ldiv! ? convert(Matrix{C}, source64) : s.sourceC
     v = compute_or_retrieve_green(s, orbindices(i), orbindices(j), source64, sourceC)
     return v
 end
@@ -112,9 +115,9 @@ end
 # Implements cache for full ldiv! solve (unitg)
 # source64 and sourceC are of size (total_orbs_including_extended, length(srcinds))
 function compute_or_retrieve_green(s::SparseLUGreenSlicer{C}, dstinds, srcinds, source64, sourceC) where {C}
-    if isdefined(s, :unitg)
+    if isdefined(s, :unitg)     # we have already computed the full-cell slice
         g = view(s.unitg, dstinds, srcinds)
-    else
+    else                        # we haven't, so we must do some work still
         fact = s.fact
         allinds = 1:size(fact, 1) # axes not defined on SparseArrays.UMFPACK.UmfpackLU
         one!(source64, srcinds)
@@ -124,7 +127,7 @@ function compute_or_retrieve_green(s::SparseLUGreenSlicer{C}, dstinds, srcinds, 
         dstinds´ = ifelse(dstinds === allinds, s.nonextrng, dstinds)
         srcinds´ = convert(typeof(srcinds), 1:length(srcinds))
         g = view(sourceC, dstinds´, srcinds´)
-        if srcinds === allinds
+        if srcinds == allinds
             s.unitg = copy(view(gext, s.nonextrng, s.nonextrng))     # exclude extended orbs
         end
     end
@@ -138,6 +141,15 @@ similar_source64(s::SparseLUGreenSlicer, j::CellOrbitals) =
 
 # getindex must return a Matrix
 Base.getindex(s::SparseLUGreenSlicer, i::CellOrbitals, j::CellOrbitals) = copy(view(s, i, j))
+
+# the lazy unitg field only aliases source64 or a copy of it. It is not necessary to
+# maintain the alias, as this is just a prealloc for a full-cell slice. We don't even need
+# to copy it, since once it is computed, it is never modified, only read
+function minimal_callsafe_copy(s::SparseLUGreenSlicer{C}, parentham, parentcontacts) where {C}
+    s´ = SparseLUGreenSlicer{C}(s.fact, s.nonextrng, s.unitcinds, s.unitcindsall, copy(s.source64))
+    isdefined(s, :unitg) && (s´.unitg = s.unitg)
+    return s´
+end
 
 #endregion
 
