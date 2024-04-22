@@ -1,4 +1,5 @@
-using Quantica: GreenFunction, GreenSlice, GreenSolution, zerocell, CellOrbitals, ncontacts
+using Quantica: GreenFunction, GreenSlice, GreenSolution, zerocell, CellOrbitals, ncontacts,
+    solver
 
 function testgreen(h, s; kw...)
     ω = 0.2
