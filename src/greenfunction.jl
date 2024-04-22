@@ -139,7 +139,7 @@ Base.getindex(s::GreenSlicer, ::CellOrbitals, ::CellOrbitals) =
 
 # fallback, for GreenSlicers that don't implement view
 Base.view(g::GreenSlicer, args...) =
-    argerror("GreenSlicer of type $(nameof(typeof(g))) doesn't implement view")
+    argerror("GreenSlicer of type $(nameof(typeof(g))) doesn't implement view for these arguments")
 
 # must ensure that orbindices is not a scalar, to consistently obtain a Matrix
 sanitize_cellorbs(c::CellOrbitals) = c
