@@ -22,13 +22,24 @@ default_green_solver(::AbstractHamiltonian) = GS.Bands()
 #endregion
 
 ############################################################################################
+# Contacts call! API
+#region
+
+function call!(c::Contacts, ω; params...)
+    Σblocks = selfenergyblocks(c)
+    call!.(c.selfenergies, Ref(ω); params...) # updates matrices in Σblocks
+    return Σblocks
+end
+
+call!_output(c::Contacts) = selfenergyblocks(c)
+
+#endregion
+
+############################################################################################
 # GreenFuntion call! API
 #region
 
-## TODO: test copy(g) for potential aliasing problems
-(g::GreenFunction)(; params...) = minimal_callsafe_copy(call!(g; params...))
 (g::GreenFunction)(ω; params...) = minimal_callsafe_copy(call!(g, ω; params...))
-(g::GreenSlice)(; params...) = minimal_callsafe_copy(call!(g; params...))
 (g::GreenSlice)(ω; params...) = copy(call!(g, ω; params...))
 
 call!(g::G, ω; params...) where {T,G<:Union{GreenFunction{T},GreenSlice{T}}} =
@@ -49,9 +60,6 @@ function call!(g::GreenFunction{T}, ω::Complex{T}; params...) where {T}
     return GreenSolution(g, slicer, Σblocks, corbs)
 end
 
-call!(g::GreenSlice; params...) =
-    GreenSlice(call!(greenfunction(g); params...), greenindices(g)...)
-
 call!(g::GreenSlice{T}, ω::T; params...) where {T} =
     call!(g, retarded_omega(ω, solver(parent(g))); params...)
 
@@ -70,18 +78,43 @@ needs_omega_shift(s::AppliedGreenSolver) = true
 #endregion
 
 ############################################################################################
-# Contacts call! API
+# DeparametrizedGreenSolver
+#   support for g(; params...) --> GreenFunction (not a wrapper, completely independent)
+#   DeparametrizedGreenSolver doesn't need to implement the AppliedGreenSolver API, since it
+#   forwards to its parent
 #region
 
-call!(c::Contacts; params...) = Contacts(call!.(c.selfenergies; params...), c.orbitals, c.orbslice)
-
-function call!(c::Contacts, ω; params...)
-    Σblocks = selfenergyblocks(c)
-    call!.(c.selfenergies, Ref(ω); params...) # updates matrices in Σblocks
-    return Σblocks
+struct DeparametrizedGreenSolver{P,G<:GreenFunction} <: AppliedGreenSolver
+    gparent::G
+    params::P
 end
 
-call!_output(c::Contacts) = selfenergyblocks(c)
+Base.parent(s::DeparametrizedGreenSolver) = s.gparent
+parameters(s::DeparametrizedGreenSolver) = s.params
+
+function (g::GreenFunction)(; params...)
+    h´ = minimal_callsafe_copy(parent(g))
+    c´ = minimal_callsafe_copy(contacts(g))
+    s´ = minimal_callsafe_copy(solver(g), h´, c´)
+    gparent = GreenFunction(h´, s´, c´)
+    return GreenFunction(h´, DeparametrizedGreenSolver(gparent, params), c´)
+end
+
+# params are ignored, solver.params are used instead. T required to disambiguate.
+function call!(g::GreenFunction{T,<:Any,<:Any,<:DeparametrizedGreenSolver}, ω::Complex{T}; params...) where {T}
+    s = solver(g)
+    return call!(s.gparent, ω; s.params...)
+end
+
+function minimal_callsafe_copy(s::DeparametrizedGreenSolver, parentham, parentcontacts)
+    solver´ = minimal_callsafe_copy(solver(s.gparent), parentham, parentcontacts)
+    gparent = GreenFunction(parentham, solver´, parentcontacts)
+    s´ = DeparametrizedGreenSolver(gparent, s.params)
+    return s´
+end
+
+default_hamiltonian(g::GreenFunction{<:Any,<:Any,<:Any,<:Quantica.DeparametrizedGreenSolver}) =
+    default_hamiltonian(parent(g); parameters(solver(g))...)
 
 #endregion
 

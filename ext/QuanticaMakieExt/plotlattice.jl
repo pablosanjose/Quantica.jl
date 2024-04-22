@@ -494,11 +494,11 @@ function Makie.plot!(plot::PlotLattice{Tuple{H,S,S´}}) where {H<:Hamiltonian,S<
     return plot
 end
 
-function Makie.plot!(plot::PlotLattice{Tuple{G}}) where {G<:GreenFunction}
+function Makie.plot!(plot::PlotLattice{Tuple{G}}) where {G<:Union{GreenFunction,OpenHamiltonian}}
     g = to_value(plot[1])
     gsel = haskey(plot, :selector) && plot[:selector][] !== missing ?
         plot[:selector][] : green_selector(g)
-    h = hamiltonian(g)
+    h = default_hamiltonian(g)
     latslice = lattice(h)[gsel]
     latslice´ = Quantica.growdiff(latslice, h)
     L = Quantica.latdim(h)
@@ -528,7 +528,7 @@ function Makie.plot!(plot::PlotLattice{Tuple{G}}) where {G<:GreenFunction}
     # plot contacts
     if !ishidden((:contact, :contacts), plot)
         Σkws = Iterators.cycle(parse_children(plot[:children]))
-        Σs = Quantica.selfenergies(Quantica.contacts(g))
+        Σs = Quantica.selfenergies(g)
         hideΣ = Quantica.tupleflatten(:bravais, plot[:hide][])
         for (Σ, Σkw) in zip(Σs, Σkws)
             Σplottables = Quantica.selfenergy_plottables(Σ)
@@ -575,7 +575,7 @@ boundary_selector(g) = siteselector(cells = n -> isboundarycell(n, g))
 
 function green_bounding_box(g)
     L = Quantica.latdim(hamiltonian(g))
-    return isempty(Quantica.contacts(g)) ?
+    return isempty(Quantica.selfenergies(g)) ?
         boundary_bounding_box(Val(L), Quantica.boundaries(g)...) :
         broaden_bounding_box(Quantica.boundingbox(g), Quantica.boundaries(g)...)
 end
@@ -748,9 +748,9 @@ Makie.convert_arguments(::PointBased, lat::Lattice, sublat = missing) =
     (Point.(Quantica.sites(lat, sublat)),)
 Makie.convert_arguments(p::PointBased, lat::Lattice{<:Any,1}, sublat = missing) =
     Makie.convert_arguments(p, Quantica.lattice(lat, dim = Val(2)), sublat)
-Makie.convert_arguments(p::PointBased, h::Union{AbstractHamiltonian,GreenFunction,GreenSolution}, sublat = missing) =
+Makie.convert_arguments(p::PointBased, h::Union{AbstractHamiltonian,GreenFunction,GreenSolution,OpenHamiltonian}, sublat = missing) =
     Makie.convert_arguments(p, Quantica.lattice(h), sublat)
-Makie.convert_arguments(p::Type{<:LineSegments}, g::Union{GreenFunction,GreenSolution}, sublat = missing) =
+Makie.convert_arguments(p::Type{<:LineSegments}, g::Union{GreenFunction,GreenSolution,OpenHamiltonian}, sublat = missing) =
     Makie.convert_arguments(p, Quantica.hamiltonian(g), sublat)
 
 function Makie.convert_arguments(::Type{<:LineSegments}, h::AbstractHamiltonian{<:Any,E}, sublat = missing) where {E}
