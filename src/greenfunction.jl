@@ -97,15 +97,12 @@ Base.getindex(g::GreenFunction, kw::NamedTuple) = g[siteselector(; kw...)]
 Base.getindex(g::GreenSolution; kw...) = g[getindex(lattice(g); kw...)]
 Base.getindex(g::GreenSolution, kw::NamedTuple) = g[getindex(lattice(g); kw...)]
 
-# wrapped view for end user consumption
-Base.view(g::GreenSolution, i::Integer, j::Integer = i) =
-    OrbitalSliceMatrix(view(slicer(g), i, j), sites_to_orbs.((i,j), Ref(g)))
-Base.view(g::GreenSolution, i::Colon, j::Colon = i) =
-    OrbitalSliceMatrix(view(slicer(g), i, j), sites_to_orbs.((i,j), Ref(g)))
+# g[::Integer, ::Integer] and g[:, :] - intra and inter contacts
+Base.view(g::GreenSolution, i::CT, j::CT = i) where {CT<:Union{Integer,Colon}} = view(slicer(g), i, j)
 
 # fastpath for intra and inter-contact
-Base.getindex(g::GreenSolution, i::Integer, j::Integer = i) = copy(view(g, i, j))
-Base.getindex(g::GreenSolution, ::Colon, ::Colon = :) = copy(view(g, :, :))
+Base.getindex(g::GreenSolution, i::CT, j::CT = i)  where {CT<:Union{Integer,Colon}}  =
+    OrbitalSliceMatrix(copy(view(g, i, j)), sites_to_orbs.((i,j), Ref(g)))
 
 # conversion down to CellOrbitals. See sites_to_orbs in slices.jl
 Base.getindex(g::GreenSolution, i, j) = getindex(g, sites_to_orbs(i, g), sites_to_orbs(j, g))

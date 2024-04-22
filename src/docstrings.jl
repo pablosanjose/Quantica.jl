@@ -1553,8 +1553,16 @@ retarded `g`.
     gs(ω; params...)
 
 For any `gω::GreenSolution` or `gs::GreenSlice`, build the Green function matrix fully
-evaluated at fixed energy, parameters and positions. The matrix is dense and has scalar
-elements, so that any orbital structure on each site is flattened.
+evaluated at fixed energy, parameters and positions. The matrix is a dense
+`m::OrbitalSliceMatrix` with scalar element type, so that any orbital structure on each site
+is flattened. Note that the resulting `m` can itself be indexed over collections of sites
+with `m[i, j]`, where `i, j` are `siteselector(; ss...)` or `ss::NamedTuple`.
+
+    view(gω, i::C, j::C == i)
+
+For any `gω::GreenSolution` and `C<:Union{Colon,Integer}`, obtain a view (of type
+`SubArray`, not `OrbitalSliceMatrix`) of the corresponding intra or inter-contact propagator
+`gω[i, j]` with minimal allocations.
 
 # Example
 ```jldoctest
