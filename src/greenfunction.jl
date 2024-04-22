@@ -90,6 +90,7 @@ struct DeparametrizedGreenSolver{P,G<:GreenFunction} <: AppliedGreenSolver
 end
 
 Base.parent(s::DeparametrizedGreenSolver) = s.gparent
+
 parameters(s::DeparametrizedGreenSolver) = s.params
 
 function (g::GreenFunction)(; params...)
@@ -99,6 +100,8 @@ function (g::GreenFunction)(; params...)
     gparent = GreenFunction(h´, s´, c´)
     return GreenFunction(h´, DeparametrizedGreenSolver(gparent, params), c´)
 end
+
+(g::GreenSlice)(; params...) = GreenSlice(parent(g)(; params...), greenindices(g)...)
 
 # params are ignored, solver.params are used instead. T required to disambiguate.
 function call!(g::GreenFunction{T,<:Any,<:Any,<:DeparametrizedGreenSolver}, ω::Complex{T}; params...) where {T}
