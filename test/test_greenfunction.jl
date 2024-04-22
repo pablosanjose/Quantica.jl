@@ -102,6 +102,12 @@ end
     g = central |> attach(glead[cells = 1], -hopping(1), region = r -> r[1] > 1.3 && -1.1 <= r[2] <= 1.1, transform = r -> r + SA[1.2,0]) |> greenfunction
     @test g isa GreenFunction
     @test_throws ArgumentError central |> attach(glead[cells = 1], -hopping(1), region = r -> r[1] > 2.3 && -1.1 <= r[2] <= 1.1, transform = r -> r + SA[1.2,0])
+
+    # cheap views
+    g = LP.linear() |> hopping(1) |> attach(@onsite((ω; p = 1) -> p), cells = 1) |> attach(@onsite((ω; p = 1) -> p), cells = 3) |> greenfunction
+    gs = g(0.2)
+    @test view(gs, 1, 2) isa SubArray
+    @test (@allocations view(gs, 1, 2)) == 1
 end
 
 @testset "GreenSolvers applicability" begin
