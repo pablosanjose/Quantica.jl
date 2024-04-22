@@ -31,8 +31,7 @@
         hide = :cell,               # :hops, :sites, :bravais, :cell, :axes, :shell, :boundary, :contacts, :all
         isAxis3 = false,            # for internal use, to fix marker scaling
         marker = :auto,
-        children = missing,
-        inspector = false
+        children = missing
     )
 end
 
@@ -43,7 +42,7 @@ end
 #region
 
 function Quantica.qplot(h::PlotLatticeArgumentType;
-    fancyaxis = true, axis = axis_defaults(h, fancyaxis), figure = user_default_figure, inspector = false, plotkw...)
+    fancyaxis = true, axis = axis_defaults(h, fancyaxis), figure = user_default_figure, inspector = true, plotkw...)
     fig, ax = empty_fig_axis(h; fancyaxis, axis, figure)
     plotkw´ = (isAxis3 = ax isa Axis3, inspector, plotkw...)   # isAxis3 necessary to fix marker scaling
     plotlattice!(ax, h; plotkw´...)

@@ -24,7 +24,7 @@ end
 #region
 
 function Quantica.qplot(b::PlotBandsArgumentType;
-    fancyaxis = true, axis = axis_defaults(b, fancyaxis), figure = user_default_figure, inspector = false, plotkw...)
+    fancyaxis = true, axis = axis_defaults(b, fancyaxis), figure = user_default_figure, inspector = true, plotkw...)
     fig, ax = empty_fig_axis(b; fancyaxis, axis, figure)
     plotbands!(ax, b; plotkw...)
     inspector && DataInspector(; default_inspector..., user_default_inspector...)
