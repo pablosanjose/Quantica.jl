@@ -471,12 +471,17 @@ orbindices(s::AnyCellOrbitals) = s.inds
 siteindex(s::AnyCellSite) = s.inds
 orbindex(s::CellOrbital) = s.inds
 
-indexcollection(l::LatticeSlice, c::CellSitePos) = siteindexdict(l)[CellSite(c)]
-indexcollection(l::LatticeSlice, c::CellSite) = siteindexdict(l)[c]
-indexcollection(l::LatticeSlice, cs::CellSites) =
-    [j for i in siteindices(cs) for j in indexcollection(l, CellSite(cell(cs), i))]
 indexcollection(lold::LatticeSlice, lnew::LatticeSlice) =
     [j for s in cellsites(lnew) for j in indexcollection(lold, s)]
+indexcollection(l::LatticeSlice, c::CellSitePos) =
+    siteindexdict(l)[sanitize_cellindices(CellSite(c), l)]
+indexcollection(l::LatticeSlice, c::CellSite) =
+    siteindexdict(l)[sanitize_cellindices(c, l)]
+indexcollection(l::LatticeSlice, cs::CellSites) =
+    sanitized_indexcollection(l, sanitize_cellindices(cs, l))
+
+sanitized_indexcollection(l::LatticeSlice, cs::CellSites) =
+    [j for i in siteindices(cs) for j in indexcollection(l, CellSite(cell(cs), i))]
 
 siteindexdict(l::LatticeSlice) = l.siteindsdict
 siteindexdict(l::OrbitalSlice) = missing        # in this case, cellsites are not known
@@ -2265,9 +2270,9 @@ Base.getindex(o::BarebonesOperator{L}, dn::SVector{L,Int}) where {L} =
 
 # Unlike o[dn][i, j], o[si::AnyCellSites, sj::AnyCellSites] returns a zero if !haskey(dn)
 function Base.getindex(o::BarebonesOperator{L}, i::AnyCellSites, j::AnyCellSites = i) where {L}
-    i´, j = sanitize_cellindices(i, Val(L)), sanitize_cellindices(j, Val(L))
-    dn = cell(J´) - cell(i´)
-    si, sj = siteindices(i´), siteindices(J´)
+    i´, j´ = sanitize_cellindices(i, Val(L)), sanitize_cellindices(j, Val(L))
+    dn = cell(j´) - cell(i´)
+    si, sj = siteindices(i´), siteindices(j´)
     if haskey(harmonics(o), dn)
         x = o[dn][si, sj]
     else
