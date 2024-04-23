@@ -837,8 +837,7 @@ end
 
 const AnyAbstractModifier = Union{AbstractModifier,Interblock{<:AbstractModifier},Intrablock{<:AbstractModifier}}
 const AnyModifier = Union{Modifier,Interblock{<:Modifier},Intrablock{<:Modifier}}
-const AnyOnsiteModifier = Union{OnsiteModifier,Interblock{<:OnsiteModifier},Intrablock{<:OnsiteModifier}}
-const AnyHoppingModifier = Union{HoppingModifier,Interblock{<:HoppingModifier},Intrablock{<:HoppingModifier}}
+const BlockModifier = Union{Interblock{<:AbstractModifier},Intrablock{<:AbstractModifier}}
 
 Base.parent(m::Union{Interblock,Intrablock}) = m.parent
 

@@ -166,12 +166,10 @@ apply(m::ParametricModel, lat) = ParametricModel(apply.(terms(m), Ref(lat)))
 #region
 
 # Any means it could be wrapped in Intrablock or Interblock
-apply(m::AnyOnsiteModifier, h::Hamiltonian, shifts = missing) =
-    apply(parent(m), h, shifts, block(m, blockstructure(h)))
-apply(m::AnyHoppingModifier, h::Hamiltonian, shifts = missing) =
+apply(m::BlockModifier, h::Hamiltonian, shifts = missing) =
     apply(parent(m), h, shifts, block(m, blockstructure(h)))
 
-function apply(m::OnsiteModifier, h::Hamiltonian, shifts, oblock)
+function apply(m::OnsiteModifier, h::Hamiltonian, shifts = missing, oblock = missing)
     f = parametric_function(m)
     sel = selector(m)
     asel = apply(sel, lattice(h))
@@ -181,7 +179,7 @@ function apply(m::OnsiteModifier, h::Hamiltonian, shifts, oblock)
     return AppliedOnsiteModifier(sel, B, f, ptrs, spatial)
 end
 
-function apply(m::HoppingModifier, h::Hamiltonian, shifts, oblock)
+function apply(m::HoppingModifier, h::Hamiltonian, shifts = missing, oblock = missing)
     f = parametric_function(m)
     sel = selector(m)
     asel = apply(sel, lattice(h))
