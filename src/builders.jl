@@ -196,8 +196,10 @@ function IJVBuilder(lat::Lattice{T}, hams::AbstractHamiltonian...) where {T}
     orbs = vcat(norbitals.(hams)...)
     builder = IJVBuilderWithModifiers(lat, orbs)
     push_ijvharmonics!(builder, hams...)
-    unapplied_modifiers = tupleflatten(parent.(modifiers.(hams))...)
-    push!(builder, unapplied_modifiers...)
+    mss = modifiers.(hams)
+    bis = blockindices(hams)
+    unapplied_block_modifiers = ((ms, bi) -> intrablock.(parent.(ms), Ref(bi))).(mss, bis)
+    push!(builder, tupleflatten(unapplied_block_modifiers...)...)
     return builder
 end
 
@@ -261,7 +263,7 @@ harmonics(b::AbstractHamiltonianBuilder) = b.harmonics
 
 Base.length(b::AbstractHarmonicBuilder) = length(collector(b))
 
-Base.push!(b::IJVBuilderWithModifiers, ms::Modifier...) = push!(b.modifiers, ms...)
+Base.push!(b::IJVBuilderWithModifiers, ms::AnyModifier...) = push!(b.modifiers, ms...)
 
 Base.pop!(b::IJVBuilderWithModifiers) = pop!(b.modifiers)
 

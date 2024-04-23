@@ -165,27 +165,33 @@ apply(m::ParametricModel, lat) = ParametricModel(apply.(terms(m), Ref(lat)))
 #   shifts is useful for supercell, where we want to keep the r, dr of original lat
 #region
 
-function apply(m::OnsiteModifier, h::Hamiltonian, shifts = missing)
+# Any means it could be wrapped in Intrablock or Interblock
+apply(m::AnyOnsiteModifier, h::Hamiltonian, shifts = missing) =
+    apply(parent(m), h, shifts, block(m, blockstructure(h)))
+apply(m::AnyHoppingModifier, h::Hamiltonian, shifts = missing) =
+    apply(parent(m), h, shifts, block(m, blockstructure(h)))
+
+function apply(m::OnsiteModifier, h::Hamiltonian, shifts, oblock)
     f = parametric_function(m)
     sel = selector(m)
     asel = apply(sel, lattice(h))
-    ptrs = pointers(h, asel, shifts)
+    ptrs = pointers(h, asel, shifts, oblock)
     B = blocktype(h)
     spatial = is_spatial(m)
     return AppliedOnsiteModifier(sel, B, f, ptrs, spatial)
 end
 
-function apply(m::HoppingModifier, h::Hamiltonian, shifts = missing)
+function apply(m::HoppingModifier, h::Hamiltonian, shifts, oblock)
     f = parametric_function(m)
     sel = selector(m)
     asel = apply(sel, lattice(h))
-    ptrs = pointers(h, asel, shifts)
+    ptrs = pointers(h, asel, shifts, oblock)
     B = blocktype(h)
     spatial = is_spatial(m)
     return AppliedHoppingModifier(sel, B, f, ptrs, spatial)
 end
 
-function pointers(h::Hamiltonian{T,E,L,B}, s::AppliedSiteSelector{T,E,L}, shifts) where {T,E,L,B}
+function pointers(h::Hamiltonian{T,E,L,B}, s::AppliedSiteSelector{T,E,L}, shifts, oblock) where {T,E,L,B}
     isempty(cells(s)) || argerror("Cannot constrain cells in an onsite modifier, cell periodicity is assumed.")
     ptrs = Tuple{Int,SVector{E,T},CellSitePos{T,E,L,B},Int}[]
     isnull(s) && return ptrs
@@ -195,21 +201,24 @@ function pointers(h::Hamiltonian{T,E,L,B}, s::AppliedSiteSelector{T,E,L}, shifts
     umat = unflat(har0)
     rows = rowvals(umat)
     norbs = norbitals(h)
-    for scol in sublats(lat), col in siterange(lat, scol), p in nzrange(umat, col)
-        row = rows[p]
-        col == row || continue
-        r = site(lat, col)
-        r = apply_shift(shifts, r, col)
-        if (scol, r) in s
-            n = norbs[scol]
-            sp = CellSitePos(dn0, col, r, B)
-            push!(ptrs, (p, r, sp, n))
+    for scol in sublats(lat), col in siterange(lat, scol)
+        isinblock(col, oblock) || continue
+        for p in nzrange(umat, col)
+            row = rows[p]
+            col == row || continue
+            r = site(lat, col)
+            r = apply_shift(shifts, r, col)
+            if (scol, r) in s
+                n = norbs[scol]
+                sp = CellSitePos(dn0, col, r, B)
+                push!(ptrs, (p, r, sp, n))
+            end
         end
     end
     return ptrs
 end
 
-function pointers(h::Hamiltonian{T,E,L,B}, s::AppliedHopSelector{T,E,L}, shifts) where {T,E,L,B}
+function pointers(h::Hamiltonian{T,E,L,B}, s::AppliedHopSelector{T,E,L}, shifts, oblock) where {T,E,L,B}
     hars = harmonics(h)
     ptrs = [Tuple{Int,SVector{E,T},SVector{E,T},CellSitePos{T,E,L,B},CellSitePos{T,E,L,B},Tuple{Int,Int}}[] for _ in hars]
     isnull(s) && return ptrs
@@ -221,6 +230,7 @@ function pointers(h::Hamiltonian{T,E,L,B}, s::AppliedHopSelector{T,E,L}, shifts)
         rows = rowvals(mh)
         for scol in sublats(lat), col in siterange(lat, scol), p in nzrange(mh, col)
             row = rows[p]
+            isinblock(row, col, oblock) || continue
             srow = sitesublat(lat, row)
             dn = dcell(har)
             rcol = site(lat, col, dn0)

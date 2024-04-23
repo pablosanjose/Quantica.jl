@@ -619,20 +619,6 @@ struct ParametricModel{T<:NTuple{<:Any,AbstractParametricTerm},M<:TightbindingMo
     terms::T    # Collection of `AbstractParametricTerm`s
 end
 
-## BlockModels ##
-
-struct InterblockModel{M<:AbstractModel,N}
-    model::M
-    block::NTuple{N,UnitRange{Int}}  # May be two or more ranges
-end
-
-struct IntrablockModel{M<:AbstractModel}
-    model::M
-    block::UnitRange{Int}
-end
-
-const AbstractBlockModel{M} = Union{InterblockModel{M},IntrablockModel{M}}
-
 #region ## Constructors ##
 
 ParametricFunction{N}(f::F, params = Symbol[]) where {N,F} =
@@ -673,10 +659,6 @@ narguments(t::OnsiteTerm) = 0
 narguments(t::HoppingTerm) = 0
 narguments(t::AbstractParametricTerm) = narguments(t.f)
 narguments(::ParametricFunction{N}) where {N} = N
-
-Base.parent(m::InterblockModel) = m.model
-
-block(m::InterblockModel) = m.block
 
 is_spatial(t::AbstractParametricTerm) = t.spatial
 is_spatial(t) = true
@@ -836,6 +818,32 @@ Base.parent(m::AppliedOnsiteModifier) = OnsiteModifier(m.f, m.parentselector, m.
 Base.parent(m::AppliedHoppingModifier) = HoppingModifier(m.f, m.parentselector, m.spatial)
 
 #endregion
+#endregion
+
+############################################################################################
+# Intrablock and Interblock - see models.jl
+#    Wrappers to restrict models and modifiers to certain blocks of a Hamiltonian
+#region
+
+struct Interblock{M<:Union{AbstractModel,AbstractModifier},N}
+    parent::M
+    block::NTuple{N,UnitRange{Int}}  # May be two or more ranges
+end
+
+struct Intrablock{M<:Union{AbstractModel,AbstractModifier}}
+    parent::M
+    block::UnitRange{Int}
+end
+
+const AnyAbstractModifier = Union{AbstractModifier,Interblock{<:AbstractModifier},Intrablock{<:AbstractModifier}}
+const AnyModifier = Union{Modifier,Interblock{<:Modifier},Intrablock{<:Modifier}}
+const AnyOnsiteModifier = Union{OnsiteModifier,Interblock{<:OnsiteModifier},Intrablock{<:OnsiteModifier}}
+const AnyHoppingModifier = Union{HoppingModifier,Interblock{<:HoppingModifier},Intrablock{<:HoppingModifier}}
+
+Base.parent(m::Union{Interblock,Intrablock}) = m.parent
+
+block(m::Union{Interblock,Intrablock}) = m.block
+
 #endregion
 
 ############################################################################################

@@ -176,10 +176,13 @@ interblock(m::AbstractModel, hams::AbstractHamiltonian...) =
     interblock(m, blockindices(hams)...)
 
 interblock(m::AbstractModel, inds...) = isempty(intersect(inds...)) ?
-    InterblockModel(hopping(m), inds) :
-    InterblockModel(m, inds)                 # if blocks overlap, don't exclude onsite terms
+    Interblock(hopping(m), inds) :
+    Interblock(m, inds)                 # if blocks overlap, don't exclude onsite terms
 
-intrablock(m::AbstractModel, inds) = IntrablockModel(m, inds)
+intrablock(m::AbstractModel, inds) = Intrablock(m, inds)
+
+interblock(m::AbstractModifier, inds) = Interblock(m, inds)
+intrablock(m::AbstractModifier, inds) = Intrablock(m, inds)
 
 function blockindices(hams::NTuple{N,Any}) where {N}
     offset = 0
@@ -191,5 +194,9 @@ function blockindices(hams::NTuple{N,Any}) where {N}
     end
     return inds
 end
+
+block(m::Intrablock, b::OrbitalBlockStructure) = flatrange(b, block(m))
+block(m::Interblock, b::OrbitalBlockStructure) = flatrange.(Ref(b), block(m))
+block(::Union{AbstractModel,AbstractModifier}, b...) = missing
 
 #endregion

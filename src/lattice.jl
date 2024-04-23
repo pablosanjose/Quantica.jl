@@ -90,7 +90,7 @@ unitcell(u::Unitcell{T,E}, names, postype::Type{S})  where {T,E,S<:SVector{E,T}}
 # end
 
 ############################################################################################
-# combine lattices - combine sublats if equal name
+# combine lattices - combine sublats, rename if equal name
 #region
 
 function combine(lats::Lattice{<:Any,E,L}...) where {E,L}
