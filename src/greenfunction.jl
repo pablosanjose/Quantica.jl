@@ -78,42 +78,45 @@ needs_omega_shift(s::AppliedGreenSolver) = true
 #endregion
 
 ############################################################################################
-# DeparametrizedGreenSolver
+# FixedParamGreenSolver
 #   support for g(; params...) --> GreenFunction (not a wrapper, completely independent)
-#   DeparametrizedGreenSolver doesn't need to implement the AppliedGreenSolver API, since it
+#   FixedParamGreenSolver doesn't need to implement the AppliedGreenSolver API, since it
 #   forwards to its parent
 #region
 
-struct DeparametrizedGreenSolver{P,G<:GreenFunction} <: AppliedGreenSolver
+struct FixedParamGreenSolver{P,G<:GreenFunction} <: AppliedGreenSolver
     gparent::G
     params::P
 end
 
-Base.parent(s::DeparametrizedGreenSolver) = s.gparent
-parameters(s::DeparametrizedGreenSolver) = s.params
+Base.parent(s::FixedParamGreenSolver) = s.gparent
+
+parameters(s::FixedParamGreenSolver) = s.params
 
 function (g::GreenFunction)(; params...)
     h´ = minimal_callsafe_copy(parent(g))
     c´ = minimal_callsafe_copy(contacts(g))
     s´ = minimal_callsafe_copy(solver(g), h´, c´)
     gparent = GreenFunction(h´, s´, c´)
-    return GreenFunction(h´, DeparametrizedGreenSolver(gparent, params), c´)
+    return GreenFunction(h´, FixedParamGreenSolver(gparent, params), c´)
 end
 
+(g::GreenSlice)(; params...) = GreenSlice(parent(g)(; params...), greenindices(g)...)
+
 # params are ignored, solver.params are used instead. T required to disambiguate.
-function call!(g::GreenFunction{T,<:Any,<:Any,<:DeparametrizedGreenSolver}, ω::Complex{T}; params...) where {T}
+function call!(g::GreenFunction{T,<:Any,<:Any,<:FixedParamGreenSolver}, ω::Complex{T}; params...) where {T}
     s = solver(g)
     return call!(s.gparent, ω; s.params...)
 end
 
-function minimal_callsafe_copy(s::DeparametrizedGreenSolver, parentham, parentcontacts)
+function minimal_callsafe_copy(s::FixedParamGreenSolver, parentham, parentcontacts)
     solver´ = minimal_callsafe_copy(solver(s.gparent), parentham, parentcontacts)
     gparent = GreenFunction(parentham, solver´, parentcontacts)
-    s´ = DeparametrizedGreenSolver(gparent, s.params)
+    s´ = FixedParamGreenSolver(gparent, s.params)
     return s´
 end
 
-default_hamiltonian(g::GreenFunction{<:Any,<:Any,<:Any,<:Quantica.DeparametrizedGreenSolver}) =
+default_hamiltonian(g::GreenFunction{<:Any,<:Any,<:Any,<:FixedParamGreenSolver}) =
     default_hamiltonian(parent(g); parameters(solver(g))...)
 
 #endregion

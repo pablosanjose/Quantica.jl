@@ -120,6 +120,11 @@ end
     @test g(0.2, p = 2)[] == g´(0.2)[]
     @test g(0.2, p = 1)[] != g´(0.2, p = 1)[]       # p = 1 is ignored by g´, fixed to p = 2
     @test solver(g) !== solver(parent(solver(g´)))  # no aliasing
+    gs = g[]
+    gs´ = gs(p = 2)
+    @test gs´ isa GreenSlice
+    @test gs´(0.3) == gs(0.3, p = 2)
+    @test gs´(0.3, p = 1) != gs(0.3, p = 1)
 end
 
 @testset "GreenSolvers applicability" begin

@@ -1564,6 +1564,11 @@ For any `gω::GreenSolution` and `C<:Union{Colon,Integer}`, obtain a view (of ty
 `SubArray`, not `OrbitalSliceMatrix`) of the corresponding intra or inter-contact propagator
 `gω[i, j]` with minimal allocations.
 
+    g(; params...)
+
+For any `g::Union{GreenFunction,GreenSlice}`, produce a new `GreenFunction` or `GreenSlice`
+with all parameters fixed to `params` (or to their default values if not provided).
+
 # Example
 ```jldoctest
 julia> g = LP.honeycomb() |> hamiltonian(@hopping((; t = 1) -> t)) |> supercell(region = RP.circle(10)) |> greenfunction(GS.SparseLU())

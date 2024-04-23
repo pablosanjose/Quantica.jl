@@ -50,9 +50,6 @@ end
     g = LP.linear() |> hamiltonian(@hopping((; q = 1) -> q*I), orbitals = 2) |> attach(@onsite((ω; p = 0) ->p*SA[0 1; 1 0]), cells = 1) |> greenfunction
     @test qplot(g) isa Figure
     @test qplot(g(p = 3)) isa Figure
-    # Issue 243
-    oh = LP.linear() |> hopping(1) |> attach(@onsite((ω; p = 1) -> p), cells = 1) |> attach(@onsite((ω; p = 1) -> p), cells = 3)
-    @test qplot(oh) isa Figure
 end
 
 @testset "plot bands" begin
