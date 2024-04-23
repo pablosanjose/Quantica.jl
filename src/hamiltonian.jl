@@ -7,18 +7,20 @@ add!(m::TightbindingModel) = b -> add!(b, m)
 
 # direct site indexing
 function add!(b::IJVBuilder, val, c::CellSites, d::CellSites)
-    ijv = b[cell(d) - cell(c)]
+    c´, d´ = sanitize_cellindices(c, b), sanitize_cellindices(d, b)
+    ijv = b[cell(d´) - cell(c´)]
     B = blocktype(b)
     val´ = mask_block(B, val)   # Warning: we don't check matrix size here, just conversion to B
-    add!(ijv, val´, siteindices(c), siteindices(d))
+    add!(ijv, val´, siteindices(c´), siteindices(d´))
     return b
 end
 
 function add!(b::IJVBuilder, val, c::CellSites)
-    ijv = b[zero(cell(c))]
+    c´ = sanitize_cellindices(c, b)
+    ijv = b[zero(cell(c´))]
     B = blocktype(b)
     val´ = mask_block(B, val)   # Warning: we don't check matrix size here, just conversion to B
-    add!(ijv, val´, siteindices(c))
+    add!(ijv, val´, siteindices(c´))
     return b
 end
 

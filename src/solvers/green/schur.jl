@@ -528,7 +528,7 @@ end
 
 function inf_schur_slice(s::SchurGreenSlicer, i::CellOrbitals, j::CellOrbitals)
     rows, cols = orbindices(i), orbindices(j)
-    dist = only(cell(i, Val(1)) - cell(j, Val(1)))
+    dist = only(cell(i) - cell(j))
     if dist == 0
         g = s.G∞₀₀
         i´, j´ = CellOrbitals((), rows), CellOrbitals((), cols)

@@ -495,8 +495,8 @@ cell(s::CellIndices) = s.cell
 
 cells(l::LatticeSlice) = keys(l.cellsdict)
 
-zerocellsites(::Val{L}, c::AnyCellSites{0}) where {L} =
-    CellIndices(zero(SVector{L,Int}), siteindices(c), c.type)
+zerocellinds(c::CellIndices{0}, ::Val{L}) where {L} =
+    CellIndices(zero(SVector{L,Int}), c.inds, c.type)
 
 nsites(s::LatticeSlice, cell...) = nsites(cellsdict(s, cell...))
 nsites(s::CellIndicesDict) = isempty(s) ? 0 : sum(nsites, s)
@@ -2264,9 +2264,10 @@ Base.getindex(o::BarebonesOperator{L}, dn::SVector{L,Int}) where {L} =
     matrix(harmonics(o)[dn])
 
 # Unlike o[dn][i, j], o[si::AnyCellSites, sj::AnyCellSites] returns a zero if !haskey(dn)
-function Base.getindex(o::BarebonesOperator, i::AnyCellSites, j::AnyCellSites = i)
-    dn = cell(j) - cell(i)
-    si, sj = siteindices(i), siteindices(j)
+function Base.getindex(o::BarebonesOperator{L}, i::AnyCellSites, j::AnyCellSites = i) where {L}
+    i´, j = sanitize_cellindices(i, Val(L)), sanitize_cellindices(j, Val(L))
+    dn = cell(J´) - cell(i´)
+    si, sj = siteindices(i´), siteindices(J´)
     if haskey(harmonics(o), dn)
         x = o[dn][si, sj]
     else
@@ -2275,7 +2276,6 @@ function Base.getindex(o::BarebonesOperator, i::AnyCellSites, j::AnyCellSites = 
     end
     return x
 end
-
 
 SparseArrays.nnz(h::BarebonesOperator) = sum(har -> nnz(matrix(har)), harmonics(h))
 

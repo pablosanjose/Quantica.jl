@@ -365,7 +365,7 @@ end
 
 ## convert CellSites -> CellOrbitalsGrouped
 
-sites_to_orbs(c::CellSites, g) = sites_to_orbs(c, blockstructure(g))
+sites_to_orbs(c::CellSites, g) = sites_to_orbs(sanitize_cellindices(c, g), blockstructure(g))
 
 function sites_to_orbs(cs::CellSites, os::OrbitalBlockStructure)
     sites = siteindices(cs)
