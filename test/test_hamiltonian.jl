@@ -460,7 +460,7 @@ end
 end
 
 @testset "hamiltonian indexing" begin
-    h = HP.graphene(orbitals = (2, 1))
+    h = HP.graphene(orbitals = (2, 1), a0 = 1) |> @hopping!((t; p = 0) -> p*t)
     @test size(h[sites(1), sites(2)]) == (2, 1)
     @test iszero(h[sites(1), sites(SA[2,3], 2)])
 end
