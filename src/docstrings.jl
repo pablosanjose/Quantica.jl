@@ -231,6 +231,14 @@ lattice `lat[sel...]` with some `siteselector` keywords `sel`. See also `lattice
 
 Note: the returned collections can be of different types (vectors, generators, views...)
 
+    sites(cell_index, site_indices)
+    sites(site_indices)
+
+Construct a simple selector of sites, of type `CellSites`, with given `site_indices` in a
+given cell at `cell_index`. Here, `site_indices` can be an index, a collection of integers
+or `:` (for all sites), and `cell_index` should be a collection of `L` integers, where `L`
+is the lattice dimension. If omitted, `cell_index` defaults to the zero-th cell `(0,...)`.
+
 # Examples
 ```jldoctest
 julia> sites(LatticePresets.honeycomb(), :A)
@@ -239,7 +247,7 @@ julia> sites(LatticePresets.honeycomb(), :A)
 ```
 
 # See also
-    `lattice`, `siteselector`, `cellsites`
+    `lattice`, `siteselector`
 """
 sites
 
@@ -248,9 +256,10 @@ sites
 
 Returns the position operator in the Wannier basis. It is given as a `r::BarebonesOperator`
 object, which can be indexed as `r[s, s´]` to obtain matrix elements `⟨s|R|s´⟩` of the
-position operator `R` (a vector). Here `s` and `s´` represent site indices, constructued
-with `cellsites`. To obtain the matrix between cells separated by `dn::SVector{L,Int}`, do
-`r[dn]`. The latter will throw an error if the `dn` harmonic is not present.
+position operator `R` (a vector). Here `s` and `s´` represent site indices, constructed
+with `sites(cell, inds)`. To obtain the matrix between cells separated by
+`dn::SVector{L,Int}`, do `r[dn]`. The latter will throw an error if the `dn` harmonic is not
+present.
 
 # See also
     `current`, `sites`
@@ -1478,18 +1487,6 @@ julia> gdisk = HP.graphene(a0 = 1, dim = 3) |> supercell(region = RP.circle(10))
 attach
 
 """
-    cellsites(cell_index, site_indices)
-
-Simple selector of sites with given `site_indices` in a given cell at `cell_index`. Here,
-`site_indices` can be an index, a collection of integers or `:` (for all sites), and
-`cell_index` should be a collection of `L` integers, where `L` is the lattice dimension.
-
-# See also
-    `siteselector`
-"""
-cellsites
-
-"""
     greenfunction(h::Union{AbstractHamiltonian,OpenHamiltonian}, solver::AbstractGreenSolver)
 
 Build a `g::GreenFunction` of Hamiltonian `h` using `solver`. See `GreenSolvers` for
@@ -2037,12 +2034,12 @@ sel...]` is equivalent to `mat[(; sel...), (; sel...)]`.
 If we index an `OrbitalSliceMatrix` with `s::NamedTuple` or a `siteselector(; s...)`, we
 obtain a new `OrbitalSliceMatrix` over the orbitals of the selected sites.
 
-# `cellsites` indexing
+# `sites` indexing
 
-    mat[cellsites(cell_index, site_indices)]
-    mat[cellsites(row_cell_index, row_site_indices), cellsites(col_cell_index, col_site_indices)]
+    mat[sites(cell_index, site_indices)]
+    mat[sites(row_cell_index, row_site_indices), sites(col_cell_index, col_site_indices)]
 
-If we index an `OrbitalSliceMatrix` with `cellsites`, we obtain an unwrapped `Matrix` over
+If we index an `OrbitalSliceMatrix` with `sites`, we obtain an unwrapped `Matrix` over
 the sites with `site_indices` within cell with `cell_index`. Here `site_indices` can be
 an `Int`, a container of `Int`, or a `:` (for all sites in the unit cell). If any of the
 specified sites are not already in `orbaxes(mat)`, indexing will throw an error.
@@ -2076,7 +2073,7 @@ julia> mat[(; cells = SA[1]), (; cells = SA[0])]
  0.4+0.37097im  0.0+0.0im       0.0+0.0im       -0.5+0.218218im
  0.0+0.0im      0.4+0.37097im  -0.5+0.218218im   0.0+0.0im
 
-julia> mat[cellsites(SA[1], 1)]
+julia> mat[sites(SA[1], 1)]
 2×2 Matrix{ComplexF64}:
  -1.93554e-9-0.545545im          0.0-0.0im
          0.0-0.0im       -1.93554e-9-0.545545im

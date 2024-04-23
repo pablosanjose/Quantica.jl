@@ -147,7 +147,7 @@ julia> r[SA[0,0]]
  [0.164126-2.14909e-5im, -0.000483435-0.0144407im]                 ⋅
            ⋅                                             [0.000608652+0.0im, 2.12317+0.0im]
 
-julia> r[cellsites(SA[0,0], 1), cellsites(SA[0,0], 4)]
+julia> r[sites(1), sites(4)]
 2-element SVector{2, ComplexF64} with indices SOneTo(2):
   2.4885857e-5 + 0.018543702im
  -0.0053425408 + 1.8808481e-5im

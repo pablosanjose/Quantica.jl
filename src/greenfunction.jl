@@ -570,7 +570,7 @@ function Base.getindex(c::GreenSolutionCache{<:Any,L}, ci::CellSite{L}, cj::Cell
     if haskey(c.cache, (ni, nj, j))
         gs = c.cache[(ni, nj, j)]
     else
-        gs = c.gω[cellsites(ni, :), cj]
+        gs = c.gω[sites(ni, :), cj]
         push!(c.cache, (ni, nj, j) => gs)
     end
     h = hamiltonian(c.gω)

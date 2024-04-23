@@ -22,6 +22,8 @@ Base.convert(::Type{T}, l::Mesh) where T<:Mesh = T(l)
 Sublat{T,E}(s::Sublat, name = s.name) where {T<:AbstractFloat,E} =
     Sublat{T,E}([sanitize_SVector(SVector{E,T}, site) for site in sites(s)], name)
 
+CellSites{L,V}(c::CellSites{0}) where {L,V} =
+    CellIndices(zero(SVector{L,Int}), convert(V, siteindices(c)), SiteLike())
 CellSites{L,V}(c::CellSites) where {L,V} =
     CellIndices(convert(SVector{L,Int}, cell(c)), convert(V, siteindices(c)), SiteLike())
 

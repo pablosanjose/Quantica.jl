@@ -360,8 +360,8 @@ function schur_openhams_types(fsolver, h, boundary)
     h0 = unitcell_hamiltonian(h)   # h0 is non-parametric, but will alias h.h first harmonic
     rsites = stored_cols(hamiltonian(h)[unflat(1)])
     lsites = stored_cols(hamiltonian(h)[unflat(-1)])
-    orbslice_l = sites_to_orbs(lattice(h0)[cellsites((), lsites)], h)
-    orbslice_r = sites_to_orbs(lattice(h0)[cellsites((), rsites)], h)
+    orbslice_l = sites_to_orbs(lattice(h0)[sites(lsites)], h)
+    orbslice_r = sites_to_orbs(lattice(h0)[sites(rsites)], h)
     ΣR_solver = SelfEnergySchurSolver(fsolver, h, :R, boundary)
     ΣL_solver = SelfEnergySchurSolver(fsolver, h, :L, boundary)
     ΣL = SelfEnergy(ΣL_solver, orbslice_l)
@@ -528,7 +528,7 @@ end
 
 function inf_schur_slice(s::SchurGreenSlicer, i::CellOrbitals, j::CellOrbitals)
     rows, cols = orbindices(i), orbindices(j)
-    dist = only(cell(i) - cell(j))
+    dist = only(cell(i, Val(1)) - cell(j, Val(1)))
     if dist == 0
         g = s.G∞₀₀
         i´, j´ = CellOrbitals((), rows), CellOrbitals((), cols)

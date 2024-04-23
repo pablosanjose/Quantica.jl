@@ -164,7 +164,8 @@ numbertype(::Lattice{T}) where {T} = T
 
 zerocell(::Bravais{<:Any,<:Any,L}) where {L} = zero(SVector{L,Int})
 zerocell(::Lattice{<:Any,<:Any,L}) where {L} = zero(SVector{L,Int})
-zerocellsites(l::Lattice, i) = cellsites(zerocell(l), i)
+
+zerocellsites(l::Lattice, i) = sites(zerocell(l), i)
 
 Base.length(l::Lattice) = nsites(l)
 
@@ -357,19 +358,19 @@ end
 const CellSites{L,I} = CellIndices{L,I,SiteLike}
 const CellSite{L} = CellIndices{L,Int,SiteLike}
 const CellSitePos{T,E,L,B} = CellIndices{L,Int,SiteLikePos{T,E,B}} # for non-spatial models
-const AnyCellSite = Union{CellSite,CellSitePos}
-const AnyCellSites = Union{CellSites,CellSitePos}
+const AnyCellSite{L} = Union{CellSite{L},CellSitePos{<:Any,<:Any,L}}
+const AnyCellSites{L} = Union{CellSites{L},CellSitePos{<:Any,<:Any,L}}
 
 const CellOrbitals{L,I} = CellIndices{L,I,OrbitalLike}
 const CellOrbitalsGrouped{L,I} = CellIndices{L,I,OrbitalLikeGrouped}
 const CellOrbital{L} = CellIndices{L,Int,OrbitalLike}
-const AnyCellOrbitals = Union{CellOrbital,CellOrbitals,CellOrbitalsGrouped}
+const AnyCellOrbitals{L} = Union{CellOrbital{L},CellOrbitals{L},CellOrbitalsGrouped{L}}
 
 const CellIndicesDict{L,C<:CellIndices{L}} = Dictionary{SVector{L,Int},C}
 const CellSitesDict{L} = Dictionary{SVector{L,Int},CellSites{L,Vector{Int}}}
 const CellOrbitalsDict{L} = Dictionary{SVector{L,Int},CellOrbitals{L,Vector{Int}}}
 const CellOrbitalsGroupedDict{L} = Dictionary{SVector{L,Int},CellOrbitalsGrouped{L,Vector{Int}}}
-const AnyCellOrbitalsDict = Union{CellOrbitalsDict,CellOrbitalsGroupedDict}
+const AnyCellOrbitalsDict{L} = Union{CellOrbitalsDict{L},CellOrbitalsGroupedDict{L}}
 
 struct LatticeSlice{T,E,L,C<:CellIndices{L}}
     lat::Lattice{T,E,L}
@@ -396,11 +397,13 @@ const AnyOrbitalSlice = Union{OrbitalSlice,OrbitalSliceGrouped}
 
 #region ## Constructors ##
 
+# exported constructor for general site inds in a given cell (defaults to zero cell)
+sites(cell, inds) = CellSites(cell, inds)
+sites(inds) = CellSites(zero(SVector{0,Int}), inds)
+
 CellSite(cell, ind::Int) = CellIndices(sanitize_SVector(Int, cell), ind, SiteLike())
 CellSite(c::CellSitePos) = CellSite(c.cell, c.inds)
 CellSites(cell, inds = Int[]) = CellIndices(sanitize_SVector(Int, cell), sanitize_cellindices(inds), SiteLike())
-# exported lowercase constructor for general inds
-cellsites(cell, inds) = CellSites(cell, inds)
 # no check for unique inds
 unsafe_cellsites(cell, inds) = CellIndices(cell, inds, SiteLike())
 
@@ -425,7 +428,7 @@ cellinds_to_dict(cs::AbstractVector{C}) where {L,C<:CellIndices{L}} =
 cellinds_to_dict(cells::AbstractVector{SVector{L,Int}}, cs::AbstractVector{C}) where {L,C<:CellIndices{L}} =
     CellIndicesDict{L,C}(cells, cs)
 cellinds_to_dict(cs::CellIndices{L}) where {L} = cellinds_to_dict(SVector(cs))
-# don't allow single-cellsites in dictionaries (it polutes the LatticeSlice type diversity)
+# don't allow single-CellSites in dictionaries (it polutes the LatticeSlice type diversity)
 cellinds_to_dict(cs::AbstractVector{C}) where {L,C<:CellSite{L}} =
     cellinds_to_dict(CellSites{L,Vector{Int}}.(cs))
 
@@ -489,7 +492,11 @@ ncells(x::CellIndicesDict) = length(x)
 ncells(x::CellIndices) = 1
 
 cell(s::CellIndices) = s.cell
+cell(s::CellIndices, v::Val) = sanitize_SVector(v, s.cell)
 cells(l::LatticeSlice) = keys(l.cellsdict)
+
+zerocellsites(::Val{L}, c::AnyCellSites{0}) where {L} =
+    CellIndices(cell(c, Val(L)), siteindices(c), c.type)
 
 nsites(s::LatticeSlice, cell...) = nsites(cellsdict(s, cell...))
 nsites(s::CellIndicesDict) = isempty(s) ? 0 : sum(nsites, s)
@@ -1391,6 +1398,7 @@ flatrange(h::AbstractHamiltonian, name::Symbol) =
     sublatorbrange(blockstructure(h), sublatindex(lattice(h), name))
 
 zerocell(h::AbstractHamiltonian) = zerocell(lattice(h))
+
 zerocellsites(h::AbstractHamiltonian, i) = zerocellsites(lattice(h), i)
 
 # OpenHamiltonian is not <: AbstractHamiltonian
@@ -2256,8 +2264,8 @@ Base.getindex(o::BarebonesOperator{L}, dn::SVector{L,Int}) where {L} =
     matrix(harmonics(o)[dn])
 
 # Unlike o[dn][i, j], o[si::AnyCellSites, sj::AnyCellSites] returns a zero if !haskey(dn)
-function Base.getindex(o::BarebonesOperator, i::AnyCellSites, j::AnyCellSites = i)
-    dn = cell(j) - cell(i)
+function Base.getindex(o::BarebonesOperator{L}, i::AnyCellSites, j::AnyCellSites = i) where {L}
+    dn = cell(j, Val(L)) - cell(i, Val(L))
     si, sj = siteindices(i), siteindices(j)
     if haskey(harmonics(o), dn)
         x = o[dn][si, sj]

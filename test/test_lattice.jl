@@ -177,10 +177,10 @@ end
     @test !isempty(Quantica.cells(ls)) && all(n -> 5 < norm(n) < 10, Quantica.cells(ls))
     ls = lat[region = r -> 5 < norm(r) < 10]
     @test !isempty(Quantica.cells(ls)) && all(r -> 5 < norm(r) < 10, Quantica.sites(ls))
-    ls = lat[cellsites(SA[1,0], 1:3)]
+    ls = lat[sites(SA[1,0], 1:3)]
     @test ls isa Quantica.SiteSlice
     @test nsites(ls) == 3
-    ls = lat[cellsites(SA[1,0], 2)]
+    ls = lat[sites(SA[1,0], 2)]
     @test ls isa Quantica.SiteSlice
     @test nsites(ls) == 1
     # test the difference between a null selector and an unspecified one

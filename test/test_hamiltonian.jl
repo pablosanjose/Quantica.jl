@@ -356,9 +356,9 @@ end
     @test h isa Hamiltonian{Float32,2,2,ComplexF32}
     R = position(w)
     @test R isa BarebonesOperator{2,SVector{2,ComplexF32}}
-    @test R[cellsites(SA[0,0],1)] isa SVector{2,ComplexF32}
+    @test R[sites(1)] isa SVector{2,ComplexF32}
     @test_throws Quantica.Dictionaries.IndexError R[SA[1000,0]]
-    @test iszero(R[cellsites(SA[0,0],1), cellsites(SA[1000,0],1)])
+    @test iszero(R[sites(1), sites(SA[1000,0],1)])
 
     # Wannier90 coupling to dipole moments
     w = EP.wannier90("wannier_test2_tb.dat", onsite(2); dim = 2, htol = 1e-4, rtol = 1e-4) |> @onsite!((o; k = 1) -> o * k)
@@ -436,7 +436,7 @@ end
     @test hamiltonian(b) isa Hamiltonian
     Quantica.add!(b, hopping(2I))
     Quantica.add!(b, @onsite((; w = 0) -> w*I))
-    Quantica.add!(b, SA[0 1; 1 0], cellsites(SA[0], 1))
+    Quantica.add!(b, SA[0 1; 1 0], sites(1))
     @test length(Quantica.modifiers(b)) == 1
     h = hamiltonian(b)
     @test h(w=3)[()] == 3*I + SA[0 1; 1 0]
@@ -445,16 +445,16 @@ end
     h = hamiltonian(b)
     @test h(w=3)[()] == 9*I + + SA[0 3; 3 0]
     b = LP.honeycomb() |> Quantica.builder(orbitals = (1,2))
-    Quantica.add!(b, SA[0 1; 1 0], cellsites(SA[0,0], 2))
-    Quantica.add!(b, 2, cellsites(SA[0,0], 1))
+    Quantica.add!(b, SA[0 1; 1 0], sites(2))
+    Quantica.add!(b, 2, sites(1))
     h = hamiltonian(b)
     @test h[()] == SA[2 0 0; 0 0 1; 0 1 0]
     b = LP.honeycomb() |> Quantica.builder(orbitals = (1,2))
-    Quantica.add!(b, 2I, cellsites(SA[0,0], 1:2))
+    Quantica.add!(b, 2I, sites(1:2))
     h = hamiltonian(b)
     @test h[()] == 2I
     b = LP.honeycomb() |> Quantica.builder
-    Quantica.add!(b, 2, cellsites(SA[0,0], 1:2), cellsites(SA[0,0], 1:2))
+    Quantica.add!(b, 2, sites(1:2), sites(1:2))
     h = hamiltonian(b)
     @test all(isequal(2), h[()])
 end
