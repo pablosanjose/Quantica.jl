@@ -265,9 +265,9 @@ function current_matrix(gω, ls, d)
     return current
 end
 
-function apply_charge_current(hij_block::B, (ci, cj), d::CurrentDensitySolution{T,E,L}) where {T,E,L,B}
-    ni, i = cell(ci, Val(L)), siteindex(ci)
-    nj, j = cell(cj, Val(L)), siteindex(cj)
+function apply_charge_current(hij_block::B, (ci, cj), d::CurrentDensitySolution{T,E}) where {T,E,B}
+    ni, i = cell(ci), siteindex(ci)
+    nj, j = cell(cj), siteindex(cj)
     ni == nj && i == j && return zero(SVector{E,T})
     gji = unblock(mask_block(B, d.cache[cj, ci]))
     gij = unblock(mask_block(B, d.cache[ci, cj]))

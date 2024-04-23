@@ -322,11 +322,6 @@ end
 
 apply(c::AnyCellSite, ::Lattice{<:Any,<:Any,L}) where {L} = c
 
-apply(c::AnyCellSites{0}, ::Lattice{<:Any,<:Any,0}) = c
-
-apply(c::AnyCellSites{0}, l::Lattice{<:Any,<:Any,L}) where {L} =
-    apply(zerocellsites(Val(L), c), l)
-
 apply(c::CellSites{L,Vector{Int}}, ::Lattice{<:Any,<:Any,L}) where {L} = c
 
 apply(c::CellSites{L,Colon}, l::Lattice{<:Any,<:Any,L}) where {L} =

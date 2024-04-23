@@ -492,11 +492,11 @@ ncells(x::CellIndicesDict) = length(x)
 ncells(x::CellIndices) = 1
 
 cell(s::CellIndices) = s.cell
-cell(s::CellIndices, v::Val) = sanitize_SVector(v, s.cell)
+
 cells(l::LatticeSlice) = keys(l.cellsdict)
 
 zerocellsites(::Val{L}, c::AnyCellSites{0}) where {L} =
-    CellIndices(cell(c, Val(L)), siteindices(c), c.type)
+    CellIndices(zero(SVector{L,Int}), siteindices(c), c.type)
 
 nsites(s::LatticeSlice, cell...) = nsites(cellsdict(s, cell...))
 nsites(s::CellIndicesDict) = isempty(s) ? 0 : sum(nsites, s)
@@ -2264,8 +2264,8 @@ Base.getindex(o::BarebonesOperator{L}, dn::SVector{L,Int}) where {L} =
     matrix(harmonics(o)[dn])
 
 # Unlike o[dn][i, j], o[si::AnyCellSites, sj::AnyCellSites] returns a zero if !haskey(dn)
-function Base.getindex(o::BarebonesOperator{L}, i::AnyCellSites, j::AnyCellSites = i) where {L}
-    dn = cell(j, Val(L)) - cell(i, Val(L))
+function Base.getindex(o::BarebonesOperator, i::AnyCellSites, j::AnyCellSites = i)
+    dn = cell(j) - cell(i)
     si, sj = siteindices(i), siteindices(j)
     if haskey(harmonics(o), dn)
         x = o[dn][si, sj]
