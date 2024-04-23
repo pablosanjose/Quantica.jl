@@ -40,60 +40,58 @@ _hopping(t::ParametricHoppingTerm; kw...) =
 
 ## Parametric models ##
 
-# version with site selector kwargs
-macro onsite(kw, f)
-    f, N, params, spatial = parse_term(f, "Only @onsite(args -> body; kw...) syntax supported (or with -->). Mind the `;`.")
+macro onsite(x, ys...)
+    kw, f, N, params, spatial = parse_term("@onsite", x, ys...)
     return esc(:(Quantica.ParametricModel(Quantica.ParametricOnsiteTerm(
         Quantica.ParametricFunction{$N}($f, $(params)), Quantica.siteselector($kw), 1, $(spatial)))))
 end
 
-# version without site selector kwargs
-macro onsite(f)
-    f, N, params, spatial = parse_term(f, "Only @onsite(args -> body; kw...) syntax supported (or with -->). Mind the `;`.")
-    return esc(:(Quantica.ParametricModel(Quantica.ParametricOnsiteTerm(
-            Quantica.ParametricFunction{$N}($f, $(params)), Quantica.siteselector(), 1, $(spatial)))))
-end
-
-# version with hop selector kwargs
-macro hopping(kw, f)
-    f, N, params, spatial = parse_term(f, "Only @hopping(args -> body; kw...) syntax supported (or with -->). Mind the `;`.")
+macro hopping(x, ys...)
+    kw, f, N, params, spatial = parse_term("@hopping", x, ys...)
     return esc(:(Quantica.ParametricModel(Quantica.ParametricHoppingTerm(
         Quantica.ParametricFunction{$N}($f, $(params)), Quantica.hopselector($kw), 1, $(spatial)))))
 end
 
-# version without hop selector kwargs
-macro hopping(f)
-    f, N, params, spatial = parse_term(f, "Only @hopping(args -> body; kw...) syntax supported (or with -->). Mind the `;`.")
-    return esc(:(Quantica.ParametricModel(Quantica.ParametricHoppingTerm(
-        Quantica.ParametricFunction{$N}($f, $(params)), Quantica.hopselector(), 1, $(spatial)))))
-end
-
 ## Model modifiers ##
 
-macro onsite!(kw, f)
-    f, N, params, spatial = parse_term(f, "Only @onsite!(args -> body; kw...) syntax supported (or with -->). Mind the `;`.")
+macro onsite!(x, ys...)
+    kw, f, N, params, spatial = parse_term("@onsite!", x, ys...)
     return esc(:(Quantica.OnsiteModifier(Quantica.ParametricFunction{$N}($f, $(params)), Quantica.siteselector($kw), $(spatial))))
 end
 
-macro onsite!(f)
-    f, N, params, spatial = parse_term(f, "Only @onsite!(args -> body; kw...) syntax supported (or with -->).  Mind the `;`.")
-    return esc(:(Quantica.OnsiteModifier(Quantica.ParametricFunction{$N}($f, $(params)), Quantica.siteselector(), $(spatial))))
-end
-
-# Since the default hopping range is neighbors(1), we need change the default to Inf for @hopping!
-macro hopping!(kw, f)
-    f, N, params, spatial = parse_term(f, "Only @hopping!(args -> body; kw...) syntax supported (or with -->). Mind the `;`.")
+macro hopping!(x, ys...)
+    kw, f, N, params, spatial = parse_term("@hopping!", x, ys...)
+    # Since the default hopping range is neighbors(1), we need change the default to Inf for @hopping!
     return esc(:(Quantica.HoppingModifier(Quantica.ParametricFunction{$N}($f, $(params)), Quantica.hopselector_infrange($kw), $(spatial))))
 end
 
-macro hopping!(f)
-    f, N, params, spatial = parse_term(f, "Only @hopping!(args -> body; kw...) syntax supported (or with -->). Mind the `;`.")
-    return esc(:(Quantica.HoppingModifier(Quantica.ParametricFunction{$N}($f, $(params)), Quantica.hopselector_infrange(), $(spatial))))
+function parse_term(macroname, x, ys...)
+    if x isa Expr && x.head == :parameters
+        kw = x
+        f, N, params, spatial = parse_term_body(macroname, only(ys))
+    else
+        kw = parse_term_parameters(ys...)
+        f, N, params, spatial = parse_term_body(macroname, x)
+    end
+    return kw, f, N, params, spatial
 end
 
+# parse keywords after a comma as if they were keyword arguments
+function parse_term_parameters(exs...)
+    exs´ = maybe_kw.(exs)
+    paramex = Expr(:parameters, exs´...)
+    return paramex
+end
+
+maybe_kw(ex::Expr) = Expr(:kw, ex.args...)
+maybe_kw(ex::Symbol) = ex
+
 # Extracts normalized f, number of arguments and kwarg names from an anonymous function f
-function parse_term(f, msg)
-    (f isa Expr && (f.head == :-> || f.head == :-->)) || throw(ArgumentError(msg))
+function parse_term_body(macroname, f)
+    if !(f isa Expr && (f.head == :-> || f.head == :-->))
+        msg = "Only $(macroname)(args -> body; kw...) syntax supported (or with -->). Received $(macroname)($f, ...) instead."
+        throw(ArgumentError(msg))
+    end
     # change --> to -> and record change in spatial
     spatial = f.head == :->
     !spatial && (f.head = :->)
