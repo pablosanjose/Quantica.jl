@@ -316,7 +316,7 @@ end
     @test h((π/2, -π/2), λ=1) ≈ [4 1; 1 -4]
     # Non-numeric parameters
     @test h((π/2, -π/2); λ = 1, k = SA[1,0]) ≈ [-4 1; 1 4]
-    # # Issue 61, type stability
+    # # Issue #61, type stability
     # h = LatticePresets.honeycomb() |> hamiltonian(onsite(0))
     # @inferred hamiltonian(h, @onsite!((o;μ) -> o- μ))
     # @inferred hamiltonian(h, @onsite!(o->2o), @hopping!((t)->2t), @onsite!((o, r)->o+r[1]))
@@ -347,6 +347,13 @@ end
     @test iszero(h0())
     h0 = LP.square() |> hopping(0) |> supercell(3) |> @hopping!((t, r, dr) -> 1; dcells = SVector{2,Int}[])
     @test iszero(h0())
+    # Issue #118
+    sublats = :A;
+    h0 = LP.honeycomb() |>
+        @hopping(r->0, sublats, range = 2) + @onsite((r; p = 3) ->3p; sublats) + @onsite((r; q = 3) ->3q, sublats, region = RP.circle(2)) |>
+        @hopping!((t, r, dr; p = 1) -> p+r[2], dcells = SVector{2,Int}[]) |> @onsite!((o, r; q = 1) -> o + q, sublats, region = RP.circle(3))
+    @test h0 isa ParametricHamiltonian
+    @test Quantica.parameters(h0) == [:p, :q]
 end
 
 @testset "ExternalPresets.wannier90" begin
