@@ -440,6 +440,18 @@ function Base.isassigned(h::AbstractHamiltonian{<:Any,<:Any,L}, dn::SVector{L,In
     return false
 end
 
+
+
+Base.getindex(h::AbstractHamiltonian, i::AnyCellSites, j::AnyCellSites = i) =
+    hamiltonian(h)[sites_to_orbs(i, h), sites_to_orbs(j, h)]
+
+function Base.getindex(h::Hamiltonian{T}, i::AnyCellOrbitals, j::AnyCellOrbitals) where {T}
+    dn = cell(i) - cell(j)
+    oi, oj = orbindices(i), orbindices(j)
+    mat = isassigned(h, dn) ? h[dn][oi, oj] : spzeros(Complex{T}, length(oi), length(oj))
+    return mat
+end
+
 #endregion
 
 ############################################################################################

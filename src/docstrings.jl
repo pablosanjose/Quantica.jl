@@ -184,6 +184,7 @@ Return the parent lattice of object `x`, of type e.g. `LatticeSlice`, `Hamiltoni
 ## Indexing
 
     lat[kw...]
+    lat[siteselector(; kw...)]
 
 Indexing into a lattice `lat` with keywords returns `LatticeSlice` representing a finite
 collection of sites selected by `siteselector(; kw...)`. See `siteselector` for details on
@@ -193,6 +194,11 @@ possible `kw`, and `sites` to obtain site positions.
 
 Special case equivalent to `lat[cells = (0,...)]` that returns a `LatticeSlice` of the
 zero-th unitcell.
+
+    lat[i::CellSites]
+
+With an `i` of type `CellSites` contructed with `sites([cell,] indices)`, return a
+`LatticeSlice` of the corresponding sites.
 
 # Examples
 
@@ -623,6 +629,12 @@ also `unflat`).
     h[()]
 
 Special syntax equivalent to `h[(0...)]`, which access the fundamental Bloch harmonic.
+
+    h[i::CellSites, j::CellSites = i]
+
+With `i` and `j` of type `CellSites` and constructed with `sites([cell,] indices)`, return a
+sparse matrix block of `h` between the sites with the corresponding `indices` and in the
+given `cell`s.
 
 ## Call syntax
 

@@ -458,3 +458,9 @@ end
     h = hamiltonian(b)
     @test all(isequal(2), h[()])
 end
+
+@testset "hamiltonian indexing" begin
+    h = HP.graphene(orbitals = (2, 1))
+    @test size(h[sites(1), sites(2)]) == (2, 1)
+    @test iszero(h[sites(1), sites(SA[2,3], 2)])
+end

@@ -964,7 +964,7 @@ end
 
 checkinrange(siteind::Integer, b::OrbitalBlockStructure) =
     @boundscheck(1 <= siteind <= flatsize(b) ||
-        argerror("Requested site $siteind our of range [1, $(flatsize(b))]"))
+        argerror("Requested site $siteind out of range [1, $(flatsize(b))]"))
 
 flatindex(b::OrbitalBlockStructure, i) = first(flatrange(b, i))
 

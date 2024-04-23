@@ -162,6 +162,12 @@ end
 
 @testset "lattice slices" begin
     lat = LP.honeycomb() |> supercell(2)
+    ls = lat[sites(1:2)]
+    @test length(ls) == 2
+    ls = lat[sites(:)]
+    @test length(ls) == 8
+    ls = lat[sites(SA[1,2], :)]
+    @test length(ls) == 8
     ls1 = lat[sublats = :B, region = RP.ellipse((10, 20), (0, 1/√3))]
     ls2 = lat[sublats = :A, region = RP.ellipse((10, 20))]
     ls3 = lat[region = RP.ellipse((10, 20))]

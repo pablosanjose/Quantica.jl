@@ -4,6 +4,8 @@
 
 Base.getindex(lat::Lattice; kw...) = lat[siteselector(; kw...)]
 
+Base.getindex(lat::Lattice, kw::NamedTuple) = lat[siteselector(; kw...)]
+
 Base.getindex(lat::Lattice, ls::LatticeSlice) = ls
 
 Base.getindex(lat::Lattice, ss::SiteSelector) = lat[apply(ss, lat)]
@@ -34,7 +36,8 @@ function Base.getindex(lat::Lattice, as::AppliedSiteSelector)
     return LatticeSlice(lat, cellsdict)
 end
 
-Base.getindex(l::Lattice, c::CellIndices) = LatticeSlice(l, [apply(c, l)])
+Base.getindex(l::Lattice, c::AnyCellSites) =
+    LatticeSlice(l, [apply(sanitize_cellindices(c, l), l)])
 
 Base.getindex(ls::LatticeSlice; kw...) = getindex(ls, siteselector(; kw...))
 
