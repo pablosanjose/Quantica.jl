@@ -1952,7 +1952,7 @@ offsets(c::Contacts) = offsets(c.orbitals)
 offsets(c::ContactOrbitals) = c.offsets
 
 selfenergies(c::Contacts) = c.selfenergies
-selfenergies(c::Contacts, i::Integer) = check_contact_index(i, c) && c.selfenergies[i]
+selfenergies(c::Contacts, i::Integer) = (check_contact_index(i, c); c.selfenergies[i])
 
 has_selfenergy(c::Contacts) = any(has_selfenergy, selfenergies(c))
 
