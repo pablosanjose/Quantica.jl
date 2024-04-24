@@ -120,6 +120,7 @@ sanitize_cellindices(c::CellIndices{0}, ::TELtypes{<:Any,<:Any,L}) where {L} =
     zerocellinds(c, Val(L))
 sanitize_cellindices(c::CellIndices{L}, ::TELtypes{<:Any,<:Any,L´}) where {L,L´} =
     argerror("Expected a cell index of dimension $L´, got $L")
+
 #endregion
 
 ############################################################################################

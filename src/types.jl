@@ -500,7 +500,8 @@ cell(s::CellIndices) = s.cell
 
 cells(l::LatticeSlice) = keys(l.cellsdict)
 
-zerocellinds(c::CellIndices{0}, ::Val{L}) where {L} =
+# replace cell with zero of requested dimension
+zerocellinds(c::CellIndices, ::Val{L}) where {L} =
     CellIndices(zero(SVector{L,Int}), c.inds, c.type)
 
 nsites(s::LatticeSlice, cell...) = nsites(cellsdict(s, cell...))

@@ -778,15 +778,10 @@ end
 function inf_band_slice!(gmat, ω, (i, j)::Tuple{CellOrbitals,CellOrbitals},
         subband::Subband, subbandsimps::SubbandSimplices,
         simpinds = eachindex(simplices(subband)))
-    dist = celldiff(i, j)
+    dist = cell(i) - cell(j)
     orbs = orbindices(i), orbindices(j)
     return inf_band_slice!(gmat, ω, dist, orbs, subband, subbandsimps, simpinds)
 end
-
-celldiff(i::CellIndices{L}, j::CellIndices{L}) where {L} = cell(i) - cell(j)
-celldiff(i::CellIndices{0}, j::CellIndices{L}) where {L} = - cell(j)
-celldiff(i::CellIndices{L}, j::CellIndices{0}) where {L} = cell(i)
-celldiff(i::CellIndices{0}, j::CellIndices{0}) = cell(i) - cell(j)
 
 # main driver
 function inf_band_slice!(gmat, ω, dist, orbs, subband, subbandsimps, simpinds)
@@ -838,14 +833,12 @@ get_multiple_cellorbs(c::CellOrbitals) = (c,)
 get_multiple_cellorbs(c::LatticeSlice) = cellsdict(c)
 
 # Gᵢⱼ(k∥) = G⁰ᵢⱼ(k∥) - G⁰ᵢᵦ(k∥)G⁰ᵦᵦ(k∥)⁻¹G⁰ᵦⱼ(k∥), where β are removed sites at boundary
-function semi_band_slice(s::BandsGreenSlicer{C}, i::CellOrbitals{L}, j::CellOrbitals{L´}) where {C,L,L´}
+function semi_band_slice(s::BandsGreenSlicer{C}, i::CellOrbitals{L}, j::CellOrbitals{L}) where {C,L}
     borbs = s.solver.boundaryorbs
     ni, nj = length(orbindices(i)), length(orbindices(j))
     gij = zeros(C, ni, nj)
     (dir, pos) = borbs.boundary
-    # i,j may have L=0 if sites(inds) syntax was used
-    xi = iszero(L)  ? -pos : cell(i)[dir] - pos
-    xj = iszero(L´) ? -pos : cell(j)[dir] - pos
+    xi, xj = cell(i)[dir] - pos, cell(j)[dir] - pos
     if sign(xi) == sign(xj) != 0
         subband, subbandsimps = s.solver.subband, s.solver.subbandsimps
         b = ifelse(xi > 0, borbs.orbsright, borbs.orbsleft)  # 1D boundary orbital slice
