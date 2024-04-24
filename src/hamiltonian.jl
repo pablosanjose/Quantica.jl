@@ -134,10 +134,10 @@ hamiltonian(lat::Lattice, m0::ParametricModel, ms::Modifier...; kw...) =
 hamiltonian(lat::Lattice, m::Modifier, ms::Modifier...; kw...) =
     parametric(hamiltonian(lat; kw...), m, ms...)
 
-hamiltonian(lat::Lattice, m::AbstractBlockModel{<:TightbindingModel}; kw...) =
+hamiltonian(lat::Lattice, m::Interblock{<:TightbindingModel}; kw...) =
     hamiltonian(lat, parent(m), block(m); kw...)
 
-hamiltonian(lat::Lattice, m::AbstractBlockModel{<:ParametricModel}; kw...) = parametric(
+hamiltonian(lat::Lattice, m::Interblock{<:ParametricModel}; kw...) = parametric(
     hamiltonian(lat, basemodel(parent(m)), block(m); kw...),
     modifier.(terms(parent(m)))...)
 
@@ -170,13 +170,14 @@ function parametric(hparent::Hamiltonian)
     return ParametricHamiltonian(hparent, h, modifiers, allptrs, allparams)
 end
 
-parametric(h::Hamiltonian, m::AbstractModifier, ms::AbstractModifier...) =
+# Any means perhaps wrapped in Intrablock or Interblock
+parametric(h::Hamiltonian, m::AnyAbstractModifier, ms::AnyAbstractModifier...) =
     parametric!(parametric(h), m, ms...)
-parametric(p::ParametricHamiltonian, ms::AbstractModifier...) =
+parametric(p::ParametricHamiltonian, ms::AnyAbstractModifier...) =
     parametric!(copy(p), ms...)
 
 # This should not be exported, because it doesn't modify p in place (because of modifiers)
-function parametric!(p::ParametricHamiltonian, ms::Modifier...)
+function parametric!(p::ParametricHamiltonian, ms::AnyModifier...)
     ams = apply.(ms, Ref(parent(p)))
     return parametric!(p, ams...)
 end
@@ -480,12 +481,12 @@ unitcell_hamiltonian(ph::ParametricHamiltonian) = unitcell_hamiltonian(hamiltoni
 
 ############################################################################################
 # combine
-#   We cannot combine anything with parameters. The reason is that coupling modifiers and
-#   modifiers of hams should only be applied to their corresponding blocks, which we
-#   currently cannot express. Needs e.g. Selectors with indices, or Modifiers with blocks.
+#   type-stable with Hamiltonians, but not with ParametricHamiltonians, as the field
+#   builder.modifiers isa Vector{Any} in that case.
 #region
 
-function combine(hams::Hamiltonian{T}...; coupling::TightbindingModel = TightbindingModel()) where {T}
+function combine(hams::AbstractHamiltonian...; coupling::AbstractModel = TightbindingModel())
+    check_unique_names(coupling, hams...)
     lat = combine(lattice.(hams)...)
     builder = IJVBuilder(lat, hams...)
     interblockmodel = interblock(coupling, hams...)
@@ -494,8 +495,20 @@ function combine(hams::Hamiltonian{T}...; coupling::TightbindingModel = Tightbin
     return hamiltonian(builder)
 end
 
-combine(hams::AbstractHamiltonian...; kw...) =
-    argerror("Quantica can currently only combine Hamiltonians (not ParametricHamiltonians) using non-parametric couplings.")
+# No need to have unique names if nothing is parametric
+check_unique_names(::TightbindingModel, ::Hamiltonian...) = nothing
+
+function check_unique_names(::AbstractModel, hs::AbstractHamiltonian...)
+    names = tupleflatten(sublatnames.(lattice.(hs))...)
+    allunique(names) || argerror("Cannot combine ParametricHamiltonians with non-unique sublattice names, since modifiers could be tied to the original names. Assign unique names on construction.")
+    return nothing
+end
+
+function check_unique_names(::AbstractModel, hs::Hamiltonian...)
+    names = tupleflatten(sublatnames.(lattice.(hs))...)
+    allunique(names) || argerror("Cannot combine Hamiltonians with non-unique sublattice names using a ParametricModel, since modifiers could be tied to the original names. Assign unique names on construction.")
+    return nothing
+end
 
 #endregion
 

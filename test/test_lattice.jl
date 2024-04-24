@@ -110,11 +110,11 @@ end
     @test length.(sites.(Ref(cells), 1:5)) == [14, 14, 14, 14, 2]
     @test_throws ArgumentError combine(LatticePresets.honeycomb(), LatticePresets.square())
     @test_throws ArgumentError combine(LatticePresets.honeycomb(), LatticePresets.linear())
-    lat1 = transform(LatticePresets.honeycomb(type = Float32), r -> SA[r[2], -r[1]]) |> supercell((-1,1), (1,1))
+    lat1 = transform(LatticePresets.honeycomb(), r -> SA[r[2], -r[1]]) |> supercell((-1,1), (1,1))
     lat2 = combine(lat0, lat1)
     @test lat2 isa typeof(lat0)
     @test allunique(Quantica.sublatnames(lat2))
-    lat1 = transform(LatticePresets.honeycomb(type = Float32), r -> SA[r[2], -r[1]]) |> supercell((-3,3), (1,1))
+    lat1 = transform(LatticePresets.honeycomb(), r -> SA[r[2], -r[1]]) |> supercell((-3,3), (1,1))
     @test_throws ArgumentError combine(lat0, lat1)
 end
 

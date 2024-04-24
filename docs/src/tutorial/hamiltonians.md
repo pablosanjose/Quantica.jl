@@ -221,3 +221,28 @@ julia> h2[()]
 As a consequence, `h` and `supercell(h)` represent exactly the same system, with the same observables, but with a different choice of unitcell.
 
 These two different behaviors make sense in different situations, so it is important to be aware of the order dependence of transformations. Similar considerations apply to `transform`, `translate` and `torus` when models are position dependent.
+
+## Combining Hamiltonians
+
+Multiple `h::AbstractHamiltonian`s (or multiple `l::Lattice`s) can be combined into one with `combine`.
+```julia
+julia> h1 = LP.linear(dim = 2) |> hopping(1); h2 = LP.linear(dim = 2, names = :B) |> hopping(1) |> translate(SA[0,1]) |> @onsite!((o; p=1) -> o+p);
+
+julia> combine(h1, h2; coupling = hopping(2))
+ParametricHamiltonian{Float64,2,1}: Parametric Hamiltonian on a 1D Lattice in 2D space
+  Bloch harmonics  : 3
+  Harmonic size    : 2 × 2
+  Orbitals         : [1, 1]
+  Element type     : scalar (ComplexF64)
+  Onsites          : 0
+  Hoppings         : 6
+  Coordination     : 3.0
+  Parameters       : [:p]
+```
+The `coupling` keyword, available when combining `h::AbstractHamiltonian`s, is a hopping model that is applied between each `h`. It can be constrained as usual with `hopselector`s and also be parametric. If either `coupling` or any of the combined `h` is parametric, the result of `combine` will be a `ParametricHamiltonian`, or a `Hamiltonian` otherwise.
+
+The combined objects must satisfy some conditions:
+
+- They must have the same Bravais vectors (modulo reorderings), which will be the inherited by the combined result.
+- They must have the same position type (the `T` in `AbstractHamiltonian{T}` and `Lattice{T}`)
+- They must have no repeated sublattice names among them (unless the combined object is non-parametric)

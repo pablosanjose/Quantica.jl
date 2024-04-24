@@ -35,7 +35,7 @@ end
 
 @noinline checkmatrixsize(::UniformScaling, s) = nothing
 @noinline checkmatrixsize(val, s) = (size(val, 1), size(val, 2)) == s ||
-    throw(ArgumentError("Expected an block or matrix of size $s, got size $((size(val, 1), size(val, 2)))"))
+    throw(ArgumentError("Expected a block or matrix of size $s, got size $((size(val, 1), size(val, 2)))"))
 
 @noinline function_not_defined(name) = argerror("Function $name not defined for the requested types")
 
