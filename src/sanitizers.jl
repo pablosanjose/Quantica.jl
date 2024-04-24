@@ -38,9 +38,6 @@ sanitize_Vector_of_SVectors(::Type{T}, ::Tuple{}) where {T} = T[]
 sanitize_Vector_of_SVectors(::Type{T}, vs) where {T} =
     eltype(vs) <: Number ? [sanitize_SVector(T, vs)] : [sanitize_SVector.(T, vs)...]
 
-sanitize_SVector(::Val{L}, s::SVector{L}) where {L} = s
-sanitize_SVector(::Val{L}, s::SVector{0,T}) where {L,T} = zero(SVector{L,T})
-
 sanitize_SVector(::Tuple{}) = SVector{0,Float64}()
 sanitize_SVector(x::Number) = SVector{1}(x)
 sanitize_SVector(v) = convert(SVector{length(v)}, v)
