@@ -47,7 +47,7 @@ BarebonesOperator{2}: a simple collection of 2D Bloch harmonics
   Element type     : SVector{2, ComplexF32}
   Nonzero elements : 7408
 
-julia> r[cellsites(SA[0,0], 3), cellsites(SA[1,0],2)]
+julia> r[sites(SA[0,0], 3), sites(SA[1,0],2)]
 2-element SVector{2, ComplexF32} with indices SOneTo(2):
  -0.0016230071f0 - 0.00012927242f0im
    0.008038711f0 + 0.004102786f0im

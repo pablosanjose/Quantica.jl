@@ -12,7 +12,7 @@ function testgreen(h, s; kw...)
     z = zero(SVector{L,Int})
     o = Quantica.unitvector(1, SVector{L,Int})
     conts = ntuple(identity, ncontacts(h))
-    locs = (cellsites(z, :), cellsites(z, 2), cellsites(o, 1:2), cellsites(o, (1,2)),
+    locs = (sites(z, :), sites(z, 2), sites(1:2), sites(o, (1,2)),
             CellOrbitals(o, 1), CellOrbitals(z, 1:2), CellOrbitals(z, SA[2,1]),
             conts...)
     for loc in locs, loc´ in locs
@@ -40,8 +40,8 @@ end
     g = LP.square() |> hamiltonian(@onsite(()->I), orbitals = 2) |> supercell |> greenfunction
     @test g[](0.0 + 0im) ≈ SA[-1 0; 0 -1]
     g = LP.linear() |> hopping(0) + @onsite((;ω=0) -> ω)|> greenfunction;
-    @test only(g[cellsites(SA[1],1)](1.0; ω = 0)) ≈ 1.0   atol = 0.000001
-    @test only(g[cellsites(SA[1],1)](1.0; ω = -1)) ≈ 0.5  atol = 0.000001
+    @test only(g[sites(SA[1],1)](1.0; ω = 0)) ≈ 1.0   atol = 0.000001
+    @test only(g[sites(SA[1],1)](1.0; ω = -1)) ≈ 0.5  atol = 0.000001
 end
 
 @testset "greenfunction with contacts" begin
@@ -175,7 +175,7 @@ end
     ρ´ = ldos(g[1])(ω)
     @test all(<(0.01), abs.(ρ .- ρ´))
     @test all(<(0.01), abs.(ρflat .- ρflat´))
-    @test_throws ArgumentError g[cellsites((), 3:4)](ω)
+    @test_throws ArgumentError g[sites((), 3:4)](ω)
     @test g[:](ω) == g[1](ω) == g(ω)[1] == g(ω)[:]
 
     g´ = HP.graphene(a0 = 1, t0 = 1, orbitals = (2,1)) |> supercell(region = RP.circle(20)) |>
@@ -207,7 +207,7 @@ end
         @test abs(g1[2,2] - 1/0.2) < 0.02
         @test all(x -> Quantica.chop(imag(x)) ≈ 0, g1[2,:])
         @test all(x -> Quantica.chop(imag(x)) ≈ 0, g1[:,2])
-        g2 = g[cellsites((0,0),:), cellsites((1,1),2)](0.2)
+        g2 = g[sites((0,0),:), sites((1,1),2)](0.2)
         @test size(g2) == (3,1)
     end
 
@@ -241,7 +241,7 @@ end
     ϕs = subdiv(0, 0.6π, 2)
     b = bands(h, ϕs, ϕs, showprogress = false)
     g = h |> attach(@onsite(ω->-im), cells = SA[20,0]) |> greenfunction(GS.Bands(ϕs, ϕs))
-    @test g(-1)[cellsites(SA[1,-1], 1), cellsites(SA[0,0],1)] isa AbstractMatrix
+    @test g(-1)[sites(SA[1,-1], 1), sites(1)] isa AbstractMatrix
 end
 
 @testset "greenfunction 32bit" begin
@@ -298,7 +298,7 @@ end
     gmat´ = gmat[cells = SA[1]]
     @test gmat´ isa Quantica.OrbitalSliceMatrix
     @test isempty(gmat´)
-    gmat = g[(; cells = SA[2]), cellsites(SA[1], 1:2)](0.2)
+    gmat = g[(; cells = SA[2]), sites(SA[1], 1:2)](0.2)
     @test gmat isa Matrix
     @test size(gmat) == (4, 2)
     gmat = g[(; cells = SA[1]), (; region = r -> 3<=r[1]<=5)](0.2)
@@ -310,11 +310,11 @@ end
     gmat´ = gmat[(; cells = SA[1])]
     @test gmat´ isa Quantica.OrbitalSliceMatrix
     @test size(gmat´) == (4, 2)
-    @test_throws Quantica.Dictionaries.IndexError gmat[cellsites(SA[1],:)]  # `:` means all sites in cell
-    gmat´ = gmat[cellsites(SA[1], 1:2)]
+    @test_throws Quantica.Dictionaries.IndexError gmat[sites(SA[1],:)]  # `:` means all sites in cell
+    gmat´ = gmat[sites(SA[1], 1:2)]
     @test gmat´ isa Matrix
     @test size(gmat´) == (2, 2)
-    c = cellsites(SA[1], 1)
+    c = sites(SA[1], 1)
     view(gmat, c)
     @test (@allocations view(gmat, c)) <= 2
 end
@@ -376,8 +376,8 @@ end
     ρ0 = ρ(0, 0; B=0.3)
     @test ρ0 isa OrbitalSliceMatrix
     @test iszero(ρ0)        # rows are on boundary
-    @test ρ0[cellsites(SA[0], 1), cellsites(SA[1], 1)] isa Matrix
-    @test size(view(ρ0, cellsites(SA[0], 1), cellsites(SA[1], 1))) == (2, 2)
+    @test ρ0[sites(1), sites(SA[1], 1)] isa Matrix
+    @test size(view(ρ0, sites(1), sites(SA[1], 1))) == (2, 2)
 
     # Diagonal slicing not yet supported
     @test_broken densitymatrix(g1[diagonal(cells = SA[1])], 5)

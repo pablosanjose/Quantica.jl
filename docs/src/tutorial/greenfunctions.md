@@ -265,7 +265,7 @@ julia> g(0.5)[diagonal(cells = (0, 0), kernel = SA[0 1; 1 0])]
 which is zero in this spin-degenerate case
 
 !!! tip "Slicing `OrbitalSliceArray`s"
-    An `v::OrbitalSliceVector` and `m::OrbitalSliceMatrix` are both `a::OrbitalSliceArray`, and wrap conventional arrays, with e.g. conventional `axes`. They also provide, however, `orbaxes(a)`, which are a tuple of `OrbitalSliceGrouped`. These are `LatticeSlice`s that represent orbitals grouped by sites. They allow an interesting additional functionality. You can index `v[sitelector(...)]` or `m[rowsiteselector, colsiteselector]` to obtain a new `OrbitalSliceArray` of the selected rows and cols. The full machinery of `siteselector` applies. One can also use a lower-level `v[cellsites(cell_index, site_indices)]` to obtain an unwrapped `AbstractArray`, without building new `orbaxes`. See `OrbitalSliceArray` for further details.
+    An `v::OrbitalSliceVector` and `m::OrbitalSliceMatrix` are both `a::OrbitalSliceArray`, and wrap conventional arrays, with e.g. conventional `axes`. They also provide, however, `orbaxes(a)`, which are a tuple of `OrbitalSliceGrouped`. These are `LatticeSlice`s that represent orbitals grouped by sites. They allow an interesting additional functionality. You can index `v[sitelector(...)]` or `m[rowsiteselector, colsiteselector]` to obtain a new `OrbitalSliceArray` of the selected rows and cols. The full machinery of `siteselector` applies. One can also use a lower-level `v[sites(cell_index, site_indices)]` to obtain an unwrapped `AbstractArray`, without building new `orbaxes`. See `OrbitalSliceArray` for further details.
 
 ## Visualizing a Green function
 

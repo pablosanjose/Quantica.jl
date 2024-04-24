@@ -7,18 +7,20 @@ add!(m::TightbindingModel) = b -> add!(b, m)
 
 # direct site indexing
 function add!(b::IJVBuilder, val, c::CellSites, d::CellSites)
-    ijv = b[cell(d) - cell(c)]
+    c´, d´ = sanitize_cellindices(c, b), sanitize_cellindices(d, b)
+    ijv = b[cell(d´) - cell(c´)]
     B = blocktype(b)
     val´ = mask_block(B, val)   # Warning: we don't check matrix size here, just conversion to B
-    add!(ijv, val´, siteindices(c), siteindices(d))
+    add!(ijv, val´, siteindices(c´), siteindices(d´))
     return b
 end
 
 function add!(b::IJVBuilder, val, c::CellSites)
-    ijv = b[zero(cell(c))]
+    c´ = sanitize_cellindices(c, b)
+    ijv = b[zero(cell(c´))]
     B = blocktype(b)
     val´ = mask_block(B, val)   # Warning: we don't check matrix size here, just conversion to B
-    add!(ijv, val´, siteindices(c))
+    add!(ijv, val´, siteindices(c´))
     return b
 end
 
@@ -437,6 +439,18 @@ function Base.isassigned(h::AbstractHamiltonian{<:Any,<:Any,L}, dn::SVector{L,In
         dn == dcell(har) && return true
     end
     return false
+end
+
+
+
+Base.getindex(h::AbstractHamiltonian, i::AnyCellSites, j::AnyCellSites = i) =
+    hamiltonian(h)[sites_to_orbs(i, h), sites_to_orbs(j, h)]
+
+function Base.getindex(h::Hamiltonian{T}, i::AnyCellOrbitals, j::AnyCellOrbitals) where {T}
+    dn = cell(i) - cell(j)
+    oi, oj = orbindices(i), orbindices(j)
+    mat = isassigned(h, dn) ? h[dn][oi, oj] : spzeros(Complex{T}, length(oi), length(oj))
+    return mat
 end
 
 #endregion

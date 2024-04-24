@@ -28,7 +28,7 @@ export sublat, bravais_matrix, lattice, sites, supercell, hamiltonian,
        plusadjoint, neighbors, siteselector, hopselector, diagonal,
        unflat, torus, transform, translate, combine,
        spectrum, energies, states, bands, subdiv,
-       greenfunction, selfenergy, attach, cellsites,
+       greenfunction, selfenergy, attach,
        plotlattice, plotlattice!, plotbands, plotbands!, qplot, qplot!, qplotdefaults,
        conductance, josephson, ldos, current, transmission, densitymatrix,
        OrbitalSliceArray, OrbitalSliceVector, OrbitalSliceMatrix, orbaxes

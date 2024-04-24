@@ -16,10 +16,10 @@
 #      - minimal_callsafe_copy(gs, parentham, parentcontacts)
 #   The user-facing indexing API accepts:
 #      - i::Integer -> Sites of Contact number i
-#      - cellsites(cell::Tuple, sind::Int)::Subcell -> Single site in a cell
-#      - cellsites(cell::Tuple, sindcollection)::Subcell -> Site collection in a cell
-#      - cellsites(cell::Tuple, slat::Symbol)::Subcell -> Whole sublattice in a cell
-#      - cellsites(cell::Tuple, :) ~ cell::Union{NTuple,SVector} -> All sites in a cell
+#      - sites(cell::Tuple, sind::Int)::Subcell -> Single site in a cell
+#      - sites(cell::Tuple, sindcollection)::Subcell -> Site collection in a cell
+#      - sites(cell::Tuple, slat::Symbol)::Subcell -> Whole sublattice in a cell
+#      - sites(cell::Tuple, :) ~ cell::Union{NTuple,SVector} -> All sites in a cell
 #      - sel::SiteSelector ~ NamedTuple -> forms a LatticeSlice
 #   Optional: to properly plot boundaries, an ::AbstractGreenSolver may also implement
 #      - boundaries(s::AbstractGreenSolver) -> collection of (dir => cell)::Pair{Int,Int}

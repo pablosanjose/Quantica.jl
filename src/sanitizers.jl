@@ -84,6 +84,16 @@ end
 #endregion
 
 ############################################################################################
+# TEL types
+# Family of types with well-defined T,E,L
+#region
+
+const TELtypes{T,E,L} = Union{Lattice{T,E,L},LatticeSlice{T,E,L},AbstractHamiltonian{T,E,L},
+    GreenFunction{T,E,L},GreenSlice{T,E,L},GreenSolution{T,E,L},IJVBuilder{T,E,L},CSCBuilder{T,E,L}}
+
+#endregion
+
+############################################################################################
 # CellIndices sanitizers
 #region
 
@@ -99,6 +109,17 @@ function _check_unique(inds)
     allunique(inds) || argerror("Cell indices should be unique")
     return inds
 end
+
+sanitize_cellindices(c::CellIndices{0}, ::Val{L}) where {L} = zerocellinds(c, Val(L))
+sanitize_cellindices(c::CellIndices{L}, ::Val{L}) where {L} = c
+sanitize_cellindices(c::CellIndices{0}, ::Val{0}) = c
+
+sanitize_cellindices(c::CellIndices{L}, ::TELtypes{<:Any,<:Any,L}) where {L} = c
+sanitize_cellindices(c::CellIndices{0}, ::TELtypes{<:Any,<:Any,0}) = c
+sanitize_cellindices(c::CellIndices{0}, ::TELtypes{<:Any,<:Any,L}) where {L} =
+    zerocellinds(c, Val(L))
+sanitize_cellindices(c::CellIndices{L}, ::TELtypes{<:Any,<:Any,L´}) where {L,L´} =
+    argerror("Expected a cell index of dimension $L´, got $L")
 
 #endregion
 

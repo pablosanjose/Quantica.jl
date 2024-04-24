@@ -134,7 +134,8 @@ Base.getindex(g::GreenSolution; kw...) = g[getindex(lattice(g); kw...)]
 Base.getindex(g::GreenSolution, kw::NamedTuple) = g[getindex(lattice(g); kw...)]
 
 # g[::Integer, ::Integer] and g[:, :] - intra and inter contacts
-Base.view(g::GreenSolution, i::CT, j::CT = i) where {CT<:Union{Integer,Colon}} = view(slicer(g), i, j)
+Base.view(g::GreenSolution, i::CT, j::CT = i) where {CT<:Union{Integer,Colon}} =
+    view(slicer(g), i, j)
 
 # fastpath for intra and inter-contact
 Base.getindex(g::GreenSolution, i::CT, j::CT = i)  where {CT<:Union{Integer,Colon}}  =
@@ -564,13 +565,14 @@ function GreenSolutionCache(gω::GreenSolution{T,<:Any,L}) where {T,L}
     return GreenSolutionCache(gω, cache)
 end
 
-function Base.getindex(c::GreenSolutionCache{<:Any,L}, ci::CellSite{L}, cj::CellSite{L}) where {L}
-    ni, i = cell(ci), siteindex(ci)
-    nj, j = cell(cj), siteindex(cj)
+function Base.getindex(c::GreenSolutionCache{<:Any,L}, ci::CellSite, cj::CellSite) where {L}
+    ci´, cj´ = sanitize_cellindices(ci, Val(L)), sanitize_cellindices(cj, Val(L))
+    ni, i = cell(ci´), siteindex(ci´)
+    nj, j = cell(cj´), siteindex(cj´)
     if haskey(c.cache, (ni, nj, j))
         gs = c.cache[(ni, nj, j)]
     else
-        gs = c.gω[cellsites(ni, :), cj]
+        gs = c.gω[sites(ni, :), cj]
         push!(c.cache, (ni, nj, j) => gs)
     end
     h = hamiltonian(c.gω)

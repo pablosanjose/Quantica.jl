@@ -621,9 +621,9 @@ function group_projected_cell_indices(condition, dir, d::CellSitesDict{L}) where
     keys´ = SVector{L,Int}[]
     indvals´ = Vector{Int}[]
     if !isempty(d)
-        # get [cell => cellsites(cell, inds)...]
+        # get [cell => sites(cell, inds)...]
         ps = collect(pairs(d))
-        # get [projcell => cellsites(cell, inds)...]
+        # get [projcell => sites(cell, inds)...]
         map!(kv -> projected_cell(first(kv), dir) => last(kv), ps, ps)
         # remove those pcells that do not satisfy condition
         filter!(kv -> condition(first(kv)[dir]), ps)
@@ -778,7 +778,7 @@ end
 function inf_band_slice!(gmat, ω, (i, j)::Tuple{CellOrbitals,CellOrbitals},
         subband::Subband, subbandsimps::SubbandSimplices,
         simpinds = eachindex(simplices(subband)))
-    dist = celldist(i, j)
+    dist = cell(i) - cell(j)
     orbs = orbindices(i), orbindices(j)
     return inf_band_slice!(gmat, ω, dist, orbs, subband, subbandsimps, simpinds)
 end
@@ -803,8 +803,6 @@ function inf_band_slice!(gmat, ω, dist, orbs, subband, subbandsimps, simpinds)
     end
     return gmat
 end
-
-celldist(i::CellOrbitals{L}, j::CellOrbitals{L}) where {L} = cell(i) - cell(j)
 
 function inf_band_slice!(gmat, ω, (si, sj)::Tuple, args...)   # si, sj can be orbslice or cellorbs
     if ncells(si) == ncells(sj) == 1
