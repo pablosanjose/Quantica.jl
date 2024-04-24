@@ -415,6 +415,16 @@ Note that the `coupling` model will be applied to the combined lattice (which ma
 renamed sublattices to avoid name collissions). However, only hopping terms between
 different `hams` blocks will be applied.
 
+## Limitations
+
+Currently, `combine` only works with `Lattice{T}` `AbstractHamiltonians{T}` with the same
+`T`. Furthermore, if any of the `hams` is a `ParametricHamiltonian` or `coupling` is a
+`ParametricModel`, the sublattice names of all `hams` must be distinct. This ensures that
+parametric models, which get applied through `Modifiers` after construction of the
+`ParametricHamiltonian`, are not applied to the wrong sublattice, since sublattice names
+could be renamed by `combine` if they are not unique. Therefore, be sure to choose unique
+sublattice names upon construction for all the `hams` to be combined (see `lattice`).
+
 # Examples
 ```jldoctest
 julia> # Building Bernal-stacked bilayer graphene

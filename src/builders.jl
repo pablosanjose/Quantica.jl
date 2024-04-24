@@ -185,16 +185,16 @@ end
 
 # with no modifiers
 function IJVBuilder(lat::Lattice{T}, hams::Hamiltonian...) where {T}
-    orbs = vcat(norbitals.(hams)...)
-    builder = IJVBuilder(lat, orbs)
+    bs = blockstructure(lat, hams...)
+    builder = IJVBuilder(lat, bs)
     push_ijvharmonics!(builder, hams...)
     return builder
 end
 
 # with some modifiers
 function IJVBuilder(lat::Lattice{T}, hams::AbstractHamiltonian...) where {T}
-    orbs = vcat(norbitals.(hams)...)
-    builder = IJVBuilderWithModifiers(lat, orbs)
+    bs = blockstructure(lat, hams...)
+    builder = IJVBuilderWithModifiers(lat, bs)
     push_ijvharmonics!(builder, hams...)
     mss = modifiers.(hams)
     bis = blockindices(hams)
@@ -211,17 +211,22 @@ push_ijvharmonics!(builder) = builder
 
 function push_ijvharmonics!(builder::IJVBuilder, hs::AbstractHamiltonian...)
     offset = 0
+    B = blocktype(builder)
     for h in hs
         for har in harmonics(h)
             ijv = builder[dcell(har)]
             hmat = unflat(matrix(har))
             I,J,V = findnz(hmat)
-            append!(ijv, (I .+ offset, J .+ offset, V))
+            V´ = maybe_mask_blocks(B, V)
+            append!(ijv, (I .+ offset, J .+ offset, V´))
         end
         offset += nsites(lattice(h))
     end
     return builder
 end
+
+maybe_mask_blocks(::Type{B}, V::Vector{B}) where {B} = V
+maybe_mask_blocks(::Type{B}, V::Vector) where {B} = mask_block.(B, V)
 
 empty_harmonic(b::CSCBuilder{<:Any,<:Any,L,B}, dn) where {L,B} =
     CSCHarmonic{L,B}(dn, CSC{B}(nsites(b.lat)))

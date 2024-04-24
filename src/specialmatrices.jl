@@ -156,6 +156,9 @@ checkstored(mat, i, j) = i in view(rowvals(mat), nzrange(mat, j)) ||
 #   converts input to a specific block type B (with or without size check)
 #region
 
+# in case the first argument is a value, not a type
+@inline mask_block(::B, val) where {B} = mask_block(B, val)
+
 @inline mask_block(::Type{B}, val::UniformScaling, size = (N, N)) where {T,N,B<:MatrixElementNonscalarType{T,N}} =
     mask_block(B, sanitize_SMatrix(SMatrix{N,N,T}, SMatrix{N,N}(val), size))
 
@@ -183,7 +186,7 @@ end
     return SMatrixView(SMatrix{N,N,T}(s))
 end
 
-mask_block(t, val) = argerror("Unexpected block size")
+mask_block(t::Type, val) = argerror("Unexpected block size")
 
 size_or_1x1(::Number) = (1, 1)
 size_or_1x1(val) = size(val)

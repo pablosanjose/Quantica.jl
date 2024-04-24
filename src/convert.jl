@@ -58,3 +58,22 @@ function Base.promote_rule(::Type{Sublat{T1,E1}}, ::Type{Sublat{T2,E2}}) where {
     T = float(promote_type(T1, T2))
     return Sublat{T,E}
 end
+
+# Block type promotion, for use in e.g. combine
+
+const HBtype{B} = AbstractHamiltonian{<:Any,<:Any,<:Any,B}
+const SMatrixOrView{N,M,T,NM} = Union{SMatrix{N,M,T,NM}, SMatrixView{N,M,T,NM}}
+
+Base.promote_rule(::Type{<:HBtype{S}}, ::Type{<:HBtype{S}}) where {S} = HBtype{S}
+
+Base.promote_rule(::Type{<:HBtype{C}}, ::Type{<:HBtype{C´}}) where {C<:Complex,C´<:Complex} =
+    HBtype{promote_type(C,C´)}
+
+Base.promote_rule(::Type{<:HBtype{C´}}, ::Type{<:HBtype{S}}) where {C´<:Complex,C,N,NN,S<:SMatrixOrView{N,N,C,NN}} =
+    HBtype{SMatrixView{N,N,promote_type(C,C´),NN}}
+
+function Base.promote_rule(::Type{<:HBtype{S1}}, ::Type{<:HBtype{S2}}) where {N1,C1,S1<:SMatrixOrView{N1,N1,C1},N2,C2,S2<:SMatrixOrView{N2,N2,C2}}
+    N = max(N1,N2)
+    C = promote_type(C1, C2)
+    return HBtype{SMatrixView{N,N,C,N*N}}
+end

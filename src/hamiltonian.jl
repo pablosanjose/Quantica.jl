@@ -481,15 +481,33 @@ unitcell_hamiltonian(ph::ParametricHamiltonian) = unitcell_hamiltonian(hamiltoni
 
 ############################################################################################
 # combine
+#   type-stable with Hamiltonians, but not with ParametricHamiltonians, as the field
+#   builder.modifiers isa Vector{Any} in that case.
 #region
 
-function combine(hams::AbstractHamiltonian{T}...; coupling::AbstractModel = TightbindingModel()) where {T}
+function combine(hams::AbstractHamiltonian...; coupling::AbstractModel = TightbindingModel())
+    check_unique_names(coupling, hams...)
     lat = combine(lattice.(hams)...)
     builder = IJVBuilder(lat, hams...)
     interblockmodel = interblock(coupling, hams...)
     model´, blocks´ = parent(interblockmodel), block(interblockmodel)
     add!(builder, model´, blocks´)
     return hamiltonian(builder)
+end
+
+# No need to have unique names if nothing is parametric
+check_unique_names(::TightbindingModel, ::Hamiltonian...) = nothing
+
+function check_unique_names(::AbstractModel, hs::AbstractHamiltonian...)
+    names = tupleflatten(sublatnames.(lattice.(hs))...)
+    allunique(names) || argerror("Cannot combine ParametricHamiltonians with non-unique sublattice names, since modifiers could be tied to the original names. Assign unique names on construction.")
+    return nothing
+end
+
+function check_unique_names(::AbstractModel, hs::Hamiltonian...)
+    names = tupleflatten(sublatnames.(lattice.(hs))...)
+    allunique(names) || argerror("Cannot combine Hamiltonians with non-unique sublattice names using a ParametricModel, since modifiers could be tied to the original names. Assign unique names on construction.")
+    return nothing
 end
 
 #endregion

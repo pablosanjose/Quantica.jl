@@ -93,7 +93,7 @@ unitcell(u::Unitcell{T,E}, names, postype::Type{S})  where {T,E,S<:SVector{E,T}}
 # combine lattices - combine sublats, rename if equal name
 #region
 
-function combine(lats::Lattice{<:Any,E,L}...) where {E,L}
+function combine(lats::Lattice{T,E,L}...) where {T,E,L}
     isapprox_modulo_shuffle(bravais_matrix.(lats)...) ||
         throw(ArgumentError("To combine lattices they must all share the same Bravais matrix. They read $(bravais_matrix.(lats))"))
     bravais´ = bravais(first(lats))
@@ -101,8 +101,9 @@ function combine(lats::Lattice{<:Any,E,L}...) where {E,L}
     return Lattice(bravais´, unitcell´)
 end
 
+# without <:Any here, this method overwrites the one above
 combine(lats::Lattice{<:Any}...) =
-    argerror("Tried to combine lattices with different dimension or embedding dimension")
+    argerror("Tried to combine lattices with different type or different dimension or embedding dimension")
 
 function combine(ucells::Unitcell...)
     names´ = vcat(sublatnames.(ucells)...)

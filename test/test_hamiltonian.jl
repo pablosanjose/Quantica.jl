@@ -419,8 +419,20 @@ end
     @test iszero(h((0,0))[1:2, 5:6])
     h = combine(hb, h0, ht; coupling = hopping((r,dr) -> exp(-norm(dr)), range = 2))
     @test !iszero(h((0,0))[1:2, 5:6])
+    # Parametric combine
+    h1 = LP.linear(dim = 2) |> hopping(1)
+    h2 = LP.linear(dim = 2) |> hamiltonian(@hopping((; p = 1) -> p*I), orbitals = 2)
+    coupling = @hopping((; p = 1) -> im*p*SA[1 0], range = 3, sublats = :B => :A) |> plusadjoint
+    @test_throws ArgumentError combine(h1, h2)
+    @test_throws ArgumentError combine(h1, h2(); coupling)
+    @test combine(h1, h2()) isa Hamiltonian
+    h2 = LP.linear(dim = 2, names = :B) |> hamiltonian(@hopping((; p = 1) -> p*I), orbitals = 2)
+    @test combine(h1, h2) isa ParametricHamiltonian{Float64,2,1,Quantica.SMatrixView{2,2,ComplexF64,4}}
+    h = combine(h1, h2; coupling)
+    @test h isa ParametricHamiltonian{Float64,2,1,Quantica.SMatrixView{2,2,ComplexF64,4}}
+    # plustadjoint broken for ParametricModels
+    @test_broken h((p = 10))
 end
-
 
 @testset "current operator" begin
     h = LP.honeycomb() |> hamiltonian(@onsite((; μ = 0) -> (2-μ)*I) - hopping(SA[0 1; 1 0]), orbitals = 2) |> supercell(2)

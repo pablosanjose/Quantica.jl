@@ -7,7 +7,7 @@ sanitize_Vector_of_Symbols(names) = Symbol[convert(Symbol, name) for name in nam
 
 sanitize_orbitals(o::Val) = o
 sanitize_orbitals(o::Int) = Val(o)
-sanitize_orbitals(o) = allequal(o) ? Val(first(o)) : o
+sanitize_orbitals(o) = allequal(o) ? sanitize_orbitals(first(o)) : o
 
 sanitize_Val(o::Val) = o
 sanitize_Val(o) = Val(o)
