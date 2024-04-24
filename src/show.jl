@@ -52,6 +52,26 @@ displayname(s::Sublat) = sublatname(s) == Symbol(:_) ? "pending" : string(":", s
 #endregion
 
 ############################################################################################
+# CellSites
+#region
+
+function Base.show(io::IO, c::CellSites)
+    i = get(io, :indent, "")
+    print(io, i, summary(c), "\n")
+end
+
+Base.summary(c::CellSites{L,V}) where {L,V} =
+    "CellSites{$L,$V} : $(display_nsites(c)) in $(display_cell(c))"
+
+display_nsites(::CellSites{<:Any,Colon}) = "all sites"
+display_nsites(c::CellSites) = length(c) == 1 ? "1 site" : "$(length(c)) sites"
+
+display_cell(c::CellSites{0}) = "cell zero"
+display_cell(c::CellSites) = iszero(cell(c)) ? "cell zero" : "cell $(cell(c))"
+
+#endregion
+
+############################################################################################
 # LatticeSlice
 #region
 

@@ -34,6 +34,10 @@
         @test nothing === show(stdout, transmission(g[1,2]))
         @test nothing === show(stdout, densitymatrix(g[1]))
         @test nothing === show(stdout, MIME("text/plain"), densitymatrix(g[1])())
+        @test nothing === show(stdout, sites(1))
+        @test nothing === show(stdout, sites(SA[1], 2:4))
+        @test nothing === show(stdout, sites(:))
+        @test nothing === show(stdout, sites(SA[0], :))
     end
     h = first(hs)
     g = greenfunction(supercell(h) |> attach(@onsite(ω -> im*I)) |> attach(nothing))

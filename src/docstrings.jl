@@ -245,6 +245,13 @@ given cell at `cell_index`. Here, `site_indices` can be an index, a collection o
 or `:` (for all sites), and `cell_index` should be a collection of `L` integers, where `L`
 is the lattice dimension. If omitted, `cell_index` defaults to the zero-th cell `(0,...)`.
 
+`CellSites` produced with `sites` can be used to index `Lattice`s, `AbstractHamiltonian`s,
+`GreenFunction`s, `GreenSlice`s, `OrbitalSliceArray`s, etc. Note that selecting sites based
+on cell and site indices requires finding the indices beforehand, which can be done e.g.
+through plotting the system with `qplot`. This is lower level and potentially more fragile
+than using `siteselector`s, as indices are chosen freely by Quantica in an unspecified way,
+but it does have a smaller overhead.
+
 # Examples
 ```jldoctest
 julia> sites(LatticePresets.honeycomb(), :A)
