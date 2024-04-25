@@ -1,4 +1,4 @@
-using Quantica: Hamiltonian, ParametricHamiltonian, BarebonesOperator,
+using Quantica: Hamiltonian, ParametricHamiltonian, BarebonesOperator, OrbitalSliceMatrix, SparseMatrixCSC,
       sites, nsites, nonsites, nhoppings, coordination, flat, hybrid, transform!, nnz, nonzeros
 
 @testset "basic hamiltonians" begin
@@ -479,7 +479,18 @@ end
 end
 
 @testset "hamiltonian indexing" begin
-    h = HP.graphene(orbitals = (2, 1), a0 = 1) |> @hopping!((t; p = 0) -> p*t)
-    @test size(h[sites(1), sites(2)]) == (2, 1)
+    h = LP.honeycomb() |> hamiltonian(hopping(I), orbitals = (2, 1)) |> @hopping!((t; p = 1) -> p*t)
+    m = h[sites(1), sites(2)]
+    @test m isa SparseMatrixCSC
+    @test m == SA[1; 0;;]
     @test iszero(h[sites(1), sites(SA[2,3], 2)])
+    m = h[cells = 1]
+    @test m isa OrbitalSliceMatrix
+    @test m == SA[0 0 1; 0 0 0; 1 0 0]
+    m = h[sites(2), (; cells = 1)]
+    @test m isa SparseMatrixCSC
+    @test m == SA[1 0 0]
+    m = view(h, sites(2), sites(1))
+    @test m isa SubArray
+    @test m == SA[1 0]
 end

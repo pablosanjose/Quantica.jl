@@ -298,8 +298,8 @@ function call!(ph::ParametricHamiltonian; kw...)
     reset_to_parent!(ph)
     h = hamiltonian(ph)
     applymodifiers!(h, modifiers(ph)...; kw...)
-    flat_sync!(h)  # modifiers are applied to unflat, need to be synced to flat
-    return h
+    # flat_sync!(h)  # modifiers are applied to unflat, need to be synced to flat
+    # return h
 end
 
 function reset_to_parent!(ph)
@@ -406,8 +406,10 @@ call!_output(p::ParametricHamiltonian) = call!_output(hamiltonian(p))
 #endregion
 
 ############################################################################################
-# indexing into AbstractHamiltonian (harmonic extraction) - see also slices.jl
+# indexing into AbstractHamiltonian - see also slices.jl
 #region
+
+# Extraction of Harmonics
 
 Base.getindex(h::AbstractHamiltonian, dn::Union{Tuple,Integer,SVector,AbstractVector}) =
     flat(h[hybrid(dn)])
@@ -441,16 +443,45 @@ function Base.isassigned(h::AbstractHamiltonian{<:Any,<:Any,L}, dn::SVector{L,In
     return false
 end
 
+# SiteSelector indexing - replicates GreenSolution indexing - see GreenFunctions.jl
 
+Base.getindex(h::ParametricHamiltonian; kw...) = getindex(call!(h); kw...)
+Base.getindex(h::Hamiltonian; kw...) = h[siteselector(; kw...)]
 
-Base.getindex(h::AbstractHamiltonian, i::AnyCellSites, j::AnyCellSites = i) =
-    hamiltonian(h)[sites_to_orbs(i, h), sites_to_orbs(j, h)]
+# conversion down to CellOrbitals. See sites_to_orbs in slices.jl
+Base.getindex(h::ParametricHamiltonian, i, j) = getindex(call!(h), i, j)
+Base.getindex(h::Hamiltonian, i, j) = getindex(h, sites_to_orbs(i, h), sites_to_orbs(j, h))
+# we need AbstractHamiltonian here to avoid ambiguities with dn above
+Base.getindex(h::AbstractHamiltonian, i) = (i´ = sites_to_orbs(i, h); getindex(h, i´, i´))
+
+# wrapped matrix for end user consumption
+Base.getindex(h::Hamiltonian, i::OrbitalSliceGrouped, j::OrbitalSliceGrouped) =
+    OrbitalSliceMatrix(
+        mortar((h[si, sj] for si in cellsdict(i), sj in cellsdict(j))),
+    (i, j))
+
+Base.getindex(h::Hamiltonian, i::AnyOrbitalSlice, j::AnyOrbitalSlice) =
+    mortar((h[si, sj] for si in cellsdict(i), sj in cellsdict(j)))
+
+Base.getindex(h::Hamiltonian, i::AnyOrbitalSlice, j::AnyCellOrbitals) =
+    mortar((h[si, sj] for si in cellsdict(i), sj in (j,)))
+
+Base.getindex(h::Hamiltonian, i::AnyCellOrbitals, j::AnyOrbitalSlice) =
+    mortar((h[si, sj] for si in (i,), sj in cellsdict(j)))
 
 function Base.getindex(h::Hamiltonian{T}, i::AnyCellOrbitals, j::AnyCellOrbitals) where {T}
     dn = cell(i) - cell(j)
     oi, oj = orbindices(i), orbindices(j)
     mat = isassigned(h, dn) ? h[dn][oi, oj] : spzeros(Complex{T}, length(oi), length(oj))
     return mat
+end
+
+Base.view(h::ParametricHamiltonian, i::CellSites, j::CellSites = i) = view(call!(h), i, j)
+
+function Base.view(h::Hamiltonian, i::CellSites, j::CellSites = i)
+    oi, oj = sites_to_orbs_nogroups(i, h), sites_to_orbs_nogroups(j, h)
+    dn = cell(oi) - cell(oj)
+    return view(h[dn], orbindices(oi), orbindices(oj))
 end
 
 #endregion

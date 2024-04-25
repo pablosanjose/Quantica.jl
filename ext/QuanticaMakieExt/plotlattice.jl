@@ -98,14 +98,13 @@ end
 
 function _siteprimitives(ls::LatticeSlice{<:Any,E}, h, opts, is_shell) where {E}
     sp = SitePrimitives{E}()
-    mat = Quantica.matrix(first(harmonics(h)))
     lat = parent(ls)
     for (i´, cs) in enumerate(Quantica.cellsites(ls))
         ni = Quantica.cell(cs)
         i = Quantica.siteindex(cs)
         # in case opts contains some array over latslice (from an observable)
         opts´ = maybe_getindex.(opts, i´)
-        push_siteprimitive!(sp, opts´, lat, i, ni, mat[i, i], is_shell)
+        push_siteprimitive!(sp, opts´, lat, i, ni, view(h, cs), is_shell)
     end
     return sp
 end
@@ -122,9 +121,9 @@ function _hoppingprimitives(ls::LatticeSlice{<:Any,E}, ls´, h, opts, siteradii)
     lat = parent(ls)
     sdict = Quantica.siteindexdict(ls)
     sdict´ = Quantica.siteindexdict(ls´)
-    for (j´, cs) in enumerate(Quantica.cellsites(ls))
-        nj = Quantica.cell(cs)
-        j = Quantica.siteindex(cs)
+    for (j´, csj) in enumerate(Quantica.cellsites(ls))
+        nj = Quantica.cell(csj)
+        j = Quantica.siteindex(csj)
         siteradius = isempty(siteradii) ? Float32(0) : siteradii[j´]
         for har in harmonics(h)
             dn = Quantica.dcell(har)
@@ -134,15 +133,16 @@ function _hoppingprimitives(ls::LatticeSlice{<:Any,E}, ls´, h, opts, siteradii)
             for ptr in nzrange(mat, j)
                 i = rows[ptr]
                 Quantica.isonsite((i, j), dn) && continue
-                i´ = get(sdict, Quantica.CellSite(ni, i), nothing)
+                csi = sites(ni, i)
+                i´ = get(sdict, csi, nothing)
                 if i´ === nothing   # dst is not in latslice
-                    if haskey(sdict´, Quantica.CellSite(ni, i))  # dst is in latslice´
+                    if haskey(sdict´, csi)  # dst is in latslice´
                         opts´ = maybe_getindex.(opts, j´)
-                        push_hopprimitive!(hp´, opts´, lat, (i, j), (ni, nj), siteradius, mat[i, j], false)
+                        push_hopprimitive!(hp´, opts´, lat, (i, j), (ni, nj), siteradius, view(h, csi, csj), false)
                     end
                 else
                     opts´ = maybe_getindex.(opts, i´, j´)
-                    push_hopprimitive!(hp, opts´, lat, (i, j), (ni, nj), siteradius, mat[i, j], true)
+                    push_hopprimitive!(hp, opts´, lat, (i, j), (ni, nj), siteradius, view(h, csi, csj), true)
                 end
             end
         end
@@ -494,11 +494,11 @@ function Makie.plot!(plot::PlotLattice{Tuple{H,S,S´}}) where {H<:Hamiltonian,S<
     return plot
 end
 
-function Makie.plot!(plot::PlotLattice{Tuple{G}}) where {G<:Union{GreenFunction,OpenHamiltonian}}
+function Makie.plot!(plot::PlotLattice{Tuple{G}}) where {G<:GreenFunction}
     g = to_value(plot[1])
     gsel = haskey(plot, :selector) && plot[:selector][] !== missing ?
         plot[:selector][] : green_selector(g)
-    h = default_hamiltonian(g)
+    h = hamiltonian(g)
     latslice = lattice(h)[gsel]
     latslice´ = Quantica.growdiff(latslice, h)
     L = Quantica.latdim(h)
@@ -528,7 +528,7 @@ function Makie.plot!(plot::PlotLattice{Tuple{G}}) where {G<:Union{GreenFunction,
     # plot contacts
     if !ishidden((:contact, :contacts), plot)
         Σkws = Iterators.cycle(parse_children(plot[:children]))
-        Σs = Quantica.selfenergies(g)
+        Σs = Quantica.selfenergies(Quantica.contacts(g))
         hideΣ = Quantica.tupleflatten(:bravais, plot[:hide][])
         for (Σ, Σkw) in zip(Σs, Σkws)
             Σplottables = Quantica.selfenergy_plottables(Σ)
@@ -575,7 +575,7 @@ boundary_selector(g) = siteselector(cells = n -> isboundarycell(n, g))
 
 function green_bounding_box(g)
     L = Quantica.latdim(hamiltonian(g))
-    return isempty(Quantica.selfenergies(g)) ?
+    return isempty(Quantica.contacts(g)) ?
         boundary_bounding_box(Val(L), Quantica.boundaries(g)...) :
         broaden_bounding_box(Quantica.boundingbox(g), Quantica.boundaries(g)...)
 end
@@ -723,15 +723,11 @@ end
 matrixstring(row, x) = string("Onsite[$row] : ", matrixstring(x))
 matrixstring(row, col, x) = string("Hopping[$row, $col] : ", matrixstring(x))
 
-matrixstring(x::Number) = numberstring(Quantica.chop(x))
-
-function matrixstring(s::SMatrix)
+function matrixstring(s::AbstractMatrix)
     ss = repr("text/plain", s)
     pos = findfirst(isequal('\n'), ss)
     return pos === nothing ? ss : ss[pos:end]
 end
-
-matrixstring(s::Quantica.SMatrixView) = matrixstring(Quantica.unblock(s))
 
 numberstring(x) = isreal(x) ? string(" ", real(x)) : isimag(x) ? string(" ", imag(x), "im") : string(" ", x)
 
@@ -748,9 +744,9 @@ Makie.convert_arguments(::PointBased, lat::Lattice, sublat = missing) =
     (Point.(Quantica.sites(lat, sublat)),)
 Makie.convert_arguments(p::PointBased, lat::Lattice{<:Any,1}, sublat = missing) =
     Makie.convert_arguments(p, Quantica.lattice(lat, dim = Val(2)), sublat)
-Makie.convert_arguments(p::PointBased, h::Union{AbstractHamiltonian,GreenFunction,GreenSolution,OpenHamiltonian}, sublat = missing) =
+Makie.convert_arguments(p::PointBased, h::Union{AbstractHamiltonian,GreenFunction,GreenSolution}, sublat = missing) =
     Makie.convert_arguments(p, Quantica.lattice(h), sublat)
-Makie.convert_arguments(p::Type{<:LineSegments}, g::Union{GreenFunction,GreenSolution,OpenHamiltonian}, sublat = missing) =
+Makie.convert_arguments(p::Type{<:LineSegments}, g::Union{GreenFunction,GreenSolution}, sublat = missing) =
     Makie.convert_arguments(p, Quantica.hamiltonian(g), sublat)
 
 function Makie.convert_arguments(::Type{<:LineSegments}, h::AbstractHamiltonian{<:Any,E}, sublat = missing) where {E}
