@@ -476,6 +476,14 @@ function Base.getindex(h::Hamiltonian{T}, i::AnyCellOrbitals, j::AnyCellOrbitals
     return mat
 end
 
+Base.view(h::ParametricHamiltonian, i::CellSites, j::CellSites = i) = view(call!(h), i, j)
+
+function Base.view(h::Hamiltonian, i::CellSites, j::CellSites = i)
+    oi, oj = sites_to_orbs_nogroups(i, h), sites_to_orbs_nogroups(j, h)
+    dn = cell(oi) - cell(oj)
+    return view(h[dn], orbindices(oi), orbindices(oj))
+end
+
 #endregion
 
 ############################################################################################

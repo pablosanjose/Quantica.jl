@@ -316,11 +316,11 @@ end
     @test h((π/2, -π/2), λ=1) ≈ [4 1; 1 -4]
     # Non-numeric parameters
     @test h((π/2, -π/2); λ = 1, k = SA[1,0]) ≈ [-4 1; 1 4]
-    # # Issue #61, type stability
+    # # Issue #61, type stability. TODO: must review this test
     # h = LatticePresets.honeycomb() |> hamiltonian(onsite(0))
     # @inferred hamiltonian(h, @onsite!((o;μ) -> o- μ))
-    # @inferred hamiltonian(h, @onsite!(o->2o), @hopping!((t)->2t), @onsite!((o, r)->o+r[1]))
-    # @inferred hamiltonian(h, @onsite!((o, r)->o*r[1]), @hopping!((t; p)->p*t), @onsite!((o; μ)->o-μ))
+    # @test_broken @inferred hamiltonian(h, @onsite!(o->2o), @hopping!((t)->2t), @onsite!((o, r)->o+r[1]))
+    # @test_broken @inferred hamiltonian(h, @onsite!((o, r)->o*r[1]), @hopping!((t; p)->p*t), @onsite!((o; μ)->o-μ))
 
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(2I), orbitals = (Val(2), Val(1)), @hopping!((t; α, β = 0) -> α * t .+ β))
     b = h((0, 0); α = 2)
@@ -490,4 +490,7 @@ end
     m = h[sites(2), (; cells = 1)]
     @test m isa SparseMatrixCSC
     @test m == SA[1 0 0]
+    m = view(h, sites(2), sites(1))
+    @test m isa SubArray
+    @test m == SA[1 0]
 end

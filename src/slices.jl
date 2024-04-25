@@ -395,6 +395,9 @@ end
 
 ## convert CellSites -> CellOrbitals
 
+sites_to_orbs_nogroups(cs::CellSites, g) =
+    sites_to_orbs_nogroups(sanitize_cellindices(cs, g), blockstructure(g))
+
 function sites_to_orbs_nogroups(cs::CellSites, os::OrbitalBlockStructure)
     sites = siteindices(cs)
     orbinds = _orbinds(sites, os)
@@ -427,6 +430,7 @@ function _groups(sites, os)
 end
 
 _orbinds(sites::Union{Integer,Colon,AbstractUnitRange}, _, os) = flatrange(os, sites)
+_orbinds(sites::Union{Integer,Colon,AbstractUnitRange}, os) = flatrange(os, sites)
 
 function _orbinds(_, (sites, orbrngs), os)  # reuse precomputed groups
     orbinds = Int[]

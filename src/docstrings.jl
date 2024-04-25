@@ -659,7 +659,8 @@ Special syntax equivalent to `h[(0...)]`, which access the fundamental Bloch har
 
 With `i` and `j` of type `CellSites` and constructed with `sites([cell,] indices)`, return a
 `SparseMatrixCSC` block of `h` between the sites with the corresponding `indices` and in the
-given `cell`s.
+given `cell`s. Alternatively, one can also use `view(h, i, j = i)`, which should be
+non-allocating for `AbstractHamiltonian`s with uniform number of orbitals.
 
     h[srow::SiteSelector, scol::SiteSelector = srow]
     h[kwrow::NamedTuple, kwcol::NamedTuple = kwrow]
