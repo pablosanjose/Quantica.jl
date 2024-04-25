@@ -108,39 +108,6 @@ lengths_to_offsets(v::NTuple{<:Any,Integer}) = (0, cumsum(v)...)
 lengths_to_offsets(v) = prepend!(cumsum(v), 0)
 lengths_to_offsets(f::Function, v) = prepend!(accumulate((i,j) -> i + f(j), v; init = 0), 0)
 
-
-# function get_or_push!(by, x, xs)
-#     for x´ in xs
-#         by(x) == by(x´) && return x´
-#     end
-#     push!(xs, x)
-#     return x
-# end
-
-# # split runs of consecutive elements of itr such that by(itr[i]) == by(itr[i+1]),
-# # applying post to each. Assume no type widening. Each run is reduced with reduce(by, run)
-# splitruns(itr; kw...) = splitruns(identity, itr; kw...)
-
-# function splitruns(post, itr; by = identity, reduce = missing)
-#     i0, itr´ = Iterators.peel(itr)
-#     run = [post(i0)]
-#     rrun = reduce === missing ? run : reduce(by(i0), run)
-#     runs = [rrun]
-#     for i in itr´
-#         p = post(i)
-#         byi, byi0 = by(i), by(i0)
-#         if byi == byi0
-#             push!(run, p)
-#         else
-#             run = [p]
-#             rrun = reduce === missing ? run : reduce(byi, run)
-#             push!(runs, rrun)
-#         end
-#         i0 = i
-#     end
-#     return runs
-# end
-
 #endregion
 
 ############################################################################################

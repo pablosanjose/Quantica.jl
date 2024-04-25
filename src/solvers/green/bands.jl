@@ -345,40 +345,6 @@ function g_integrals_nonlocal(s::BandSimplex{D,T}, ω, dn, ::Val{N} = Val(0)) wh
     return g₀, gⱼ
 end
 
-# # Computes how many denominator zeros in any of the terms of g₀ and gⱼ (max of both)
-# function simplex_degeneracy(s::BandSimplex, dn)
-#     ϕⱼ = s.kij * dn
-#     ϕₖʲ = chop.(transpose(ϕⱼ) .- ϕⱼ)
-#     eₖʲ = s.eij
-#     return simplex_degeneracy(ϕₖʲ, eₖʲ)
-# end
-
-# function simplex_degeneracy(ϕₖʲ::SMatrix{D´}, eₖʲ) where {D´}
-#     deg = degα = degd = 0
-#     for j in 1:D´
-#         degγ = 0
-#         for k in 1:D´
-#             k == j && continue
-#             e = eₖʲ[k, j]
-#             ϕ = ϕₖʲ[k, j]
-#             iszero(e) && (degγ += iszero(ϕ))
-#             degα = degd = 0
-#             for l in 1:D´
-#                 e´ = eₖʲ[l,j]
-#                 iszero(e) && continue
-#                 ϕ´ = ϕₖʲ[l,j]
-#                 tt = ϕ*e´≈e*ϕ´
-#                 l != k && l != j && (degα += tt)
-#                 iszero(e´) && continue
-#                 !iszero(e) && tt && iszero(ϕ´) && (degd = 1)
-#             end
-#             deg = max(deg, degγ + degα + degd)
-#         end
-#         deg >= D´ && return D´
-#     end
-#     return deg
-# end
-
 # If any ϕₖʲ = 0, or if any tₖʲ and tₗʲ are equal
 function is_degenerate(ϕₖʲ::SMatrix{D´}, eₖʲ) where {D´}
     for j in 2:D´, k in 1:j-1
