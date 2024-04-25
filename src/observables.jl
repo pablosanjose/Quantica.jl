@@ -130,7 +130,7 @@ end
 ############################################################################################
 # ldos: local spectral density
 #   d = ldos(::GreenSolution; kernel = I)      -> d[sites...]::Vector
-#   d = ldos(::GreenSlice; kernel = I) -> d(ω; params...)::Vector
+#   d = ldos(::GreenSlice; kernel = I)         -> d(ω; params...)::Vector
 #   Here ldos is given as Tr(ρᵢᵢ * kernel) where ρᵢᵢ is the spectral function at site i
 #   Here is the generic fallback that uses G. Any more specialized methods need to be added
 #   to each GreenSolver
@@ -260,8 +260,9 @@ end
 
 function current_matrix(gω, ls, d)
     h = hamiltonian(parent(gω))
-    # see slices.jl for this form of getindex
-    current = h[ls, (hij, cij) -> maybe_project(apply_charge_current(hij, cij, d), d.direction)]
+    # see slices.jl for unflat_getindex
+    current = unflat_sparse_slice(h, ls, ls,
+        (hij, cij) -> maybe_project(apply_charge_current(hij, cij, d), d.direction))
     return current
 end
 

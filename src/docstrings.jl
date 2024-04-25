@@ -603,16 +603,24 @@ neighbors
 """
     hamiltonian(lat::Lattice, model; orbitals = 1)
 
-Create a `Hamiltonian` or `ParametricHamiltonian` by applying `model` to the lattice `lat`
-(see `onsite`, `@onsite`, `hopping` and `@hopping` for details on building tight-binding
-models).
+Create an `AbstractHamiltonian` (i.e. an `Hamiltonian` or `ParametricHamiltonian`) by
+applying `model` to the lattice `lat` (see `onsite`, `@onsite`, `hopping` and `@hopping` for
+details on building parametric and non-parametric tight-binding models).
 
     hamiltonian(lat::Lattice, model, modifiers...; orbitals = 1)
-    hamiltonian(h::AbstractHamiltonian, modifiers...; orbitals = 1)
 
 Create a `ParametricHamiltonian` where all onsite and hopping terms in `model` can be
-parametrically modified through the provided `modifiers` (see `@onsite!` and `@hopping!` for
-details on defining modifiers).
+parametrically modified through the provided parametric `modifiers` (see `@onsite!` and
+`@hopping!` for details on defining modifiers).
+
+    hamiltonian(h::AbstractHamiltonian, modifier, modifiers...)
+
+Add modifiers to an existing `AbstractHamiltonian`.
+
+    hamiltonian(h::ParametricHamiltonian)
+
+Return the base (non-parametric) `Hamiltonian` of `h`, with all modifiers and parametric
+model terms removed (see `@onsite`, `@hopping`, `@onsite!`, `@hopping!`).
 
 ## Keywords
 
@@ -650,8 +658,17 @@ Special syntax equivalent to `h[(0...)]`, which access the fundamental Bloch har
     h[i::CellSites, j::CellSites = i]
 
 With `i` and `j` of type `CellSites` and constructed with `sites([cell,] indices)`, return a
-sparse matrix block of `h` between the sites with the corresponding `indices` and in the
+`SparseMatrixCSC` block of `h` between the sites with the corresponding `indices` and in the
 given `cell`s.
+
+    h[srow::SiteSelector, scol::SiteSelector = srow]
+    h[kwrow::NamedTuple, kwcol::NamedTuple = kwrow]
+
+Return an `OrbitalSliceMatrix` of `h` between row and column sites selected by `srow` and
+`scol`, or by `siteselector(; kwrow...)` and `siteselector(; kwcol...)`
+
+Note: `CellSites` and `SiteSelector`s can be mixed when indexing, in which case the matrix
+block will be returned as a `SparseMatrixCSC`, instead of an `OrbitalSliceMatrix`.
 
 ## Call syntax
 
@@ -690,10 +707,22 @@ julia> h((0,0))
      ⋅          ⋅      3.0+0.0im  0.0+0.0im
  0.0+0.0im  3.0+0.0im      ⋅          ⋅
  3.0+0.0im  0.0+0.0im      ⋅          ⋅
+
+julia> h[sites(1), sites(2)]
+2×2 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 4 stored entries:
+ 0.0+0.0im  1.0+0.0im
+ 1.0+0.0im  0.0+0.0im
+
+julia> ph = h |> @hopping!((t; p = 3) -> p*t); ph[region = RP.square(1)]
+4×4 OrbitalSliceMatrix{SparseArrays.SparseMatrixCSC{ComplexF64, Int64}}:
+ 0.0+0.0im  0.0+0.0im  0.0+0.0im  3.0+0.0im
+ 0.0+0.0im  0.0+0.0im  3.0+0.0im  0.0+0.0im
+ 0.0+0.0im  3.0+0.0im  0.0+0.0im  0.0+0.0im
+ 3.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im
 ```
 
 # See also
-    `lattice`, `onsite`, `hopping`, `@onsite`, `@hopping`, `@onsite!`, `@hopping!`, `ishermitian`
+    `lattice`, `onsite`, `hopping`, `@onsite`, `@hopping`, `@onsite!`, `@hopping!`, `ishermitian`, `OrbitalSliceMatrix`
 """
 hamiltonian
 
