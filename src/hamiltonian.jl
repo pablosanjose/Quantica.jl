@@ -298,8 +298,8 @@ function call!(ph::ParametricHamiltonian; kw...)
     reset_to_parent!(ph)
     h = hamiltonian(ph)
     applymodifiers!(h, modifiers(ph)...; kw...)
-    # flat_sync!(h)  # modifiers are applied to unflat, need to be synced to flat
-    # return h
+    flat_sync!(h)  # modifiers are applied to unflat, need to be synced to flat
+    return h
 end
 
 function reset_to_parent!(ph)
