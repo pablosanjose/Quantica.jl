@@ -713,12 +713,12 @@ julia> h[sites(1), sites(2)]
  0.0+0.0im  1.0+0.0im
  1.0+0.0im  0.0+0.0im
 
- julia> ph = h |> @hopping!((t; p = 3) -> p*t); ph[region = RP.square(1)]
- 4×4 OrbitalSliceMatrix{SparseArrays.SparseMatrixCSC{ComplexF64, Int64}}:
-  0.0+0.0im  0.0+0.0im  0.0+0.0im  3.0+0.0im
-  0.0+0.0im  0.0+0.0im  3.0+0.0im  0.0+0.0im
-  0.0+0.0im  3.0+0.0im  0.0+0.0im  0.0+0.0im
-  3.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im
+julia> ph = h |> @hopping!((t; p = 3) -> p*t); ph[region = RP.square(1)]
+4×4 OrbitalSliceMatrix{SparseArrays.SparseMatrixCSC{ComplexF64, Int64}}:
+ 0.0+0.0im  0.0+0.0im  0.0+0.0im  3.0+0.0im
+ 0.0+0.0im  0.0+0.0im  3.0+0.0im  0.0+0.0im
+ 0.0+0.0im  3.0+0.0im  0.0+0.0im  0.0+0.0im
+ 3.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im
 ```
 
 # See also
