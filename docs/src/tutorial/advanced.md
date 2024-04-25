@@ -125,7 +125,7 @@ Hamiltonian{Float64,2,2}: Hamiltonian on a 2D Lattice in 2D space
   Hoppings         : 7500
   Coordination     : 750.0
 
-julia> r = sites(w)
+julia> r = position(w)
 BarebonesOperator{2}: a simple collection of 2D Bloch harmonics
   Bloch harmonics  : 151
   Harmonic size    : 10 × 10
