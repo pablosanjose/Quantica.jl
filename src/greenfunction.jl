@@ -131,7 +131,6 @@ Base.getindex(g::GreenFunction; kw...) = g[siteselector(; kw...)]
 Base.getindex(g::GreenFunction, kw::NamedTuple) = g[siteselector(; kw...)]
 
 Base.getindex(g::GreenSolution; kw...) = g[getindex(lattice(g); kw...)]
-Base.getindex(g::GreenSolution, kw::NamedTuple) = g[getindex(lattice(g); kw...)]
 
 # g[::Integer, ::Integer] and g[:, :] - intra and inter contacts
 Base.view(g::GreenSolution, i::CT, j::CT = i) where {CT<:Union{Integer,Colon}} =

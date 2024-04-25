@@ -137,30 +137,28 @@ end
 #endregion
 
 ############################################################################################
-# slice of Hamiltonian h[latslice] - returns a SparseMatrix{B,Int}
-#   Elements::B can be transformed by `post(hij, (ci, cj))` using h[latslice; post]
-#   Here ci and cj are single-site CellSite for h
+# unflat_sparse_slice: slice of Hamiltonian h[latslice] - returns a SparseMatrix{B,Int}
+#   This is a more efficient slice builder than mortar, but does not flatten B
+#   Elements::B can be transformed by `post(hij, (ci, cj))` with `h[latslice, latslice, post]`
+#   Here ci and cj are single-site `CellSite` for h
 #   ParametricHamiltonian deliberately not supported, as the output is not updatable
 #region
 
-## disabled this method because h[] is too similar to h[()], and becomes confusing
-# Base.getindex(h::Hamiltonian; post = (hij, cij) -> hij, kw...) = h[getindex(lattice(h); kw...), post]
-
-function Base.getindex(h::Hamiltonian, ls::LatticeSlice, post = (hij, cij) -> hij)
+function unflat_sparse_slice(h::Hamiltonian, lsrows::LS, lscols::LS = lsrows, post = (hij, cij) -> hij) where {LS<:LatticeSlice}
     # @assert lattice(h) === lattice(ls)   # TODO: fails upon plotting a current density (see tutorial)
-    cszero = zerocellsites(h, 1)
+    cszero = zerocellsites(h, 1)           # like `sites(1)`, but with explicit cell
     B = typeof(post(zero(blocktype(h)), (cszero, cszero)))
-    ncols = nrows = length(ls)
+    nrows, ncols = length(lsrows), length(lscols)
     builder = CSC{B}(ncols)
     hars = harmonics(h)
-    for colcs in cellsites(ls)
+    for colcs in cellsites(lscols)
         colcell = cell(colcs)
         colsite = siteindices(colcs)
         for har in hars
             rowcell = colcell + dcell(har)
-            rowsubcell = findsubcell(rowcell, ls)
+            rowsubcell = findsubcell(rowcell, lsrows)
             rowsubcell === nothing && continue
-            rowoffset = offsets(ls, rowcell)
+            rowoffset = offsets(lsrows, rowcell)
             rowsubcellinds = siteindices(rowsubcell)
             # rowsubcellinds are the site indices in original unitcell for subcell = rowcell
             # rowoffset is the latslice site offset for the rowsubcellinds sites
@@ -184,7 +182,6 @@ function Base.getindex(h::Hamiltonian, ls::LatticeSlice, post = (hij, cij) -> hi
     end
     return sparse(builder, nrows, ncols)
 end
-
 
 #endregion
 
