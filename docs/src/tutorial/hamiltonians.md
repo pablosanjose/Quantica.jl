@@ -241,7 +241,7 @@ ParametricHamiltonian{Float64,2,1}: Parametric Hamiltonian on a 1D Lattice in 2D
 ```
 The `coupling` keyword, available when combining `h::AbstractHamiltonian`s, is a hopping model that is applied between each `h`. It can be constrained as usual with `hopselector`s and also be parametric. If either `coupling` or any of the combined `h` is parametric, the result of `combine` will be a `ParametricHamiltonian`, or a `Hamiltonian` otherwise.
 
-The combined objects must satisfy some conditions:
+The objects to be combined must satisfy some conditions:
 
 - They must have the same Bravais vectors (modulo reorderings), which will be then inherited by the combined object.
 - They must have the same position type (the `T` in `AbstractHamiltonian{T}` and `Lattice{T}`)
