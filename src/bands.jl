@@ -377,7 +377,7 @@ end
 # count singular values. The min_squared_overlap is arbitrary, and is fixed heuristically to
 # a high enough value to connect in the coarsest base lattices
 function connection_rank(proj)
-    min_squared_overlap = 0.5
+    min_squared_overlap = 0.499
     rankf = sum(abs2, proj) # = tr(proj'proj)
     fastrank = ifelse(rankf > min_squared_overlap, 1, 0)  # For rank=1 proj: upon doubt, connect
     if iszero(fastrank) || size(proj, 1) == 1 || size(proj, 2) == 1
