@@ -49,6 +49,11 @@ using Random
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(-1))
     b = bands(h, subdiv(0, 2pi, 8), subdiv(0, 2pi, 8); showprogress = false, defects = ((2pi/3, 4pi/3), (4pi/3, 2pi/3)), patches = 10)
     @test nvertices(b) == 140
+
+    # knit min_squared_overlap should be < 0.5
+    h = LP.square() |> hamiltonian(onsite(3*I) -hopping(I) + hopping((r, dr) -> 0.1*(im*dr[1]*SA[0 -im; im 0] - im*dr[2]*SA[0 1; 1 0])), orbitals = 2)
+    b = bands(h, subdiv(-π, π, 19), subdiv(-π, π, 19))
+    @test nsimplices(b) == 1312
 end
 
 @testset "functional bandstructures" begin
