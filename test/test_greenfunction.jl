@@ -443,5 +443,12 @@ end
     g´ = Quantica.minimal_callsafe_copy(g);
     @test g´(0, o = 0)[] == g(0, o = 0)[]
     @test g´(0, o = 1)[] == g(0, o = 1)[]
-
+    # two leads from the same g
+    glead = LP.honeycomb() |> onsite(4) - hopping(1) |> supercell(4,2) |> supercell((0,-1))|> greenfunction(GS.Schur(boundary = 0));
+    g = LP.honeycomb() |> onsite(4) - hopping(1) |> supercell(4,5) |> supercell |>
+       attach(glead, region = r -> SA[-√3/2,1/2]' * r > 3.5, reverse = true) |>
+       attach(glead, region = r -> SA[-√3/2,1/2]' * r < 0, reverse = false) |> greenfunction;
+    @test g.contacts.selfenergies[2].solver.hlead[(0,)] === g.contacts.selfenergies[1].solver.hlead[(0,)]
+    @test g.contacts.selfenergies[2].solver.hlead[(1,)] === g.contacts.selfenergies[1].solver.hlead[(-1,)]
+    @test g.contacts.selfenergies[2].solver.hlead[(-1,)] === g.contacts.selfenergies[1].solver.hlead[(1,)]
 end

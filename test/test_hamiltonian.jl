@@ -1,5 +1,5 @@
 using Quantica: Hamiltonian, ParametricHamiltonian, BarebonesOperator, OrbitalSliceMatrix, SparseMatrixCSC,
-      sites, nsites, nonsites, nhoppings, coordination, flat, hybrid, transform!, nnz, nonzeros
+      sites, nsites, nonsites, nhoppings, coordination, flat, hybrid, transform!, nnz, nonzeros, dcell, harmonics
 
 @testset "basic hamiltonians" begin
     presets = (LatticePresets.linear, LatticePresets.square, LatticePresets.triangular, LatticePresets.honeycomb,
@@ -402,6 +402,7 @@ end
     @test sites(lattice(h´)) == [SA[0,0], SA[0,1]]
     h´´ = reverse(h´)
     @test bravais_matrix(lattice(h´´)) == - bravais_matrix(lattice(h´))
+    @test all(dcell(har´´) == -dcell(har´) for (har´´, har´) in zip(harmonics(h´´), harmonics(h´)))
     @test reverse!(h´´) === h´´
     @test bravais_matrix(lattice(h´´)) == bravais_matrix(lattice(h´))
 end
