@@ -1486,6 +1486,9 @@ Base.copy(h::Hamiltonian) = Hamiltonian(
 copy_lattice(h::Hamiltonian) = Hamiltonian(
     copy(lattice(h)), blockstructure(h), harmonics(h), bloch(h))
 
+copy_harmonics_shallow(h::Hamiltonian) = Hamiltonian(
+    lattice(h), blockstructure(h), copy(harmonics(h)), bloch(h))
+
 function LinearAlgebra.ishermitian(h::Hamiltonian)
     for hh in h.harmonics
         isassigned(h, -hh.dn) || return false
@@ -1555,6 +1558,9 @@ LinearAlgebra.ishermitian(h::ParametricHamiltonian) =
 
 copy_lattice(p::ParametricHamiltonian) = ParametricHamiltonian(
     copy_lattice(p.hparent), p.h, p.modifiers, p.allptrs, p.allparams)
+
+copy_harmonics_shallow(p::ParametricHamiltonian) = ParametricHamiltonian(
+    copy_harmonics_shallow(p.hparent), copy_harmonics_shallow(p.h), p.modifiers, p.allptrs, p.allparams)
 
 #endregion
 #endregion

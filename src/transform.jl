@@ -45,13 +45,31 @@ translate(l::Lattice, δr) = translate!(copy(l), δr)
 # Lattice reverse - flip all Bravais vectors
 #region
 
-Base.reverse!(lat::Lattice) = (matrix(bravais(lat)) .*= -1; lat)
-
 Base.reverse(lat::Lattice) = reverse!(copy(lat))
 
-Base.reverse!(h::AbstractHamiltonian) = (reverse!(lattice(h)); h)
+Base.reverse!(lat::Lattice) = (matrix(bravais(lat)) .*= -1; lat)
 
 Base.reverse(h::AbstractHamiltonian) = reverse!(copy(h))
+
+function Base.reverse!(h::AbstractHamiltonian)
+    reverse!(lattice(h))
+    flip_harmonics!(h)
+    return h
+end
+
+function flip_harmonics!(h::Hamiltonian)
+    hars = harmonics(h)
+    for (i, har) in enumerate(hars)
+        hars[i] = Harmonic(-dcell(har), matrix(har))
+    end
+    return h
+end
+
+function flip_harmonics!(h::AbstractHamiltonian)
+    flip_harmonics!(parent(h))
+    flip_harmonics!(hamiltonian(h))
+    return h
+end
 
 #end
 

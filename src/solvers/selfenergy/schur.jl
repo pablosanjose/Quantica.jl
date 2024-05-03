@@ -47,22 +47,36 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurEmpty
     boundary = schursolver.boundary
     isfinite(boundary) ||
         argerror("The form attach(h, glead; sites...) assumes a semi-infinite lead, but got `boundary = Inf`")
+
     # we obtain latslice of open surface in gL/gR
     gunit = reverse ? schursolver.gL : schursolver.gR
     blocksizes(blockstructure(gunit)) == blocksizes(blockstructure(hparent)) ||
         argerror("The orbital/sublattice structure of parent and lead Hamiltonians do not match. Maybe you meant to use `attach(h, g1D, coupling; sites...)`?")
+
     # This is a SelfEnergy for a lead unit cell with a SelfEnergySchurSolver
     Σlead = only(selfenergies(contacts(gunit)))
     lslead = orbslice(Σlead)
+
     # find lead site index in lslead for each site in lsparent
     leadsites, displacement = lead_siteind_foreach_parent_siteind(lsparent, lslead, transform)
+
     # convert lead site indices to lead orbital indices using lead's ContactOrbitals
     leadorbs = reordered_site_orbitals(leadsites, cellsdict(contactorbitals(gunit)))
+
     # translate glead unitcell by displacement, so it overlaps sel sites (modulo transform)
-    hlead = copy_lattice(parent(glead)) # don't copy, since you would break === link to fsolver
+    # we don't do full copy, since you would break === link to fsolver of harmonic matrices
+    hlead = copy_lattice(parent(glead))
     transform === missing || Quantica.transform!(hlead, transform)
     translate!(hlead, displacement)
-    reverse && Base.reverse!(hlead)  # only flips bravais vectors in place
+
+    if reverse
+        # this new hlead updates harmonic matrices with call! just like the original hlead
+        # but the bravais vectors and ±dn indices are flipped in place. Nothing else changes
+        # consequently, this only affects plotting, not calculations
+        hlead = copy_harmonics_shallow(hlead)
+        reverse!(hlead)
+    end
+
     solver´ = SelfEnergySchurSolver(fsolver, hlead, reverse, boundary, leadorbs)
     return SelfEnergy(solver´, lsparent)
 end
@@ -167,6 +181,7 @@ end
 # lead unit cell, and then build an extended self energy
 function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead, model::AbstractModel;
                     reverse = false, transform = missing, kw...)
+    check_lead_contact_reversal(glead, reverse)
     schursolver = solver(glead)
     gunit = copy_lattice(reverse ? schursolver.gL : schursolver.gR)
     lat0lead = lattice(gunit)            # lat0lead is the zero cell of parent(glead)
@@ -201,9 +216,16 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead,
 
     gslice = glead[cells = SA[xunit]]
     Σs = selfenergies(contacts(glead))
-    solver´ = extended_or_regular_solver(Σs, gslice, gunit, hcoupling, nparent)
 
-    reverse && Base.reverse!(hlead)
+    if reverse
+        # this new hlead updates harmonic matrices with call! just like the original hlead
+        # but the bravais vectors and ±dn indices are flipped in place. Nothing else changes
+        # consequently, this only affects plotting, not calculations
+        hlead = copy_harmonics_shallow(hlead)
+        reverse!(hlead)
+    end
+
+    solver´ = extended_or_regular_solver(Σs, gslice, gunit, hcoupling, nparent)
 
     return SelfEnergy(solver´, lsparent)
 end
@@ -243,6 +265,11 @@ function selfenergy_plottables(s::SelfEnergyCouplingSchurSolver, ls::LatticeSlic
     return (p1, p2, p3)
 end
 
+check_lead_contact_reversal(::GreenFunctionSchurLead, reverse) =
+    reverse && @warn "Using `reverse` on a lead with additional contacts. Note that contacts will not be reversed, only the Bravais vectors of the lead"
+
+check_lead_contact_reversal(::GreenFunctionSchurEmptyLead, reverse) = nothing
+
 #endregion
 
 #endregion
@@ -251,11 +278,13 @@ end
 # SelfEnergy(h, glead::GreenFunctionSchurLead; kw...)
 #   Regular (Generic) self energy, since Extended is not possible for lead with contacts
 #   Otherwise equivalent to SelfEnergy(h, glead::GreenFunctionSchurEmptyLead; kw...)
+#   reverse is not allowed since lead contacts cannot be reversed
 #region
 
 function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead; reverse = false, transform = missing, sites...)
     blocksizes(blockstructure(glead)) == blocksizes(blockstructure(hparent)) ||
         argerror("The orbital/sublattice structure of parent and lead Hamiltonians do not match")
+    check_lead_contact_reversal(glead, reverse)
     # find boundary ± 1
     schursolver = solver(glead)
     boundary = schursolver.boundary
@@ -265,7 +294,6 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead;
     gslice = glead[cells = SA[xunit]]
     # lattice slices for parent and lead unit cell
     lsparent = contact_orbslice(hparent; sites...)
-    # The above is currently broken when unitcell surface does not match full unit cell. Perhaps use some version of this:
     # Compute lslead as lead unicell surface:
     #   gL and gR are unitcell GreenFunctions with ΣL and ΣR, but same ordering as gslice
         gunit = reverse ? schursolver.gL : schursolver.gR
@@ -276,14 +304,25 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead;
     displacement += bravais_matrix(hamiltonian(glead)) * SA[xunit]
     # convert lead site indices to lead orbital indices using lead's ContactOrbitals
     leadorbs = reordered_site_orbitals(leadsites, cellsdict(contactorbitals(glead)))
+
     # build V and V´ as a leadorbs reordering of inter-cell harmonics of hlead
     hlead = copy_lattice(hamiltonian(glead))  # careful, not parent, which could be a ParametricHamiltonian
     h₊₁, h₋₁ = hlead[SA[1]], hlead[SA[-1]]
     V  = SparseMatrixView(view(h₊₁, :, leadorbs))
     V´ = SparseMatrixView(view(h₋₁, leadorbs, :))
+
+    # transform hlead (note that we did copy_lattice, so this preserves glead's lattice)
     transform === missing || Quantica.transform!(hlead, transform)
     translate!(hlead, displacement)
-    reverse && Base.reverse!(hlead)
+
+    if reverse
+        # this new hlead updates harmonic matrices with call! just like the original hlead
+        # but the bravais vectors and ±dn indices are flipped in place. Nothing else changes
+        # consequently, this only affects plotting, not calculations
+        hlead = copy_harmonics_shallow(hlead)
+        reverse!(hlead)
+    end
+
     solver´ = SelfEnergyGenericSolver(gslice, hlead, V´, V)
     return SelfEnergy(solver´, lsparent)
 end
