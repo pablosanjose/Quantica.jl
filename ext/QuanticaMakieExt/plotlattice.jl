@@ -654,7 +654,7 @@ function plothops_shaded!(plot::PlotLattice, hp::HoppingPrimitives, transparency
     cyl = Cylinder(Point3f(0., 0., -1), Point3f(0., 0, 1), Float32(1))
     vectors = Quantica.sanitize_SVector.(SVector{3,Float32}, hp.vectors) # convert to 3D
     meshscatter!(plot, hp.centers; color = hp.colors,
-        rotations = vectors, markersize = scales, marker = cyl,
+        rotation = vectors, markersize = scales, marker = cyl,
         transparency,
         inspector_label)
     return plot
@@ -699,7 +699,7 @@ function plotbravais!(plot::PlotLattice, lat::Lattice{<:Any,E,L}, latslice) wher
             vertices = mrect.position
             vertices .= Ref(r0) .+ Ref(mat) .* (vertices0 .+ Ref(cell))
             mesh!(plot, mrect; color = colface, transparency = true, shading = NoShading, inspectable = false)
-            wireframe!(plot, mrect; color = coledge, transparency = true, strokewidth = 1, inspectable = false)
+            wireframe!(plot, mrect; color = coledge, transparency = true, linewidth = 1, inspectable = false)
         end
     end
 
