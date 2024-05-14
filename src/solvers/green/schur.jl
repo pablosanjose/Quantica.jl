@@ -619,10 +619,10 @@ end
 #   computes the decay lengths of all evanescent modes with λ = exp(i k a0) and 1>|λ|>minabs
 #region
 
-retarded_eigvals(g::GreenFunctionSchurEmptyLead, ω::Real, args...; params...) =
+retarded_eigvals(g::GreenFunctionSchurLead, ω::Real, args...; params...) =
     retarded_eigvals(g, retarded_omega(ω, solver(g)), args...; params...)
 
-function retarded_eigvals(g::GreenFunctionSchurEmptyLead, ω::Complex, minabs = 0; params...)
+function retarded_eigvals(g::GreenFunctionSchurLead, ω::Complex, minabs = 0; params...)
     h = parent(g)                   # get the (Parametric)Hamiltonian from g
     call!(h; params...)             # update the (Parametric)Hamiltonian with the params
     sf = g.solver.fsolver           # obtain the SchurFactorSolver that computes the AB pencil
