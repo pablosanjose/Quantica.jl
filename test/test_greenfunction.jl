@@ -76,6 +76,10 @@ end
         end
     end
 
+    # decay_lengths
+    glead = LP.honeycomb() |> hopping(1) + @onsite((; w=0) -> w) |> supercell((1, -1)) |> greenfunction(GS.Schur(boundary = 0));
+    @test only(Quantica.decay_lengths(glead, 0.2)) < 0.4
+
     # SparseLU and Spectrum are equivalent
     @test g0[(; region = RP.circle(2)), (; region = RP.circle(3))](0.2) ≈
           g0´[(; region = RP.circle(2)), (; region = RP.circle(3))](0.2)

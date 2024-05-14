@@ -1,7 +1,3 @@
-
-const GreenFunctionSchurEmptyLead{T,E} = GreenFunction{T,E,1,<:AppliedSchurGreenSolver,<:Any,<:EmptyContacts}
-const GreenFunctionSchurLead{T,E} = GreenFunction{T,E,1,<:AppliedSchurGreenSolver,<:Any,<:Any}
-
 ############################################################################################
 # SelfEnergy(h, glead::GreenFunctionSchurEmptyLead; kw...)
 #   Extended self energy solver for deflated ΣL or ΣR Schur factors of lead unitcell
