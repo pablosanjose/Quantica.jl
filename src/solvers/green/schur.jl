@@ -315,6 +315,9 @@ mutable struct AppliedSchurGreenSolver{T,B,O,O∞,G,G∞} <: AppliedGreenSolver
     end
 end
 
+const GreenFunctionSchurEmptyLead{T,E} = GreenFunction{T,E,1,<:AppliedSchurGreenSolver,<:Any,<:EmptyContacts}
+const GreenFunctionSchurLead{T,E} = GreenFunction{T,E,1,<:AppliedSchurGreenSolver,<:Any,<:Any}
+
 AppliedSchurGreenSolver{G,G∞}(fsolver::SchurFactorsSolver{T,B}, boundary, ohL::O, ohR::O, oh∞::O∞) where {T,B,O,O∞,G,G∞} =
     AppliedSchurGreenSolver{T,B,O,O∞,G,G∞}(fsolver, boundary, ohL, ohR, oh∞)
 
@@ -608,6 +611,34 @@ function minimal_callsafe_copy(s::SchurGreenSlicer, parentham, parentcontacts)
     return s´
 end
 #endregion
+
+#endregion
+
+############################################################################################
+# decay_lengths
+#   computes the decay lengths of all evanescent modes with λ = exp(i k a0) and 1>|λ|>minabs
+#region
+
+retarded_eigvals(g::GreenFunctionSchurEmptyLead, ω::Real, args...; params...) =
+    retarded_eigvals(g, retarded_omega(ω, solver(g)), args...; params...)
+
+function retarded_eigvals(g::GreenFunctionSchurEmptyLead, ω::Complex, minabs = 0; params...)
+    h = parent(g)                   # get the (Parametric)Hamiltonian from g
+    call!(h; params...)             # update the (Parametric)Hamiltonian with the params
+    sf = g.solver.fsolver           # obtain the SchurFactorSolver that computes the AB pencil
+    update_LR!(sf)                  # Ensure L and R matrices are updated after updating h
+    update_iG!(sf, ω)               # shift inverse G with ω
+    A, B = pencilAB!(sf)            # build the pecil
+    λs = eigvals!(A, B)             # extract the λs as geeraized eigenvales of the pencil
+    filter!(λ -> 1 > abs(λ) > minabs, λs)   # select only the decaying modes
+    return λs
+end
+
+function decay_lengths(args...; params...)
+    λs = retarded_eigvals(args...; params...)
+    ls = @. -1/log(abs(λs))         # compute the decay lengths in units of a0
+    return ls
+end
 
 #endregion
 
