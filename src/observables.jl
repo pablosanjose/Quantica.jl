@@ -65,12 +65,12 @@ end
 
 ############################################################################################
 # Integrator - integrates a function f along a complex path ωcomplex(ω::Real), connecting ωi
-#   The path is piecewise linear in the form of a sawtooth with a given ± slope
+#   The path is piecewise linear in the form of a triangular sawtooth with a given ± slope
 #region
 
 struct Integrator{I,T,P,O<:NamedTuple,M,F}
     integrand::I    # call!(integrand, ω::Complex; params...)::Union{Number,Array{Number}}
-    points::P       # a tuple of complex points that form the sawtooth integration path
+    points::P       # a tuple of complex points that form the triangular sawtooth integration path
     result::T       # can be missing (for scalar integrand) or a mutable type (nonscalar)
     opts::O         # kwargs for quadgk
     omegamap::M     # function that maps ω to parameters
@@ -82,18 +82,18 @@ end
 function Integrator(result, f, pts::NTuple{<:Any,Number}; omegamap = Returns((;)), imshift = missing, post = identity, slope = 1, opts...)
     imshift´ = imshift === missing ?
         sqrt(eps(promote_type(typeof.(float.(real.(pts)))...))) : float(imshift)
-    pts´ = iszero(slope) ? pts .+ (im * imshift´) : sawtooth(imshift´, slope, pts)
+    pts´ = iszero(slope) ? pts .+ (im * imshift´) : triangular_sawtooth(imshift´, slope, pts)
     opts´ = NamedTuple(opts)
     return Integrator(f, pts´, result, opts´, omegamap, post)
 end
 
 Integrator(f, pts::NTuple{<:Any,Number}; kw...) = Integrator(missing, f, pts; kw...)
 
-sawtooth(is, sl, ωs) = _sawtooth(is, sl, (), ωs...)
-_sawtooth(is, sl, ::Tuple{}, ω1, ωs...) = _sawtooth(is, sl, (ω1 + im * is,), ωs...)
-_sawtooth(is, sl, ωs´, ωn, ωs...) = _sawtooth(is, sl,
+triangular_sawtooth(is, sl, ωs) = _triangular_sawtooth(is, sl, (), ωs...)
+_triangular_sawtooth(is, sl, ::Tuple{}, ω1, ωs...) = _triangular_sawtooth(is, sl, (ω1 + im * is,), ωs...)
+_triangular_sawtooth(is, sl, ωs´, ωn, ωs...) = _triangular_sawtooth(is, sl,
     (ωs´..., 0.5 * (real(last(ωs´)) + ωn) + im * (is + sl * 0.5*(ωn - real(last(ωs´)))), ωn + im * is), ωs...)
-_sawtooth(is, sl, ωs´) = ωs´
+_triangular_sawtooth(is, sl, ωs´) = ωs´
 
 #endregion
 

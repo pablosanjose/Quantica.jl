@@ -1826,7 +1826,7 @@ The generic integration algorithm allows for the following `opts` (see also `jos
 - `omegamap`: a function `ω -> (; params...)` that translates `ω` at each point in the integration contour to a set of system parameters. Useful for `ParametricHamiltonians` which include terms `Σ(ω)` that depend on a parameter `ω` (one would then use `omegamap = ω -> (; ω)`). Default: `ω -> (;)`, i.e. no mapped parameters.
 - `imshift`: a small imaginary shift to add to the integration contour. Default: `sqrt(eps)` for the relevant number type.
 - `post`: a function to apply to the result of the integration. Default: `identity`.
-- `slope`: the integration contour is a sawtooth path connecting `(ωmin, ωmax)`, or more generally `ωpoints`, which are usually real numbers encompasing the system's bandwidth. Between each pair of points the path increases and then decreases linearly with the given `slope`. Default: `1.0`.
+- `slope`: the integration contour is a triangular sawtooth path connecting `(ωmin, ωmax)`, or more generally `ωpoints`, which are usually real numbers encompasing the system's bandwidth. Between each pair of points the path increases and then decreases linearly with the given `slope`. Default: `1.0`.
 
 Currently, the following GreenSolvers implement dedicated densitymatrix algorithms:
 
