@@ -589,7 +589,7 @@ end
 
 broaden_bounding_box(mm::Tuple) = mm
 
-boundary_bounding_box(::Val{0}) = (SVector{0,Int}(), SVector{0,Int}())
+boundary_bounding_box(::Val{L}) where {L} = (zero(SVector{L,Int}), zero(SVector{L,Int}))
 
 function boundary_bounding_box(::Val{L}, (dir, cell), bs...) where {L}
     cell´ = isfinite(cell) ? cell + 1 : 0

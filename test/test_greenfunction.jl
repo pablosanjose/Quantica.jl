@@ -408,6 +408,29 @@ end
     # test fermi at zero temperature
     g = LP.linear() |> hopping(1) |> supercell(3) |> supercell |> greenfunction(GS.Spectrum())
     @test ρ = diag(densitymatrix(g[])()) ≈ [0.5, 0.5, 0.5]
+
+    # test DensityMatrixSchurSolver
+    g = LP.honeycomb() |> hamiltonian(hopping(I) + @onsite((; w=0) -> SA[w 1; 1 -w], sublats = :A), orbitals = (2,1)) |> supercell((1,-1), region = r->-2<r[2]<2) |> greenfunction(GS.Schur());
+    ρ0 = densitymatrix(g[cells = (SA[2],SA[4]), sublats = :A], (-4, 4))
+    ρ = densitymatrix(g[cells = (SA[2],SA[4]), sublats = :A])
+    ρ0sol = ρ(0.2, 0.3)
+    ρsol = ρ(0.2, 0.3)
+    @test maximum(abs, ρ0sol - ρsol) < 1e-7
+    @test typeof(ρ0sol) == typeof(ρsol)
+    ρ0sol = ρ()
+    ρsol = ρ()
+    @test maximum(abs, ρ0sol - ρsol) < 1e-7
+    @test typeof(ρ0sol) == typeof(ρsol)
+    ρ = densitymatrix(g[sites(:)])
+    ρ0 = densitymatrix(g[sites(:)])
+    ρ0sol = ρ(0.2, 0.3)
+    ρsol = ρ(0.2, 0.3)
+    @test maximum(abs, ρ0sol - ρsol) < 1e-7
+    @test typeof(ρ0sol) == typeof(ρsol)
+    ρ0sol = ρ()
+    ρsol = ρ()
+    @test maximum(abs, ρ0sol - ρsol) < 1e-7
+    @test typeof(ρ0sol) == typeof(ρsol)
 end
 
 @testset "mean-field models" begin

@@ -325,7 +325,7 @@ AppliedSchurGreenSolver{G,G∞}(fsolver::SchurFactorsSolver{T,B}, boundary, ohL:
 
 schurfactorsolver(s::AppliedSchurGreenSolver) = s.fsolver
 
-boundaries(s::AppliedSchurGreenSolver) = (1 => s.boundary,)
+boundaries(s::AppliedSchurGreenSolver) = isfinite(s.boundary) ? (1 => s.boundary,) : ()
 
 #endregion
 
@@ -615,14 +615,14 @@ end
 #endregion
 
 ############################################################################################
-# decay_lengths
-#   computes the decay lengths of all evanescent modes with λ = exp(i k a0) and 1>|λ|>minabs
+# schur_eigvals
+#   computes schur_eigenvalues of all lead modes
 #region
 
-retarded_eigvals(g::GreenFunctionSchurLead, ω::Real, args...; params...) =
-    retarded_eigvals(g, retarded_omega(ω, solver(g)), args...; params...)
+schur_eigvals(g::GreenFunctionSchurLead, ω::Real, args...; params...) =
+    schur_eigvals(g, retarded_omega(ω, solver(g)), args...; params...)
 
-function retarded_eigvals(g::GreenFunctionSchurLead, ω::Complex, minabs = 0; params...)
+function schur_eigvals(g::GreenFunctionSchurLead, ω::Complex; params...)
     h = parent(g)                   # get the (Parametric)Hamiltonian from g
     call!(h; params...)             # update the (Parametric)Hamiltonian with the params
     sf = g.solver.fsolver           # obtain the SchurFactorSolver that computes the AB pencil
@@ -630,15 +630,116 @@ function retarded_eigvals(g::GreenFunctionSchurLead, ω::Complex, minabs = 0; pa
     update_iG!(sf, ω)               # shift inverse G with ω
     A, B = pencilAB!(sf)            # build the pecil
     λs = eigvals!(A, B)             # extract the λs as geeraized eigenvales of the pencil
-    filter!(λ -> 1 > abs(λ) > minabs, λs)   # select only the decaying modes
     return λs
 end
+
+retarded_eigvals(g, ω, minabs = 0; params...) =
+    filter!(λ -> 1 > abs(λ) > minabs, schur_eigvals(g, ω; params...))
+
+advanced_eigvals(g, ω, maxabs = Inf; params...) =
+    filter!(λ -> 1 < abs(λ) < maxabs, schur_eigvals(g, ω; params...))
+
+propagating_eigvals(g, ω, margin = 0; params...) =
+    iszero(margin) ?
+        filter!(λ -> abs(λ) ≈ 1, schur_eigvals(g, ω; params...)) :
+        filter!(λ -> 1 - margin < abs(λ) < 1 + margin, schur_eigvals(g, ω; params...))
 
 function decay_lengths(args...; params...)
     λs = retarded_eigvals(args...; params...)
     ls = @. -1/log(abs(λs))         # compute the decay lengths in units of a0
     return ls
 end
+
+#endregion
+
+############################################################################################
+# densitymatrix
+#region
+
+struct DensityMatrixSchurSolver{T,A,G<:GreenFunctionSchurLead{T},O<:NamedTuple}
+    g::G                            # parent of GreenSlice
+    axes::Tuple{A,A}                # axes of GreenSlice (orbrows, orbcols)
+    ρmat::Matrix{Complex{T}}        # it spans the full orbitalslices (axes) of GreenSlice
+    hmat::Matrix{Complex{T}}        # it spans just the unit cell, dense Bloch matrix
+    psis::Matrix{Complex{T}}        # it spans just the unit cell, Eigenstates
+    fmat::Matrix{Complex{T}}        # it spans just the unit cell, f(hmat)
+    opts::O                         # kwargs for quadgk
+end
+
+## Constructor
+
+function densitymatrix(s::AppliedSchurGreenSolver, gs::GreenSlice; atol = 1e-7, quadgk_opts...)
+    isempty(boundaries(s)) ||
+        argerror("Boundaries not implemented for DensityMatrixSchurSolver. Consider using the generic integration solver.")
+    check_nodiag_axes(gs)
+    g = parent(gs)
+    ρmat = similar_Matrix(gs)
+    hmat = similar_Matrix(hamiltonian(g))
+    psis = similar(hmat)
+    fmat = similar(hmat)
+    axes = orbrows(gs), orbcols(gs)
+    opts = (; atol, quadgk_opts...)
+    solver = DensityMatrixSchurSolver(g, axes, ρmat, hmat, psis, fmat, opts)
+    return DensityMatrix(solver, gs)
+end
+
+# API
+
+## call
+
+function (s::DensityMatrixSchurSolver)(µ, kBT; params...)
+    λs = propagating_eigvals(s.g, µ + 0im, 1e-2; params...)
+    ϕs = @. real(-im*log(λs))
+    xs = sort!(ϕs ./ (2π))
+    pushfirst!(xs, -0.5)
+    push!(xs, 0.5)
+    xs = unique!(xs)
+    integrand(x) = fermi_h!(s, 2π * x, µ, inv(kBT); params...)
+    result = similar(s.ρmat)
+    fx! = (y, x) -> (y .= integrand(x))
+    result, err = quadgk!(fx!, result, xs...; s.opts...)
+    return result
+end
+
+function fermi_h!(s, ϕ, µ, β = 0; params...)
+    h = parent(s.g)
+    # Similar to spectrum(h, ϕ; params...), but less work (no sort! or sanitization)
+    copy!(s.hmat, call!(h, ϕ; params...))  # sparse to dense
+    ϵs, psis = eigen!(s.hmat)
+    # special-casing β = Inf with views turns out to be slower
+    fs = (@. ϵs = fermi(ϵs - µ, β))
+    fpsis = (s.psis .= fs .* psis')
+    mul!(s.fmat, psis, fpsis)
+    fillblocks!(s.ρmat, s.fmat, ϕ, s.axes...)
+    return s.ρmat
+end
+
+# fillblock! consistent with Base.getindex(g::GreenSolution, args...) see greenfunction.jl
+
+function fillblocks!(ρmat, fmat, ϕ, i, j)
+    oj = 0  # offsets
+    for cj in cellsdict_or_single_cellorbs(j)
+        oi = 0
+        for ci in cellsdict_or_single_cellorbs(i)
+            ρview = view(ρmat, oi + 1:oi + norbitals(ci), oj + 1:oj + norbitals(cj))
+            fillblocks!(ρview, fmat, ϕ, ci, cj)
+            oi += norbitals(ci)
+        end
+        oj += norbitals(cj)
+    end
+    return ρmat
+end
+
+function fillblocks!(ρmat, fmat, ϕ, i::AnyCellOrbitals, j::AnyCellOrbitals)
+    fview = view(fmat, orbindices(i), orbindices(j))
+    copy!(ρmat, fview)
+    dn = only(cell(i) - cell(j))
+    ρmat .*= cis(ϕ*dn)
+    return ρmat
+end
+
+cellsdict_or_single_cellorbs(i::AnyOrbitalSlice) = cellsdict(i)
+cellsdict_or_single_cellorbs(i::AnyCellOrbitals) = (i,)
 
 #endregion
 
