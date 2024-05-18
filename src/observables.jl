@@ -4,8 +4,8 @@
 
 abstract type IndexableObservable end  # any type that can be sliced into (current and ldos)
 
-fermi(ω::C, kBT = 0; atol = sqrt(eps(real(C)))) where {C} =
-    iszero(kBT) ? ifelse(abs(ω) < atol, C(0.5), ifelse(real(ω) <= 0, C(1), C(0))) : C(1/(exp(ω/kBT) + 1))
+fermi(ω::C, β = Inf; atol = sqrt(eps(real(C)))) where {C} =
+    isinf(β) ? ifelse(abs(ω) < atol, C(0.5), ifelse(real(ω) <= 0, C(1), C(0))) : C(1/(exp(β * ω) + 1))
 
 normal_size(h::AbstractHamiltonian) = normal_size(blockstructure(h))
 
@@ -70,7 +70,7 @@ end
 
 struct Integrator{I,T,P,O<:NamedTuple,M,F}
     integrand::I    # call!(integrand, ω::Complex; params...)::Union{Number,Array{Number}}
-    points::P       # a tuple of complex points that form the triangular sawtooth integration path
+    points::P       # a collection of points that form the triangular sawtooth integration path
     result::T       # can be missing (for scalar integrand) or a mutable type (nonscalar)
     opts::O         # kwargs for quadgk
     omegamap::M     # function that maps ω to parameters
@@ -79,17 +79,20 @@ end
 
 #region ## Constructor ##
 
-function Integrator(result, f, pts::NTuple{<:Any,Number}; omegamap = Returns((;)), imshift = missing, post = identity, slope = 1, opts...)
+function Integrator(result, f, pts; omegamap = Returns((;)), imshift = missing, post = identity, slope = 1, opts...)
     imshift´ = imshift === missing ?
         sqrt(eps(promote_type(typeof.(float.(real.(pts)))...))) : float(imshift)
-    pts´ = iszero(slope) ? pts .+ (im * imshift´) : triangular_sawtooth(imshift´, slope, pts)
+    pts´ = apply_complex_shifts(pts, imshift´, slope)
     opts´ = NamedTuple(opts)
     return Integrator(f, pts´, result, opts´, omegamap, post)
 end
 
-Integrator(f, pts::NTuple{<:Any,Number}; kw...) = Integrator(missing, f, pts; kw...)
+Integrator(f, pts; kw...) = Integrator(missing, f, pts; kw...)
 
-triangular_sawtooth(is, sl, ωs) = _triangular_sawtooth(is, sl, (), ωs...)
+apply_complex_shifts(pts::Tuple, imshift, slope) =
+    iszero(slope) ? pts .+ (im * imshift) : triangular_sawtooth(imshift, slope, pts)
+
+triangular_sawtooth(is, sl, ωs::Tuple) = _triangular_sawtooth(is, sl, (), ωs...)
 _triangular_sawtooth(is, sl, ::Tuple{}, ω1, ωs...) = _triangular_sawtooth(is, sl, (ω1 + im * is,), ωs...)
 _triangular_sawtooth(is, sl, ωs´, ωn, ωs...) = _triangular_sawtooth(is, sl,
     (ωs´..., 0.5 * (real(last(ωs´)) + ωn) + im * (is + sl * 0.5*(ωn - real(last(ωs´)))), ωn + im * is), ωs...)
@@ -416,14 +419,14 @@ end
 #   Keywords opts are passed to QuadGK.quadgk for the integral or the algorithm used
 #region
 
-struct DensityMatrix{S,G<:GreenSlice}
-    solver::S
-    gs::G
-end
-
 # Default solver (integration in complex plane)
 struct DensityMatrixIntegratorSolver{I}
     ifunc::I
+end
+
+struct DensityMatrix{S,G<:GreenSlice}
+    solver::S
+    gs::G
 end
 
 #region ## Constructors ##
@@ -472,7 +475,7 @@ end
 
 function call!(gf::GFermi, ω; params...)
     gω = call!(gf.gs, ω; params...)
-    f = fermi(ω - gf.mu, gf.kBT)
+    f = fermi(ω - gf.mu, inv(gf.kBT))
     gω .*= f
     return gω
 end
@@ -568,7 +571,7 @@ numphaseshifts(phaseshifts) = length(phaseshifts)
 
 function call!(J::JosephsonDensity, ω; params...)
     gω = call!(J.g, ω; params...)
-    f = fermi(ω, J.kBT)
+    f = fermi(ω, inv(J.kBT))
     traces = josephson_traces(J, gω, f)
     return traces
 end

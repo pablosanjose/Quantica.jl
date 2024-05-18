@@ -99,11 +99,11 @@ end
 
 function (d::DensityMatrixSpectrumSolver)(mu, kBT; params...)
     vi = d.psirows
-    vj´ = d.psicols' .* fermi.(d.es .- mu, kBT)
+    vj´ = d.psicols' .* fermi.(d.es .- mu, inv(kBT))
     return vi * vj´
 end
 
-# if the orbindices cover all the unit cell, use matrices instead of
+# if the orbindices cover all the unit cell, use matrices instead of views
 _maybe_view(m, oi) = length(oi) == size(m, 1) ? m : view(m, oi, :)
 
 #endregion

@@ -1442,6 +1442,8 @@ function blockstructure(lat::Lattice{T}, h::AbstractHamiltonian{T}, hs::Abstract
     return OrbitalBlockStructure{B}(orbitals, subsizes)
 end
 
+similar_Matrix(h::AbstractHamiltonian{T}) where {T} =
+    Matrix{Complex{T}}(undef, flatsize(h), flatsize(h))
 
 ## Hamiltonian
 

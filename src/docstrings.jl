@@ -1830,6 +1830,7 @@ The generic integration algorithm allows for the following `opts` (see also `jos
 
 Currently, the following GreenSolvers implement dedicated densitymatrix algorithms:
 
+- `GS.Schur`: based on numerical integration over Bloch phase. Boundaries are not currently supported. No `opts`.
 - `GS.Spectrum`: based on summation occupation-weigthed eigenvectors. No `opts`.
 - `GS.KPM`: based on the Chebyshev expansion of the Fermi function. Currently only works for zero temperature and only supports `nothing` contacts (see `attach`). No `opts`.
 
