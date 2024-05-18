@@ -256,13 +256,12 @@ apply_shift(shifts, r, i) = r - shifts[i]
 #region
 
 function apply(solver::AbstractEigenSolver, h::AbstractHamiltonian, ::Type{S}, mapping, transform) where {T<:Real,S<:SVector{<:Any,T}}
-    h´ = minimal_callsafe_copy(h)
     # Some solvers (e.g. ES.LinearAlgebra) only accept certain matrix types
     # so this mat´ could be an alias of the call! output, or an unaliased conversion
-    mat´ = ES.input_matrix(solver, h´)
+    mat´ = ES.input_matrix(solver, h)
     function sfunc(φs)
         φs´ = apply_map(mapping, φs)      # this can be a FrankenTuple
-        mat = call!(h´, φs´)
+        mat = call!(h, φs´)
         mat´ === mat || copy!(mat´, mat)
         # mat´ could be dense, while mat is sparse, so if not egal, we copy
         # the solver always receives the type of matrix mat´ declared by ES.input_matrix
@@ -270,7 +269,7 @@ function apply(solver::AbstractEigenSolver, h::AbstractHamiltonian, ::Type{S}, m
         apply_transform!(eigen, transform)
         return eigen
     end
-    # issue #235: for some reason, unless this is called, h´ may be GC'ed despite the
+    # issue #235: for some reason, unless this is called, h may be GC'ed despite the
     # asolver closure in some systems, leading to segfaults. TODO: why this is needed?
     @static (Sys.ARCH === :x86_64 && !Sys.iswindows() && v"1.10" <= VERSION < v"1.11.0-alpha1" && sfunc(zero(S)))
     asolver = AppliedEigenSolver(FunctionWrapper{EigenComplex{T},Tuple{S}}(sfunc))

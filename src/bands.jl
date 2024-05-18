@@ -92,9 +92,12 @@ end
 function eigensolvers_thread_pool(solver, h, S, mapping, transform)
     # if h::Function we cannot be sure it is thread-safe
     nsolvers = ES.is_thread_safe(solver) && h isa AbstractHamiltonian ? Threads.nthreads() : 1
-    solvers = [apply(solver, h, S, mapping, transform) for _ in 1:nsolvers]
+    solvers = [apply(solver, copy_if_hamiltonian(h), S, mapping, transform) for _ in 1:nsolvers]
     return solvers
 end
+
+copy_if_hamiltonian(h::AbstractHamiltonian) = minimal_callsafe_copy(h)
+copy_if_hamiltonian(f) = f
 
 function subbands(hf, solvers, basemesh::Mesh{SVector{L,T}};
          showprogress = true, defects = (), patches = 0, degtol = missing, split = true, warn = true, projectors = false) where {T,L}
