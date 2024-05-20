@@ -819,11 +819,15 @@ narguments(m::AbstractModifier) = narguments(m.f)
     mask_block(B, m.f.f(o; kw...), (orbs, orbs))
 @inline (m::AppliedOnsiteModifier{B,2})(o, r, orbs; kw...) where {B} =
     mask_block(B, m.f.f(o, r; kw...), (orbs, orbs))
+(::AppliedOnsiteModifier)(args...; kw...) =
+    argerror("Wrong number of arguments in parametric onsite. Note that only the following syntaxes are allowed: `@onsite!((o; p...) ->...)`, `@onsite!((o, r; p...) ->...)`, `@onsite((; p...) ->...)`, `@onsite((r; p...) ->...)`")
 
 @inline (m::AppliedHoppingModifier{B,1})(t, r, dr, orborb; kw...) where {B} =
     mask_block(B, m.f.f(t; kw...), orborb)
 @inline (m::AppliedHoppingModifier{B,3})(t, r, dr, orborb; kw...) where {B} =
     mask_block(B, m.f.f(t, r, dr; kw...), orborb)
+(::AppliedHoppingModifier)(args...; kw...) =
+    argerror("Wrong number of arguments in parametric hopping. Note that only the following syntaxes are allowed: `@hopping!((t; p...) ->...)`, `@hopping!((t, r, dr; p...) ->...)`, `@hopping((; p...) ->...)`, `@hopping((r, dr; p...) ->...)`")
 
 Base.similar(m::A) where {A <: AppliedModifier} = A(m.blocktype, m.f, similar(m.ptrs, 0), m.spatial)
 
