@@ -139,6 +139,20 @@ end
         ts = Quantica.allterms(m)
         @test length(ts) == 1 && all(t->Quantica.selector(t).dcells == 1, ts)
     end
+
+    # malformed models
+    h = LP.linear() |> @onsite((r, dr) -> 0)
+    @test_throws ArgumentError h()
+    h = LP.linear() |> @hopping((r) -> 0)
+    @test_throws ArgumentError h()
+    h = LP.linear() |> onsite(0) |> @onsite!((; o=0) -> o)
+    @test_throws ArgumentError h()
+    h = LP.linear() |> onsite(0) |> @onsite!((o, r, dr; p=0) -> o)
+    @test_throws ArgumentError h()
+    h = LP.linear() |> hopping(0) |> @hopping!((; p=0) -> p)
+    @test_throws ArgumentError h()
+    h = LP.linear() |> hopping(0) |> @hopping!((o, dr; p=0) -> o)
+    @test_throws ArgumentError h()
 end
 
 @testset "hamiltonian supercell" begin
