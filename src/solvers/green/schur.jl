@@ -619,8 +619,8 @@ end
 #   computes schur_eigenvalues of all lead modes
 #region
 
-schur_eigvals(g::GreenFunctionSchurLead, ω::Real, args...; params...) =
-    schur_eigvals(g, retarded_omega(ω, solver(g)), args...; params...)
+schur_eigvals(g::GreenFunctionSchurLead, ω::Real; params...) =
+    schur_eigvals(g, retarded_omega(ω, solver(g)); params...)
 
 function schur_eigvals(g::GreenFunctionSchurLead, ω::Complex; params...)
     h = parent(g)                   # get the (Parametric)Hamiltonian from g

@@ -621,3 +621,28 @@ end
 
 #endregion
 #endregion
+
+############################################################################################
+# gap
+#region
+
+gaps(h::AbstractHamiltonian{<:Any,<:Any,1}, µ = 0, ϕstore = missing; params...) =
+    gaps(h(; params...), µ, ϕstore)
+
+function gaps(h::Hamiltonian{T,<:Any,1}, µ = 0, ϕstore = missing; atol = 1e-7, opts...) where {T}
+    g = greenfunction(h, GS.Schur())
+    λs = schur_eigvals(g, µ)
+    cϕs = λs .= -im .* log.(λs) # saves one allocation
+    unique!(x -> round(Int, real(x)/atol), sort!(cϕs, by = real))
+    ϕs = real.(λs)
+    iϕs = chop.(abs.(imag.(λs)), atol)
+    ϕstore === missing || copy!(ϕstore, ϕs)
+    solver = ES.ShiftInvert(ES.ArnoldiMethod(nev = 1), µ)
+    Δs = [iszero(iϕ) ? zero(T) : abs(first(first(spectrum(h, ϕ; solver)))-µ) for (ϕ, iϕ) in zip(ϕs, iϕs)]
+    return Δs
+end
+
+gap(h::AbstractHamiltonian{<:Any,<:Any,1}, args...; params...) =
+    minimum(gaps(h, args...; params...))
+
+#endregion
