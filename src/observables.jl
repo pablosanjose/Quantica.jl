@@ -635,7 +635,7 @@ function gaps(h::Hamiltonian{T,<:Any,1}, µ = 0, ϕstore = missing; atol = 1e-7,
     cϕs = λs .= -im .* log.(λs) # saves one allocation
     unique!(x -> round(Int, real(x)/atol), sort!(cϕs, by = real))
     ϕs = real.(λs)
-    iϕs = chop.(abs.(imag.(λs)), atol)
+    iϕs = chopsmall.(abs.(imag.(λs)), atol)
     ϕstore === missing || copy!(ϕstore, ϕs)
     solver = ES.ShiftInvert(ES.ArnoldiMethod(nev = 1), µ)
     n = flatsize(h)

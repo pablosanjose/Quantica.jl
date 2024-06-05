@@ -66,11 +66,11 @@ merge_parameters!(p) = unique!(sort!(p))
 
 typename(::T) where {T} = nameof(T)
 
-chop(x::T, atol = sqrt(eps(real(T)))) where {T<:Real} =
-    ifelse(abs2(x) < atol, zero(T), x)
-chop(x::C, atol = sqrt(eps(real(C)))) where {C<:Complex} =
-    chop(real(x), atol) + im*chop(imag(x), atol)
-chop(xs, atol) = chop.(xs, atol)
+chopsmall(x::T, atol = sqrt(eps(real(T)))) where {T<:Real} =
+    ifelse(abs(x) < atol, zero(T), x)
+chopsmall(x::C, atol = sqrt(eps(real(C)))) where {C<:Complex} =
+    chopsmall(real(x), atol) + im*chopsmall(imag(x), atol)
+chopsmall(xs, atol) = chopsmall.(xs, atol)
 
 # Flattens matrix of Matrix{<:Number} into a matrix of Number's
 function mortar(ms::AbstractMatrix{M}) where {C<:Number,M<:AbstractMatrix{C}}

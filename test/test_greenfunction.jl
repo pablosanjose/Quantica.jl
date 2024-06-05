@@ -211,8 +211,8 @@ end
         g1 = g[1](0.2)
         @test size(g1) == (3,3)
         @test abs(g1[2,2] - 1/0.2) < 0.02
-        @test all(x -> Quantica.chop(imag(x)) ≈ 0, g1[2,:])
-        @test all(x -> Quantica.chop(imag(x)) ≈ 0, g1[:,2])
+        @test all(x -> Quantica.chopsmall(imag(x)) ≈ 0, g1[2,:])
+        @test all(x -> Quantica.chopsmall(imag(x)) ≈ 0, g1[:,2])
         g2 = g[sites((0,0),:), sites((1,1),2)](0.2)
         @test size(g2) == (3,1)
     end
@@ -346,7 +346,7 @@ end
 function testjosephson(g0)
     J1 = josephson(g0[1], 4; phases = subdiv(0, pi, 10))
     J2 = josephson(g0[2], 4; phases = subdiv(0, pi, 10))
-    @test all(>=(0), Quantica.chop.(J1()))
+    @test all(>=(0), Quantica.chopsmall.(J1()))
     @test all(((j1, j2) -> ≈(j1, j2, atol = 0.000001)).(J1(), J2()))
 end
 
