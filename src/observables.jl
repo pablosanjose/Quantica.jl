@@ -623,27 +623,27 @@ end
 #endregion
 
 ############################################################################################
-# gap
+# gap(::Hamiltonian, µ = 0, ...) -> minimum gap in the bands around µ
 #region
 
-gaps(h::AbstractHamiltonian{<:Any,<:Any,1}, µ = 0, ϕstore = missing; params...) =
-    gaps(h(; params...), µ, ϕstore)
-
-function gaps(h::Hamiltonian{T,<:Any,1}, µ = 0, ϕstore = missing; atol = 1e-7, opts...) where {T}
+function gaps(h::Hamiltonian{T,<:Any,1}, µ = 0, ϕstore = missing; atol = eps(T)) where {T}
     g = greenfunction(h, GS.Schur())
     λs = schur_eigvals(g, µ)
     cϕs = λs .= -im .* log.(λs) # saves one allocation
-    unique!(x -> round(Int, real(x)/atol), sort!(cϕs, by = real))
-    ϕs = real.(λs)
-    iϕs = chopsmall.(abs.(imag.(λs)), atol)
-    ϕstore === missing || copy!(ϕstore, ϕs)
+    # remove duplicates within tolerance
+    sort!(cϕs, by = real)
+    runs = Runs(cϕs, (x, y) -> isapprox(real(x), real(y); atol))
+    cϕs = [cϕs[first(rng)] for rng in runs]
+    rϕs = real.(cϕs)
+    iϕs = chopsmall.(abs.(imag.(cϕs)), atol)
+    ϕstore === missing || copy!(ϕstore, cϕs)
     solver = ES.ShiftInvert(ES.ArnoldiMethod(nev = 1), µ)
     n = flatsize(h)
-    Δs = [iszero(iϕ) || rank(h(ϕ)-µ*I) < n ? zero(T) : abs(first(first(spectrum(h, ϕ; solver)))-µ) for (ϕ, iϕ) in zip(ϕs, iϕs)]
+    Δs = [iszero(iϕ) || rank(h(rϕ)-µ*I; tol=atol) < n ? zero(T) : abs(first(first(spectrum(h, rϕ; solver)))-µ) for (rϕ, iϕ) in zip(rϕs, iϕs)]
     return Δs
 end
 
-gap(h::AbstractHamiltonian{<:Any,<:Any,1}, args...; params...) =
-    minimum(gaps(h, args...; params...))
+gap(h::AbstractHamiltonian{<:Any,<:Any,1}, args...; kw...) =
+    minimum(gaps(h, args...; kw...))
 
 #endregion
