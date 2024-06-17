@@ -180,6 +180,7 @@ end
     end
     h = LP.honeycomb() |> hamiltonian(hopping(1)) |> supercell(2) |> supercell(mincoordination = 2)
     @test nsites(h) == 6
+    @test Quantica.offsets(lattice(h)) == [0, 3, 6]
     h = LP.cubic() |> hamiltonian(hopping(1)) |> supercell(4) |> supercell(mincoordination = 4)
     @test nsites(h) == 0
     h = LP.honeycomb() |> hamiltonian(hopping(1)) |> supercell(region = RP.circle(5) & !RP.circle(2)) |> supercell(mincoordination = 2)

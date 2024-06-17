@@ -171,21 +171,17 @@ function supercell(h::Hamiltonian, v...; mincoordination = 0, kw...)
 end
 
 function supercell(h::Hamiltonian, data::SupercellData; mincoordination = 0)
-    # data.sitelist === sites(lat´), so any change to data will reflect in lat´ too
+    # data.sitelist may be modified to apply mincoordination
+    indexlist, offset = supercell_indexlist!(data, h, mincoordination)
     lat´ = lattice(data)
     B = blocktype(h)
     bs´ = OrbitalBlockStructure{B}(norbitals(h), sublatlengths(lat´))
     builder = CSCBuilder(lat´, bs´)
-    har´ = supercell_harmonics(h, data, builder, mincoordination)
+    har´ = supercell_harmonics(h, data, builder, indexlist, offset)
     return Hamiltonian(lat´, bs´, har´)
 end
 
-function supercell_harmonics(h, data, builder, mincoordination)
-    indexlist, offset = supercell_indexlist(data)
-    if mincoordination > 0
-        indexlist, offset = remove_low_coordination_sites!(data, indexlist, offset, h, mincoordination)
-    end
-
+function supercell_harmonics(h, data, builder, indexlist, offset)
     # Note: masklist = [(sublat, old_cell, old_siteindex)...]
     for (col´, (_, cellsrc, col)) in enumerate(data.masklist)
         for har in harmonics(h)
@@ -236,6 +232,15 @@ function supercell_indexlist(data)
     for (inew, (_, cellold, iold)) in enumerate(data.masklist)
         c = CartesianIndex((iold, Tuple(cellold)...)) + offset
         indexlist[c] = inew
+    end
+    return indexlist, offset
+end
+
+# as above, but also remove sites with coordination < mincoordination
+function supercell_indexlist!(data, h, mincoordination)
+    indexlist, offset = supercell_indexlist(data)
+    if mincoordination > 0
+        indexlist, offset = remove_low_coordination_sites!(data, indexlist, offset, h, mincoordination)
     end
     return indexlist, offset
 end
