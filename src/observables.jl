@@ -639,7 +639,7 @@ function gaps(h::Hamiltonian{T,<:Any,1}, µ = 0, ϕstore = missing; atol = eps(T
     ϕstore === missing || copy!(ϕstore, cϕs)
     solver = ES.ShiftInvert(ES.ArnoldiMethod(nev = 1), µ)
     n = flatsize(h)
-    Δs = [iszero(iϕ) || rank(h(rϕ)-µ*I; tol=atol) < n ? zero(T) : abs(first(first(spectrum(h, rϕ; solver)))-µ) for (rϕ, iϕ) in zip(rϕs, iϕs)]
+    Δs = [iszero(iϕ) || rank(h(rϕ)-µ*I; tol=atol) < n ? zero(T) : abs(first(energies(spectrum(h, rϕ; solver)))-µ) for (rϕ, iϕ) in zip(rϕs, iϕs)]
     return Δs
 end
 
