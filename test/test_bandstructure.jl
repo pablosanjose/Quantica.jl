@@ -1,5 +1,14 @@
 using Quantica: nsubbands, nvertices, nedges, nsimplices
 using Random
+
+@testset "extensions not loaded" begin
+    solver = ES.ShiftInvert(ES.ArnoldiMethod(), 0.0)
+    h = HP.graphene() |> supercell(10)
+    @test_throws ArgumentError spectrum(h, (0,0); solver)
+    solver = ES.Arpack(nev = 2)
+    @test_throws ArgumentError spectrum(h, (0,0); solver)
+end
+
 using LinearMaps, ArnoldiMethod, KrylovKit, Arpack
 
 @testset "basic bandstructures" begin
