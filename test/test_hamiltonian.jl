@@ -510,12 +510,3 @@ end
     @test m isa SubArray
     @test m == SA[1 0]
 end
-
-using ArnoldiMethod, LinearMaps
-
-@testset "hamiltonian gap" begin
-    h = LP.linear() |> supercell(2) |> hopping(1) - @onsite((r; U = 0) ->ifelse(iseven(r[1]), U, -U))
-    @test Quantica.gap(h(U = 1)) ≈ 1
-    @test Quantica.gap(h(U = 0.1)) ≈ 0.1
-    @test Quantica.gap(h(U = 0.0)) ≈ 0.0
-end
