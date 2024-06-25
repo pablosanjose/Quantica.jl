@@ -1229,26 +1229,32 @@ julia> h = HP.graphene(orbitals = 2); h[unflat(0,0)]
 unflat
 
 """
-`EigenSolvers` is a Quantica submodule containing several pre-defined eigensolvers. The
-alias `ES` can be used in place of `EigenSolvers`. Currently supported solvers are
+`EigenSolvers` is a Quantica submodule containing support for several pre-defined
+eigensolver extensions. The alias `ES` can be used in place of `EigenSolvers`. Currently
+supported solvers are
 
     ES.LinearAlgebra(; kw...)       # Uses `eigen(mat; kw...)` from the `LinearAlgebra` package
     ES.Arpack(; kw...)              # Uses `eigs(mat; kw...)` from the `Arpack` package (WARNING: Arpack is not thread-safe)
     ES.KrylovKit(params...; kw...)  # Uses `eigsolve(mat, params...; kw...)` from the `KrylovKit` package
-    ES.ArnoldiMethod(; kw...)       # Uses `partialschur(mat; kw...)` from the `ArnoldiMethod` package
+    ES.ArnoldiMethod(; kw...)       # Uses `partialschur(mat; kw...)` from the `ArnoldiMethod` package.
+
+To use each of these solvers the corresponding package must be loaded with e.g. `using
+ArnoldiMethod`. The exception is the default `ES.LinearAlgebra` which is a direct
+Quantica dependency and does not require loading.
 
 Additionally, to compute interior eigenvalues, we can use a shift-invert method around
-energy `ϵ0` (uses `LinearMaps` and a `LinearSolve.lu` factorization), combined with any
+energy `ϵ0` (uses `LinearMaps` and a `LinearAlgebra.lu` factorization), combined with any
 solver `s` from the list above:
 
     ES.ShiftInvert(s, ϵ0)           # Perform a lu-based shift-invert with solver `s`
 
-If the required packages are not already available, they will be automatically loaded when
-calling these solvers.
+The `ShiftInvert` solver extension requires doing `using LinearMaps`.
 
 # Examples
 
 ```
+julia> using LinearMaps, ArnoldiMethod  # loads required extensions
+
 julia> h = HP.graphene(t0 = 1) |> supercell(10);
 
 julia> spectrum(h, (0,0); solver = ES.ShiftInvert(ES.ArnoldiMethod(nev = 4), 0.0)) |> energies
@@ -1675,7 +1681,7 @@ possible keyword arguments are
     - `boundary` : 1D cell index of a boundary cell, or `Inf` for no boundaries. Equivalent to removing that specific cell from the lattice when computing the Green function.
 - `GS.KPM(; order = 100, bandrange = missing, kernel = I)` : Kernel polynomial method solver for 0D Hamiltonians
     - `order` : order of the expansion in Chebyshev polynomials `Tₙ(h)` of the Hamiltonian `h` (lowest possible order is `n = 0`).
-    - `bandrange` : a `(min_energy, max_energy)::Tuple` interval that encompasses the full band of the Hamiltonian. If `missing`, it is computed automatically.
+    - `bandrange` : a `(min_energy, max_energy)::Tuple` interval that encompasses the full band of the Hamiltonian. If `missing`, it is computed automatically, but `using ArnoldiMethod` is required first.
     - `kernel` : generalization that computes momenta as `μₙ = Tr[Tₙ(h)*kernel]`, so that the local density of states (see `ldos`) becomes the density of the `kernel` operator.
     - This solver does not allow arbitrary indexing of the resulting `g::GreenFunction`, only on contacts `g[contact_ind::Integer]`. If the system has none, we can add a dummy contact using `attach(h, nothing; sites...)`, see `attach`.
 - `GS.Bands(bands_arguments; boundary = missing, bands_kw...)`: solver based on the integration of bandstructure simplices

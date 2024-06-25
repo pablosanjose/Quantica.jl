@@ -1,5 +1,6 @@
 using Quantica: nsubbands, nvertices, nedges, nsimplices
 using Random
+using LinearMaps, ArnoldiMethod, KrylovKit, Arpack
 
 @testset "basic bandstructures" begin
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(-1))

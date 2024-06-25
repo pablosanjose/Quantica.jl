@@ -9,7 +9,7 @@ module EigenSolvers
 using FunctionWrappers: FunctionWrapper
 using SparseArrays: SparseMatrixCSC, AbstractSparseMatrix
 using Quantica: Eigen, I, lu, ldiv!
-using Quantica: Quantica, AbstractEigenSolver, ensureloaded, SVector, SMatrix,
+using Quantica: Quantica, AbstractEigenSolver, SVector, SMatrix,
                 sanitize_eigen, call!_output
 
 #endregion
