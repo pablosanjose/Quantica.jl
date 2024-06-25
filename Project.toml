@@ -58,11 +58,12 @@ StaticArrays = "0.12.3, 0.13, 1.0"
 julia = "^1.9"
 
 [extras]
+LinearMaps = "7a12625a-238d-50fd-b39a-03d52299707e"
 ArnoldiMethod = "ec485272-7323-5ecc-a04f-4719b315124d"
+KrylovKit = "0b1a1467-8014-51b9-945f-bf0ae24f4b77"
 Arpack = "7d9fca2a-8960-54d3-9f78-7d1dccf2cb97"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
-FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Test", "ArnoldiMethod", "FFTW", "Arpack", "CairoMakie"]
+test = ["Test", "LinearMaps", "ArnoldiMethod", "KrylovKit", "Arpack", "CairoMakie"]
