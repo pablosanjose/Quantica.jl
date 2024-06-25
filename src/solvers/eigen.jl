@@ -1,3 +1,7 @@
+# extension stubs for EigenSolvers
+get_eigen(s::AbstractEigenSolver, _) =
+    argerror("The eigensolver backend for EigenSolvers.$(nameof(typeof(s))) is not loaded. Did you first do `using $(ES.solverbackends(s))`?")
+
 ############################################################################################
 # EigenSolvers module
 #   An AbstractEigenSolver is defined by a set of kwargs for the eigensolver and a set of
@@ -9,8 +13,9 @@ module EigenSolvers
 using FunctionWrappers: FunctionWrapper
 using SparseArrays: SparseMatrixCSC, AbstractSparseMatrix
 using Quantica: Eigen, I, lu, ldiv!
-using Quantica: Quantica, AbstractEigenSolver, ensureloaded, SVector, SMatrix,
-                sanitize_eigen, call!_output
+using Quantica: Quantica, AbstractEigenSolver, SVector, SMatrix,
+                sanitize_eigen, call!_output, argerror
+import Quantica: get_eigen
 
 #endregion
 
@@ -18,10 +23,14 @@ using Quantica: Quantica, AbstractEigenSolver, ensureloaded, SVector, SMatrix,
 # AbstractEigensolvers
 #region
 
+# Extensions should add methods to get_eigen for their specific solver. It should return a
+# tuple (ε, Ψ) where ε is the eigenvalues and Ψ the eigenvectors.
+(s::AbstractEigenSolver)(mat) = sanitize_eigen(Quantica.get_eigen(s, mat)...)
+
 ## Fallbacks
 
-(s::AbstractEigenSolver)(mat) =
-    throw(ArgumentError("The eigensolver backend $(typeof(s)) is not defined to work on $(typeof(mat))"))
+# unless otherwise specified, the backend package matches the solver name
+solverbackends(s::AbstractEigenSolver) = string(nameof(typeof(s)))
 
 # an alias of h's call! output makes apply call! conversion a no-op, see apply.jl
 input_matrix(::AbstractEigenSolver, h) = call!_output(h)
@@ -34,13 +43,12 @@ struct LinearAlgebra{K} <: AbstractEigenSolver
     kwargs::K
 end
 
-function LinearAlgebra(; kw...)
-    return LinearAlgebra(kw)
-end
+LinearAlgebra(; kw...) = LinearAlgebra(NamedTuple(kw))
 
-function (solver::LinearAlgebra)(mat::AbstractMatrix{<:Number})
-    ε, Ψ = Quantica.LinearAlgebra.eigen(mat; solver.kwargs...)
-    return sanitize_eigen(ε, Ψ)
+# no extension for LinearAlgebra, it is a strong dependency
+function Quantica.get_eigen(solver::LinearAlgebra, mat::AbstractMatrix{<:Number})
+    ϵ, ψ = Quantica.LinearAlgebra.eigen(mat; solver.kwargs...)
+    return ϵ, ψ
 end
 
 # LinearAlgebra.eigen doesn't like sparse Matrices as input, must convert
@@ -48,19 +56,11 @@ input_matrix(::LinearAlgebra, h) = Matrix(call!_output(h))
 
 #### Arpack #####
 
-struct Arpack{K} <: AbstractEigenSolver
+struct Arpack{K<:NamedTuple} <: AbstractEigenSolver
     kwargs::K
 end
 
-function Arpack(; kw...)
-    ensureloaded(:Arpack)
-    return Arpack(kw)
-end
-
-function (solver::Arpack)(mat::AbstractMatrix{<:Number})
-    ε, Ψ, _ = Quantica.Arpack.eigs(mat; solver.kwargs...)
-    return sanitize_eigen(ε, Ψ)
-end
+Arpack(; kw...) = Arpack(NamedTuple(kw))
 
 # See https://github.com/JuliaLinearAlgebra/Arpack.jl/issues/86
 is_thread_safe(::Arpack) = false
@@ -72,55 +72,24 @@ struct KrylovKit{P<:Tuple,K<:NamedTuple} <: AbstractEigenSolver
     kwargs::K
 end
 
-function KrylovKit(params...; kw...)
-    ensureloaded(:KrylovKit)
-    return KrylovKit(params, NamedTuple(kw))
-end
-
-function (solver::KrylovKit)(mat)
-    ε, Ψ, _ = Quantica.KrylovKit.eigsolve(mat, solver.params...; solver.kwargs...)
-    return sanitize_eigen(ε, Ψ)
-end
+KrylovKit(params...; kw...) = KrylovKit(params, NamedTuple(kw))
 
 #### ArnoldiMethod #####
 
-struct ArnoldiMethod{K} <: AbstractEigenSolver
+struct ArnoldiMethod{K<:NamedTuple} <: AbstractEigenSolver
     kwargs::K
 end
 
-function ArnoldiMethod(; kw...)
-    ensureloaded(:ArnoldiMethod)
-    return ArnoldiMethod(kw)
-end
-
-function (solver::ArnoldiMethod)(mat)
-    pschur, _ = Quantica.ArnoldiMethod.partialschur(mat; solver.kwargs...)
-    ε, Ψ = Quantica.ArnoldiMethod.partialeigen(pschur)
-    return sanitize_eigen(ε, Ψ)
-end
+ArnoldiMethod(; kw...) = ArnoldiMethod(NamedTuple(kw))
 
 #### ShiftInvert ####
 
 struct ShiftInvert{T,E<:AbstractEigenSolver} <: AbstractEigenSolver
     eigensolver::E
     origin::T
-    function ShiftInvert{T,E}(eigensolver, origin) where {T,E<:AbstractEigenSolver}
-        ensureloaded(:LinearMaps)
-        return new(eigensolver, origin)
-    end
 end
 
-ShiftInvert(eigensolver::E, origin::T) where {E,T} = ShiftInvert{T,E}(eigensolver, origin)
-
-function (solver::ShiftInvert)(mat::AbstractSparseMatrix{T}) where {T<:Number}
-    mat´ = mat - I * solver.origin
-    F = lu(mat´)
-    lmap = Quantica.LinearMaps.LinearMap{T}((x, y) -> ldiv!(x, F, y), size(mat)...;
-        ismutating = true, ishermitian = false)
-    eigen = solver.eigensolver(lmap)
-    @. eigen.values = 1 / (eigen.values) + solver.origin
-    return eigen
-end
+solverbackends(s::ShiftInvert) = "LinearMaps"
 
 #endregion
 

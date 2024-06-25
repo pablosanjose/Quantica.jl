@@ -227,19 +227,3 @@ function merged_mul!(C::SparseMatrixCSC{<:Number}, bs::OrbitalBlockStructure{B},
 end
 
 #endregion
-
-############################################################################################
-# Dynamic package loader
-#   This is in global Quantica scope to avoid name collisions
-#   We also `import` instead of `using` to avoid collisions between different backends
-#region
-
-function ensureloaded(package::Symbol)
-    if !isdefined(Quantica, package)
-        @warn("Required package $package not loaded. Loading...")
-        eval(:(import $package))
-    end
-    return nothing
-end
-
-#endregion

@@ -1,6 +1,8 @@
 using Quantica: GreenFunction, GreenSlice, GreenSolution, zerocell, CellOrbitals, ncontacts,
     solver
 
+using ArnoldiMethod  # for KPM bandrange
+
 function testgreen(h, s; kw...)
     ω = 0.2
     g = greenfunction(h, s)

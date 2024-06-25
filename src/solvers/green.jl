@@ -28,7 +28,7 @@
 
 module GreenSolvers
 
-using Quantica: Quantica, AbstractGreenSolver, ensureloaded, I
+using Quantica: Quantica, AbstractGreenSolver, I
 
 struct SparseLU <:AbstractGreenSolver end
 
@@ -46,31 +46,8 @@ struct KPM{B<:Union{Missing,NTuple{2}},A} <: AbstractGreenSolver
     padfactor::Float64  # for automatically computed bandrange
 end
 
-function KPM(; order = 100, bandrange = missing, padfactor = 1.01, kernel = I)
-    bandrange === missing && ensureloaded(:Arpack)
-    return KPM(order, bandrange, kernel, padfactor)
-end
-
-# Used in kpm.jl
-function bandrange_arpack(h::AbstractMatrix{T}) where {T}
-    R = real(T)
-    ϵL, _ = Quantica.Arpack.eigs(h, nev=1, tol=1e-4, which = :LR);
-    ϵR, _ = Quantica.Arpack.eigs(h, nev=1, tol=1e-4, which = :SR);
-    ϵmax = R(real(ϵL[1]))
-    ϵmin = R(real(ϵR[1]))
-    return (ϵmin, ϵmax)
-end
-
-## Alternative bandrange, requires ensureloaded(:ArnoldiMethod) in KPM constructor
-# function bandrange_arnoldi(h::AbstractMatrix{T}) where {T}
-#     # ensureloaded(:ArnoldiMethod)
-#     R = real(T)
-#     decompl, _ = Quantica.ArnoldiMethod.partialschur(h, nev=1, tol=1e-4, which = Main.ArnoldiMethod.LR());
-#     decomps, _ = Quantica.ArnoldiMethod.partialschur(h, nev=1, tol=1e-4, which = Main.ArnoldiMethod.SR());
-#     ϵmax = R(real(decompl.eigenvalues[1]))
-#     ϵmin = R(real(decomps.eigenvalues[1]))
-#     return (ϵmin, ϵmax)
-# end
+KPM(; order = 100, bandrange = missing, padfactor = 1.01, kernel = I) =
+    KPM(order, bandrange, kernel, padfactor)
 
 struct Spectrum{K} <:AbstractGreenSolver
     spectrumkw::K

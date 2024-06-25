@@ -165,11 +165,21 @@ band_ceter_halfwidth(_, (emin, emax), padfactor) = 0.5 * (emin + emax), 0.5 * (e
 
 function band_ceter_halfwidth(h, ::Missing, padfactor)
     @warn "Computing spectrum bounds... Consider using the `bandrange` option for faster performance."
-    # (ϵmin, ϵmax) = GS.bandrange_arnoldi(h)
-    (emin, emax) = GS.bandrange_arpack(h)
+    (emin, emax) = bandrange(h)  # requires an extension
     @warn  "Computed real bandrange = ($emin, $emax)"
     bandCH = 0.5 * (emin + emax), 0.5 * (emax - emin) * padfactor
     return bandCH
+end
+
+function bandrange(h::AbstractMatrix{T}) where {T}
+    R = real(T)
+    # ϵL, _ = get_eigen(ES.Arpack(nev=1, tol=1e-4, which = :LR), h)
+    # ϵR, _ = get_eigen(ES.Arpack(nev=1, tol=1e-4, which = :SR), h)
+    ϵL, _ = get_eigen(ES.ArnoldiMethod(nev=1, tol=1e-4, which = :LR), h)
+    ϵR, _ = get_eigen(ES.ArnoldiMethod(nev=1, tol=1e-4, which = :SR), h)
+    ϵmax = R(real(ϵL[1]))
+    ϵmin = R(real(ϵR[1]))
+    return (ϵmin, ϵmax)
 end
 
 function contact_basis(h::AbstractHamiltonian{T}, contacts) where {T}
