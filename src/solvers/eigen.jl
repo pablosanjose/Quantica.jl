@@ -1,3 +1,7 @@
+# extension stubs for EigenSolvers
+get_eigen(s::AbstractEigenSolver, _) =
+    argerror("The eigensolver backend for EigenSolvers.$(nameof(typeof(s))) is not loaded. Did you first do `using $(ES.solverbackends(s))`?")
+
 ############################################################################################
 # EigenSolvers module
 #   An AbstractEigenSolver is defined by a set of kwargs for the eigensolver and a set of
@@ -10,7 +14,8 @@ using FunctionWrappers: FunctionWrapper
 using SparseArrays: SparseMatrixCSC, AbstractSparseMatrix
 using Quantica: Eigen, I, lu, ldiv!
 using Quantica: Quantica, AbstractEigenSolver, SVector, SMatrix,
-                sanitize_eigen, call!_output
+                sanitize_eigen, call!_output, argerror
+import Quantica: get_eigen
 
 #endregion
 
@@ -20,12 +25,9 @@ using Quantica: Quantica, AbstractEigenSolver, SVector, SMatrix,
 
 # Extensions should add methods to get_eigen for their specific solver. It should return a
 # tuple (ε, Ψ) where ε is the eigenvalues and Ψ the eigenvectors.
-(s::AbstractEigenSolver)(mat) = sanitize_eigen(get_eigen(s, mat))
+(s::AbstractEigenSolver)(mat) = sanitize_eigen(Quantica.get_eigen(s, mat)...)
 
 ## Fallbacks
-
-get_eigen(s::AbstractEigenSolver, _) =
-    argerror("The eigensolver backend for $(typeof(s)) is not loaded (did you do `using $(solverbackends(s))`?)")
 
 # unless otherwise specified, the backend package matches the solver name
 solverbackends(s::AbstractEigenSolver) = string(nameof(typeof(s)))
@@ -44,8 +46,10 @@ end
 LinearAlgebra(; kw...) = LinearAlgebra(NamedTuple(kw))
 
 # no extension for LinearAlgebra, it is a strong dependency
-get_eigen(solver::LinearAlgebra, mat::AbstractMatrix{<:Number}) =
-    Quantica.LinearAlgebra.eigen(mat; solver.kwargs...)
+function Quantica.get_eigen(solver::LinearAlgebra, mat::AbstractMatrix{<:Number})
+    ϵ, ψ = Quantica.LinearAlgebra.eigen(mat; solver.kwargs...)
+    return ϵ, ψ
+end
 
 # LinearAlgebra.eigen doesn't like sparse Matrices as input, must convert
 input_matrix(::LinearAlgebra, h) = Matrix(call!_output(h))

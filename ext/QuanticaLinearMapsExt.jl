@@ -4,6 +4,7 @@ using LinearMaps
 using LinearAlgebra
 using SparseArrays
 using Quantica
+import Quantica: get_eigen
 
 function Quantica.get_eigen(solver::ES.ShiftInvert, mat::AbstractSparseMatrix{T}) where {T<:Number}
     mat´ = mat - I * solver.origin
