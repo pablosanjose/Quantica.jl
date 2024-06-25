@@ -15,7 +15,7 @@ States:
   0.707107-8.65956e-17im  0.707107-8.65956e-17im
  -0.707107+0.0im          0.707107+0.0im
 ```
-The above destructuring syntax assigns eigenvalues and eigenvectors to `eᵢ` and `ψᵢ`, respectively. The available eigensolvers and their options can be checked in the `EigenSolvers` docstrings.
+The above destructuring syntax assigns eigenvalues and eigenvectors to `eᵢ` and `ψᵢ`, respectively. The available eigensolvers and their options can be checked in the `EigenSolvers` docstrings. They are supported through the extension mechanism in Julia, so they require additional libraries to be loaded first, such as `using Arpack` or `using ArnoldiMethod`.
 
 !!! warning "Arpack solver is not thread-safe"
     `EigenSolvers.Arpack` relies on a Fortran library that is not currently thread-safe. If you launch Julia with multiple threads, they will not be used with this specific solver. Otherwise Arpack would segfault.
@@ -82,11 +82,11 @@ julia> qplot(b, axis = (; xticks = ([0, 2, 3, 4], ["Γ", "K", "M", "Γ"]), ylabe
 ```
 
 !!! tip "subdiv"
-    The `subdiv` function is a convenience function provided by Quantica.jl that generalizes `range` (see the corresponding docstring for comprehensive details). It is useful to create collections of numbers as subdivisions of intervals, as in the example above. In its simplest form `subdiv(min, max, npoints)` is is equivalent to `range(min, max, length = npoints)` or `collect(LinRange(min, max, npoints))`
+    The `subdiv` function is a convenience function provided by Quantica.jl that generalizes `range` (see the corresponding docstring for comprehensive details). It is useful to create collections of numbers as subdivisions of intervals, as in the example above. In its simplest form `subdiv(min, max, npoints)` is is equivalent to `range(min, max, npoints)`.
 
 The `mapping` keyword understand a third syntax that can be used to map a mesh to the space of Bloch phases and parameters of a `ParametricHamiltonian`. To this end we use `mapping = (mesh_points...) -> ftuple(bloch_phases...; params...)`. The `ftuple` function creates a `FrankenTuple`, which is a hybrid between a `Tuple` and a `NamedTuple`. For example, in the following 1D SSH chain we can compute the bandstructure as a function of Bloch phase `ϕ` *and* hopping `t´`, and plot it using more customization options
 ```julia
-julia> h = LP.linear() |> supercell(2) |> @hopping((r, dr; t = 1, t´ = 1) -> iseven(r[1]-1/2) ? t : t´);
+julia> h = LP.linear() |> supercell(2) |> @hopping((r, dr; t = 1, t´ = 2) -> iseven(r[1]-1/2) ? t : t´);
 
 julia> b = bands(h, subdiv(0, 2π, 11), subdiv(0, 10, 11), mapping = (ϕ, y) -> ftuple(ϕ; t´ = y/5), patches = 20)
 Bandstructure{Float64,3,2}: 3D Bandstructure over a 2-dimensional parameter space of type Float64
@@ -102,6 +102,18 @@ julia> qplot(b, nodedarken = 0.5, axis = (; aspect = (1,1,1), perspectiveness = 
 ```
 
 Note that since we didn't specify a value for `t`, it assumed its default `t=1`. In this case we needed to patch the defect at `(ϕ, t´) = (π, 1)` (topological transition) using the `patches` keyword to avoid a band dislocation.
+
+If no parameters are specified or mapped, they take their default values. This produces the 1D bandstructure of the SSH model for `t = 1, t´ = 2` over the default 1D mesh (49 points)
+```julia
+julia> qplot(bands(h))
+```
+```@raw html
+<img src="../../assets/ssh_bands_1D.png" alt="SSH 1D bandstructure as a function of `ϕ` for `t´ = 2t = 2" width="400" class="center"/>
+```
+
+!!! tip Experimental "Quantica.gaps" and "Quantica.decay_lengths" for 1D Hamiltonians
+    The function `Quantica.gaps(h, µ)` can be used to efficiently calculate the gaps respect to chemical potential `µ` at local band minima, but only for 1D `Hamiltonian`'s for the moment. Similarly `Quantica.decay_lengths(h, µ; reverse = false)` will yield the decay lengths of the evanescent modes of `h` at energy `µ` (towards the positive direction, unless `reverse = true`). Both functions are unexported and experimental.
+
 
 ## Band indexing and slicing
 
