@@ -259,19 +259,23 @@ function apply(solver::AbstractEigenSolver, h::AbstractHamiltonian, ::Type{S}, m
     # Some solvers (e.g. ES.LinearAlgebra) only accept certain matrix types
     # so this mat´ could be an alias of the call! output, or an unaliased conversion
     mat´ = ES.input_matrix(solver, h)
-    function sfunc(φs)
-        φs´ = apply_map(mapping, φs)      # this can be a FrankenTuple
-        mat = call!(h, φs´)
-        mat´ === mat || copy!(mat´, mat)
-        # mat´ could be dense, while mat is sparse, so if not egal, we copy
-        # the solver always receives the type of matrix mat´ declared by ES.input_matrix
-        eigen = solver(mat´)
-        apply_transform!(eigen, transform)
+    function sfunc(φs, dryrun = false)
+        # this branch seems to solve #235 and out-of-order extension loading bugs
+        # The errors stem from FunctionWrappers (world-age incompatible?). TODO: Why??
+        if dryrun
+            eigen = EigenComplex{T}(Complex{T}[], Complex{T}[;;])
+        else
+            φs´ = apply_map(mapping, φs)      # this can be a FrankenTuple
+            mat = call!(h, φs´)
+            mat´ === mat || copy!(mat´, mat)
+            # mat´ could be dense, while mat is sparse, so if not egal, we copy
+            # the solver always receives the type of matrix mat´ declared by ES.input_matrix
+            eigen = solver(mat´)
+            apply_transform!(eigen, transform)
+        end
         return eigen
     end
-    # issue #235: for some reason, unless this is called, h may be GC'ed despite the
-    # asolver closure in some systems, leading to segfaults. TODO: why this is needed?
-    @static (Sys.ARCH === :x86_64 && !Sys.iswindows() && v"1.10" <= VERSION < v"1.11.0-alpha1" && sfunc(zero(S)))
+    sfunc(zero(S), true)  # dryrun to avoid world age bugs
     asolver = AppliedEigenSolver(FunctionWrapper{EigenComplex{T},Tuple{S}}(sfunc))
     return asolver
 end

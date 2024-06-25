@@ -94,4 +94,4 @@ function qplotdefaults end
 qplot(args...; kw...) =
     argerror("No plotting backend found or unexpected argument. Forgot to do e.g. `using GLMakie`?")
 
-end
+end # module
