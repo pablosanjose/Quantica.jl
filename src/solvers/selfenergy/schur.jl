@@ -88,7 +88,7 @@ function lead_siteind_foreach_parent_siteind(lsparent, lslead, transform)
     sl .+= Ref(displacement)
     tree = KDTree(sl)
     indslead, dists = nn(tree, sp)
-    iszero(chop(maximum(dists))) && allunique(indslead) ||
+    iszero(chopsmall(maximum(dists))) && allunique(indslead) ||
         argerror("The contact and lead surface sites have the same number of sites but do not match (modulo a displacement). Perhaps an error in the `attach` site selection? Otherwise consider using the `transform` keyword to specify an attachment transformation.")
     return indslead, displacement
 end

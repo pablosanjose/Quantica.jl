@@ -151,3 +151,10 @@ end
     @test Tuple(s) == Tuple(s´) == Tuple(s´´) == (ϵs, ψs)
     @test s[1:10, around = 0] == s´[1:10, around = 0] == s´´[1:10, around = 0]
 end
+
+@testset "gap in 1D bands" begin
+    h = LP.linear() |> supercell(2) |> hopping(1) - @onsite((r; U = 0) ->ifelse(iseven(r[1]), U, -U))
+    @test Quantica.gap(h(U = 1)) ≈ 1
+    @test Quantica.gap(h(U = 0.1)) ≈ 0.1
+    @test Quantica.gap(h(U = 0.0)) ≈ 0.0
+end

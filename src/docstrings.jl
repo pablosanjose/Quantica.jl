@@ -2162,3 +2162,57 @@ is done more efficiently internally.
 
 """
 diagonal
+
+"""
+    gaps(h::Hamiltonian1D{T}, µ = 0; atol = eps(T))
+
+Compute the energy gaps of a 1D Hamiltonian `h` at chemical potential `µ`. The result is a
+`Vector{T}` of the local minima of the `|ϵ(ϕ) - µ|`, where `ϵ(ϕ)` is the energy band closest
+to `µ` and `ϕ ∈ [-π,π]` is the Bloch phase. The `atol` parameter is the absolute tolerance
+used to determine the local minima versus `ϕ`, which are computed using the `Schur` solver
+for 1D Hamiltonians.
+
+The `LinearMaps` and `ArnoldiMethod` packages must be loaded to enable this functionality.
+
+# Examples
+
+```
+julia> using LinearMaps, ArnoldiMethod
+
+julia> h = LP.linear() |> supercell(4) |> hopping(1) - @onsite((r; U = 2) -> ifelse(iseven(r[1]), U, -U));
+
+julia> Quantica.gaps(h(U=2))
+2-element Vector{Float64}:
+ 1.9999999999999996
+ 1.9999999999999991
+```
+
+# See also:
+    `Quantica.decay_lengths`
+
+"""
+gaps
+
+"""
+    decay_lengths(g::GreenFunctionSchurLead, µ = 0; reverse = false)
+    decay_lengths(h::AbstractHamiltonian1D, µ = 0; reverse = false)
+
+Compute the decay lengths of evanescent modes of a 1D `AbstractHamiltonian` `h` or a 1D
+`GreenFunction` `g` using the `GS.Schur` solver. The modes decaying towards positive
+direction (relative to the Bravais vector) are used, unless `reverse = true`.
+
+# Examples
+
+```
+julia> h = LP.linear() |> supercell(4) |> hopping(1) - @onsite((r; U = 2) -> ifelse(iseven(r[1]), U, -U));
+
+julia> Quantica.decay_lengths(h(U=2))
+1-element Vector{Float64}:
+ 0.28364816427662776
+```
+
+# See also:
+    `Quantica.gaps`
+
+"""
+decay_lengths

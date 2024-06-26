@@ -621,3 +621,29 @@ end
 
 #endregion
 #endregion
+
+############################################################################################
+# gap(::Hamiltonian, µ = 0, ...) -> minimum gap in the bands around µ
+#region
+
+function gaps(h::Hamiltonian{T,<:Any,1}, µ = 0, ϕstore = missing; atol = eps(T)) where {T}
+    g = greenfunction(h, GS.Schur())
+    λs = schur_eigvals(g, µ)
+    cϕs = λs .= -im .* log.(λs) # saves one allocation
+    # remove duplicates within tolerance
+    sort!(cϕs, by = real)
+    runs = Runs(cϕs, (x, y) -> isapprox(real(x), real(y); atol))
+    cϕs = [cϕs[first(rng)] for rng in runs]
+    rϕs = real.(cϕs)
+    iϕs = chopsmall.(abs.(imag.(cϕs)), atol)
+    ϕstore === missing || copy!(ϕstore, cϕs)
+    solver = ES.ShiftInvert(ES.ArnoldiMethod(nev = 1), µ)
+    n = flatsize(h)
+    Δs = [iszero(iϕ) || rank(h(rϕ)-µ*I; tol=atol) < n ? zero(T) : abs(first(energies(spectrum(h, rϕ; solver)))-µ) for (rϕ, iϕ) in zip(rϕs, iϕs)]
+    return Δs
+end
+
+gap(h::AbstractHamiltonian{<:Any,<:Any,1}, args...; kw...) =
+    minimum(gaps(h, args...; kw...))
+
+#endregion

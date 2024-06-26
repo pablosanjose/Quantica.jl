@@ -619,8 +619,8 @@ end
 #   computes schur_eigenvalues of all lead modes
 #region
 
-schur_eigvals(g::GreenFunctionSchurLead, ω::Real, args...; params...) =
-    schur_eigvals(g, retarded_omega(ω, solver(g)), args...; params...)
+schur_eigvals(g::GreenFunctionSchurLead, ω::Real; params...) =
+    schur_eigvals(g, retarded_omega(ω, solver(g)); params...)
 
 function schur_eigvals(g::GreenFunctionSchurLead, ω::Complex; params...)
     h = parent(g)                   # get the (Parametric)Hamiltonian from g
@@ -644,11 +644,14 @@ propagating_eigvals(g, ω, margin = 0; params...) =
         filter!(λ -> abs(λ) ≈ 1, schur_eigvals(g, ω; params...)) :
         filter!(λ -> 1 - margin < abs(λ) < 1 + margin, schur_eigvals(g, ω; params...))
 
-function decay_lengths(args...; params...)
-    λs = retarded_eigvals(args...; params...)
+function decay_lengths(g::GreenFunctionSchurLead, args...; reverse = false, params...)
+    λs = reverse ? advanced_eigvals(g, args...; params...) :  retarded_eigvals(g, args...; params...)
     ls = @. -1/log(abs(λs))         # compute the decay lengths in units of a0
     return ls
 end
+
+decay_lengths(g::AbstractHamiltonian1D, µ = 0, args...; params...) =
+    decay_lengths(greenfunction(g, GS.Schur()), µ, args...; params...)
 
 #endregion
 

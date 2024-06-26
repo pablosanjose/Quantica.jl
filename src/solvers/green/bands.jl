@@ -27,7 +27,7 @@ function rescale(d::Series{N}, α::Number) where {N}
     return d´
 end
 
-chop(d::Series) = Series(chop(d.x), d.pow)
+chopsmall(d::Series) = Series(chopsmall(d.x), d.pow)
 
 function trim(d::Series{N}) where {N}
     nz = leading_zeros(d)
@@ -193,7 +193,7 @@ function snap_and_diff(es)
         end
     end
     ess = SVector(mes)
-    return ess, chop(ess' .- ess)
+    return ess, chopsmall(ess' .- ess)
 end
 
 # e_j such that e^j_k are all nonzero
@@ -261,13 +261,13 @@ end
 
 function g_integrals_local_e(s::BandSimplex{D,T}, ω::Number, eⱼ) where {D,T}
     Δⱼ  = ω .- eⱼ
-    eₖʲ  = map(chop, transpose(eⱼ) .- eⱼ)  # broadcast too hard for inference
+    eₖʲ  = map(chopsmall, transpose(eⱼ) .- eⱼ)  # broadcast too hard for inference
     qⱼ = q_vector(eₖʲ)                              # SVector{D´,T}
     lΔⱼ = logim.(Δⱼ, s.refex)
     Eᴰⱼ = (-1)^D .* Δⱼ.^(D-1) .* lΔⱼ ./ factorial(D-1)
     Eᴰ⁺¹ⱼ = (-1)^(D+1) .* Δⱼ.^D .* lΔⱼ ./ factorial(D)
     if iszero(eₖʲ)                                  # special case, full energy degeneracy
-        Δ0 = chop(first(Δⱼ))
+        Δ0 = chopsmall(first(Δⱼ))
         if iszero(Δ0)
             g₀ = zero(complex(T))
             gⱼ = SVector(ntuple(Returns(g₀), Val(D)))
@@ -327,7 +327,7 @@ end
 
 function g_integrals_nonlocal(s::BandSimplex{D,T}, ω, dn, ::Val{N} = Val(0)) where {D,T,N}
     ϕⱼ = s.kij * dn
-    ϕₖʲ = chop.(transpose(ϕⱼ) .- ϕⱼ)
+    ϕₖʲ = chopsmall.(transpose(ϕⱼ) .- ϕⱼ)
     eₖʲ = s.eij
     g₀, gⱼ = begin
         if N > 0 || is_degenerate(ϕₖʲ, eₖʲ)
@@ -365,12 +365,12 @@ function g_integrals_nonlocal_ϕ(s::BandSimplex{D,T}, ω::Number, ϕⱼ) where {
     eⱼ  = s.ei
     eₖʲ = s.eij
     Δⱼ  = ω .- eⱼ
-    ϕₖʲ  = map(chop, transpose(ϕⱼ) .- ϕⱼ)  # broadcast too hard for inference
+    ϕₖʲ  = map(chopsmall, transpose(ϕⱼ) .- ϕⱼ)  # broadcast too hard for inference
     tₖʲ = divide_if_nonzero.(ϕₖʲ, eₖʲ)
     eϕⱼ  = cis_scalar.(ϕⱼ, s.refex)
     αₖʲγⱼ  = αγ_matrix(ϕₖʲ, tₖʲ, eₖʲ)               # αₖʲγⱼ :: SMatrix{D´,D´}
     if iszero(eₖʲ)                                  # special case, full energy degeneracy
-        Δ0 = chop(first(Δⱼ))
+        Δ0 = chopsmall(first(Δⱼ))
         if iszero(Δ0)
             g₀ = zero(complex(T))
             gⱼ = ntuple(Returns(g₀), Val(D))
@@ -430,7 +430,7 @@ function α⁻¹_scalar((k, j), tedges::SMatrix{D´,D´,S}, eedges) where {D´,S
         if l != j  && !iszero(eedges[l, j])
             x *= eedges[l, j]
             if l != k # ekj != 0, already constrained above
-                x *= chop(tedges[l, j] - tedges[k, j])
+                x *= chopsmall(tedges[l, j] - tedges[k, j])
             end
         end
     end
@@ -477,7 +477,7 @@ function Λ_scalar((k, j), ϕₖʲ, Λⱼ, Δⱼ, emat::SMatrix{D´,D´,T}, tmat
                 if tₗʲ == tₖʲ
                     Λₖʲ -= (αγeϕmat[l, j] / eₖʲ) * (inv(tₗʲ) + im * Δⱼ * Jₗʲ)
                 else
-                    Λₖʲ -= (αγeϕmat[l, j] / eₖʲ) * chop(Jₗʲ - Jₖʲ) * inv(chop(tₗʲ - tₖʲ))
+                    Λₖʲ -= (αγeϕmat[l, j] / eₖʲ) * chopsmall(Jₗʲ - Jₖʲ) * inv(chopsmall(tₗʲ - tₖʲ))
                 end
             end
         end
