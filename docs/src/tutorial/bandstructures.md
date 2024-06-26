@@ -103,7 +103,7 @@ julia> qplot(b, nodedarken = 0.5, axis = (; aspect = (1,1,1), perspectiveness = 
 
 Note that since we didn't specify a value for `t`, it assumed its default `t=1`. In this case we needed to patch the defect at `(ϕ, t´) = (π, 1)` (topological transition) using the `patches` keyword to avoid a band dislocation.
 
-If no parameters are specified or mapped, they take their default values. This produces the 1D bandstructure of the SSH model for `t = 1, t´ = 2` over the default 1D mesh (49 points)
+If no parameters are specified or mapped, they take their default values. For example, this produces the 1D bandstructure of the SSH model for the default `t = 1, t´ = 2` over the default 1D mesh (49 points, uniformly distributed in `[-π, π]`)
 ```julia
 julia> qplot(bands(h))
 ```
