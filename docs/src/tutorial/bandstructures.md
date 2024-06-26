@@ -108,10 +108,10 @@ If no parameters are specified or mapped, they take their default values. This p
 julia> qplot(bands(h))
 ```
 ```@raw html
-<img src="../../assets/ssh_bands_1D.png" alt="SSH 1D bandstructure as a function of `ϕ` for `t´ = 2t = 2" width="400" class="center"/>
+<img src="../../assets/ssh_bands_1D.png" alt="SSH 1D bandstructure as a function of `ϕ` for `t´ = 2t = 2" width="500" class="center"/>
 ```
 
-!!! tip Experimental "Quantica.gaps" and "Quantica.decay_lengths" for 1D Hamiltonians
+!!! tip "Experimental `Quantica.gaps` and `Quantica.decay_lengths` for 1D Hamiltonians"
     The function `Quantica.gaps(h, µ)` can be used to efficiently calculate the gaps respect to chemical potential `µ` at local band minima, but only for 1D `Hamiltonian`'s for the moment. Similarly `Quantica.decay_lengths(h, µ; reverse = false)` will yield the decay lengths of the evanescent modes of `h` at energy `µ` (towards the positive direction, unless `reverse = true`). Both functions are unexported and experimental.
 
 
