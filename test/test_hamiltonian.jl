@@ -531,16 +531,16 @@ end
     @test h2(U = 3, V = 3) != deserialize(s, serialize(s; U = 3, V = 3))         # U = 3 does not get serialized
     @test h2(U = 3, V = 3) == deserialize(s, serialize(s; V = 3); U = 3, V = 0)  # V = 0 gets overwritten
 
-    encoder = identity, (s, s´) -> SA[imag(s[2,1]), imag(s[1,2])]
-    decoder = identity, x -> (im*SA[0 x[2]; x[1] 0], -im*SA[0 x[1]; x[2] 0])
-    s = serializer(Float64, h2, hopselector(); encoder, decoder)
+    encoder = s->reim(s[1,1]), (s, s´) -> SA[imag(s[2,1]), imag(s[1,2])]
+    decoder = x -> complex(x[1],x[2])*SA[1 0; 0 1], x -> (im*SA[0 x[2]; x[1] 0], -im*SA[0 x[1]; x[2] 0])
+    s = serializer(Float64, h2; encoder, decoder)
     v = serialize(s; U = 3, V = 3)
     @test v isa Vector{Float64}
     @test v == serialize!(complex.(v), s; U = 3, V = 3)
     @test Quantica.check(s) === nothing
-    @test length(serialize(s)) == length(s) == 4
-    @test h2(U = 3, V = 3) != deserialize(s, serialize(s; U = 3, V = 3))         # U = 3 does not get serialized
-    @test h2(U = 3, V = 3) == deserialize(s, serialize(s; V = 3); U = 3, V = 0)  # V = 0 gets overwritten
+    @test length(serialize(s)) == length(s) == 8
+    @test h2(U = 3, V = 3) == deserialize(s, serialize(s; U = 3, V = 3))         # U = 3 now does get serialized
+    @test h2(U = 3, V = 3) != deserialize(s, serialize(s; V = 3); U = 3, V = 0)  # U = 3 gets overwritten by U = 2 default
 
     h3 = LP.honeycomb() |> hamiltonian(hopping((r, dr; V = 3) -> V*I) - @onsite((r; U = 2) -> U*I), orbitals = (1,2));
     s = serializer(h3)
