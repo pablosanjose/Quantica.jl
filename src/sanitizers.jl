@@ -64,6 +64,8 @@ function sanitize_SMatrix(::Type{S}, s::AbstractMatrix, (rows, cols) = (E, L)) w
     return SMatrix{E,L,T}(t)
 end
 
+sanitize_SMatrix(::Type{S}, x::SMatrix{E,L}) where {T<:Number,E,L,S<:SMatrix{E,L,T}} = S(x)
+
 function sanitize_Matrix(::Type{T}, E, cols::Tuple) where {T}
     m = zeros(T, E, length(cols))
     for (j, col) in enumerate(cols), i in 1:E

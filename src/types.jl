@@ -183,7 +183,9 @@ Base.:(==)(u::Unitcell, u´::Unitcell) = u.sites == u´.sites && u.offsets == u�
 # Selectors  -  see selectors.jl for methods
 #region
 
-struct SiteSelector{F,S,C}
+abstract type Selector end
+
+struct SiteSelector{F,S,C} <: Selector
     region::F
     sublats::S
     cells::C
@@ -199,7 +201,7 @@ struct AppliedSiteSelector{T,E,L}
     isnull::Bool    # if isnull, the selector selects nothing, regardless of other fields
 end
 
-struct HopSelector{F,S,D,R}
+struct HopSelector{F,S,D,R} <: Selector
     region::F
     sublats::S
     dcells::D
@@ -300,6 +302,8 @@ SMatrixView{N,M}(mat::AbstractMatrix{T}) where {N,M,T} = SMatrixView{N,M,T}(mat)
 SMatrixView{N,M,T}(mat) where {N,M,T} = SMatrixView{N,M,T,N*M}(mat)
 
 SMatrixView(::Type{SMatrix{N,M,T,NM}}) where {N,M,T,NM} = SMatrixView{N,M,T,NM}
+
+parent_type(::Type{SMatrixView{N,M,T,NM}}) where {N,M,T,NM} = SMatrix{N,M,T,NM}
 
 #endregion
 
@@ -1402,7 +1406,7 @@ bravais_matrix(h::AbstractHamiltonian) = bravais_matrix(lattice(h))
 
 norbitals(h::AbstractHamiltonian) = blocksizes(blockstructure(h))
 
-blockeltype(::AbstractHamiltonian) = blockeltype(blockstructure(h))
+blockeltype(h::AbstractHamiltonian) = blockeltype(blockstructure(h))
 
 blocktype(h::AbstractHamiltonian) = blocktype(blockstructure(h))
 
@@ -1505,7 +1509,7 @@ end
 
 function Base.:(==)(h::Hamiltonian, h´::Hamiltonian)
     hs = sort(h.harmonics, by = har -> har.dn)
-    hs´ = sort(h.harmonics, by = har -> har.dn)
+    hs´ = sort(h´.harmonics, by = har -> har.dn)
     equalharmonics = length(hs) == length(hs´) && all(splat(==), zip(hs, hs´))
     return h.lattice == h´.lattice && h.blockstruct == h´.blockstruct && equalharmonics
 end
@@ -2341,5 +2345,71 @@ OrbitalSliceMatrix(m::AbstractMatrix, axes) = OrbitalSliceArray(m, axes)
 orbaxes(a::OrbitalSliceArray) = a.orbaxes
 
 Base.parent(a::OrbitalSliceArray) = a.parent
+
+#endregion
+
+
+############################################################################################
+# Serializer  -  see serializer.jl
+#   A Serializer is used to contruct an iterator that encodes Hamiltonian matrix elements in
+#   a way that can be turned into a Vector and back into a Hamiltonian
+#   encoder = s -> vec and its inverse decoder = vec -> s translate between s::B and some
+#   iterable, typically some AbstractVector. B<:SMatrixView is translated to its parent.
+#   Both can also be tuples (s->vec, (s, s´)->vec) and viceversa if the translation
+#   of hoppings requires both the hopping s and its conjugate s´.
+#region
+
+struct Serializer{T,H<:AbstractHamiltonian,P<:Dictionary,E,D}
+    type::Type{T}
+    h::H
+    ptrs::P     # [dn => [(ptr, ptr´, serialrng)...]...]or [dn => [(ptr, serialrng)...]...]
+                # depending on encoder, (Function, Function) or Function.
+    encoder::E
+    decoder::D
+    len::Int
+end
+
+#region ## Constructors ##
+
+serializer(T, h; kw...) = serializer(T, h, siteselector(), hopselector(); kw...)
+
+function serializer(T::Type, h::H, sel::Selector, selectors...; encoder = identity, decoder = identity) where {H<:AbstractHamiltonian}
+    check_encoder_decoder(encoder, decoder)
+    ptrs = serializer_pointers(h, encoder, sel, selectors...)
+    s = Serializer(T, h, ptrs, encoder, decoder, 0)
+    s´ = update_serial_ranges!(s)
+    return s´
+end
+
+serializer(h::AbstractHamiltonian{T}, args...; kw...) where {T} =
+    serializer(Complex{T}, h, siteselector(), hopselector(); kw...)
+
+
+Serializer(s::Serializer, len) = Serializer(s.type, s.h, s.ptrs, s.encoder, s.decoder, len)
+
+check_encoder_decoder(encoder::Function, decoder::Function) = nothing
+check_encoder_decoder(encoder::Tuple{Function,Function}, decoder::Tuple{Function,Function}) =
+    nothing
+check_encoder_decoder(_, _) = argerror("encoder and decoder must be both functions or both tuples of functions")
+
+#endregion
+
+#region ## API ##
+
+call!(s::Serializer; kw...) = Serializer(s.type, call!(s.h; kw...), s.ptrs, s.encoder, s.decoder, s.len)
+
+(s::Serializer)(; kw...) = Serializer(s.type, s.h(; kw...), s.ptrs, s.encoder, s.decoder, s.len)
+
+hamiltonian(s::Serializer) = s.h
+
+pointers(s::Serializer) = s.ptrs
+
+encoder(s::Serializer) = s.encoder
+
+decoder(s::Serializer) = s.decoder
+
+Base.length(s::Serializer) = s.len
+
+#endregion
 
 #endregion

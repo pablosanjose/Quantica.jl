@@ -23,8 +23,11 @@ makedocs(;
             "Hamiltonians" => "tutorial/hamiltonians.md",
             "Bandstructures" => "tutorial/bandstructures.md",
             "GreenFunctions" => "tutorial/greenfunctions.md",
-            "Observables" => "tutorial/observables.md",
-            "Advanced topics" => "tutorial/advanced.md"
+            "Observables" => "tutorial/observables.md"
+            ],
+        "Advanced" => [
+            "Self-consistent mean fields" => "advanced/meanfield.md",
+            "Wannier90 imports" => "advanced/wannier90.md"
             ],
         "Examples" => "examples.md",
         "API" => "api.md",

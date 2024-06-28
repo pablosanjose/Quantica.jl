@@ -31,7 +31,8 @@ export sublat, bravais_matrix, lattice, sites, supercell, hamiltonian,
        greenfunction, selfenergy, attach,
        plotlattice, plotlattice!, plotbands, plotbands!, qplot, qplot!, qplotdefaults,
        conductance, josephson, ldos, current, transmission, densitymatrix,
-       OrbitalSliceArray, OrbitalSliceVector, OrbitalSliceMatrix, orbaxes
+       OrbitalSliceArray, OrbitalSliceVector, OrbitalSliceMatrix, orbaxes,
+       serializer, serialize, serialize!, deserialize!, deserialize
 
 export LatticePresets, LP, RegionPresets, RP, HamiltonianPresets, HP, ExternalPresets, EP
 export EigenSolvers, ES, GreenSolvers, GS
@@ -55,6 +56,7 @@ include("lattice.jl")
 include("slices.jl")
 include("models.jl")
 include("hamiltonian.jl")
+include("serializer.jl")
 include("supercell.jl")
 include("transform.jl")
 include("mesh.jl")
