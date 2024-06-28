@@ -148,7 +148,7 @@ Serializer{Float64} : encoder/decoder of matrix elements into a collection of sc
   Length            : 4
 
 julia> function f!(x, x0, (s, params))
-        h = deserialize!(s, x0)
+        h = deserialize!(s, x0; params...)
         g = greenfunction(h, GS.Spectrum())
         ρ = densitymatrix(g[])(0.5, 0)
         serialize!(x, s; ρ = ρ, params...)
@@ -161,10 +161,10 @@ julia> m = 2; len = length(s); x0 = rand(len); vstore = rand(len, 3m+3);  # orde
 
 julia> x = aasol(f!, x0, m, vstore; pdata = (s, (; U = 0.3))).solution
 4-element Vector{Float64}:
- 2.04319819150754
- 2.1068018084891236
- 2.1068018084820492
- 2.0431981915212862
+ 2.0431981914978996
+ 2.106801808497027
+ 2.1068018084899847
+ 2.0431981915150885
 
 julia> h´ = deserialize!(s, x)
 Hamiltonian{Float64,1,0}: Hamiltonian on a 0D Lattice in 1D space
