@@ -510,3 +510,45 @@ end
     @test m isa SubArray
     @test m == SA[1 0]
 end
+
+@testset "hamiltonian serializers" begin
+    lat = LP.linear() |> supercell(2)
+    h1 = lat |> hopping((r, dr) -> im*dr[1]) - @onsite((r; U = 2) -> U);
+    s = serializer(h1)
+    @test Quantica.check(s) === nothing
+
+    s = serializer(Float64, h1, encoder = reim, decoder = splat(complex))
+    @test Quantica.check(s) === nothing
+    @test h1(U = 3) == deserialize(s, serialize(s; U = 3))
+    @test Quantica.call!(h1; U = 3) !== deserialize(s, serialize(s; U = 3))
+    @test Quantica.call!(h1; U = 3) === deserialize!(s, serialize(s; U = 3))
+
+    @test Quantica.check(s(U = 3)) === nothing
+
+    h2 = lat |> hamiltonian(@hopping((r, dr; V = 1) -> ifelse(dr[1]>0, V*im*SA[0 2; 1 0], -V*im*SA[0 1; 2 0])) - @onsite((r; U = 2) -> U*I), orbitals = 2);
+    s = serializer(Float64, h2, hopselector(), encoder = imag, decoder = x->im*x)
+    @test Quantica.check(s) === nothing
+    @test h2(U = 3, V = 3) != deserialize(s, serialize(s; U = 3, V = 3))         # U = 3 does not get serialized
+    @test h2(U = 3, V = 3) == deserialize(s, serialize(s; V = 3); U = 3, V = 0)  # V = 0 gets overwritten
+
+    encoder = identity, (s, s´) -> SA[imag(s[2,1]), imag(s[1,2])]
+    decoder = identity, x -> (im*SA[0 x[2]; x[1] 0], -im*SA[0 x[1]; x[2] 0])
+    s = serializer(Float64, h2, hopselector(); encoder, decoder)
+    v = serialize(s; U = 3, V = 3)
+    @test v isa Vector{Float64}
+    @test v == serialize!(complex.(v), s; U = 3, V = 3)
+    @test Quantica.check(s) === nothing
+    @test length(serialize(s)) == length(s) == 4
+    @test h2(U = 3, V = 3) != deserialize(s, serialize(s; U = 3, V = 3))         # U = 3 does not get serialized
+    @test h2(U = 3, V = 3) == deserialize(s, serialize(s; V = 3); U = 3, V = 0)  # V = 0 gets overwritten
+
+    h3 = LP.honeycomb() |> hamiltonian(hopping((r, dr; V = 3) -> V*I) - @onsite((r; U = 2) -> U*I), orbitals = (1,2));
+    s = serializer(h3)
+    @test Quantica.check(s) === nothing
+    v = serialize(s; U = 3, V = 3)
+    @test length(v) == length(s) == 4*(2 + 6)
+    @test eltype(v) == Quantica.blockeltype(h3)
+    @test h3(U = 3, V = 4) == deserialize(s, serialize(s; U = 3, V = 4))
+    @test Quantica.call!(h3; U = 3) !== deserialize(s, serialize(s; U = 3))
+    @test Quantica.call!(h3; U = 3) === deserialize!(s, serialize(s; U = 3))
+end

@@ -173,7 +173,7 @@ function apply(m::OnsiteModifier, h::Hamiltonian, shifts = missing, oblock = mis
     f = parametric_function(m)
     sel = selector(m)
     asel = apply(sel, lattice(h))
-    ptrs = pointers(h, asel, shifts, oblock)
+    ptrs = modifier_pointers(h, asel, shifts, oblock)
     B = blocktype(h)
     spatial = is_spatial(m)
     return AppliedOnsiteModifier(sel, B, f, ptrs, spatial)
@@ -183,19 +183,34 @@ function apply(m::HoppingModifier, h::Hamiltonian, shifts = missing, oblock = mi
     f = parametric_function(m)
     sel = selector(m)
     asel = apply(sel, lattice(h))
-    ptrs = pointers(h, asel, shifts, oblock)
+    ptrs = modifier_pointers(h, asel, shifts, oblock)
     B = blocktype(h)
     spatial = is_spatial(m)
     return AppliedHoppingModifier(sel, B, f, ptrs, spatial)
 end
 
-function pointers(h::Hamiltonian{T,E,L,B}, s::AppliedSiteSelector{T,E,L}, shifts, oblock) where {T,E,L,B}
+function modifier_pointers(h::Hamiltonian{T,E,L,B}, s::AppliedSiteSelector{T,E,L}, shifts = missing, oblock = missing) where {T,E,L,B}
     isempty(cells(s)) || argerror("Cannot constrain cells in an onsite modifier, cell periodicity is assumed.")
     ptrs = Tuple{Int,SVector{E,T},CellSitePos{T,E,L,B},Int}[]
-    isnull(s) && return ptrs
-    lat = lattice(h)
     har0 = first(harmonics(h))
-    dn0 = zerocell(lat)
+    return push_pointers!(ptrs, h, har0, s, shifts, oblock)
+end
+
+function modifier_pointers(h::Hamiltonian{T,E,L,B}, s::AppliedHopSelector{T,E,L}, shifts = missing, oblock = missing) where {T,E,L,B}
+    hars = harmonics(h)
+    harptrs = [Tuple{Int,SVector{E,T},SVector{E,T},CellSitePos{T,E,L,B},CellSitePos{T,E,L,B},Tuple{Int,Int}}[] for _ in hars]
+    for (har, ptrs) in zip(hars, harptrs)
+        push_pointers!(ptrs, h, har, s, shifts, oblock)
+    end
+    return harptrs
+end
+
+function push_pointers!(ptrs, h, har0, s::AppliedSiteSelector, shifts = missing, oblock = missing)
+    isnull(s) && return ptrs
+    dn0 = dcell(har0)
+    iszero(dn0) || return ptrs
+    B = blocktype(h)
+    lat = lattice(h)
     umat = unflat(har0)
     rows = rowvals(umat)
     norbs = norbitals(h)
@@ -209,42 +224,44 @@ function pointers(h::Hamiltonian{T,E,L,B}, s::AppliedSiteSelector{T,E,L}, shifts
             if (scol, r) in s
                 n = norbs[scol]
                 sp = CellSitePos(dn0, col, r, B)
-                push!(ptrs, (p, r, sp, n))
+                tup = (p, r, sp, n)
+                push_pointer!(ptrs, tup, h, har0, (row, col))
             end
         end
     end
     return ptrs
 end
 
-function pointers(h::Hamiltonian{T,E,L,B}, s::AppliedHopSelector{T,E,L}, shifts, oblock) where {T,E,L,B}
-    hars = harmonics(h)
-    ptrs = [Tuple{Int,SVector{E,T},SVector{E,T},CellSitePos{T,E,L,B},CellSitePos{T,E,L,B},Tuple{Int,Int}}[] for _ in hars]
+function push_pointers!(ptrs, h, har, s::AppliedHopSelector, shifts = missing, oblock = missing)
     isnull(s) && return ptrs
+    B = blocktype(h)
     lat = lattice(h)
     dn0 = zerocell(lat)
+    dn = dcell(har)
     norbs = norbitals(h)
-    for (har, ptrs) in zip(hars, ptrs)
-        mh = unflat(har)
-        rows = rowvals(mh)
-        for scol in sublats(lat), col in siterange(lat, scol), p in nzrange(mh, col)
-            row = rows[p]
-            isinblock(row, col, oblock) || continue
-            srow = sitesublat(lat, row)
-            dn = dcell(har)
-            rcol = site(lat, col, dn0)
-            rrow = site(lat, row, dn)
-            r, dr = rdr(rcol => rrow)
-            r = apply_shift(shifts, r, col)
-            if (scol => srow, (r, dr), dn) in s
-                ncol = norbs[scol]
-                nrow = norbs[srow]
-                srow, scol = CellSitePos(dn, row, rrow, B), CellSitePos(dn0, col, rcol, B)
-                push!(ptrs, (p, r, dr, srow, scol, (nrow, ncol)))
-            end
+    umat = unflat(har)
+    rows = rowvals(umat)
+    for scol in sublats(lat), col in siterange(lat, scol), p in nzrange(umat, col)
+        row = rows[p]
+        isinblock(row, col, oblock) || continue
+        srow = sitesublat(lat, row)
+        rcol = site(lat, col, dn0)
+        rrow = site(lat, row, dn)
+        r, dr = rdr(rcol => rrow)
+        r = apply_shift(shifts, r, col)
+        if (scol => srow, (r, dr), dn) in s
+            ncol = norbs[scol]
+            nrow = norbs[srow]
+            sprow, spcol = CellSitePos(dn, row, rrow, B), CellSitePos(dn0, col, rcol, B)
+            tup = (p, r, dr, sprow, spcol, (nrow, ncol))
+            # push_pointer! may be extended for various ptrs types
+            push_pointer!(ptrs, tup, h, har, (row, col))
         end
     end
     return ptrs
 end
+
+push_pointer!(ptrs::Vector{T}, tup::T, _...) where {T<:Tuple} = push!(ptrs, tup)
 
 apply_shift(::Missing, r, _) = r
 apply_shift(shifts, r, i) = r - shifts[i]

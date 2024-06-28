@@ -550,3 +550,24 @@ Base.summary(::IJVBuilder{T,E,L}) where {T,E,L} =
     "IJVBuilder{$T,$E,$L}: AbstractHamiltonian builder based on IJV tuples (row, col, value)"
 
 #endregion
+
+############################################################################################
+# Serializer
+#region
+
+function Base.show(io::IO, s::Serializer{T}) where {T}
+    i = get(io, :indent, "")
+    ioindent = IOContext(io, :indent => i * "  ")
+    print(io, i, summary(s), "\n",
+"$i  Object            : $(nameof(typeof(hamiltonian(s))))
+$i  Output eltype     : $T
+$i  Encoder/Decoder   : $(display_encdec(encoder(s)))
+$i  Length            : $(length(s))")
+end
+
+Base.summary(::Serializer{T}) where {T} =
+    "Serializer{$T} : encoder/decoder of matrix elements into a collection of scalars"
+
+display_encdec(::Function) = "Single"
+display_encdec(::Tuple) = "(Onsite, Hopping pairs)"
+#endregion

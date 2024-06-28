@@ -2164,6 +2164,146 @@ is done more efficiently internally.
 diagonal
 
 """
+    serializer(T::Type, h::AbstractHamiltonian, selectors...; encoder = identity, decoder = identity)
+
+Construct a `s::Serializer` object that can be used to serialize and deserialize an
+AbstractHamiltonian, i.e. to translate the matrix elements selected by `selectors`
+(`SiteSelectors` or `HopSelectors`) into a 1D array of scalars of type `T`. The `encoder`
+and `decoder` keywords can be used to specify how each matrix element (which can be either a
+`Complex` or an `SMatrix`) is converted to and from a collection of scalars. See `serialize`
+and `deserialize` for further details.
+
+    serializer(h::AbstractHamiltonian{T}, selectors...; kw...)
+
+Equivalent to `serializer(Complex{T}, h, selectors...; kw...)`.
+
+    serializer(T::Type, h::AbstractHamiltonian; kw...)
+
+Equivalent to `serializer(T, h, siteselector(), hopselector(); kw...)`, which can be used to
+serialize all onsites and hoppings.
+
+## Keywords
+
+- `encoder`: a function `s -> vec` that translates a single matrix element `s` into an collection `vec` of scalars of type `T`. Also supported is `encoder = (s->vec, (s,s´)->vec´)`, which applies the second function to hoppings `hᵢⱼ = s` and their adjoint `hⱼᵢ = s´` to encode both in a single collection `vec´` (onsites `hᵢᵢ` are still encoded using the first single-argument function). This is useful for Hermitian Hamiltonians, where `hⱼᵢ` can be derived from `hᵢⱼ`.
+- `decoder`: the inverse function `vec -> s` of the encoder. If `encoder` is a tuple, `decoder` should also be a tuple of the inverse functions of each encoder function.
+
+Note: for an `h::AbstractHamiltonian` with a non-uniform number of orbitals, the matrix
+element passed to the `encoder` should always be assumed to be a square `SMatrix` of a fixed
+size that can fit all sites, padded with zeros if necessary (see "Element type" when
+displaying it, and the output of `h[unflat(dn)]`). Likewise, the decoder should return a
+square `SMatrix` of the same size, or any other container that can be converted to one. The
+latter is also important in cases with a uniform orbital number greater than one (non-scalar
+element type).
+
+The user can check that the encoder and decoder are mutual inverses with `Quantica.check(s;
+params...)` where `params` is any choice of Hamiltonian parameters. This essentially checks
+that `h(; params) == deserialize(s, serialize(s; params...); params...)` holds.
+
+## Examples
+
+```
+julia> h = LP.linear() |> hopping((r, dr) -> im*dr[1]) - @onsite((r; U = 2) -> U);
+
+julia> s = serializer(Float64, h; encoder = s -> reim(s), decoder = v -> complex(v[1], v[2]))
+Serializer{Float64} : encoder/decoder of matrix elements into a collection of scalars
+  Object            : ParametricHamiltonian
+  Output eltype     : Float64
+  Encoder/Decoder   : Single
+  Length            : 6
+
+julia> v = serialize(s; U = 4)
+6-element Vector{Float64}:
+ -4.0
+  0.0
+ -0.0
+ -1.0
+  0.0
+  1.0
+
+julia> h´ = deserialize!(s, v);
+
+julia> h´ == h(U = 4)
+true
+```
+
+## See also
+    `serialize`, `serialize!`, `deserialize`, `deserialize!`, `siteselector`, `hopselector`
+"""
+serializer
+
+"""
+    serialize(s::Serializer; params...)
+
+Construct a vector that encodes a selection of matrix elements of `h(; params...)` where `h
+= `hamiltonian(s)` is the `AbstractHamiltonian` used to build the `Serializer`, see
+`serializer`.
+
+## See also
+    `serializer`, `serialize!`, `deserialize`, `deserialize!`
+
+"""
+serialize
+
+"""
+    serialize!(v, s::Serializer; params...)
+
+Fill `v` with the output of `serialize(s; params...)` in place. See `serialize` for details.
+
+## See also
+    `serialize`, `serialize!`, `deserialize`, `deserialize!`
+
+"""
+serialize!
+
+"""
+    deserialize(s::Serializer, v; params...)
+
+Construct `h(; params...)`, where `h = hamiltonian(s)` is the `AbstractHamiltonian` used to
+construct `s`, with the matrix elements enconded in `v = serialize(s)` restored (i.e.
+overwritten). See `serialize` for details.
+
+## See also
+    `serializer`, `serialize`, `serialize!`, `deserialize!`
+
+"""
+deserialize
+
+"""
+    deserialize!(s::Serializer, v; params...)
+
+In-place version of `deserialize`. It returns `h´ = Quantica.call!(h; params...)` with
+serialised elements `v` restored (i.e. overwritten). Here `h = hamiltonian(s)` is the
+`AbstractHamiltonian` used to construct `s`. The `h´::Hamiltonian` is not an independent
+copy, but is aliased with `h`.
+
+## Examples
+
+```
+julia> h = HP.graphene() |> supercell(2);
+
+julia> s = serializer(h)
+Serializer: encoder/decoder of matrix elements into a collection of scalars
+  Object          : Hamiltonian
+  Encoder/Decoder : Single
+  Length          : 24
+
+julia> h === deserialize!(s, serialize(s))
+true
+
+julia> h === deserialize(s, serialize(s))
+false
+
+julia> h == deserialize(s, serialize(s))
+true
+```
+
+## See also
+    `serializer`, `serialize`, `serialize!`, `deserialize`
+
+"""
+deserialize!
+
+"""
     gaps(h::Hamiltonian1D{T}, µ = 0; atol = eps(T))
 
 Compute the energy gaps of a 1D Hamiltonian `h` at chemical potential `µ`. The result is a

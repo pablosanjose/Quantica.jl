@@ -118,6 +118,14 @@ lengths_to_offsets(f::Function, v) = prepend!(accumulate((i,j) -> i + f(j), v; i
 # all merged_* functions assume matching structure of sparse matrices
 #region
 
+function sparse_pointer(mat::AbstractSparseMatrixCSC, (row, col))
+    rows = rowvals(mat)
+    for ptr in nzrange(mat, col)
+        rows[ptr] == row && return ptr
+    end
+    argerror("Element ($row, $col) not stored in sparse matrix")
+end
+
 function nnzdiag(b::AbstractSparseMatrixCSC)
     count = 0
     rowptrs = rowvals(b)
