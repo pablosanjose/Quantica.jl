@@ -6,8 +6,8 @@
 
 ## serializer_pointers
 
-serializer_pointers(h::ParametricHamiltonian, selectors...) =
-    serializer_pointers(hamiltonian(h), selectors...)
+serializer_pointers(h::ParametricHamiltonian, encoder, selectors...) =
+    serializer_pointers(hamiltonian(h), encoder, selectors...)
 
 function serializer_pointers(h::Hamiltonian{<:Any,<:Any,L}, encoder, selectors...) where {L}
     E = serializer_pointer_type(encoder)

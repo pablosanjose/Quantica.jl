@@ -61,9 +61,6 @@ end
 copy_ifnotmissing(::Missing) = missing
 copy_ifnotmissing(d) = copy(d)
 
-merge_parameters!(p, m, ms...) = merge_parameters!(append!(p, parameters(m)), ms...)
-merge_parameters!(p) = unique!(sort!(p))
-
 typename(::T) where {T} = nameof(T)
 
 chopsmall(x::T, atol = sqrt(eps(real(T)))) where {T<:Real} =

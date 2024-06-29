@@ -195,6 +195,9 @@ function parametric!(p::ParametricHamiltonian, ms::AppliedModifier...)
     return ParametricHamiltonian(hparent, h, allmodifiers, allptrs, allparams)
 end
 
+merge_parameters!(p, m, ms...) = merge_parameters!(append!(p, parameters(m)), ms...)
+merge_parameters!(p) = unique!(sort!(p))
+
 merge_pointers!(p, m, ms...) = merge_pointers!(_merge_pointers!(p, m), ms...)
 
 function merge_pointers!(p)
@@ -215,6 +218,14 @@ end
 function _merge_pointers!(p, m::AppliedHoppingModifier)
     for (pn, pm) in zip(p, pointers(m)), (ptr, _) in pm
         push!(pn, ptr)
+    end
+    return p
+end
+
+function _merge_pointers!(p, sm::SerializerModifier)
+    s = serializer(sm)
+    for (pn, ps) in zip(p, pointers(s)), p in ps
+        push!(pn, Base.front(p)...)
     end
     return p
 end
@@ -397,6 +408,15 @@ function applymodifiers!(h, m::AppliedHoppingModifier{B}; kw...) where {B<:SMatr
             end
         end
     end
+    return h
+end
+
+function applymodifiers!(h, m::SerializerModifier; kw...)
+    pname = only(parameters(m))
+    s = serializer(m)
+    nkw = NamedTuple(kw)
+    # this should override hamiltonian(s), which should be aliased with h
+    haskey(nkw, pname) && deserialize!(s, nkw[pname])
     return h
 end
 
