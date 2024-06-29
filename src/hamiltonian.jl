@@ -178,6 +178,8 @@ parametric(h::Hamiltonian, m::AnyAbstractModifier, ms::AnyAbstractModifier...) =
 parametric(p::ParametricHamiltonian, ms::AnyAbstractModifier...) =
     parametric!(copy(p), ms...)
 
+parametric!(p::ParametricHamiltonian) = p
+
 # This should not be exported, because it doesn't modify p in place (because of modifiers)
 function parametric!(p::ParametricHamiltonian, ms::AnyModifier...)
     ams = apply.(ms, Ref(parent(p)))
