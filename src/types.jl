@@ -1437,7 +1437,12 @@ call!(s::Serializer; kw...) = Serializer(s.type, call!(s.h; kw...), s.selectors,
 
 (s::Serializer)(; kw...) = Serializer(s.type, s.h(; kw...), s.selectors, s.ptrs, s.encoder, s.decoder, s.len)
 
-(s::Serializer)(name::Symbol) = parametric!(hamiltonian(s), SerializerModifier(name, s))
+function (s::Serializer)(name::Symbol)
+    s´ = parametric(s)
+    return parametric!(hamiltonian(s´), SerializerModifier(name, s´))
+end
+
+parametric(s::Serializer) = Serializer(s.type, parametric(s.h), s.selectors, s.ptrs, s.encoder, s.decoder, s.len)
 
 hamiltonian(s::Serializer) = s.h
 
