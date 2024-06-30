@@ -1,78 +1,15 @@
 
 ############################################################################################
-# Serializer
+# AppliedSerializer
 #   support for serialization of Hamiltonians and ParametricHamiltonians
 #region
 
-## serializer_pointers
-
-serializer_pointers(h::ParametricHamiltonian, selectors...) =
-    serializer_pointers(hamiltonian(h), selectors...)
-
-function serializer_pointers(h::Hamiltonian{<:Any,<:Any,L}, encoder, selectors...) where {L}
-    E = serializer_pointer_type(encoder)
-    skip_reverse = encoder isa Tuple
-    d = Dictionary{SVector{L,Int},Vector{E}}()
-    for har in harmonics(h)
-        dn = dcell(har)
-        if skip_reverse && haskey(d, -dn)
-            ptrs = E[]
-        else
-            ptrs = push_and_merge_pointers!(E[], h, har, selectors...)
-        end
-        insert!(d, dn, ptrs)
-    end
-    return d
-end
-
-serializer_pointer_type(::Function) = Tuple{Int,UnitRange{Int}}
-serializer_pointer_type(::Tuple{Function,Function}) = Tuple{Int,Int,UnitRange{Int}}
-
-function push_and_merge_pointers!(ptrs, h, har, sel::Selector, selectors...)
-    asel = apply(sel, lattice(h))
-    push_pointers!(ptrs, h, har, asel)
-    return push_and_merge_pointers!(ptrs, h, har, selectors...)
-end
-
-push_and_merge_pointers!(ptrs, h, har) = unique!(sort!(ptrs))
-
-# gets called by push_pointers! in apply.jl
-function push_pointer!(ptrs::Vector{Tuple{Int,Int,UnitRange{Int}}}, (p, _...), h, har, (row, col))
-    dn = dcell(har)
-    if row == col && iszero(dn)
-        p´ = p
-    elseif row > col && iszero(dn)
-        return ptrs     # we don't want duplicates
-    else
-        mat´ = h[unflat(-dn)]
-        p´ = sparse_pointer(mat´, (col, row)) # adjoint element
-    end
-     # we leave the serial range empty (initialized later), as it depends on the encoder
-    push!(ptrs, (p, p´, 1:0))
-    return ptrs
-end
-
-push_pointer!(ptrs::Vector{Tuple{Int,UnitRange{Int}}}, (p, _...), _...) = push!(ptrs, (p, 1:0))
-
-## update_serial_ranges!
-
-function update_serial_ranges!(s::Serializer)
-    h = hamiltonian(s)
-    enc = encoder(s)
-    offset = 0
-    for (har, ptrs) in zip(harmonics(h), pointers(s)), (i, p) in enumerate(ptrs)
-        len = length(serialize_core(h, har, p, enc))
-        ptrs[i] = (Base.front(p)..., offset+1:offset+len)
-        offset += len
-    end
-    return Serializer(s, offset)
-end
-
 ## serialize and serialize!
 
-function serialize!(v, s::Serializer; kw...)
+function serialize!(v, s::AppliedSerializer; kw...)
     @boundscheck check_serializer_length(s, v)
-    h = call!(s.h; kw...)
+    h0 = parent_hamiltonian(s)
+    h = call!(h0; kw...)
     enc = encoder(s)
     i = 0
     for (har, ptrs) in zip(harmonics(h), pointers(s)), p in ptrs
@@ -84,7 +21,7 @@ function serialize!(v, s::Serializer; kw...)
     return v
 end
 
-serialize(s::Serializer{T}; kw...) where {T} =
+serialize(s::AppliedSerializer{T}; kw...) where {T} =
     serialize!(Vector{T}(undef, length(s)), s; kw...)
 
 # encoder::Function
@@ -119,13 +56,13 @@ check_serializer_length(s, v) = length(v) == length(s) ||
 
 ## deserialize!
 
-deserialize(s::Serializer, v; kw...) = deserialize!(s(; kw...), v)
+deserialize(s::AppliedSerializer, v; kw...) = deserialize!(s(; kw...), v)
 
-deserialize!(s::Serializer, v; kw...) = deserialize!(call!(s; kw...), v)
+deserialize!(s::AppliedSerializer, v; kw...) = deserialize!(call!(s; kw...), v)
 
-function deserialize!(s::Serializer{<:Any,<:Hamiltonian}, v)
+function deserialize!(s::AppliedSerializer{<:Any,<:Hamiltonian}, v)
     @boundscheck check_serializer_length(s, v)
-    h = hamiltonian(s)
+    h = parent_hamiltonian(s)
     dec = decoder(s)
     for (har, ptrs) in zip(harmonics(h), pointers(s))
         isempty(ptrs) && continue
@@ -181,8 +118,8 @@ end
 
 ## check
 
-function check(s::Serializer{T}; params...) where {T}
-    h = hamiltonian(s)
+function check(s::AppliedSerializer{T}; params...) where {T}
+    h = parent_hamiltonian(s)
     h(; params...) == deserialize(s, serialize(s; params...); params...) ||
         argerror("decoder/encoder pair do not seem to be correct inverse of each other")
     return nothing

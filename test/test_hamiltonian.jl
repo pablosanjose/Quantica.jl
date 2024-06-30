@@ -1,5 +1,6 @@
 using Quantica: Hamiltonian, ParametricHamiltonian, BarebonesOperator, OrbitalSliceMatrix, SparseMatrixCSC,
-      sites, nsites, nonsites, nhoppings, coordination, flat, hybrid, transform!, nnz, nonzeros, dcell, harmonics
+      sites, nsites, nonsites, nhoppings, coordination, flat, hybrid, transform!, nnz, nonzeros, dcell, harmonics,
+      parent_hamiltonian, call!, Serializer, AppliedSerializer
 
 @testset "basic hamiltonians" begin
     presets = (LatticePresets.linear, LatticePresets.square, LatticePresets.triangular, LatticePresets.honeycomb,
@@ -512,10 +513,16 @@ end
 end
 
 @testset "hamiltonian serializers" begin
+    @test serializer(Float64) isa Serializer
+    @test_throws ArgumentError serializer(Float64, encoder = (identity, identity), decoder = identity)
+
     lat = LP.linear() |> supercell(2)
-    h1 = lat |> hopping((r, dr) -> im*dr[1]) - @onsite((r; U = 2) -> U);
+    h0 = lat |> hopping((r, dr) -> im*dr[1])
+    h1 = lat |> hopping((r, dr) -> im*dr[1]) - @onsite((r; U = 2) -> U)
     s = serializer(h1)
     @test Quantica.check(s) === nothing
+    @test eltype(s) == Quantica.blockeltype(h1)
+    @test s isa AppliedSerializer && parent(s) isa Serializer
 
     s = serializer(Float64, h1, encoder = reim, decoder = splat(complex))
     @test Quantica.check(s) === nothing
@@ -551,4 +558,39 @@ end
     @test h3(U = 3, V = 4) == deserialize(s, serialize(s; U = 3, V = 4))
     @test Quantica.call!(h3; U = 3) !== deserialize(s, serialize(s; U = 3))
     @test Quantica.call!(h3; U = 3) === deserialize!(s, serialize(s; U = 3))
+
+    # Serializer -> ParametricHamiltonian conversion
+    hs = hamiltonian(serializer(h0; parameter = :mystream))
+    @test hs isa ParametricHamiltonian
+    @test Quantica.parameters(hs) == [:mystream]
+    @test h0 == hamiltonian(hs)
+    @test hs.modifiers[1].h === hs.h
+    hs = hamiltonian(serializer(h1))
+    @test hs isa ParametricHamiltonian
+    @test hamiltonian(h1) == hamiltonian(hs)
+    @test hs.modifiers[2].h === hs.h
+
+    # Serializer call
+    s = serializer(h1)
+    @test parent_hamiltonian(s)(; U = 1) == parent_hamiltonian(s(; U = 1))
+    @test parent_hamiltonian(s)(; U = 1) !== parent_hamiltonian(s(; U = 1))
+    @test call!(parent_hamiltonian(s); U = 1) === parent_hamiltonian(call!(s; U = 1))
+
+    # Serializer as a Modifier
+    @test_throws MethodError h1 |> serializer(h0)
+    hs = h0 |> serializer(ComplexF64)
+    @test hs isa ParametricHamiltonian
+    @test hs.modifiers[1].h === hs.h
+    hs´ = hs |> serializer(ComplexF64)
+    @test hs´.modifiers[1].h === hs´.modifiers[2].h === hs´.h
+    s = serializer(h0)
+    hss = hs(stream = SA[1,2,3,4])
+    @test all((hss[(0,)], hss[(-1,)], hss[(1)]) .== (SA[0 2; 1 0], SA[0 0; 3 0], SA[0 4; 0 0]))
+
+    # Supercell transform
+    hs = LP.linear() |> hopping((r, dr) -> im*dr[1]) - @onsite((r; U = 2) -> U) |>
+         serializer(ComplexF64, siteselector(), parameter = :onsite)
+    @test hs(onsite = SA[1], U = 3)[()] == SA[1;;]
+    hs´ = supercell(hs, 2)
+    @test hs´(onsite = SA[10,20], U = 3)[()] == SA[10 -im; im 20]
 end

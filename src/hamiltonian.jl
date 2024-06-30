@@ -178,6 +178,8 @@ parametric(h::Hamiltonian, m::AnyAbstractModifier, ms::AnyAbstractModifier...) =
 parametric(p::ParametricHamiltonian, ms::AnyAbstractModifier...) =
     parametric!(copy(p), ms...)
 
+parametric!(p::ParametricHamiltonian) = p
+
 # This should not be exported, because it doesn't modify p in place (because of modifiers)
 function parametric!(p::ParametricHamiltonian, ms::AnyModifier...)
     ams = apply.(ms, Ref(parent(p)))
@@ -188,12 +190,17 @@ function parametric!(p::ParametricHamiltonian, ms::AppliedModifier...)
     hparent = parent(p)
     h = hamiltonian(p)
     allmodifiers = (modifiers(p)..., ms...)
+    # restores aliasing of any serializer to h
+    relinked_modifiers = maybe_relink_serializer.(allmodifiers, Ref(h))
     allparams = parameters(p)
     merge_parameters!(allparams, ms...)
     allptrs = pointers(p)
     merge_pointers!(allptrs, ms...)
-    return ParametricHamiltonian(hparent, h, allmodifiers, allptrs, allparams)
+    return ParametricHamiltonian(hparent, h, relinked_modifiers, allptrs, allparams)
 end
+
+merge_parameters!(p, m, ms...) = merge_parameters!(append!(p, parameters(m)), ms...)
+merge_parameters!(p) = unique!(sort!(p))
 
 merge_pointers!(p, m, ms...) = merge_pointers!(_merge_pointers!(p, m), ms...)
 
@@ -215,6 +222,13 @@ end
 function _merge_pointers!(p, m::AppliedHoppingModifier)
     for (pn, pm) in zip(p, pointers(m)), (ptr, _) in pm
         push!(pn, ptr)
+    end
+    return p
+end
+
+function _merge_pointers!(p, sm::AppliedSerializer)
+    for (pn, ps) in zip(p, pointers(sm)), p in ps
+        push!(pn, Base.front(p)...)
     end
     return p
 end
@@ -397,6 +411,14 @@ function applymodifiers!(h, m::AppliedHoppingModifier{B}; kw...) where {B<:SMatr
             end
         end
     end
+    return h
+end
+
+function applymodifiers!(h, m::AppliedSerializer; kw...)
+    pname = only(parameters(m))
+    nkw = NamedTuple(kw)
+    # this should override hamiltonian(s), which should be aliased with h
+    haskey(nkw, pname) && deserialize!(m, nkw[pname])
     return h
 end
 

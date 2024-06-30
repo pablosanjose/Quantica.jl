@@ -165,7 +165,6 @@ apply(m::ParametricModel, lat) = ParametricModel(apply.(terms(m), Ref(lat)))
 #   shifts is useful for supercell, where we want to keep the r, dr of original lat
 #region
 
-# Any means it could be wrapped in Intrablock or Interblock
 apply(m::BlockModifier, h::Hamiltonian, shifts = missing) =
     apply(parent(m), h, shifts, block(m, blockstructure(h)))
 
@@ -265,6 +264,87 @@ push_pointer!(ptrs::Vector{T}, tup::T, _...) where {T<:Tuple} = push!(ptrs, tup)
 
 apply_shift(::Missing, r, _) = r
 apply_shift(shifts, r, i) = r - shifts[i]
+
+#endregion
+
+############################################################################################
+# apply Serializers
+#   construct pointer Dictionaries of the form
+#   [dn => [(ptr, ptr´, serialrng)...]...] or [dn => [(ptr, serialrng)...]...]
+#   depending on whether enc/dec is a tuple of functions (onsite/hopping) or a function
+#   ptr, ptr´ are pointers to nonzeros of h[unflat(dn)] and h[unflat(-dn)] respectively
+#   serialrng is the index range inside the serialized vector corresponding to the pointer
+#region
+
+# we support shifts, for supercell, but not oblock, for BlockModifiers
+function apply(s::Serializer, h::AbstractHamiltonian, shifts = missing)
+    ptrs = serializer_pointers(h, encoder(s), selectors(s), shifts)
+    len = update_serial_ranges!(ptrs, h, s)
+    return AppliedSerializer(s, h, ptrs, len)
+end
+
+## serializer_pointers
+
+serializer_pointers(h::ParametricHamiltonian, args...) =
+    serializer_pointers(hamiltonian(h), args...)
+
+function serializer_pointers(h::Hamiltonian{<:Any,<:Any,L}, encoder, selectors, shifts) where {L}
+    E = serializer_pointer_type(encoder)
+    skip_reverse = encoder isa Tuple
+    d = Dictionary{SVector{L,Int},Vector{E}}()
+    for har in harmonics(h)
+        dn = dcell(har)
+        if skip_reverse && haskey(d, -dn)
+            ptrs = E[]
+        else
+            ptrs = push_and_merge_pointers!(E[], h, har, shifts, selectors...)
+        end
+        insert!(d, dn, ptrs)
+    end
+    return d
+end
+
+serializer_pointer_type(::Function) = Tuple{Int,UnitRange{Int}}
+serializer_pointer_type(::Tuple{Function,Function}) = Tuple{Int,Int,UnitRange{Int}}
+
+function push_and_merge_pointers!(ptrs, h, har, shifts, sel::Selector, selectors...)
+    asel = apply(sel, lattice(h))
+    push_pointers!(ptrs, h, har, asel, shifts)
+    return push_and_merge_pointers!(ptrs, h, har, shifts, selectors...)
+end
+
+push_and_merge_pointers!(ptrs, h, har, shifts) = unique!(sort!(ptrs))
+
+# gets called by push_pointers!, see Modifier section above
+function push_pointer!(ptrs::Vector{Tuple{Int,Int,UnitRange{Int}}}, (p, _...), h, har, (row, col))
+    dn = dcell(har)
+    if row == col && iszero(dn)
+        p´ = p
+    elseif row > col && iszero(dn)
+        return ptrs     # we don't want duplicates
+    else
+        mat´ = h[unflat(-dn)]
+        p´ = sparse_pointer(mat´, (col, row)) # adjoint element
+    end
+     # we leave the serial range empty (initialized later), as it depends on the encoder
+    push!(ptrs, (p, p´, 1:0))
+    return ptrs
+end
+
+push_pointer!(ptrs::Vector{Tuple{Int,UnitRange{Int}}}, (p, _...), _...) = push!(ptrs, (p, 1:0))
+
+## update_serial_ranges!
+
+function update_serial_ranges!(ptrs, h, s::Serializer)
+    enc = encoder(s)
+    offset = 0
+    for (har, ps) in zip(harmonics(h), ptrs), (i, p) in enumerate(ps)
+        len = length(serialize_core(h, har, p, enc))
+        ps[i] = (Base.front(p)..., offset+1:offset+len)
+        offset += len
+    end
+    return offset   # we return the total length of the serialized vector
+end
 
 #endregion
 

@@ -177,6 +177,7 @@ Base.summary(::ParametricHoppingTerm{N}) where {N} = "ParametricHoppingTerm{Para
 Base.summary(::OnsiteModifier{N}) where {N} = "OnsiteModifier{ParametricFunction{$N}}:"
 Base.summary(::HoppingModifier{N}) where {N} = "HoppingModifier{ParametricFunction{$N}}:"
 
+
 display_argument_type(t) = is_spatial(t) ? "spatial" : "non-spatial"
 
 #endregion
@@ -555,19 +556,35 @@ Base.summary(::IJVBuilder{T,E,L}) where {T,E,L} =
 # Serializer
 #region
 
-function Base.show(io::IO, s::Serializer{T}) where {T}
+function Base.show(io::IO, s::Serializer)
     i = get(io, :indent, "")
     ioindent = IOContext(io, :indent => i * "  ")
     print(io, i, summary(s), "\n",
-"$i  Object            : $(nameof(typeof(hamiltonian(s))))
-$i  Output eltype     : $T
+"$i  Stream parameter  : :$(only(parameters(s)))
+$i  Output eltype     : $(eltype(s))
+$i  Encoder/Decoder   : $(display_encdec(encoder(s)))")
+end
+
+function Base.show(io::IO, s::AppliedSerializer)
+    i = get(io, :indent, "")
+    ioindent = IOContext(io, :indent => i * "  ")
+    print(io, i, summary(s), "\n",
+"$i  Object            : $(nameof(typeof(parent_hamiltonian(s))))
+$i  Object parameters : $(display_parameters(s))
+$i  Stream parameter  : :$(only(parameters(s)))
+$i  Output eltype     : $(eltype(s))
 $i  Encoder/Decoder   : $(display_encdec(encoder(s)))
 $i  Length            : $(length(s))")
 end
 
-Base.summary(::Serializer{T}) where {T} =
-    "Serializer{$T} : encoder/decoder of matrix elements into a collection of scalars"
+Base.summary(::Serializer) =
+    "Serializer : translation rules used to build an AppliedSerializer"
+Base.summary(::AppliedSerializer) =
+    "AppliedSerializer : translator between a selection of of matrix elements of an AbstractHamiltonian and a collection of scalars"
 
 display_encdec(::Function) = "Single"
 display_encdec(::Tuple) = "(Onsite, Hopping pairs)"
+
+display_parameters(s::AppliedSerializer{<:Any,<:Hamiltonian}) = "none"
+display_parameters(s::AppliedSerializer{<:Any,<:ParametricHamiltonian}) = string(parameters(parent_hamiltonian(s)))
 #endregion

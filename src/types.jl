@@ -758,14 +758,16 @@ end
 #region
 
 abstract type AbstractModifier end
+abstract type Modifier <: AbstractModifier end
+abstract type AppliedModifier <: AbstractModifier end
 
-struct OnsiteModifier{N,S<:SiteSelector,F<:ParametricFunction{N}} <: AbstractModifier
+struct OnsiteModifier{N,S<:SiteSelector,F<:ParametricFunction{N}} <: Modifier
     f::F
     selector::S
     spatial::Bool
 end
 
-struct AppliedOnsiteModifier{B,N,R<:SVector,F<:ParametricFunction{N},S<:SiteSelector,P<:CellSitePos} <: AbstractModifier
+struct AppliedOnsiteModifier{B,N,R<:SVector,F<:ParametricFunction{N},S<:SiteSelector,P<:CellSitePos} <: AppliedModifier
     parentselector::S        # unapplied selector, needed to grow a ParametricHamiltonian
     blocktype::Type{B}  # These are needed to cast the modification to the sublat block type
     f::F
@@ -774,13 +776,13 @@ struct AppliedOnsiteModifier{B,N,R<:SVector,F<:ParametricFunction{N},S<:SiteSele
     spatial::Bool   # If true, f is a function of position r. Otherwise it takes a single CellSite
 end
 
-struct HoppingModifier{N,S<:HopSelector,F<:ParametricFunction{N}} <: AbstractModifier
+struct HoppingModifier{N,S<:HopSelector,F<:ParametricFunction{N}} <: Modifier
     f::F
     selector::S
     spatial::Bool  # If true, f is a function of positions r, dr. Otherwise it takes two CellSite's
 end
 
-struct AppliedHoppingModifier{B,N,R<:SVector,F<:ParametricFunction{N},S<:HopSelector,P<:CellSitePos} <: AbstractModifier
+struct AppliedHoppingModifier{B,N,R<:SVector,F<:ParametricFunction{N},S<:HopSelector,P<:CellSitePos} <: AppliedModifier
     parentselector::S        # unapplied selector, needed to grow a ParametricHamiltonian
     blocktype::Type{B}  # These are needed to cast the modification to the sublat block type
     f::F
@@ -788,9 +790,6 @@ struct AppliedHoppingModifier{B,N,R<:SVector,F<:ParametricFunction{N},S<:HopSele
     # [[(ptr, r, dr, si, sj, (norbs, norbs´)), ...], ...] for each selected hop on each harmonic
     spatial::Bool  # If true, f is a function of positions r, dr. Otherwise it takes two CellSite's
 end
-
-const Modifier = Union{OnsiteModifier,HoppingModifier}
-const AppliedModifier = Union{AppliedOnsiteModifier,AppliedHoppingModifier}
 
 #region ## Constructors ##
 
@@ -1371,13 +1370,108 @@ Base.parent(u::HybridInds) = u.inds
 #endregion
 
 ############################################################################################
-# Hamiltonian  -  see hamiltonian.jl for methods
+# AbstractHamiltonian type
 #region
 
 abstract type AbstractHamiltonian{T,E,L,B} end
 
 const AbstractHamiltonian0D{T,E,B} = AbstractHamiltonian{T,E,0,B}
 const AbstractHamiltonian1D{T,E,B} = AbstractHamiltonian{T,E,1,B}
+
+#endregion
+
+############################################################################################
+# Serializer  -  see serializer.jl
+#   A Serializer is used to contruct an iterator that encodes Hamiltonian matrix elements in
+#   a way that can be turned into a Vector and back into a Hamiltonian
+#   encoder = s -> vec and its inverse decoder = vec -> s translate between s::B and some
+#   iterable, typically some AbstractVector. B<:SMatrixView is translated to its parent.
+#   Both can also be tuples (s->vec, (s, s´)->vec) and viceversa if the translation
+#   of hoppings requires both the hopping s and its conjugate s´.
+#region
+
+struct Serializer{T,S,E,D} <: Modifier
+    type::Type{T}
+    parameter::Symbol             # parameter for ParametricHamiltonians, :stream by default
+    selectors::S                  # unapplied selectors, needed to rebuild ptrs if h changes
+    encoder::E
+    decoder::D
+end
+
+struct AppliedSerializer{T,H<:AbstractHamiltonian,S<:Serializer{T},P<:Dictionary} <: AppliedModifier
+    parent::S
+    h::H
+    ptrs::P     # [dn => [(ptr, ptr´, serialrng)...]...] or [dn => [(ptr, serialrng)...]...]
+    len::Int
+end
+
+#region ## Constructors ##
+
+serializer(T::Type; kw...) = serializer(T, siteselector(), hopselector(); kw...)
+
+function serializer(T::Type, sel::Selector, selectors...; encoder = identity, decoder = identity, parameter = :stream)
+    check_encoder_decoder_tuples(encoder, decoder)
+    s = Serializer(T, parameter, (sel, selectors...), encoder, decoder)
+    return s
+end
+
+serializer(h::AbstractHamiltonian{T}, args...; kw...) where {T} =
+    serializer(Complex{T}, h, args...; kw...)
+
+serializer(T::Type, h::AbstractHamiltonian, args...; kw...) =
+    apply(serializer(T, args...; kw...), h)
+
+check_encoder_decoder_tuples(encoder::Function, decoder::Function) = nothing
+check_encoder_decoder_tuples(encoder::Tuple{Function,Function}, decoder::Tuple{Function,Function}) =
+    nothing
+check_encoder_decoder_tuples(_, _) = argerror("encoder and decoder must be both functions or both tuples of functions")
+
+#endregion
+
+#region ## API ##
+
+call!(s::AppliedSerializer; kw...) = AppliedSerializer(s.parent, call!(s.h; kw...), s.ptrs, s.len)
+
+(s::AppliedSerializer)(; kw...) = AppliedSerializer(s.parent, s.h(; kw...), s.ptrs, s.len)
+
+hamiltonian(s::AppliedSerializer) = parametric(s.h, s)
+
+# assume s has been applied to h or a copy of h
+maybe_relink_serializer(s::AppliedSerializer, h) =
+    s.h === h ? s : AppliedSerializer(s.parent, h, s.ptrs, s.len)
+maybe_relink_serializer(m::AppliedModifier, _) = m
+
+parent_hamiltonian(s::AppliedSerializer) = s.h
+
+pointers(s::AppliedSerializer) = s.ptrs
+
+Base.length(s::AppliedSerializer) = s.len
+
+Base.eltype(s::AppliedSerializer) = eltype(s.parent)
+Base.eltype(::Serializer{T}) where {T} = T
+
+Base.parent(s::AppliedSerializer) = s.parent
+
+selectors(s::Serializer) = s.selectors
+selectors(s::AppliedSerializer) = selectors(s.parent)
+
+parameters(s::Serializer) = (s.parameter,)
+parameters(s::AppliedSerializer) = parameters(s.parent)
+
+encoder(s::Serializer) = s.encoder
+encoder(s::AppliedSerializer) = encoder(s.parent)
+
+decoder(s::Serializer) = s.decoder
+decoder(s::AppliedSerializer) = decoder(s.parent)
+
+
+#endregion
+
+#endregion
+
+############################################################################################
+# Hamiltonian  -  see hamiltonian.jl for methods
+#region
 
 struct Hamiltonian{T,E,L,B} <: AbstractHamiltonian{T,E,L,B}
     lattice::Lattice{T,E,L}
@@ -1587,7 +1681,6 @@ struct Mesh{V,S} <: AbstractMesh{V,S}    # S-1 is the manifold dimension
     simps::Vector{NTuple{S,Int}}         # list of simplices, each a group of S neighboring
                                          # vertex indices
 end
-
 
 #region ## Constructors ##
 
@@ -2324,6 +2417,7 @@ end
 SparseArrays.nnz(h::BarebonesOperator) = sum(har -> nnz(matrix(har)), harmonics(h))
 
 #endregion
+#endregion
 
 ############################################################################################
 # OrbitalSliceArray: array type over orbital slice - see specialmatrices.jl
@@ -2345,71 +2439,5 @@ OrbitalSliceMatrix(m::AbstractMatrix, axes) = OrbitalSliceArray(m, axes)
 orbaxes(a::OrbitalSliceArray) = a.orbaxes
 
 Base.parent(a::OrbitalSliceArray) = a.parent
-
-#endregion
-
-
-############################################################################################
-# Serializer  -  see serializer.jl
-#   A Serializer is used to contruct an iterator that encodes Hamiltonian matrix elements in
-#   a way that can be turned into a Vector and back into a Hamiltonian
-#   encoder = s -> vec and its inverse decoder = vec -> s translate between s::B and some
-#   iterable, typically some AbstractVector. B<:SMatrixView is translated to its parent.
-#   Both can also be tuples (s->vec, (s, s´)->vec) and viceversa if the translation
-#   of hoppings requires both the hopping s and its conjugate s´.
-#region
-
-struct Serializer{T,H<:AbstractHamiltonian,P<:Dictionary,E,D}
-    type::Type{T}
-    h::H
-    ptrs::P     # [dn => [(ptr, ptr´, serialrng)...]...]or [dn => [(ptr, serialrng)...]...]
-                # depending on encoder, (Function, Function) or Function.
-    encoder::E
-    decoder::D
-    len::Int
-end
-
-#region ## Constructors ##
-
-serializer(T, h; kw...) = serializer(T, h, siteselector(), hopselector(); kw...)
-
-function serializer(T::Type, h::H, sel::Selector, selectors...; encoder = identity, decoder = identity) where {H<:AbstractHamiltonian}
-    check_encoder_decoder(encoder, decoder)
-    ptrs = serializer_pointers(h, encoder, sel, selectors...)
-    s = Serializer(T, h, ptrs, encoder, decoder, 0)
-    s´ = update_serial_ranges!(s)
-    return s´
-end
-
-serializer(h::AbstractHamiltonian{T}, args...; kw...) where {T} =
-    serializer(Complex{T}, h, siteselector(), hopselector(); kw...)
-
-
-Serializer(s::Serializer, len) = Serializer(s.type, s.h, s.ptrs, s.encoder, s.decoder, len)
-
-check_encoder_decoder(encoder::Function, decoder::Function) = nothing
-check_encoder_decoder(encoder::Tuple{Function,Function}, decoder::Tuple{Function,Function}) =
-    nothing
-check_encoder_decoder(_, _) = argerror("encoder and decoder must be both functions or both tuples of functions")
-
-#endregion
-
-#region ## API ##
-
-call!(s::Serializer; kw...) = Serializer(s.type, call!(s.h; kw...), s.ptrs, s.encoder, s.decoder, s.len)
-
-(s::Serializer)(; kw...) = Serializer(s.type, s.h(; kw...), s.ptrs, s.encoder, s.decoder, s.len)
-
-hamiltonian(s::Serializer) = s.h
-
-pointers(s::Serializer) = s.ptrs
-
-encoder(s::Serializer) = s.encoder
-
-decoder(s::Serializer) = s.decoder
-
-Base.length(s::Serializer) = s.len
-
-#endregion
 
 #endregion
