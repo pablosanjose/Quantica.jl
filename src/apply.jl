@@ -278,7 +278,7 @@ apply_shift(shifts, r, i) = r - shifts[i]
 
 # we support shifts, for supercell, but not oblock, for BlockModifiers
 function apply(s::Serializer, h::AbstractHamiltonian, shifts = missing)
-    ptrs = serializer_pointers(h, s.encoder, s.selectors, shifts)
+    ptrs = serializer_pointers(h, encoder(s), selectors(s), shifts)
     len = update_serial_ranges!(ptrs, h, s)
     return AppliedSerializer(s, h, ptrs, len)
 end

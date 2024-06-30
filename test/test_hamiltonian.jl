@@ -1,6 +1,6 @@
 using Quantica: Hamiltonian, ParametricHamiltonian, BarebonesOperator, OrbitalSliceMatrix, SparseMatrixCSC,
       sites, nsites, nonsites, nhoppings, coordination, flat, hybrid, transform!, nnz, nonzeros, dcell, harmonics,
-      parent_hamiltonian, call!
+      parent_hamiltonian, call!, Serializer, AppliedSerializer
 
 @testset "basic hamiltonians" begin
     presets = (LatticePresets.linear, LatticePresets.square, LatticePresets.triangular, LatticePresets.honeycomb,
@@ -513,11 +513,16 @@ end
 end
 
 @testset "hamiltonian serializers" begin
+    @test serializer(Float64) isa Serializer
+    @test_throws ArgumentError serializer(Float64, encoder = (identity, identity), decoder = identity)
+
     lat = LP.linear() |> supercell(2)
     h0 = lat |> hopping((r, dr) -> im*dr[1])
     h1 = lat |> hopping((r, dr) -> im*dr[1]) - @onsite((r; U = 2) -> U)
     s = serializer(h1)
     @test Quantica.check(s) === nothing
+    @test eltype(s) == Quantica.blockeltype(h1)
+    @test s isa AppliedSerializer && parent(s) isa Serializer
 
     s = serializer(Float64, h1, encoder = reim, decoder = splat(complex))
     @test Quantica.check(s) === nothing
@@ -581,4 +586,10 @@ end
     s = serializer(h0)
     hss = hs(stream = SA[1,2,3,4])
     @test all((hss[(0,)], hss[(-1,)], hss[(1)]) .== (SA[0 2; 1 0], SA[0 0; 3 0], SA[0 4; 0 0]))
+
+    # Supercell transform
+    hs = h1 |> serializer(ComplexF64, siteselector(), parameter = :onsite)
+    @test hs(onsite = SA[1], U = 3)[()] == SA[1;;]
+    hs´ = supercell(hs, 2)
+    @test hs´(onsite = SA[10,20], U = 3)[()] == SA[10 -im; im 20]
 end

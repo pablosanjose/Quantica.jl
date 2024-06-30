@@ -1448,10 +1448,9 @@ pointers(s::AppliedSerializer) = s.ptrs
 Base.length(s::AppliedSerializer) = s.len
 
 Base.eltype(s::AppliedSerializer) = eltype(s.parent)
+Base.eltype(::Serializer{T}) where {T} = T
 
 Base.parent(s::AppliedSerializer) = s.parent
-
-serializer(sm::AppliedSerializer) = sm.parent
 
 selectors(s::Serializer) = s.selectors
 selectors(s::AppliedSerializer) = selectors(s.parent)
@@ -1465,7 +1464,6 @@ encoder(s::AppliedSerializer) = encoder(s.parent)
 decoder(s::Serializer) = s.decoder
 decoder(s::AppliedSerializer) = decoder(s.parent)
 
-Base.eltype(::Serializer{T}) where {T} = T
 
 #endregion
 
