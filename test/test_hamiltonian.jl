@@ -588,7 +588,8 @@ end
     @test all((hss[(0,)], hss[(-1,)], hss[(1)]) .== (SA[0 2; 1 0], SA[0 0; 3 0], SA[0 4; 0 0]))
 
     # Supercell transform
-    hs = h1 |> serializer(ComplexF64, siteselector(), parameter = :onsite)
+    hs = LP.linear() |> hopping((r, dr) -> im*dr[1]) - @onsite((r; U = 2) -> U) |>
+         serializer(ComplexF64, siteselector(), parameter = :onsite)
     @test hs(onsite = SA[1], U = 3)[()] == SA[1;;]
     hs´ = supercell(hs, 2)
     @test hs´(onsite = SA[10,20], U = 3)[()] == SA[10 -im; im 20]
