@@ -1,5 +1,6 @@
 using Quantica: Hamiltonian, ParametricHamiltonian, BarebonesOperator, OrbitalSliceMatrix, SparseMatrixCSC,
-      sites, nsites, nonsites, nhoppings, coordination, flat, hybrid, transform!, nnz, nonzeros, dcell, harmonics
+      sites, nsites, nonsites, nhoppings, coordination, flat, hybrid, transform!, nnz, nonzeros, dcell, harmonics,
+      parent_hamiltonian, call!
 
 @testset "basic hamiltonians" begin
     presets = (LatticePresets.linear, LatticePresets.square, LatticePresets.triangular, LatticePresets.honeycomb,
@@ -513,7 +514,8 @@ end
 
 @testset "hamiltonian serializers" begin
     lat = LP.linear() |> supercell(2)
-    h1 = lat |> hopping((r, dr) -> im*dr[1]) - @onsite((r; U = 2) -> U);
+    h0 = lat |> hopping((r, dr) -> im*dr[1])
+    h1 = lat |> hopping((r, dr) -> im*dr[1]) - @onsite((r; U = 2) -> U)
     s = serializer(h1)
     @test Quantica.check(s) === nothing
 
@@ -551,4 +553,32 @@ end
     @test h3(U = 3, V = 4) == deserialize(s, serialize(s; U = 3, V = 4))
     @test Quantica.call!(h3; U = 3) !== deserialize(s, serialize(s; U = 3))
     @test Quantica.call!(h3; U = 3) === deserialize!(s, serialize(s; U = 3))
+
+    # Serializer -> ParametricHamiltonian conversion
+    hs = hamiltonian(serializer(h0; parameter = :mystream))
+    @test hs isa ParametricHamiltonian
+    @test Quantica.parameters(hs) == [:mystream]
+    @test h0 == hamiltonian(hs)
+    @test hs.modifiers[1].h === hs.h
+    hs = hamiltonian(serializer(h1))
+    @test hs isa ParametricHamiltonian
+    @test hamiltonian(h1) == hamiltonian(hs)
+    @test hs.modifiers[2].h === hs.h
+
+    # Serializer call
+    s = serializer(h1)
+    @test parent_hamiltonian(s)(; U = 1) == parent_hamiltonian(s(; U = 1))
+    @test parent_hamiltonian(s)(; U = 1) !== parent_hamiltonian(s(; U = 1))
+    @test call!(parent_hamiltonian(s); U = 1) === parent_hamiltonian(call!(s; U = 1))
+
+    # Serializer as a Modifier
+    @test_throws MethodError h1 |> serializer(h0)
+    hs = h0 |> serializer(ComplexF64)
+    @test hs isa ParametricHamiltonian
+    @test hs.modifiers[1].h === hs.h
+    hs´ = hs |> serializer(ComplexF64)
+    @test hs´.modifiers[1].h === hs´.modifiers[2].h === hs´.h
+    s = serializer(h0)
+    hss = hs(stream = SA[1,2,3,4])
+    @test all((hss[(0,)], hss[(-1,)], hss[(1)]) .== (SA[0 2; 1 0], SA[0 0; 3 0], SA[0 4; 0 0]))
 end

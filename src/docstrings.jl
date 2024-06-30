@@ -2164,28 +2164,32 @@ is done more efficiently internally.
 diagonal
 
 """
-    serializer(T::Type, h::AbstractHamiltonian, selectors...; encoder = identity, decoder = identity)
+    serializer(T::Type, selectors...; parameter = :stream, encoder = identity, decoder = identity)
 
-Construct a `s::Serializer` object that can be used to serialize and deserialize an
+Construct a abstract `s::Serializer` object defines the rules to serialize and deserialize an
 AbstractHamiltonian, i.e. to translate the matrix elements selected by `selectors`
-(`SiteSelectors` or `HopSelectors`) into a 1D array of scalars of type `T`. The `encoder`
-and `decoder` keywords can be used to specify how each matrix element (which can be either a
-`Complex` or an `SMatrix`) is converted to and from a collection of scalars. See `serialize`
-and `deserialize` for further details.
+(`SiteSelectors` or `HopSelectors`) into a 1D array of scalars of type `T`.
+
+    serializer(T::Type; kw...)
+
+Equivalent to `serializer(T, siteselector(), hopselector(); kw...)`, i.e. with all onsites
+and hoppings included in selection.
+
+    serializer(T::Type, h::AbstractHamiltonian, selectors...; kw...)
+
+Applies a `Serializer` object like those above, and applies it to `h::AbstractHamiltonian`
+to produce an `AppliedSerializer{T,<:AbstractHamiltonian}`, that can be used to serialize
+and deserialize `h`. See `serialize` and `deserialize` for further details.
 
     serializer(h::AbstractHamiltonian{T}, selectors...; kw...)
 
 Equivalent to `serializer(Complex{T}, h, selectors...; kw...)`.
 
-    serializer(T::Type, h::AbstractHamiltonian; kw...)
-
-Equivalent to `serializer(T, h, siteselector(), hopselector(); kw...)`, which can be used to
-serialize all onsites and hoppings.
-
 ## Keywords
 
-- `encoder`: a function `s -> vec` that translates a single matrix element `s` into an collection `vec` of scalars of type `T`. Also supported is `encoder = (s->vec, (s,s´)->vec´)`, which applies the second function to hoppings `hᵢⱼ = s` and their adjoint `hⱼᵢ = s´` to encode both in a single collection `vec´` (onsites `hᵢᵢ` are still encoded using the first single-argument function). This is useful for Hermitian Hamiltonians, where `hⱼᵢ` can be derived from `hᵢⱼ`.
-- `decoder`: the inverse function `vec -> s` of the encoder. If `encoder` is a tuple, `decoder` should also be a tuple of the inverse functions of each encoder function.
+- `parameter`: the parameter name used to address the serialized vector after transforming an `AppliedSerializer` into a `ParametricHamiltonian`, see below. Default: `:stream`.
+- `encoder`: a function `s -> vec` that translates a single matrix element `s` into an collection `vec` of scalars of type `T`. Also supported is `encoder = (s->vec, (s,s´)->vec´)`, which applies the second function to hoppings `hᵢⱼ = s` and their adjoint `hⱼᵢ = s´` to encode both in a single collection `vec´` (onsites `hᵢᵢ` are still encoded using the first single-argument function). This is useful for Hermitian Hamiltonians, where `hⱼᵢ` can be derived from `hᵢⱼ`. Default: `identity`.
+- `decoder`: the inverse function `vec -> s` of the encoder. If `encoder` is a tuple, `decoder` should also be a tuple of the inverse functions of each encoder function. Default: `identity`.
 
 Note: for an `h::AbstractHamiltonian` with a non-uniform number of orbitals, the matrix
 element passed to the `encoder` should always be assumed to be a square `SMatrix` of a fixed
@@ -2199,19 +2203,47 @@ The user can check that the encoder and decoder are mutual inverses with `Quanti
 params...)` where `params` is any choice of Hamiltonian parameters. This essentially checks
 that `h(; params) == deserialize(s, serialize(s; params...); params...)` holds.
 
+## Call syntax and ParametricHamiltonians
+
+    as(; params...)
+
+Transforms `as::AppliedSerializer{T,<:ParametricHamiltonian}` into an
+`as´::AppliedSerializer{T,<:Hamiltonian}` where the enclosed `h` is replaced by `h´ = h(;
+params...)`. The in-place (aliasing) version of the above is `Quantica.call!(as;
+params...)`. Note that the enclosed `AbstractHamiltonian`s can be retrieved with e.g.
+`Quantica.parent_hamiltonian(as)`.
+
+    hamiltonian(as::AppliedSerializer)
+
+Builds a `ph::ParametricHamiltonian` by adding `as` as a parametric modifier (similar to
+`@onsite!` or `@hopping!`) to the `h::AbstractHamiltonian` enclosed in `as`. As a result,
+`ph` acquires a new parameter of the name given by the `parameter` keyword specified
+originally (`:stream` by default, see above). This parameter takes a serialized stream (e.g.
+the output of `serialize(as)`) and replaces the corresponding elements in `ph`.
+
+    h |> s
+
+For `s::Serializer` and `h::AbstractHamiltonian`, converts `s` into an
+`as::AppliedSerializer` by applying it to `h` and then adds `as` as a parametric modifier to
+`h` to produce a `ph::ParametricHamiltonian`, as above. Note that `h |> as` with
+`as::AppliedSerializer` is not allowed, since `as` can only be a modifier of its enclosed
+`AbstractHamiltonian`.
+
 ## Examples
 
 ```
-julia> h = LP.linear() |> hopping((r, dr) -> im*dr[1]) - @onsite((r; U = 2) -> U);
+julia> h1 = LP.linear() |> hopping((r, dr) -> im*dr[1]) - @onsite((r; U = 2) -> U);
 
-julia> s = serializer(Float64, h; encoder = s -> reim(s), decoder = v -> complex(v[1], v[2]))
-Serializer{Float64} : encoder/decoder of matrix elements into a collection of scalars
+julia> as = serializer(Float64, h1; encoder = s -> reim(s), decoder = v -> complex(v[1], v[2]))
+AppliedSerializer : translator between a selection of of matrix elements of an AbstractHamiltonian and a collection of scalars
   Object            : ParametricHamiltonian
+  Object parameters : [:U]
+  Stream parameter  : :stream
   Output eltype     : Float64
   Encoder/Decoder   : Single
   Length            : 6
 
-julia> v = serialize(s; U = 4)
+julia> v = serialize(as; U = 4)
 6-element Vector{Float64}:
  -4.0
   0.0
@@ -2220,9 +2252,23 @@ julia> v = serialize(s; U = 4)
   0.0
   1.0
 
-julia> h´ = deserialize!(s, v);
+julia> h2 = deserialize!(as, v);
 
-julia> h´ == h(U = 4)
+julia> h2 == h1(U = 4)
+true
+
+julia> h3 = hamiltonian(as)
+ParametricHamiltonian{Float64,1,1}: Parametric Hamiltonian on a 1D Lattice in 1D space
+  Bloch harmonics  : 3
+  Harmonic size    : 1 × 1
+  Orbitals         : [1]
+  Element type     : scalar (ComplexF64)
+  Onsites          : 1
+  Hoppings         : 2
+  Coordination     : 2.0
+  Parameters       : [:U, :stream]
+
+julia> h3(stream = v, U = 5) == h1(U = 4)  # stream overwrites the U=5 onsite terms
 true
 ```
 
@@ -2232,11 +2278,11 @@ true
 serializer
 
 """
-    serialize(s::Serializer; params...)
+    serialize(as::AppliedSerializer{T}; params...)
 
-Construct a vector that encodes a selection of matrix elements of `h(; params...)` where `h
-= `hamiltonian(s)` is the `AbstractHamiltonian` used to build the `Serializer`, see
-`serializer`.
+Construct a `Vector{T}` that encodes a selection of matrix elements of `h(; params...)`
+where `h = Quantica.parent_hamiltonian(as)` is the `AbstractHamiltonian` used to build the
+`AppliedSerializer`, see `serializer`.
 
 ## See also
     `serializer`, `serialize!`, `deserialize`, `deserialize!`
@@ -2245,9 +2291,10 @@ Construct a vector that encodes a selection of matrix elements of `h(; params...
 serialize
 
 """
-    serialize!(v, s::Serializer; params...)
+    serialize!(v, as::AppliedSerializer; params...)
 
-Fill `v` with the output of `serialize(s; params...)` in place. See `serialize` for details.
+Fill `v` in-place with the output of `serialize(as; params...)`, see `serialize` for
+details.
 
 ## See also
     `serialize`, `serialize!`, `deserialize`, `deserialize!`
@@ -2256,11 +2303,11 @@ Fill `v` with the output of `serialize(s; params...)` in place. See `serialize` 
 serialize!
 
 """
-    deserialize(s::Serializer, v; params...)
+    deserialize(as::AppliedSerializer, v; params...)
 
-Construct `h(; params...)`, where `h = hamiltonian(s)` is the `AbstractHamiltonian` used to
-construct `s`, with the matrix elements enconded in `v = serialize(s)` restored (i.e.
-overwritten). See `serialize` for details.
+Construct `h(; params...)`, where `h = Quantica.parametric_hamiltonian(as)` is the
+`AbstractHamiltonian` enclosed in `as`, with the matrix elements enconded in `v =
+serialize(s)` restored (i.e. overwritten). See `serialize` for details.
 
 ## See also
     `serializer`, `serialize`, `serialize!`, `deserialize!`
@@ -2269,12 +2316,12 @@ overwritten). See `serialize` for details.
 deserialize
 
 """
-    deserialize!(s::Serializer, v; params...)
+    deserialize!(as::AppliedSerializer, v; params...)
 
 In-place version of `deserialize`. It returns `h´ = Quantica.call!(h; params...)` with
-serialised elements `v` restored (i.e. overwritten). Here `h = hamiltonian(s)` is the
-`AbstractHamiltonian` used to construct `s`. The `h´::Hamiltonian` is not an independent
-copy, but is aliased with `h`.
+serialised elements `v` restored (i.e. overwritten). Here `h =
+Quantica.parent_hamiltonian(s)` is the `AbstractHamiltonian` used to construct `as`. The
+resulting `h´::Hamiltonian` is not an independent copy, but is aliased with `h`.
 
 ## Examples
 
@@ -2282,10 +2329,13 @@ copy, but is aliased with `h`.
 julia> h = HP.graphene() |> supercell(2);
 
 julia> s = serializer(h)
-Serializer: encoder/decoder of matrix elements into a collection of scalars
-  Object          : Hamiltonian
-  Encoder/Decoder : Single
-  Length          : 24
+AppliedSerializer : translator between a selection of of matrix elements of an AbstractHamiltonian and a collection of scalars
+  Object            : Hamiltonian
+  Object parameters : none
+  Stream parameter  : :stream
+  Output eltype     : ComplexF64
+  Encoder/Decoder   : Single
+  Length            : 24
 
 julia> h === deserialize!(s, serialize(s))
 true

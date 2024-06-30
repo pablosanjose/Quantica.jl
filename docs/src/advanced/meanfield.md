@@ -1,4 +1,4 @@
-# Non-spatial models and self-consistent mean-field problems
+# Non-spatial models
 
 As briefly mentioned when discussing parametric models and modifiers, we have a special syntax that allows models to depend on sites directly, instead of on their spatial location. We call these non-spatial models. A simple example, with an onsite energy proportional to the site **index**
 ```julia
@@ -70,6 +70,8 @@ Note the `ρ[i]` above. This indexes `ρ` at site `i`. For a multiorbital hamilt
 !!! tip "Sparse vs dense"
     The method explained above to build a Hamiltonian `hρ` using `-->` supports all the `SiteSelector` and `HopSelector` functionality of conventional models. Therefore, although the density matrix computed above is dense, its application to the Hamiltonian is sparse: it only touches the onsite matrix elements in this case. Likewise, we could for example use `@hopping!` with a finite `range` to apply a Fock mean field within a finite range.
 
+# Self-consistent mean-field problems
+
 The above provides the tools to implement self-consistent mean field problems in Quantica. The problem consists of finding a fixed point `f(h) = h` of the function
 ```julia
 function f(h)
@@ -96,18 +98,22 @@ julia> aasol(f!, x0, m, vstore).solution
 ```
 The package requires as input an in-place version `f!` of the function `f`, and the preallocation of some storage space vstore (see the `aasol` documentation). The package, as [a few others](https://docs.sciml.ai/NonlinearSolve/stable/solvers/fixed_point_solvers/), also requires the variable `x` and the initial condition `x0` to be (real) `AbstractArray` (or a scalar, but we need the former for our use case), hence the broadcast dots above. In our case we will therefore need to translate back and forth from a Hamiltonian `h` to a real vector `x` to pass it to `aasol`.
 
+## Serializers
+
 This translation is achieved with Quantica's `serializer` funcionality. A `s::Serializer{T}` is an object that takes an `h::AbstractHamiltonian`, a selection of the sites and hoppings to be translated, and an `encoder`/`decoder` pair of functions to translate each element. This `s` can then be used to convert the specified elements of `h` into a vector of scalars of type `T` and back, possibly after applying some parameter values. Consider this self-explanatory example from the `serializer` docstring
 ```julia
-julia> h = LP.linear() |> hopping((r, dr) -> im*dr[1]) - @onsite((r; U = 2) -> U);
+julia> h1 = LP.linear() |> hopping((r, dr) -> im*dr[1]) - @onsite((r; U = 2) -> U);
 
-julia> s = serializer(Float64, h; encoder = s -> (real(s), imag(s)), decoder = v -> complex(v[1], v[2]))
-Serializer{Float64} : encoder/decoder of matrix elements into a collection of scalars
+julia> as = serializer(Float64, h1; encoder = s -> reim(s), decoder = v -> complex(v[1], v[2]))
+AppliedSerializer : translator between a selection of of matrix elements of an AbstractHamiltonian and a collection of scalars
   Object            : ParametricHamiltonian
+  Object parameters : [:U]
+  Stream parameter  : :stream
   Output eltype     : Float64
   Encoder/Decoder   : Single
   Length            : 6
 
-julia> v = serialize(s; U = 4)
+julia> v = serialize(as; U = 4)
 6-element Vector{Float64}:
  -4.0
   0.0
@@ -116,23 +122,42 @@ julia> v = serialize(s; U = 4)
   0.0
   1.0
 
-julia> h´ = deserialize!(s, v);
+julia> h2 = deserialize!(as, v);
 
-julia> h´ == h(U = 4)
+julia> h2 == h1(U = 4)
+true
+
+julia> h3 = hamiltonian(as)
+ParametricHamiltonian{Float64,1,1}: Parametric Hamiltonian on a 1D Lattice in 1D space
+  Bloch harmonics  : 3
+  Harmonic size    : 1 × 1
+  Orbitals         : [1]
+  Element type     : scalar (ComplexF64)
+  Onsites          : 1
+  Hoppings         : 2
+  Coordination     : 2.0
+  Parameters       : [:U, :stream]
+
+julia> h3(stream = v, U = 5) == h1(U = 4)  # stream overwrites the U=5 onsite terms
 true
 ```
 The serializer functionality is designed with efficiency in mind. Using the in-place `serialize!`/`deserialize!` pair we can do the encode/decode round trip without allocations
 ```
 julia> using BenchmarkTools
 
-julia> v = Vector{Float64}(undef, length(s));
+julia> v = Vector{Float64}(undef, length(as));
 
-julia> @btime deserialize!($s, serialize!($v, $s));
+julia> deserialize!(as, serialize!(v, as)) === Quantica.call!(h1, U = 4)
+true
+
+julia> @btime deserialize!($as, serialize!($v, $as));
   149.737 ns (0 allocations: 0 bytes)
 ```
-It also allows powerful compression into relevant degrees of freedom through appropriate use of encoders/decoders, see the docstring.
+It also allows powerful compression into relevant degrees of freedom through appropriate use of encoders/decoders, see the `serializer` docstring.
 
-With this serializer functionality we can build a version of the fixed-point function `f` that operates on real vectors. Let's return to our original Hamiltonian
+## Using Serializers with fixed-point solvers
+
+With the `serializer` functionality we can build a version of the fixed-point function `f` that operates on real vectors. Let's return to our original Hamiltonian
 ```julia
 julia> h = LP.linear() |> onsite(2) - hopping(1) |> supercell(4) |> supercell;
 
@@ -184,7 +209,6 @@ julia> h´[()]
         ⋅             ⋅        -1.0+0.0im  2.0432+0.0im
 ```
 Note that the content of `pdata` is passed by `aasol` as a third argument to `f!`. We use this to pass the serializer `s` and `U` parameter to use.
-
 
 !!! note "Bring your own fixed-point solver!"
     Note that fixed-point calculations can be tricky, and the search algorithm can have a huge impact in convergence (if the problem converges at all!). For this reason, Quantica.jl does not provide built-in fixed-point routines, only the functionality to write functions such as `f` above. Numerous packages exist for fixed-point computations in julia. Check [NonlinearSolve.jl](https://github.com/SciML/NonlinearSolve.jl) for one prominent metapackage.

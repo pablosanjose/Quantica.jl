@@ -1390,75 +1390,82 @@ const AbstractHamiltonian1D{T,E,B} = AbstractHamiltonian{T,E,1,B}
 #   of hoppings requires both the hopping s and its conjugate s´.
 #region
 
-struct Serializer{T,H<:AbstractHamiltonian,P<:Dictionary,S,E,D}
+struct Serializer{T,S,E,D} <: Modifier
     type::Type{T}
-    h::H
-    selectors::S    # unapplied selectors, needed to rebuild ptrs if h changes (e.g. supercell)
-    ptrs::P         # [dn => [(ptr, ptr´, serialrng)...]...]or [dn => [(ptr, serialrng)...]...]
-                    # depending on encoder, (Function, Function) or Function.
+    parameter::Symbol             # parameter for ParametricHamiltonians, :stream by default
+    selectors::S                  # unapplied selectors, needed to rebuild ptrs if h changes
     encoder::E
     decoder::D
-    len::Int
 end
 
-struct SerializerModifier{S<:Serializer} <: AppliedModifier
-    paramname::Symbol
-    s::S
+struct AppliedSerializer{T,H<:AbstractHamiltonian,S<:Serializer{T},P<:Dictionary} <: AppliedModifier
+    parent::S
+    h::H
+    ptrs::P     # [dn => [(ptr, ptr´, serialrng)...]...] or [dn => [(ptr, serialrng)...]...]
+    len::Int
 end
 
 #region ## Constructors ##
 
-serializer(T, h; kw...) = serializer(T, h, siteselector(), hopselector(); kw...)
+serializer(T::Type; kw...) = serializer(T, siteselector(), hopselector(); kw...)
 
-function serializer(T::Type, h::H, sel::Selector, selectors...; encoder = identity, decoder = identity) where {H<:AbstractHamiltonian}
-    check_encoder_decoder(encoder, decoder)
-    ptrs = serializer_pointers(h, encoder, sel, selectors...)
-    s = Serializer(T, h, selectors, ptrs, encoder, decoder, 0)
-    s´ = update_serial_ranges!(s)
-    return s´
+function serializer(T::Type, sel::Selector, selectors...; encoder = identity, decoder = identity, parameter = :stream)
+    check_encoder_decoder_tuples(encoder, decoder)
+    s = Serializer(T, parameter, (sel, selectors...), encoder, decoder)
+    return s
 end
 
 serializer(h::AbstractHamiltonian{T}, args...; kw...) where {T} =
-    serializer(Complex{T}, h, siteselector(), hopselector(); kw...)
+    serializer(Complex{T}, h, args...; kw...)
 
+serializer(T::Type, h::AbstractHamiltonian, args...; kw...) =
+    apply(serializer(T, args...; kw...), h)
 
-Serializer(s::Serializer, len) = Serializer(s.type, s.h, s.selectors, s.ptrs, s.encoder, s.decoder, len)
-
-check_encoder_decoder(encoder::Function, decoder::Function) = nothing
-check_encoder_decoder(encoder::Tuple{Function,Function}, decoder::Tuple{Function,Function}) =
+check_encoder_decoder_tuples(encoder::Function, decoder::Function) = nothing
+check_encoder_decoder_tuples(encoder::Tuple{Function,Function}, decoder::Tuple{Function,Function}) =
     nothing
-check_encoder_decoder(_, _) = argerror("encoder and decoder must be both functions or both tuples of functions")
+check_encoder_decoder_tuples(_, _) = argerror("encoder and decoder must be both functions or both tuples of functions")
 
 #endregion
 
 #region ## API ##
 
-call!(s::Serializer; kw...) = Serializer(s.type, call!(s.h; kw...), s.selectors, s.ptrs, s.encoder, s.decoder, s.len)
+call!(s::AppliedSerializer; kw...) = AppliedSerializer(s.parent, call!(s.h; kw...), s.ptrs, s.len)
 
-(s::Serializer)(; kw...) = Serializer(s.type, s.h(; kw...), s.selectors, s.ptrs, s.encoder, s.decoder, s.len)
+(s::AppliedSerializer)(; kw...) = AppliedSerializer(s.parent, s.h(; kw...), s.ptrs, s.len)
 
-function (s::Serializer)(name::Symbol)
-    s´ = parametric(s)
-    return parametric!(hamiltonian(s´), SerializerModifier(name, s´))
-end
+hamiltonian(s::AppliedSerializer) = parametric(s.h, s)
 
-parametric(s::Serializer) = Serializer(s.type, parametric(s.h), s.selectors, s.ptrs, s.encoder, s.decoder, s.len)
+# assume s has been applied to h or a copy of h
+maybe_relink_serializer(s::AppliedSerializer, h) =
+    s.h === h ? s : AppliedSerializer(s.parent, h, s.ptrs, s.len)
+maybe_relink_serializer(m::AppliedModifier, _) = m
 
-hamiltonian(s::Serializer) = s.h
+parent_hamiltonian(s::AppliedSerializer) = s.h
 
-pointers(s::Serializer) = s.ptrs
+pointers(s::AppliedSerializer) = s.ptrs
 
-encoder(s::Serializer) = s.encoder
+Base.length(s::AppliedSerializer) = s.len
 
-decoder(s::Serializer) = s.decoder
+Base.eltype(s::AppliedSerializer) = eltype(s.parent)
+
+Base.parent(s::AppliedSerializer) = s.parent
+
+serializer(sm::AppliedSerializer) = sm.parent
 
 selectors(s::Serializer) = s.selectors
+selectors(s::AppliedSerializer) = selectors(s.parent)
 
-Base.length(s::Serializer) = s.len
+parameters(s::Serializer) = (s.parameter,)
+parameters(s::AppliedSerializer) = parameters(s.parent)
 
-serializer(sm::SerializerModifier) = sm.s
+encoder(s::Serializer) = s.encoder
+encoder(s::AppliedSerializer) = encoder(s.parent)
 
-parameters(sm::SerializerModifier) = (sm.paramname,)
+decoder(s::Serializer) = s.decoder
+decoder(s::AppliedSerializer) = decoder(s.parent)
+
+Base.eltype(::Serializer{T}) where {T} = T
 
 #endregion
 
