@@ -569,6 +569,8 @@ end
     @test hs isa ParametricHamiltonian
     @test hamiltonian(h1) == hamiltonian(hs)
     @test hs.modifiers[2].h === hs.h
+    hs´ = Quantica.minimal_callsafe_copy(hs)
+    @test hs´.modifiers[2].h === hs´.h
 
     # Serializer call
     s = serializer(h1)
