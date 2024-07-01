@@ -1647,8 +1647,11 @@ blocktype(h::ParametricHamiltonian) = blocktype(parent(h))
 
 lattice(h::ParametricHamiltonian) = lattice(hamiltonian(h))
 
-minimal_callsafe_copy(p::ParametricHamiltonian) = ParametricHamiltonian(
-    p.hparent, minimal_callsafe_copy(p.h), p.modifiers, p.allptrs, p.allparams)
+function minimal_callsafe_copy(p::ParametricHamiltonian)
+    h´ = minimal_callsafe_copy(p.h)
+    modifiers´ = maybe_relink_serializer.(p.modifiers, Ref(h´))
+    return ParametricHamiltonian(p.hparent, h´, modifiers´, p.allptrs, p.allparams)
+end
 
 Base.parent(h::ParametricHamiltonian) = h.hparent
 
