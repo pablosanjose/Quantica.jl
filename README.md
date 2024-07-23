@@ -2,7 +2,7 @@
 
 <!-- [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://pablosanjose.github.io/Quantica.jl/stable) -->
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://pablosanjose.github.io/Quantica.jl/dev)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.4762964.svg)](https://doi.org/10.5281/zenodo.4762964)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.11068257.svg)](https://doi.org/10.5281/zenodo.11068257)
 [![Build Status](https://github.com/pablosanjose/Quantica.jl/workflows/CI/badge.svg)](https://github.com/pablosanjose/Quantica.jl/actions)
 [![Coverage](https://codecov.io/gh/pablosanjose/Quantica.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/pablosanjose/Quantica.jl)
 [![GitHub commits since last release](https://img.shields.io/github/commits-since/pablosanjose/Quantica.jl/latest?include_prereleases&sort=semver&style=social)](https://github.com/pablosanjose/Quantica.jl)
@@ -58,3 +58,19 @@ julia> qplot(b, color = (psi, e, k) -> angle(psi[1] / psi[2]), colormap = :cycli
     <img height="400" alt="Kane-Mele Hamiltonian" src="docs/src/assets/latticeKM.png">
     <img height="400" alt="Kane-Mele bandstructure" src="docs/src/assets/bandsKM.png">
 </p>
+
+# Citations
+
+If you find Quantica.jl useful for your work, please cite it using the following BibTeX entry
+```
+@software{SanJose:24,
+  author       = {Pablo San-Jose},
+  title        = {pablosanjose/Quantica.jl},
+  month        = apr,
+  year         = 2024,
+  publisher    = {Zenodo},
+  doi          = {10.5281/zenodo.11068257},
+  url          = {https://doi.org/10.5281/zenodo.11068257}
+}
+```
+or using the Citation tool at [Quantica's Zenodo](https://doi.org/10.5281/zenodo.11068257)
