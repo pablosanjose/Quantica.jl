@@ -63,7 +63,7 @@ julia> qplot(b, color = (psi, e, k) -> angle(psi[1] / psi[2]), colormap = :cycli
 
 If you find Quantica.jl useful for your work, please cite it using the following BibTeX entry
 ```
-@software{SanJose:24,
+@software{Quantica,
   author       = {Pablo San-Jose},
   title        = {pablosanjose/Quantica.jl},
   month        = apr,
