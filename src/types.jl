@@ -847,12 +847,12 @@ Base.parent(m::AppliedHoppingModifier) = HoppingModifier(m.f, m.parentselector, 
 
 struct Interblock{M<:Union{AbstractModel,AbstractModifier},N}
     parent::M
-    block::NTuple{N,UnitRange{Int}}  # May be two or more ranges
+    block::NTuple{N,UnitRange{Int}}  # May be two or more ranges of site indices
 end
 
 struct Intrablock{M<:Union{AbstractModel,AbstractModifier}}
     parent::M
-    block::UnitRange{Int}
+    block::UnitRange{Int}            # A single range of site indices
 end
 
 const AnyAbstractModifier = Union{AbstractModifier,Interblock{<:AbstractModifier},Intrablock{<:AbstractModifier}}

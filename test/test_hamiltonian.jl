@@ -449,6 +449,27 @@ end
     @test h isa ParametricHamiltonian{Float64,2,1,Quantica.SMatrixView{2,2,ComplexF64,4}}
     # plustadjoint broken for ParametricModels
     @test_broken h((p = 10))
+    # block filtering
+    l1 = LP.linear(dim = 2, names = :A) |> supercell(2) |> supercell
+    l2 = translate(lattice(l1, names = :B), SA[0,1])
+    models = hopping(I), @hopping((; a = 1.0) -> a*I)
+    couplings = hopping(I), @hopping((; τ = 1.0) -> τ*I)
+    for orbitals in (1, 2), model in models, coupling in couplings
+        h1 = l1 |> hamiltonian(model; orbitals)
+        h2 = l2 |> hamiltonian(model; orbitals)
+        hc = combine(h1, h2; coupling)
+        scalarcoupling = coupling isa Quantica.TightbindingModel
+        scalarmodel = model isa Quantica.TightbindingModel
+        if scalarcoupling && scalarmodel
+            @test hc isa Hamiltonian
+        else
+            @test hc isa ParametricHamiltonian
+        end
+        h = hc(τ = 10, a = 2)[unflat()]
+        one = ifelse(orbitals == 1, 1, SA[1 0; 0 1])
+        @test h[1,2] == h[2,1] == h[3,4] == h[4,3] == ifelse(scalarmodel, 1, 2) * one
+        @test h[1,3] == h[3,1] == h[2,4] == h[4,2] == ifelse(scalarcoupling, 1, 10) * one
+    end
 end
 
 @testset "current operator" begin

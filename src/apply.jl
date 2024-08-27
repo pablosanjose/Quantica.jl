@@ -166,45 +166,45 @@ apply(m::ParametricModel, lat) = ParametricModel(apply.(terms(m), Ref(lat)))
 #region
 
 apply(m::BlockModifier, h::Hamiltonian, shifts = missing) =
-    apply(parent(m), h, shifts, block(m, blockstructure(h)))
+    apply(parent(m), h, shifts, block(m))
 
-function apply(m::OnsiteModifier, h::Hamiltonian, shifts = missing, oblock = missing)
+function apply(m::OnsiteModifier, h::Hamiltonian, shifts = missing, block = missing)
     f = parametric_function(m)
     sel = selector(m)
     asel = apply(sel, lattice(h))
-    ptrs = modifier_pointers(h, asel, shifts, oblock)
+    ptrs = modifier_pointers(h, asel, shifts, block)
     B = blocktype(h)
     spatial = is_spatial(m)
     return AppliedOnsiteModifier(sel, B, f, ptrs, spatial)
 end
 
-function apply(m::HoppingModifier, h::Hamiltonian, shifts = missing, oblock = missing)
+function apply(m::HoppingModifier, h::Hamiltonian, shifts = missing, block = missing)
     f = parametric_function(m)
     sel = selector(m)
     asel = apply(sel, lattice(h))
-    ptrs = modifier_pointers(h, asel, shifts, oblock)
+    ptrs = modifier_pointers(h, asel, shifts, block)
     B = blocktype(h)
     spatial = is_spatial(m)
     return AppliedHoppingModifier(sel, B, f, ptrs, spatial)
 end
 
-function modifier_pointers(h::Hamiltonian{T,E,L,B}, s::AppliedSiteSelector{T,E,L}, shifts = missing, oblock = missing) where {T,E,L,B}
+function modifier_pointers(h::Hamiltonian{T,E,L,B}, s::AppliedSiteSelector{T,E,L}, shifts = missing, block = missing) where {T,E,L,B}
     isempty(cells(s)) || argerror("Cannot constrain cells in an onsite modifier, cell periodicity is assumed.")
     ptrs = Tuple{Int,SVector{E,T},CellSitePos{T,E,L,B},Int}[]
     har0 = first(harmonics(h))
-    return push_pointers!(ptrs, h, har0, s, shifts, oblock)
+    return push_pointers!(ptrs, h, har0, s, shifts, block)
 end
 
-function modifier_pointers(h::Hamiltonian{T,E,L,B}, s::AppliedHopSelector{T,E,L}, shifts = missing, oblock = missing) where {T,E,L,B}
+function modifier_pointers(h::Hamiltonian{T,E,L,B}, s::AppliedHopSelector{T,E,L}, shifts = missing, block = missing) where {T,E,L,B}
     hars = harmonics(h)
     harptrs = [Tuple{Int,SVector{E,T},SVector{E,T},CellSitePos{T,E,L,B},CellSitePos{T,E,L,B},Tuple{Int,Int}}[] for _ in hars]
     for (har, ptrs) in zip(hars, harptrs)
-        push_pointers!(ptrs, h, har, s, shifts, oblock)
+        push_pointers!(ptrs, h, har, s, shifts, block)
     end
     return harptrs
 end
 
-function push_pointers!(ptrs, h, har0, s::AppliedSiteSelector, shifts = missing, oblock = missing)
+function push_pointers!(ptrs, h, har0, s::AppliedSiteSelector, shifts = missing, block = missing)
     isnull(s) && return ptrs
     dn0 = dcell(har0)
     iszero(dn0) || return ptrs
@@ -214,7 +214,7 @@ function push_pointers!(ptrs, h, har0, s::AppliedSiteSelector, shifts = missing,
     rows = rowvals(umat)
     norbs = norbitals(h)
     for scol in sublats(lat), col in siterange(lat, scol)
-        isinblock(col, oblock) || continue
+        isinblock(col, block) || continue
         for p in nzrange(umat, col)
             row = rows[p]
             col == row || continue
@@ -231,7 +231,7 @@ function push_pointers!(ptrs, h, har0, s::AppliedSiteSelector, shifts = missing,
     return ptrs
 end
 
-function push_pointers!(ptrs, h, har, s::AppliedHopSelector, shifts = missing, oblock = missing)
+function push_pointers!(ptrs, h, har, s::AppliedHopSelector, shifts = missing, block = missing)
     isnull(s) && return ptrs
     B = blocktype(h)
     lat = lattice(h)
@@ -242,7 +242,7 @@ function push_pointers!(ptrs, h, har, s::AppliedHopSelector, shifts = missing, o
     rows = rowvals(umat)
     for scol in sublats(lat), col in siterange(lat, scol), p in nzrange(umat, col)
         row = rows[p]
-        isinblock(row, col, oblock) || continue
+        isinblock(row, col, block) || continue
         srow = sitesublat(lat, row)
         rcol = site(lat, col, dn0)
         rrow = site(lat, row, dn)
@@ -276,7 +276,7 @@ apply_shift(shifts, r, i) = r - shifts[i]
 #   serialrng is the index range inside the serialized vector corresponding to the pointer
 #region
 
-# we support shifts, for supercell, but not oblock, for BlockModifiers
+# we support shifts, for supercell, but not block, for BlockModifiers
 function apply(s::Serializer, h::AbstractHamiltonian, shifts = missing)
     ptrs = serializer_pointers(h, encoder(s), selectors(s), shifts)
     len = update_serial_ranges!(ptrs, h, s)

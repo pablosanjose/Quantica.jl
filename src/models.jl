@@ -195,8 +195,4 @@ function blockindices(hams::NTuple{N,Any}) where {N}
     return inds
 end
 
-block(m::Intrablock, b::OrbitalBlockStructure) = flatrange(b, block(m))
-block(m::Interblock, b::OrbitalBlockStructure) = flatrange.(Ref(b), block(m))
-block(::Union{AbstractModel,AbstractModifier}, b...) = missing
-
 #endregion

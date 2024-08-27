@@ -204,6 +204,11 @@ function IJVBuilder(lat::Lattice{T}, hams::AbstractHamiltonian...) where {T}
 end
 
 (::Type{IJVBuilderWithModifiers})(lat, orbitals) = IJVBuilder(lat, orbitals, Any[])
+# add modifiers to existing builder
+(::Type{IJVBuilderWithModifiers})(b::IJVBuilder) =
+    IJVBuilder(b.lat, b.blockstruct, b.harmonics, b.kdtrees, Any[])
+# only if it doesn't already have modifiers!
+(::Type{IJVBuilderWithModifiers})(b::IJVBuilderWithModifiers) = b
 
 push_ijvharmonics!(builder, ::OrbitalBlockStructure) = builder
 push_ijvharmonics!(builder, hars::Vector{<:IJVHarmonic}) = copy!(builder.harmonics, hars)
