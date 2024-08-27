@@ -52,11 +52,16 @@ end
 
 function add!(b::IJVBuilderWithModifiers, model::ParametricModel, block = missing)
     m0 = basemodel(model)
-    ms = modifier.(terms(model))
+    ms = filterblock.(modifier.(terms(model)), Ref(block))
     add!(b, m0, block)
     push!(b, ms...)
     return b
 end
+
+# ensure modifiers (not only m0) remain restricted to their block
+filterblock(m, ::Missing) = m
+filterblock(m, b::UnitRange) = Intrablock(m, b)
+filterblock(m, b::Tuple) = Interblock(m, b)
 
 function addterm!(builder, block, term::AppliedOnsiteTerm)
     sel = selector(term)
@@ -557,9 +562,10 @@ function combine(hams::AbstractHamiltonian...; coupling::AbstractModel = Tightbi
     lat = combine(lattice.(hams)...)
     builder = IJVBuilder(lat, hams...)
     interblockmodel = interblock(coupling, hams...)
-    model´, blocks´ = parent(interblockmodel), block(interblockmodel)
-    add!(builder, model´, blocks´)
-    return hamiltonian(builder)
+    builder´ = maybe_add_modifiers(builder, coupling)
+    model´, block´ = parent(interblockmodel), block(interblockmodel)
+    add!(builder´, model´, block´)
+    return hamiltonian(builder´)
 end
 
 # No need to have unique names if nothing is parametric
@@ -576,6 +582,9 @@ function check_unique_names(::AbstractModel, hs::Hamiltonian...)
     allunique(names) || argerror("Cannot combine Hamiltonians with non-unique sublattice names using a ParametricModel, since modifiers could be tied to the original names. Assign unique names on construction.")
     return nothing
 end
+
+maybe_add_modifiers(b, ::ParametricModel) = IJVBuilderWithModifiers(b)
+maybe_add_modifiers(b, ::TightbindingModel) = b
 
 #endregion
 
