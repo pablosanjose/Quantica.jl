@@ -2165,7 +2165,7 @@ minimal_callsafe_copy(c::Contacts) =
 
 struct GreenFunction{T,E,L,S<:AppliedGreenSolver,H<:AbstractHamiltonian{T,E,L},C<:Contacts}
     parent::H
-    solver::S
+    solver::S       # an AppliedGreenSolver generates a GreenSlicer for a given ω
     contacts::C
 end
 
@@ -2175,7 +2175,7 @@ end
 # Allows also view(gω, ...)
 struct GreenSolution{T,E,L,S<:GreenSlicer,G<:GreenFunction{T,E,L},Σs}
     parent::G
-    slicer::S       # gives G(ω; p...)[i,j] for i,j::AppliedGreenIndex
+    slicer::S       # gives G(ω; p...)[i,j] for i,j CellOrbitals, Colon or Integers
     contactΣs::Σs   # Tuple of selfenergies Σ(ω)::MatrixBlock or NTuple{3,MatrixBlock}, one per contact
     contactorbs::ContactOrbitals{L}
 end

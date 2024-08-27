@@ -150,7 +150,7 @@ needs_omega_shift(s::AppliedKPMGreenSolver) = false
 #region ## apply ##
 
 function apply(s::GS.KPM,  h::Hamiltonian{T,<:Any,0}, cs::Contacts) where {T}
-    isempty(cs) && argerror("The KPM solver requires at least one contact to be added that defiens where the Green function will be computed. A dummy contact can be created with `attach(nothing; sites...)`.")
+    isempty(cs) && argerror("The KPM solver requires at least one contact to be added that defines where the Green function will be computed. A dummy contact can be created with `attach(nothing; sites...)`.")
     hmat = h(())
     bandCH = T.(band_ceter_halfwidth(hmat, s.bandrange, s.padfactor))
     ket = contact_basis(h, cs)
@@ -197,7 +197,7 @@ end
 
 function (s::AppliedKPMGreenSolver{T})(ω, Σblocks, corbitals) where {T}
     g0contacts = KPMgreen(s.momenta, ω, s.bandCH)
-    # We rely on TMatrixSlicer to incorporate contact self-energie, and to slice contacts
+    # We rely on TMatrixSlicer to incorporate contact self-energies, and to slice contacts
     gslicer = TMatrixSlicer(g0contacts, Σblocks, corbitals)
     return gslicer
 end
@@ -275,7 +275,7 @@ function (d::DensityMatrixKPMSolver)(mu, kBT; params...)
             @. ρ += d.momenta[n+1] * 2 * (sin(π*n)-sin(n*ϕ))/(π*n)
         end
     else
-        throw(argerror("KPM densitymatrix currently doesn't support finite temperatures"))
+        throw(argerror("KPM densitymatrix currently doesn't support finite temperatures. Open an issue if you need this feature."))
     end
     return ρ
 end
