@@ -1747,7 +1747,7 @@ the retarded Green function at a given site `i`.
 
 ## Keywords
 
-- `kernel` : for multiorbital sites, `kernel` allows to compute a generalized `ldos` `ρᵢ(ω) = -Tr(gᵢᵢ(ω) * kernel)/π`, where `gᵢᵢ(ω)` is the retarded Green function at site `i` and energy `ω`. If `kernel = missing`, the complete, orbital-resolved `ldos` is returned.
+- `kernel` : for multiorbital sites, `kernel` allows to compute a generalized `ldos` `ρᵢ(ω) = -imag(Tr(gᵢᵢ(ω) * kernel))/π`, where `gᵢᵢ(ω)` is the retarded Green function at site `i` and energy `ω`. If `kernel = missing`, the complete, orbital-resolved `ldos` is returned.
 
 ## Full evaluation
 
