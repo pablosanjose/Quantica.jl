@@ -2050,6 +2050,18 @@ the given `g` parameters `params`, if any.
 - `atol`: absolute integration tolerance. The default `1e-7` is chosen to avoid excessive integration times when the current is actually zero.
 - `quadgk_opts` : extra keyword arguments (other than `atol`) to pass on to the function `QuadGK.quadgk` that is used for the integration.
 
+## Note on analyticity
+
+A non-zero `slope` parameter (as is the default) moves the integration path into the
+upper-half complex-ω plane for increased performance. For this to work requires that the
+Green function and it's attached self-energies all be analytic in the upper half-plane of
+complex ω. (Technically things will work also with independent analyticity in the upper-left
+and upper-right quarter-planes). However, no check of analyticity is performed, so it is up
+to the user to ensure that. As a general rule of thumb, model self-energies that are
+combinations of simple functions of `ω` but not of `conj(ω)` (e.g. no `real(ω)` or `imag(ω)`
+anywhere), will in general be analytic. If ensuring this is not possible, consider using
+`slope = 0`.
+
 # Examples
 
 ```
