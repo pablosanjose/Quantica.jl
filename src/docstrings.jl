@@ -2092,6 +2092,16 @@ julia> J(0.0)
 josephson
 
 """
+    Quantica.integrand(J::Josephson, kBT = 0)
+
+Return the integrand `j::JosephsonDensity` whose integral over frequency yields the
+Josephson current `J(kBT)`. To evaluate the `j` for a given `ω` and parameters, use `j(ω;
+params...)`, or `call!(j, ω; params...)` for its mutating (non-allocating) version.
+
+"""
+integrand
+
+"""
     OrbitalSliceArray <: AbstractArray
 
 A type of `AbstractArray` defined over a set of orbitals (see also `orbaxes`). It wraps a
@@ -2366,7 +2376,7 @@ true
 deserialize!
 
 """
-    gaps(h::Hamiltonian1D{T}, µ = 0; atol = eps(T))
+    Quantica.gaps(h::Hamiltonian1D{T}, µ = 0; atol = eps(T))
 
 Compute the energy gaps of a 1D Hamiltonian `h` at chemical potential `µ`. The result is a
 `Vector{T}` of the local minima of the `|ϵ(ϕ) - µ|`, where `ϵ(ϕ)` is the energy band closest
@@ -2396,8 +2406,8 @@ julia> Quantica.gaps(h(U=2))
 gaps
 
 """
-    decay_lengths(g::GreenFunctionSchurLead, µ = 0; reverse = false)
-    decay_lengths(h::AbstractHamiltonian1D, µ = 0; reverse = false)
+    Quantica.decay_lengths(g::GreenFunctionSchurLead, µ = 0; reverse = false)
+    Quantica.decay_lengths(h::AbstractHamiltonian1D, µ = 0; reverse = false)
 
 Compute the decay lengths of evanescent modes of a 1D `AbstractHamiltonian` `h` or a 1D
 `GreenFunction` `g` using the `GS.Schur` solver. The modes decaying towards positive

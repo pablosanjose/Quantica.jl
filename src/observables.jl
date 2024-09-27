@@ -510,8 +510,9 @@ struct JosephsonDensity{T<:AbstractFloat,P<:Union{Missing,AbstractArray},G<:Gree
     cisτz::Vector{Complex{T}}   # preallocated workspace
 end
 
-struct Josephson{S}
+struct Josephson{S,I}
     solver::S
+    integrand::I
 end
 
 # default solver (integration in complex plane)
@@ -541,7 +542,7 @@ function josephson(gs::GreenSlice{T}, ωmax; omegamap = Returns((;)), phases = m
     ifunc(kBT; params...) = iszero(kBT) ?
         Integrator(traces, jd(kBT), (-ωmax, 0); opts´...)(; params...) :
         Integrator(traces, jd(kBT), (-ωmax, 0, ωmax); opts´...)(; params...)
-    return Josephson(JosephsonIntegratorSolver(ifunc))
+    return Josephson(JosephsonIntegratorSolver(ifunc), jd)
 end
 
 sanitize_phases_traces(::Missing, ::Type{T}) where {T} = missing, missing
@@ -558,6 +559,8 @@ end
 
 #region ## API ##
 
+integrand(J::Josephson, kBT = 0.0) = J.integrand(kBT)
+
 temperature(J::JosephsonDensity) = J.kBT
 
 contact(J::JosephsonDensity) = J.contactind
@@ -568,6 +571,8 @@ phaseshifts(J::JosephsonDensity) = real.(J.phaseshifts)
 numphaseshifts(J::JosephsonDensity) = numphaseshifts(J.phaseshifts)
 numphaseshifts(::Missing) = 0
 numphaseshifts(phaseshifts) = length(phaseshifts)
+
+(J::JosephsonDensity)(ω; params...) = copy(call!(J, ω; params...))
 
 function call!(J::JosephsonDensity, ω; params...)
     gω = call!(J.g, ω; params...)

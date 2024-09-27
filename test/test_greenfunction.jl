@@ -348,6 +348,8 @@ function testjosephson(g0)
     J2 = josephson(g0[2], 4; phases = subdiv(0, pi, 10))
     @test all(>=(0), Quantica.chopsmall.(J1()))
     @test all(((j1, j2) -> ≈(j1, j2, atol = 0.000001)).(J1(), J2()))
+    j = Quantica.integrand(J1)
+    @test Quantica.call!(j, 0.2+0.3im) isa Vector
 end
 
 @testset "greenfunction observables" begin
