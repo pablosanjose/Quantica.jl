@@ -570,6 +570,7 @@ Base.copy(ls::LatticeSlice) = LatticeSlice(ls.lat, copy(ls.cellsdict))
 
 abstract type AbstractModel end
 abstract type AbstractModelTerm end
+abstract type AbstractParametricTerm{N} <: AbstractModelTerm end
 
 # wrapper of a function f(x1, ... xN; kw...) with N arguments and the kwargs in params
 struct ParametricFunction{N,F}
@@ -613,23 +614,19 @@ end
 ## Parametric ##
 
 # We fuse applied and non-applied versions, since these only apply the selector, not f
-struct ParametricOnsiteTerm{N,S<:Union{SiteSelector,AppliedSiteSelector},F<:ParametricFunction{N},T<:Number} <: AbstractModelTerm
+struct ParametricOnsiteTerm{N,S<:Union{SiteSelector,AppliedSiteSelector},F<:ParametricFunction{N},T<:Number} <: AbstractParametricTerm{N}
     f::F
     selector::S
     coefficient::T
     spatial::Bool   # If true, f is a function of position r. Otherwise it takes a single CellSite
 end
 
-struct ParametricHoppingTerm{N,S<:Union{HopSelector,AppliedHopSelector},F<:ParametricFunction{N},T<:Number} <: AbstractModelTerm
+struct ParametricHoppingTerm{N,S<:Union{HopSelector,AppliedHopSelector},F<:ParametricFunction{N},T<:Number} <: AbstractParametricTerm{N}
     f::F
     selector::S
     coefficient::T
     spatial::Bool   # If true, f is a function of positions r, dr. Otherwise it takes two CellSite's
 end
-
-const AbstractParametricTerm{N} = Union{ParametricOnsiteTerm{N},ParametricHoppingTerm{N}}
-const AppliedParametricTerm{N} = Union{ParametricOnsiteTerm{N,<:AppliedSiteSelector},
-                                       ParametricHoppingTerm{N,<:AppliedHopSelector}}
 
 struct ParametricModel{T<:NTuple{<:Any,AbstractParametricTerm},M<:TightbindingModel} <: AbstractModel
     npmodel::M  # non-parametric model to use as base
