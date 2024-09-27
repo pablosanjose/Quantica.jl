@@ -2094,7 +2094,7 @@ josephson
 """
     Quantica.integrand(J::Josephson, kBT = 0)
 
-Returns the integrand `j::JosephsonDensity` whose integral over frequency yields the
+Return the integrand `j::JosephsonDensity` whose integral over frequency yields the
 Josephson current `J(kBT)`. To evaluate the `j` for a given `ω` and parameters, use `j(ω;
 params...)`, or `call!(j, ω; params...)` for its mutating (non-allocating) version.
 
