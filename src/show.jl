@@ -417,7 +417,7 @@ Base.summary(::Transmission) =
 function Base.show(io::IO, I::Integrator)
     i = get(io, :indent, "")
     print(io, i, summary(I), "\n",
-"$i  Integration path    : $(points(I))
+"$i  Integration path    : $(path(I))
 $i  Integration options : $(display_namedtuple(options(I)))
 $i  Integrand           : ")
     ioindent = IOContext(io, :indent => i * "  ")
@@ -432,18 +432,27 @@ display_namedtuple(nt::NamedTuple) = isempty(nt) ? "()" : "$nt"
 #endregion
 
 ############################################################################################
-# Josephson (integrand)
+# Josephson and DensityMatrix integrands
 #region
 
-function Base.show(io::IO, J::JosephsonDensity)
+function Base.show(io::IO, J::JosephsonIntegrand)
     i = get(io, :indent, "")
     print(io, summary(J), "\n",
-"$i  kBT                     : $(temperature(J))
+"$i  Temperature (kBT)       : $(temperature(J))
 $i  Contact                 : $(contact(J))
 $i  Number of phase shifts  : $(numphaseshifts(J))")
 end
 
-Base.summary(::JosephsonDensity{T}) where {T} = "JosephsonDensity{$T}"
+Base.summary(::JosephsonIntegrand{T}) where {T} = "JosephsonIntegrand{$T}"
+
+function Base.show(io::IO, D::DensityMatrixIntegrand)
+    i = get(io, :indent, "")
+    print(io, summary(D), "\n",
+"$i  Chemical potential      : $(chemicalpotential(D))
+$i  Temperature (kBT)       : $(temperature(D))")
+end
+
+Base.summary(::DensityMatrixIntegrand) = "DensityMatrixIntegrand"
 
 #endregion
 
@@ -457,7 +466,7 @@ function Base.show(io::IO, d::DensityMatrix)
 end
 
 Base.summary(::DensityMatrix{S}) where {S} =
-    "DensityMatrix: density matrix on specified sites using solver of type $(nameof(S))"
+    "DensityMatrix{$(nameof(S))}: density matrix on specified sites"
 
 #endregion
 
@@ -471,7 +480,7 @@ function Base.show(io::IO, j::Josephson)
 end
 
 Base.summary(::Josephson{S}) where {S} =
-    "Josephson: equilibrium Josephson current at a specific contact using solver of type $(nameof(S))"
+    "Josephson{$(nameof(S))}: equilibrium Josephson current at a specific contact"
 
 #endregion
 

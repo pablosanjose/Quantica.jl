@@ -1805,11 +1805,11 @@ specialized for the GreenSolver used, if available. In this case, `opts` are opt
 said algorithm.
 
     densitymatrix(gs::GreenSlice, (ωmin, ωmax); opts..., quadgk_opts...)
-    densitymatrix(gs::GreenSlice, (ωpoints...); opts..., quadgk_opts...)
+    densitymatrix(gs::GreenSlice, ωpoints; opts..., quadgk_opts...)
 
 As above, but using a generic algorithm that relies on numerical integration along a contour
 in the complex plane, between points `(ωmin, ωmax)` (or along a polygonal path connecting
-`ωpoints`), which should be chosen so as to encompass the full system bandwidth. Keywords
+`ωpoints`, a collection of numbers), which should be chosen so as to encompass the full system bandwidth. Keywords
 `quadgk_opts` are passed to the `QuadGK.quadgk` integration routine. See below for
 additiona `opts`.
 
@@ -2030,14 +2030,15 @@ true
 transmission
 
 """
-    josephson(gs::GreenSlice, (ωpoints...); omegamap = ω -> (;), phases = missing, imshift = missing, slope = 1, post = real, atol = 1e-7, quadgk_opts...)
+    josephson(gs::GreenSlice, ωpoints; omegamap = ω -> (;), phases = missing, imshift = missing, slope = 1, post = real, atol = 1e-7, quadgk_opts...)
 
 For a `gs = g[i::Integer]` slice of the `g::GreenFunction` of a hybrid junction, build a
 `J::Josephson` object representing the equilibrium (static) Josephson current `I_J` flowing
-into `g` through contact `i`, integrated along a polygonal contour connecting `ωpoints` in
-the complex plane. The result of `I_J` is given in units of `qe/h` (`q` is the dimensionless
-carrier charge). `I_J` can be written as ``I_J = Re ∫ dω f(ω) j(ω)``, where ``j(ω) = (qe/h)
-× 2Tr[(ΣʳᵢGʳ - GʳΣʳᵢ)τz]``. Here `f(ω)` is the Fermi function with `µ = 0`.
+into `g` through contact `i`, integrated along a polygonal contour connecting `ωpoints` (a
+collection of numbers) in the complex plane. The result of `I_J` is given in units of `qe/h`
+(`q` is the dimensionless carrier charge). `I_J` can be written as ``I_J = Re ∫ dω f(ω)
+j(ω)``, where ``j(ω) = (qe/h) × 2Tr[(ΣʳᵢGʳ - GʳΣʳᵢ)τz]``. Here `f(ω)` is the Fermi function
+with `µ = 0`.
 
     josephson(gs::GreenSlice, ωmax::Real; kw...)
 
@@ -2104,20 +2105,29 @@ julia> J(0.0)
 josephson
 
 """
-    Quantica.integrand(J::Josephson, kBT = 0)
+    Quantica.integrand(J::Josephson{<:JosephsonIntegratorSolver}, kBT = 0)
 
-Return the complex integrand `d::JosephsonDensity` whose integral over frequency yields the
+Return the complex integrand `d::JosephsonIntegrand` whose integral over frequency yields the
 Josephson current, `J(kBT) = post(∫dω d(ω))`, with `post = real`. To evaluate the `d` for a
 given `ω` and parameters, use `d(ω; params...)`, or `call!(d, ω; params...)` for its
 mutating (non-allocating) version.
 
-    Quantica.integrand(ρ::DensityMatrix, mu = 0, kBT = 0)
+    Quantica.integrand(ρ::DensityMatrix{<:DensityMatrixIntegratorSolver}, mu = 0, kBT = 0)
 
-Like above for the density matrix `ρ(mu, kBT)`, with `d::DensityMatrixDensity` and `post =
+Like above for the density matrix `ρ(mu, kBT)`, with `d::DensityMatrixIntegrand` and `post =
 Quantica.gf_to_rho!` that computes `-(GF-GF')/(2π*im)` in place for a matrix `GF`.
 
 """
 integrand
+
+"""
+    Quantica.path(O::Josephson, args...)
+    Quantica.path(O::DensityMatrix, args...)
+
+Return the vertices of the polygonal integration path used to compute `O(args...)`.
+"""
+path
+
 
 """
     OrbitalSliceArray <: AbstractArray

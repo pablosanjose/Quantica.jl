@@ -242,7 +242,7 @@ Integrator: Complex-plane integrator
   Integration path    : (-4.1 + 1.4901161193847656e-8im, -2.05 + 2.050000014901161im, 0.0 + 1.4901161193847656e-8im)
   Integration options : (atol = 1.0e-7,)
   Integrand:          :
-  JosephsonDensity{Float64} : Equilibrium (dc) Josephson current observable before integration over energy
+  JosephsonIntegrand{Float64} : Equilibrium (dc) Josephson current observable before integration over energy
     kBT                     : 0.0
     Contact                 : 1
     Number of phase shifts  : 0
@@ -270,7 +270,7 @@ julia> φs = subdiv(0, pi, 11); J = josephson(g[1], 4.1; phases = φs)
   Integration path    : (-4.1 + 1.4901161193847656e-8im, -2.05 + 2.050000014901161im, 0.0 + 1.4901161193847656e-8im)
   Integration options : (atol = 1.0e-7,)
   Integrand:          :
-  JosephsonDensity{Float64} : Equilibrium (dc) Josephson current observable before integration over energy
+  JosephsonIntegrand{Float64} : Equilibrium (dc) Josephson current observable before integration over energy
     kBT                     : 0.0
     Contact                 : 1
     Number of phase shifts  : 11
