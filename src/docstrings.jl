@@ -1795,73 +1795,6 @@ true
 ldos
 
 """
-
-    densitymatrix(gs::GreenSlice; opts...)
-
-Compute a `ρ::DensityMatrix` at thermal equilibrium on sites encoded in `gs`. The actual
-matrix for given system parameters `params`, and for a given chemical potential `mu` and
-temperature `kBT` is obtained by calling `ρ(mu = 0, kBT = 0; params...)`. The algorithm used is
-specialized for the GreenSolver used, if available. In this case, `opts` are options for
-said algorithm.
-
-    densitymatrix(gs::GreenSlice, (ωmin, ωmax); opts..., quadgk_opts...)
-    densitymatrix(gs::GreenSlice, ωpoints; opts..., quadgk_opts...)
-
-As above, but using a generic algorithm that relies on numerical integration along a contour
-in the complex plane, between points `(ωmin, ωmax)` (or along a polygonal path connecting
-`ωpoints`, a collection of numbers), which should be chosen so as to encompass the full system bandwidth. Keywords
-`quadgk_opts` are passed to the `QuadGK.quadgk` integration routine. See below for
-additiona `opts`.
-
-    densitymatrix(gs::GreenSlice, ωmax::Number; opts...)
-
-As above with `ωmin = -ωmax`.
-
-## Full evaluation
-
-    ρ(μ = 0, kBT = 0; params...)   # where ρ::DensityMatrix
-
-Evaluate the density matrix at chemical potential `μ` and temperature `kBT` (in the same
-units as the Hamiltonian) for the given `g` parameters `params`, if any. The result is given
-as an `OrbitalSliceMatrix`, see its docstring for further details. When the `ωpoints` are
-all real, an extra point is added at `ω = µ` to the integration path, to better integrate
-the step in the Fermi function.
-
-## Algorithms and keywords
-
-The generic integration algorithm allows for the following `opts` (see also `josephson`):
-
-- `omegamap`: a function `ω -> (; params...)` that translates `ω` at each point in the integration contour to a set of system parameters. Useful for `ParametricHamiltonians` which include terms `Σ(ω)` that depend on a parameter `ω` (one would then use `omegamap = ω -> (; ω)`). Default: `ω -> (;)`, i.e. no mapped parameters.
-- `imshift`: a small imaginary shift to add to the integration contour if all its vertices `ωpoints` are real numbers. Default: `sqrt(eps)` for the relevant number type.
-- `slope`: if `ωpoints` are all real numbers (typically encompassing the system's bandwidth), the integration contour is transformed into a triangular sawtooth path these points. Between each pair of points the path increases and then decreases linearly with the given `slope`. Default: `1.0`.
-- `post`: a function to apply to the result of the integration. Default: `identity`.
-- `callback`: a function to be called as `callback(x, y)` at each point in the integration, where `x` is the contour point and `y` is the integrand evaluated at that point. Useful for inspection and debugging, e.g. `callback(x, y) = @show x`. Default: `Returns(nothing)`.
-- `atol`: absolute integration tolerance. The default `1e-7` is chosen to avoid excessive integration times when the current is actually zero. Default `1e-7`.
-- `quadgk_opts` : extra keyword arguments (other than `atol`) to pass on to the function `QuadGK.quadgk` that is used for the integration.
-
-Currently, the following GreenSolvers implement dedicated densitymatrix algorithms:
-
-- `GS.Schur`: based on numerical integration over Bloch phase. Boundaries are not currently supported. No `opts`.
-- `GS.Spectrum`: based on summation occupation-weigthed eigenvectors. No `opts`.
-- `GS.KPM`: based on the Chebyshev expansion of the Fermi function. Currently only works for zero temperature and only supports `nothing` contacts (see `attach`). No `opts`.
-
-# Example
-```
-julia> g = HP.graphene(a0 = 1) |> supercell(region = RP.circle(10)) |> greenfunction(GS.Spectrum());
-
-julia> ρ = densitymatrix(g[region = RP.circle(0.5)])
-DensityMatrix: density matrix on specified sites with solver of type DensityMatrixSpectrumSolver
-
-julia> ρ()  # with mu = kBT = 0 by default
-2×2 OrbitalSliceMatrix{Matrix{ComplexF64}}:
-       0.5+0.0im  -0.262865+0.0im
- -0.262865+0.0im        0.5+0.0im
-```
-
-"""
-densitymatrix
-
-"""
     current(h::AbstractHamiltonian; charge = -I, direction = 1)
 
 Build an `Operator` object that behaves like a `ParametricHamiltonian` in regards to calls
@@ -2030,7 +1963,74 @@ true
 transmission
 
 """
-    josephson(gs::GreenSlice, ωpoints; omegamap = ω -> (;), phases = missing, imshift = missing, slope = 1, post = real, atol = 1e-7, quadgk_opts...)
+    densitymatrix(gs::GreenSlice; opts...)
+
+Compute a `ρ::DensityMatrix` at thermal equilibrium on sites encoded in `gs`. The actual
+matrix for given system parameters `params`, and for a given chemical potential `mu` and
+temperature `kBT` is obtained by calling `ρ(mu = 0, kBT = 0; params...)`. The algorithm used is
+specialized for the GreenSolver used, if available. In this case, `opts` are options for
+said algorithm.
+
+    densitymatrix(gs::GreenSlice, (ωmin, ωmax); opts..., quadgk_opts...)
+    densitymatrix(gs::GreenSlice, ωpoints; opts..., quadgk_opts...)
+
+As above, but using a generic algorithm that relies on numerical integration along a contour
+in the complex plane, between points `(ωmin, ωmax)` (or along a polygonal path connecting
+`ωpoints`, a collection of numbers), which should be chosen so as to encompass the full system bandwidth. Keywords
+`quadgk_opts` are passed to the `QuadGK.quadgk` integration routine. See below for
+additiona `opts`.
+
+    densitymatrix(gs::GreenSlice, ωmax::Number; opts...)
+
+As above with `ωmin = -ωmax`.
+
+## Full evaluation
+
+    ρ(μ = 0, kBT = 0; params...)   # where ρ::DensityMatrix
+
+Evaluate the density matrix at chemical potential `μ` and temperature `kBT` (in the same
+units as the Hamiltonian) for the given `g` parameters `params`, if any. The result is given
+as an `OrbitalSliceMatrix`, see its docstring for further details. When the `ωpoints` are
+all real, an extra point is added at `ω = µ` to the integration path, to better integrate
+the step in the Fermi function.
+
+## Algorithms and keywords
+
+The generic integration algorithm allows for the following `opts` (see also `josephson`):
+
+- `omegamap`: a function `ω -> (; params...)` that translates `ω` at each point in the integration contour to a set of system parameters. Useful for `ParametricHamiltonians` which include terms `Σ(ω)` that depend on a parameter `ω` (one would then use `omegamap = ω -> (; ω)`). Default: `ω -> (;)`, i.e. no mapped parameters.
+- `imshift`: a small imaginary shift to add to the integration contour if all its vertices `ωpoints` are real numbers. Default: `missing` which is equivalent to `sqrt(eps)` for the relevant number type.
+- `slope`: if `ωpoints` are all real numbers (typically encompassing the system's bandwidth), the integration contour is transformed into a triangular sawtooth path these points. Between each pair of points the path increases and then decreases linearly with the given `slope`. Default: `1.0`.
+- `post`: a function to apply to the result of the integration. Default: `identity`.
+- `callback`: a function to be called as `callback(x, y)` at each point in the integration, where `x` is the contour point and `y` is the integrand evaluated at that point. Useful for inspection and debugging, e.g. `callback(x, y) = @show x`. Default: `Returns(nothing)`.
+- `atol`: absolute integration tolerance. The default `1e-7` is chosen to avoid excessive integration times when the current is actually zero. Default `1e-7`.
+
+The `quadgk_opts` are extra keyword arguments (other than `atol`) to pass on to the function `QuadGK.quadgk` that is used for the integration.
+
+Currently, the following GreenSolvers implement dedicated densitymatrix algorithms:
+
+- `GS.Schur`: based on numerical integration over Bloch phase. Boundaries are not currently supported. No `opts`.
+- `GS.Spectrum`: based on summation occupation-weigthed eigenvectors. No `opts`.
+- `GS.KPM`: based on the Chebyshev expansion of the Fermi function. Currently only works for zero temperature and only supports `nothing` contacts (see `attach`). No `opts`.
+
+# Example
+```
+julia> g = HP.graphene(a0 = 1) |> supercell(region = RP.circle(10)) |> greenfunction(GS.Spectrum());
+
+julia> ρ = densitymatrix(g[region = RP.circle(0.5)])
+DensityMatrix: density matrix on specified sites with solver of type DensityMatrixSpectrumSolver
+
+julia> ρ()  # with mu = kBT = 0 by default
+2×2 OrbitalSliceMatrix{Matrix{ComplexF64}}:
+       0.5+0.0im  -0.262865+0.0im
+ -0.262865+0.0im        0.5+0.0im
+```
+
+"""
+densitymatrix
+
+"""
+    josephson(gs::GreenSlice, ωpoints; opts..., quadgk_opts...)
 
 For a `gs = g[i::Integer]` slice of the `g::GreenFunction` of a hybrid junction, build a
 `J::Josephson` object representing the equilibrium (static) Josephson current `I_J` flowing
@@ -2055,14 +2055,17 @@ integrate the step in the Fermi function.
 
 ## Keywords
 
+The generic integration algorithm allows for the following `opts` (see also `densitymatrix`):
+
 - `omegamap`: a function `ω -> (; params...)` that translates `ω` at each point in the integration contour to a set of system parameters. Useful for `ParametricHamiltonians` which include terms `Σ(ω)` that depend on a parameter `ω` (one would then use `omegamap = ω -> (; ω)`). Default: `ω -> (;)`, i.e. no mapped parameters.
-- `phases` : collection of superconducting phase biases to apply to the contact, so as to efficiently compute the full current-phase relation `[I_J(ϕ) for ϕ in phases]`. Note that each phase bias `ϕ` is applied by a `[cis(-ϕ/2) 0; 0 cis(ϕ/2)]` rotation to the self energy, which is almost free. If `missing`, a single `I_J` is returned.
-- `imshift`: a small imaginary shift to add to the integration contour if all its vertices `ωpoints` are real numbers. Default: `sqrt(eps)` for the relevant number type.
+- `phases` : collection of superconducting phase biases to apply to the contact, so as to efficiently compute the full current-phase relation `[I_J(ϕ) for ϕ in phases]`. Note that each phase bias `ϕ` is applied by a `[cis(-ϕ/2)*I 0*I; 0*I cis(ϕ/2)*I]` rotation to the self energy, which is almost free. If `missing`, a single `I_J` is returned.
+- `imshift`: a small imaginary shift to add to the integration contour if all its vertices `ωpoints` are real numbers. Default: `missing` which is equivalent to `sqrt(eps)` for the relevant number type.
 - `slope`: if `ωpoints`, are all real numbers (typically encompassing the system's bandwidth), the integration contour is transformed into a triangular sawtooth path these points. Between each pair of points the path increases and then decreases linearly with the given `slope`. Default: `1.0`.
 - `post`: function to apply to the result of `∫ dω f(ω) j(ω)` to obtain the result, `post = real` by default.
 - `callback`: a function to be called as `callback(x, y)` at each point in the integration, where `x` is the contour point and `y` is the integrand at that point. Useful for inspection and debugging, e.g. `callback(x, y) = @show x`. Default: `Returns(nothing)`.
 - `atol`: absolute integration tolerance. The default `1e-7` is chosen to avoid excessive integration times when the current is actually zero. Default `1e-7`.
-- `quadgk_opts` : extra keyword arguments (other than `atol`) to pass on to the function `QuadGK.quadgk` that is used for the integration.
+
+The `quadgk_opts` are extra keyword arguments (other than `atol`) to pass on to the function `QuadGK.quadgk` that is used for the integration.
 
 ## Note on analyticity
 
