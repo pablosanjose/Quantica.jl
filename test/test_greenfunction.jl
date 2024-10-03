@@ -346,10 +346,34 @@ end
 function testjosephson(g0)
     J1 = josephson(g0[1], 4; phases = subdiv(0, pi, 10))
     J2 = josephson(g0[2], 4; phases = subdiv(0, pi, 10))
-    @test all(>=(0), Quantica.chopsmall.(J1()))
-    @test all(((j1, j2) -> ≈(j1, j2, atol = 0.000001)).(J1(), J2()))
+    J3 = josephson(g0[1], (-4, 0); phases = subdiv(0, pi, 10))
+    J4 = josephson(g0[1], range(-4, 0, 3); phases = subdiv(0, pi, 10))
+    J5 = josephson(g0[1], (-4,-2+3im,0) .+ sqrt(eps(Float64))*im; phases = subdiv(0, pi, 10))
+    j1 = J1()
+    @test all(>=(0), Quantica.chopsmall.(j1))
+    @test all(((j1, j2) -> ≈(j1, j2, atol = 0.000001)).(j1, J2()))
+    @test all(((j1, j2) -> ≈(j1, j2, atol = 0.000001)).(j1, J3()))
+    @test all(((j1, j2) -> ≈(j1, j2, atol = 0.000001)).(j1, J4()))
+    @test all(((j1, j2) -> ≈(j1, j2, atol = 0.000001)).(j1, J5()))
     j = Quantica.integrand(J1)
     @test Quantica.call!(j, 0.2+0.3im) isa Vector
+    @test typeof.(Quantica.path.((J1, J2, J3, J4, J5))) ==
+        (Vector{ComplexF64}, Vector{ComplexF64}, NTuple{3, ComplexF64}, Vector{ComplexF64}, NTuple{3, ComplexF64})
+    # integration path logic
+    J = josephson(g0[1], (-4, -1))
+    @test J() <= eps(Float64)
+    p1, p2 = Quantica.path(J, 0), Quantica.path(J, 0.2)
+    @test p1 isa NTuple{3,ComplexF64}    # tuple sawtooth
+    @test p2 isa Vector{ComplexF64} && length(p2) == 5
+    J = josephson(g0[1], (-4, 0); phases = subdiv(0, pi, 10))
+    p1, p2 = Quantica.path(J, 0), Quantica.path(J, 0.2)
+    @test p1 isa NTuple{3,ComplexF64}    # tuple sawtooth
+    @test p2 isa NTuple{3,ComplexF64}
+    @test all(p2 .≈ p1)
+    J = josephson(g0[1], (-4, 1); phases = subdiv(0, pi, 10))
+    p1, p2 = Quantica.path(J, 0), Quantica.path(J, 0.2)
+    @test p1 isa Vector{ComplexF64} && length(p1) == 3 && maximum(real(p1)) == 0
+    @test p2 isa Vector{ComplexF64} && length(p2) == 5 && maximum(real(p2)) == 1
 end
 
 @testset "greenfunction observables" begin
@@ -362,6 +386,7 @@ end
     @test 2*J1(0.2; B = 0.1) ≈ J2(0.2; B = 0.1)
 
     ρ = densitymatrix(g1[cells = SA[1]], 5)
+    @test Quantica.path(ρ) isa Vector{ComplexF64} && length(Quantica.path(ρ)) == 3
     @test all(≈(0.5), diag(ρ(0, 0; B=0.3))) # half filling
     ρ = densitymatrix(g1[cells = SA[1]], 7)
     @test all(<(0.96), real(diag(ρ(4, 1; B=0.1)))) # thermal depletion
@@ -408,6 +433,13 @@ end
     g0 = LP.square() |> hamiltonian(hopping(I), orbitals = 2) |> supercell(region = RP.square(10)) |> attach(glead, reverse = true; region = contact2) |> attach(glead; region = contact1) |> greenfunction;
     testcond(g0; nambu = true)
     testjosephson(g0)
+
+    # test omegamap gets passed to integrand
+    glead = LP.square() |> hamiltonian(@onsite((;ω=0) -> SA[im*ω 1; 1 im*ω]) + hopping(I), orbitals = 2) |> supercell((1,0), region = r -> -1 <= r[2] <= 1) |> greenfunction(GS.Schur(boundary = 0));
+    g0 = LP.square() |> hamiltonian(hopping(I), orbitals = 2) |> supercell(region = RP.square(10)) |> attach(glead, reverse = true; region = contact2) |> attach(glead; region = contact1) |> greenfunction;
+    J1 = josephson(g0[1], 4; phases = subdiv(0, pi, 10), omegamap = ω ->(; ω))
+    J2 = josephson(g0[1], 4; phases = subdiv(0, pi, 10))
+    @test Quantica.integrand(J1)(-2 + 0.00001*im) != Quantica.integrand(J2)(-2 + 0.00001*im)
 
     # test fermi at zero temperature
     g = LP.linear() |> hopping(1) |> supercell(3) |> supercell |> greenfunction(GS.Spectrum())

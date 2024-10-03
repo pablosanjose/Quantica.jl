@@ -44,8 +44,12 @@
     @test nothing === show(stdout, serializer(Float64))
     @test nothing === show(stdout, serializer(Float64, decoder = (identity, v -> (v, v)), encoder = (identity, (s1, s2)->s1)))
     g = greenfunction(supercell(h) |> attach(@onsite(ω -> im*I)) |> attach(nothing))
-    @test nothing === show(stdout, josephson(g[1], 2))
-    @test nothing === show(stdout, densitymatrix(g[1], 2))
+    J = josephson(g[1], 2)
+    ρ = densitymatrix(g[1], 2)
+    @test nothing === show(stdout, J)
+    @test nothing === show(stdout, ρ)
+    @test nothing === show(stdout, Quantica.integrand(J, 0.3))
+    @test nothing === show(stdout, Quantica.integrand(ρ, 0.2, 0.3))
     h = supercell(h, 3) |> supercell
     g = greenfunction(supercell(h) |> attach(nothing), GS.KPM())
     @test nothing === show(stdout, densitymatrix(g[1]))
@@ -56,5 +60,4 @@
     w = EP.wannier90("wannier_test_tb.dat");
     @test nothing === show(stdout, w)
     @test nothing === show(stdout, position(w))
-
 end

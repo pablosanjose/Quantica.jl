@@ -1805,11 +1805,11 @@ specialized for the GreenSolver used, if available. In this case, `opts` are opt
 said algorithm.
 
     densitymatrix(gs::GreenSlice, (ωmin, ωmax); opts..., quadgk_opts...)
-    densitymatrix(gs::GreenSlice, (ωpoints...); opts..., quadgk_opts...)
+    densitymatrix(gs::GreenSlice, ωpoints; opts..., quadgk_opts...)
 
 As above, but using a generic algorithm that relies on numerical integration along a contour
 in the complex plane, between points `(ωmin, ωmax)` (or along a polygonal path connecting
-`ωpoints`), which should be chosen so as to encompass the full system bandwidth. Keywords
+`ωpoints`, a collection of numbers), which should be chosen so as to encompass the full system bandwidth. Keywords
 `quadgk_opts` are passed to the `QuadGK.quadgk` integration routine. See below for
 additiona `opts`.
 
@@ -1823,16 +1823,21 @@ As above with `ωmin = -ωmax`.
 
 Evaluate the density matrix at chemical potential `μ` and temperature `kBT` (in the same
 units as the Hamiltonian) for the given `g` parameters `params`, if any. The result is given
-as an `OrbitalSliceMatrix`, see its docstring for further details.
+as an `OrbitalSliceMatrix`, see its docstring for further details. When the `ωpoints` are
+all real, an extra point is added at `ω = µ` to the integration path, to better integrate
+the step in the Fermi function.
 
 ## Algorithms and keywords
 
 The generic integration algorithm allows for the following `opts` (see also `josephson`):
 
 - `omegamap`: a function `ω -> (; params...)` that translates `ω` at each point in the integration contour to a set of system parameters. Useful for `ParametricHamiltonians` which include terms `Σ(ω)` that depend on a parameter `ω` (one would then use `omegamap = ω -> (; ω)`). Default: `ω -> (;)`, i.e. no mapped parameters.
-- `imshift`: a small imaginary shift to add to the integration contour. Default: `sqrt(eps)` for the relevant number type.
+- `imshift`: a small imaginary shift to add to the integration contour if all its vertices `ωpoints` are real numbers. Default: `sqrt(eps)` for the relevant number type.
+- `slope`: if `ωpoints` are all real numbers (typically encompassing the system's bandwidth), the integration contour is transformed into a triangular sawtooth path these points. Between each pair of points the path increases and then decreases linearly with the given `slope`. Default: `1.0`.
 - `post`: a function to apply to the result of the integration. Default: `identity`.
-- `slope`: the integration contour is a triangular sawtooth path connecting `(ωmin, ωmax)`, or more generally `ωpoints`, which are usually real numbers encompasing the system's bandwidth. Between each pair of points the path increases and then decreases linearly with the given `slope`. Default: `1.0`.
+- `callback`: a function to be called as `callback(x, y)` at each point in the integration, where `x` is the contour point and `y` is the integrand evaluated at that point. Useful for inspection and debugging, e.g. `callback(x, y) = @show x`. Default: `Returns(nothing)`.
+- `atol`: absolute integration tolerance. The default `1e-7` is chosen to avoid excessive integration times when the current is actually zero. Default `1e-7`.
+- `quadgk_opts` : extra keyword arguments (other than `atol`) to pass on to the function `QuadGK.quadgk` that is used for the integration.
 
 Currently, the following GreenSolvers implement dedicated densitymatrix algorithms:
 
@@ -2025,42 +2030,50 @@ true
 transmission
 
 """
-    josephson(gs::GreenSlice, ωmax; omegamap = ω -> (;), phases = missing, imshift = missing, slope = 1, post = real, atol = 1e-7, quadgk_opts...)
+    josephson(gs::GreenSlice, ωpoints; omegamap = ω -> (;), phases = missing, imshift = missing, slope = 1, post = real, atol = 1e-7, quadgk_opts...)
 
 For a `gs = g[i::Integer]` slice of the `g::GreenFunction` of a hybrid junction, build a
 `J::Josephson` object representing the equilibrium (static) Josephson current `I_J` flowing
-into `g` through contact `i`, integrated from `-ωmax` to `ωmax`. The result of `I_J` is
-given in units of `qe/h` (`q` is the dimensionless carrier charge). `I_J` can be written as
-``I_J = Re ∫ dω f(ω) j(ω)``, where ``j(ω) = (qe/h) × 2Tr[(ΣʳᵢGʳ - GʳΣʳᵢ)τz]``.
+into `g` through contact `i`, integrated along a polygonal contour connecting `ωpoints` (a
+collection of numbers) in the complex plane. The result of `I_J` is given in units of `qe/h`
+(`q` is the dimensionless carrier charge). `I_J` can be written as ``I_J = Re ∫ dω f(ω)
+j(ω)``, where ``j(ω) = (qe/h) × 2Tr[(ΣʳᵢGʳ - GʳΣʳᵢ)τz]``. Here `f(ω)` is the Fermi function
+with `µ = 0`.
+
+    josephson(gs::GreenSlice, ωmax::Real; kw...)
+
+As above, but with `ωpoints = (-ωmax, ωmax)`.
 
 ## Full evaluation
 
     J(kBT = 0; params...)   # where J::Josephson
 
-Evaluate the current `I_J` at temperature `kBT` (in the same units as the Hamiltonian) for
-the given `g` parameters `params`, if any.
+Evaluate the current `I_J` at chemical potemtial `µ = 0` and temperature `kBT` (in the same
+units as the Hamiltonian) for the given `g` parameters `params`, if any. When the `ωpoints`
+are all real, an extra point is added at `ω = 0` to the integration path, to better
+integrate the step in the Fermi function.
 
 ## Keywords
 
 - `omegamap`: a function `ω -> (; params...)` that translates `ω` at each point in the integration contour to a set of system parameters. Useful for `ParametricHamiltonians` which include terms `Σ(ω)` that depend on a parameter `ω` (one would then use `omegamap = ω -> (; ω)`). Default: `ω -> (;)`, i.e. no mapped parameters.
 - `phases` : collection of superconducting phase biases to apply to the contact, so as to efficiently compute the full current-phase relation `[I_J(ϕ) for ϕ in phases]`. Note that each phase bias `ϕ` is applied by a `[cis(-ϕ/2) 0; 0 cis(ϕ/2)]` rotation to the self energy, which is almost free. If `missing`, a single `I_J` is returned.
-- `imshift`: if `missing` the initial and final integration points `± ωmax` are shifted by `im * sqrt(eps(ωmax))`, to avoid the real axis. Otherwise a shift `im*imshift` is applied (may be zero if `ωmax` is greater than the bandwidth).
-- `slope`: if non-zero, the integration will be performed along a piecewise-linear path in the complex plane `(-ωmax, -ωmax/2 * (1+slope*im), 0, ωmax/2 * (1+slope*im), ωmax)`, taking advantage of the holomorphic integrand `f(ω) j(ω)` and the Cauchy Integral Theorem for faster convergence.
+- `imshift`: a small imaginary shift to add to the integration contour if all its vertices `ωpoints` are real numbers. Default: `sqrt(eps)` for the relevant number type.
+- `slope`: if `ωpoints`, are all real numbers (typically encompassing the system's bandwidth), the integration contour is transformed into a triangular sawtooth path these points. Between each pair of points the path increases and then decreases linearly with the given `slope`. Default: `1.0`.
 - `post`: function to apply to the result of `∫ dω f(ω) j(ω)` to obtain the result, `post = real` by default.
-- `atol`: absolute integration tolerance. The default `1e-7` is chosen to avoid excessive integration times when the current is actually zero.
+- `callback`: a function to be called as `callback(x, y)` at each point in the integration, where `x` is the contour point and `y` is the integrand at that point. Useful for inspection and debugging, e.g. `callback(x, y) = @show x`. Default: `Returns(nothing)`.
+- `atol`: absolute integration tolerance. The default `1e-7` is chosen to avoid excessive integration times when the current is actually zero. Default `1e-7`.
 - `quadgk_opts` : extra keyword arguments (other than `atol`) to pass on to the function `QuadGK.quadgk` that is used for the integration.
 
 ## Note on analyticity
 
 A non-zero `slope` parameter (as is the default) moves the integration path into the
-upper-half complex-ω plane for increased performance. For this to work requires that the
-Green function and it's attached self-energies all be analytic in the upper half-plane of
-complex ω. (Technically things will work also with independent analyticity in the upper-left
-and upper-right quarter-planes). However, no check of analyticity is performed, so it is up
-to the user to ensure that. As a general rule of thumb, model self-energies that are
-combinations of simple functions of `ω` but not of `conj(ω)` (e.g. no `real(ω)` or `imag(ω)`
-anywhere), will in general be analytic. If ensuring this is not possible, consider using
-`slope = 0`.
+upper-half complex-ω plane for increased performance. For this to work it's necessary that
+the Green function and it's attached self-energies all be analytic in the upper half-plane
+of complex ω. (Technically things will work also with independent analyticity in the
+upper-left and upper-right quarter-planes, since the path passes 0 by default). However, no
+check of analyticity is performed, so it is up to the user to ensure that. If this is not
+possible, consider using `slope = 0`, or choosing a set of `ωpoints` that avoids
+non-analyticities and cuts.
 
 # Examples
 
@@ -2092,14 +2105,29 @@ julia> J(0.0)
 josephson
 
 """
-    Quantica.integrand(J::Josephson, kBT = 0)
+    Quantica.integrand(J::Josephson{<:JosephsonIntegratorSolver}, kBT = 0)
 
-Return the integrand `j::JosephsonDensity` whose integral over frequency yields the
-Josephson current `J(kBT)`. To evaluate the `j` for a given `ω` and parameters, use `j(ω;
-params...)`, or `call!(j, ω; params...)` for its mutating (non-allocating) version.
+Return the complex integrand `d::JosephsonIntegrand` whose integral over frequency yields the
+Josephson current, `J(kBT) = post(∫dω d(ω))`, with `post = real`. To evaluate the `d` for a
+given `ω` and parameters, use `d(ω; params...)`, or `call!(d, ω; params...)` for its
+mutating (non-allocating) version.
+
+    Quantica.integrand(ρ::DensityMatrix{<:DensityMatrixIntegratorSolver}, mu = 0, kBT = 0)
+
+Like above for the density matrix `ρ(mu, kBT)`, with `d::DensityMatrixIntegrand` and `post =
+Quantica.gf_to_rho!` that computes `-(GF-GF')/(2π*im)` in place for a matrix `GF`.
 
 """
 integrand
+
+"""
+    Quantica.path(O::Josephson, args...)
+    Quantica.path(O::DensityMatrix, args...)
+
+Return the vertices of the polygonal integration path used to compute `O(args...)`.
+"""
+path
+
 
 """
     OrbitalSliceArray <: AbstractArray

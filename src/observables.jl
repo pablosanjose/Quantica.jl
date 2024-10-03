@@ -68,29 +68,50 @@ end
 #   The path is piecewise linear in the form of a triangular sawtooth with a given ± slope
 #region
 
-struct Integrator{I,T,P,O<:NamedTuple,M,F}
+struct Integrator{I,T,P,O<:NamedTuple,C,F}
     integrand::I    # call!(integrand, ω::Complex; params...)::Union{Number,Array{Number}}
     points::P       # a collection of points that form the triangular sawtooth integration path
     result::T       # can be missing (for scalar integrand) or a mutable type (nonscalar)
-    opts::O         # kwargs for quadgk
-    omegamap::M     # function that maps ω to parameters
+    quadgk_opts::O  # kwargs for quadgk
+    callback::C     # callback to call at each integration step (callback(ω, i(ω)))
     post::F         # function to apply to the integrand at the end of integration
 end
 
 #region ## Constructor ##
 
-function Integrator(result, f, pts; omegamap = Returns((;)), imshift = missing, post = identity, slope = 1, opts...)
+function Integrator(result, f, pts; imshift = missing, post = identity, slope = 0, callback = Returns(nothing), quadgk_opts...)
     imshift´ = imshift === missing ?
         sqrt(eps(promote_type(typeof.(float.(real.(pts)))...))) : float(imshift)
+    sanitize_integration_points(pts)
     pts´ = apply_complex_shifts(pts, imshift´, slope)
-    opts´ = NamedTuple(opts)
-    return Integrator(f, pts´, result, opts´, omegamap, post)
+    quadgk_opts´ = NamedTuple(quadgk_opts)
+    return Integrator(f, pts´, result, quadgk_opts´, callback, post)
 end
 
 Integrator(f, pts; kw...) = Integrator(missing, f, pts; kw...)
 
-apply_complex_shifts(pts::Tuple, imshift, slope) =
+sanitize_integration_points(pts::Vector{<:Real}) = unique!(sort!(pts))
+sanitize_integration_points(pts::Vector) = unique!(pts)
+sanitize_integration_points(pts::AbstractRange) = sort(pts)
+
+# fallback
+function sanitize_integration_points(pts)
+    if promote_type(typeof.(pts)...) <: Real
+        issorted(pts) || argerror("Real integrated points should in general be sorted, got $pts")
+    else
+        allunique(pts) || argerror("Complex integrated points should in general be all unique, got $pts")
+    end
+    return pts
+end
+
+# If all points are real, apply sawtooth with slope
+apply_complex_shifts(pts::NTuple{<:Any,Real}, imshift, slope) =
     iszero(slope) ? pts .+ (im * imshift) : triangular_sawtooth(imshift, slope, pts)
+apply_complex_shifts(pts::AbstractVector{<:Real}, imshift, slope) =
+    iszero(slope) ? (pts .+ (im * imshift)) : triangular_sawtooth(imshift, slope, pts)
+
+# Otherwise do not modify
+apply_complex_shifts(pts, imshift, slope) = pts
 
 triangular_sawtooth(is, sl, ωs::Tuple) = _triangular_sawtooth(is, sl, (), ωs...)
 _triangular_sawtooth(is, sl, ::Tuple{}, ω1, ωs...) = _triangular_sawtooth(is, sl, (ω1 + im * is,), ωs...)
@@ -98,29 +119,49 @@ _triangular_sawtooth(is, sl, ωs´, ωn, ωs...) = _triangular_sawtooth(is, sl,
     (ωs´..., 0.5 * (real(last(ωs´)) + ωn) + im * (is + sl * 0.5*(ωn - real(last(ωs´)))), ωn + im * is), ωs...)
 _triangular_sawtooth(is, sl, ωs´) = ωs´
 
+function triangular_sawtooth(imshift, slope, pts::Vector{T}) where {T<:Real}
+    pts´ = pts .+ (im*imshift)
+    for i in 2:length(pts)
+        mid = 0.5 * (pts[i-1] + pts[i]) + im * (imshift + slope * 0.5 * (pts[i] - pts[i-1]))
+        push!(pts´, mid)
+    end
+    sort!(pts´, by = real)
+    return pts´
+end
+
+triangular_sawtooth(imshift, slope, pts) = triangular_sawtooth(imshift, slope, [pts...])
+
 #endregion
 
 #region ## API ##
 
 integrand(I::Integrator) = I.integrand
 
-points(I::Integrator) = I.points
+path(I::Integrator) = I.points
 
-options(I::Integrator) = I.opts
+options(I::Integrator) = I.quadgk_opts
 
 ## call! ##
 # scalar version
 function call!(I::Integrator{<:Any,Missing}; params...)
-    fx = x -> call!(I.integrand, x; I.omegamap(x)..., params...)
-    result, err = quadgk(fx, I.points...; I.opts...)
+    fx = x -> begin
+        y = call!(I.integrand, x; params...)
+        I.callback(x, y)
+        return y
+    end
+    result, err = quadgk(fx, I.points...; I.quadgk_opts...)
     result´ = I.post(result)
     return result´
 end
 
 # nonscalar version
 function call!(I::Integrator; params...)
-    fx! = (y, x) -> (y .= call!(I.integrand, x; I.omegamap(x)..., params...))
-    result, err = quadgk!(fx!, I.result, I.points...; I.opts...)
+    fx! = (y, x) -> begin
+        y .= call!(I.integrand, x; params...)
+        I.callback(x, y)
+        return y
+    end
+    result, err = quadgk!(fx!, I.result, I.points...; I.quadgk_opts...)
     result´ = I.post(result)  # note: post-processing is not element-wise & can be in-place
     return result´
 end
@@ -412,12 +453,21 @@ end
 
 ############################################################################################
 # densitymatrix: equilibrium (static) ρ::DensityMatrix
-#   ρ = densitymatrix(g::GreenSlice, (ωmin, ωmax); opts...)
-#   ρ(mu, kBT = 0; params...) gives the DensityMatrix that is solved with an integral over (ωmin, ωmax)
+#   ρ = densitymatrix(g::GreenSlice, ωpoints; opts...)
+#   ρ(mu, kBT = 0; params...) gives the DensityMatrix that is solved with an integral over
+#   a polygonal path connecting (ωpoints...) in the complex plane,
 #       ρ(mu, kBT; params...) = -(1/π) Im ∫dω f(ω) g(ω; params...)
 #   ρ = densitymatrix(g::GreenSlice; opts...) uses a GreenSolver-specific algorithm
 #   Keywords opts are passed to QuadGK.quadgk for the integral or the algorithm used
 #region
+
+# this produces gs(ω; params...) * f(ω-mu). Use post = gf_to_rho! after integration
+struct DensityMatrixIntegrand{G<:GreenSlice,T,O}
+    gs::G
+    mu::T
+    kBT::T
+    omegamap::O
+end
 
 # Default solver (integration in complex plane)
 struct DensityMatrixIntegratorSolver{I}
@@ -431,10 +481,14 @@ end
 
 #region ## Constructors ##
 
+# generic fallback (for other solvers)
 (ρ::DensityMatrix)(mu = 0, kBT = 0; params...) = ρ.solver(mu, kBT; params...) |>
     maybe_OrbitalSliceArray(axes(ρ.gs))
+# special case for integrator solver
+(ρ::DensityMatrix{<:DensityMatrixIntegratorSolver})(mu = 0, kBT = 0; params...) = ρ.solver(mu, kBT)(; params...) |>
+    maybe_OrbitalSliceArray(axes(ρ.gs))
 
-(s::DensityMatrixIntegratorSolver)(mu, kBT; params...) = s.ifunc(mu, kBT; params...)
+(s::DensityMatrixIntegratorSolver)(mu, kBT) = s.ifunc(mu, kBT);
 
 # redirects to specialized method
 densitymatrix(gs::GreenSlice; kw...) =
@@ -447,14 +501,51 @@ densitymatrix(s::AppliedGreenSolver, gs::GreenSlice; kw...) =
 # default integrator solver
 densitymatrix(gs::GreenSlice, ωmax::Number; opts...) = densitymatrix(gs, (-ωmax, ωmax); opts...)
 
-function densitymatrix(gs::GreenSlice{T}, (ωmin, ωmax)::Tuple; omegamap = Returns((;)), imshift = missing, atol = 1e-7, opts...) where {T}
+function densitymatrix(gs::GreenSlice{T}, ωpoints; omegamap = Returns((;)), imshift = missing, atol = 1e-7, opts...) where {T}
     check_nodiag_axes(gs)
     result = similar_Matrix(gs)
-    opts´ = (; omegamap, imshift, slope = 1, post = gf_to_rho!, atol, opts...)
-    integratorfunc(mu, kBT; params...) = iszero(kBT) ?
-        Integrator(result, GFermi(gs, T(mu), T(kBT)), (ωmin, mu); opts´...)(; params...) :
-        Integrator(result, GFermi(gs, T(mu), T(kBT)), (ωmin, mu, ωmax); opts´...)(; params...)
-    return DensityMatrix(DensityMatrixIntegratorSolver(integratorfunc), gs)
+    opts´ = (; imshift, slope = 1, post = gf_to_rho!, atol, opts...)
+    ωpoints_vec = collect(promote_type(T, typeof.(ωpoints)...), ωpoints)
+    ifunc(mu, kBT) = Integrator(result, DensityMatrixIntegrand(gs, T(mu), T(kBT), omegamap),
+        maybe_insert_mu!(ωpoints_vec, ωpoints, mu, kBT); opts´...)
+    return DensityMatrix(DensityMatrixIntegratorSolver(ifunc), gs)
+end
+
+# If all pts are real, maybe_insert_mu! inserts mu and orders. pts can be any container.
+maybe_insert_mu!(pts´, pts, mu, kBT) =
+    maybe_insert_mu!(pts´, pts, promote_type(typeof.(pts)...), mu, kBT)
+
+maybe_insert_mu!(pts´, pts, _, mu, kBT) = pts
+function maybe_insert_mu!(pts´, pts, ::Type{<:Real}, mu, kBT)
+    # union spitting handles this type instability
+    if (iszero(kBT) && maximum(pts) <= mu) || any(≈(mu), pts)
+        return pts
+    else
+        return maybe_insert_mu!(copyto!(resize!(pts´, length(pts)), pts), mu, kBT)
+    end
+end
+
+function maybe_insert_mu!(pts::AbstractVector{<:Real}, mu, kBT)
+    sort!(push!(pts, mu))
+    # If kBT = 0 it we filter out pts <= mu
+    # it's unclear whether this is useful. It allocates less, but I don't see any speedup.
+    iszero(kBT) && filter!(<=(mu), pts)
+    return pts
+end
+
+maybe_insert_mu!(pts, mu, kBT) = pts
+
+#endregion
+
+#region ## API ##
+
+(gf::DensityMatrixIntegrand)(ω; params...) = copy(call!(gf, ω; params...))
+
+function call!(gf::DensityMatrixIntegrand, ω; params...)
+    gω = call!(gf.gs, ω; gf.omegamap(ω)..., params...)
+    f = fermi(ω - gf.mu, inv(gf.kBT))
+    gω .*= f
+    return gω
 end
 
 function gf_to_rho!(x)
@@ -463,22 +554,13 @@ function gf_to_rho!(x)
     return x
 end
 
-#endregion
+integrand(ρ::DensityMatrix{<:DensityMatrixIntegratorSolver}, mu = 0.0, kBT = 0.0) = integrand(ρ.solver(mu, kBT))
 
-#region ## API ##
+path(ρ::DensityMatrix{<:DensityMatrixIntegratorSolver}, mu = 0.0, kBT = 0.0) = path(ρ.solver(mu, kBT))
 
-struct GFermi{G<:GreenSlice,T}
-    gs::G
-    mu::T
-    kBT::T
-end
+temperature(D::DensityMatrixIntegrand) = D.kBT
 
-function call!(gf::GFermi, ω; params...)
-    gω = call!(gf.gs, ω; params...)
-    f = fermi(ω - gf.mu, inv(gf.kBT))
-    gω .*= f
-    return gω
-end
+chemicalpotential(D::DensityMatrixIntegrand) = D.mu
 
 #endregion
 
@@ -495,12 +577,13 @@ end
 #   Keywords opts are passed to quadgk for the integral
 #region
 
-struct JosephsonDensity{T<:AbstractFloat,P<:Union{Missing,AbstractArray},G<:GreenFunction{T}}
+struct JosephsonIntegrand{T<:AbstractFloat,P<:Union{Missing,AbstractArray},O,G<:GreenFunction{T}}
     g::G
     kBT::T
     contactind::Int             # contact index
     tauz::Vector{Int}           # precomputed diagonal of tauz
     phaseshifts::P              # missing or collection of phase shifts to apply
+    omegamap::O                 # function that maps ω to parameters
     traces::P                   # preallocated workspace
     Σ::Matrix{Complex{T}}       # preallocated workspace, full self-energy
     ΣggΣ::Matrix{Complex{T}}    # preallocated workspace
@@ -510,9 +593,9 @@ struct JosephsonDensity{T<:AbstractFloat,P<:Union{Missing,AbstractArray},G<:Gree
     cisτz::Vector{Complex{T}}   # preallocated workspace
 end
 
-struct Josephson{S,I}
+struct Josephson{S,G<:GreenSlice}
     solver::S
-    integrand::I
+    gs::G  # currently unused, but parallels DensityMatrix (used for OrbitalSliceArray conv)
 end
 
 # default solver (integration in complex plane)
@@ -522,11 +605,17 @@ end
 
 #region ## Constructors ##
 
+# generic fallback (for other solvers)
 (j::Josephson)(kBT = 0; params...) = j.solver(kBT; params...)
+# special case for integrator solver
+(j::Josephson{<:JosephsonIntegratorSolver})(kBT = 0; params...) = j.solver(kBT)(; params...)
 
-(s::JosephsonIntegratorSolver)(kBT; params...) = s.ifunc(kBT; params...)
+(s::JosephsonIntegratorSolver)(kBT) = s.ifunc(kBT)
 
-function josephson(gs::GreenSlice{T}, ωmax; omegamap = Returns((;)), phases = missing, imshift = missing, atol = 1e-7, opts...) where {T}
+josephson(gs::GreenSlice{T}, ωmax::Number; kw...) where {T} =
+    josephson(gs, (-ωmax, ωmax); kw...)
+
+function josephson(gs::GreenSlice{T}, ωpoints; omegamap = Returns((;)), phases = missing, imshift = missing, atol = 1e-7, opts...) where {T}
     check_nodiag_axes(gs)
     check_same_contact_slice(gs)
     contact = rows(gs)
@@ -536,13 +625,15 @@ function josephson(gs::GreenSlice{T}, ωmax; omegamap = Returns((;)), phases = m
     normalsize = normal_size(hamiltonian(g))
     tauz = tauz_diag.(axes(Σ, 1), normalsize)
     phases´, traces = sanitize_phases_traces(phases, T)
-    jd(kBT) = JosephsonDensity(g, T(kBT), contact, tauz, phases´,
-        traces, Σfull, Σ, similar(Σ), similar(Σ), similar(Σ), similar(tauz, Complex{T}))
-    opts´ = (; omegamap, imshift, slope = 1, post = real, atol, opts...)
-    ifunc(kBT; params...) = iszero(kBT) ?
-        Integrator(traces, jd(kBT), (-ωmax, 0); opts´...)(; params...) :
-        Integrator(traces, jd(kBT), (-ωmax, 0, ωmax); opts´...)(; params...)
-    return Josephson(JosephsonIntegratorSolver(ifunc), jd)
+    opts´ = (; imshift, slope = 1, post = real, atol, opts...)
+    ωpoints_vec = collect(promote_type(T, typeof.(ωpoints)...), ωpoints)
+    function ifunc(kBT)
+        jd = JosephsonIntegrand(g, T(kBT), contact, tauz, phases´, omegamap,
+            traces, Σfull, Σ, similar(Σ), similar(Σ), similar(Σ), similar(tauz, Complex{T}))
+        pts = maybe_insert_mu!(ωpoints_vec, ωpoints, zero(T), kBT)
+        return Integrator(traces, jd, pts; opts´...)
+    end
+    return Josephson(JosephsonIntegratorSolver(ifunc), gs)
 end
 
 sanitize_phases_traces(::Missing, ::Type{T}) where {T} = missing, missing
@@ -559,23 +650,25 @@ end
 
 #region ## API ##
 
-integrand(J::Josephson, kBT = 0.0) = J.integrand(kBT)
+integrand(J::Josephson{<:JosephsonIntegratorSolver}, kBT = 0.0) = integrand(J.solver(kBT))
 
-temperature(J::JosephsonDensity) = J.kBT
+path(J::Josephson{<:JosephsonIntegratorSolver}, kBT = 0.0) = path(J.solver(kBT))
 
-contact(J::JosephsonDensity) = J.contactind
+temperature(J::JosephsonIntegrand) = J.kBT
 
-phaseshifts(I::Integrator{<:JosephsonDensity}) = phaseshifts(integrand(I))
-phaseshifts(J::JosephsonDensity) = real.(J.phaseshifts)
+contact(J::JosephsonIntegrand) = J.contactind
 
-numphaseshifts(J::JosephsonDensity) = numphaseshifts(J.phaseshifts)
+phaseshifts(I::Integrator{<:JosephsonIntegrand}) = phaseshifts(integrand(I))
+phaseshifts(J::JosephsonIntegrand) = real.(J.phaseshifts)
+
+numphaseshifts(J::JosephsonIntegrand) = numphaseshifts(J.phaseshifts)
 numphaseshifts(::Missing) = 0
 numphaseshifts(phaseshifts) = length(phaseshifts)
 
-(J::JosephsonDensity)(ω; params...) = copy(call!(J, ω; params...))
+(J::JosephsonIntegrand)(ω; params...) = copy(call!(J, ω; params...))
 
-function call!(J::JosephsonDensity, ω; params...)
-    gω = call!(J.g, ω; params...)
+function call!(J::JosephsonIntegrand, ω; params...)
+    gω = call!(J.g, ω; J.omegamap(ω)..., params...)
     f = fermi(ω, inv(J.kBT))
     traces = josephson_traces(J, gω, f)
     return traces
@@ -587,7 +680,7 @@ function josephson_traces(J, gω, f)
     return josephson_traces!(J, gr, Σi, f)
 end
 
-josephson_traces!(J::JosephsonDensity{<:Any,Missing}, gr, Σi, f) = josephson_one_trace!(J, gr, Σi, f)
+josephson_traces!(J::JosephsonIntegrand{<:Any,Missing}, gr, Σi, f) = josephson_one_trace!(J, gr, Σi, f)
 
 function josephson_traces!(J, gr, Σi, f)
     for (i, phaseshift) in enumerate(J.phaseshifts)
