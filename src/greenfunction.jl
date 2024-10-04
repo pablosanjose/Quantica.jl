@@ -78,52 +78,9 @@ needs_omega_shift(s::AppliedGreenSolver) = true
 #endregion
 
 ############################################################################################
-# FixedParamGreenSolver
-#   support for g(; params...) --> GreenFunction (not a wrapper, completely independent)
-#   FixedParamGreenSolver doesn't need to implement the AppliedGreenSolver API, since it
-#   forwards to its parent
-#region
-
-struct FixedParamGreenSolver{P,G<:GreenFunction} <: AppliedGreenSolver
-    gparent::G
-    params::P
-end
-
-Base.parent(s::FixedParamGreenSolver) = s.gparent
-
-parameters(s::FixedParamGreenSolver) = s.params
-
-function (g::GreenFunction)(; params...)
-    h´ = minimal_callsafe_copy(parent(g))
-    c´ = minimal_callsafe_copy(contacts(g))
-    s´ = minimal_callsafe_copy(solver(g), h´, c´)
-    gparent = GreenFunction(h´, s´, c´)
-    return GreenFunction(h´, FixedParamGreenSolver(gparent, params), c´)
-end
-
-(g::GreenSlice)(; params...) = GreenSlice(parent(g)(; params...), greenindices(g)...)
-
-# params are ignored, solver.params are used instead. T required to disambiguate.
-function call!(g::GreenFunction{T,<:Any,<:Any,<:FixedParamGreenSolver}, ω::Complex{T}; params...) where {T}
-    s = solver(g)
-    return call!(s.gparent, ω; s.params...)
-end
-
-function minimal_callsafe_copy(s::FixedParamGreenSolver, parentham, parentcontacts)
-    solver´ = minimal_callsafe_copy(solver(s.gparent), parentham, parentcontacts)
-    gparent = GreenFunction(parentham, solver´, parentcontacts)
-    s´ = FixedParamGreenSolver(gparent, s.params)
-    return s´
-end
-
-default_hamiltonian(g::GreenFunction{<:Any,<:Any,<:Any,<:FixedParamGreenSolver}) =
-    default_hamiltonian(parent(g); parameters(solver(g))...)
-
-#endregion
-
-############################################################################################
 # GreenSolution indexing
 #   We convert any index down to cellorbs to pass to slicer, except contacts (Int, Colon)
+#   If we index with CellIndices, we bypass mortaring and return a bare matrix
 #region
 
 Base.getindex(g::GreenFunction, i, j = i) = GreenSlice(g, i, j)
@@ -242,6 +199,50 @@ apply_kernel(kernel::Diagonal, v::Number) = only(kernel) * v
 
 maybe_scalarize(s::OrbitalSliceGrouped, kernel::Missing) = s
 maybe_scalarize(s::OrbitalSliceGrouped, kernel) = scalarize(s)
+
+#endregion
+
+############################################################################################
+# FixedParamGreenSolver
+#   support for g(; params...) --> GreenFunction (not a wrapper, completely independent)
+#   FixedParamGreenSolver doesn't need to implement the AppliedGreenSolver API, since it
+#   forwards to its parent
+#region
+
+struct FixedParamGreenSolver{P,G<:GreenFunction} <: AppliedGreenSolver
+    gparent::G
+    params::P
+end
+
+Base.parent(s::FixedParamGreenSolver) = s.gparent
+
+parameters(s::FixedParamGreenSolver) = s.params
+
+function (g::GreenFunction)(; params...)
+    h´ = minimal_callsafe_copy(parent(g))
+    c´ = minimal_callsafe_copy(contacts(g))
+    s´ = minimal_callsafe_copy(solver(g), h´, c´)
+    gparent = GreenFunction(h´, s´, c´)
+    return GreenFunction(h´, FixedParamGreenSolver(gparent, params), c´)
+end
+
+(g::GreenSlice)(; params...) = GreenSlice(parent(g)(; params...), greenindices(g)...)
+
+# params are ignored, solver.params are used instead. T required to disambiguate.
+function call!(g::GreenFunction{T,<:Any,<:Any,<:FixedParamGreenSolver}, ω::Complex{T}; params...) where {T}
+    s = solver(g)
+    return call!(s.gparent, ω; s.params...)
+end
+
+function minimal_callsafe_copy(s::FixedParamGreenSolver, parentham, parentcontacts)
+    solver´ = minimal_callsafe_copy(solver(s.gparent), parentham, parentcontacts)
+    gparent = GreenFunction(parentham, solver´, parentcontacts)
+    s´ = FixedParamGreenSolver(gparent, s.params)
+    return s´
+end
+
+default_hamiltonian(g::GreenFunction{<:Any,<:Any,<:Any,<:FixedParamGreenSolver}) =
+    default_hamiltonian(parent(g); parameters(solver(g))...)
 
 #endregion
 
