@@ -502,8 +502,8 @@ densitymatrix(s::AppliedGreenSolver, gs::GreenSlice; kw...) =
 densitymatrix(gs::GreenSlice, ωmax::Number; opts...) = densitymatrix(gs, (-ωmax, ωmax); opts...)
 
 function densitymatrix(gs::GreenSlice{T}, ωpoints; omegamap = Returns((;)), imshift = missing, atol = 1e-7, opts...) where {T}
-    check_nodiag_axes(gs)
-    result = similar_Matrix(gs)
+    # check_nodiag_axes(gs)
+    result = similar_Array(gs)
     opts´ = (; imshift, slope = 1, post = gf_to_rho!, atol, opts...)
     ωpoints_vec = collect(promote_type(T, typeof.(ωpoints)...), ωpoints)
     function ifunc(mu, kBT, override)
@@ -527,10 +527,6 @@ function maybe_insert_mu!(pts´, pts, ::Type{<:Real}, mu, kBT)
     else
         return maybe_insert_mu!(copyto!(resize!(pts´, length(pts)), pts), mu, kBT)
     end
-function gf_to_rho!(x::AbstractMatrix)
-    x .= x .- x'
-    x .*= -1/(2π*im)
-    return x
 end
 
 function maybe_insert_mu!(pts::AbstractVector{<:Real}, mu, kBT)
