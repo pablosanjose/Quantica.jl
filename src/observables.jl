@@ -527,6 +527,10 @@ function maybe_insert_mu!(pts´, pts, ::Type{<:Real}, mu, kBT)
     else
         return maybe_insert_mu!(copyto!(resize!(pts´, length(pts)), pts), mu, kBT)
     end
+function gf_to_rho!(x::AbstractMatrix)
+    x .= x .- x'
+    x .*= -1/(2π*im)
+    return x
 end
 
 function maybe_insert_mu!(pts::AbstractVector{<:Real}, mu, kBT)
@@ -564,8 +568,15 @@ function call!(gf::DensityMatrixIntegrand, ω; params...)
     return gω
 end
 
-function gf_to_rho!(x)
+function gf_to_rho!(x::AbstractMatrix)
     x .= x .- x'
+    x .*= -1/(2π*im)
+    return x
+end
+
+# For diagonal indexing
+function gf_to_rho!(x::AbstractVector)
+    x .= x .- conj.(x)
     x .*= -1/(2π*im)
     return x
 end

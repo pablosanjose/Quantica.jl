@@ -659,10 +659,11 @@ decay_lengths(g::AbstractHamiltonian1D, µ = 0, args...; params...) =
 # densitymatrix
 #region
 
-struct DensityMatrixSchurSolver{T,A,G<:GreenFunctionSchurLead{T},O<:NamedTuple}
+struct DensityMatrixSchurSolver{T,A,G<:GreenFunctionSchurLead{T},R,O<:NamedTuple}
     g::G                            # parent of GreenSlice
     axes::Tuple{A,A}                # axes of GreenSlice (orbrows, orbcols)
-    ρmat::Matrix{Complex{T}}        # it spans the full orbitalslices (axes) of GreenSlice
+    ρmat::R                         # it spans the full orbitalslices (axes) of GreenSlice.
+                                    # can be a Matrix or a Vector (if A::DiagIndices)
     hmat::Matrix{Complex{T}}        # it spans just the unit cell, dense Bloch matrix
     psis::Matrix{Complex{T}}        # it spans just the unit cell, Eigenstates
     fmat::Matrix{Complex{T}}        # it spans just the unit cell, f(hmat)
@@ -674,10 +675,10 @@ end
 function densitymatrix(s::AppliedSchurGreenSolver, gs::GreenSlice; atol = 1e-7, quadgk_opts...)
     isempty(boundaries(s)) ||
         argerror("Boundaries not implemented for DensityMatrixSchurSolver. Consider using the generic integration solver.")
-    check_nodiag_axes(gs)
+    # check_nodiag_axes(gs)
     g = parent(gs)
-    ρmat = similar_Matrix(gs)
-    hmat = similar_Matrix(hamiltonian(g))
+    ρmat = similar_Array(gs)
+    hmat = similar_Array(hamiltonian(g))
     psis = similar(hmat)
     fmat = similar(hmat)
     axes = orbrows(gs), orbcols(gs)
@@ -690,6 +691,7 @@ end
 
 ## call
 
+# use computed Fermi points to integrate spectral function by segments
 function (s::DensityMatrixSchurSolver)(µ, kBT; params...)
     λs = propagating_eigvals(s.g, µ + 0im, 1e-2; params...)
     ϕs = @. real(-im*log(λs))
@@ -718,7 +720,7 @@ function fermi_h!(s, ϕ, µ, β = 0; params...)
 end
 
 # fillblock! consistent with Base.getindex(g::GreenSolution, args...) see greenfunction.jl
-
+# uses views into fmat = f(ϵₙ) * ψₙ * ψₘ' to fill blocks in the ρmat = parent or OrbitalSliceMatrix
 function fillblocks!(ρmat, fmat, ϕ, i, j)
     oj = 0  # offsets
     for cj in cellsdict_or_single_cellorbs(j)

@@ -2221,11 +2221,14 @@ OrbitalSliceArray, OrbitalSliceVector, OrbitalSliceMatrix
 
 
 """
-    diagonal(args...)
+    diagonal(inds; kernel = missing)
 
-Wrapper over indices `args` used to obtain the diagonal of a `gω::GreenSolution`. If `d =
+Wrapper over indices `inds` used to obtain the diagonal of a `gω::GreenSolution`. If `d =
 diagonal(sel)`, then `gω[d] = diag(gω[sel, sel])`, although in most cases the computation
 is done more efficiently internally.
+
+If `kernel = Q` (a matrix) instead of `missing`, a vector with `Tr(gᵢᵢQ)` on
+each site `i` is returned (instead of of `vcat(diag(gᵢᵢ)...)`).
 
 """
 diagonal

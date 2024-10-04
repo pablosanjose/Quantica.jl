@@ -1545,7 +1545,7 @@ function blockstructure(lat::Lattice{T}, h::AbstractHamiltonian{T}, hs::Abstract
     return OrbitalBlockStructure{B}(orbitals, subsizes)
 end
 
-similar_Matrix(h::AbstractHamiltonian{T}) where {T} =
+similar_Array(h::AbstractHamiltonian{T}) where {T} =
     Matrix{Complex{T}}(undef, flatsize(h), flatsize(h))
 
 ## Hamiltonian
@@ -2226,6 +2226,9 @@ Base.parent(i::DiagIndices) = i.inds
 
 kernel(i::DiagIndices) = i.kernel
 
+norbitals_or_sites(i::DiagIndices{Missing}) = norbitals(i.inds)
+norbitals_or_sites(i::DiagIndices) = nsites(i.inds)
+
 # returns the Hamiltonian field
 hamiltonian(g::Union{GreenFunction,GreenSolution,GreenSlice}) = hamiltonian(g.parent)
 
@@ -2304,11 +2307,10 @@ Base.size(g::GreenSolution, i...) = size(g.parent, i...)
 flatsize(g::GreenFunction, i...) = flatsize(g.parent, i...)
 flatsize(g::GreenSolution, i...) = flatsize(g.parent, i...)
 
-function similar_Matrix(gs::GreenSlice{T}) where {T}
-    m = norbitals(orbrows(gs))
-    n = norbitals(orbcols(gs))
-    return Matrix{Complex{T}}(undef, m, n)
-end
+similar_Array(gs::GreenSlice{T}) where {T} =
+    matrix_or_vector(Complex{T}, orbrows(gs), orbcols(gs))
+matrix_or_vector(C, r, c) = Matrix{C}(undef, norbitals(r), norbitals(c))
+matrix_or_vector(C, r::DiagIndices, ::DiagIndices) = Vector{C}(undef, norbitals_or_sites(r))
 
 boundaries(g::GreenFunction) = boundaries(solver(g))
 # fallback (for solvers without boundaries, or for OpenHamiltonian)
@@ -2443,5 +2445,15 @@ OrbitalSliceMatrix(m::AbstractMatrix, axes) = OrbitalSliceArray(m, axes)
 orbaxes(a::OrbitalSliceArray) = a.orbaxes
 
 Base.parent(a::OrbitalSliceArray) = a.parent
+
+#endregion
+
+############################################################################################
+# Hartree and Fock
+#region
+
+# struct Hartree{D<:DensityMatrix}
+#     rho::
+# end
 
 #endregion
