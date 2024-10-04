@@ -20,8 +20,7 @@ function apply(s::SiteSelector, lat::Lattice{T,E,L}, cells...) where {T,E,L}
     unique!(sort!(cells))
     # isnull: to distinguish in a type-stable way between s.cells === missing and no-selected-cells
     # and the same for sublats
-    isnull = (s.cells !== missing && isempty(cells)) ||
-        (s.sublats !== missing && isempty(sublats))
+    isnull = (s.cells !== missing && isempty(cells)) || (s.sublats !== missing && isempty(sublats))
     return AppliedSiteSelector{T,E,L}(lat, region, sublats, cells, isnull)
 end
 
@@ -40,9 +39,10 @@ function apply(s::HopSelector, lat::Lattice{T,E,L}, cells...) where {T,E,L}
         sublats .= reverse.(sublats)
         dcells .*= -1
     end
-    isnull = (s.dcells !== missing && isempty(dcells)) ||
-        (s.sublats !== missing && isempty(sublats))
-    return AppliedHopSelector{T,E,L}(lat, region, sublats, dcells, (rmin, rmax), isnull)
+    includeonsite = s.includeonsite
+    # isnull: see above
+    isnull = (s.dcells !== missing && isempty(dcells)) || (s.sublats !== missing && isempty(sublats))
+    return AppliedHopSelector{T,E,L}(lat, region, sublats, dcells, (rmin, rmax), includeonsite, isnull)
 end
 
 sublatindex_or_zero(lat, ::Missing) = missing

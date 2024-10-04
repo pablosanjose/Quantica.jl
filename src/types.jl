@@ -206,6 +206,7 @@ struct HopSelector{F,S,D,R} <: Selector
     sublats::S
     dcells::D
     range::R
+    includeonsite::Bool
     adjoint::Bool  # make apply take the "adjoint" of the selector
 end
 
@@ -215,6 +216,7 @@ struct AppliedHopSelector{T,E,L}
     sublats::Vector{Pair{Int,Int}}
     dcells::Vector{SVector{L,Int}}
     range::Tuple{T,T}
+    includeonsite::Bool  # undocumented/internal: don't skip onsite
     isnull::Bool    # if isnull, the selector selects nothing, regardless of other fields
 end
 
@@ -224,7 +226,7 @@ end
 
 #region ## Constructors ##
 
-HopSelector(re, su, dc, ra) = HopSelector(re, su, dc, ra, false)
+HopSelector(re, su, dc, ra, io = false) = HopSelector(re, su, dc, ra, io, false)
 
 #endregion
 
@@ -241,6 +243,8 @@ lattice(ap::AppliedHopSelector) = ap.lat
 
 cells(ap::AppliedSiteSelector) = ap.cells
 dcells(ap::AppliedHopSelector) = ap.dcells
+
+includeonsite(ap::AppliedHopSelector) = ap.includeonsite
 
 # if isempty(s.dcells) or isempty(s.sublats), none were specified, so we must accept any
 inregion(r, s::AppliedSiteSelector) = s.region(r)
@@ -261,7 +265,7 @@ isbelowrange(dr, (rmin, rmax)::Tuple{Real,Real}) =  ifelse(dr'dr < rmin^2, true,
 isnull(s::AppliedSiteSelector) = s.isnull
 isnull(s::AppliedHopSelector) = s.isnull
 
-Base.adjoint(s::HopSelector) = HopSelector(s.region, s.sublats, s.dcells, s.range, !s.adjoint)
+Base.adjoint(s::HopSelector) = HopSelector(s.region, s.sublats, s.dcells, s.range, s.includeonsite, !s.adjoint)
 
 Base.NamedTuple(s::SiteSelector) =
     (; region = s.region, sublats = s.sublats, cells = s.cells)
