@@ -358,7 +358,7 @@ function testjosephson(g0)
     # path override
     j5 = J5(0.2)
     j5´ = J5(0.2, (-4,-2+0.1im,0) .+ sqrt(eps(Float64))*im)
-    @test j5 != j5 && j5 ≈ j5´
+    @test j5 != j5´ && j5 ≈ j5´
     j = Quantica.integrand(J1)
     @test Quantica.call!(j, 0.2+0.3im) isa Vector
     @test typeof.(Quantica.path.((J1, J2, J3, J4, J5))) ==

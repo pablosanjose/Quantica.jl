@@ -540,6 +540,7 @@ end
 maybe_insert_mu!(pts, mu, kBT) = pts
 
 override_path!(::Missing, ptsvec, pts) = pts
+override_path!(::Missing, ptsvec::Vector{<:Complex}, pts) = pts
 override_path!(f::Function, ptsvec::Vector{<:Complex}, pts) = f.(pts)
 
 function override_path!(pts´, ptsvec::Vector{<:Complex}, pts)
@@ -548,7 +549,7 @@ function override_path!(pts´, ptsvec::Vector{<:Complex}, pts)
 end
 
 override_path!(override, ptsvec, pts) =
-    argerror("Override not recognized, or real ωpoints used upon construction (only complex paths can be overriden)")
+    argerror("Override of real ωpoints not supported, use complex ωpoints upon construction")
 
 #endregion
 
