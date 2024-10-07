@@ -714,20 +714,22 @@ function fermi_h!(s, ϕ, µ, β = 0; params...)
     # special-casing β = Inf with views turns out to be slower
     fs = (@. ϵs = fermi(ϵs - µ, β))
     fpsis = (s.psis .= fs .* psis')
-    mul!(s.fmat, psis, fpsis)
-    fillblocks!(s.ρmat, s.fmat, ϕ, s.axes...)
+    # mul!(s.fmat, psis, fpsis)
+    # fillblocks!(s.ρmat, s.fmat, ϕ, s.axes...)
+    fillblocks!(s.ρmat, psis, fpsis, ϕ, s.axes...)
     return s.ρmat
 end
 
 # fillblock! consistent with Base.getindex(g::GreenSolution, args...) see greenfunction.jl
 # uses views into fmat = f(ϵₙ) * ψₙ * ψₘ' to fill blocks in the ρmat = parent or OrbitalSliceMatrix
-function fillblocks!(ρmat, fmat, ϕ, i, j)
+function fillblocks!(ρmat, psis, fpsis, ϕ, i, j)
+    mul!(fmat, psis, fpsis)
     oj = 0  # offsets
     for cj in cellsdict_or_single_cellorbs(j)
         oi = 0
         for ci in cellsdict_or_single_cellorbs(i)
             ρview = view(ρmat, oi + 1:oi + norbitals(ci), oj + 1:oj + norbitals(cj))
-            fillblocks!(ρview, fmat, ϕ, ci, cj)
+            _fillblocks!(ρview, fmat, ϕ, ci, cj)
             oi += norbitals(ci)
         end
         oj += norbitals(cj)
@@ -735,7 +737,7 @@ function fillblocks!(ρmat, fmat, ϕ, i, j)
     return ρmat
 end
 
-function fillblocks!(ρmat, fmat, ϕ, i::AnyCellOrbitals, j::AnyCellOrbitals)
+function _fillblocks!(ρmat, fmat, ϕ, i::AnyCellOrbitals, j::AnyCellOrbitals)
     fview = view(fmat, orbindices(i), orbindices(j))
     copy!(ρmat, fview)
     dn = only(cell(i) - cell(j))
@@ -745,6 +747,22 @@ end
 
 cellsdict_or_single_cellorbs(i::AnyOrbitalSlice) = cellsdict(i)
 cellsdict_or_single_cellorbs(i::AnyCellOrbitals) = (i,)
+
+## Diagonal indexing case
+# function fillblocks!(ρmat, psis, fpsis, ϕ, i, j)
+#     mul!(fmat, psis, fpsis)
+#     oj = 0  # offsets
+#     for cj in cellsdict_or_single_cellorbs(j)
+#         oi = 0
+#         for ci in cellsdict_or_single_cellorbs(i)
+#             ρview = view(ρmat, oi + 1:oi + norbitals(ci), oj + 1:oj + norbitals(cj))
+#             _fillblocks!(ρview, fmat, ϕ, ci, cj)
+#             oi += norbitals(ci)
+#         end
+#         oj += norbitals(cj)
+#     end
+#     return ρmat
+# end
 
 #endregion
 
