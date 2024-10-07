@@ -482,13 +482,13 @@ end
 #region ## Constructors ##
 
 # generic fallback (for other solvers)
-(ρ::DensityMatrix)(mu = 0, kBT = 0; params...) = ρ.solver(mu, kBT; params...) |>
-    maybe_OrbitalSliceArray(axes(ρ.gs))
+(ρ::DensityMatrix)(mu = 0, kBT = 0; params...) =
+    ρ.solver(mu, kBT; params...) |> maybe_OrbitalSliceArray(axes(ρ.gs))
 # special case for integrator solver
-(ρ::DensityMatrix{<:DensityMatrixIntegratorSolver})(mu = 0, kBT = 0; params...) = ρ.solver(mu, kBT)(; params...) |>
-    maybe_OrbitalSliceArray(axes(ρ.gs))
+(ρ::DensityMatrix{<:DensityMatrixIntegratorSolver})(mu = 0, kBT = 0, override = missing; params...) =
+    ρ.solver(mu, kBT, override)(; params...) |> maybe_OrbitalSliceArray(axes(ρ.gs))
 
-(s::DensityMatrixIntegratorSolver)(mu, kBT) = s.ifunc(mu, kBT);
+(s::DensityMatrixIntegratorSolver)(mu, kBT, override = missing) = s.ifunc(mu, kBT, override);
 
 # redirects to specialized method
 densitymatrix(gs::GreenSlice; kw...) =
@@ -506,8 +506,12 @@ function densitymatrix(gs::GreenSlice{T}, ωpoints; omegamap = Returns((;)), ims
     result = similar_Matrix(gs)
     opts´ = (; imshift, slope = 1, post = gf_to_rho!, atol, opts...)
     ωpoints_vec = collect(promote_type(T, typeof.(ωpoints)...), ωpoints)
-    ifunc(mu, kBT) = Integrator(result, DensityMatrixIntegrand(gs, T(mu), T(kBT), omegamap),
-        maybe_insert_mu!(ωpoints_vec, ωpoints, mu, kBT); opts´...)
+    function ifunc(mu, kBT, override)
+        ωpoints´ = override_path!(override, ωpoints_vec, ωpoints)
+        ρd = DensityMatrixIntegrand(gs, T(mu), T(kBT), omegamap)
+        pts = maybe_insert_mu!(ωpoints_vec, ωpoints´, zero(T), kBT)
+        return Integrator(result, ρd, pts; opts´...)
+    end
     return DensityMatrix(DensityMatrixIntegratorSolver(ifunc), gs)
 end
 
@@ -534,6 +538,17 @@ function maybe_insert_mu!(pts::AbstractVector{<:Real}, mu, kBT)
 end
 
 maybe_insert_mu!(pts, mu, kBT) = pts
+
+override_path!(::Missing, ptsvec::Vector{<:Complex}, pts) = pts
+override_path!(f::Function, ptsvec::Vector{<:Complex}, pts) = f.(pts)
+
+function override_path!(pts´, ptsvec::Vector{<:Complex}, pts)
+    resize!(ptsvec, length(pts))
+    return pts´
+end
+
+override_path!(override, ptsvec, pts) =
+    argerror("Override of real ωpoints not supported, use a complex path upon construction")
 
 #endregion
 
@@ -608,9 +623,10 @@ end
 # generic fallback (for other solvers)
 (j::Josephson)(kBT = 0; params...) = j.solver(kBT; params...)
 # special case for integrator solver
-(j::Josephson{<:JosephsonIntegratorSolver})(kBT = 0; params...) = j.solver(kBT)(; params...)
+(j::Josephson{<:JosephsonIntegratorSolver})(kBT = 0, override = missing; params...) =
+    j.solver(kBT, override)(; params...)
 
-(s::JosephsonIntegratorSolver)(kBT) = s.ifunc(kBT)
+(s::JosephsonIntegratorSolver)(kBT, override = missing) = s.ifunc(kBT, override)
 
 josephson(gs::GreenSlice{T}, ωmax::Number; kw...) where {T} =
     josephson(gs, (-ωmax, ωmax); kw...)
@@ -627,10 +643,11 @@ function josephson(gs::GreenSlice{T}, ωpoints; omegamap = Returns((;)), phases 
     phases´, traces = sanitize_phases_traces(phases, T)
     opts´ = (; imshift, slope = 1, post = real, atol, opts...)
     ωpoints_vec = collect(promote_type(T, typeof.(ωpoints)...), ωpoints)
-    function ifunc(kBT)
+    function ifunc(kBT, override)
+        ωpoints´ = override_path!(override, ωpoints_vec, ωpoints)
         jd = JosephsonIntegrand(g, T(kBT), contact, tauz, phases´, omegamap,
             traces, Σfull, Σ, similar(Σ), similar(Σ), similar(Σ), similar(tauz, Complex{T}))
-        pts = maybe_insert_mu!(ωpoints_vec, ωpoints, zero(T), kBT)
+        pts = maybe_insert_mu!(ωpoints_vec, ωpoints´, zero(T), kBT)
         return Integrator(traces, jd, pts; opts´...)
     end
     return Josephson(JosephsonIntegratorSolver(ifunc), gs)

@@ -1976,9 +1976,10 @@ said algorithm.
 
 As above, but using a generic algorithm that relies on numerical integration along a contour
 in the complex plane, between points `(ωmin, ωmax)` (or along a polygonal path connecting
-`ωpoints`, a collection of numbers), which should be chosen so as to encompass the full system bandwidth. Keywords
-`quadgk_opts` are passed to the `QuadGK.quadgk` integration routine. See below for
-additiona `opts`.
+`ωpoints`, a collection of numbers), which should be chosen so as to encompass the full
+system bandwidth. When the `ωpoints` are all real, an extra point is added at `ω = µ` to the
+integration path, to better integrate the step in the Fermi function. Keywords `quadgk_opts`
+are passed to the `QuadGK.quadgk` integration routine. See below for additiona `opts`.
 
     densitymatrix(gs::GreenSlice, ωmax::Number; opts...)
 
@@ -1990,9 +1991,16 @@ As above with `ωmin = -ωmax`.
 
 Evaluate the density matrix at chemical potential `μ` and temperature `kBT` (in the same
 units as the Hamiltonian) for the given `g` parameters `params`, if any. The result is given
-as an `OrbitalSliceMatrix`, see its docstring for further details. When the `ωpoints` are
-all real, an extra point is added at `ω = µ` to the integration path, to better integrate
-the step in the Fermi function.
+as an `OrbitalSliceMatrix`, see its docstring for further details.
+
+If the generic integration algorithm is used with complex `ωpoints`, the following form is
+also available:
+
+    ρ(μ = 0, kBT = 0, override = missing; params...)
+
+Here `override` can be a collection of `ωpoints` that will replace the original ones
+provided when defining `ρ`. Alternatively, it can be a function that will be applied to the
+original `ωpoints`. This may be useful when the integration path must depend on `params`.
 
 ## Algorithms and keywords
 
@@ -2035,10 +2043,13 @@ densitymatrix
 For a `gs = g[i::Integer]` slice of the `g::GreenFunction` of a hybrid junction, build a
 `J::Josephson` object representing the equilibrium (static) Josephson current `I_J` flowing
 into `g` through contact `i`, integrated along a polygonal contour connecting `ωpoints` (a
-collection of numbers) in the complex plane. The result of `I_J` is given in units of `qe/h`
-(`q` is the dimensionless carrier charge). `I_J` can be written as ``I_J = Re ∫ dω f(ω)
-j(ω)``, where ``j(ω) = (qe/h) × 2Tr[(ΣʳᵢGʳ - GʳΣʳᵢ)τz]``. Here `f(ω)` is the Fermi function
-with `µ = 0`.
+collection of numbers) in the complex plane. When the `ωpoints` are all real, an extra point
+is added at `ω = 0` to the integration path, to better integrate the step in the Fermi
+function.
+
+The result of `I_J` is given in units of `qe/h` (`q` is the dimensionless carrier charge).
+`I_J` can be written as ``I_J = Re ∫ dω f(ω) j(ω)``, where ``j(ω) = (qe/h) × 2Tr[(ΣʳᵢGʳ -
+GʳΣʳᵢ)τz]``. Here `f(ω)` is the Fermi function with `µ = 0`.
 
     josephson(gs::GreenSlice, ωmax::Real; kw...)
 
@@ -2046,12 +2057,15 @@ As above, but with `ωpoints = (-ωmax, ωmax)`.
 
 ## Full evaluation
 
-    J(kBT = 0; params...)   # where J::Josephson
+    J(kBT = 0, override = missing; params...)   # where J::Josephson
 
 Evaluate the current `I_J` at chemical potemtial `µ = 0` and temperature `kBT` (in the same
-units as the Hamiltonian) for the given `g` parameters `params`, if any. When the `ωpoints`
-are all real, an extra point is added at `ω = 0` to the integration path, to better
-integrate the step in the Fermi function.
+units as the Hamiltonian) for the given `g` parameters `params`, if any.
+
+It's possible to `override` a complex integration path at evaluation time. In this case
+`override` can be a collection of `ωpoints` that will replace the original ones provided
+when defining `J`. Alternatively, it can be a function that will be applied to the original
+`ωpoints`. This may be useful when the integration path must depend on `params`.
 
 ## Keywords
 
