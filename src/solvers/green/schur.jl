@@ -734,7 +734,7 @@ function fill_rho_blocks!(s::DensityMatrixSchurSolver, psis, fpsis, ϕ, i, j)
             ρview = view(ρmat, oi + 1:oi + norbitals(ci), oj + 1:oj + norbitals(cj))
             fview = view(fmat, orbindices(ci), orbindices(cj))
             copy!(ρview, fview)
-            phase = cis(only(cell(i) - cell(j)) * ϕ)
+            phase = cis(only(cell(ci) - cell(cj)) * ϕ)
             ρview .*= phase
             oi += norbitals(ci)
         end

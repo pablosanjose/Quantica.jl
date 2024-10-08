@@ -175,7 +175,9 @@ function append_diagonal!(d, x, s::AnyCellOrbitalsDict, kernel, g; kw...)
 end
 
 # main driver
-function append_diagonal!(d, x, o::AnyCellOrbitals, kernel, g; post = identity)
+function append_diagonal!(d, x, o::Union{AnyCellOrbitals,Colon,Integer}, kernel, g; post = identity)
+    # Note that o can be a contact index (Colon or Integer), since sites_to_orbs doesn't
+    # reduce these for performance (they are already precomputed if x::GreenSolution)
     xblock = diagonal_slice(x, o)
     rngs = orbranges_or_allorbs(kernel, o, g)
     for rng in rngs

@@ -88,7 +88,7 @@ end
 function densitymatrix(s::AppliedSpectrumGreenSolver, gs::GreenSlice)
     # SpectrumGreenSlicer is 0D, so there is a single cellorbs in dict.
     # If rows/cols are contacts, we need their orbrows/orbcols (unlike for gs(ω; params...))
-    i, j = orbrows(gs), orbcols(gs)
+    i, j = onlycellorbs(orbrows(gs)), onlycellorbs(orbcols(gs))
     es, psis = spectrum(s)
     fpsis = copy(psis')
     ρmat = similar_Array(gs)
@@ -96,6 +96,9 @@ function densitymatrix(s::AppliedSpectrumGreenSolver, gs::GreenSlice)
     solver = DensityMatrixSpectrumSolver(g, es, (i,j), psis, fpsis, ρmat)
     return DensityMatrix(solver, gs)
 end
+
+onlycellorbs(orb::AnyCellOrbitals) = orb
+onlycellorbs(orb::AnyOrbitalSlice) = only(cellsdict(orb))
 
 ## call
 
