@@ -698,19 +698,6 @@ is_spatial(t) = true
 (term::AbstractParametricTerm{2})(x, y, args...; kw...) = term.coefficient * term.f.f(x, y; kw...)
 (term::AbstractParametricTerm{3})(x, y, z, args...; kw...) = term.coefficient * term.f.f(x, y, z; kw...)
 
-# We need these for SelfEnergyModelSolver, which uses a ParametricModel. We return a
-# ParametricOnsiteTerm, not an OnsiteTerm because the latter is tied to a Hamiltonian at its
-# orbital structure, not only to a site selection
-function (t::ParametricOnsiteTerm{N})(; kw...) where {N}
-    f = ParametricFunction{N}((args...) -> t.f(args...; kw...)) # no params
-    return ParametricOnsiteTerm(f, t.selector, t.coefficient, t.spatial)
-end
-
-function (t::ParametricHoppingTerm{N})(; kw...) where {N}
-    f = ParametricFunction{N}((args...) -> t.f(args...; kw...)) # no params
-    return ParametricHoppingTerm(f, t.selector, t.coefficient, t.spatial)
-end
-
 ## Model term algebra
 
 Base.:*(x::Number, m::TightbindingModel) = TightbindingModel(x .* terms(m))
