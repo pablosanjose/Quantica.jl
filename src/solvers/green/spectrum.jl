@@ -74,10 +74,13 @@ end
 #   specialized DensityMatrix method for GS.Spectrum
 #region
 
-struct DensityMatrixSpectrumSolver{T,R,C}
+struct DensityMatrixSpectrumSolver{T,A,G<:GreenFunction,P,R}
+    g::G                        # parent of GreenSlice
     es::Vector{Complex{T}}
-    psirows::R
-    psicols::C
+    axes::A
+    psis::P
+    fpsis::P
+    ρmat::R
 end
 
 ## Constructor
@@ -85,26 +88,34 @@ end
 function densitymatrix(s::AppliedSpectrumGreenSolver, gs::GreenSlice)
     # SpectrumGreenSlicer is 0D, so there is a single cellorbs in dict.
     # If rows/cols are contacts, we need their orbrows/orbcols (unlike for gs(ω; params...))
-    check_nodiag_axes(gs)
-    i, j = only(cellsdict(orbrows(gs))), only(cellsdict(orbcols(gs)))
-    oi, oj = orbindices(i), orbindices(j)
+    i, j = orbrows(gs), orbcols(gs)
     es, psis = spectrum(s)
-    solver = DensityMatrixSpectrumSolver(es, _maybe_view(psis, oi), _maybe_view(psis, oj))
+    fpsis = copy(psis')
+    ρmat = similar_Array(gs)
+    g = parent(gs)
+    solver = DensityMatrixSpectrumSolver(g, es, (i,j), psis, fpsis, ρmat)
     return DensityMatrix(solver, gs)
 end
 
-## API
-
 ## call
 
-function (d::DensityMatrixSpectrumSolver)(mu, kBT; params...)
-    vi = d.psirows
-    vj´ = d.psicols' .* fermi.(d.es .- mu, inv(kBT))
-    return vi * vj´
+function (s::DensityMatrixSpectrumSolver)(mu, kBT; params...)
+    psis, fpsis, es = s.psis, s.fpsis, s.es
+    β = inv(kBT)
+    @. fpsis = fermi(es - mu, β) .* psis'
+    ρmat = fill_rho_blocks!(s, psis, fpsis, s.axes...)
+    return copy(ρmat)
 end
 
-# if the orbindices cover all the unit cell, use matrices instead of views
-_maybe_view(m, oi) = length(oi) == size(m, 1) ? m : view(m, oi, :)
+function fill_rho_blocks!(s::DensityMatrixSpectrumSolver, psis, fpsis, i, j)
+    vpsis = view(psis, orbindices(i), :)
+    vfpsis = view(fpsis, :, orbindices(j))
+    return mul!(s.ρmat, vpsis, vfpsis)
+end
+
+# this relies on the apply_kernel method from the schur.jl densitymatrix solver
+fill_rho_blocks!(s::DensityMatrixSpectrumSolver, psis, fpsis, di::DiagIndices, ::DiagIndices) =
+    append_diagonal!(empty!(s.ρmat), FermiEigenstates(psis, fpsis), parent(di), kernel(di), s.g)
 
 #endregion
 #endregion

@@ -661,7 +661,7 @@ decay_lengths(g::AbstractHamiltonian1D, µ = 0, args...; params...) =
 
 struct DensityMatrixSchurSolver{T,A,G<:GreenFunctionSchurLead{T},R,O<:NamedTuple}
     g::G                            # parent of GreenSlice
-    axes::Tuple{A,A}                # axes of GreenSlice (orbrows, orbcols)
+    axes::A                # axes of GreenSlice (orbrows, orbcols)
     ρmat::R                         # it spans the full orbitalslices (axes) of GreenSlice.
                                     # can be a Matrix or a Vector (if A::DiagIndices)
     hmat::Matrix{Complex{T}}        # it spans just the unit cell, dense Bloch matrix
@@ -675,7 +675,6 @@ end
 function densitymatrix(s::AppliedSchurGreenSolver, gs::GreenSlice; atol = 1e-7, quadgk_opts...)
     isempty(boundaries(s)) ||
         argerror("Boundaries not implemented for DensityMatrixSchurSolver. Consider using the generic integration solver.")
-    # check_nodiag_axes(gs)
     g = parent(gs)
     ρmat = similar_Array(gs)
     hmat = similar_Array(hamiltonian(g))
@@ -719,42 +718,36 @@ function fermi_h!(s, ϕ, µ, β = 0; params...)
     # special-casing β = Inf with views turns out to be slower
     fs = (@. ϵs = fermi(ϵs - µ, β))
     fpsis = (s.psis .= fs .* psis')
-    # mul!(s.fmat, psis, fpsis)
-    # fillblocks!(s.ρmat, s.fmat, ϕ, s.axes...)
-    ρmat = fillblocks!(s, psis, fpsis, ϕ, s.axes...)
+    ρmat = fill_rho_blocks!(s, psis, fpsis, ϕ, s.axes...)
     return ρmat
 end
 
 # fillblock! consistent with Base.getindex(g::GreenSolution, args...) see greenfunction.jl
 # uses views into fmat = f(ϵₙ) * ψₙ * ψₘ' to fill blocks in the ρmat = parent or OrbitalSliceMatrix
-function fillblocks!(s, psis, fpsis, ϕ, i, j)
-    mul!(s.fmat, psis, fpsis)
+function fill_rho_blocks!(s::DensityMatrixSchurSolver, psis, fpsis, ϕ, i, j)
+    ρmat, fmat = s.ρmat, s.fmat
+    mul!(fmat, psis, fpsis)
     oj = 0  # offsets
     for cj in cellsdict_or_single_cellorbs(j)
         oi = 0
         for ci in cellsdict_or_single_cellorbs(i)
-            ρview = view(s.ρmat, oi + 1:oi + norbitals(ci), oj + 1:oj + norbitals(cj))
-            _fillblock!(ρview, s.fmat, ϕ, ci, cj)
+            ρview = view(ρmat, oi + 1:oi + norbitals(ci), oj + 1:oj + norbitals(cj))
+            fview = view(fmat, orbindices(ci), orbindices(cj))
+            copy!(ρview, fview)
+            phase = cis(only(cell(i) - cell(j)) * ϕ)
+            ρview .*= phase
             oi += norbitals(ci)
         end
         oj += norbitals(cj)
     end
-    return s.ρmat
+    return ρmat
 end
 
 cellsdict_or_single_cellorbs(i::AnyOrbitalSlice) = cellsdict(i)
 cellsdict_or_single_cellorbs(i::AnyCellOrbitals) = (i,)
 
-function _fillblock!(ρmat, fmat, ϕ, i::AnyCellOrbitals, j::AnyCellOrbitals)
-    fview = view(fmat, orbindices(i), orbindices(j))
-    copy!(ρmat, fview)
-    phase = cis(only(cell(i) - cell(j)) * ϕ)
-    ρmat .*= phase
-    return ρmat
-end
-
 # fastpath for direct CellOrbitals indexing. Not sure it's worth it.
-function fillblocks!(s, psis, fpsis, ϕ, i::AnyCellOrbitals, j::AnyCellOrbitals)
+function fill_rho_blocks!(s::DensityMatrixSchurSolver, psis, fpsis, ϕ, i::AnyCellOrbitals, j::AnyCellOrbitals)
     vpsis = view(psis, orbindices(i), :)
     vfpsis = view(fpsis, :, orbindices(j))
     phase = cis(only(cell(i) - cell(j)) * ϕ)
@@ -763,7 +756,7 @@ function fillblocks!(s, psis, fpsis, ϕ, i::AnyCellOrbitals, j::AnyCellOrbitals)
 end
 
 # diagonal indexing
-fillblocks!(s, psis, fpsis, ϕ, di::DiagIndices, ::DiagIndices) =
+fill_rho_blocks!(s::DensityMatrixSchurSolver, psis, fpsis, ϕ, di::DiagIndices, ::DiagIndices) =
     append_diagonal!(empty!(s.ρmat), FermiEigenstates(psis, fpsis), parent(di), kernel(di), s.g)
 
 # no-op overload
