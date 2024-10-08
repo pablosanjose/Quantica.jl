@@ -509,7 +509,7 @@ function densitymatrix(gs::GreenSlice{T}, ωpoints; omegamap = Returns((;)), ims
     function ifunc(mu, kBT, override)
         ωpoints´ = override_path!(override, ωpoints_vec, ωpoints)
         ρd = DensityMatrixIntegrand(gs, T(mu), T(kBT), omegamap)
-        pts = maybe_insert_mu!(ωpoints_vec, ωpoints´, zero(T), kBT)
+        pts = maybe_insert_mu!(ωpoints_vec, ωpoints´, mu, kBT)
         return Integrator(result, ρd, pts; opts´...)
     end
     return DensityMatrix(DensityMatrixIntegratorSolver(ifunc), gs)
