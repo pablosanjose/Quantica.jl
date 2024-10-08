@@ -394,6 +394,8 @@ end
     @test all(≈(0.5), diag(ρ(0, 0; B=0.3))) # half filling
     ρ = densitymatrix(g1[cells = SA[1]], 7)
     @test all(<(0.96), real(diag(ρ(4, 1; B=0.1)))) # thermal depletion
+    @test diag(ρ(0)) ≈ SA[0.5, 0.5, 0.5]
+    @test diag(ρ(4)) ≈ SA[1, 1, 1]
     h = LP.honeycomb() |> hopping(1) |> supercell(region = RP.circle(10))
     reg = (; region = RP.circle(0.5))
     gLU = h |> greenfunction(GS.SparseLU());
