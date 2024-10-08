@@ -656,7 +656,7 @@ decay_lengths(g::AbstractHamiltonian1D, µ = 0, args...; params...) =
 #endregion
 
 ############################################################################################
-# densitymatrix
+# densitymatrix - dedicated Schur method (integration with Fermi points as segments)
 #region
 
 struct DensityMatrixSchurSolver{T,A,G<:GreenFunctionSchurLead{T},R,O<:NamedTuple}
@@ -687,6 +687,11 @@ function densitymatrix(s::AppliedSchurGreenSolver, gs::GreenSlice; atol = 1e-7, 
     return DensityMatrix(solver, gs)
 end
 
+struct FermiEigenstates{T}
+    psis::Matrix{Complex{T}}
+    fpsis::Matrix{Complex{T}}
+end
+
 # API
 
 ## call
@@ -702,7 +707,7 @@ function (s::DensityMatrixSchurSolver)(µ, kBT; params...)
     integrand(x) = fermi_h!(s, 2π * x, µ, inv(kBT); params...)
     result = similar(s.ρmat)
     fx! = (y, x) -> (y .= integrand(x))
-    result, err = quadgk!(fx!, result, xs...; s.opts...)
+    quadgk!(fx!, result, xs...; s.opts...)
     return result
 end
 
@@ -716,53 +721,67 @@ function fermi_h!(s, ϕ, µ, β = 0; params...)
     fpsis = (s.psis .= fs .* psis')
     # mul!(s.fmat, psis, fpsis)
     # fillblocks!(s.ρmat, s.fmat, ϕ, s.axes...)
-    fillblocks!(s.ρmat, psis, fpsis, ϕ, s.axes...)
-    return s.ρmat
+    ρmat = fillblocks!(s, psis, fpsis, ϕ, s.axes...)
+    return ρmat
 end
 
 # fillblock! consistent with Base.getindex(g::GreenSolution, args...) see greenfunction.jl
 # uses views into fmat = f(ϵₙ) * ψₙ * ψₘ' to fill blocks in the ρmat = parent or OrbitalSliceMatrix
-function fillblocks!(ρmat, psis, fpsis, ϕ, i, j)
-    mul!(fmat, psis, fpsis)
+function fillblocks!(s, psis, fpsis, ϕ, i, j)
+    mul!(s.fmat, psis, fpsis)
     oj = 0  # offsets
     for cj in cellsdict_or_single_cellorbs(j)
         oi = 0
         for ci in cellsdict_or_single_cellorbs(i)
-            ρview = view(ρmat, oi + 1:oi + norbitals(ci), oj + 1:oj + norbitals(cj))
-            _fillblocks!(ρview, fmat, ϕ, ci, cj)
+            ρview = view(s.ρmat, oi + 1:oi + norbitals(ci), oj + 1:oj + norbitals(cj))
+            _fillblock!(ρview, s.fmat, ϕ, ci, cj)
             oi += norbitals(ci)
         end
         oj += norbitals(cj)
     end
-    return ρmat
-end
-
-function _fillblocks!(ρmat, fmat, ϕ, i::AnyCellOrbitals, j::AnyCellOrbitals)
-    fview = view(fmat, orbindices(i), orbindices(j))
-    copy!(ρmat, fview)
-    dn = only(cell(i) - cell(j))
-    ρmat .*= cis(ϕ*dn)
-    return ρmat
+    return s.ρmat
 end
 
 cellsdict_or_single_cellorbs(i::AnyOrbitalSlice) = cellsdict(i)
 cellsdict_or_single_cellorbs(i::AnyCellOrbitals) = (i,)
 
-## Diagonal indexing case
-# function fillblocks!(ρmat, psis, fpsis, ϕ, i, j)
-#     mul!(fmat, psis, fpsis)
-#     oj = 0  # offsets
-#     for cj in cellsdict_or_single_cellorbs(j)
-#         oi = 0
-#         for ci in cellsdict_or_single_cellorbs(i)
-#             ρview = view(ρmat, oi + 1:oi + norbitals(ci), oj + 1:oj + norbitals(cj))
-#             _fillblocks!(ρview, fmat, ϕ, ci, cj)
-#             oi += norbitals(ci)
-#         end
-#         oj += norbitals(cj)
-#     end
-#     return ρmat
-# end
+function _fillblock!(ρmat, fmat, ϕ, i::AnyCellOrbitals, j::AnyCellOrbitals)
+    fview = view(fmat, orbindices(i), orbindices(j))
+    copy!(ρmat, fview)
+    phase = cis(only(cell(i) - cell(j)) * ϕ)
+    ρmat .*= phase
+    return ρmat
+end
+
+# fastpath for direct CellOrbitals indexing. Not sure it's worth it.
+function fillblocks!(s, psis, fpsis, ϕ, i::AnyCellOrbitals, j::AnyCellOrbitals)
+    vpsis = view(psis, orbindices(i), :)
+    vfpsis = view(fpsis, :, orbindices(j))
+    phase = cis(only(cell(i) - cell(j)) * ϕ)
+    mul!(s.ρmat, vpsis, vfpsis, phase, 0)
+    return s.ρmat
+end
+
+# diagonal indexing
+fillblocks!(s, psis, fpsis, ϕ, di::DiagIndices, ::DiagIndices) =
+    append_diagonal!(empty!(s.ρmat), FermiEigenstates(psis, fpsis), parent(di), kernel(di), s.g)
+
+# no-op overload
+diagonal_slice(fe::FermiEigenstates, _) = fe
+
+# specialized methods for function called by append_diagonal!
+# rng can be an Integer or a UnitRange
+function apply_kernel(kernel, fe::FermiEigenstates{T}, rng) where {T}
+    val = zero(Complex{T})
+    v, v´ = view(fe.psis, rng, :), view(fe.fpsis, :, rng)
+    val += kernel_multiply(kernel, v, v´)
+    return val
+end
+
+kernel_multiply(::Missing, v, v´) = trace_prod(v, v´)
+kernel_multiply(kernel::UniformScaling, v, v´) = kernel.λ * trace_prod(v, v´)
+kernel_multiply(kernel::Number, v, v´) = kernel * trace_prod(v, v´)
+kernel_multiply(kernel, v, v´) = trace_prod(kernel * v, v´)
 
 #endregion
 

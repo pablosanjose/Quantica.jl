@@ -218,7 +218,7 @@ Base.getindex(d::LocalSpectralDensitySolution, s::SiteSelector) =
     d[getindex(lattice(d.gω), s)]
 
 Base.getindex(d::LocalSpectralDensitySolution{T}, i) where {T} =
-    append_diagonal!(T[], d.gω, i, d.kernel, post = x -> -imag(x)/π) |>
+    append_diagonal!(T[], d.gω, i, d.kernel, d.gω; post = x -> -imag(x)/π) |>
         maybe_OrbitalSliceArray(sites_to_orbs(i, d.gω)) # see greenfunction.jl
 
 (d::LocalSpectralDensitySlice)(ω; params...) = copy(call!(d, ω; params...))

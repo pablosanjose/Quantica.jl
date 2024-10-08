@@ -108,6 +108,9 @@ lengths_to_offsets(v::NTuple{<:Any,Integer}) = (0, cumsum(v)...)
 lengths_to_offsets(v) = prepend!(cumsum(v), 0)
 lengths_to_offsets(f::Function, v) = prepend!(accumulate((i,j) -> i + f(j), v; init = 0), 0)
 
+# fast tr(A*B) without doing the A*B product
+trace_prod(A, B) = sum(splat(*), zip(A, transpose(B)))
+
 #endregion
 
 ############################################################################################
