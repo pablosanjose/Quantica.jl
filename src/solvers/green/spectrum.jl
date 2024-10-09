@@ -99,6 +99,7 @@ end
 
 onlycellorbs(orb::AnyCellOrbitals) = orb
 onlycellorbs(orb::AnyOrbitalSlice) = only(cellsdict(orb))
+onlycellorbs(orb::DiagIndices) = onlycellorbs(parent(orb))
 
 ## call
 
