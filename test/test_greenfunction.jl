@@ -418,11 +418,6 @@ end
     @test ρ0[sites(1), sites(SA[1], 1)] isa Matrix
     @test size(view(ρ0, sites(1), sites(SA[1], 1))) == (2, 2)
 
-    # Diagonal slicing not yet supported
-    @test_broken densitymatrix(g1[diagonal(cells = SA[1])], 5)
-    @test_broken densitymatrix(gSpectrum[diagonal(cells = SA[])])
-    @test_broken densitymatrix(gKPM[diagonal(1)])
-
     glead = LP.square() |> hamiltonian(hopping(1)) |> supercell((0,1), region = r -> -1 <= r[1] <= 1) |> attach(nothing; cells = SA[10]) |> greenfunction(GS.Schur(boundary = 0));
     contact1 = r -> r[1] ≈ 5 && -1 <= r[2] <= 1
     contact2 = r -> r[2] ≈ 5 && -1 <= r[1] <= 1
