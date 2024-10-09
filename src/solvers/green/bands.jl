@@ -858,12 +858,12 @@ minimal_callsafe_copy(s::BandsGreenSlicer, parentham, parentcontacts) = s  # it 
 #endregion
 
 ############################################################################################
-# diagonal_slice
+# maybe_diagonal_slice
 #   optimized block diagonal of g[::CellOrbitals] for BandsGreenSlicer without boundary
 #   otherwise we need to do it the normal way
 #region
 
-function diagonal_slice(gω::GreenSolution{T,<:Any,<:Any,G}, o::CellOrbitals) where {T,G<:BandsGreenSlicer{<:Any,Missing}}
+function maybe_diagonal_slice(gω::GreenSolution{T,<:Any,<:Any,G}, o::CellOrbitals) where {T,G<:BandsGreenSlicer{<:Any,Missing}}
     s = slicer(gω)   # BandsGreenSlicer
     norbs = flatsize(gω)
     rngs = orbranges(o)

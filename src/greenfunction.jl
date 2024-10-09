@@ -160,9 +160,6 @@ Base.getindex(gω::GreenSolution{T}, i::DiagIndices, ::DiagIndices = i) where {T
 append_diagonal!(d, x, i, kernel, g; kw...) =
     append_diagonal!(d, x, sites_to_orbs(i, g), kernel, g; kw...)
 
-# append_diagonal!(d, x, s::OrbitalSlice, kernel, g; kw...) =
-#     append_diagonal!(d, x, cellsdict(s), kernel, g; kw...)    # no OrbitalSliceVector here
-
 append_diagonal!(d, x, s::AnyOrbitalSlice, kernel, g; kw...) =
     append_diagonal!(d, x, cellsdict(s), kernel, g; kw...)
 
@@ -178,7 +175,7 @@ end
 function append_diagonal!(d, x, o::Union{AnyCellOrbitals,Colon,Integer}, kernel, g; post = identity)
     # Note that o can be a contact index (Colon or Integer), since sites_to_orbs doesn't
     # reduce these for performance (they are already precomputed if x::GreenSolution)
-    xblock = diagonal_slice(x, o)
+    xblock = maybe_diagonal_slice(x, o)
     rngs = orbranges_or_allorbs(kernel, o, g)
     for rng in rngs
         val = apply_kernel(kernel, xblock, rng)
@@ -187,9 +184,11 @@ function append_diagonal!(d, x, o::Union{AnyCellOrbitals,Colon,Integer}, kernel,
     return d
 end
 
-# fallback, may be overloaded for gω's that know how to do this more efficiently
+# generic fallback, may be specialized for gω's that know how to do this more efficiently
 # it should include all diagonal blocks for each site, not just the orbital diagonal
-diagonal_slice(gω, o) = gω[o, o]
+maybe_diagonal_slice(gω::GreenSolution, o) = gω[o, o]
+# no-op for objects different than GreenSolution. Useful for direct calls to append_diagonal!
+maybe_diagonal_slice(x, _) = x
 
 # If no kernel is provided, we return the whole diagonal
 orbranges_or_allorbs(kernel::Missing, o::AnyCellOrbitals, gω) = eachindex(orbindices(o))
@@ -210,7 +209,7 @@ apply_kernel(kernel::Diagonal, v::AbstractMatrix) = sum(i -> kernel[i] * v[i, i]
 apply_kernel(kernel::Diagonal, v::Number) = only(kernel) * v
 
 view_or_scalar(gblock, rng::UnitRange) = view(gblock, rng, rng)
-view_or_scalar(gblock, i::Integer) = gblock[i, i]
+view_or_scalar(gblock, orb::Integer) = gblock[orb, orb]
 
 maybe_scalarize(s::OrbitalSliceGrouped, kernel::Missing) = s
 maybe_scalarize(s::OrbitalSliceGrouped, kernel) = scalarize(s)

@@ -759,9 +759,6 @@ end
 fill_rho_blocks!(s::DensityMatrixSchurSolver, psis, fpsis, ϕ, di::DiagIndices, ::DiagIndices) =
     append_diagonal!(empty!(s.ρmat), FermiEigenstates(psis, fpsis), parent(di), kernel(di), s.g)
 
-# no-op overload
-diagonal_slice(fe::FermiEigenstates, _) = fe
-
 # specialized methods for function called by append_diagonal!
 # rng can be an Integer or a UnitRange
 function apply_kernel(kernel, fe::FermiEigenstates{T}, rng) where {T}
