@@ -51,6 +51,8 @@ using Quantica: Hamiltonian, ParametricHamiltonian, BarebonesOperator, OrbitalSl
     @test Quantica.Quantica.nhoppings(h) == 48
     @test Hamiltonian{3}(h) isa Hamiltonian{<:Any,3}
     @test convert(Hamiltonian{3}, h) isa Hamiltonian{<:Any,3}
+    h = LP.honeycomb() |> hamiltonian(@hopping((; t=1) -> t*SA[1 0], sublats = :B => :A) |> plusadjoint, orbitals = (1,2))
+    @test ishermitian(h())
 end
 
 @testset "hamiltonian orbitals" begin
