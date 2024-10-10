@@ -2281,7 +2281,9 @@ Base.axes(g::GreenSlice) = (orbrows(g), orbcols(g))
 # ifelse(rows && cols are contacts, (rows, cols), (orbrows, orbcols))
 # I.e: if rows, cols are contact indices retrieve them instead of orbslices.
 orbinds_or_contactinds(g) = orbinds_or_contactinds(rows(g), cols(g), orbrows(g), orbcols(g))
-orbinds_or_contactinds(r::Union{Colon,Integer}, c::Union{Colon,Integer}, _, _) = (r, c)
+orbinds_or_contactinds(
+    r::Union{Colon,Integer,DiagIndices{<:Any,Colon},DiagIndices{<:Any,<:Integer}},
+    c::Union{Colon,Integer,DiagIndices{<:Any,Colon},DiagIndices{<:Any,<:Integer}}, _, _) = (r, c)
 orbinds_or_contactinds(_, _, or, oc) = (or, oc)
 
 Base.parent(g::GreenFunction) = g.parent
