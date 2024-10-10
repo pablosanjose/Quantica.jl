@@ -734,7 +734,7 @@ Base.:*(x::Number, t::ParametricHoppingTerm) =
     ParametricHoppingTerm(t.f, t.selector, x * t.coefficient, t.spatial)
 
 Base.adjoint(m::TightbindingModel) = TightbindingModel(adjoint.(terms(m))...)
-Base.adjoint(m::ParametricModel) = ParametricModel(adjoint.(terms(m))...)
+Base.adjoint(m::ParametricModel) = ParametricModel(adjoint(nonparametric(m)), adjoint.(terms(m)))
 Base.adjoint(t::OnsiteTerm{<:Function}) = OnsiteTerm(r -> t.f(r)', t.selector, t.coefficient')
 Base.adjoint(t::OnsiteTerm) = OnsiteTerm(t.f', t.selector, t.coefficient')
 Base.adjoint(t::HoppingTerm{<:Function}) = HoppingTerm((r, dr) -> t.f(r, -dr)', t.selector', t.coefficient')
@@ -747,7 +747,7 @@ end
 
 function Base.adjoint(t::ParametricHoppingTerm{N}) where {N}
     f = ParametricFunction{N}((args...; kw...) -> t.f(args...; kw...)', t.f.params)
-    return ParametricHoppingTerm(f, t.selector, t.coefficient', t.spatial)
+    return ParametricHoppingTerm(f, t.selector', t.coefficient', t.spatial)
 end
 
 #endregion
