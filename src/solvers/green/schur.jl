@@ -657,11 +657,12 @@ decay_lengths(g::AbstractHamiltonian1D, µ = 0, args...; params...) =
 
 ############################################################################################
 # densitymatrix - dedicated Schur method (integration with Fermi points as segments)
+#   Does not support non-Nothing contacts
 #region
 
 struct DensityMatrixSchurSolver{T,A,G<:GreenFunctionSchurLead{T},R,O<:NamedTuple}
     g::G                            # parent of GreenSlice
-    axes::A                # axes of GreenSlice (orbrows, orbcols)
+    orbaxes::A                      # axes of GreenSlice (orbrows, orbcols)
     ρmat::R                         # it spans the full orbitalslices (axes) of GreenSlice.
                                     # can be a Matrix or a Vector (if A::DiagIndices)
     hmat::Matrix{Complex{T}}        # it spans just the unit cell, dense Bloch matrix
@@ -675,14 +676,15 @@ end
 function densitymatrix(s::AppliedSchurGreenSolver, gs::GreenSlice; atol = 1e-7, quadgk_opts...)
     isempty(boundaries(s)) ||
         argerror("Boundaries not implemented for DensityMatrixSchurSolver. Consider using the generic integration solver.")
+    has_selfenergy(gs) && argerror("The Schur densitymatrix solver currently support only `nothing` contacts")
     g = parent(gs)
     ρmat = similar_Array(gs)
     hmat = similar_Array(hamiltonian(g))
     psis = similar(hmat)
     fmat = similar(hmat)
-    axes = orbrows(gs), orbcols(gs)
+    orbaxes = orbrows(gs), orbcols(gs)
     opts = (; atol, quadgk_opts...)
-    solver = DensityMatrixSchurSolver(g, axes, ρmat, hmat, psis, fmat, opts)
+    solver = DensityMatrixSchurSolver(g, orbaxes, ρmat, hmat, psis, fmat, opts)
     return DensityMatrix(solver, gs)
 end
 
@@ -718,7 +720,7 @@ function fermi_h!(s, ϕ, µ, β = 0; params...)
     # special-casing β = Inf with views turns out to be slower
     fs = (@. ϵs = fermi(ϵs - µ, β))
     fpsis = (s.psis .= fs .* psis')
-    ρmat = fill_rho_blocks!(s, psis, fpsis, ϕ, s.axes...)
+    ρmat = fill_rho_blocks!(s, psis, fpsis, ϕ, s.orbaxes...)
     return ρmat
 end
 
@@ -759,19 +761,31 @@ end
 fill_rho_blocks!(s::DensityMatrixSchurSolver, psis, fpsis, ϕ, di::DiagIndices, ::DiagIndices) =
     append_diagonal!(empty!(s.ρmat), FermiEigenstates(psis, fpsis), parent(di), kernel(di), s.g)
 
-# specialized methods for function called by append_diagonal!
-# rng can be an Integer or a UnitRange
-function apply_kernel(kernel, fe::FermiEigenstates{T}, rng) where {T}
-    val = zero(Complex{T})
-    v, v´ = view(fe.psis, rng, :), view(fe.fpsis, :, rng)
-    val += kernel_multiply(kernel, v, v´)
-    return val
+# this driver gets called by append_diagonal(d, fe, o, kernel, g), see greenfunction.jl
+function append_diagonal!(d, fe::FermiEigenstates, o::AnyCellOrbitals, kernel; post = identity)
+    for orbs in orbgroups(o)
+        v, v´ = view(fe.psis, orbs, :), view(fe.fpsis, :, orbs)
+        append_trace_or_diag!(d, kernel, v, v´, post)
+    end
+    return d
 end
 
-kernel_multiply(::Missing, v, v´) = trace_prod(v, v´)
-kernel_multiply(kernel::UniformScaling, v, v´) = kernel.λ * trace_prod(v, v´)
-kernel_multiply(kernel::Number, v, v´) = kernel * trace_prod(v, v´)
-kernel_multiply(kernel, v, v´) = trace_prod(kernel * v, v´)
+function append_trace_or_diag!(d::AbstractVector{T}, ::Missing, v, v´, post) where {T}
+    for i in axes(v, 1)
+        val = zero(T)
+        for j in axes(v, 2)
+            val += v[i, j] * v´[j, i]
+        end
+        push!(d, post(val))
+    end
+    return d
+end
+
+append_trace_or_diag!(d, kernel, v, v´, post) = push!(d, post(kernel_trace_multiply(kernel, v, v´)))
+
+kernel_trace_multiply(kernel::UniformScaling, v, v´) = kernel.λ * trace_prod(v, v´)
+kernel_trace_multiply(kernel::Number, v, v´) = kernel * trace_prod(v, v´)
+kernel_trace_multiply(kernel, v, v´) = trace_prod(kernel * v, v´)
 
 #endregion
 

@@ -1966,6 +1966,7 @@ orbslice(Σ::SelfEnergy) = Σ.orbslice
 
 solver(Σ::SelfEnergy) = Σ.solver
 
+# check if we have any non-empty selfenergies
 has_selfenergy(s::SelfEnergy) = has_selfenergy(solver(s))
 has_selfenergy(s::AbstractSelfEnergySolver) = true
 # see nothing.jl for override for the case of SelfEnergyEmptySolver
