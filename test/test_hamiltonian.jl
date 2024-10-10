@@ -451,7 +451,7 @@ end
     h = combine(h1, h2; coupling)
     @test h isa ParametricHamiltonian{Float64,2,1,Quantica.SMatrixView{2,2,ComplexF64,4}}
     @test ishermitian(h((p = 10)))
-    @test h(0; p = 10) == SA[2 50im 0; -50im  20 0; 0 0 20]
+    @test h(0; p = 10) == SA[2 70im 0; -70im  20 0; 0 0 20]
     # block filtering
     l1 = LP.linear(dim = 2, names = :A) |> supercell(2) |> supercell
     l2 = translate(lattice(l1, names = :B), SA[0,1])

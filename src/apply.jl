@@ -254,7 +254,7 @@ function push_pointers!(ptrs, h, har, s::AppliedHopSelector, shifts = missing, b
         rrow = site(lat, row, dn)
         r, dr = rdr(rcol => rrow)
         r = apply_shift(shifts, r, col)
-        if (scol => srow, (r, dr), dn) in s
+        if (col => row, scol => srow, (r, dr), dn) in s
             ncol = norbs[scol]
             nrow = norbs[srow]
             sprow, spcol = CellSitePos(dn, row, rrow, B), CellSitePos(dn0, col, rcol, B)
