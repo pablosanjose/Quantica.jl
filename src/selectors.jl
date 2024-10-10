@@ -50,8 +50,8 @@ end
 #     return ((j, i), (r, dr), dcell) in sel
 # end
 
-function Base.in(((sj, si), (r, dr), dcell)::Tuple{Pair,Tuple,SVector}, sel::AppliedHopSelector)
-    return !isnull(sel) && (includeonsite(sel) || !isonsite(dr)) &&
+function Base.in(((j, i), (sj, si), (r, dr), dcell)::Tuple{Pair, Pair,Tuple,SVector}, sel::AppliedHopSelector)
+    return !isnull(sel) && (includeonsite(sel) || !isonsite((j, i), dcell)) &&
             indcells(dcell, sel) &&
             insublats(sj => si, sel) &&
             iswithinrange(dr, sel) &&

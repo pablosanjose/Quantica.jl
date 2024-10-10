@@ -197,8 +197,9 @@ function IJVBuilder(lat::Lattice{T}, hams::AbstractHamiltonian...) where {T}
     builder = IJVBuilderWithModifiers(lat, bs)
     push_ijvharmonics!(builder, hams...)
     mss = modifiers.(hams)
+    mss´ = applyrange.(mss, hams)
     bis = blockindices(hams)
-    unapplied_block_modifiers = ((ms, bi) -> intrablock.(parent.(ms), Ref(bi))).(mss, bis)
+    unapplied_block_modifiers = ((ms, bi) -> intrablock.(parent.(ms), Ref(bi))).(mss´, bis)
     push!(builder, tupleflatten(unapplied_block_modifiers...)...)
     return builder
 end

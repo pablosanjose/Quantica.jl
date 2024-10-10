@@ -439,7 +439,7 @@ end
     h = combine(hb, h0, ht; coupling = hopping((r,dr) -> exp(-norm(dr)), range = 2))
     @test !iszero(h((0,0))[1:2, 5:6])
     # Parametric combine
-    h1 = LP.linear(dim = 2) |> translate(SA[0,1]) |> hopping(1)
+    h1 = LP.linear(dim = 2) |> hopping(1)
     h2 = LP.linear(dim = 2) |> hamiltonian(@hopping((; p = 1) -> p*I), orbitals = 2)
     coupling = @hopping((; p = 1) -> im*p*SA[1 0], range = 3, sublats = :B => :A) |> plusadjoint
     @test_throws ArgumentError combine(h1, h2)  # non-unique names not allowed with parametric
@@ -447,10 +447,11 @@ end
     @test combine(h1, h2()) isa Hamiltonian     # non-unique names allowed with hamiltonian
     h2 = LP.linear(dim = 2, names = :B) |> hamiltonian(@hopping((; p = 1) -> p*I), orbitals = 2)
     @test combine(h1, h2) isa ParametricHamiltonian{Float64,2,1,Quantica.SMatrixView{2,2,ComplexF64,4}}
+    # this `combine` exercises #313, because lattice(h1) + lattice(h2) has smaller neighbor distance than lattice(h2)
     h = combine(h1, h2; coupling)
     @test h isa ParametricHamiltonian{Float64,2,1,Quantica.SMatrixView{2,2,ComplexF64,4}}
     @test ishermitian(h((p = 10)))
-    @test h(0; p = 10) == SA[2 50im 0; -50im  20 0; 0 0 20]
+    @test h(0; p = 10) == SA[2 70im 0; -70im  20 0; 0 0 20]
     # block filtering
     l1 = LP.linear(dim = 2, names = :A) |> supercell(2) |> supercell
     l2 = translate(lattice(l1, names = :B), SA[0,1])
