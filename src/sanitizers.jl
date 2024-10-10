@@ -169,8 +169,8 @@ function sorteigs!(ϵ::AbstractVector, ψ::AbstractMatrix)
     p = Vector{Int}(undef, length(ϵ))
     p´ = similar(p)
     sortperm!(p, ϵ, by = real, alg = Base.DEFAULT_UNSTABLE)
-    Base.permute!!(ϵ, copy!(p´, p))
-    Base.permutecols!!(ψ, copy!(p´, p))
+    permute!!(ϵ, copy!(p´, p))
+    permutecols!!(ψ, copy!(p´, p))
     return ϵ, ψ
 end
 
