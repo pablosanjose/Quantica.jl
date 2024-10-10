@@ -323,6 +323,12 @@ end
         if g !== g3 # KPM doesn't support finite temperatures yet
             @test isapprox(ρ0(0.2, 0.3), ρ(0.2, 0.3))
         end
+        if g === g1 || g === g3
+            ρ0 = densitymatrix(g[diagonal(1, kernel = SA[0 1; 1 0])], 5)
+            ρ = densitymatrix(g[diagonal(1, kernel = SA[0 1; 1 0])])
+            @test isapprox(ρ0(), ρ(); atol = 1e-8)
+            @test isapprox(ρ0(0.2), ρ(0.2); atol = 1e-8)
+        end
     end
 end
 
