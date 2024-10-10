@@ -108,8 +108,63 @@ lengths_to_offsets(v::NTuple{<:Any,Integer}) = (0, cumsum(v)...)
 lengths_to_offsets(v) = prepend!(cumsum(v), 0)
 lengths_to_offsets(f::Function, v) = prepend!(accumulate((i,j) -> i + f(j), v; init = 0), 0)
 
+
 # fast tr(A*B) without doing the A*B product
 trace_prod(A, B) = sum(splat(*), zip(A, transpose(B)))
+
+# Taken from Base julia, now deprecated there
+function permute!!(a, p::AbstractVector{<:Integer})
+    Base.require_one_based_indexing(a, p)
+    count = 0
+    start = 0
+    while count < length(a)
+        ptr = start = findnext(!iszero, p, start+1)::Int
+        temp = a[start]
+        next = p[start]
+        count += 1
+        while next != start
+            a[ptr] = a[next]
+            p[ptr] = 0
+            ptr = next
+            next = p[next]
+            count += 1
+        end
+        a[ptr] = temp
+        p[ptr] = 0
+    end
+    a
+end
+
+# like permute!! applied to each row of a, in-place in a (overwriting p).
+function permutecols!!(a::AbstractMatrix, p::AbstractVector{<:Integer})
+    Base.require_one_based_indexing(a, p)
+    count = 0
+    start = 0
+    while count < length(p)
+        ptr = start = findnext(!iszero, p, start+1)::Int
+        next = p[start]
+        count += 1
+        while next != start
+            swapcols!(a, ptr, next)
+            p[ptr] = 0
+            ptr = next
+            next = p[next]
+            count += 1
+        end
+        p[ptr] = 0
+    end
+    a
+end
+
+function swapcols!(a::AbstractMatrix, i, j)
+    i == j && return
+    cols = axes(a,2)
+    @boundscheck i in cols || throw(BoundsError(a, (:,i)))
+    @boundscheck j in cols || throw(BoundsError(a, (:,j)))
+    for k in axes(a,1)
+        @inbounds a[k,i],a[k,j] = a[k,j],a[k,i]
+    end
+end
 
 #endregion
 
