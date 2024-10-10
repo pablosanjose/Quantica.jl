@@ -66,9 +66,6 @@ sanitize_cells(::Missing, ::Val{L}) where {L} = missing
 sanitize_cells(f::Function, ::Val{L}) where {L} = f
 sanitize_cells(cells, ::Val{L}) where {L} = sanitize_SVector.(SVector{L,Int}, cells)
 
-applyrange(r::Neighbors, lat) = nrange(Int(r), lat)
-applyrange(r::Real, lat) = r
-
 padrange(r::Real, m) = isfinite(r) ? float(r) + m * sqrt(eps(float(r))) : float(r)
 
 applied_region(r, ::Missing) = true
@@ -127,6 +124,15 @@ function recursive_push!(v::Vector{SVector{L,Int}}, fcell::Function, cells) wher
 end
 
 recursive_push!(v::Vector, f, cells) = recursive_push!(v, f)
+
+applyrange(ss::Tuple, h::AbstractHamiltonian) = applyrange.(ss, Ref(h))
+applyrange(s::Modifier, h::AbstractHamiltonian) = s
+applyrange(s::AppliedHoppingModifier, h::ParametricHamiltonian) =
+    AppliedHoppingModifier(s, applyrange(selector(s), lattice(h)))
+applyrange(s::HopSelector, lat::Lattice) = hopselector(s; range = sanitize_minmaxrange(hoprange(s), lat))
+
+applyrange(r::Neighbors, lat::Lattice) = nrange(Int(r), lat)
+applyrange(r::Real, lat::Lattice) = r
 
 #endregion
 

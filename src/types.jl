@@ -244,6 +244,8 @@ lattice(ap::AppliedHopSelector) = ap.lat
 cells(ap::AppliedSiteSelector) = ap.cells
 dcells(ap::AppliedHopSelector) = ap.dcells
 
+hoprange(s::HopSelector) = s.range
+
 includeonsite(ap::AppliedHopSelector) = ap.includeonsite
 
 # if isempty(s.dcells) or isempty(s.sublats), none were specified, so we must accept any
@@ -786,6 +788,9 @@ AppliedOnsiteModifier(m::AppliedOnsiteModifier, ptrs) =
 
 AppliedHoppingModifier(m::AppliedHoppingModifier, ptrs) =
     AppliedHoppingModifier(m.parentselector, m.blocktype, m.f, ptrs, m.spatial)
+
+AppliedHoppingModifier(m::AppliedHoppingModifier, sel::Selector) =
+    AppliedHoppingModifier(sel, m.blocktype, m.f, m.ptrs, m.spatial)
 
 #endregion
 
