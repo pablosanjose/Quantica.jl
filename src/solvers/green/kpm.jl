@@ -244,7 +244,6 @@ end
 ## Constructor
 
 function densitymatrix(s::AppliedKPMGreenSolver, gs::GreenSlice{T}) where {T}
-    check_nodiag_axes(gs)
     has_selfenergy(gs) && argerror("The KPM densitymatrix solver currently support only `nothing` contacts")
     momenta = slice_momenta(s.momenta, gs)
     solver = DensityMatrixKPMSolver(momenta, s.bandCH)
@@ -254,13 +253,22 @@ end
 function slice_momenta(momenta, gs)
     r = _maybe_contactinds(gs, rows(gs))
     c = _maybe_contactinds(gs, cols(gs))
-    momenta´ = [view(m, r, c) for m in momenta]
+    momenta´ = [_maybe_diagonal(view(m, r, c), gs) for m in momenta]
     return momenta´
 end
 
 _maybe_contactinds(gs, ::Colon) = Colon()
 _maybe_contactinds(gs, i::Integer) = contactinds(gs, i)
+_maybe_contactinds(gs, i::DiagIndices) = _maybe_contactinds(gs, parent(i))
 _maybe_contactinds(gs, _) = throw(argerror("KPM doesn't support generic indexing"))
+
+_maybe_diagonal(blockmat, gs) = _maybe_diagonal(blockmat, gs, rows(gs))
+_maybe_diagonal(blockmat, gs, is) = blockmat
+
+function _maybe_diagonal(blockmat::AbstractArray{C}, gs, is::DiagIndices) where {C}
+    blockrngs = contactranges(kernel(is), parent(is), gs)          # see greenfunction.jl
+    return append_diagonal!(C[], blockmat, blockrngs, kernel(is))  # parent(is) should be Colon or Integer
+end
 
 ## call
 

@@ -9,10 +9,10 @@ siteselector(s::SiteSelector; region = s.region, sublats = s.sublats, cells = s.
     SiteSelector(region, sublats, cells)
 
 hopselector(h::NamedTuple) = hopselector(; h...)
-hopselector(; region = missing, sublats = missing, dcells = missing, range = neighbors(1)) =
-    HopSelector(region, sublats, dcells, range)
-hopselector(s::HopSelector; region = s.region, sublats = s.sublats, dcells = s.dcells, range = s.range) =
-    HopSelector(region, sublats, dcells, range, s.adjoint)
+hopselector(; region = missing, sublats = missing, dcells = missing, range = neighbors(1), includeonsite = false) =
+    HopSelector(region, sublats, dcells, range, includeonsite)
+hopselector(s::HopSelector; region = s.region, sublats = s.sublats, dcells = s.dcells, range = s.range, includeonsite = s.includeonsite) =
+    HopSelector(region, sublats, dcells, range, includeonsite, s.adjoint)
 
 neighbors(n::Int) = Neighbors(n)
 neighbors(n::Int, lat::Lattice) = nrange(n, lat)
@@ -50,8 +50,8 @@ end
 #     return ((j, i), (r, dr), dcell) in sel
 # end
 
-function Base.in(((sj, si), (r, dr), dcell)::Tuple{Pair,Tuple,SVector}, sel::AppliedHopSelector)
-    return !isnull(sel) && !isonsite(dr) &&
+function Base.in(((j, i), (sj, si), (r, dr), dcell)::Tuple{Pair, Pair,Tuple,SVector}, sel::AppliedHopSelector)
+    return !isnull(sel) && (includeonsite(sel) || !isonsite((j, i), dcell)) &&
             indcells(dcell, sel) &&
             insublats(sj => si, sel) &&
             iswithinrange(dr, sel) &&
@@ -137,7 +137,7 @@ function foreach_hop(f, sel::AppliedHopSelector, kdtrees::Vector{<:KDTree}, ni::
         for j in js
             is = inrange_targets(site(lat, j, nj - ni), lat, si, rmax, kdtrees)
             for i in is
-                isonsite((j, i), ni - nj) && continue
+                !includeonsite(sel) && isonsite((j, i), ni - nj) && continue
                 r, dr = rdr(site(lat, j, nj) => site(lat, i, ni))
                 # Make sure we don't stop searching cells until we reach minimum range
                 isbelowrange(dr, sel) && (found = true)

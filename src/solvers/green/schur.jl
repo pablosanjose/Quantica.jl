@@ -656,13 +656,15 @@ decay_lengths(g::AbstractHamiltonian1D, µ = 0, args...; params...) =
 #endregion
 
 ############################################################################################
-# densitymatrix
+# densitymatrix - dedicated Schur method (integration with Fermi points as segments)
+#   Does not support non-Nothing contacts
 #region
 
-struct DensityMatrixSchurSolver{T,A,G<:GreenFunctionSchurLead{T},O<:NamedTuple}
+struct DensityMatrixSchurSolver{T,A,G<:GreenFunctionSchurLead{T},R,O<:NamedTuple}
     g::G                            # parent of GreenSlice
-    axes::Tuple{A,A}                # axes of GreenSlice (orbrows, orbcols)
-    ρmat::Matrix{Complex{T}}        # it spans the full orbitalslices (axes) of GreenSlice
+    orbaxes::A                      # axes of GreenSlice (orbrows, orbcols)
+    ρmat::R                         # it spans the full orbitalslices (axes) of GreenSlice.
+                                    # can be a Matrix or a Vector (if A::DiagIndices)
     hmat::Matrix{Complex{T}}        # it spans just the unit cell, dense Bloch matrix
     psis::Matrix{Complex{T}}        # it spans just the unit cell, Eigenstates
     fmat::Matrix{Complex{T}}        # it spans just the unit cell, f(hmat)
@@ -674,22 +676,28 @@ end
 function densitymatrix(s::AppliedSchurGreenSolver, gs::GreenSlice; atol = 1e-7, quadgk_opts...)
     isempty(boundaries(s)) ||
         argerror("Boundaries not implemented for DensityMatrixSchurSolver. Consider using the generic integration solver.")
-    check_nodiag_axes(gs)
+    has_selfenergy(gs) && argerror("The Schur densitymatrix solver currently support only `nothing` contacts")
     g = parent(gs)
-    ρmat = similar_Matrix(gs)
-    hmat = similar_Matrix(hamiltonian(g))
+    ρmat = similar_Array(gs)
+    hmat = similar_Array(hamiltonian(g))
     psis = similar(hmat)
     fmat = similar(hmat)
-    axes = orbrows(gs), orbcols(gs)
+    orbaxes = orbrows(gs), orbcols(gs)
     opts = (; atol, quadgk_opts...)
-    solver = DensityMatrixSchurSolver(g, axes, ρmat, hmat, psis, fmat, opts)
+    solver = DensityMatrixSchurSolver(g, orbaxes, ρmat, hmat, psis, fmat, opts)
     return DensityMatrix(solver, gs)
+end
+
+struct FermiEigenstates{T}
+    psis::Matrix{Complex{T}}
+    fpsis::Matrix{Complex{T}}
 end
 
 # API
 
 ## call
 
+# use computed Fermi points to integrate spectral function by segments
 function (s::DensityMatrixSchurSolver)(µ, kBT; params...)
     λs = propagating_eigvals(s.g, µ + 0im, 1e-2; params...)
     ϕs = @. real(-im*log(λs))
@@ -700,7 +708,7 @@ function (s::DensityMatrixSchurSolver)(µ, kBT; params...)
     integrand(x) = fermi_h!(s, 2π * x, µ, inv(kBT); params...)
     result = similar(s.ρmat)
     fx! = (y, x) -> (y .= integrand(x))
-    result, err = quadgk!(fx!, result, xs...; s.opts...)
+    quadgk!(fx!, result, xs...; s.opts...)
     return result
 end
 
@@ -712,20 +720,24 @@ function fermi_h!(s, ϕ, µ, β = 0; params...)
     # special-casing β = Inf with views turns out to be slower
     fs = (@. ϵs = fermi(ϵs - µ, β))
     fpsis = (s.psis .= fs .* psis')
-    mul!(s.fmat, psis, fpsis)
-    fillblocks!(s.ρmat, s.fmat, ϕ, s.axes...)
-    return s.ρmat
+    ρmat = fill_rho_blocks!(s, psis, fpsis, ϕ, s.orbaxes...)
+    return ρmat
 end
 
 # fillblock! consistent with Base.getindex(g::GreenSolution, args...) see greenfunction.jl
-
-function fillblocks!(ρmat, fmat, ϕ, i, j)
+# uses views into fmat = f(ϵₙ) * ψₙ * ψₘ' to fill blocks in the ρmat = parent or OrbitalSliceMatrix
+function fill_rho_blocks!(s::DensityMatrixSchurSolver, psis, fpsis, ϕ, i, j)
+    ρmat, fmat = s.ρmat, s.fmat
+    mul!(fmat, psis, fpsis)
     oj = 0  # offsets
     for cj in cellsdict_or_single_cellorbs(j)
         oi = 0
         for ci in cellsdict_or_single_cellorbs(i)
             ρview = view(ρmat, oi + 1:oi + norbitals(ci), oj + 1:oj + norbitals(cj))
-            fillblocks!(ρview, fmat, ϕ, ci, cj)
+            fview = view(fmat, orbindices(ci), orbindices(cj))
+            copy!(ρview, fview)
+            phase = cis(only(cell(ci) - cell(cj)) * ϕ)
+            ρview .*= phase
             oi += norbitals(ci)
         end
         oj += norbitals(cj)
@@ -733,16 +745,47 @@ function fillblocks!(ρmat, fmat, ϕ, i, j)
     return ρmat
 end
 
-function fillblocks!(ρmat, fmat, ϕ, i::AnyCellOrbitals, j::AnyCellOrbitals)
-    fview = view(fmat, orbindices(i), orbindices(j))
-    copy!(ρmat, fview)
-    dn = only(cell(i) - cell(j))
-    ρmat .*= cis(ϕ*dn)
-    return ρmat
-end
-
 cellsdict_or_single_cellorbs(i::AnyOrbitalSlice) = cellsdict(i)
 cellsdict_or_single_cellorbs(i::AnyCellOrbitals) = (i,)
+
+# fastpath for direct CellOrbitals indexing. Not sure it's worth it.
+function fill_rho_blocks!(s::DensityMatrixSchurSolver, psis, fpsis, ϕ, i::AnyCellOrbitals, j::AnyCellOrbitals)
+    vpsis = view(psis, orbindices(i), :)
+    vfpsis = view(fpsis, :, orbindices(j))
+    phase = cis(only(cell(i) - cell(j)) * ϕ)
+    mul!(s.ρmat, vpsis, vfpsis, phase, 0)
+    return s.ρmat
+end
+
+# diagonal indexing
+fill_rho_blocks!(s::DensityMatrixSchurSolver, psis, fpsis, ϕ, di::DiagIndices, ::DiagIndices) =
+    append_diagonal!(empty!(s.ρmat), FermiEigenstates(psis, fpsis), parent(di), kernel(di), s.g)
+
+# this driver gets called by append_diagonal(d, fe, o, kernel, g), see greenfunction.jl
+function append_diagonal!(d, fe::FermiEigenstates, o::AnyCellOrbitals, kernel; post = identity)
+    for orbs in orbgroups(o)
+        v, v´ = view(fe.psis, orbs, :), view(fe.fpsis, :, orbs)
+        append_trace_or_diag!(d, kernel, v, v´, post)
+    end
+    return d
+end
+
+function append_trace_or_diag!(d::AbstractVector{T}, ::Missing, v, v´, post) where {T}
+    for i in axes(v, 1)
+        val = zero(T)
+        for j in axes(v, 2)
+            val += v[i, j] * v´[j, i]
+        end
+        push!(d, post(val))
+    end
+    return d
+end
+
+append_trace_or_diag!(d, kernel, v, v´, post) = push!(d, post(kernel_trace_multiply(kernel, v, v´)))
+
+kernel_trace_multiply(kernel::UniformScaling, v, v´) = kernel.λ * trace_prod(v, v´)
+kernel_trace_multiply(kernel::Number, v, v´) = kernel * trace_prod(v, v´)
+kernel_trace_multiply(kernel, v, v´) = trace_prod(kernel * v, v´)
 
 #endregion
 

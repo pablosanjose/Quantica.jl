@@ -74,10 +74,13 @@ end
 #   specialized DensityMatrix method for GS.Spectrum
 #region
 
-struct DensityMatrixSpectrumSolver{T,R,C}
+struct DensityMatrixSpectrumSolver{T,G<:GreenSlice,A,P,R}
+    gs::G
+    orbs::A
     es::Vector{Complex{T}}
-    psirows::R
-    psicols::C
+    psis::P
+    fpsis::P
+    ρmat::R
 end
 
 ## Constructor
@@ -85,26 +88,39 @@ end
 function densitymatrix(s::AppliedSpectrumGreenSolver, gs::GreenSlice)
     # SpectrumGreenSlicer is 0D, so there is a single cellorbs in dict.
     # If rows/cols are contacts, we need their orbrows/orbcols (unlike for gs(ω; params...))
-    check_nodiag_axes(gs)
-    i, j = only(cellsdict(orbrows(gs))), only(cellsdict(orbcols(gs)))
-    oi, oj = orbindices(i), orbindices(j)
+    has_selfenergy(gs) && argerror("The Spectrum densitymatrix solver currently support only `nothing` contacts")
     es, psis = spectrum(s)
-    solver = DensityMatrixSpectrumSolver(es, _maybe_view(psis, oi), _maybe_view(psis, oj))
+    fpsis = copy(psis')
+    ρmat = similar_Array(gs)
+    orbs = orbrows(gs), orbcols(gs)
+    solver = DensityMatrixSpectrumSolver(gs, orbs, es, psis, fpsis, ρmat)
     return DensityMatrix(solver, gs)
 end
 
-## API
-
 ## call
 
-function (d::DensityMatrixSpectrumSolver)(mu, kBT; params...)
-    vi = d.psirows
-    vj´ = d.psicols' .* fermi.(d.es .- mu, inv(kBT))
-    return vi * vj´
+function (s::DensityMatrixSpectrumSolver)(mu, kBT; params...)
+    psis, fpsis, es = s.psis, s.fpsis, s.es
+    β = inv(kBT)
+    @. fpsis = fermi(es - mu, β) * psis'
+    oi, oj = s.orbs
+    ρmat = fill_rho_blocks!(s, psis, fpsis, oi, oj)
+    return copy(ρmat)
 end
 
-# if the orbindices cover all the unit cell, use matrices instead of views
-_maybe_view(m, oi) = length(oi) == size(m, 1) ? m : view(m, oi, :)
+function fill_rho_blocks!(s::DensityMatrixSpectrumSolver, psis, fpsis, i, j)
+    oi, oj = zerocellorbinds(i), zerocellorbinds(j)
+    vpsis = view(psis, oi, :)
+    vfpsis = view(fpsis, :, oj)
+    return mul!(s.ρmat, vpsis, vfpsis)
+end
+
+zerocellorbinds(orb::AnyCellOrbitals) = orbindices(orb)
+zerocellorbinds(orb::AnyOrbitalSlice) = orbindices(only(cellsdict(orb)))
+
+# this relies on the append_diagonal! method from the Schur densitymatrix solver, see schur.jl
+fill_rho_blocks!(s::DensityMatrixSpectrumSolver, psis, fpsis, i::DiagIndices, ::DiagIndices) =
+    append_diagonal!(empty!(s.ρmat), FermiEigenstates(psis, fpsis), parent(i), kernel(i), parent(s.gs))
 
 #endregion
 #endregion

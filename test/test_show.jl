@@ -32,7 +32,8 @@
         @test nothing === show(stdout, current(g(0.1)))
         @test nothing === show(stdout, conductance(g[1]))
         @test nothing === show(stdout, transmission(g[1,2]))
-        @test nothing === show(stdout, densitymatrix(g[1]))
+        g = greenfunction(supercell(h) |> attach(nothing), GS.Spectrum())
+        @test nothing === show(stdout, densitymatrix(g[1]))  # only supports nothing solvers
         @test nothing === show(stdout, MIME("text/plain"), densitymatrix(g[1])())
         @test nothing === show(stdout, sites(1))
         @test nothing === show(stdout, sites(SA[1], 2:4))
@@ -53,7 +54,7 @@
     h = supercell(h, 3) |> supercell
     g = greenfunction(supercell(h) |> attach(nothing), GS.KPM())
     @test nothing === show(stdout, densitymatrix(g[1]))
-    g = greenfunction(supercell(h) |> attach(@onsite(ω -> im*I)) |> attach(nothing), GS.Spectrum())
+    g = greenfunction(supercell(h) |> attach(nothing), GS.Spectrum())
     @test nothing === show(stdout, densitymatrix(g[1]))
     b = LP.honeycomb() |> Quantica.builder(orbitals = 2)
     @test nothing === show(stdout, b)

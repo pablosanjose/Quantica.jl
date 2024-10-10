@@ -140,55 +140,64 @@ sanitize_cellorbs(c::CellOrbitalsGrouped) = CellOrbitals(cell(c), orbindices(c))
 
 ############################################################################################
 # GreenSolution diagonal indexing
-#   returns a vector of AbstractMatrices or scalars, one per site
+#   returns a vector of AbstractMatrices or scalars,
+#   one per site (if kernel is not missing) or one per orbital (if kernel is missing)
 #region
 
 Base.getindex(gω::GreenSolution{T}, i::DiagIndices, ::DiagIndices = i) where {T} =
-    append_diagonal!(Complex{T}[], gω, parent(i), kernel(i)) |>
+    append_diagonal!(Complex{T}[], gω, parent(i), kernel(i), gω) |>
         maybe_OrbitalSliceArray(sites_to_orbs(i, gω))
 
+#endregion
+
+############################################################################################
+# append_diagonal!(d, x, i, kernel, g; kw...)
+#   append to d the elements Tr(kernel*x[i,i]) for each site encoded in i, or each orbital
+#   if kernel is missing. g is the GreenFunction, used to convert i to CellOrbitals
+#region
+
 # If i::Union{SiteSlice,CellSites}, convert to orbitals
-append_diagonal!(d, gω, i, kernel; kw...) =
-    append_diagonal!(d, gω, sites_to_orbs(i, gω), kernel; kw...)
+append_diagonal!(d, x, i, kernel, g; kw...) =
+    append_diagonal!(d, x, sites_to_orbs(i, g), kernel; kw...)
 
-append_diagonal!(d, gω, s::OrbitalSlice, kernel; kw...) =
-    append_diagonal!(d, gω, cellsdict(s), kernel; kw...)    # no OrbitalSliceVector here
+# but not if i is a contact. Jumpt to core driver
+append_diagonal!(d, gω::GreenSolution, o::Union{Colon,Integer}, kernel, g; kw...) =
+    append_diagonal!(d, gω[o,o], contactranges(kernel, o, gω), kernel; kw...)
 
-append_diagonal!(d, gω, s::AnyOrbitalSlice, kernel; kw...) =
-    append_diagonal!(d, gω, cellsdict(s), kernel; kw...)
+# decompose any LatticeSlice into CellOrbitals
+append_diagonal!(d, x, s::AnyOrbitalSlice, kernel; kw...) =
+    append_diagonal!(d, x, cellsdict(s), kernel; kw...)
 
-function append_diagonal!(d, gω, s::AnyCellOrbitalsDict, kernel; kw...)
+function append_diagonal!(d, x, s::AnyCellOrbitalsDict, kernel; kw...)
     sizehint!(d, length(s))
     for sc in s
-        append_diagonal!(d, gω, sc, kernel; kw...)
+        append_diagonal!(d, x, sc, kernel; kw...)
     end
     return d
 end
 
-function append_diagonal!(d, gω, o::Union{AnyCellOrbitals,Integer,Colon}, kernel; post = identity)
-    gblock = diagonal_slice(gω, o)
-    rngs = orbranges_or_allorbs(kernel, o, gω)
-    for rng in rngs
-        push!(d, post(apply_kernel(kernel, view_or_scalar(gblock, rng))))
+append_diagonal!(d, gω::GreenSolution, o::AnyCellOrbitals, kernel; kw...) =
+    append_diagonal!(d, gω[o,o], orbindranges(kernel, o), kernel; kw...)
+
+# core driver
+function append_diagonal!(d, blockmat::AbstractMatrix, blockrngs, kernel; post = identity)
+    for rng in blockrngs
+        val = apply_kernel(kernel, blockmat, rng)
+        push!(d, post(val))
     end
     return d
 end
-
-# fallback, may be overloaded for gω's that know how to do this more efficiently
-# it should include all diagonal blocks for each site, not just the orbital diagonal
-diagonal_slice(gω, o) = gω[o, o]
 
 # If no kernel is provided, we return the whole diagonal
-orbranges_or_allorbs(kernel::Missing, o::AnyCellOrbitals, gω) = eachindex(orbindices(o))
-orbranges_or_allorbs(kernel::Missing, o::Colon, gω) = 1:norbitals(contactorbitals(gω))
-orbranges_or_allorbs(kernel::Missing, i::Integer, gω) = 1:norbitals(contactorbitals(gω), i)
-orbranges_or_allorbs(kernel, o, gω) = orbranges_or_allorbs(o, gω)
-orbranges_or_allorbs(contact::Integer, gω) = orbranges(contactorbitals(gω), contact)
-orbranges_or_allorbs(::Colon, gω) = orbranges(contactorbitals(gω))
-orbranges_or_allorbs(o::CellOrbitalsGrouped, gω) = orbranges(o)
+contactranges(::Missing, o::Colon, gω) = 1:norbitals(contactorbitals(gω))
+contactranges(::Missing, i::Integer, gω) = 1:norbitals(contactorbitals(gω), i)
+contactranges(kernel, ::Colon, gω) = orbranges(contactorbitals(gω))
+contactranges(kernel, i::Integer, gω) = orbranges(contactorbitals(gω), i)
 
-view_or_scalar(gblock, rng::UnitRange) = view(gblock, rng, rng)
-view_or_scalar(gblock, i::Integer) = gblock[i, i]
+orbindranges(::Missing, o) = eachindex(orbindices(o))
+orbindranges(kernel, o) = orbranges(o)
+
+apply_kernel(kernel, gblock, rng) = apply_kernel(kernel, view_or_scalar(gblock, rng))
 
 apply_kernel(kernel::Missing, v::Number) = v
 apply_kernel(kernel::AbstractMatrix, v) = tr(kernel * v)
@@ -196,6 +205,9 @@ apply_kernel(kernel::UniformScaling, v) = kernel.λ * tr(v)
 apply_kernel(kernel::Number, v) = kernel * tr(v)
 apply_kernel(kernel::Diagonal, v::AbstractMatrix) = sum(i -> kernel[i] * v[i, i], eachindex(kernel))
 apply_kernel(kernel::Diagonal, v::Number) = only(kernel) * v
+
+view_or_scalar(gblock, rng::UnitRange) = view(gblock, rng, rng)
+view_or_scalar(gblock, orb::Integer) = gblock[orb, orb]
 
 maybe_scalarize(s::OrbitalSliceGrouped, kernel::Missing) = s
 maybe_scalarize(s::OrbitalSliceGrouped, kernel) = scalarize(s)

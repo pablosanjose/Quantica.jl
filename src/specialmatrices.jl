@@ -573,6 +573,7 @@ Broadcast.broadcast_unalias(dest::OrbitalSliceArray, src::OrbitalSliceArray) =
 maybe_OrbitalSliceArray(i) = x -> maybe_OrbitalSliceArray(x, i)
 
 maybe_OrbitalSliceArray(x::AbstractVector, i) = maybe_OrbitalSliceVector(x, i)
+maybe_OrbitalSliceArray(x::AbstractVector, (i,_)::Tuple) = maybe_OrbitalSliceVector(x, i)
 maybe_OrbitalSliceArray(x::AbstractMatrix, i) = maybe_OrbitalSliceMatrix(x, i)
 
 maybe_OrbitalSliceVector(x, i::DiagIndices{Missing,<:OrbitalSliceGrouped}) =

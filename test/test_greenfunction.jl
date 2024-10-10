@@ -248,6 +248,10 @@ end
     b = bands(h, ϕs, ϕs, showprogress = false)
     g = h |> attach(@onsite(ω->-im), cells = SA[20,0]) |> greenfunction(GS.Bands(ϕs, ϕs))
     @test g(-1)[sites(SA[1,-1], 1), sites(1)] isa AbstractMatrix
+
+    # exercise band digagonal fastpath
+    g = h |> greenfunction(GS.Bands(ϕs, ϕs))
+    @test g(-0.2)[diagonal(sites(SA[1,2], :))] isa AbstractVector
 end
 
 @testset "greenfunction 32bit" begin
@@ -280,7 +284,7 @@ end
     end
 end
 
-@testset "diagonal slicing" begin
+@testset "greenfunction diagonal slicing" begin
     g = HP.graphene(a0 = 1, t0 = 1, orbitals = (2,1)) |> supercell((2,-2), region = r -> 0<=r[2]<=5) |>
         attach(nothing, cells = 2, region = r -> 0<=r[2]<=2) |> attach(nothing, cells = 3) |>
         greenfunction(GS.Schur(boundary = -2))
@@ -294,6 +298,32 @@ end
     @test length(g[diagonal(cells = 2:3)](ω)) == 72
     @test length(g[diagonal(cells = 2:3, kernel = I)](ω)) == 48
     @test ldos(g[1])(ω) ≈ -imag.(g[diagonal(1; kernel = I)](ω)) ./ π
+
+    inds = (1, :, (; cells = 1, sublats = :B), sites(2, 1:3), sites(0, 2), sites(3, :))
+    for i in inds, j in inds
+        @test g(0.2)[diagonal(i)] isa Union{OrbitalSliceVector, AbstractVector}
+    end
+end
+
+@testset "densitymatrix diagonal slicing" begin
+    g1 = LP.honeycomb() |> hamiltonian(hopping(0.1I, sublats = (:A,:B) .=> (:A,:B), range = 1) - plusadjoint(@hopping((; t=1) -> t*SA[0.4 1], sublats = :B => :A)), orbitals = (1,2)) |>
+        supercell((1,-1), region = r -> -2<=r[2]<=2) |> attach(nothing, region = RP.circle(1), sublats = :B) |>
+        attach(nothing, sublats = :A, cells = 0, region = r->r[2]<0) |> greenfunction(GS.Schur())
+    g2 = LP.square() |> hopping(1) - onsite(1) |> supercell(3) |> supercell |> attach(nothing, region = RP.circle(2)) |> greenfunction(GS.Spectrum())
+    g3 = LP.triangular() |> hamiltonian(hopping(-I) + onsite(1.8I), orbitals = 2) |> supercell(10) |> supercell |>
+        attach(nothing, region = RP.circle(2)) |> attach(nothing, region = RP.circle(2, SA[1,2])) |> greenfunction(GS.KPM(bandrange=(-4,5)))
+    for g in (g1, g2, g3)
+        ρ0 = densitymatrix(g[diagonal(1)], 5)
+        ρ = densitymatrix(g[diagonal(1)])
+        @test g[diagonal(1)](0.2) == g(0.2)[diagonal(1)]
+        @test g[diagonal(:)](0.2) == g(0.2)[diagonal(:)]
+        @test g[diagonal(1)](0.2) isa OrbitalSliceVector
+        @test isapprox(ρ0(), ρ())
+        @test isapprox(ρ0(0.2), ρ(0.2))
+        if g !== g3 # KPM doesn't support finite temperatures yet
+            @test isapprox(ρ0(0.2, 0.3), ρ(0.2, 0.3))
+        end
+    end
 end
 
 @testset "OrbitalSliceArray slicing" begin
@@ -417,11 +447,6 @@ end
     @test iszero(ρ0)        # rows are on boundary
     @test ρ0[sites(1), sites(SA[1], 1)] isa Matrix
     @test size(view(ρ0, sites(1), sites(SA[1], 1))) == (2, 2)
-
-    # Diagonal slicing not yet supported
-    @test_broken densitymatrix(g1[diagonal(cells = SA[1])], 5)
-    @test_broken densitymatrix(gSpectrum[diagonal(cells = SA[])])
-    @test_broken densitymatrix(gKPM[diagonal(1)])
 
     glead = LP.square() |> hamiltonian(hopping(1)) |> supercell((0,1), region = r -> -1 <= r[1] <= 1) |> attach(nothing; cells = SA[10]) |> greenfunction(GS.Schur(boundary = 0));
     contact1 = r -> r[1] ≈ 5 && -1 <= r[2] <= 1

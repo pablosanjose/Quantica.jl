@@ -206,6 +206,7 @@ struct HopSelector{F,S,D,R} <: Selector
     sublats::S
     dcells::D
     range::R
+    includeonsite::Bool
     adjoint::Bool  # make apply take the "adjoint" of the selector
 end
 
@@ -215,6 +216,7 @@ struct AppliedHopSelector{T,E,L}
     sublats::Vector{Pair{Int,Int}}
     dcells::Vector{SVector{L,Int}}
     range::Tuple{T,T}
+    includeonsite::Bool  # undocumented/internal: don't skip onsite
     isnull::Bool    # if isnull, the selector selects nothing, regardless of other fields
 end
 
@@ -224,7 +226,7 @@ end
 
 #region ## Constructors ##
 
-HopSelector(re, su, dc, ra) = HopSelector(re, su, dc, ra, false)
+HopSelector(re, su, dc, ra, io = false) = HopSelector(re, su, dc, ra, io, false)
 
 #endregion
 
@@ -241,6 +243,10 @@ lattice(ap::AppliedHopSelector) = ap.lat
 
 cells(ap::AppliedSiteSelector) = ap.cells
 dcells(ap::AppliedHopSelector) = ap.dcells
+
+hoprange(s::HopSelector) = s.range
+
+includeonsite(ap::AppliedHopSelector) = ap.includeonsite
 
 # if isempty(s.dcells) or isempty(s.sublats), none were specified, so we must accept any
 inregion(r, s::AppliedSiteSelector) = s.region(r)
@@ -261,7 +267,7 @@ isbelowrange(dr, (rmin, rmax)::Tuple{Real,Real}) =  ifelse(dr'dr < rmin^2, true,
 isnull(s::AppliedSiteSelector) = s.isnull
 isnull(s::AppliedHopSelector) = s.isnull
 
-Base.adjoint(s::HopSelector) = HopSelector(s.region, s.sublats, s.dcells, s.range, !s.adjoint)
+Base.adjoint(s::HopSelector) = HopSelector(s.region, s.sublats, s.dcells, s.range, s.includeonsite, !s.adjoint)
 
 Base.NamedTuple(s::SiteSelector) =
     (; region = s.region, sublats = s.sublats, cells = s.cells)
@@ -570,6 +576,7 @@ Base.copy(ls::LatticeSlice) = LatticeSlice(ls.lat, copy(ls.cellsdict))
 
 abstract type AbstractModel end
 abstract type AbstractModelTerm end
+abstract type AbstractParametricTerm{N} <: AbstractModelTerm end
 
 # wrapper of a function f(x1, ... xN; kw...) with N arguments and the kwargs in params
 struct ParametricFunction{N,F}
@@ -613,23 +620,19 @@ end
 ## Parametric ##
 
 # We fuse applied and non-applied versions, since these only apply the selector, not f
-struct ParametricOnsiteTerm{N,S<:Union{SiteSelector,AppliedSiteSelector},F<:ParametricFunction{N},T<:Number} <: AbstractModelTerm
+struct ParametricOnsiteTerm{N,S<:Union{SiteSelector,AppliedSiteSelector},F<:ParametricFunction{N},T<:Number} <: AbstractParametricTerm{N}
     f::F
     selector::S
     coefficient::T
     spatial::Bool   # If true, f is a function of position r. Otherwise it takes a single CellSite
 end
 
-struct ParametricHoppingTerm{N,S<:Union{HopSelector,AppliedHopSelector},F<:ParametricFunction{N},T<:Number} <: AbstractModelTerm
+struct ParametricHoppingTerm{N,S<:Union{HopSelector,AppliedHopSelector},F<:ParametricFunction{N},T<:Number} <: AbstractParametricTerm{N}
     f::F
     selector::S
     coefficient::T
     spatial::Bool   # If true, f is a function of positions r, dr. Otherwise it takes two CellSite's
 end
-
-const AbstractParametricTerm{N} = Union{ParametricOnsiteTerm{N},ParametricHoppingTerm{N}}
-const AppliedParametricTerm{N} = Union{ParametricOnsiteTerm{N,<:AppliedSiteSelector},
-                                       ParametricHoppingTerm{N,<:AppliedHopSelector}}
 
 struct ParametricModel{T<:NTuple{<:Any,AbstractParametricTerm},M<:TightbindingModel} <: AbstractModel
     npmodel::M  # non-parametric model to use as base
@@ -696,19 +699,6 @@ is_spatial(t) = true
 (term::AbstractParametricTerm{1})(x, args...; kw...) = term.coefficient * term.f.f(x; kw...)
 (term::AbstractParametricTerm{2})(x, y, args...; kw...) = term.coefficient * term.f.f(x, y; kw...)
 (term::AbstractParametricTerm{3})(x, y, z, args...; kw...) = term.coefficient * term.f.f(x, y, z; kw...)
-
-# We need these for SelfEnergyModelSolver, which uses a ParametricModel. We return a
-# ParametricOnsiteTerm, not an OnsiteTerm because the latter is tied to a Hamiltonian at its
-# orbital structure, not only to a site selection
-function (t::ParametricOnsiteTerm{N})(; kw...) where {N}
-    f = ParametricFunction{N}((args...) -> t.f(args...; kw...)) # no params
-    return ParametricOnsiteTerm(f, t.selector, t.coefficient, t.spatial)
-end
-
-function (t::ParametricHoppingTerm{N})(; kw...) where {N}
-    f = ParametricFunction{N}((args...) -> t.f(args...; kw...)) # no params
-    return ParametricHoppingTerm(f, t.selector, t.coefficient, t.spatial)
-end
 
 ## Model term algebra
 
@@ -798,6 +788,9 @@ AppliedOnsiteModifier(m::AppliedOnsiteModifier, ptrs) =
 
 AppliedHoppingModifier(m::AppliedHoppingModifier, ptrs) =
     AppliedHoppingModifier(m.parentselector, m.blocktype, m.f, ptrs, m.spatial)
+
+AppliedHoppingModifier(m::AppliedHoppingModifier, sel::Selector) =
+    AppliedHoppingModifier(sel, m.blocktype, m.f, m.ptrs, m.spatial)
 
 #endregion
 
@@ -1544,7 +1537,7 @@ function blockstructure(lat::Lattice{T}, h::AbstractHamiltonian{T}, hs::Abstract
     return OrbitalBlockStructure{B}(orbitals, subsizes)
 end
 
-similar_Matrix(h::AbstractHamiltonian{T}) where {T} =
+similar_Array(h::AbstractHamiltonian{T}) where {T} =
     Matrix{Complex{T}}(undef, flatsize(h), flatsize(h))
 
 ## Hamiltonian
@@ -1978,6 +1971,7 @@ orbslice(Σ::SelfEnergy) = Σ.orbslice
 
 solver(Σ::SelfEnergy) = Σ.solver
 
+# check if we have any non-empty selfenergies
 has_selfenergy(s::SelfEnergy) = has_selfenergy(solver(s))
 has_selfenergy(s::AbstractSelfEnergySolver) = true
 # see nothing.jl for override for the case of SelfEnergyEmptySolver
@@ -2225,6 +2219,9 @@ Base.parent(i::DiagIndices) = i.inds
 
 kernel(i::DiagIndices) = i.kernel
 
+norbitals_or_sites(i::DiagIndices{Missing}) = norbitals(i.inds)
+norbitals_or_sites(i::DiagIndices) = nsites(i.inds)
+
 # returns the Hamiltonian field
 hamiltonian(g::Union{GreenFunction,GreenSolution,GreenSlice}) = hamiltonian(g.parent)
 
@@ -2290,7 +2287,9 @@ Base.axes(g::GreenSlice) = (orbrows(g), orbcols(g))
 # ifelse(rows && cols are contacts, (rows, cols), (orbrows, orbcols))
 # I.e: if rows, cols are contact indices retrieve them instead of orbslices.
 orbinds_or_contactinds(g) = orbinds_or_contactinds(rows(g), cols(g), orbrows(g), orbcols(g))
-orbinds_or_contactinds(r::Union{Colon,Integer}, c::Union{Colon,Integer}, _, _) = (r, c)
+orbinds_or_contactinds(
+    r::Union{Colon,Integer,DiagIndices{<:Any,Colon},DiagIndices{<:Any,<:Integer}},
+    c::Union{Colon,Integer,DiagIndices{<:Any,Colon},DiagIndices{<:Any,<:Integer}}, _, _) = (r, c)
 orbinds_or_contactinds(_, _, or, oc) = (or, oc)
 
 Base.parent(g::GreenFunction) = g.parent
@@ -2303,11 +2302,10 @@ Base.size(g::GreenSolution, i...) = size(g.parent, i...)
 flatsize(g::GreenFunction, i...) = flatsize(g.parent, i...)
 flatsize(g::GreenSolution, i...) = flatsize(g.parent, i...)
 
-function similar_Matrix(gs::GreenSlice{T}) where {T}
-    m = norbitals(orbrows(gs))
-    n = norbitals(orbcols(gs))
-    return Matrix{Complex{T}}(undef, m, n)
-end
+similar_Array(gs::GreenSlice{T}) where {T} =
+    matrix_or_vector(Complex{T}, orbrows(gs), orbcols(gs))
+matrix_or_vector(C, r, c) = Matrix{C}(undef, norbitals(r), norbitals(c))
+matrix_or_vector(C, r::DiagIndices, ::DiagIndices) = Vector{C}(undef, norbitals_or_sites(r))
 
 boundaries(g::GreenFunction) = boundaries(solver(g))
 # fallback (for solvers without boundaries, or for OpenHamiltonian)
@@ -2442,5 +2440,15 @@ OrbitalSliceMatrix(m::AbstractMatrix, axes) = OrbitalSliceArray(m, axes)
 orbaxes(a::OrbitalSliceArray) = a.orbaxes
 
 Base.parent(a::OrbitalSliceArray) = a.parent
+
+#endregion
+
+############################################################################################
+# Hartree and Fock
+#region
+
+# struct Hartree{D<:DensityMatrix}
+#     rho::
+# end
 
 #endregion

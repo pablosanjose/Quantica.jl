@@ -849,6 +849,21 @@ function muladd_ψPψ⁺!(gmat, α, ψ, (rows, cols)::Tuple)
     return gmat
 end
 
+# fallback for a generic rngs collection (used e.g. by rngs = orbs in append_diagonal! below)
+function muladd_ψPψ⁺!(gmat, α, ψ, rngs)
+    for rng in rngs
+        if length(rng) == 1
+            i = only(rng)
+            gmat[i, i] += α * abs2(ψ[i])
+        else
+            gv = view(gmat, rng, rng)
+            ψv = view(ψ, rng, :)
+            mul!(gv, ψv, ψv', α, 1)
+        end
+    end
+    return gmat
+end
+
 view_or_copy(ψ, rows::Union{Colon,AbstractRange}, cols::Union{Colon,AbstractRange}) =
     view(ψ, rows, cols)
 view_or_copy(ψ, rows, cols) = ψ[rows, cols]
@@ -858,12 +873,12 @@ minimal_callsafe_copy(s::BandsGreenSlicer, parentham, parentcontacts) = s  # it 
 #endregion
 
 ############################################################################################
-# diagonal_slice
+# append_diagonal!
 #   optimized block diagonal of g[::CellOrbitals] for BandsGreenSlicer without boundary
 #   otherwise we need to do it the normal way
 #region
 
-function diagonal_slice(gω::GreenSolution{T,<:Any,<:Any,G}, o::CellOrbitals) where {T,G<:BandsGreenSlicer{<:Any,Missing}}
+function append_diagonal!(d, gω::GreenSolution{T,<:Any,<:Any,G}, o::AnyCellOrbitals, kernel; kw...) where {T,G<:BandsGreenSlicer{<:Any,Missing}}
     s = slicer(gω)   # BandsGreenSlicer
     norbs = flatsize(gω)
     rngs = orbranges(o)
@@ -877,21 +892,8 @@ function diagonal_slice(gω::GreenSolution{T,<:Any,<:Any,G}, o::CellOrbitals) wh
     simpinds = eachindex(simplices(subband))
     # to main driver with orbs = rngs
     inf_band_slice!(gmat, s.ω, dist, rngs, subband, subbandsimps, simpinds)
-    return gmat
-end
-
-function muladd_ψPψ⁺!(gmat, α, ψ, rngs::Vector{<:UnitRange})
-    for rng in rngs
-        if length(rng) == 1
-            i = only(rng)
-            gmat[i, i] += α * abs2(ψ[i])
-        else
-            gv = view(gmat, rng, rng)
-            ψv = view(ψ, rng, :)
-            mul!(gv, ψv, ψv', α, 1)
-        end
-    end
-    return gmat
+    orbs = orbindranges(kernel, o)
+    return append_diagonal!(d, gmat, orbs, kernel; kw...)
 end
 
 #endregion
