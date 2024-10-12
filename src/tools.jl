@@ -109,8 +109,19 @@ lengths_to_offsets(v) = prepend!(cumsum(v), 0)
 lengths_to_offsets(f::Function, v) = prepend!(accumulate((i,j) -> i + f(j), v; init = 0), 0)
 
 
-# fast tr(A*B) without doing the A*B product
-trace_prod(A, B) = sum(splat(*), zip(A, transpose(B)))
+# fast tr(A*B) without allocating an A*B product. Doesn't check dimensions or index offsets
+trace_prod(A::AbstractMatrix, B::AbstractMatrix) = sum(splat(*), zip(A, transpose(B)))
+trace_prod(A::Number, B::AbstractMatrix) = A*tr(B)
+trace_prod(A::AbstractMatrix, B::Number) = trace_prod(B, A)
+trace_prod(A::UniformScaling, B::AbstractMatrix) = A.λ*tr(B)
+trace_prod(A::AbstractMatrix, B::UniformScaling) = trace_prod(B, A)
+trace_prod(A::Diagonal, B::Diagonal) = sum(i -> A[i] * B[i], axes(A,1))
+trace_prod(A::Diagonal, B::AbstractMatrix) = sum(i -> A[i] * B[i, i], axes(A,1))
+trace_prod(A::AbstractMatrix, B::Diagonal) = trace_prod(B, A)
+trace_prod(A::Diagonal, B::Number) = only(A) * B
+trace_prod(A::Number, B::Diagonal) = trace_prod(B, A)
+trace_prod(A::Union{SMatrix,UniformScaling,Number}, B::Union{SMatrix,UniformScaling,Number}) =
+     tr(A*B)
 
 # Taken from Base julia, now deprecated there
 function permute!!(a, p::AbstractVector{<:Integer})

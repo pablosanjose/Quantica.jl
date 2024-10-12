@@ -32,7 +32,8 @@ export sublat, bravais_matrix, lattice, sites, supercell, hamiltonian,
        plotlattice, plotlattice!, plotbands, plotbands!, qplot, qplot!, qplotdefaults,
        conductance, josephson, ldos, current, transmission, densitymatrix,
        OrbitalSliceArray, OrbitalSliceVector, OrbitalSliceMatrix, orbaxes,
-       serializer, serialize, serialize!, deserialize!, deserialize
+       serializer, serialize, serialize!, deserialize!, deserialize,
+       meanfield
 
 export LatticePresets, LP, RegionPresets, RP, HamiltonianPresets, HP, ExternalPresets, EP
 export EigenSolvers, ES, GreenSolvers, GS
@@ -63,6 +64,7 @@ include("mesh.jl")
 include("bands.jl")
 include("greenfunction.jl")
 include("observables.jl")
+include("meanfield.jl")
 # Plumbing
 include("apply.jl")
 include("show.jl")

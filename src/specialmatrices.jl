@@ -546,6 +546,18 @@ function Base.view(a::OrbitalSliceMatrix, i::AnyCellSites, j::AnyCellSites = i)
     return view(parent(a), rows, cols)
 end
 
+# Minimal getindex for OrbitalSliceVector
+Base.getindex(a::OrbitalSliceVector, i::AnyCellSites) = copy(view(a, i))
+Base.getindex(a::OrbitalSliceVector, i::C) where {B,C<:CellSitePos{<:Any,<:Any,<:Any,B}} =
+    sanitize_block(B, view(a, i))
+
+function Base.view(a::OrbitalSliceVector, i::AnyCellSites)
+    rowslice = only(orbaxes(a))
+    i´ = apply(i, lattice(rowslice))
+    rows = indexcollection(rowslice, i´)
+    return view(parent(a), rows)
+end
+
 ## broadcasting
 
 # following the manual: https://docs.julialang.org/en/v1/manual/interfaces/#man-interface-array

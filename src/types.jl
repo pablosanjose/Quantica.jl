@@ -533,6 +533,9 @@ ind(s::CellSitePos) = s.inds
 
 sites(l::LatticeSlice) =
     (site(l.lat, i, cell(subcell)) for subcell in cellsdict(l) for i in siteindices(subcell))
+sites(l::LatticeSlice, blocktype::Type) =
+    (CellIndices(cell(subcell), i, SiteLikePos(site(l.lat, i), blocktype))
+    for subcell in cellsdict(l) for i in siteindices(subcell))
 
 # single-site (CellSite) iterator
 cellsites(cs::Union{SiteSlice,OrbitalSliceGrouped}) = cellsites(cs.cellsdict)
@@ -2435,15 +2438,5 @@ OrbitalSliceMatrix(m::AbstractMatrix, axes) = OrbitalSliceArray(m, axes)
 orbaxes(a::OrbitalSliceArray) = a.orbaxes
 
 Base.parent(a::OrbitalSliceArray) = a.parent
-
-#endregion
-
-############################################################################################
-# Hartree and Fock
-#region
-
-# struct Hartree{D<:DensityMatrix}
-#     rho::
-# end
 
 #endregion

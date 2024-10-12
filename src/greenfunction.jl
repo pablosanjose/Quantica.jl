@@ -198,13 +198,8 @@ orbindranges(::Missing, o) = eachindex(orbindices(o))
 orbindranges(kernel, o) = orbranges(o)
 
 apply_kernel(kernel, gblock, rng) = apply_kernel(kernel, view_or_scalar(gblock, rng))
-
 apply_kernel(kernel::Missing, v::Number) = v
-apply_kernel(kernel::AbstractMatrix, v) = tr(kernel * v)
-apply_kernel(kernel::UniformScaling, v) = kernel.λ * tr(v)
-apply_kernel(kernel::Number, v) = kernel * tr(v)
-apply_kernel(kernel::Diagonal, v::AbstractMatrix) = sum(i -> kernel[i] * v[i, i], eachindex(kernel))
-apply_kernel(kernel::Diagonal, v::Number) = only(kernel) * v
+apply_kernel(kernel, v) = trace_prod(kernel, v)
 
 view_or_scalar(gblock, rng::UnitRange) = view(gblock, rng, rng)
 view_or_scalar(gblock, orb::Integer) = gblock[orb, orb]
