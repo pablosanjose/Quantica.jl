@@ -85,9 +85,9 @@ needs_omega_shift(s::AppliedGreenSolver) = true
 
 ## GreenFunction -> GreenSlice
 
-Base.getindex(g::GreenFunction, i, j = i) = GreenSlice(g, i, j)
 Base.getindex(g::GreenFunction; kw...) = g[siteselector(; kw...)]
 Base.getindex(g::GreenFunction, kw::NamedTuple) = g[siteselector(; kw...)]
+Base.getindex(g::GreenFunction, i, j = i) = GreenSlice(g, i, j)  # this calls sites_to_orbs
 
 ## GreenSolution -> OrbitalSliceMatrix or AbstractMatrix
 
@@ -143,7 +143,7 @@ getindex!(output, g::GreenSolution, ci::AnyOrbitalSlice, cj::AnyCellOrbitals) =
 getindex!(output, g::GreenSolution, ci::AnyCellOrbitals, cj::AnyOrbitalSlice) =
     getindex_cells!(output, g, (ci,), cellsdict(cj))
 
-function getindex_cells!(output, g::GreenSolution, cis, cjs)
+function getindex_cells!(output, g, cis, cjs)
     for ci in cis, cj in cjs
         getindex!(output, g, ci, cj)
     end
@@ -164,14 +164,23 @@ Base.getindex(s::GreenSlicer, ::CellOrbitals, ::CellOrbitals) =
 Base.view(g::GreenSlicer, args...) =
     argerror("GreenSlicer of type $(nameof(typeof(g))) doesn't implement view for these arguments")
 
+## Diagonal and sparse indexing
+
+getindex!(output, g, i::DiagIndices, j::DiagIndices = i) =
+    getindex_diag!(output, g, parent(i), kernel(i))
+
+getindex!(output, g, i::AppliedPairIndices, j::AppliedPairIndices = i) =
+    getindex_sparse!(output, g, parent(i), kernel(i))
+
 #endregion
 
 ############################################################################################
-# GreenSolution diagonal indexing
-#   returns a Diagonal matrix
-#   one element per site (if kernel is not missing) or one per orbital (if kernel::Missing)
-#   We don't support view with diagonal indexing, since Diagonal makes a copy
+# getindex_diag!: GreenSolution diagonal indexing
 #region
+
+function getindex_diag!(output, g, inds, ker)
+    ...
+end
 
 function Base.getindex(g::GreenSolution{T}, di::D, dj::D = di; post = identity) where {T,I<:Union{Colon,Integer},D<:DiagIndices{I}}
     i, ker = parent(di), kernel(di)

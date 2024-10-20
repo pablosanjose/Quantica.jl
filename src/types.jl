@@ -2207,8 +2207,8 @@ const PairIndices{V<:HopSelector,K} = SparseIndices{V,K}
 const AppliedPairIndices{V<:Hamiltonian,K} = SparseIndices{V,K}
 
 struct GreenIndices{I,R}
-    inds::I
-    orbinds::R  # orbinds = sites_to_orbs(inds)
+    inds::I     # Can be Colon, Integer, SiteSelector, LatticeSlice, CellIndices, SparseIndices...
+    orbinds::R  # orbinds = sites_to_orbs(inds). Can be AnyOrbitalSlice, AnyCellOrbitals or SparseIndices thereof
 end
 
 # Obtained with gs = g[; siteselection...]
@@ -2486,7 +2486,7 @@ OrbitalSliceMatrix{C}(::UndefInitializer, oi, oj) where {C} =
 OrbitalSliceMatrix{C}(::UndefInitializer, oi::DiagIndices, oj = oi) where {C} =
     OrbitalSliceArray(Diagonal{C}(undef, length(oi)), (oi, oi))
 
-# OrbitalSliceMatrix{C}(::UndefInitializer, oi::AppliedSparseIndices, oj = oi) where {C} =
+# OrbitalSliceMatrix{C}(::UndefInitializer, oi::AppliedPairIndices, oj = oi) where {C} =
 #     OrbitalSliceArray(Diagonal{C}(undef, length(oi)), (oi, oi))
 
 orbaxes(a::OrbitalSliceArray) = a.orbaxes
