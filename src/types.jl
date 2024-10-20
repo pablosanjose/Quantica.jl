@@ -2229,6 +2229,8 @@ diagonal(; kernel = missing, kw...) = DiagIndices(siteselector(; kw...), kernel)
 
 Base.parent(i::DiagIndices) = i.inds
 
+Base.length(l::DiagIndices) = length(parent(l))
+
 kernel(i::DiagIndices) = i.kernel
 
 norbitals_or_sites(i::DiagIndices{Missing}) = norbitals(i.inds)
