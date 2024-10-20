@@ -148,8 +148,10 @@ hamiltonian(lat::Lattice, m::Interblock{<:ParametricModel}; kw...) = parametric(
     hamiltonian(lat, basemodel(parent(m)), block(m); kw...),
     modifier.(terms(parent(m)))...)
 
-function hamiltonian(lat::Lattice{T}, m::TightbindingModel = TightbindingModel(), block = missing; orbitals = Val(1)) where {T}
-    b = IJVBuilder(lat, orbitals)
+hamiltonian(lat::Lattice, m::TightbindingModel = TightbindingModel(), block = missing; orbitals = Val(1)) =
+    hamiltonian!(IJVBuilder(lat, orbitals), m, block)
+
+function hamiltonian!(b::IJVBuilder, m::TightbindingModel, block = missing)
     add!(b, m, block)
     return hamiltonian(b)
 end

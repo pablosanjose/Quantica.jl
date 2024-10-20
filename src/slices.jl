@@ -336,13 +336,28 @@ end
 sites_to_orbs(s::AnyOrbitalSlice, _) = s
 sites_to_orbs(c::AnyCellOrbitalsDict, _) = c
 sites_to_orbs(c::AnyCellOrbitals, _) = c
+sites_to_orbs(c::SparseIndices{<:Any,<:Hamiltonian}, _) = c
 
 # unused
 # sites_to_orbs_nogroups(cs::CellOrbitals, _) =  cs
 
-## DiagIndices
+## DiagIndices -> DiagIndices
 
-sites_to_orbs(d::DiagIndices, g) = DiagIndices(sites_to_orbs(parent(d), g), kernel(d))
+sites_to_orbs(d::DiagIndices, g) = SparseIndices(sites_to_orbs(parent(d), g), kernel(d))
+
+## PairIndices -> AppliedPairIndices
+
+# creates a Hamiltonian with same blocktype as g, or complex if kernel::Missing
+# this may be used as an intermediate to build sparse versions of g[i,j]
+function sites_to_orbs(d::PairIndices{<:HopSelector}, g)
+    hg = hamiltonian(g)
+    ker = kernel(d)
+    bs = maybe_scalarize(blockstructure(hg), ker)
+    b = IJVBuilder(lattice(hg), bs)
+    hopsel = parent(d)
+    h = hamiltonian!(b, hopping(I, hopsel))
+    return SparseIndices(h, ker)   # AppliedPairIndices
+end
 
 ## convert SiteSlice -> OrbitalSliceGrouped
 

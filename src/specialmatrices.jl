@@ -546,6 +546,18 @@ function Base.view(a::OrbitalSliceMatrix, i::AnyCellSites, j::AnyCellSites = i)
     return view(parent(a), rows, cols)
 end
 
+# Minimal getindex for OrbitalSliceVector
+Base.getindex(a::OrbitalSliceVector, i::AnyCellSites) = copy(view(a, i))
+Base.getindex(a::OrbitalSliceVector, i::C) where {B,C<:CellSitePos{<:Any,<:Any,<:Any,B}} =
+    sanitize_block(B, view(a, i))
+
+function Base.view(a::OrbitalSliceVector, i::AnyCellSites)
+    rowslice = only(orbaxes(a))
+    i´ = apply(i, lattice(rowslice))
+    rows = indexcollection(rowslice, i´)
+    return view(parent(a), rows)
+end
+
 ## broadcasting
 
 # following the manual: https://docs.julialang.org/en/v1/manual/interfaces/#man-interface-array
@@ -568,29 +580,26 @@ Base.dataids(A::OrbitalSliceArray) = Base.dataids(parent(A))
 Broadcast.broadcast_unalias(dest::OrbitalSliceArray, src::OrbitalSliceArray) =
     parent(dest) === parent(src) ? src : Broadcast.unalias(dest, src)
 
-## conversion
+## conversion: If i contains an OrbitalSliceGrouped, wrap it in an OrbitalSliceArray. Otherwise, no-op
 
 maybe_OrbitalSliceArray(i) = x -> maybe_OrbitalSliceArray(x, i)
 
-maybe_OrbitalSliceArray(x::AbstractVector, i) = maybe_OrbitalSliceVector(x, i)
-maybe_OrbitalSliceArray(x::AbstractVector, (i,_)::Tuple) = maybe_OrbitalSliceVector(x, i)
 maybe_OrbitalSliceArray(x::AbstractMatrix, i) = maybe_OrbitalSliceMatrix(x, i)
 
-maybe_OrbitalSliceVector(x, i::DiagIndices{Missing,<:OrbitalSliceGrouped}) =
-    maybe_OrbitalSliceVector(x, parent(i))
-maybe_OrbitalSliceVector(x, i::DiagIndices{<:Any,<:OrbitalSliceGrouped}) =
-    maybe_OrbitalSliceVector(x, scalarize(parent(i)))
-maybe_OrbitalSliceVector(x, i::OrbitalSliceGrouped) = OrbitalSliceVector(x, (i,))
-
-# fallback
-maybe_OrbitalSliceVector(x, i) = x
-
-maybe_OrbitalSliceMatrix(x, i::OrbitalSliceGrouped) =
+maybe_OrbitalSliceMatrix(x::Diagonal, i::OrbitalSliceGrouped) =
     maybe_OrbitalSliceMatrix(x, (i, i))
 maybe_OrbitalSliceMatrix(x, (i, j)::Tuple{OrbitalSliceGrouped,OrbitalSliceGrouped}) =
     OrbitalSliceMatrix(x, (i, j))
-
-# fallback
 maybe_OrbitalSliceMatrix(x, i) = x
+
+## currently unsused
+# maybe_OrbitalSliceArray(x::AbstractVector, i) = maybe_OrbitalSliceVector(x, i)
+# maybe_OrbitalSliceVector(x, i::DiagIndices{Missing,<:OrbitalSliceGrouped}) =
+#     maybe_OrbitalSliceVector(x, parent(i))
+# maybe_OrbitalSliceVector(x, i::DiagIndices{<:Any,<:OrbitalSliceGrouped}) =
+#     maybe_OrbitalSliceVector(x, scalarize(parent(i)))
+# maybe_OrbitalSliceVector(x, i::OrbitalSliceGrouped) = OrbitalSliceVector(x, (i,))
+# maybe_OrbitalSliceVector(x, i) = x
+
 
 #endregion

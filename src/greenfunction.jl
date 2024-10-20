@@ -91,6 +91,10 @@ Base.getindex(g::GreenFunction, kw::NamedTuple) = g[siteselector(; kw...)]
 
 ## GreenSolution -> OrbitalSliceMatrix or AbstractMatrix
 
+# general entry point, conversion down to CellOrbitals. See sites_to_orbs in slices.jl
+Base.getindex(g::GreenSolution, i, j; kw...) = getindex(g, sites_to_orbs(i, g), sites_to_orbs(j, g); kw...)
+Base.getindex(g::GreenSolution, i; kw...) = (i´ = sites_to_orbs(i, g); getindex(g, i´, i´; kw...))
+
 # g[::Integer, ::Integer] and g[:, :] - intra and inter contacts
 Base.view(g::GreenSolution, i::CT, j::CT = i) where {CT<:Union{Integer,Colon}} =
     view(slicer(g), i, j)
@@ -164,77 +168,126 @@ Base.view(g::GreenSlicer, args...) =
 
 ############################################################################################
 # GreenSolution diagonal indexing
-#   returns a vector of AbstractMatrices or scalars,
-#   one per site (if kernel is not missing) or one per orbital (if kernel is missing)
+#   returns a Diagonal matrix
+#   one element per site (if kernel is not missing) or one per orbital (if kernel::Missing)
+#   We don't support view with diagonal indexing, since Diagonal makes a copy
 #region
 
-Base.getindex(gω::GreenSolution{T}, i::DiagIndices, ::DiagIndices = i) where {T} =
-    append_diagonal!(Complex{T}[], gω, parent(i), kernel(i), gω) |>
-        maybe_OrbitalSliceArray(sites_to_orbs(i, gω))
+function Base.getindex(g::GreenSolution{T}, di::D, dj::D = di; post = identity) where {T,I<:Union{Colon,Integer},D<:DiagIndices{I}}
+    i, ker = parent(di), kernel(di)
+    os = sites_to_orbs(i, g)
+    d = post.(Complex{T}[])
+    append_diagonal!(d, view(g, i, i), contactindranges(ker, i, g), ker; post)
+    m = Diagonal(d)
+    i´ = maybe_scalarize(os, ker)
+    return OrbitalSliceMatrix(m, (i´, i´))
+end
+
+function Base.getindex(g::GreenSolution{T}, di::D, dj::D = di; post = identity) where {T,I<:OrbitalSliceGrouped,D<:DiagIndices{I}}
+    os, ker = parent(di), kernel(di)
+    d = post.(Complex{T}[])
+    for o in cellsdict(os)
+        append_diagonal!(d, g[o,o], orbindranges(ker, o), ker; post)
+    end
+    m = Diagonal(d)
+    i´ = maybe_scalarize(os, ker)
+    return OrbitalSliceMatrix(m, (i´, i´))
+end
+
+# no wrapping in OrbitalSliceMatrix for consistency with non-diagonal case
+function Base.getindex(g::GreenSolution{T}, di::D, dj::D = di; post = identity) where {T,I<:CellSites,D<:DiagIndices{I}}
+    i, ker = parent(di), kernel(di)
+    o = sites_to_orbs(i, g)
+    d = post.(Complex{T}[])
+    append_diagonal!(d, g[o, o], orbindranges(ker, o), ker; post)
+    m = Diagonal(d)
+    return m
+end
+
+# If no kernel is provided, we return the whole diagonal
+contactindranges(::Missing, o::Colon, gω) = 1:norbitals(contactorbitals(gω))
+contactindranges(::Missing, i::Integer, gω) = 1:norbitals(contactorbitals(gω), i)
+contactindranges(kernel, ::Colon, gω) = orbranges(contactorbitals(gω))
+contactindranges(kernel, i::Integer, gω) = orbranges(contactorbitals(gω), i)
+
+orbindranges(::Missing, o::AnyCellOrbitals) = eachindex(orbindices(o))
+orbindranges(kernel, o::AnyCellOrbitals) = orbranges(o)
+
+## core driver
+#   append to d the elements Tr(kernel*x[i,i]) for each site encoded in i, or each orbital
+#   if kernel is missing. g is the GreenFunction, used to convert i to CellOrbitals
+function append_diagonal!(d, blockmat::AbstractMatrix, blockrngs, kernel; post = identity)
+    for rng in blockrngs  # rng::Int
+        val = post(apply_kernel(kernel, blockmat, rng))
+        push!(d, val)
+    end
+    return d
+end
+
+apply_kernel(kernel, gblock, rows, cols = rows) = apply_kernel(kernel, view_or_scalar(gblock, rows, cols))
+apply_kernel(kernel::Missing, v) = v
+apply_kernel(kernel, v) = trace_prod(kernel, v)
+
+view_or_scalar(gblock, rows::UnitRange, cols::UnitRange) = view(gblock, rows, cols)
+view_or_scalar(gblock, orb::Integer, orb´::Integer) = gblock[orb, orb´]
 
 #endregion
 
 ############################################################################################
-# append_diagonal!(d, x, i, kernel, g; kw...)
-#   append to d the elements Tr(kernel*x[i,i]) for each site encoded in i, or each orbital
-#   if kernel is missing. g is the GreenFunction, used to convert i to CellOrbitals
+# GreenSolution sparse indexing
+#   returns an OrbitalSliceMatrix
+#   one element per site (if kernel is not missing) or one per orbital (if kernel::Missing)
 #region
 
-# If i::Union{SiteSlice,CellSites}, convert to orbitals
-append_diagonal!(d, x, i, kernel, g; kw...) =
-    append_diagonal!(d, x, sites_to_orbs(i, g), kernel; kw...)
-
-# but not if i is a contact. Jumpt to core driver
-append_diagonal!(d, gω::GreenSolution, o::Union{Colon,Integer}, kernel, g; kw...) =
-    append_diagonal!(d, gω[o,o], contactranges(kernel, o, gω), kernel; kw...)
-
-# decompose any LatticeSlice into CellOrbitals
-append_diagonal!(d, x, s::AnyOrbitalSlice, kernel; kw...) =
-    append_diagonal!(d, x, cellsdict(s), kernel; kw...)
-
-function append_diagonal!(d, x, s::AnyCellOrbitalsDict, kernel; kw...)
-    sizehint!(d, length(s))
-    for sc in s
-        append_diagonal!(d, x, sc, kernel; kw...)
-    end
-    return d
+function Base.getindex(g, di::D, dj::D = di; post = identity) where {D<:AppliedPairIndices}
+    h, ker = parent(di), kernel(di)
+    ldst, lsrc = ham_to_latslices(h)
+    populate_sparse!(h, g, ker; post)
+    return h[ldst, lsrc]
 end
 
-append_diagonal!(d, gω::GreenSolution, o::AnyCellOrbitals, kernel; kw...) =
-    append_diagonal!(d, gω[o,o], orbindranges(kernel, o), kernel; kw...)
-
-# core driver
-function append_diagonal!(d, blockmat::AbstractMatrix, blockrngs, kernel; post = identity)
-    for rng in blockrngs
-        val = apply_kernel(kernel, blockmat, rng)
-        push!(d, post(val))
+## core driver, can be overloaded by solvers
+#   overwrite nonzero h elements with Tr(kernel*x[i,j]) for each site pair i,j
+function populate_sparse!(h::Hamiltonian, g, ker; post = identity)
+    bs = blockstructure(h)
+    for har in harmonics(h)
+        populate_sparse!(har, g, bs, ker; post)
     end
-    return d
+    return h
 end
 
-# If no kernel is provided, we return the whole diagonal
-contactranges(::Missing, o::Colon, gω) = 1:norbitals(contactorbitals(gω))
-contactranges(::Missing, i::Integer, gω) = 1:norbitals(contactorbitals(gω), i)
-contactranges(kernel, ::Colon, gω) = orbranges(contactorbitals(gω))
-contactranges(kernel, i::Integer, gω) = orbranges(contactorbitals(gω), i)
+function populate_sparse!(har::Harmonic, g::GreenSolution, bs, ker; post)
+    dn = dcell(har)
+    gcell = g[sites(dn, :), sites(zero(dn), :)]
+    return populate_sparse!(har, gcell, bs, ker; post)
+end
 
-orbindranges(::Missing, o) = eachindex(orbindices(o))
-orbindranges(kernel, o) = orbranges(o)
+function populate_sparse!(har::Harmonic, mat::AbstractMatrix, bs, kernel; post = identity)
+    B = blocktype(har)
+    hmat = unflat(har)
+    rows = rowvals(hmat)
+    nzs = nonzeros(hmat)
+    for col in axes(hmat, 2), ptr in nzrange(hmat, col)
+        row = rows[ptr]
+        orows, ocols = flatrange(bs, row), flatrange(bs, col)
+        val = post(apply_kernel(kernel, mat, orows, ocols))
+        nzs[ptr] = mask_block(B, val)
+    end
+    return har
+end
 
-apply_kernel(kernel, gblock, rng) = apply_kernel(kernel, view_or_scalar(gblock, rng))
+function ham_to_latslices(h::Hamiltonian)
+    lat = lattice(h)
+    srcinds = sourceinds(h[unflat()])
+    cssrc = CellSites(zerocell(lat), srcinds)
+    lsrc = LatticeSlice(lat, [cssrc])
+    csdst = [CellSites(dcell(har), destinds(unflat(har))) for har in harmonics(h)]
+    ldst = LatticeSlice(lat, csdst)
+    return ldst, lsrc
+end
 
-apply_kernel(kernel::Missing, v::Number) = v
-apply_kernel(kernel::AbstractMatrix, v) = tr(kernel * v)
-apply_kernel(kernel::UniformScaling, v) = kernel.λ * tr(v)
-apply_kernel(kernel::Number, v) = kernel * tr(v)
-apply_kernel(kernel::Diagonal, v::AbstractMatrix) = sum(i -> kernel[i] * v[i, i], eachindex(kernel))
-apply_kernel(kernel::Diagonal, v::Number) = only(kernel) * v
-
-view_or_scalar(gblock, rng::UnitRange) = view(gblock, rng, rng)
-view_or_scalar(gblock, orb::Integer) = gblock[orb, orb]
-
-maybe_scalarize(s::OrbitalSliceGrouped, kernel::Missing) = s
-maybe_scalarize(s::OrbitalSliceGrouped, kernel) = scalarize(s)
+destinds(mat) = unique!(sort(rowvals(mat)))
+sourceinds(mat) = [col for col in axes(mat, 2) if !isempty(nzrange(mat, col))]
 
 #endregion
 
