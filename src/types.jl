@@ -557,10 +557,18 @@ orbranges(cs::OrbitalSliceGrouped) = orbranges(cellsdict(cs))
 orbranges(cs::Union{CellOrbitalsGrouped, CellOrbitalsGroupedDict}) = Iterators.accumulate(
     (rng, rng´) -> maximum(rng)+1:maximum(rng)+length(rng´), orbgroups(cs), init = 0:0)
 
+# range of orbital indices of dn cellorbs
+function orbrange(cs::AnyOrbitalSlice, dn::SVector)
+    offset = get(offsets(cs), dn, 0)
+    rng = offset+1:offset+norbitals(cs, dn)
+    return rng
+end
+
 Base.isempty(s::LatticeSlice) = isempty(s.cellsdict)
 Base.isempty(s::CellIndices) = isempty(s.inds)
 
-Base.length(l::LatticeSlice) = nsites(l)
+Base.length(l::SiteSlice) = nsites(l)
+Base.length(l::AnyOrbitalSlice) = norbitals(l)
 Base.length(c::CellIndices) = length(c.inds)
 
 Base.parent(ls::LatticeSlice) = ls.lat
@@ -2187,13 +2195,17 @@ end
 # Obtained with gs = g[; siteselection...]
 # Alows call!(gs, ω; params...) or gs(ω; params...)
 #   required to do e.g. h |> attach(g´[sites´], couplingmodel; sites...)
-struct GreenSlice{T,E,L,G<:GreenFunction{T,E,L},R<:GreenIndices,C<:GreenIndices}
+struct GreenSlice{T,E,L,G<:GreenFunction{T,E,L},R<:GreenIndices,C<:GreenIndices,O<:AbstractArray}
     parent::G
     rows::R
     cols::C
+    output::O   # this will hold the result of call!(gs, ω; params...)
 end
 
 #region ## Constuctors ##
+
+GreenSlice(parent, rows::GreenIndices, cols::GreenIndices) =
+    GreenSlice(parent, rows, cols, similar_slice(parent, rows, cols))
 
 function GreenSlice(parent, rows, cols)
     if rows isa DiagIndices || cols isa DiagIndices
@@ -2221,6 +2233,9 @@ kernel(i::DiagIndices) = i.kernel
 
 norbitals_or_sites(i::DiagIndices{Missing}) = norbitals(i.inds)
 norbitals_or_sites(i::DiagIndices) = nsites(i.inds)
+
+Base.parent(i::GreenIndices) = i.inds
+orbindices(i::GreenIndices) = i.orbinds
 
 # returns the Hamiltonian field
 hamiltonian(g::Union{GreenFunction,GreenSolution,GreenSlice}) = hamiltonian(g.parent)
@@ -2284,6 +2299,8 @@ orbcols(g::GreenSlice) = g.cols.orbinds
 
 Base.axes(g::GreenSlice) = (orbrows(g), orbcols(g))
 
+call!_output(g::GreenSlice) = g.output
+
 # ifelse(rows && cols are contacts, (rows, cols), (orbrows, orbcols))
 # I.e: if rows, cols are contact indices retrieve them instead of orbslices.
 orbinds_or_contactinds(g) = orbinds_or_contactinds(rows(g), cols(g), orbrows(g), orbcols(g))
@@ -2318,7 +2335,7 @@ copy_lattice(g::GreenFunction) = GreenFunction(copy_lattice(g.parent), g.solver,
 copy_lattice(g::GreenSolution) = GreenSolution(
     copy_lattice(g.parent), g.slicer, g.contactΣs, g.contactbs)
 copy_lattice(g::GreenSlice) = GreenSlice(
-    copy_lattice(g.parent), g.rows, g.cols)
+    copy_lattice(g.parent), g.rows, g.cols, g.output)
 
 function minimal_callsafe_copy(g::GreenFunction)
     parent´ = minimal_callsafe_copy(g.parent)
@@ -2337,7 +2354,7 @@ function minimal_callsafe_copy(g::GreenSolution)
 end
 
 minimal_callsafe_copy(g::GreenSlice) =
-    GreenSlice(minimal_callsafe_copy(g.parent), g.rows, g.cols)
+    GreenSlice(minimal_callsafe_copy(g.parent), g.rows, g.cols, minimal_callsafe_copy(g.output))
 
 Base.:(==)(g::GreenFunction, g´::GreenFunction) = function_not_defined("==")
 Base.:(==)(g::GreenSolution, g´::GreenSolution) = function_not_defined("==")
@@ -2437,9 +2454,20 @@ const OrbitalSliceMatrix{C,M,A} = OrbitalSliceArray{C,2,M,A}
 OrbitalSliceVector(v::AbstractVector, axes) = OrbitalSliceArray(v, axes)
 OrbitalSliceMatrix(m::AbstractMatrix, axes) = OrbitalSliceArray(m, axes)
 
+OrbitalSliceMatrix{C}(::UndefInitializer, oi, oj) where {C} =
+    OrbitalSliceArray(Matrix{C}(undef, length(oi), length(oj)), (oi, oj))
+
+OrbitalSliceMatrix{C}(::UndefInitializer, oi::DiagIndices, oj = oi) where {C} =
+    OrbitalSliceArray(Diagonal{C}(undef, length(oi)), (oi, oi))
+
+# OrbitalSliceMatrix{C}(::UndefInitializer, oi::AppliedSparseIndices, oj = oi) where {C} =
+#     OrbitalSliceArray(Diagonal{C}(undef, length(oi)), (oi, oi))
+
 orbaxes(a::OrbitalSliceArray) = a.orbaxes
 
 Base.parent(a::OrbitalSliceArray) = a.parent
+
+minimal_callsafe_copy(a::OrbitalSliceArray) = OrbitalSliceArray(copy(parent(a)), orbaxes(a))
 
 #endregion
 
