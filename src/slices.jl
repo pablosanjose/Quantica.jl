@@ -393,7 +393,7 @@ function sites_to_orbs_nogroups(cellsdict::CellSitesDict{L}, os::OrbitalBlockStr
     return cellinds_to_dict(co)
 end
 
-## convert CellSites -> CellOrbitals
+## convert CellSites -> CellOrbitals (no groups)
 
 sites_to_orbs_nogroups(cs::CellSites, g) =
     sites_to_orbs_nogroups(sanitize_cellindices(cs, g), blockstructure(g))
@@ -404,7 +404,7 @@ function sites_to_orbs_nogroups(cs::CellSites, os::OrbitalBlockStructure)
     return CellOrbitals(cell(cs), orbinds)
 end
 
-## convert CellOrbitalsGrouped -> CellOrbitals
+## convert CellOrbitalsGrouped -> CellOrbitals (no groups)
 
 # unused
 # sites_to_orbs_nogroups(cs::CellOrbitalsGrouped, _) = CellOrbitals(cell(cs), orbindices(cs))
@@ -452,6 +452,21 @@ function _orbinds(sites, os)
 end
 
 #endregion
+#endregion
+
+############################################################################################
+# similar_slice(::GreenFunction, is::GreenIndices...)
+#   for given GreenIndices, preallocate an AbstractArray of a GreenFunction slice
+#   Note that GreenIndices has bare site indices and orbital indices from sites_to_orbs
+#region
+
+similar_slice(::GreenFunction{T}, i::GreenIndices{<:Any,<:AnyOrbitalSlice}, j::GreenIndices{<:Any,<:AnyOrbitalSlice}) where {T} =
+    OrbitalSliceMatrix{Complex{T}}(undef, orbindices(i), orbindices(j))
+
+# If any of rows, cols are not both AnyOrbitalSlice, the return type is a Matrix
+similar_slice(::GreenFunction{T}, i::GreenIndices, j::GreenIndices) where {T} =
+    Matrix{Complex{T}}(undef, length(orbindices(i)), length(orbindices(j)))
+
 #endregion
 
 ############################################################################################

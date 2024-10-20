@@ -44,6 +44,11 @@ end
     g = LP.linear() |> hopping(0) + @onsite((;ω=0) -> ω)|> greenfunction;
     @test only(g[sites(SA[1],1)](1.0; ω = 0)) ≈ 1.0   atol = 0.000001
     @test only(g[sites(SA[1],1)](1.0; ω = -1)) ≈ 0.5  atol = 0.000001
+    gs = g[sites(SA[1],1)]
+    @test gs(0.2) !== gs(0.3)
+    @test Quantica.call!(gs, 0.2) === Quantica.call!(gs, 0.2)
+    gs = g[cells = SA[2]]
+    @test Quantica.call!(gs, 0.2) === Quantica.call!(gs, 0.2)
 end
 
 @testset "greenfunction with contacts" begin
@@ -298,7 +303,7 @@ end
     @test length(g[diagonal(cells = 2:3)](ω)) == 72
     @test length(g[diagonal(cells = 2:3, kernel = I)](ω)) == 48
     @test ldos(g[1])(ω) ≈ -imag.(g[diagonal(1; kernel = I)](ω)) ./ π
-
+    @test Quantica.call!(g[diagonal(cells = 2:3)], ω) === Quantica.call!(g[diagonal(cells = 2:3)], 2ω)
     inds = (1, :, (; cells = 1, sublats = :B), sites(2, 1:3), sites(0, 2), sites(3, :))
     for i in inds, j in inds
         @test g(0.2)[diagonal(i)] isa Union{OrbitalSliceVector, AbstractVector}

@@ -64,7 +64,7 @@ call!(g::GreenSlice{T}, ω::T; params...) where {T} =
     call!(g, retarded_omega(ω, solver(parent(g))); params...)
 
 call!(g::GreenSlice{T}, ω::Complex{T}; params...) where {T} =
-    call!(greenfunction(g), ω; params...)[orbinds_or_contactinds(g)...]
+    getindex!(call!_output(g), call!(greenfunction(g), ω; params...), orbinds_or_contactinds(g)...)
 
 real_or_complex_convert(::Type{T}, ω::Real) where {T<:Real} = convert(T, ω)
 real_or_complex_convert(::Type{T}, ω::Complex) where {T<:Real} = convert(Complex{T}, ω)
@@ -83,41 +83,70 @@ needs_omega_shift(s::AppliedGreenSolver) = true
 #   If we index with CellIndices, we bypass mortaring and return a bare matrix
 #region
 
+## GreenFunction -> GreenSlice
+
 Base.getindex(g::GreenFunction, i, j = i) = GreenSlice(g, i, j)
 Base.getindex(g::GreenFunction; kw...) = g[siteselector(; kw...)]
 Base.getindex(g::GreenFunction, kw::NamedTuple) = g[siteselector(; kw...)]
 
-Base.getindex(g::GreenSolution; kw...) = g[getindex(lattice(g); kw...)]
+## GreenSolution -> OrbitalSliceMatrix or AbstractMatrix
 
 # g[::Integer, ::Integer] and g[:, :] - intra and inter contacts
 Base.view(g::GreenSolution, i::CT, j::CT = i) where {CT<:Union{Integer,Colon}} =
     view(slicer(g), i, j)
 
-# fastpath for intra and inter-contact
-Base.getindex(g::GreenSolution, i::CT, j::CT = i)  where {CT<:Union{Integer,Colon}}  =
-    OrbitalSliceMatrix(copy(view(g, i, j)), sites_to_orbs.((i,j), Ref(g)))
+Base.getindex(g::GreenSolution; kw...) = g[getindex(lattice(g); kw...)]
 
-# conversion down to CellOrbitals. See sites_to_orbs in slices.jl
-Base.getindex(g::GreenSolution, i, j) = getindex(g, sites_to_orbs(i, g), sites_to_orbs(j, g))
-Base.getindex(g::GreenSolution, i) = (i´ = sites_to_orbs(i, g); getindex(g, i´, i´))
-
-# wrapped matrix for end user consumption
-Base.getindex(g::GreenSolution, i::OrbitalSliceGrouped, j::OrbitalSliceGrouped) =
-    OrbitalSliceMatrix(
-        mortar((g[si, sj] for si in cellsdict(i), sj in cellsdict(j))),
-    (i, j))
-
-Base.getindex(g::GreenSolution, i::AnyOrbitalSlice, j::AnyOrbitalSlice) =
-    mortar((g[si, sj] for si in cellsdict(i), sj in cellsdict(j)))
-
-Base.getindex(g::GreenSolution, i::AnyOrbitalSlice, j::AnyCellOrbitals) =
-    mortar((g[si, sj] for si in cellsdict(i), sj in (j,)))
-
-Base.getindex(g::GreenSolution, i::AnyCellOrbitals, j::AnyOrbitalSlice) =
-    mortar((g[si, sj] for si in (i,), sj in cellsdict(j)))
+# args could be anything: CellSites, CellOrbs, Colon, Integer, DiagIndices...
+function Base.getindex(g::GreenSolution, args...)
+    gs = parent(g)[args...]  # get GreenSlice
+    output = call!_output(gs)
+    getindex!(output, g, orbinds_or_contactinds(gs)...)
+    return output
+end
 
 Base.getindex(g::GreenSolution, i::AnyCellOrbitals, j::AnyCellOrbitals) =
     slicer(g)[sanitize_cellorbs(i), sanitize_cellorbs(j)]
+
+# must ensure that orbindices is not a scalar, to consistently obtain a Matrix
+sanitize_cellorbs(c::CellOrbitals) = c
+sanitize_cellorbs(c::CellOrbital) = CellOrbitals(cell(c), orbindex(c):orbindex(c))
+sanitize_cellorbs(c::CellOrbitalsGrouped) = CellOrbitals(cell(c), orbindices(c))
+
+## getindex! - preallocated output for getindex
+
+# fastpath for intra and inter-contact
+getindex!(output, g::GreenSolution, i::Union{Integer,Colon}, j::Union{Integer,Colon}) =
+    (copy!(parent(output), view(g, i, j)); output)
+
+# indexing over single cells
+getindex!(output, g::GreenSolution, i::AnyCellOrbitals, j::AnyCellOrbitals) =
+    copy!(output, g[i, j])
+
+function getindex!(output::OrbitalSliceMatrix, g::GreenSolution, i::AnyCellOrbitals, j::AnyCellOrbitals)
+    oi, oj = orbaxes(output)
+    rows, cols = orbrange(oi, cell(i)), orbrange(oj, cell(j))
+    v = view(parent(output), rows, cols)
+    getindex!(v, g, i, j)
+    return output
+end
+
+# indexing over several cells
+getindex!(output, g::GreenSolution, ci::AnyOrbitalSlice, cj::AnyOrbitalSlice) =
+    getindex_cells!(output, g, cellsdict(ci), cellsdict(cj))
+getindex!(output, g::GreenSolution, ci::AnyOrbitalSlice, cj::AnyCellOrbitals) =
+    getindex_cells!(output, g, cellsdict(ci), (cj,))
+getindex!(output, g::GreenSolution, ci::AnyCellOrbitals, cj::AnyOrbitalSlice) =
+    getindex_cells!(output, g, (ci,), cellsdict(cj))
+
+function getindex_cells!(output, g::GreenSolution, cis, cjs)
+    for ci in cis, cj in cjs
+        getindex!(output, g, ci, cj)
+    end
+    return output
+end
+
+## GreenSlicer -> Matrix, dispatches to each solver's implementation
 
 # fallback conversion to CellOrbitals
 Base.getindex(s::GreenSlicer, i::AnyCellOrbitals, j::AnyCellOrbitals = i) =
@@ -130,11 +159,6 @@ Base.getindex(s::GreenSlicer, ::CellOrbitals, ::CellOrbitals) =
 # fallback, for GreenSlicers that don't implement view
 Base.view(g::GreenSlicer, args...) =
     argerror("GreenSlicer of type $(nameof(typeof(g))) doesn't implement view for these arguments")
-
-# must ensure that orbindices is not a scalar, to consistently obtain a Matrix
-sanitize_cellorbs(c::CellOrbitals) = c
-sanitize_cellorbs(c::CellOrbital) = CellOrbitals(cell(c), orbindex(c):orbindex(c))
-sanitize_cellorbs(c::CellOrbitalsGrouped) = CellOrbitals(cell(c), orbindices(c))
 
 #endregion
 
