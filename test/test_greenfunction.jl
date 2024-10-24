@@ -183,7 +183,7 @@ end
         attach(nothing, region = RP.circle(1)) |> greenfunction(GS.KPM(order = 500))
     gωs = g[1](ω)
     ρflat´ = -imag.(diag(gωs))/pi
-    ρ´ = ldos(g[1])(ω)
+    ρ´ = ldos(g[1], kernel = I)(ω)
     @test all(<(0.01), abs.(ρ .- ρ´))
     @test all(<(0.01), abs.(ρflat .- ρflat´))
     @test_throws ArgumentError g[sites((), 3:4)](ω)
@@ -256,7 +256,7 @@ end
 
     # exercise band digagonal fastpath
     g = h |> greenfunction(GS.Bands(ϕs, ϕs))
-    @test g(-0.2)[diagonal(sites(SA[1,2], :))] isa AbstractVector
+    @test g(-0.2)[diagonal(sites(SA[1,2], :))] isa AbstractMatrix
 end
 
 @testset "greenfunction 32bit" begin
@@ -289,25 +289,39 @@ end
     end
 end
 
-@testset "greenfunction diagonal slicing" begin
+@testset "greenfunction sparse slicing" begin
     g = HP.graphene(a0 = 1, t0 = 1, orbitals = (2,1)) |> supercell((2,-2), region = r -> 0<=r[2]<=5) |>
         attach(nothing, cells = 2, region = r -> 0<=r[2]<=2) |> attach(nothing, cells = 3) |>
         greenfunction(GS.Schur(boundary = -2))
     ω = 0.6
-    @test g[diagonal(2)](ω) isa OrbitalSliceVector
+    @test g[diagonal(2)](ω) isa OrbitalSliceMatrix
     @test g[diagonal(2)](ω) == g(ω)[diagonal(2)]
-    @test size(g[diagonal(1)](ω)) == (12,)
-    @test size(g[diagonal(1, kernel = I)](ω)) == (8,)
-    @test length(g[diagonal(:)](ω)) == length(g[diagonal(1)](ω)) + length(g[diagonal(2)](ω)) == 48
-    @test length(g[diagonal(:, kernel = I)](ω)) == length(g[diagonal(1, kernel = I)](ω)) + length(g[diagonal(2, kernel = I)](ω)) == 32
-    @test length(g[diagonal(cells = 2:3)](ω)) == 72
-    @test length(g[diagonal(cells = 2:3, kernel = I)](ω)) == 48
-    @test ldos(g[1])(ω) ≈ -imag.(g[diagonal(1; kernel = I)](ω)) ./ π
-    @test Quantica.call!(g[diagonal(cells = 2:3)], ω) === Quantica.call!(g[diagonal(cells = 2:3)], 2ω)
+    @test size(g[diagonal(1)](ω)) == (12,12)
+    @test size(g[diagonal(1, kernel = I)](ω)) == (8,8)
+    @test size(g[diagonal(:)](ω),1) == size(g[diagonal(1)](ω),1) + size(g[diagonal(2)](ω),1) == 48
+    @test size(g[diagonal(:, kernel = I)](ω),1) == size(g[diagonal(1, kernel = I)](ω),1) + size(g[diagonal(2, kernel = I)](ω),1) == 32
+    @test size(g[diagonal(cells = 2:3)](ω)) == (72, 72)
+    @test size(g[diagonal(cells = 2:3, kernel = I)](ω)) == (48, 48)
+    @test ldos(g[1], kernel = I)(ω) ≈ -imag.(diag(g[diagonal(1; kernel = I)](ω))) ./ π
+    gs = g[diagonal(cells = 2:3)]
+    @test Quantica.call!(gs, ω) === Quantica.call!(gs, 2ω)
     inds = (1, :, (; cells = 1, sublats = :B), sites(2, 1:3), sites(0, 2), sites(3, :))
-    for i in inds, j in inds
-        @test g(0.2)[diagonal(i)] isa Union{OrbitalSliceVector, AbstractVector}
+    for i in inds
+        @test g(0.2)[diagonal(i)] isa Union{OrbitalSliceMatrix, AbstractMatrix}
     end
+    gg = g(ω)[sitepairs(range = 1/sqrt(3))]
+    @test gg isa OrbitalSliceMatrix{ComplexF64,Quantica.SparseMatrixCSC{ComplexF64, Int64}}
+    @test size(gg) == Quantica.flatsize(g) .* (3, 1)
+    @test_throws DimensionMismatch g(ω)[sitepairs(range = 1, sublats = :B => :B, kernel = SA[1 0; 0 -1])]
+    gg = g(ω)[sitepairs(range = 1, sublats = :A => :A, kernel = I)]
+    @test size(gg) == size(g, 1) .* (3, 1)
+
+    g = HP.graphene(a0 = 1, t0 = 1, orbitals = (2,1)) |> supercell((1, -1)) |>
+           greenfunction(GS.Schur(boundary = -2))
+    ω = 0.6
+    gg = g(ω)[sitepairs(range = 1)]
+    gg´ = g(ω)[orbaxes(gg)...]
+    @test gg .* gg´ ≈ gg .* gg
 end
 
 @testset "densitymatrix diagonal slicing" begin
@@ -322,7 +336,7 @@ end
         ρ = densitymatrix(g[diagonal(1)])
         @test g[diagonal(1)](0.2) == g(0.2)[diagonal(1)]
         @test g[diagonal(:)](0.2) == g(0.2)[diagonal(:)]
-        @test g[diagonal(1)](0.2) isa OrbitalSliceVector
+        @test g[diagonal(1)](0.2) isa OrbitalSliceMatrix
         @test isapprox(ρ0(), ρ())
         @test isapprox(ρ0(0.2), ρ(0.2))
         if g !== g3 # KPM doesn't support finite temperatures yet
@@ -364,6 +378,9 @@ end
     c = sites(SA[1], 1)
     view(gmat, c)
     @test (@allocations view(gmat, c)) <= 2
+    i, j = orbaxes(gmat)
+    @test g(0.2)[i, j] isa Quantica.OrbitalSliceMatrix
+    @test gmat[c] isa Matrix
 end
 
 function testcond(g0; nambu = false)

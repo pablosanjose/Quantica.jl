@@ -60,11 +60,15 @@ function call!(g::GreenFunction{T}, ω::Complex{T}; params...) where {T}
     return GreenSolution(g, slicer, Σblocks, corbs)
 end
 
-call!(g::GreenSlice{T}, ω::T; params...) where {T} =
-    call!(g, retarded_omega(ω, solver(parent(g))); params...)
+# real frequency -> maybe complex frequency
+call!(g::GreenSlice{T}, ω::T; kw...) where {T} =
+    call!(g, retarded_omega(ω, solver(parent(g))); kw...)
 
-call!(g::GreenSlice{T}, ω::Complex{T}; params...) where {T} =
-    getindex!(call!_output(g), call!(greenfunction(g), ω; params...), orbinds_or_contactinds(g)...)
+call!(gs::GreenSlice{T}, ω::Complex{T}; post = identity, params...) where {T} =
+    getindex!(gs, call!(greenfunction(gs), ω; params...); post)
+
+## extrinsic version - unused
+# call!(output, g::GreenSlice, ω; kw...) = call!(replace_output!(g, output), ω; kw...)
 
 real_or_complex_convert(::Type{T}, ω::Real) where {T<:Real} = convert(T, ω)
 real_or_complex_convert(::Type{T}, ω::Complex) where {T<:Real} = convert(Complex{T}, ω)
@@ -91,21 +95,15 @@ Base.getindex(g::GreenFunction, i, j = i) = GreenSlice(g, i, j)  # this calls si
 
 ## GreenSolution -> OrbitalSliceMatrix or AbstractMatrix
 
-# general entry point, conversion down to CellOrbitals. See sites_to_orbs in slices.jl
-Base.getindex(g::GreenSolution, i, j; kw...) = getindex(g, sites_to_orbs(i, g), sites_to_orbs(j, g); kw...)
-Base.getindex(g::GreenSolution, i; kw...) = (i´ = sites_to_orbs(i, g); getindex(g, i´, i´; kw...))
-
-# g[::Integer, ::Integer] and g[:, :] - intra and inter contacts
+# view(g, ::Integer, ::Integer) and view(g, :, :) - intra and inter contacts
 Base.view(g::GreenSolution, i::CT, j::CT = i) where {CT<:Union{Integer,Colon}} =
     view(slicer(g), i, j)
 
-Base.getindex(g::GreenSolution; kw...) = g[getindex(lattice(g); kw...)]
-
+# general getindex(::GreenSolution,...) entry point. Relies on GreenSlice constructor
 # args could be anything: CellSites, CellOrbs, Colon, Integer, DiagIndices...
-function Base.getindex(g::GreenSolution, args...)
-    gs = parent(g)[args...]  # get GreenSlice
-    output = call!_output(gs)
-    getindex!(output, g, orbinds_or_contactinds(gs)...)
+function Base.getindex(g::GreenSolution, args...; post = identity, kw...)
+    gs = getindex(parent(g), args...; kw...)  # get GreenSlice
+    output = getindex!(gs, g; post)
     return output
 end
 
@@ -119,45 +117,58 @@ sanitize_cellorbs(c::CellOrbitalsGrouped) = CellOrbitals(cell(c), orbindices(c))
 
 ## getindex! - preallocated output for getindex
 
-# fastpath for intra and inter-contact
-getindex!(output, g::GreenSolution, i::Union{Integer,Colon}, j::Union{Integer,Colon}) =
-    (copy!(parent(output), view(g, i, j)); output)
+# fastpath for intra and inter-contact, only for g::GreenSolution
+getindex!(output, g::GreenSolution, i::Union{Integer,Colon}, j::Union{Integer,Colon}; post = identity) =
+    (parent(output) .= post.(view(g, i, j)); output)
 
-# indexing over single cells
-getindex!(output, g::GreenSolution, i::AnyCellOrbitals, j::AnyCellOrbitals) =
-    copy!(output, g[i, j])
-
-function getindex!(output::OrbitalSliceMatrix, g::GreenSolution, i::AnyCellOrbitals, j::AnyCellOrbitals)
-    oi, oj = orbaxes(output)
-    rows, cols = orbrange(oi, cell(i)), orbrange(oj, cell(j))
-    v = view(parent(output), rows, cols)
-    getindex!(v, g, i, j)
-    return output
-end
+# indexing over single cells. g can be any type that implements g[::AnyCellOrbitals...]
+getindex!(output, g, i::AnyCellOrbitals, j::AnyCellOrbitals; post = identity) =
+    (output .= post.(g[i, j]); output)
 
 # indexing over several cells
-getindex!(output, g::GreenSolution, ci::AnyOrbitalSlice, cj::AnyOrbitalSlice) =
-    getindex_cells!(output, g, cellsdict(ci), cellsdict(cj))
-getindex!(output, g::GreenSolution, ci::AnyOrbitalSlice, cj::AnyCellOrbitals) =
-    getindex_cells!(output, g, cellsdict(ci), (cj,))
-getindex!(output, g::GreenSolution, ci::AnyCellOrbitals, cj::AnyOrbitalSlice) =
-    getindex_cells!(output, g, (ci,), cellsdict(cj))
+getindex!(output, g, ci::AnyOrbitalSlice, cj::AnyOrbitalSlice; kw...) =
+    getindex_cells!(output, g, cellsdict(ci), cellsdict(cj); kw...)
+getindex!(output, g, ci::AnyOrbitalSlice, cj::AnyCellOrbitals; kw...) =
+    getindex_cells!(output, g, cellsdict(ci), (cj,); kw...)
+getindex!(output, g, ci::AnyCellOrbitals, cj::AnyOrbitalSlice; kw...) =
+    getindex_cells!(output, g, (ci,), cellsdict(cj); kw...)
 
-function getindex_cells!(output, g, cis, cjs)
+function getindex_cells!(output, g, cis, cjs; kw...)
     for ci in cis, cj in cjs
-        getindex!(output, g, ci, cj)
+        getindex!(output, g, ci, cj; kw...) # will typically call the method below
     end
     return output
 end
 
+function getindex!(output::OrbitalSliceMatrix, g, i::AnyCellOrbitals, j::AnyCellOrbitals; kw...)
+    oi, oj = orbaxes(output)
+    rows, cols = orbrange(oi, cell(i)), orbrange(oj, cell(j))
+    v = view(parent(output), rows, cols)
+    getindex!(v, g, i, j; kw...)
+    return output
+end
+
+## common getindex! shortcut in terms of GreenSlice
+
+# index object g over a slice enconded in gs::GreenSlice, using its preallocated output
+getindex!(gs::GreenSlice, g; kw...) = getindex!(call!_output(gs), g, orbinds_or_contactinds(gs)...; kw...)
+
+# ifelse(rows && cols are contacts, (rows, cols), (orbrows, orbcols))
+# I.e: if rows, cols are contact indices retrieve them instead of orbslices.
+orbinds_or_contactinds(g) = orbinds_or_contactinds(rows(g), cols(g), orbrows(g), orbcols(g))
+orbinds_or_contactinds(
+    r::Union{Colon,Integer,DiagIndices{Colon},DiagIndices{<:Integer}},
+    c::Union{Colon,Integer,DiagIndices{Colon},DiagIndices{<:Integer}}, _, _) = (r, c)
+orbinds_or_contactinds(_, _, or, oc) = (or, oc)
+
 ## GreenSlicer -> Matrix, dispatches to each solver's implementation
 
 # fallback conversion to CellOrbitals
-Base.getindex(s::GreenSlicer, i::AnyCellOrbitals, j::AnyCellOrbitals = i) =
-    getindex(s, sanitize_cellorbs(i), sanitize_cellorbs(j))
+Base.getindex(s::GreenSlicer, i::AnyCellOrbitals, j::AnyCellOrbitals = i; kw...) =
+    getindex(s, sanitize_cellorbs(i), sanitize_cellorbs(j); kw...)
 
 # fallback, for GreenSlicers that forgot to implement getindex
-Base.getindex(s::GreenSlicer, ::CellOrbitals, ::CellOrbitals) =
+Base.getindex(s::GreenSlicer, ::CellOrbitals, ::CellOrbitals; kw...) =
     argerror("getindex of $(nameof(typeof(s))) not implemented")
 
 # fallback, for GreenSlicers that don't implement view
@@ -166,112 +177,82 @@ Base.view(g::GreenSlicer, args...) =
 
 ## Diagonal and sparse indexing
 
-getindex!(output, g, i::DiagIndices, j::DiagIndices = i) =
-    getindex_diag!(output, g, parent(i), kernel(i))
+# These i,j are already gone through sites_to_orbs, unless they are Colon or Integer (orbinds_or_contactinds)
+getindex!(output, g, i::DiagIndices, j::DiagIndices = i; kw...) =
+    getindex_diagonal!(output, g, parent(i), kernel(i); kw...)
 
-getindex!(output, g, i::AppliedPairIndices, j::AppliedPairIndices = i) =
-    getindex_sparse!(output, g, parent(i), kernel(i))
-
-#endregion
-
-############################################################################################
-# getindex_diag!: GreenSolution diagonal indexing
-#region
-
-function getindex_diag!(output, g, inds, ker)
-    ...
-end
-
-function Base.getindex(g::GreenSolution{T}, di::D, dj::D = di; post = identity) where {T,I<:Union{Colon,Integer},D<:DiagIndices{I}}
-    i, ker = parent(di), kernel(di)
-    os = sites_to_orbs(i, g)
-    d = post.(Complex{T}[])
-    append_diagonal!(d, view(g, i, i), contactindranges(ker, i, g), ker; post)
-    m = Diagonal(d)
-    i´ = maybe_scalarize(os, ker)
-    return OrbitalSliceMatrix(m, (i´, i´))
-end
-
-function Base.getindex(g::GreenSolution{T}, di::D, dj::D = di; post = identity) where {T,I<:OrbitalSliceGrouped,D<:DiagIndices{I}}
-    os, ker = parent(di), kernel(di)
-    d = post.(Complex{T}[])
-    for o in cellsdict(os)
-        append_diagonal!(d, g[o,o], orbindranges(ker, o), ker; post)
-    end
-    m = Diagonal(d)
-    i´ = maybe_scalarize(os, ker)
-    return OrbitalSliceMatrix(m, (i´, i´))
-end
-
-# no wrapping in OrbitalSliceMatrix for consistency with non-diagonal case
-function Base.getindex(g::GreenSolution{T}, di::D, dj::D = di; post = identity) where {T,I<:CellSites,D<:DiagIndices{I}}
-    i, ker = parent(di), kernel(di)
-    o = sites_to_orbs(i, g)
-    d = post.(Complex{T}[])
-    append_diagonal!(d, g[o, o], orbindranges(ker, o), ker; post)
-    m = Diagonal(d)
-    return m
-end
-
-# If no kernel is provided, we return the whole diagonal
-contactindranges(::Missing, o::Colon, gω) = 1:norbitals(contactorbitals(gω))
-contactindranges(::Missing, i::Integer, gω) = 1:norbitals(contactorbitals(gω), i)
-contactindranges(kernel, ::Colon, gω) = orbranges(contactorbitals(gω))
-contactindranges(kernel, i::Integer, gω) = orbranges(contactorbitals(gω), i)
-
-orbindranges(::Missing, o::AnyCellOrbitals) = eachindex(orbindices(o))
-orbindranges(kernel, o::AnyCellOrbitals) = orbranges(o)
-
-## core driver
-#   append to d the elements Tr(kernel*x[i,i]) for each site encoded in i, or each orbital
-#   if kernel is missing. g is the GreenFunction, used to convert i to CellOrbitals
-function append_diagonal!(d, blockmat::AbstractMatrix, blockrngs, kernel; post = identity)
-    for rng in blockrngs  # rng::Int
-        val = post(apply_kernel(kernel, blockmat, rng))
-        push!(d, val)
-    end
-    return d
-end
-
-apply_kernel(kernel, gblock, rows, cols = rows) = apply_kernel(kernel, view_or_scalar(gblock, rows, cols))
-apply_kernel(kernel::Missing, v) = v
-apply_kernel(kernel, v) = trace_prod(kernel, v)
-
-view_or_scalar(gblock, rows::UnitRange, cols::UnitRange) = view(gblock, rows, cols)
-view_or_scalar(gblock, orb::Integer, orb´::Integer) = gblock[orb, orb´]
+getindex!(output, g, i::OrbitalPairIndices, j::OrbitalPairIndices = i; kw...) =
+    getindex_sparse!(output, g, parent(i), kernel(i); kw...)
 
 #endregion
 
 ############################################################################################
-# GreenSolution sparse indexing
-#   returns an OrbitalSliceMatrix
-#   one element per site (if kernel is not missing) or one per orbital (if kernel::Missing)
+# getindex_diagonal! and getindex_sparse! : GreenSolution diagonal and sparse indexing
+#   They rely on fill_diagonal! and fill_sparse! to fill the output matrix with mat elements
+#   We can swith `g` with another object that supports getindex_diag or getindex_sparse
+#   returning some `mat` object, that supports getindex and view
 #region
 
-function Base.getindex(g, di::D, dj::D = di; post = identity) where {D<:AppliedPairIndices}
-    h, ker = parent(di), kernel(di)
-    ldst, lsrc = ham_to_latslices(h)
-    populate_sparse!(h, g, ker; post)
-    return h[ldst, lsrc]
+getindex_diagonal!(output, g::GreenSolution, i::Union{Colon,Integer}, ker; post = identity) =
+    fill_diagonal!(output, view(g, i, i), contact_kernel_ranges(ker, i, g), ker; post)
+
+function getindex_diagonal!(output, g, o::CellOrbitalsGrouped, ker; post = identity)
+    rngs = orbital_kernel_ranges(ker, o)
+    mat = getindex_diag(g, o)
+    fill_diagonal!(output, mat, rngs, ker; post)
+    return output
 end
 
-## core driver, can be overloaded by solvers
-#   overwrite nonzero h elements with Tr(kernel*x[i,j]) for each site pair i,j
-function populate_sparse!(h::Hamiltonian, g, ker; post = identity)
-    bs = blockstructure(h)
-    for har in harmonics(h)
-        populate_sparse!(har, g, bs, ker; post)
+function getindex_diagonal!(output, g, i::OrbitalSliceGrouped, ker; post = identity)
+    offset = 0
+    for o in cellsdict(i)
+        rngs = orbital_kernel_ranges(ker, o)
+        mat = getindex_diag(g, o)
+        fill_diagonal!(output, mat, rngs, ker; post, offset)
+        offset += length(rngs)
     end
-    return h
+    return output
 end
 
-function populate_sparse!(har::Harmonic, g::GreenSolution, bs, ker; post)
-    dn = dcell(har)
-    gcell = g[sites(dn, :), sites(zero(dn), :)]
-    return populate_sparse!(har, gcell, bs, ker; post)
+function getindex_sparse!(output, g, hmask::Hamiltonian, ker; post = identity)
+    bs = blockstructure(g)  # used to find blocks of g for nonzeros in hmask
+    oj = sites_to_orbs(sites(zerocell(g), :), g)
+    for har in harmonics(hmask)
+        oi = CellIndices(dcell(har), oj)
+        mat = getindex_sparse(g, oi, oj, har)
+        fill_sparse!(har, mat, bs, ker; post)
+    end
+    fill_sparse!(parent(output), hmask)
+    return output
 end
 
-function populate_sparse!(har::Harmonic, mat::AbstractMatrix, bs, kernel; post = identity)
+# non-optimized fallback, can be specialized by solvers
+# optimized version would only compute site blocks in diagonal
+getindex_diag(g, oi) = g[oi, oi]
+# optimized version would only compute nonzero blocks from har::Harmonic
+getindex_sparse(g, oi, oj, har) = g[oi, oj]
+
+# input index ranges for each output index to fill
+contact_kernel_ranges(::Missing, o::Colon, gω) = 1:norbitals(contactorbitals(gω))
+contact_kernel_ranges(::Missing, i::Integer, gω) = 1:norbitals(contactorbitals(gω), i)
+contact_kernel_ranges(kernel, ::Colon, gω) = orbranges(contactorbitals(gω))
+contact_kernel_ranges(kernel, i::Integer, gω) = orbranges(contactorbitals(gω), i)
+orbital_kernel_ranges(::Missing, o::CellOrbitalsGrouped) = eachindex(orbindices(o))
+orbital_kernel_ranges(kernel, o::CellOrbitalsGrouped) = orbranges(o)
+
+## core drivers
+#   write to the diagonal of output, with a given offset, the elements Tr(kernel*mat[i,i])
+#   for each orbital or site encoded in range i
+function fill_diagonal!(output, mat, blockrngs, kernel; post = identity, offset = 0)
+    for (n, rng) in enumerate(blockrngs)
+        i = n + offset
+        output[i, i] = post(apply_kernel(kernel, mat, rng))
+    end
+    return output
+end
+
+#   overwrite nonzero h elements with Tr(kernel*mat[i,j]) for each site pair i,j
+function fill_sparse!(har::Harmonic, mat, bs, kernel; post = identity)
     B = blocktype(har)
     hmat = unflat(har)
     rows = rowvals(hmat)
@@ -282,21 +263,34 @@ function populate_sparse!(har::Harmonic, mat::AbstractMatrix, bs, kernel; post =
         val = post(apply_kernel(kernel, mat, orows, ocols))
         nzs[ptr] = mask_block(B, val)
     end
+    needs_flat_sync!(matrix(har))
     return har
 end
 
-function ham_to_latslices(h::Hamiltonian)
-    lat = lattice(h)
-    srcinds = sourceinds(h[unflat()])
-    cssrc = CellSites(zerocell(lat), srcinds)
-    lsrc = LatticeSlice(lat, [cssrc])
-    csdst = [CellSites(dcell(har), destinds(unflat(har))) for har in harmonics(h)]
-    ldst = LatticeSlice(lat, csdst)
-    return ldst, lsrc
+#  overwrite sparse output with an vcat of all Harmonics in h
+function fill_sparse!(output::SparseMatrixCSC, h::Hamiltonian)
+    out_nzs = nonzeros(output)
+    for col in axes(output, 2)
+        out_ptr_rng = nzrange(output, col)
+        iptr = 1
+        for har in harmonics(h)
+            hmat = flat(har)
+            hnzs = nonzeros(hmat)
+            for ptr in nzrange(hmat, col)
+                out_nzs[out_ptr_rng[iptr]] = hnzs[ptr]
+                iptr += 1
+            end
+        end
+    end
+    return output
 end
 
-destinds(mat) = unique!(sort(rowvals(mat)))
-sourceinds(mat) = [col for col in axes(mat, 2) if !isempty(nzrange(mat, col))]
+apply_kernel(kernel, mat, rows, cols = rows) = apply_kernel(kernel, view_or_scalar(mat, rows, cols))
+apply_kernel(kernel::Missing, v) = v
+apply_kernel(kernel, v) = trace_prod(kernel, v)
+
+view_or_scalar(mat, rows::UnitRange, cols::UnitRange) = view(mat, rows, cols)
+view_or_scalar(mat, orb::Integer, orb´::Integer) = mat[orb, orb´]
 
 #endregion
 

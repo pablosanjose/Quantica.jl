@@ -661,7 +661,7 @@ decay_lengths(g::AbstractHamiltonian1D, µ = 0, args...; params...) =
 #region
 
 struct DensityMatrixSchurSolver{T,A,G<:GreenSlice{T},O<:NamedTuple}
-    gs::G                            # parent of GreenSlice
+    gs::G                           # parent of GreenSlice
     orbaxes::A                      # axes of GreenSlice (orbrows, orbcols)
     hmat::Matrix{Complex{T}}        # it spans just the unit cell, dense Bloch matrix
     psis::Matrix{Complex{T}}        # it spans just the unit cell, Eigenstates
@@ -683,11 +683,6 @@ function densitymatrix(s::AppliedSchurGreenSolver, gs::GreenSlice; atol = 1e-7, 
     return DensityMatrix(solver, gs)
 end
 
-struct FermiEigenstates{T}
-    psis::Matrix{Complex{T}}
-    fpsis::Matrix{Complex{T}}
-end
-
 # API
 
 ## call
@@ -702,90 +697,25 @@ function (s::DensityMatrixSchurSolver)(µ, kBT; params...)
     pushfirst!(xs, -0.5)
     push!(xs, 0.5)
     xs = unique!(xs)
+    result = call!_output(s.gs)
     integrand!(x) = fermi_h!(result, s, 2π * x, µ, inv(kBT); params...)
-    result = similar_Array(s.gs)
-    fx! = (y, x) -> (y .= integrand(x))
+    fx! = (y, x) -> (y .= integrand!(x))
     quadgk!(fx!, result, xs...; s.opts...)
     return result
 end
 
 function fermi_h!(result, s, ϕ, µ, β = 0; params...)
-    h = parent(s.g)
+    h = hamiltonian(s.gs)
     # Similar to spectrum(h, ϕ; params...), but less work (no sort! or sanitization)
     copy!(s.hmat, call!(h, ϕ; params...))  # sparse to dense
     ϵs, psis = eigen!(s.hmat)
     # special-casing β = Inf with views turns out to be slower
     fs = (@. ϵs = fermi(ϵs - µ, β))
-    fpsis = (s.psis .= fs .* psis')
-    # vpsis = view(psis, first(s.orbaxes), :)
-    # vfpsis = view(psis, last(s.orbaxes), :)
-    feigs = FermiEigenstates(psis, fpsis, ϕ)
-    ρmat = fill_rho_blocks!(result, feigs, s.orbaxes...)
-    return ρmat
-end
-
-# fillblock! consistent with Base.getindex(g::GreenSolution, args...) see greenfunction.jl
-# uses views into f(ϵₙ) * ψₙ * ψₘ' to fill blocks in the ρmat = parent or OrbitalSliceMatrix
-function fill_rho_blocks!(result, psis, fpsis, ϕ, i, j)
-    oj = 0  # offsets
-    for cj in cellsdict_or_single_cellorbs(j)
-        oi = 0
-        for ci in cellsdict_or_single_cellorbs(i)
-            ρview = view(result, oi + 1:oi + norbitals(ci), oj + 1:oj + norbitals(cj))
-            phase = cis(only(cell(ci) - cell(cj)) * ϕ)
-            mul!(ρview, view(psis, orbindices(ci), :), view(fpsis, :, orbindices(cj)), phase, 0)
-            oi += norbitals(ci)
-        end
-        oj += norbitals(cj)
-    end
+    fpsis = (s.psis .= psis .* transpose(fs))
+    ρcell = EigenProduct(psis, fpsis, ϕ)
+    getindex!(result, ρcell, s.orbaxes...)
     return result
 end
-
-cellsdict_or_single_cellorbs(i::AnyOrbitalSlice) = cellsdict(i)
-cellsdict_or_single_cellorbs(i::AnyCellOrbitals) = (i,)
-
-# fastpath for direct CellOrbitals indexing. Not sure it's worth it.
-function fill_rho_blocks!(result, psis, fpsis, ϕ, i::AnyCellOrbitals, j::AnyCellOrbitals)
-    vpsis = view(psis, orbindices(i), :)
-    vfpsis = view(fpsis, :, orbindices(j))
-    phase = cis(only(cell(i) - cell(j)) * ϕ)
-    mul!(result, vpsis, vfpsis, phase, 0)
-    return result
-end
-
-## diagonal indexing: use the core append_diagonal! to fill the blocks
-fill_rho_blocks!(result, psis, fpsis, ϕ, di::DiagIndices, ::DiagIndices) =
-    append_diagonal!(empty!(result), FermiEigenstates(psis, fpsis), parent(di), kernel(di))
-
-fill_rho_blocks!(result, psis, fpsis, ϕ, di::SparseIndices, dj::DiagIndices = di) =
-    getindex(FermiEigenstates(psis, fpsis), di, dj)
-
-
-# this driver gets called by append_diagonal(d, fe, o, kernel, g), see greenfunction.jl
-function append_diagonal!(d, fe::FermiEigenstates, o::AnyCellOrbitals, kernel; post = identity)
-    for orbs in orbgroups(o)
-        v, v´ = view(fe.psis, orbs, :), view(fe.fpsis, :, orbs)
-        append_trace_or_diag!(d, kernel, v, v´, post)
-    end
-    return d
-end
-
-function append_trace_or_diag!(d::AbstractVector{T}, ::Missing, v, v´, post) where {T}
-    for i in axes(v, 1)
-        val = zero(T)
-        for j in axes(v, 2)
-            val += v[i, j] * v´[j, i]
-        end
-        push!(d, post(val))
-    end
-    return d
-end
-
-append_trace_or_diag!(d, kernel, v, v´, post) = push!(d, post(kernel_trace_multiply(kernel, v, v´)))
-
-kernel_trace_multiply(kernel::UniformScaling, v, v´) = kernel.λ * trace_prod(v, v´)
-kernel_trace_multiply(kernel::Number, v, v´) = kernel * trace_prod(v, v´)
-kernel_trace_multiply(kernel, v, v´) = trace_prod(kernel * v, v´)
 
 #endregion
 

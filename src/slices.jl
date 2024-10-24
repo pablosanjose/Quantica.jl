@@ -47,7 +47,7 @@ Base.getindex(ls::LatticeSlice, ss::SiteSelector, args...) =
     getindex(ls, apply(ss, ls), args...)
 
 # return cell, siteindex of the i-th site of LatticeSlice
-function Base.getindex(l::LatticeSlice, i::Integer)
+Base.@propagate_inbounds function Base.getindex(l::LatticeSlice, i::Integer)
     offset = 0
     for scell in cellsdict(l)
         ninds = length(siteindices(scell))
@@ -148,7 +148,7 @@ function unflat_sparse_slice(h::Hamiltonian, lsrows::LS, lscols::LS = lsrows, po
     # @assert lattice(h) === lattice(ls)   # TODO: fails upon plotting a current density (see tutorial)
     cszero = zerocellsites(h, 1)           # like `sites(1)`, but with explicit cell
     B = typeof(post(zero(blocktype(h)), (cszero, cszero)))
-    nrows, ncols = length(lsrows), length(lscols)
+    nrows, ncols = nsites(lsrows), nsites(lscols)
     builder = CSC{B}(ncols)
     hars = harmonics(h)
     for colcs in cellsites(lscols)
@@ -182,6 +182,24 @@ function unflat_sparse_slice(h::Hamiltonian, lsrows::LS, lscols::LS = lsrows, po
     end
     return sparse(builder, nrows, ncols)
 end
+
+#endregion
+
+
+############################################################################################
+# ham_to_orbslices: build OrbitalSliceGrouped for source and destination cells of h
+#region
+
+function ham_to_orbslices(h::Hamiltonian)
+    lat = lattice(h)
+    cssrc = CellSites(zerocell(lat), :)
+    osrc = sites_to_orbs(LatticeSlice(lat, [cssrc]), h)
+    csdst = [CellSites(dcell(har), :) for har in harmonics(h)]
+    odst = sites_to_orbs(LatticeSlice(lat, csdst), h)
+    return odst, osrc
+end
+
+ham_to_orbslices(h::ParametricHamiltonian) = ham_to_orbslices(parent(h))
 
 #endregion
 
@@ -343,9 +361,13 @@ sites_to_orbs(c::SparseIndices{<:Any,<:Hamiltonian}, _) = c
 
 ## DiagIndices -> DiagIndices
 
-sites_to_orbs(d::DiagIndices, g) = SparseIndices(sites_to_orbs(parent(d), g), kernel(d))
+function sites_to_orbs(d::DiagIndices, g)
+    ker = kernel(d)
+    inds = sites_to_orbs(parent(d), g)
+    return SparseIndices(inds, ker)
+end
 
-## PairIndices -> AppliedPairIndices
+## PairIndices -> OrbitalPairIndices
 
 # creates a Hamiltonian with same blocktype as g, or complex if kernel::Missing
 # this may be used as an intermediate to build sparse versions of g[i,j]
@@ -356,14 +378,15 @@ function sites_to_orbs(d::PairIndices{<:HopSelector}, g)
     b = IJVBuilder(lattice(hg), bs)
     hopsel = parent(d)
     h = hamiltonian!(b, hopping(I, hopsel))
-    return SparseIndices(h, ker)   # AppliedPairIndices
+    return SparseIndices(h, ker)   # OrbitalPairIndices
 end
 
 ## convert SiteSlice -> OrbitalSliceGrouped
 
 sites_to_orbs(kw::NamedTuple, g) = sites_to_orbs(siteselector(; kw...), g)
 sites_to_orbs(s::SiteSelector, g) = sites_to_orbs(lattice(g)[s], g)
-sites_to_orbs(i::Union{Colon,Integer}, g) = orbslice(contacts(g), i)
+sites_to_orbs(i::Union{Colon,Integer}, g) =
+    orbslice(contacts(g), i)
 sites_to_orbs(l::SiteSlice, g) =
     OrbitalSliceGrouped(lattice(l), sites_to_orbs(cellsdict(l), blockstructure(g)))
 sites_to_orbs(l::SiteSlice, s::OrbitalSliceGrouped) = s[l]
@@ -380,12 +403,14 @@ end
 
 ## convert CellSites -> CellOrbitalsGrouped
 
-sites_to_orbs(c::CellSites, g) = sites_to_orbs(sanitize_cellindices(c, g), blockstructure(g))
+sites_to_orbs(c::CellSites, g, ker...) =
+    sites_to_orbs(sanitize_cellindices(c, g), blockstructure(g), ker...)
 
-function sites_to_orbs(cs::CellSites, os::OrbitalBlockStructure)
+function sites_to_orbs(cs::CellSites, os::OrbitalBlockStructure, ker...)
+    os´ = maybe_scalarize(os, ker...)
     sites = siteindices(cs)
-    groups = _groups(sites, os) # sites, orbranges
-    orbinds = _orbinds(sites, groups, os)
+    groups = _groups(sites, os´) # sites, orbranges
+    orbinds = _orbinds(sites, groups, os´)
     return CellOrbitalsGrouped(cell(cs), orbinds, Dictionary(groups...))
 end
 
@@ -467,21 +492,6 @@ function _orbinds(sites, os)
 end
 
 #endregion
-#endregion
-
-############################################################################################
-# similar_slice(::GreenFunction, is::GreenIndices...)
-#   for given GreenIndices, preallocate an AbstractArray of a GreenFunction slice
-#   Note that GreenIndices has bare site indices and orbital indices from sites_to_orbs
-#region
-
-similar_slice(::GreenFunction{T}, i::GreenIndices{<:Any,<:AnyOrbitalSlice}, j::GreenIndices{<:Any,<:AnyOrbitalSlice}) where {T} =
-    OrbitalSliceMatrix{Complex{T}}(undef, orbindices(i), orbindices(j))
-
-# If any of rows, cols are not both AnyOrbitalSlice, the return type is a Matrix
-similar_slice(::GreenFunction{T}, i::GreenIndices, j::GreenIndices) where {T} =
-    Matrix{Complex{T}}(undef, length(orbindices(i)), length(orbindices(j)))
-
 #endregion
 
 ############################################################################################

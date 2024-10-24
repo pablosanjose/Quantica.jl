@@ -42,7 +42,7 @@ DensityMatrix: density matrix on specified sites using solver of type DensityMat
 
 julia> @time ρ(4)
   6.150548 seconds (57.84 k allocations: 5.670 GiB, 1.12% gc time)
-5×5 OrbitalSliceMatrix{Matrix{ComplexF64}}:
+5×5 OrbitalSliceMatrix{ComplexF64,Matrix{ComplexF64}}:
           0.5+0.0im          -7.34893e-10-3.94035e-15im  0.204478+1.9366e-14im   -7.34889e-10-1.44892e-15im  -5.70089e-10+5.48867e-15im
  -7.34893e-10+3.94035e-15im           0.5+0.0im          0.200693-2.6646e-14im   -5.70089e-10-1.95251e-15im  -7.34891e-10-2.13804e-15im
      0.204478-1.9366e-14im       0.200693+2.6646e-14im        0.5+0.0im              0.200693+3.55692e-14im      0.204779-4.27255e-14im
@@ -62,7 +62,7 @@ DensityMatrix: density matrix on specified sites with solver of type DensityMatr
 
 julia> @time ρ(4)
   0.001659 seconds (9 allocations: 430.906 KiB)
-5×5 OrbitalSliceMatrix{Matrix{ComplexF64}}:
+5×5 OrbitalSliceMatrix{ComplexF64,Matrix{ComplexF64}}:
           0.5+0.0im  -2.21437e-15+0.0im  0.204478+0.0im   2.67668e-15+0.0im   3.49438e-16+0.0im
  -2.21437e-15+0.0im           0.5+0.0im  0.200693+0.0im  -1.40057e-15+0.0im  -2.92995e-15+0.0im
      0.204478+0.0im      0.200693+0.0im       0.5+0.0im      0.200693+0.0im      0.204779+0.0im
@@ -81,7 +81,7 @@ DensityMatrix: density matrix on specified sites with solver of type DensityMatr
 
 julia> @time ρ(4)
   0.006580 seconds (3 allocations: 1.156 KiB)
-5×5 OrbitalSliceMatrix{Matrix{ComplexF64}}:
+5×5 OrbitalSliceMatrix{ComplexF64,Matrix{ComplexF64}}:
          0.5+0.0im  2.15097e-17+0.0im   0.20456+0.0im  2.15097e-17+0.0im   3.9251e-17+0.0im
  2.15097e-17+0.0im          0.5+0.0im  0.200631+0.0im  1.05873e-16+0.0im  1.70531e-18+0.0im
      0.20456+0.0im     0.200631+0.0im       0.5+0.0im     0.200631+0.0im      0.20482+0.0im

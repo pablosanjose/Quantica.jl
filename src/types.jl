@@ -428,9 +428,12 @@ CellOrbitalsGrouped(cell, inds, groups::Dictionary) =
 # B <: MatrixElementType{T}
 CellSitePos(cell, ind, r, B) = CellIndices(sanitize_SVector(Int, cell), ind, SiteLikePos(r, B))
 
+# changing only cell
+CellIndices(cell, c::CellIndices) = CellIndices(cell, c.inds, c.type)
+
 # LatticeSlice from an AbstractVector of CellIndices
 LatticeSlice(lat::Lattice, cs::AbstractVector{<:CellIndices}) =
-    LatticeSlice(lat, cellinds_to_dict(cs))
+    LatticeSlice(lat, cellinds_to_dict(apply.(cs, Ref(lat))))
 
 # CellIndices to Dictionary(cell=>cellind)
 cellinds_to_dict(cs::AbstractVector{C}) where {L,C<:CellIndices{L}} =
@@ -443,6 +446,7 @@ cellinds_to_dict(cs::AbstractVector{C}) where {L,C<:CellSite{L}} =
     cellinds_to_dict(CellSites{L,Vector{Int}}.(cs))
 
 # scalarize only if kernel is not missing
+maybe_scalarize(s) = s
 maybe_scalarize(s, kernel::Missing) = s
 maybe_scalarize(s, kernel) = scalarize(s)
 
@@ -954,7 +958,7 @@ function sublatorbrange(b::OrbitalBlockStructure, sind::Integer)
 end
 
 # Basic relation: iflat - 1 == (iunflat - soffset - 1) * b + soffset´
-function flatrange(b::OrbitalBlockStructure{<:SMatrixView}, iunflat::Integer)
+Base.@propagate_inbounds function flatrange(b::OrbitalBlockStructure{<:SMatrixView}, iunflat::Integer)
     checkinrange(iunflat, b)
     soffset  = 0
     soffset´ = 0
@@ -986,13 +990,13 @@ function flatrange(o::OrbitalBlockStructure, runflat::AbstractUnitRange)
     return orng
 end
 
-checkinrange(siteind::Integer, b::OrbitalBlockStructure) =
+Base.@propagate_inbounds checkinrange(siteind::Integer, b::OrbitalBlockStructure) =
     @boundscheck(1 <= siteind <= flatsize(b) ||
         argerror("Requested site $siteind out of range [1, $(flatsize(b))]"))
 
 flatindex(b::OrbitalBlockStructure, i) = first(flatrange(b, i))
 
-function unflatindex_and_blocksize(o::OrbitalBlockStructure{<:SMatrixView}, iflat::Integer)
+Base.@propagate_inbounds function unflatindex_and_blocksize(o::OrbitalBlockStructure{<:SMatrixView}, iflat::Integer)
     soffset  = 0
     soffset´ = 0
     @boundscheck(iflat < 0 && blockbounds_error())
@@ -1513,7 +1517,8 @@ latdim(h::AbstractHamiltonian) = latdim(lattice(h))
 
 bravais_matrix(h::AbstractHamiltonian) = bravais_matrix(lattice(h))
 
-norbitals(h::AbstractHamiltonian) = blocksizes(blockstructure(h))
+norbitals(h::AbstractHamiltonian, ::Colon) = blocksizes(blockstructure(h))
+norbitals(h::AbstractHamiltonian) = flatsize(h)
 
 blockeltype(h::AbstractHamiltonian) = blockeltype(blockstructure(h))
 
@@ -1554,7 +1559,7 @@ blocktype(::Type{<:AbstractHamiltonian{<:Any,<:Any,<:Any,B}}) where {B} = B
 # lat must be the result of combining the lattices of h, hs...
 function blockstructure(lat::Lattice{T}, h::AbstractHamiltonian{T}, hs::AbstractHamiltonian{T}...) where {T}
     B = blocktype(h, hs...)
-    orbitals = sanitize_orbitals(vcat(norbitals.((h, hs...))...))
+    orbitals = sanitize_orbitals(vcat(norbitals.((h, hs...), Ref(:))...))
     subsizes = sublatlengths(lat)
     return OrbitalBlockStructure{B}(orbitals, subsizes)
 end
@@ -2204,7 +2209,9 @@ end
 
 const DiagIndices{V<:Union{SiteSelector,LatticeSlice,CellIndices,Integer,Colon},K} = SparseIndices{V,K}
 const PairIndices{V<:HopSelector,K} = SparseIndices{V,K}
-const AppliedPairIndices{V<:Hamiltonian,K} = SparseIndices{V,K}
+
+const OrbitalDiagIndices{K} = SparseIndices{<:Union{AnyCellOrbitals,AnyOrbitalSlice},K}
+const OrbitalPairIndices{K} = SparseIndices{<:Hamiltonian,K}
 
 struct GreenIndices{I,R}
     inds::I     # Can be Colon, Integer, SiteSelector, LatticeSlice, CellIndices, SparseIndices...
@@ -2223,45 +2230,72 @@ end
 
 #region ## Constuctors ##
 
-GreenSlice(parent, rows::GreenIndices, cols::GreenIndices) =
-    GreenSlice(parent, rows, cols, similar_slice(parent, rows, cols))
+GreenSlice(parent::GreenFunction{T}, rows::GreenIndices, cols::GreenIndices, ::Type{C} = Complex{T}) where {C,T} =
+    GreenSlice(parent, rows, cols, similar_slice(C, orbindices(rows), orbindices(cols)))
 
-function GreenSlice(parent, rows, cols)
+function GreenSlice(parent, rows, cols, type...)
     if rows isa DiagIndices || cols isa DiagIndices
         rows === cols || argerror("Diagonal indices should be identical for rows and columns")
     end
     rows´ = greenindices(rows, parent)
     cols´ = cols === rows ? rows´ : greenindices(cols, parent)
-    return GreenSlice(parent, rows´, cols´)
+    return GreenSlice(parent, rows´, cols´, type...)
 end
 
 # see sites_to_orbs in slices.jl
 greenindices(inds, g) = GreenIndices(inds, sites_to_orbs(inds, g))
 greenindices(g::GreenSlice) = g.rows, g.cols
 
+# preallocated AbstractArray for the output of call!(::GreenSlice, ω; params...)
+#  - OrbitalSliceMatrix for i,j both OrbitalSliceGrouped
+#  - OrbitalSliceMatrix for i,j both SparseIndices of OrbitalSliceGrouped
+#  - Matrix otherwise
+similar_slice(::Type{C}, i::OrbitalSliceGrouped, j::OrbitalSliceGrouped) where {C} =
+    OrbitalSliceMatrix{C}(undef, i, j)
+
+similar_slice(::Type{C}, i::S, j::S) where {C,S<:SparseIndices{<:Union{AnyOrbitalSlice,Hamiltonian}}} =
+    OrbitalSliceMatrix{C}(undef, maybe_scalarize(i))
+
+# If any of rows, cols are not both AnyOrbitalSlice, the return type is a Matrix or Diagonal
+# its size is usually norbitals, but may be nsites if orbindices are a SparseIndices with kernel
+similar_slice(::Type{C}, i::S, j::S) where {C,S<:SparseIndices{<:AnyCellOrbitals}} =
+    Diagonal(Vector{C}(undef, length(maybe_scalarize(i))))
+
+similar_slice(::Type{C}, i, j) where {C} =
+    Matrix{C}(undef, length(i), length(j))
+
+maybe_scalarize(i::SparseIndices{<:Union{AnyOrbitalSlice,AnyCellOrbitals}}) =
+    SparseIndices(maybe_scalarize(i.inds, i.kernel), i.kernel)
+maybe_scalarize(i::SparseIndices) = i
+
 #endregion
 
 #region ## API ##
 
 diagonal(inds; kernel = missing) = SparseIndices(inds, kernel)                      # exported
+diagonal(inds::NamedTuple; kernel = missing) = SparseIndices(siteselector(; inds...), kernel)                      # exported
 diagonal(; kernel = missing, kw...) = SparseIndices(siteselector(; kw...), kernel)  # exported
 
 # sitepairs API only accepts HopSelector
 sitepairs(h::HopSelector; kernel = missing) = SparseIndices(h, kernel)  # exported
 sitepairs(; kernel = missing, kw...) = SparseIndices(hopselector(; kw...), kernel)           # exported
 
+norbitals(i::SparseIndices) = norbitals(parent(i))
+
 Base.parent(i::SparseIndices) = i.inds
-Base.length(i::SparseIndices) = length(parent(i))
+
+Base.length(i::SparseIndices{<:Any,Missing}) = norbitals(parent(i))
+Base.length(i::SparseIndices) = nsites(parent(i))
+
+Base.size(i::OrbitalDiagIndices) = length(i) .* (1, 1)
+Base.size(i::OrbitalPairIndices) = length(i) .* (length(harmonics(parent(i))), 1)
 
 kernel(i::SparseIndices) = i.kernel
 
-hamiltonian(i::AppliedPairIndices) = first(i.inds)
-blockstructure(i::AppliedPairIndices) = last(i.inds)
-
-norbitals_or_sites(i::DiagIndices{<:Any,Missing}) = norbitals(i.inds)
-norbitals_or_sites(i::DiagIndices) = nsites(i.inds)
+hamiltonian(i::SparseIndices{<:Hamiltonian}) = i.inds
 
 Base.parent(i::GreenIndices) = i.inds
+
 orbindices(i::GreenIndices) = i.orbinds
 
 # returns the Hamiltonian field
@@ -2308,8 +2342,8 @@ blockstructure(g::GreenFunction) = blockstructure(hamiltonian(g))
 blockstructure(g::GreenSolution) = blockstructure(hamiltonian(g))
 blockstructure(g::GreenSlice) = blockstructure(parent(g))
 
-norbitals(g::GreenFunction) = norbitals(g.parent)
-norbitals(g::GreenSlice) = norbitals(g.parent.parent)
+norbitals(g::GreenFunction, args...) = norbitals(g.parent, args...)
+norbitals(g::GreenSlice, args...) = norbitals(g.parent.parent, args...)
 
 contactinds(g::GreenFunction, i...) = contactinds(contacts(g), i...)
 contactinds(g::Union{GreenSolution,GreenSlice}, i...) = contactinds(contactorbitals(g), i...)
@@ -2328,13 +2362,7 @@ Base.axes(g::GreenSlice) = (orbrows(g), orbcols(g))
 
 call!_output(g::GreenSlice) = g.output
 
-# ifelse(rows && cols are contacts, (rows, cols), (orbrows, orbcols))
-# I.e: if rows, cols are contact indices retrieve them instead of orbslices.
-orbinds_or_contactinds(g) = orbinds_or_contactinds(rows(g), cols(g), orbrows(g), orbcols(g))
-orbinds_or_contactinds(
-    r::Union{Colon,Integer,DiagIndices{Colon},DiagIndices{<:Integer}},
-    c::Union{Colon,Integer,DiagIndices{Colon},DiagIndices{<:Integer}}, _, _) = (r, c)
-orbinds_or_contactinds(_, _, or, oc) = (or, oc)
+replace_output!(g::GreenSlice, output) = GreenSlice(g.parent, g.rows, g.cols, output)
 
 Base.parent(g::GreenFunction) = g.parent
 Base.parent(g::GreenSolution) = g.parent
@@ -2346,10 +2374,10 @@ Base.size(g::GreenSolution, i...) = size(g.parent, i...)
 flatsize(g::GreenFunction, i...) = flatsize(g.parent, i...)
 flatsize(g::GreenSolution, i...) = flatsize(g.parent, i...)
 
-similar_Array(gs::GreenSlice{T}) where {T} =
-    matrix_or_vector(Complex{T}, orbrows(gs), orbcols(gs))
-matrix_or_vector(C, r, c) = Matrix{C}(undef, norbitals(r), norbitals(c))
-matrix_or_vector(C, r::DiagIndices, ::DiagIndices) = Vector{C}(undef, norbitals_or_sites(r))
+# similar_Array(gs::GreenSlice{T}) where {T} =
+#     matrix_or_vector(Complex{T}, orbrows(gs), orbcols(gs))
+# matrix_or_vector(C, r, c) = Matrix{C}(undef, norbitals(r), norbitals(c))
+# matrix_or_vector(C, r::DiagIndices, ::DiagIndices) = Vector{C}(undef, norbitals_or_sites(r))
 
 boundaries(g::GreenFunction) = boundaries(solver(g))
 # fallback (for solvers without boundaries, or for OpenHamiltonian)
@@ -2381,7 +2409,7 @@ function minimal_callsafe_copy(g::GreenSolution)
 end
 
 minimal_callsafe_copy(g::GreenSlice) =
-    GreenSlice(minimal_callsafe_copy(g.parent), g.rows, g.cols, minimal_callsafe_copy(g.output))
+    GreenSlice(minimal_callsafe_copy(g.parent), g.rows, g.cols, copy(g.output))
 
 Base.:(==)(g::GreenFunction, g´::GreenFunction) = function_not_defined("==")
 Base.:(==)(g::GreenSolution, g´::GreenSolution) = function_not_defined("==")
@@ -2484,16 +2512,20 @@ OrbitalSliceMatrix(m::AbstractMatrix, axes) = OrbitalSliceArray(m, axes)
 OrbitalSliceMatrix{C}(::UndefInitializer, oi, oj) where {C} =
     OrbitalSliceArray(Matrix{C}(undef, length(oi), length(oj)), (oi, oj))
 
-OrbitalSliceMatrix{C}(::UndefInitializer, oi::DiagIndices, oj = oi) where {C} =
-    OrbitalSliceArray(Diagonal{C}(undef, length(oi)), (oi, oi))
+function OrbitalSliceMatrix{C}(::UndefInitializer, oi::SparseIndices{<:OrbitalSliceGrouped}) where {C}
+    i = j = parent(oi)
+    OrbitalSliceArray(Diagonal{C}(undef, length(oi)), (i, j))
+end
 
-# OrbitalSliceMatrix{C}(::UndefInitializer, oi::AppliedPairIndices, oj = oi) where {C} =
-#     OrbitalSliceArray(Diagonal{C}(undef, length(oi)), (oi, oi))
+function OrbitalSliceMatrix{C}(::UndefInitializer, oi::SparseIndices{<:Hamiltonian}) where {C}
+    h = hamiltonian(oi)
+    mat = mortar([flat(har) for har in harmonics(h), _ in 1:1])
+    i, j = ham_to_orbslices(h)
+    return OrbitalSliceArray(mat, (i, j))
+end
 
 orbaxes(a::OrbitalSliceArray) = a.orbaxes
 
 Base.parent(a::OrbitalSliceArray) = a.parent
-
-minimal_callsafe_copy(a::OrbitalSliceArray) = OrbitalSliceArray(copy(parent(a)), orbaxes(a))
 
 #endregion

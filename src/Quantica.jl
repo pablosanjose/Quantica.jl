@@ -31,7 +31,7 @@ export sublat, bravais_matrix, lattice, sites, supercell, hamiltonian,
        greenfunction, selfenergy, attach,
        plotlattice, plotlattice!, plotbands, plotbands!, qplot, qplot!, qplotdefaults,
        conductance, josephson, ldos, current, transmission, densitymatrix,
-       OrbitalSliceArray, OrbitalSliceVector, OrbitalSliceMatrix, orbaxes,
+       OrbitalSliceArray, OrbitalSliceVector, OrbitalSliceMatrix, orbaxes, siteindexdict,
        serializer, serialize, serialize!, deserialize!, deserialize,
        meanfield
 

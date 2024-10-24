@@ -716,7 +716,7 @@ julia> h[sites(1), sites(2)]
  1.0+0.0im  0.0+0.0im
 
 julia> ph = h |> @hopping!((t; p = 3) -> p*t); ph[region = RP.square(1)]
-4×4 OrbitalSliceMatrix{SparseArrays.SparseMatrixCSC{ComplexF64, Int64}}:
+4×4 OrbitalSliceMatrix{ComplexF64,SparseArrays.SparseMatrixCSC{ComplexF64, Int64}}:
  0.0+0.0im  0.0+0.0im  0.0+0.0im  3.0+0.0im
  0.0+0.0im  0.0+0.0im  3.0+0.0im  0.0+0.0im
  0.0+0.0im  3.0+0.0im  0.0+0.0im  0.0+0.0im
@@ -1632,6 +1632,21 @@ For any `gω::GreenSolution` and `C<:Union{Colon,Integer}`, obtain a view (of ty
 For any `g::Union{GreenFunction,GreenSlice}`, produce a new `GreenFunction` or `GreenSlice`
 with all parameters fixed to `params` (or to their default values if not provided).
 
+## Full evaluation
+
+    gs(ω; params...)
+    gω[sites...]
+
+For `gs::GreenSlice` or `gω::GreenSolution`, return a fully evaluated `m::AbstractMatrix`.
+If the selected site slice was defined using `sites`, the concrete type of `m` will be will
+be a conventional `Matrix`-based type. Otherwise, it will be of type `OrbitalSliceMatrix`,
+an `AbstractMatrix` type that supports both conventional indexing and indexing with `sites`
+and `siteselectors`.
+
+Advanced: in addition to the above, an unexported method `Quantica.call!(gs, ω; params...)`
+is provided to reuse the output matrix `m` (preallocated inside `gs`). Use with caution, as
+it may lead to unexpected aliasing
+
 # Example
 ```jldoctest
 julia> g = LP.honeycomb() |> hamiltonian(@hopping((; t = 1) -> t)) |> supercell(region = RP.circle(10)) |> greenfunction(GS.SparseLU())
@@ -1660,10 +1675,13 @@ GreenSlice{Float64,2,0}: Green function at arbitrary energy, but at a fixed latt
 
 julia> gω[ss] == gs(0.1; t = 2)
 true
+
+julia> summary(gω[ss])
+"14×14 OrbitalSliceMatrix{ComplexF64,Matrix{ComplexF64}}"
 ```
 
 # See also
-    `GreenSolvers`, `diagonal`, `ldos`, `conductance`, `current`, `josephson`
+    `GreenSolvers`, `diagonal`, `sitepairs`, `ldos`, `conductance`, `current`, `josephson`
 """
 greenfunction
 
@@ -1696,10 +1714,16 @@ GreenSolvers
 """
     diagonal(i; kernel = missing)
 
-Wrapper over site or orbital indices (used to index into a `g::GreenFunction` or
+Wrapper over site or orbital indices `i` (used to index into a `g::GreenFunction` or
 `g::GreenSolution`) that represent purely diagonal entries. Here `i` can be any index
 accepted in `g[i,i]`, e.g. `i::Integer` (contact index), `i::Colon` (merged contacts),
 `i::SiteSelector` (selected sites), etc.
+
+If `kernel = Q` (a matrix) instead of `missing`, each diagonal block for multiorbital site
+`i` is replaced with `Tr(gᵢᵢQ)`.
+
+For a `gω::GreenSolution`, `gω[diagonal(sel)] = diag(gω[sel, sel])`, although where possible
+the former computation is done more efficiently internally.
 
     diagonal(kernel = missing, sites...)
 
@@ -1707,36 +1731,74 @@ Equivalent to `diagonal(siteselector(; sites...); kernel)`
 
 ## Keywords
 
-    - `kernel`: if missing, all orbitals in the diagonal `g[i, i]` are returned when indexing `g[diagonal(i)]`. Otherwise, `tr(g[site, site]*kernel)` for each site included in `i` is returned. See also `ldos`
+    - `kernel`: if missing, all orbitals in the diagonal `g[i, i]` are returned when indexing `g[diagonal(i)]`. Otherwise, `Tr(g[site, site]*kernel)` for each site included in `i` is returned.
 
 # Example
-```jldoctest
+```julia
 julia> g = HP.graphene(orbitals = 2) |> attach(nothing, cells = (0,0)) |> greenfunction();
 
-julia> g(1)[diagonal(:)]                            # g diagonal on all contact orbitals
-4-element Vector{ComplexF64}:
- -0.10919028168061964 - 0.08398577667508965im
- -0.10919028168734393 - 0.08398577667508968im
- -0.10919028169083328 - 0.08398577667508969im
-   -0.109190281684109 - 0.08398577667508969im
+julia> g(1)[diagonal(:)]                            # g(ω = 1) diagonal on all contact orbitals
+4×4 OrbitalSliceMatrix{ComplexF64,LinearAlgebra.Diagonal{ComplexF64, Vector{ComplexF64}}}:
+ -0.10919-0.0839858im       0.0+0.0im             0.0+0.0im             0.0+0.0im
+      0.0+0.0im        -0.10919-0.0839858im       0.0+0.0im             0.0+0.0im
+      0.0+0.0im             0.0+0.0im        -0.10919-0.0839858im       0.0+0.0im
+      0.0+0.0im             0.0+0.0im             0.0+0.0im        -0.10919-0.0839858im
 
-julia> g(1)[diagonal(:, kernel = SA[1 0; 0 -1])]    # σz spin spectral density at ω = 1
-2-element Vector{ComplexF64}:
-  6.724287793247186e-12 + 2.7755575615628914e-17im
- -6.724273915459378e-12 + 0.0im
+julia> g(1)[diagonal(:, kernel = SA[1 0; 0 -1])]    # σz spin density of the above
+2×2 OrbitalSliceMatrix{ComplexF64,LinearAlgebra.Diagonal{ComplexF64, Vector{ComplexF64}}}:
+ 5.61885e-12+1.38778e-17im           0.0+0.0im
+         0.0+0.0im          -5.61882e-12+2.77556e-17im
 ```
 
 # See also
-    `greenfunction`, `ldos`
+    `sitepairs`, `greenfunction`, `ldos`, `densitymatrix`
 """
+diagonal
 
 """
-    ldos(gs::GreenSlice; kernel = I)
+
+    sitepairs(s::HopSelector; kernel = missing)
+
+Create a selection of site pairs `s::SparseIndices` used to sparsely index into a
+`g::GreenFunction` or `g::GreenSolution`, as `g[s]`. Of the resulting `OrbitalSliceMatrix`
+only the selected pairs of matrix elements will be computed, leaving the rest as zero
+(sparse matrix). The sparse matrix spans the minimum number of complete unit cells to
+include all site pairs
+
+If `kernel = Q` (a matrix instead of `missing`), each of these site blocks `gᵢⱼ` will be
+replaced by `Tr(kernel * gᵢⱼ)`.
+
+    sitepairs(; kernel = missing, hops...)
+
+Equivalent to `sitepairs(hopselector(; hops...); kernel)`
+
+## Keywords
+
+    - `kernel`: if missing, all orbitals blocks `gᵢⱼ = g[i, j]` between selected sites pairs (i,j) are returned when indexing `g[sitepairs(...)]`. Otherwise, `gᵢⱼ` is replaced by `Tr(gᵢⱼ*kernel)`.
+
+# Example
+```julia
+julia> g = HP.graphene(orbitals = 2, a0 = 1) |> attach(nothing, cells = (0,0)) |> greenfunction();
+
+julia> summary(g(1)[sitepairs(range = 1)])     # g(ω=1) site blocks between all sites in zero cell and all other sites at distance 1
+"28×4 OrbitalSliceMatrix{ComplexF64,SparseArrays.SparseMatrixCSC{ComplexF64, Int64}}"
+
+julia> summary(g(1)[sitepairs(range = 1, kernel = SA[1 0; 0 -1])])    # σz spin density of the above
+"14×2 OrbitalSliceMatrix{ComplexF64,SparseArrays.SparseMatrixCSC{ComplexF64, Int64}}"
+```
+
+# See also
+    `diagonal`, `hopselector`, `greenfunction`, `ldos`, `densitymatrix`
+"""
+sitepairs
+
+"""
+    ldos(gs::GreenSlice; kernel = missing)
 
 Build `ρs::LocalSpectralDensitySlice`, a partially evaluated object representing the local
 density of states `ρᵢ(ω)` at specific sites `i` but at arbitrary energy `ω`.
 
-    ldos(gω::GreenSolution; kernel = I)
+    ldos(gω::GreenSolution; kernel = missing)
 
 Build `ρω::LocalSpectralDensitySolution`, as above, but for `ρᵢ(ω)` at a fixed `ω` and
 arbitrary sites `i`. See also `greenfunction` for details on building a `GreenSlice` and
@@ -1747,7 +1809,7 @@ the retarded Green function at a given site `i`.
 
 ## Keywords
 
-- `kernel` : for multiorbital sites, `kernel` allows to compute a generalized `ldos` `ρᵢ(ω) = -imag(Tr(gᵢᵢ(ω) * kernel))/π`, where `gᵢᵢ(ω)` is the retarded Green function at site `i` and energy `ω`. If `kernel = missing`, the complete, orbital-resolved `ldos` is returned.
+- `kernel` : for multiorbital sites, `kernel` allows to compute a generalized `ldos` `ρᵢ(ω) = -imag(Tr(gᵢᵢ(ω) * kernel))/π`, where `gᵢᵢ(ω)` is the retarded Green function at site `i` and energy `ω`. If `kernel = missing`, the complete, orbital-resolved `ldos` is returned. Default: `missing`
 
 ## Full evaluation
 
@@ -1784,7 +1846,7 @@ julia> ldos(g(0.2))[1]
  0.03493305572265045
  0.036802204179317045
 
-julia> ldos(g(0.2))[1] == -imag.(g[diagonal(1; kernel = I)](0.2)) ./ π
+julia> ldos(g(0.2))[1] == -imag.(diag(g[diagonal(1)](0.2))) ./ π
 true
 ```
 
@@ -1996,7 +2058,7 @@ as an `OrbitalSliceMatrix`, see its docstring for further details.
 If the generic integration algorithm is used with complex `ωpoints`, the following form is
 also available:
 
-    ρ(μ = 0, kBT = 0, override = missing; params...)
+    ρ(μ = 0, kBT = 0, override_path = missing; params...)
 
 Here `override` can be a collection of `ωpoints` that will replace the original ones
 provided when defining `ρ`. Alternatively, it can be a function that will be applied to the
@@ -2029,7 +2091,7 @@ julia> ρ = densitymatrix(g[region = RP.circle(0.5)])
 DensityMatrix: density matrix on specified sites with solver of type DensityMatrixSpectrumSolver
 
 julia> ρ()  # with mu = kBT = 0 by default
-2×2 OrbitalSliceMatrix{Matrix{ComplexF64}}:
+2×2 OrbitalSliceMatrix{ComplexF64,Matrix{ComplexF64}}:
        0.5+0.0im  -0.262865+0.0im
  -0.262865+0.0im        0.5+0.0im
 ```
@@ -2057,15 +2119,16 @@ As above, but with `ωpoints = (-ωmax, ωmax)`.
 
 ## Full evaluation
 
-    J(kBT = 0, override = missing; params...)   # where J::Josephson
+    J(kBT = 0, override_path = missing; params...)   # where J::Josephson
 
 Evaluate the current `I_J` at chemical potemtial `µ = 0` and temperature `kBT` (in the same
 units as the Hamiltonian) for the given `g` parameters `params`, if any.
 
-It's possible to `override` a complex integration path at evaluation time. In this case
-`override` can be a collection of `ωpoints` that will replace the original ones provided
-when defining `J`. Alternatively, it can be a function that will be applied to the original
-`ωpoints`. This may be useful when the integration path must depend on `params`.
+It's possible to use `override_path` to override a complex integration path at evaluation
+time. In this case `override_path` can be a collection of `ωpoints` that will replace the
+original ones provided when defining `J`. Alternatively, it can be a function that will be
+applied to the original `ωpoints`. This may be useful when the integration path must depend
+on `params`.
 
 ## Keywords
 
@@ -2194,7 +2257,7 @@ Note: `diagonal` indexing is currently not supported by `OrbitalSliceArray`.
 julia> g = LP.linear() |> hamiltonian(hopping(SA[0 1; 1 0]) + onsite(I), orbitals = 2) |> supercell(4) |> greenfunction;
 
 julia> mat = g(0.2)[region = r -> 2<=r[1]<=4]
-6×6 OrbitalSliceMatrix{Matrix{ComplexF64}}:
+6×6 OrbitalSliceMatrix{ComplexF64,Matrix{ComplexF64}}:
  -1.93554e-9-0.545545im          0.0-0.0im               0.0-0.0im              -0.5+0.218218im          0.4+0.37097im           0.0+0.0im
          0.0-0.0im       -1.93554e-9-0.545545im         -0.5+0.218218im          0.0-0.0im               0.0+0.0im               0.4+0.37097im
          0.0-0.0im              -0.5+0.218218im  -1.93554e-9-0.545545im          0.0-0.0im               0.0+0.0im              -0.5+0.218218im
@@ -2203,7 +2266,7 @@ julia> mat = g(0.2)[region = r -> 2<=r[1]<=4]
          0.0+0.0im               0.4+0.37097im          -0.5+0.218218im          0.0+0.0im               0.0-0.0im       -1.93554e-9-0.545545im
 
 julia> mat[(; cells = SA[1]), (; cells = SA[0])]
-2×4 OrbitalSliceMatrix{Matrix{ComplexF64}}:
+2×4 OrbitalSliceMatrix{ComplexF64,Matrix{ComplexF64}}:
  0.4+0.37097im  0.0+0.0im       0.0+0.0im       -0.5+0.218218im
  0.0+0.0im      0.4+0.37097im  -0.5+0.218218im   0.0+0.0im
 
@@ -2215,23 +2278,58 @@ julia> mat[sites(SA[1], 1)]
 
 # See also
     `siteselector`, `cellindices`, `orbaxes`
-
 """
 OrbitalSliceArray, OrbitalSliceVector, OrbitalSliceMatrix
 
 
 """
-    diagonal(inds; kernel = missing)
+    orbaxes(A::OrbitalSliceArray)
 
-Wrapper over indices `inds` used to obtain the diagonal of a `gω::GreenSolution`. If `d =
-diagonal(sel)`, then `gω[d] = diag(gω[sel, sel])`, although in most cases the computation
-is done more efficiently internally.
+Return the orbital axes of `A`. This is a tuple of `OrbitalSliceGrouped` objects that can be
+used e.g. to index another `OrbitalSliceArray` or to inspect the indices of each site with
+`siteindexdict`.
 
-If `kernel = Q` (a matrix) instead of `missing`, a vector with `Tr(gᵢᵢQ)` on
-each site `i` is returned (instead of of `vcat(diag(gᵢᵢ)...)`).
+# Examples
+
+```jldoctest
+julia> g = HP.graphene(orbitals = 2) |> supercell((1,-1)) |> greenfunction;
+
+julia> d = ldos(g[cells = SA[0]])(2); summary(d)
+"8-element OrbitalSliceVector{Float64,Vector{Float64}}"
+
+julia> a = only(orbaxes(d))
+OrbitalSliceGrouped{Float64,2,1} : collection of subcells of orbitals (grouped by sites) for a 1D lattice in 2D space
+  Cells       : 1
+  Cell range  : ([0], [0])
+  Total sites : 4
+
+julia> siteindexdict(a)
+4-element Dictionaries.Dictionary{Quantica.CellIndices{1, Int64, Quantica.SiteLike}, UnitRange{Int64}}
+ CellSites{1,Int64} : 1 site in cell zero
+  Sites : 1 │ 1:2
+ CellSites{1,Int64} : 1 site in cell zero
+  Sites : 2 │ 3:4
+ CellSites{1,Int64} : 1 site in cell zero
+  Sites : 3 │ 5:6
+ CellSites{1,Int64} : 1 site in cell zero
+  Sites : 4 │ 7:8
+```
+
+# See also
+    `siteindexdict`
+"""
+orbaxes
 
 """
-diagonal
+    siteindexdict(axis::OrbitalSliceGrouped)
+
+Return a dictionary of `CellSite`s representing single sites in an orbital axis of an
+`OrbitalSliceArray`, typically obtained with `orbaxes`. See `orbaxes` for an example.
+
+# See also
+    `orbaxes`, `OrbitalSliceArray`
+"""
+siteindexdict
 
 """
     serializer(T::Type, selectors...; parameter = :stream, encoder = identity, decoder = identity)

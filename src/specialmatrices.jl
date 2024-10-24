@@ -61,7 +61,7 @@ function flat(b::OrbitalBlockStructure{B}, unflat::SparseMatrixCSC{B´}) where {
     return sparse(builder, n, n)
 end
 
-function unflat(b::OrbitalBlockStructure{B}, flat::SparseMatrixCSC{<:Number}) where {N,B<:MatrixElementNonscalarType{<:Any,N}}
+Base.@propagate_inbounds function unflat(b::OrbitalBlockStructure{B}, flat::SparseMatrixCSC{<:Number}) where {N,B<:MatrixElementNonscalarType{<:Any,N}}
     @boundscheck(checkblocks(b, flat))
     nnzguess = nnz(flat) ÷ (N * N)
     ncols = unflatsize(b)
@@ -131,7 +131,7 @@ Base.getindex(b::HybridSparseMatrix{<:Any,<:SMatrixView}, i::Integer, j::Integer
 Base.getindex(b::HybridSparseMatrix, i::Integer, j::Integer) = unflat(b)[i, j]
 
 # only allowed for elements that are already stored
-function Base.setindex!(b::HybridSparseMatrix{<:Any,B}, val::AbstractVecOrMat, i::Integer, j::Integer) where {B<:SMatrixView}
+Base.@propagate_inbounds function Base.setindex!(b::HybridSparseMatrix{<:Any,B}, val::AbstractVecOrMat, i::Integer, j::Integer) where {B<:SMatrixView}
     @boundscheck(checkstored(unflat(b), i, j))
     val´ = mask_block(B, val, blocksize(blockstructure(b), i, j))
     unflat(b)[i, j] = val´
@@ -139,7 +139,7 @@ function Base.setindex!(b::HybridSparseMatrix{<:Any,B}, val::AbstractVecOrMat, i
     return val´
 end
 
-function Base.setindex!(b::HybridSparseMatrix, val::AbstractVecOrMat, i::Integer, j::Integer)
+Base.@propagate_inbounds function Base.setindex!(b::HybridSparseMatrix, val::AbstractVecOrMat, i::Integer, j::Integer)
     @boundscheck(checkstored(unflat(b), i, j))
     unflat(b)[i, j] = val
     needs_flat_sync!(b)
@@ -512,6 +512,13 @@ Base.@propagate_inbounds Base.getindex(a::OrbitalSliceArray, I::Vararg{Int, N}) 
 Base.@propagate_inbounds Base.setindex!(a::OrbitalSliceArray, v, i::Int) = setindex!(parent(a), v, i)
 Base.@propagate_inbounds Base.setindex!(a::OrbitalSliceArray, v, I::Vararg{Int, N}) where {N} = setindex!(parent(a), v, I...)
 
+Base.:*(x::Number, a::OrbitalSliceArray) = OrbitalSliceArray(parent(a) * x, orbaxes(a))
+Base.:*(a::OrbitalSliceArray, x::Number) = x * a
+
+Base.:+(a::OrbitalSliceArray, b::OrbitalSliceArray) = parent(a) + parent(b)
+
+Base.:-(a::OrbitalSliceArray, b::OrbitalSliceArray) = parent(a) - parent(b)
+
 # Additional indexing over sites
 Base.getindex(a::OrbitalSliceMatrix; sites...) = getindex(a, siteselector(; sites...))
 Base.getindex(a::OrbitalSliceMatrix, i::NamedTuple, j::NamedTuple = i) =
@@ -558,6 +565,11 @@ function Base.view(a::OrbitalSliceVector, i::AnyCellSites)
     return view(parent(a), rows)
 end
 
+LinearAlgebra.diag(a::OrbitalSliceMatrix) =
+    OrbitalSliceVector(diag(parent(a)), (first(orbaxes(a)),))
+
+LinearAlgebra.norm(a::OrbitalSliceMatrix) = norm(parent(a))
+
 ## broadcasting
 
 # following the manual: https://docs.julialang.org/en/v1/manual/interfaces/#man-interface-array
@@ -580,17 +592,17 @@ Base.dataids(A::OrbitalSliceArray) = Base.dataids(parent(A))
 Broadcast.broadcast_unalias(dest::OrbitalSliceArray, src::OrbitalSliceArray) =
     parent(dest) === parent(src) ? src : Broadcast.unalias(dest, src)
 
-## conversion: If i contains an OrbitalSliceGrouped, wrap it in an OrbitalSliceArray. Otherwise, no-op
+# ## conversion: If i contains an OrbitalSliceGrouped, wrap it in an OrbitalSliceArray. Otherwise, no-op
 
-maybe_OrbitalSliceArray(i) = x -> maybe_OrbitalSliceArray(x, i)
+# maybe_OrbitalSliceArray(i) = x -> maybe_OrbitalSliceArray(x, i)
 
-maybe_OrbitalSliceArray(x::AbstractMatrix, i) = maybe_OrbitalSliceMatrix(x, i)
+# maybe_OrbitalSliceArray(x::AbstractMatrix, i) = maybe_OrbitalSliceMatrix(x, i)
 
-maybe_OrbitalSliceMatrix(x::Diagonal, i::OrbitalSliceGrouped) =
-    maybe_OrbitalSliceMatrix(x, (i, i))
-maybe_OrbitalSliceMatrix(x, (i, j)::Tuple{OrbitalSliceGrouped,OrbitalSliceGrouped}) =
-    OrbitalSliceMatrix(x, (i, j))
-maybe_OrbitalSliceMatrix(x, i) = x
+# maybe_OrbitalSliceMatrix(x::Diagonal, i::OrbitalSliceGrouped) =
+#     maybe_OrbitalSliceMatrix(x, (i, i))
+# maybe_OrbitalSliceMatrix(x, (i, j)::Tuple{OrbitalSliceGrouped,OrbitalSliceGrouped}) =
+#     OrbitalSliceMatrix(x, (i, j))
+# maybe_OrbitalSliceMatrix(x, i) = x
 
 ## currently unsused
 # maybe_OrbitalSliceArray(x::AbstractVector, i) = maybe_OrbitalSliceVector(x, i)
@@ -601,5 +613,63 @@ maybe_OrbitalSliceMatrix(x, i) = x
 # maybe_OrbitalSliceVector(x, i::OrbitalSliceGrouped) = OrbitalSliceVector(x, (i,))
 # maybe_OrbitalSliceVector(x, i) = x
 
+
+#endregion
+
+############################################################################################
+## EigenProduct
+#   A matrix P = X * U * V' that is stored in terms of matrices U and V without computing
+#   the product. x is a scalar. Inspired by LowRankMatrices.jl
+#region
+
+struct EigenProduct{T,M<:AbstractMatrix{Complex{T}}} <: AbstractMatrix{T}
+    U::M
+    V::M
+    phi::T
+    x::Complex{T}
+    function EigenProduct{T,M}(U::M, V::M, phi::T, x::Complex{T}) where {T,M<:AbstractMatrix{Complex{T}}}
+        axes(U, 2) != axes(V, 2) && argerror("U and V must have identical column axis")
+        return new(U, V, phi, x)
+    end
+end
+
+EigenProduct(U::M, V::M, phi = zero(T), x = one(Complex{T})) where {T,M<:AbstractMatrix{Complex{T}}} =
+    EigenProduct{T,M}(U, V, T(phi), Complex{T}(x))
+
+Base.@propagate_inbounds function Base.getindex(P::EigenProduct, i::Integer, j::Integer)
+    ret = zero(eltype(P))
+    @boundscheck checkbounds(P.U, i, :)
+    @boundscheck checkbounds(P.V, j, :)
+    @inbounds for k in axes(P.U, 2)
+        ret = muladd(P.U[i, k], conj(P.V[j, k]), ret)
+    end
+    return P.x * ret
+end
+
+Base.@propagate_inbounds function Base.getindex(P::EigenProduct, i::Integer)
+    ij = Tuple(CartesianIndices(axes(P))[i])
+    return P[ij...]
+end
+
+function Base.getindex(P::EigenProduct{T}, ci::AnyCellOrbitals, cj::AnyCellOrbitals) where {T}
+    phase = isempty(cell(ci)) ? one(T) : cis(only(cell(ci) - cell(cj)) * P.phi)
+    return view(phase * P, orbindices(ci), orbindices(cj))
+end
+
+Base.view(P::EigenProduct, is, js) = EigenProduct(view(P.U, is, :), view(P.V, js, :), P.phi, P.x)
+
+# AbstractArray interface
+Base.axes(P::EigenProduct) = axes(P.U, 1), axes(P.V, 1)
+Base.size(P::EigenProduct) = size(P.U, 1), size(P.V, 1)
+# Base.iterate(a::EigenProduct, i...) = iterate(parent(a), i...)
+Base.length(P::EigenProduct) = prod(size(P))
+Base.IndexStyle(::Type{T}) where {M,T<:EigenProduct{<:Any,M}} = IndexStyle(M)
+Base.similar(P::EigenProduct) = EigenProduct(similar(P.U), similar(P.V), P.phi, P.x)
+Base.similar(P::EigenProduct, t::Type) = EigenProduct(similar(P.U, t), similar(P.V, t), P.phi, P.x)
+Base.copy(P::EigenProduct) = EigenProduct(copy(P.U), copy(P.V), P.phi, P.x)
+Base.eltype(::EigenProduct{T}) where {T} = Complex{T}
+
+Base.:*(x::Number, P::EigenProduct) = EigenProduct(P.U, P.V, P.phi, P.x * x)
+Base.:*(P::EigenProduct, x::Number) = x*P
 
 #endregion

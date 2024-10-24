@@ -454,7 +454,7 @@ Base.getindex(h::AbstractHamiltonian{<:Any,<:Any,L}, ::HybridInds{Tuple{}}) wher
 Base.getindex(h::ParametricHamiltonian{<:Any,<:Any,L}, dn::HybridInds{SVector{L,Int}}) where {L} =
     getindex(hamiltonian(h), dn)
 
-function Base.getindex(h::Hamiltonian{<:Any,<:Any,L}, dn::HybridInds{SVector{L,Int}}) where {L}
+Base.@propagate_inbounds function Base.getindex(h::Hamiltonian{<:Any,<:Any,L}, dn::HybridInds{SVector{L,Int}}) where {L}
     for har in harmonics(h)
         parent(dn) == dcell(har) && return matrix(har)
     end
@@ -482,6 +482,9 @@ Base.getindex(h::ParametricHamiltonian, i, j) = getindex(call!(h), i, j)
 Base.getindex(h::Hamiltonian, i, j) = getindex(h, sites_to_orbs(i, h), sites_to_orbs(j, h))
 # we need AbstractHamiltonian here to avoid ambiguities with dn above
 Base.getindex(h::AbstractHamiltonian, i) = (i´ = sites_to_orbs(i, h); getindex(h, i´, i´))
+
+Base.getindex(h::AbstractHamiltonian, ::SparseIndices...) =
+    argerror("Sparse indexing not yet supported for AbstractHamiltonian")
 
 # wrapped matrix for end user consumption
 Base.getindex(h::Hamiltonian, i::OrbitalSliceGrouped, j::OrbitalSliceGrouped) =
