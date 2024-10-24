@@ -380,6 +380,23 @@ Base.summary(g::GreenSlice{T,E,L}) where {T,E,L} =
 #endregion
 
 ############################################################################################
+# SparseIndices
+#region
+
+function Base.show(io::IO, s::SparseIndices)
+    i = get(io, :indent, "")
+    print(io, i, summary(s))
+end
+
+Base.summary(::PairIndices) =
+    "PairIndices: a form of SparseIndices used to sparsely index an object such as a GreenFunction on a selection of site pairs"
+
+Base.summary(::DiagIndices) =
+    "DiagIndices: a form of SparseIndices used to index the diagonal of an object such as a GreenFunction"
+
+#endregion
+
+############################################################################################
 # Conductance
 #region
 

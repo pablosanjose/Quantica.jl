@@ -100,11 +100,12 @@ end
 ## call
 
 function (s::DensityMatrixSpectrumSolver)(µ, kBT; params...)
+    bs = blockstructure(s.gs)
     psis, fpsis, es, fs = s.psis, s.fpsis, s.es, s.fs
     β = inv(kBT)
     (@. fs = fermi(es - µ, β))
     fpsis .= psis .* transpose(fs)
-    ρcell = EigenProduct(psis, fpsis)
+    ρcell = EigenProduct(bs, psis, fpsis)
     result = call!_output(s.gs)
     getindex!(result, ρcell, s.orbaxes...)
     return result

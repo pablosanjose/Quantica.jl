@@ -565,18 +565,10 @@ override_path!(override_path, ptsvec, pts) =
 
 (gf::DensityMatrixIntegrand)(ω; params...) = copy(call!(gf, ω; params...))
 
-# # extrinsic version - unused
-# function call!(output, gf::DensityMatrixIntegrand, ω; params...)
-#     call!(output, gf.gs, ω; gf.omegamap(ω)..., params...)
-#     output .*= fermi(ω - gf.mu, inv(gf.kBT))
-#     return output
-# end
-
-# intrinsic version
 function call!(gf::DensityMatrixIntegrand, ω; params...)
     output = call!(gf.gs, ω; gf.omegamap(ω)..., params...)
-    output .*= fermi(ω - gf.mu, inv(gf.kBT))
-    return output    # turns into a bare Array
+    serialize(output) .*= fermi(ω - gf.mu, inv(gf.kBT))
+    return output
 end
 
 function gf_to_rho!(x::AbstractMatrix)
@@ -711,10 +703,6 @@ numphaseshifts(phaseshifts) = length(phaseshifts)
 
 (J::JosephsonIntegrand)(ω; params...) = copy(call!(J, ω; params...))
 
-# # extrinsic version (fallback) - unused
-# call!(output, J::JosephsonIntegrand, ω; params...) = (output .= call!(J, ω; params...))
-
-# intrinsic version
 function call!(J::JosephsonIntegrand, ω; params...)
     gω = call!(J.g, ω; J.omegamap(ω)..., params...)
     f = fermi(ω, inv(J.kBT))
@@ -723,7 +711,7 @@ function call!(J::JosephsonIntegrand, ω; params...)
 end
 
 function josephson_traces(J, gω, f)
-    gr = gω[J.contactind, J.contactind]
+    gr = view(gω, J.contactind, J.contactind)
     Σi = selfenergy!(J.Σ, gω, J.contactind)
     return josephson_traces!(J, gr, Σi, f)
 end

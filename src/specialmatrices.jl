@@ -538,9 +538,11 @@ function Base.getindex(a::OrbitalSliceMatrix, i::SiteSelector, j::SiteSelector =
     return OrbitalSliceMatrix(m, (rowslice´, colslice´))
 end
 
-# CellSites: return an unwrapped Matrix or a view thereof (non-allocating)
+# CellSites: return an unwrapped Matrix or a scalar
 Base.getindex(a::OrbitalSliceMatrix, i::AnyCellSites, j::AnyCellSites = i) =
     copy(view(a, i, j))
+Base.getindex(a::OrbitalSliceMatrix, i::CellSite, j::CellSite = i) =
+    only(view(a, i, j))
 
 Base.getindex(a::OrbitalSliceMatrix, i::C, j::C = i) where {B,C<:CellSitePos{<:Any,<:Any,<:Any,B}} =
     sanitize_block(B, view(a, i, j))
@@ -573,18 +575,21 @@ LinearAlgebra.norm(a::OrbitalSliceMatrix) = norm(parent(a))
 ## broadcasting
 
 # following the manual: https://docs.julialang.org/en/v1/manual/interfaces/#man-interface-array
+# disabled for now, since it seems to cause issues with OrbitalSliceMatrix{<:SparseMatrixCSC}
 
-Broadcast.BroadcastStyle(::Type{<:OrbitalSliceArray}) = Broadcast.ArrayStyle{OrbitalSliceArray}()
+# Broadcast.BroadcastStyle(::Type{O}) where {O<:OrbitalSliceArray} = Broadcast.ArrayStyle{O}()
 
-Base.similar(bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{OrbitalSliceArray}}, ::Type{ElType}) where {ElType} =
-    OrbitalSliceArray(similar(Array{ElType}, axes(bc)), orbaxes(find_osa(bc)))
+# Base.similar(bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{O}}, ::Type{ElType}) where {ElType,O<:OrbitalSliceMatrix{<:Any,<:Array}} =
+#     OrbitalSliceArray(similar(Array{ElType}, axes(bc)), orbaxes(find_osa(bc)))
+# Base.similar(bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{O}}, ::Type{ElType}) where {ElType,O<:OrbitalSliceMatrix{<:Any,<:SparseMatrixCSC}} =
+#     OrbitalSliceArray(similar(parent(find_osa(bc)), ElType), orbaxes(find_osa(bc)))
 
-find_osa(bc::Base.Broadcast.Broadcasted) = find_osa(bc.args)
-find_osa(args::Tuple) = find_osa(find_osa(args[1]), Base.tail(args))
-find_osa(x) = x
-find_osa(::Tuple{}) = nothing
-find_osa(a::OrbitalSliceArray, rest) = a
-find_osa(::Any, rest) = find_osa(rest)
+# find_osa(bc::Base.Broadcast.Broadcasted) = find_osa(bc.args)
+# find_osa(args::Tuple) = find_osa(find_osa(args[1]), Base.tail(args))
+# find_osa(x) = x
+# find_osa(::Tuple{}) = nothing
+# find_osa(a::OrbitalSliceArray, rest) = a
+# find_osa(::Any, rest) = find_osa(rest)
 
 # taken from https://github.com/JuliaArrays/OffsetArrays.jl/blob/756e839563c88faa4ebe4ff971286747863aaff0/src/OffsetArrays.jl#L469
 
@@ -622,19 +627,28 @@ Broadcast.broadcast_unalias(dest::OrbitalSliceArray, src::OrbitalSliceArray) =
 #   the product. x is a scalar. Inspired by LowRankMatrices.jl
 #region
 
-struct EigenProduct{T,M<:AbstractMatrix{Complex{T}}} <: AbstractMatrix{T}
+struct EigenProduct{T,M<:AbstractMatrix{Complex{T}},O<:OrbitalBlockStructure} <: AbstractMatrix{T}
+    blockstruct::O
     U::M
     V::M
     phi::T
     x::Complex{T}
-    function EigenProduct{T,M}(U::M, V::M, phi::T, x::Complex{T}) where {T,M<:AbstractMatrix{Complex{T}}}
+    function EigenProduct{T,M,O}(blockstruct::O, U::M, V::M, phi::T, x::Complex{T}) where {T,M<:AbstractMatrix{Complex{T}},O<:OrbitalBlockStructure}
         axes(U, 2) != axes(V, 2) && argerror("U and V must have identical column axis")
-        return new(U, V, phi, x)
+        return new(blockstruct, U, V, phi, x)
     end
 end
 
-EigenProduct(U::M, V::M, phi = zero(T), x = one(Complex{T})) where {T,M<:AbstractMatrix{Complex{T}}} =
-    EigenProduct{T,M}(U, V, T(phi), Complex{T}(x))
+#region ## Constructors ##
+
+EigenProduct(blockstruct::O, U::M, V::M, phi = zero(T), x = one(Complex{T})) where {T,M<:AbstractMatrix{Complex{T}},O<:OrbitalBlockStructure} =
+    EigenProduct{T,M,O}(blockstruct, U, V, T(phi), Complex{T}(x))
+
+#endregion
+
+#region ## API ##
+
+blockstructure(P::EigenProduct) = P.blockstruct
 
 Base.@propagate_inbounds function Base.getindex(P::EigenProduct, i::Integer, j::Integer)
     ret = zero(eltype(P))
@@ -656,7 +670,8 @@ function Base.getindex(P::EigenProduct{T}, ci::AnyCellOrbitals, cj::AnyCellOrbit
     return view(phase * P, orbindices(ci), orbindices(cj))
 end
 
-Base.view(P::EigenProduct, is, js) = EigenProduct(view(P.U, is, :), view(P.V, js, :), P.phi, P.x)
+Base.view(P::EigenProduct, is, js) =
+    EigenProduct(P.blockstruct, view(P.U, is, :), view(P.V, js, :), P.phi, P.x)
 
 # AbstractArray interface
 Base.axes(P::EigenProduct) = axes(P.U, 1), axes(P.V, 1)
@@ -664,12 +679,13 @@ Base.size(P::EigenProduct) = size(P.U, 1), size(P.V, 1)
 # Base.iterate(a::EigenProduct, i...) = iterate(parent(a), i...)
 Base.length(P::EigenProduct) = prod(size(P))
 Base.IndexStyle(::Type{T}) where {M,T<:EigenProduct{<:Any,M}} = IndexStyle(M)
-Base.similar(P::EigenProduct) = EigenProduct(similar(P.U), similar(P.V), P.phi, P.x)
-Base.similar(P::EigenProduct, t::Type) = EigenProduct(similar(P.U, t), similar(P.V, t), P.phi, P.x)
-Base.copy(P::EigenProduct) = EigenProduct(copy(P.U), copy(P.V), P.phi, P.x)
+Base.similar(P::EigenProduct) = EigenProduct(P.blockstruct, similar(P.U), similar(P.V), P.phi, P.x)
+Base.similar(P::EigenProduct, t::Type) = EigenProduct(P.blockstruct, similar(P.U, t), similar(P.V, t), P.phi, P.x)
+Base.copy(P::EigenProduct) = EigenProduct(P.blockstruct, copy(P.U), copy(P.V), P.phi, P.x)
 Base.eltype(::EigenProduct{T}) where {T} = Complex{T}
 
-Base.:*(x::Number, P::EigenProduct) = EigenProduct(P.U, P.V, P.phi, P.x * x)
+Base.:*(x::Number, P::EigenProduct) = EigenProduct(P.blockstruct, P.U, P.V, P.phi, P.x * x)
 Base.:*(P::EigenProduct, x::Number) = x*P
 
+#endregion
 #endregion

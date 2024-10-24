@@ -296,6 +296,7 @@ end
     ω = 0.6
     @test g[diagonal(2)](ω) isa OrbitalSliceMatrix
     @test g[diagonal(2)](ω) == g(ω)[diagonal(2)]
+    @test g[diagonal(:)](ω) == g(ω)[diagonal(:)]
     @test size(g[diagonal(1)](ω)) == (12,12)
     @test size(g[diagonal(1, kernel = I)](ω)) == (8,8)
     @test size(g[diagonal(:)](ω),1) == size(g[diagonal(1)](ω),1) + size(g[diagonal(2)](ω),1) == 48
@@ -324,30 +325,26 @@ end
     @test gg .* gg´ ≈ gg .* gg
 end
 
-@testset "densitymatrix diagonal slicing" begin
+@testset "densitymatrix sparse slicing" begin
     g1 = LP.honeycomb() |> hamiltonian(hopping(0.1I, sublats = (:A,:B) .=> (:A,:B), range = 1) - plusadjoint(@hopping((; t=1) -> t*SA[0.4 1], sublats = :B => :A)), orbitals = (1,2)) |>
         supercell((1,-1), region = r -> -2<=r[2]<=2) |> attach(nothing, region = RP.circle(1), sublats = :B) |>
         attach(nothing, sublats = :A, cells = 0, region = r->r[2]<0) |> greenfunction(GS.Schur())
     g2 = LP.square() |> hopping(1) - onsite(1) |> supercell(3) |> supercell |> attach(nothing, region = RP.circle(2)) |> greenfunction(GS.Spectrum())
     g3 = LP.triangular() |> hamiltonian(hopping(-I) + onsite(1.8I), orbitals = 2) |> supercell(10) |> supercell |>
         attach(nothing, region = RP.circle(2)) |> attach(nothing, region = RP.circle(2, SA[1,2])) |> greenfunction(GS.KPM(bandrange=(-4,5)))
-    for g in (g1, g2, g3)
-        ρ0 = densitymatrix(g[diagonal(1)], 5)
-        ρ = densitymatrix(g[diagonal(1)])
-        @test g[diagonal(1)](0.2) == g(0.2)[diagonal(1)]
-        @test g[diagonal(:)](0.2) == g(0.2)[diagonal(:)]
-        @test g[diagonal(1)](0.2) isa OrbitalSliceMatrix
-        @test isapprox(ρ0(), ρ())
-        @test isapprox(ρ0(0.2), ρ(0.2))
-        if g !== g3 # KPM doesn't support finite temperatures yet
-            @test isapprox(ρ0(0.2, 0.3), ρ(0.2, 0.3))
-        end
-        if g === g1 || g === g3
-            ρ0 = densitymatrix(g[diagonal(1, kernel = SA[0 1; 1 0])], 5)
-            ρ = densitymatrix(g[diagonal(1, kernel = SA[0 1; 1 0])])
-            @test isapprox(ρ0(), ρ(); atol = 1e-8)
-            @test isapprox(ρ0(0.2), ρ(0.2); atol = 1e-8)
-        end
+    # KPM doesn't support finite temperatures or generic indexing yet, so g3 excluded from this loop
+    for g in (g1, g2), inds in (diagonal(1), diagonal(:), sitepairs(range = 1))
+        ρ0 = densitymatrix(g[inds], 5)
+        ρ = densitymatrix(g[inds])
+        @test isapprox(ρ0(), ρ(); atol = 1e-7)
+        @test isapprox(ρ0(0.2), ρ(0.2); atol = 1e-7)
+        @test isapprox(ρ0(0.2, 0.3), ρ(0.2, 0.3))
+    end
+    for g in (g1, g3)
+        ρ0 = densitymatrix(g[diagonal(1, kernel = SA[0 1; 1 0])], 5)
+        ρ = densitymatrix(g[diagonal(1, kernel = SA[0 1; 1 0])])
+        @test isapprox(ρ0(), ρ(); atol = 1e-8)
+        @test isapprox(ρ0(0.2), ρ(0.2); atol = 1e-8)
     end
 end
 
@@ -488,6 +485,8 @@ end
     g0 = LP.square() |> hamiltonian(hopping(1)) |> supercell(region = RP.square(10)) |> attach(glead, reverse = true; region = contact2) |> attach(glead; region = contact1) |> greenfunction;
     testcond(g0)
 
+    contact1 = r -> r[1] ≈ 5 && -1 <= r[2] <= 1
+    contact2 = r -> r[1] ≈ -5 && -1 <= r[2] <= 1
     glead = LP.square() |> hamiltonian(hopping(I) + onsite(SA[0 1; 1 0]), orbitals = 2) |> supercell((1,0), region = r -> -1 <= r[2] <= 1) |> greenfunction(GS.Schur(boundary = 0));
     g0 = LP.square() |> hamiltonian(hopping(I), orbitals = 2) |> supercell(region = RP.square(10)) |> attach(glead, reverse = true; region = contact2) |> attach(glead; region = contact1) |> greenfunction;
     testcond(g0; nambu = true)

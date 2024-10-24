@@ -67,9 +67,6 @@ call!(g::GreenSlice{T}, ω::T; kw...) where {T} =
 call!(gs::GreenSlice{T}, ω::Complex{T}; post = identity, params...) where {T} =
     getindex!(gs, call!(greenfunction(gs), ω; params...); post)
 
-## extrinsic version - unused
-# call!(output, g::GreenSlice, ω; kw...) = call!(replace_output!(g, output), ω; kw...)
-
 real_or_complex_convert(::Type{T}, ω::Real) where {T<:Real} = convert(T, ω)
 real_or_complex_convert(::Type{T}, ω::Complex) where {T<:Real} = convert(Complex{T}, ω)
 
@@ -189,8 +186,10 @@ getindex!(output, g, i::OrbitalPairIndices, j::OrbitalPairIndices = i; kw...) =
 ############################################################################################
 # getindex_diagonal! and getindex_sparse! : GreenSolution diagonal and sparse indexing
 #   They rely on fill_diagonal! and fill_sparse! to fill the output matrix with mat elements
-#   We can swith `g` with another object that supports getindex_diag or getindex_sparse
-#   returning some `mat` object, that supports getindex and view
+#   We can swith `g` with another object `o` that supports getindex_diag or getindex_sparse
+#   returning `mat::AbstractMatrix`
+#   `mat` is not an OrbitalSliceGrouped for performance reasons. Instead the object `o`
+#   should also implement a `blockstructure` method so we know how to map sites to indices.
 #region
 
 getindex_diagonal!(output, g::GreenSolution, i::Union{Colon,Integer}, ker; post = identity) =
@@ -203,6 +202,7 @@ function getindex_diagonal!(output, g, o::CellOrbitalsGrouped, ker; post = ident
     return output
 end
 
+# g may be a GreenSolution or any other type with a minimal API (e.g. EigenProduct)
 function getindex_diagonal!(output, g, i::OrbitalSliceGrouped, ker; post = identity)
     offset = 0
     for o in cellsdict(i)
@@ -216,20 +216,20 @@ end
 
 function getindex_sparse!(output, g, hmask::Hamiltonian, ker; post = identity)
     bs = blockstructure(g)  # used to find blocks of g for nonzeros in hmask
-    oj = sites_to_orbs(sites(zerocell(g), :), g)
+    oj = sites_to_orbs(sites(zerocell(hmask), :), bs)  # full cell
     for har in harmonics(hmask)
         oi = CellIndices(dcell(har), oj)
-        mat = getindex_sparse(g, oi, oj, har)
-        fill_sparse!(har, mat, bs, ker; post)
+        mat_cell = getindex_sparse(g, oi, oj, har)
+        fill_sparse!(har, mat_cell, bs, ker; post)
     end
     fill_sparse!(parent(output), hmask)
     return output
 end
 
 # non-optimized fallback, can be specialized by solvers
-# optimized version would only compute site blocks in diagonal
+# optimized version could compute only site blocks in diagonal
 getindex_diag(g, oi) = g[oi, oi]
-# optimized version would only compute nonzero blocks from har::Harmonic
+# optimized version could compute only nonzero blocks from har::Harmonic
 getindex_sparse(g, oi, oj, har) = g[oi, oj]
 
 # input index ranges for each output index to fill
@@ -241,18 +241,18 @@ orbital_kernel_ranges(::Missing, o::CellOrbitalsGrouped) = eachindex(orbindices(
 orbital_kernel_ranges(kernel, o::CellOrbitalsGrouped) = orbranges(o)
 
 ## core drivers
-#   write to the diagonal of output, with a given offset, the elements Tr(kernel*mat[i,i])
+#   write to the diagonal of output, with a given offset, the elements Tr(kernel*mat_cell[i,i])
 #   for each orbital or site encoded in range i
-function fill_diagonal!(output, mat, blockrngs, kernel; post = identity, offset = 0)
+function fill_diagonal!(output, mat_cell, blockrngs, kernel; post = identity, offset = 0)
     for (n, rng) in enumerate(blockrngs)
         i = n + offset
-        output[i, i] = post(apply_kernel(kernel, mat, rng))
+        output[i, i] = post(apply_kernel(kernel, mat_cell, rng))
     end
     return output
 end
 
-#   overwrite nonzero h elements with Tr(kernel*mat[i,j]) for each site pair i,j
-function fill_sparse!(har::Harmonic, mat, bs, kernel; post = identity)
+#   overwrite nonzero h elements with Tr(kernel*mat_cell[irng,jrng]) for each site pair i,j
+function fill_sparse!(har::Harmonic, mat_cell, bs, kernel; post = identity)
     B = blocktype(har)
     hmat = unflat(har)
     rows = rowvals(hmat)
@@ -260,7 +260,7 @@ function fill_sparse!(har::Harmonic, mat, bs, kernel; post = identity)
     for col in axes(hmat, 2), ptr in nzrange(hmat, col)
         row = rows[ptr]
         orows, ocols = flatrange(bs, row), flatrange(bs, col)
-        val = post(apply_kernel(kernel, mat, orows, ocols))
+        val = post(apply_kernel(kernel, mat_cell, orows, ocols))
         nzs[ptr] = mask_block(B, val)
     end
     needs_flat_sync!(matrix(har))
@@ -285,12 +285,12 @@ function fill_sparse!(output::SparseMatrixCSC, h::Hamiltonian)
     return output
 end
 
-apply_kernel(kernel, mat, rows, cols = rows) = apply_kernel(kernel, view_or_scalar(mat, rows, cols))
+apply_kernel(kernel, mat_cell, rows, cols = rows) = apply_kernel(kernel, view_or_scalar(mat_cell, rows, cols))
 apply_kernel(kernel::Missing, v) = v
 apply_kernel(kernel, v) = trace_prod(kernel, v)
 
-view_or_scalar(mat, rows::UnitRange, cols::UnitRange) = view(mat, rows, cols)
-view_or_scalar(mat, orb::Integer, orb´::Integer) = mat[orb, orb´]
+view_or_scalar(mat_cell, rows::UnitRange, cols::UnitRange) = view(mat_cell, rows, cols)
+view_or_scalar(mat_cell, orb::Integer, orb´::Integer) = mat_cell[orb, orb´]
 
 #endregion
 
