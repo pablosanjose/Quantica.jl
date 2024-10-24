@@ -236,7 +236,8 @@ end
 #   specialized DensityMatrix method for GS.KPM
 #region
 
-struct DensityMatrixKPMSolver{T,M}
+struct DensityMatrixKPMSolver{T,M,G<:GreenSlice}
+    gs::G
     momenta::Vector{M}
     bandCH::Tuple{T,T}
 end
@@ -246,7 +247,7 @@ end
 function densitymatrix(s::AppliedKPMGreenSolver, gs::GreenSlice{T}) where {T}
     has_selfenergy(gs) && argerror("The KPM densitymatrix solver currently support only `nothing` contacts")
     momenta = slice_momenta(s.momenta, gs)
-    solver = DensityMatrixKPMSolver(momenta, s.bandCH)
+    solver = DensityMatrixKPMSolver(gs, momenta, s.bandCH)
     return DensityMatrix(solver, gs)
 end
 
@@ -266,8 +267,11 @@ _maybe_diagonal(blockmat, gs) = _maybe_diagonal(blockmat, gs, rows(gs))
 _maybe_diagonal(blockmat, gs, is) = blockmat
 
 function _maybe_diagonal(blockmat::AbstractArray{C}, gs, is::DiagIndices) where {C}
-    blockrngs = contactranges(kernel(is), parent(is), gs)          # see greenfunction.jl
-    return append_diagonal!(C[], blockmat, blockrngs, kernel(is))  # parent(is) should be Colon or Integer
+    blockrngs = contact_kernel_ranges(kernel(is), parent(is), gs)  # see greenfunction.jl
+    # note: blockrngs can be a lazy Iterator of unknown length
+    d = Diagonal(Returns(zero(C)).(blockrngs))
+    fill_diagonal!(d, blockmat, blockrngs, kernel(is))  # parent(is) should be Colon or Integer
+    return d.diag
 end
 
 ## call
@@ -276,16 +280,18 @@ function (d::DensityMatrixKPMSolver)(mu, kBT; params...)
     ω0, Δ = d.bandCH
     kBT´ = kBT / Δ
     mu´ = (mu - ω0) / Δ
+    result = copy(call!_output(d.gs))
+    ρ = serialize(result)   # obtain underlying array of result
     if kBT´ ≈ 0
         ϕ = acos(mu´)
-        ρ = copy(first(d.momenta)) * (1-ϕ/π)
+        ρ .= first(d.momenta) .* (1-ϕ/π)
         for n in 1:length(d.momenta)-1
             @. ρ += d.momenta[n+1] * 2 * (sin(π*n)-sin(n*ϕ))/(π*n)
         end
     else
         throw(argerror("KPM densitymatrix currently doesn't support finite temperatures. Open an issue if you need this feature."))
     end
-    return ρ
+    return result
 end
 
 #endregion

@@ -1,4 +1,3 @@
-
 ############################################################################################
 # AppliedSerializer
 #   support for serialization of Hamiltonians and ParametricHamiltonians
@@ -6,7 +5,7 @@
 
 ## serialize and serialize!
 
-function serialize!(v, s::AppliedSerializer; kw...)
+Base.@propagate_inbounds function serialize!(v, s::AppliedSerializer; kw...)
     @boundscheck check_serializer_length(s, v)
     h0 = parent_hamiltonian(s)
     h = call!(h0; kw...)
@@ -60,7 +59,7 @@ deserialize(s::AppliedSerializer, v; kw...) = deserialize!(s(; kw...), v)
 
 deserialize!(s::AppliedSerializer, v; kw...) = deserialize!(call!(s; kw...), v)
 
-function deserialize!(s::AppliedSerializer{<:Any,<:Hamiltonian}, v)
+Base.@propagate_inbounds function deserialize!(s::AppliedSerializer{<:Any,<:Hamiltonian}, v)
     @boundscheck check_serializer_length(s, v)
     h = parent_hamiltonian(s)
     dec = decoder(s)
@@ -124,5 +123,29 @@ function check(s::AppliedSerializer{T}; params...) where {T}
         argerror("decoder/encoder pair do not seem to be correct inverse of each other")
     return nothing
 end
+
+#endregion
+
+
+############################################################################################
+# serialize and deserialize for OrbitalSliceArray
+#   extract underlying data and reconstruct an object using such data
+#   no check of correct array dimensionality is performed for performance
+#region
+
+serialize(a::OrbitalSliceArray) = serialize_array(parent(a))
+serialize(a::AbstractArray) = serialize_array(a)
+
+serialize_array(a::Array) = a
+serialize_array(a::Diagonal{<:Any,<:Vector}) = a.diag
+serialize_array(a::SparseMatrixCSC) = nonzeros(a)
+
+deserialize(a::OrbitalSliceArray, v) = OrbitalSliceArray(deserialize_array(parent(a), v), orbaxes(a))
+deserialize(a::AbstractArray, v) = deserialize_array(a, v)
+
+deserialize_array(::A, v::A´) where {N,T,T´,A<:Array{T,N},A´<:Array{T´,N}} = v
+deserialize_array(::Diagonal, v::Vector) = Diagonal(v)
+deserialize_array(a::SparseMatrixCSC, v::Vector) = SparseMatrixCSC(a.m, a.n, a.colptr, a.rowval, v)
+
 
 #endregion

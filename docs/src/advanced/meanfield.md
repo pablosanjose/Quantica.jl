@@ -41,7 +41,7 @@ julia> h(SA[])
 julia> g = greenfunction(h, GS.Spectrum());
 
 julia> ρ0 = densitymatrix(g[])(0.5, 0) ## density matrix at chemical potential `µ=0.5` and temperature `kBT = 0`  on all sites
-4×4 OrbitalSliceMatrix{Matrix{ComplexF64}}:
+4×4 OrbitalSliceMatrix{ComplexF64,Matrix{ComplexF64}}:
  0.138197+0.0im  0.223607+0.0im  0.223607+0.0im  0.138197+0.0im
  0.223607+0.0im  0.361803+0.0im  0.361803+0.0im  0.223607+0.0im
  0.223607+0.0im  0.361803+0.0im  0.361803+0.0im  0.223607+0.0im

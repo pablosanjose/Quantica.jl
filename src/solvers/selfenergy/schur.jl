@@ -208,7 +208,7 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead,
     # apply model to lat0 to get hcoupling
     interblockmodel = interblock(model, 1:nparent, nparent+1:ntotal)
     hcoupling = hamiltonian(lat0, interblockmodel;
-        orbitals = vcat(norbitals(hparent), norbitals(hlead)))
+        orbitals = vcat(norbitals(hparent, :), norbitals(hlead, :)))
 
     gslice = glead[cells = SA[xunit]]
     Σs = selfenergies(contacts(glead))

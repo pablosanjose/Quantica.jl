@@ -218,7 +218,7 @@ function push_pointers!(ptrs, h, har0, s::AppliedSiteSelector, shifts = missing,
     lat = lattice(h)
     umat = unflat(har0)
     rows = rowvals(umat)
-    norbs = norbitals(h)
+    norbs = norbitals(h, :)
     for scol in sublats(lat), col in siterange(lat, scol)
         isinblock(col, block) || continue
         for p in nzrange(umat, col)
@@ -243,7 +243,7 @@ function push_pointers!(ptrs, h, har, s::AppliedHopSelector, shifts = missing, b
     lat = lattice(h)
     dn0 = zerocell(lat)
     dn = dcell(har)
-    norbs = norbitals(h)
+    norbs = norbitals(h, :)
     umat = unflat(har)
     rows = rowvals(umat)
     for scol in sublats(lat), col in siterange(lat, scol), p in nzrange(umat, col)
