@@ -538,11 +538,9 @@ function Base.getindex(a::OrbitalSliceMatrix, i::SiteSelector, j::SiteSelector =
     return OrbitalSliceMatrix(m, (rowslice´, colslice´))
 end
 
-# CellSites: return an unwrapped Matrix or a scalar
+# CellSites: return an unwrapped Matrix
 Base.getindex(a::OrbitalSliceMatrix, i::AnyCellSites, j::AnyCellSites = i) =
     copy(view(a, i, j))
-Base.getindex(a::OrbitalSliceMatrix, i::CellSite, j::CellSite = i) =
-    only(view(a, i, j))
 
 Base.getindex(a::OrbitalSliceMatrix, i::C, j::C = i) where {B,C<:CellSitePos{<:Any,<:Any,<:Any,B}} =
     sanitize_block(B, view(a, i, j))
@@ -686,6 +684,8 @@ Base.eltype(::EigenProduct{T}) where {T} = Complex{T}
 
 Base.:*(x::Number, P::EigenProduct) = EigenProduct(P.blockstruct, P.U, P.V, P.phi, P.x * x)
 Base.:*(P::EigenProduct, x::Number) = x*P
+
+LinearAlgebra.tr(P::EigenProduct) = sum(xy -> first(xy) * conj(last(xy)), zip(P.U, P.V)) * P.x
 
 #endregion
 #endregion
