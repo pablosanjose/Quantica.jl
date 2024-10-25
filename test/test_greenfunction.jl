@@ -531,21 +531,6 @@ end
     @test typeof(ρ0sol) == typeof(ρsol)
 end
 
-@testset "mean-field models" begin
-    h1 = LP.honeycomb() |> supercell(2) |> supercell |> hamiltonian(onsite(0I) + hopping(I), orbitals = 1)
-    h2 = LP.honeycomb() |> supercell(2) |> supercell |> hamiltonian(onsite(0I) + hopping(I), orbitals = 2)
-    h3 = LP.honeycomb() |> supercell(2) |> supercell |> hamiltonian(onsite(0I) + hopping(I), orbitals = (1,2))
-    for h0 in (h1, h2, h3)
-        ρ0 = densitymatrix(greenfunction(h0, GS.Spectrum())[cells = SA[]])();
-        h = h0 |> @onsite!((o, s; ρ = ρ0, t) --> o + t*ρ[s])
-        @test diag(h(t = 2)[()]) ≈ 2*diag(ρ0) atol = 0.0000001
-        h = h0 |> @hopping!((t, si, sj; ρ = ρ0, α = 2) --> α*ρ[si, sj])
-        @test h() isa Quantica.Hamiltonian
-        diff = (h()[()] - 2ρ0) .* h()[()]
-        @test iszero(diff)
-    end
-end
-
 @testset "aliasing" begin
     # Issue #267
     g = LP.linear() |> hamiltonian(@hopping((; q = 1) -> q*I), orbitals = 2) |> greenfunction
@@ -576,4 +561,50 @@ end
     @test g.contacts.selfenergies[2].solver.hlead[(0,)] === g.contacts.selfenergies[1].solver.hlead[(0,)]
     @test g.contacts.selfenergies[2].solver.hlead[(1,)] === g.contacts.selfenergies[1].solver.hlead[(-1,)]
     @test g.contacts.selfenergies[2].solver.hlead[(-1,)] === g.contacts.selfenergies[1].solver.hlead[(1,)]
+end
+
+@testset "meanfield" begin
+    oh = LP.honeycomb() |> hamiltonian(hopping(SA[1 im; -im 1]) - onsite(SA[1 0; 0 -1], sublats = :A), orbitals = 2) |> supercell((1,-1))
+    g = oh |> greenfunction
+    Q = SA[0 -im; im 0]
+    m = meanfield(g; selector = (; range = 1), potential = 2, fock = 1.5, charge = Q)
+    Φ = m(0.2, 0.3)
+    @test Φ[sites(1), sites(2)] ≈ -1.5 * Q * m.rhoFock(0.2, 0.3)[sites(1), sites(2)] * Q
+
+    g = LP.linear() |> hopping(1) |> greenfunction
+    pot(r) = 1/norm(r)
+    Φ = meanfield(g; selector = (; range = 10), potential = pot, onsite = 3)()
+    # onsite fock cancels hartree in the spinless case
+    @test only(view(Φ, sites(1))) ≈ 0.5 * (0*3 + 2*sum(pot, 1:10))
+    # unless we disable fock
+    Φ = meanfield(g; selector = (; range = 10), potential = pot, onsite = 3, fock = nothing)()
+    @test only(view(Φ, sites(1))) ≈ 0.5 * (3 + 2*sum(pot, 1:10))
+
+    g = oh |> greenfunction
+    @test_throws ArgumentError meanfield(g, nambu = true, charge = I)
+    g = oh |> greenfunction(GS.Schur(boundary = 0))
+    @test_throws ArgumentError meanfield(g)
+    g = LP.honeycomb() |> hamiltonian(hopping(I), orbitals = (2,1)) |> greenfunction
+    @test_throws ArgumentError meanfield(g)
+end
+
+@testset begin "OrbitalSliceArray serialization"
+    g = LP.linear() |> supercell(4) |> supercell |> hamiltonian(hopping(I), orbitals = 2) |> greenfunction
+    m = g(0.2)[cells = 0]
+    v = serialize(m)
+    @test v === parent(m)
+    @test deserialize(m, v) === m
+    m = g(0.2)[diagonal(cells = 0)]
+    v = serialize(m)
+    @test v === parent(m).diag
+    @test deserialize(m, v) === m
+    m = g(0.2)[sitepairs(range = 1)]
+    v = serialize(m)
+    @test v === Quantica.nonzeros(parent(m))
+    @test deserialize(m, v) === m
+
+    m = g(0.2)[(; cells = 0), (; cells = 0, region = r -> r[1] < 2)]
+    m´ = g(0.2)[cells = 0]
+    v = serialize(m)
+    @test_throws ArgumentError deserialize(m´, v)
 end

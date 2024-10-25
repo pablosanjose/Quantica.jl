@@ -211,6 +211,9 @@ Base.@propagate_inbounds function swapcols!(a::AbstractMatrix, i, j)
     end
 end
 
+is_square(a::AbstractMatrix) = size(a, 1) == size(a, 2)
+is_square(a) = false
+
 #endregion
 
 ############################################################################################

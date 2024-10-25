@@ -130,7 +130,6 @@ end
 ############################################################################################
 # serialize and deserialize for OrbitalSliceArray
 #   extract underlying data and reconstruct an object using such data
-#   no check of correct array dimensionality is performed for performance
 #region
 
 serialize(a::OrbitalSliceArray) = serialize_array(parent(a))
@@ -140,12 +139,20 @@ serialize_array(a::Array) = a
 serialize_array(a::Diagonal{<:Any,<:Vector}) = a.diag
 serialize_array(a::SparseMatrixCSC) = nonzeros(a)
 
-deserialize(a::OrbitalSliceArray, v) = OrbitalSliceArray(deserialize_array(parent(a), v), orbaxes(a))
-deserialize(a::AbstractArray, v) = deserialize_array(a, v)
+deserialize(a, v) = (check_serializer_size(a, v); _deserialize(a, v))
 
-deserialize_array(::A, v::A´) where {N,T,T´,A<:Array{T,N},A´<:Array{T´,N}} = v
-deserialize_array(::Diagonal, v::Vector) = Diagonal(v)
-deserialize_array(a::SparseMatrixCSC, v::Vector) = SparseMatrixCSC(a.m, a.n, a.colptr, a.rowval, v)
+_deserialize(a::OrbitalSliceArray, v::AbstractArray) =
+    OrbitalSliceArray(deserialize_array(parent(a), v), orbaxes(a))
+_deserialize(a::AbstractArray, v::AbstractArray) = deserialize_array(a, v)
 
+deserialize_array(::AbstractArray{<:Any,N}, v::AbstractArray{<:Any,N}) where {N} = v
+deserialize_array(::Diagonal, v::AbstractVector) =
+    Diagonal(convert(Vector, v))
+deserialize_array(a::SparseMatrixCSC, v::AbstractVector) =
+    SparseMatrixCSC(a.m, a.n, a.colptr, a.rowval, convert(Vector, v))
+
+check_serializer_size(a, v) =
+    size(serialize(a)) == size(v) ||
+        argerror("Wrong size of serialized array, expected length $(size(serialize(a))), got $(size(v))")
 
 #endregion

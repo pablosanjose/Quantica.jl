@@ -2452,6 +2452,11 @@ Construct a `Vector{T}` that encodes a selection of matrix elements of `h(; para
 where `h = Quantica.parent_hamiltonian(as)` is the `AbstractHamiltonian` used to build the
 `AppliedSerializer`, see `serializer`.
 
+    serialize(m::OrbitalSliceArray)
+
+Return an `Array` of the same eltype as `m` that contains all the stored matrix elements of
+`m`. See `deserialize` for the inverse operation.
+
 ## See also
     `serializer`, `serialize!`, `deserialize`, `deserialize!`
 
@@ -2466,7 +2471,6 @@ details.
 
 ## See also
     `serialize`, `serialize!`, `deserialize`, `deserialize!`
-
 """
 serialize!
 
@@ -2477,9 +2481,14 @@ Construct `h(; params...)`, where `h = Quantica.parametric_hamiltonian(as)` is t
 `AbstractHamiltonian` enclosed in `as`, with the matrix elements enconded in `v =
 serialize(s)` restored (i.e. overwritten). See `serialize` for details.
 
+    deserialize(m::OrbitalSliceArray, v)
+
+Reconstruct an `OrbitalSliceArray` with the same structure as `m` but with the matrix
+elements enconded in `v`. This `v` is typically the result of a `serialize` call to a
+another similar `m`, but the only requirement is that is has the correct size.
+
 ## See also
     `serializer`, `serialize`, `serialize!`, `deserialize!`
-
 """
 deserialize
 
@@ -2574,3 +2583,68 @@ julia> Quantica.decay_lengths(h(U=2))
 
 """
 decay_lengths
+
+"""
+    meanfield(g::GreenFunction, args...; kw...)
+
+Build a `M::MeanField` object that can be used to compute the Hartree-Fock mean field `Φ`
+between selected sites interacting through a given charge-charge potential. The density
+matrix used to build the mean field is obtained with `densitymatrix(g[pair_selection],
+args...; kw...)`, see `densitymatrix` for details.
+
+The mean field between site `i` and `j` is defined as `Φᵢⱼ = δᵢⱼ hartreeᵢ + fockᵢⱼ`, where
+
+    hartreeᵢ = ν * Q * Σ_k v_H(r_i-r_k) * tr(ρ[k,k]*Q)
+    fockᵢⱼ  = -v_F(r_i-r_j) * Q * ρ[i,j] * Q
+
+Here `Q` is the charge operator, `v_H` and `v_F` are Hartree and Fock
+interaction potentials, and `ρ` is the density matrix evaluated at specific chemical
+potential and temperature. Also `ν = ifelse(nambu, 0.5, 1.0)`, and `v_F(0) = v_H(0) = U`,
+where `U` is the onsite interaction.
+
+## Keywords
+
+- `potential`: charge-charge potential to use for both Hartree and Fock. Can be a number or a function of position. Default: `1
+- `hartree`: charge-charge potential `v_H` for the Hartree mean field. Can be a number or a function of position. Overrides `potential`. Default: `potential`
+- `fock`: charge-charge potential `v_F` for the Fock mean field. Can be a number, a function of position or `nothing`. In the latter case all Fock terms (even onsite) will be dropped. Default: `hartree`
+- `onsite`: charge-charge onsite potential. Overrides both Hartree and Fock potentials for onsite interactions. Default: `hartree(0)`
+- `charge`: a number (in single-orbital systems) or a matrix (in multi-orbital systems) representing the charge operator on each site. Default: `I`
+- `nambu::Bool`: specifies whether the model is defined in Nambu space. In such case, `charge` should also be in Nambu space, typically `SA[1 0; 0 -1]` or similar. Default: `false`
+- `selector::NamedTuple`: a collection of `hopselector` directives that defines the pairs of sites (`pair_selection` above) that interact through the charge-charge potential. Default: `(; range = 0)` (i.e. onsite)
+
+Any additional keywords `kw` are passed to the `densitymatrix` function used to compute the
+mean field, see above
+
+## Evaluation and Indexing
+
+    M(µ = 0, kBT = 0; params...)    # where M::MeanField
+
+Build an `Φ::OrbitalSliceMatrix` that can be indexed at different sites or pairs of sites,
+e.g. `ϕ[sites(2:3), sites(1)]`, see `OrbitalSliceArray` for details.
+
+# Examples
+
+```jldoctest
+julia> g = HP.graphene(orbitals = 2, a0 = 1) |> supercell((1,-1)) |> greenfunction;
+
+julia> M = meanfield(g; selector = (; range = 1), charge = I)
+MeanField{SMatrix{2, 2, ComplexF64, 4}} : builder of Hartree-Fock mean fields
+  Charge type      : 2 × 2 blocks (ComplexF64)
+  Hartree pairs    : 14
+  Mean field pairs : 28
+
+julia> phi = M(0.2, 0.3);
+
+julia> phi[sites(1), sites(2)] |> Quantica.chopsmall
+2×2 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 2 stored entries:
+ 0.00239416+0.0im             ⋅
+            ⋅      0.00239416+0.0im
+
+julia> phi[sites(1)] |> Quantica.chopsmall
+2×2 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 2 stored entries:
+ 5.53838+0.0im          ⋅
+         ⋅      5.53838+0.0im
+
+```
+"""
+meanfield

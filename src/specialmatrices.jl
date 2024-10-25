@@ -542,8 +542,15 @@ end
 Base.getindex(a::OrbitalSliceMatrix, i::AnyCellSites, j::AnyCellSites = i) =
     copy(view(a, i, j))
 
+# CellSitePos: return an unwrapped SMatrix or a scalar, even if out of bounds
 Base.getindex(a::OrbitalSliceMatrix, i::C, j::C = i) where {B,C<:CellSitePos{<:Any,<:Any,<:Any,B}} =
-    sanitize_block(B, view(a, i, j))
+    checkbounds(Bool, a, i, j) ? sanitize_block(B, view(a, i, j)) : zero(B)
+
+Base.checkbounds(::Type{Bool}, a::OrbitalSliceMatrix, i::CellSitePos, j::CellSitePos) =
+    checkbounds(Bool, first(orbaxes(a)), i) && checkbounds(Bool, last(orbaxes(a)), j)
+
+# it also returns 0I if the matrix is missing (useful for meanfield models)
+Base.getindex(::Missing, ::CellSitePos, ::CellSitePos...) = 0I
 
 function Base.view(a::OrbitalSliceMatrix, i::AnyCellSites, j::AnyCellSites = i)
     rowslice, colslice = orbaxes(a)

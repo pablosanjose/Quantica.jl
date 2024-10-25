@@ -132,6 +132,7 @@ sanitize_cellindices(c::CellIndices{L}, ::TELtypes{<:Any,<:Any,L´}) where {L,L�
 #region
 
 sanitize_block(::Type{C}, a) where {C<:Number} = complex(C)(only(a))
+sanitize_block(::Type{C}, a::UniformScaling) where {C<:Number} = complex(C)(a.λ)
 sanitize_block(::Type{C}, a) where {C<:SMatrix} = C(a)
 # here we assume a is already of the correct size and let if fail later otherwise
 sanitize_block(::Type{C}, a) where {C<:SMatrixView} = a
