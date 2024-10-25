@@ -61,4 +61,6 @@
     w = EP.wannier90("wannier_test_tb.dat");
     @test nothing === show(stdout, w)
     @test nothing === show(stdout, position(w))
+    M = LP.linear() |> hopping(1) |> greenfunction |> meanfield
+    @test nothing === show(stdout, M)
 end

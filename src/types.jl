@@ -431,6 +431,10 @@ CellSitePos(cell, ind, r, B) = CellIndices(sanitize_SVector(Int, cell), ind, Sit
 # changing only cell
 CellIndices(cell, c::CellIndices) = CellIndices(cell, c.inds, c.type)
 
+zerocell(i::CellIndices) = CellIndices(zero(i.cell), i.inds, i.type)
+zerocell(i::CellIndices, j::CellIndices) =
+    CellIndices(i.cell-j.cell, i.inds, i.type), CellIndices(zero(j.cell), j.inds, j.type)
+
 # LatticeSlice from an AbstractVector of CellIndices
 LatticeSlice(lat::Lattice, cs::AbstractVector{<:CellIndices}) =
     LatticeSlice(lat, cellinds_to_dict(apply.(cs, Ref(lat))))

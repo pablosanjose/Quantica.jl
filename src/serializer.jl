@@ -135,17 +135,30 @@ end
 
 serialize(a::OrbitalSliceArray) = serialize_array(parent(a))
 serialize(a::AbstractArray) = serialize_array(a)
+serialize(::Type{T}, a::AbstractArray{T}) where {T} = serialize(a)
+serialize(::Type{T}, a::AbstractArray) where {T} = reinterpret(T, serialize(a))
 
 serialize_array(a::Array) = a
 serialize_array(a::Diagonal{<:Any,<:Vector}) = a.diag
 serialize_array(a::SparseMatrixCSC) = nonzeros(a)
 
-deserialize(a::OrbitalSliceArray, v) = OrbitalSliceArray(deserialize_array(parent(a), v), orbaxes(a))
-deserialize(a::AbstractArray, v) = deserialize_array(a, v)
+deserialize(a, v) = (check_serializer_length(a, v); _deserialize(a, v))
 
-deserialize_array(::A, v::A´) where {N,T,T´,A<:Array{T,N},A´<:Array{T´,N}} = v
-deserialize_array(::Diagonal, v::Vector) = Diagonal(v)
-deserialize_array(a::SparseMatrixCSC, v::Vector) = SparseMatrixCSC(a.m, a.n, a.colptr, a.rowval, v)
+_deserialize(a::OrbitalSliceArray{T}, v::AbstractArray{T}) where {T} =
+    OrbitalSliceArray(deserialize_array(parent(a), v), orbaxes(a))
+_deserialize(a::AbstractArray{T}, v::AbstractArray{T}) where {T} = deserialize_array(a, v)
+_deserialize(a::AbstractArray{T}, v::AbstractArray) where {T} = deserialize(a, reinterpret(T, v))
 
+deserialize_array(::AbstractArray{<:Any,N}, v::AbstractArray{<:Any,N}) where {N} = v
+deserialize_array(::Diagonal, v::AbstractVector) =
+    Diagonal(convert(Vector, v))
+deserialize_array(a::SparseMatrixCSC, v::AbstractVector) =
+    SparseMatrixCSC(a.m, a.n, a.colptr, a.rowval, convert(Vector, v))
+
+check_serializer_length(a::AbstractArray{T}, v::AbstractArray{T}) where {T} =
+    length(serialize(a)) == length(v) || argerror("Wrong length of serialized array")
+
+check_serializer_length(a::AbstractArray, v::AbstractArray{T}) where {T} =
+    length(serialize(T, a)) == length(v) || argerror("Wrong length of serialized array")
 
 #endregion

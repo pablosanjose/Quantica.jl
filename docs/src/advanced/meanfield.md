@@ -1,88 +1,58 @@
-# Non-spatial models
-
-As briefly mentioned when discussing parametric models and modifiers, we have a special syntax that allows models to depend on sites directly, instead of on their spatial location. We call these non-spatial models. A simple example, with an onsite energy proportional to the site **index**
-```julia
-julia> model = @onsite((i; p = 1) --> ind(i) * p)
-ParametricModel: model with 1 term
-  ParametricOnsiteTerm{ParametricFunction{1}}
-    Region            : any
-    Sublattices       : any
-    Cells             : any
-    Coefficient       : 1
-    Argument type     : non-spatial
-    Parameters        : [:p]
-```
-or a modifier that changes a hopping between different cells
-```julia
-julia> modifier = @hopping!((t, i, j; dir = 1) --> (cell(i) - cell(j))[dir])
-HoppingModifier{ParametricFunction{3}}:
-  Region            : any
-  Sublattice pairs  : any
-  Cell distances    : any
-  Hopping range     : Inf
-  Reverse hops      : false
-  Argument type     : non-spatial
-  Parameters        : [:dir]
-```
-
-Note that we use the special syntax `-->` instead of `->`. This indicates that the positional arguments of the function, here called `i` and `j`, are no longer site positions as up to now. These `i, j` are non-spatial arguments, as noted by the `Argument type` property shown above. Instead of a position, a non-spatial argument `i` represent an individual site, whose index is `ind(i)`, its position is `pos(i)` and the cell it occupies on the lattice is `cell(i)`.
-
-Technically `i` is of type `CellSitePos`, which is an internal type not meant for the end user to instantiate. One special property of this type, however, is that it can efficiently index `OrbitalSliceArray`s. We can use this to build a Hamiltonian that depends on an observable, such as a `densitymatrix`. A simple example of a four-site chain with onsite energies shifted by a potential proportional to the local density on each site:
-```julia
-julia> h = LP.linear() |> onsite(2) - hopping(1) |> supercell(4) |> supercell;
-
-julia> h(SA[])
-4×4 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 10 stored entries:
-  2.0+0.0im  -1.0+0.0im       ⋅           ⋅
- -1.0+0.0im   2.0+0.0im  -1.0+0.0im       ⋅
-      ⋅      -1.0+0.0im   2.0+0.0im  -1.0+0.0im
-      ⋅           ⋅      -1.0+0.0im   2.0+0.0im
-
-julia> g = greenfunction(h, GS.Spectrum());
-
-julia> ρ0 = densitymatrix(g[])(0.5, 0) ## density matrix at chemical potential `µ=0.5` and temperature `kBT = 0`  on all sites
-4×4 OrbitalSliceMatrix{ComplexF64,Matrix{ComplexF64}}:
- 0.138197+0.0im  0.223607+0.0im  0.223607+0.0im  0.138197+0.0im
- 0.223607+0.0im  0.361803+0.0im  0.361803+0.0im  0.223607+0.0im
- 0.223607+0.0im  0.361803+0.0im  0.361803+0.0im  0.223607+0.0im
- 0.138197+0.0im  0.223607+0.0im  0.223607+0.0im  0.138197+0.0im
-
-julia> hρ = h |> @onsite!((o, i; U = 0, ρ = ρ0) --> o + U * ρ[i])
-ParametricHamiltonian{Float64,1,0}: Parametric Hamiltonian on a 0D Lattice in 1D space
-  Bloch harmonics  : 1
-  Harmonic size    : 4 × 4
-  Orbitals         : [1]
-  Element type     : scalar (ComplexF64)
-  Onsites          : 4
-  Hoppings         : 6
-  Coordination     : 1.5
-  Parameters       : [:U, :ρ]
-
-julia> hρ(SA[]; U = 1, ρ = ρ0)
-4×4 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 10 stored entries:
- 2.1382+0.0im    -1.0+0.0im         ⋅             ⋅
-   -1.0+0.0im  2.3618+0.0im    -1.0+0.0im         ⋅
-        ⋅        -1.0+0.0im  2.3618+0.0im    -1.0+0.0im
-        ⋅             ⋅        -1.0+0.0im  2.1382+0.0im
-```
-Note the `ρ[i]` above. This indexes `ρ` at site `i`. For a multiorbital hamiltonian, this will be a matrix (the local density matrix on each site `i`). Here it is just a number, either ` 0.138197` (sites 1 and 4) or `0.361803` (sites 2 and 3).
-
-!!! tip "Sparse vs dense"
-    The method explained above to build a Hamiltonian `hρ` using `-->` supports all the `SiteSelector` and `HopSelector` functionality of conventional models. Therefore, although the density matrix computed above is dense, its application to the Hamiltonian is sparse: it only touches the onsite matrix elements in this case. Likewise, we could for example use `@hopping!` with a finite `range` to apply a Fock mean field within a finite range.
 
 # Self-consistent mean-field problems
 
-The above provides the tools to implement self-consistent mean field problems in Quantica. The problem consists of finding a fixed point `f(h) = h` of the function
-```julia
-function f(h)
-    g = greenfunction(h, GS.Spectrum())
-    ρ = densitymatrix(g[])(0.5, 0)
-    return hρ(; ρ)
-end
-```
-that takes a Hamiltonian `h`, computes `ρ` with it, and returns a new Hamiltonian `h = hρ(ρ)`. Its fixed point corresponds to the self-consistent Hamiltonian, and the corresponding `ρ` is the self-consistent mean-field density matrix.
+Here we show how to solve interacting-electron problems in Quantica, approximated at the mean field level. A mean field is a collection of onsite and hopping terms that are added to a given `h::AbstractHamiltonian`, that depend on the density matrix `ρ`. Since `ρ` itself depends on `h`, this defines a self-consistent problem.
 
-In the following we show how to approach such as problem. We will employ an external library to solve generic fixed-point problems, and show how to make it work with Quantica AbstractHamiltonians efficiently. Many generic fixed-point solver backends exist. Here we use the SIAMFANLEquations.jl package. It provides a simple utility `aasol(f, x0)` that computes the solution of `f(x) = x` with initial condition `x0` using Anderson acceleration. This is an example of how it works to compute the fixed point of function `f(x) = 1 + atan(x)`
+If the mean field solution is dubbed `Φ`, the problem consists in finding a fixed point solution to the function `Φ = M(Φ)` for a certain function `M` that takes `Φ`, computes `h` with the added mean field onsite and hopping terms, computes the density matrix, and from that computes the new mean field `Φ`. To attack this problem we will employ non-spatial models and a new `meanfield` constructor.
+
+Schematically the process is as follows:
+- We start from an `AbstractHamiltonian` that includes a non-interacting model `model_0` and non-spatial model `model_1 + model_2` with a mean field parameter, e.g. `Φ`,
+```julia
+julia> model_0 = hopping(1); # a possible non-interacting model
+
+julia> model_1 = @onsite((i; Φ = missing) --> Φ[i]);
+
+julia> model_2 = @hopping((i, j; Φ = missing) -> Φ[i, j]);Fock
+
+julia> h = lat |> hamiltonian(model_0 + model_1 + model_2)
+```
+Here `model_1` corresponds to Hartree and onsite-Fock mean field terms, while `model_2` corresponds to inter-site Fock terms.
+The default value of `Φ = missing` corresponds to a vanishing `model_1 + model_2`, i.e. no interactions.
+- We build the `GreenFunction` of `h` with `g = greenfunction(h, solver; kw...)` using the `GreenSolver` of choice
+- We construct a `M::MeanField` object using `M = meanfield(g; potential = pot, other_options...)`
+
+  Here `pot(r)` is the charge-charge interaction potential between electrons. We can also specify `hopselector` directives to define which sites interacts, adding e.g. `selector = (; range = 2)` to `other_options`, to make sites at distance `2` interacting. See `meanfield` docstring for further details.
+
+- We evaluate this `M` with `Φ0 = M(µ, kBT; params...)`.
+
+  This computes the density matrix at specific chemical potential `µ` and temperature `kBT`, and for specific parameters of `h` (possibly including `Φ`). Then it computes the appropriate Hartree and Fock terms, and stores them in the returned `Φ0::OrbitalSliceMatrix`, where `Φ0ᵢⱼ = δᵢⱼ hartreeᵢ + fockᵢⱼ`. In normal systems, these terms read
+
+    $$\text{hartree}_i = Q \sum_k v_H(r_i-r_k) \text{tr}(\rho_{kk}Q)$$
+
+    $$\text{fock}_{ij}  = -v_F(r_i-r_j) Q \rho_{ij} Q$$
+
+  where `v_H` and `v_F` are Hartree and Fock charge-charge interaction potentials (by default equal to `pot`), and the charge operator is `Q` (equal to the identity by default, but can be changed to implement e.g. spin-spin interactions).
+
+  When computing `Φ0` we don't specify `Φ` in `params`, so that `Φ0` is evaluated using the non-interacting model, hence its name.
+
+- The self-consistent condition can be tackled naively by iteration-until-convergence,
+```julia
+Φ0 = M(µ, kBT; params...)
+Φ1 = M(µ, KBT; Φ = Φ0, params...)
+Φ2 = M(µ, KBT; Φ = Φ1, params...)
+...
+```
+A converged solution `Φ`, if found, should satisfy the fixed-point condition
+
+    Φ_sol ≈ M(µ, KBT; Φ = Φ_sol, params...)
+
+Then, the self-consistent Hamiltonian is given by `h(; Φ = Φ_sol, params...)`.
+
+The key problem is to actually find the fixed point of the `M` function. The naive iteration above is not optimal, and often does not converge. To do a better job we should use a dedicated fixed-point solver.
+
+## Using an external fixed-point solver
+
+We now show how to approach such a fixed-point problem. We will employ an external library to solve generic fixed-point problems, and show how to make it work with Quantica `MeanField` objects efficiently. Many generic fixed-point solver backends exist. Here we use the SIAMFANLEquations.jl package. It provides a simple utility `aasol(f, x0)` that computes the solution of `f(x) = x` with initial condition `x0` using Anderson acceleration. This is an example of how it works to compute the fixed point of function `f(x) = 1 + atan(x)`
 ```julia
 julia> using SIAMFANLEquations
 
@@ -96,119 +66,96 @@ julia> aasol(f!, x0, m, vstore).solution
  2.132267725272908
  2.132267725284556
 ```
-The package requires as input an in-place version `f!` of the function `f`, and the preallocation of some storage space vstore (see the `aasol` documentation). The package, as [a few others](https://docs.sciml.ai/NonlinearSolve/stable/solvers/fixed_point_solvers/), also requires the variable `x` and the initial condition `x0` to be (real) `AbstractArray` (or a scalar, but we need the former for our use case), hence the broadcast dots above. In our case we will therefore need to translate back and forth from a Hamiltonian `h` to a real vector `x` to pass it to `aasol`.
-
-## Serializers
-
-This translation is achieved with Quantica's `serializer` funcionality. A `s::Serializer{T}` is an object that takes an `h::AbstractHamiltonian`, a selection of the sites and hoppings to be translated, and an `encoder`/`decoder` pair of functions to translate each element. This `s` can then be used to convert the specified elements of `h` into a vector of scalars of type `T` and back, possibly after applying some parameter values. Consider this self-explanatory example from the `serializer` docstring
-```julia
-julia> h1 = LP.linear() |> hopping((r, dr) -> im*dr[1]) - @onsite((r; U = 2) -> U);
-
-julia> as = serializer(Float64, h1; encoder = s -> reim(s), decoder = v -> complex(v[1], v[2]))
-AppliedSerializer : translator between a selection of of matrix elements of an AbstractHamiltonian and a collection of scalars
-  Object            : ParametricHamiltonian
-  Object parameters : [:U]
-  Stream parameter  : :stream
-  Output eltype     : Float64
-  Encoder/Decoder   : Single
-  Length            : 6
-
-julia> v = serialize(as; U = 4)
-6-element Vector{Float64}:
- -4.0
-  0.0
- -0.0
- -1.0
-  0.0
-  1.0
-
-julia> h2 = deserialize!(as, v);
-
-julia> h2 == h1(U = 4)
-true
-
-julia> h3 = hamiltonian(as)
-ParametricHamiltonian{Float64,1,1}: Parametric Hamiltonian on a 1D Lattice in 1D space
-  Bloch harmonics  : 3
-  Harmonic size    : 1 × 1
-  Orbitals         : [1]
-  Element type     : scalar (ComplexF64)
-  Onsites          : 1
-  Hoppings         : 2
-  Coordination     : 2.0
-  Parameters       : [:U, :stream]
-
-julia> h3(stream = v, U = 5) == h1(U = 4)  # stream overwrites the U=5 onsite terms
-true
-```
-The serializer functionality is designed with efficiency in mind. Using the in-place `serialize!`/`deserialize!` pair we can do the encode/decode round trip without allocations
-```
-julia> using BenchmarkTools
-
-julia> v = Vector{Float64}(undef, length(as));
-
-julia> deserialize!(as, serialize!(v, as)) === Quantica.call!(h1, U = 4)
-true
-
-julia> @btime deserialize!($as, serialize!($v, $as));
-  149.737 ns (0 allocations: 0 bytes)
-```
-It also allows powerful compression into relevant degrees of freedom through appropriate use of encoders/decoders, see the `serializer` docstring.
+The package requires as input an in-place version `f!` of the function `f`, and the preallocation of some storage space vstore (see the `aasol` documentation). The package, as [a few others](https://docs.sciml.ai/NonlinearSolve/stable/solvers/fixed_point_solvers/), also requires the variable `x` and the initial condition `x0` to be (real) `AbstractArray` (or a scalar, but we need the former for our use case), hence the broadcast dots above. In our case we will therefore need to translate back and forth from an `Φ::OrbitalSliceMatrix` to a real vector `x` to pass it to `aasol`. This translation is achieved using Quantica's `serialize`/`deserialize` funcionality.
 
 ## Using Serializers with fixed-point solvers
 
-With the `serializer` functionality we can build a version of the fixed-point function `f` that operates on real vectors. Let's return to our original Hamiltonian
+With the serializer functionality we can build a version of the fixed-point function `f` that operates on real vectors. Let's take a 1D Hamiltonian with a sawtooth potential, and build a Hartree mean field (note the `fock = nothing` keyword)
 ```julia
-julia> h = LP.linear() |> onsite(2) - hopping(1) |> supercell(4) |> supercell;
+julia> using SIAMFANLEquations
 
-julia> ρ0 = densitymatrix(greenfunction(h, GS.Spectrum())[])(0.5, 0)
+julia> h = LP.linear() |> supercell(4) |> onsite(r->r[1]) - hopping(1) + @onsite((i; phi = missing) --> phi[i]);
 
-julia> hρ = h |> @onsite!((o, i; U = 0, ρ = ρ0) --> o + U * ρ[i]);
+julia> M = meanfield(greenfunction(h); onsite = 1, selector = (; range = 0), fock = nothing)
+MeanField{ComplexF64} : builder of Hartree-Fock mean fields
+  Charge type      : scalar (ComplexF64)
+  Hartree pairs    : 4
+  Mean field pairs : 4
 
-julia> s = serializer(Float64, hρ, siteselector(); encoder = real, decoder = identity)
-Serializer{Float64} : encoder/decoder of matrix elements into a collection of scalars
-  Object            : ParametricHamiltonian
-  Output eltype     : Float64
-  Encoder/Decoder   : Single
-  Length            : 4
+julia> Φ0 = M(0.0, 0.0);
 
-julia> function f!(x, x0, (s, params))
-        h = deserialize!(s, x0)
-        g = greenfunction(h, GS.Spectrum())
-        ρ = densitymatrix(g[])(0.5, 0)
-        serialize!(x, s; ρ = ρ, params...)
+julia> function f!(x, x0, (M, Φ0))
+        Φ = M(0.0, 0.0; phi = deserialize(Φ0, x0))
+        copy!(x, serialize(Float64, Φ))
         return x
     end;
 ```
 Then we can proceed as in the `f(x) = 1 + atan(x)` example
 ```julia
-julia> m = 2; len = length(s); x0 = rand(len); vstore = rand(len, 3m+3);  # order m, initial condition x0, and preallocated space vstore
+julia> m = 2; x0 = serialize(Float64, Φ0); vstore = rand(length(x0), 3m+3);  # order m, initial condition x0, and preallocated space vstore
 
-julia> x = aasol(f!, x0, m, vstore; pdata = (s, (; U = 0.3))).solution
-4-element Vector{Float64}:
- 2.04319819150754
- 2.1068018084891236
- 2.1068018084820492
- 2.0431981915212862
+julia> x = aasol(f!, x0, m, vstore; pdata = (M, Φ0)).solution
+Iteration terminates on entry to aasol.jl
+8-element Vector{Float64}:
+ 0.565818503090569
+ 0.0
+ 0.3062161093223203
+ 0.0
+ 0.0669636234267607
+ 0.0
+ 0.061001764160349956
+ 0.0
 
-julia> h´ = deserialize!(s, x)
-Hamiltonian{Float64,1,0}: Hamiltonian on a 0D Lattice in 1D space
-  Bloch harmonics  : 1
+julia> h´ = h(; phi = deserialize(Φ0, x))
+Hamiltonian{Float64,1,1}: Hamiltonian on a 1D Lattice in 1D space
+  Bloch harmonics  : 3
   Harmonic size    : 4 × 4
   Orbitals         : [1]
   Element type     : scalar (ComplexF64)
   Onsites          : 4
-  Hoppings         : 6
-  Coordination     : 1.5
+  Hoppings         : 8
+  Coordination     : 2.0
 
 julia> h´[()]
 4×4 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 10 stored entries:
- 2.0432+0.0im    -1.0+0.0im         ⋅             ⋅
-   -1.0+0.0im  2.1068+0.0im    -1.0+0.0im         ⋅
-        ⋅        -1.0+0.0im  2.1068+0.0im    -1.0+0.0im
-        ⋅             ⋅        -1.0+0.0im  2.0432+0.0im
+ 0.565819+0.0im     -1.0+0.0im          ⋅            ⋅
+     -1.0+0.0im  1.30622+0.0im     -1.0+0.0im        ⋅
+          ⋅         -1.0+0.0im  2.06696+0.0im   -1.0+0.0im
+          ⋅              ⋅         -1.0+0.0im  3.061+0.0im
 ```
 Note that the content of `pdata` is passed by `aasol` as a third argument to `f!`. We use this to pass the serializer `s` and `U` parameter to use.
 
 !!! note "Bring your own fixed-point solver!"
     Note that fixed-point calculations can be tricky, and the search algorithm can have a huge impact in convergence (if the problem converges at all!). For this reason, Quantica.jl does not provide built-in fixed-point routines, only the functionality to write functions such as `f` above. Numerous packages exist for fixed-point computations in julia. Check [NonlinearSolve.jl](https://github.com/SciML/NonlinearSolve.jl) for one prominent metapackage.
+
+## GreenSolvers without support for ParametricHamiltonians
+
+Some `GreenSolver`'s, like `GS.Spectrum` or `GS.KPM`, do not support `ParametricHamiltonian`s. In such cases, the approach above will fail, since it will not be possible to build `g` before knowing `phi`. In such cases one would need to rebuild the `meanfield` object at each step of the fixed-point solver.
+```julia
+julia> using SIAMFANLEquations
+
+julia> h = LP.linear() |> supercell(4) |> supercell |> onsite(1) - hopping(1) + @onsite((i; phi = missing) --> phi[i]);
+
+julia> M´(Φ = missing) = meanfield(greenfunction(h(; phi = Φ), GS.Spectrum()); onsite = 1, selector = (; range = 0), fock = nothing)
+
+julia> Φ0 = M´()(0.0, 0.0);
+
+julia> function f!(x, x0, (M´, Φ0))
+        Φ = M´(deserialize(Φ0, x0))(0.0, 0.0)
+        copy!(x, serialize(Float64, Φ))
+        return x
+    end;
+
+julia> m = 2; x0 = serialize(Float64, Φ0); vstore = rand(length(x0), 3m+3);  # order m, initial condition x0, and preallocated space vstore
+
+julia> x = aasol(f!, x0, m, vstore; pdata = (M´, Φ0)).solution
+8-element Vector{Float64}:
+ 0.15596283661183488
+ 0.0
+ 0.3440371633881653
+ 0.0
+ 0.3440371633881646
+ 0.0
+ 0.15596283661183474
+ 0.0
+```

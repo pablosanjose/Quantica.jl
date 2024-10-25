@@ -17,7 +17,8 @@ function apply(s::SiteSelector, lat::Lattice{T,E,L}, cells...) where {T,E,L}
     sublats = recursive_push!(Int[], intsublats)
     cells = recursive_push!(SVector{L,Int}[], sanitize_cells(s.cells, Val(L)), cells...)
     unique!(sort!(sublats))
-    unique!(sort!(cells))
+    # we don't sort cells, in case we have received them as an explicit list
+    unique!(cells)
     # isnull: to distinguish in a type-stable way between s.cells === missing and no-selected-cells
     # and the same for sublats
     isnull = (s.cells !== missing && isempty(cells)) || (s.sublats !== missing && isempty(sublats))

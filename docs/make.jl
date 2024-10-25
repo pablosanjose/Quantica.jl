@@ -26,6 +26,8 @@ makedocs(;
             "Observables" => "tutorial/observables.md"
             ],
         "Advanced" => [
+            "Non-spatial models" => "advanced/nonspatial.md",
+            "Serializers" => "advanced/serializers.md",
             "Self-consistent mean fields" => "advanced/meanfield.md",
             "Wannier90 imports" => "advanced/wannier90.md"
             ],
