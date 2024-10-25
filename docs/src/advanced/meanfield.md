@@ -66,7 +66,7 @@ julia> aasol(f!, x0, m, vstore).solution
  2.132267725272908
  2.132267725284556
 ```
-The package requires as input an in-place version `f!` of the function `f`, and the preallocation of some storage space vstore (see the `aasol` documentation). The package, as [a few others](https://docs.sciml.ai/NonlinearSolve/stable/solvers/fixed_point_solvers/), also requires the variable `x` and the initial condition `x0` to be (real) `AbstractArray` (or a scalar, but we need the former for our use case), hence the broadcast dots above. In our case we will therefore need to translate back and forth from an `Φ::OrbitalSliceMatrix` to a real vector `x` to pass it to `aasol`. This translation is achieved using Quantica's `serialize`/`deserialize` funcionality.
+The package requires as input an in-place version `f!` of the function `f`, and the preallocation of some storage space vstore (see the `aasol` documentation). The package, as [a few others](https://docs.sciml.ai/NonlinearSolve/stable/solvers/fixed_point_solvers/), also requires the variable `x` and the initial condition `x0` to be an `AbstractArray` (or a scalar, but we need the former for our use case), hence the broadcast dots above. In our case we will therefore need to translate back and forth from an `Φ::OrbitalSliceMatrix` to a real vector `x` to pass it to `aasol`. This translation is achieved using Quantica's `serialize`/`deserialize` funcionality.
 
 ## Using Serializers with fixed-point solvers
 
@@ -86,24 +86,20 @@ julia> Φ0 = M(0.0, 0.0);
 
 julia> function f!(x, x0, (M, Φ0))
         Φ = M(0.0, 0.0; phi = deserialize(Φ0, x0))
-        copy!(x, serialize(Float64, Φ))
+        copy!(x, serialize(Φ))
         return x
     end;
 ```
 Then we can proceed as in the `f(x) = 1 + atan(x)` example
 ```julia
-julia> m = 2; x0 = serialize(Float64, Φ0); vstore = rand(length(x0), 3m+3);  # order m, initial condition x0, and preallocated space vstore
+julia> m = 2; x0 = serialize(Φ0); vstore = rand(length(x0), 3m+3);  # order m, initial condition x0, and preallocated space vstore
 
 julia> x = aasol(f!, x0, m, vstore; pdata = (M, Φ0)).solution
-8-element Vector{Float64}:
- 0.5658185030962436
- 0.0
- 0.306216109313951
- 0.0
- 0.06696362342872919
- 0.0
- 0.06100176416107613
- 0.0
+4-element Vector{ComplexF64}:
+  0.5658185030962436 + 0.0im
+   0.306216109313951 + 0.0im
+ 0.06696362342872919 + 0.0im
+ 0.06100176416107613 + 0.0im
 
 julia> h´ = h(; phi = deserialize(Φ0, x))
 Hamiltonian{Float64,1,1}: Hamiltonian on a 1D Lattice in 1D space
@@ -141,20 +137,16 @@ julia> Φ0 = M´()(0.0, 0.0);
 
 julia> function f!(x, x0, (M´, Φ0))
         Φ = M´(deserialize(Φ0, x0))(0.0, 0.0)
-        copy!(x, serialize(Float64, Φ))
+        copy!(x, serialize(Φ))
         return x
     end;
 
-julia> m = 2; x0 = serialize(Float64, Φ0); vstore = rand(length(x0), 3m+3);  # order m, initial condition x0, and preallocated space vstore
+julia> m = 2; x0 = serialize(Φ0); vstore = rand(length(x0), 3m+3);  # order m, initial condition x0, and preallocated space vstore
 
 julia> x = aasol(f!, x0, m, vstore; pdata = (M´, Φ0)).solution
-8-element Vector{Float64}:
- 0.15596283661183488
- 0.0
- 0.3440371633881653
- 0.0
- 0.3440371633881646
- 0.0
- 0.15596283661183474
- 0.0
+4-element Vector{ComplexF64}:
+ 0.15596283661234628 + 0.0im
+ 0.34403716338765444 + 0.0im
+ 0.34403716338765344 + 0.0im
+ 0.15596283661234572 + 0.0im
 ```

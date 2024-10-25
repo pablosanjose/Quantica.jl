@@ -349,7 +349,7 @@ end
     g = HP.graphene(orbitals = 2) |> supercell((1,-1)) |> greenfunction
     ρ0 = densitymatrix(g[sitepairs(range = 1)], 6)
     mat = ρ0(0.2, 0.3)
-    @test Quantica.nnz(parent(mat)) < size(mat)  # no broken sparsity
+    @test Quantica.nnz(parent(mat)) < length(parent(mat))  # no broken sparsity
 end
 
 @testset "OrbitalSliceArray slicing" begin
