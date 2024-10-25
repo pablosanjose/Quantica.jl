@@ -17,6 +17,8 @@ struct MeanField{B,T,S<:SparseMatrixCSC,H<:DensityMatrix,F<:DensityMatrix}
     onsite_tmp::Vector{Complex{T}}
 end
 
+struct ZeroField end
+
 #region ## Constructors ##
 
 function meanfield(g::GreenFunction{T,E}, args...;
@@ -63,10 +65,6 @@ function meanfield(g::GreenFunction{T,E}, args...;
     return MeanField(potHartree, potFock, rhoHartree, rhoFock, Q, rowcol_ranges, onsite_tmp)
 end
 
-# currying version
-meanfield(; kw...) = g -> meanfield(g; kw...)
-meanfield(x; kw...) = g -> meanfield(g, x; kw...)
-
 sanitize_potential(x::Number) = Returns(x)
 sanitize_potential(x::Function) = x
 sanitize_potential(x::Nothing) = Returns(0)
@@ -92,13 +90,17 @@ hartree_matrix(m::MeanField) = m.potHartree
 
 fock_matrix(m::MeanField) = parent(m.potFock)
 
-function (m::MeanField{B})(args...; params...) where {B}
+function (m::MeanField{B})(args...; chopsmall = true, params...) where {B}
     Q, hartree_pot, fock_pot = m.charge, m.onsite_tmp, m.potFock
     rowrngs, colrngs = m.rowcol_ranges
     trρQ = m.rhoHartree(args...; params...)
     mul!(hartree_pot, m.potHartree, diag(parent(trρQ)))
     meanfield = m.rhoFock(args...; params...)
-    mf_parent = parent(meanfield)   # should be a sparse matrix
+    mf_parent = parent(meanfield)
+    if chopsmall
+        hartree_pot .= Quantica.chopsmall.(hartree_pot)
+        nonzeros(mf_parent) .= Quantica.chopsmall.(nonzeros(mf_parent))
+    end
     rows, cols, nzs = rowvals(fock_pot), axes(fock_pot, 2), nonzeros(fock_pot)
     for col in cols
         viiQ = hartree_pot[col] * Q
@@ -116,6 +118,15 @@ function (m::MeanField{B})(args...; params...) where {B}
     end
     return meanfield
 end
+
+
+## ZeroField
+
+const zerofield = ZeroField()
+
+(m::ZeroField)(args...; kw...) = m
+
+Base.getindex(::ZeroField, _...) = 0.0 * I
 
 #endregion
 

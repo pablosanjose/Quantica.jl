@@ -549,9 +549,6 @@ Base.getindex(a::OrbitalSliceMatrix, i::C, j::C = i) where {B,C<:CellSitePos{<:A
 Base.checkbounds(::Type{Bool}, a::OrbitalSliceMatrix, i::CellSitePos, j::CellSitePos) =
     checkbounds(Bool, first(orbaxes(a)), i) && checkbounds(Bool, last(orbaxes(a)), j)
 
-# it also returns 0I if the matrix is missing (useful for meanfield models)
-Base.getindex(::Missing, ::CellSitePos, ::CellSitePos...) = 0I
-
 function Base.view(a::OrbitalSliceMatrix, i::AnyCellSites, j::AnyCellSites = i)
     rowslice, colslice = orbaxes(a)
     i´, j´ = apply(i, lattice(rowslice)), apply(j, lattice(colslice))
