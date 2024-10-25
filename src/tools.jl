@@ -71,7 +71,7 @@ chopsmall(xs, atol) = chopsmall.(xs, Ref(atol))
 chopsmall(xs) = chopsmall.(xs)
 
 # Flattens matrix of Matrix{<:Number} into a matrix of Number's
-function mortar(ms::AbstractMatrix{M}) where {C<:Number,M<:AbstractMatrix{C}}
+function mortar(ms::AbstractMatrix{M}) where {C<:Number,M<:Matrix{C}}
     isempty(ms) && return convert(Matrix{C}, ms)
     mrows = size.(ms, 1)
     mcols = size.(ms, 2)
@@ -89,7 +89,35 @@ function mortar(ms::AbstractMatrix{M}) where {C<:Number,M<:AbstractMatrix{C}}
     end
     return mat
 end
-# faspath for generators or other collections
+
+#equivalent with SparseMatrixCSC
+function mortar(ms::AbstractMatrix{M}) where {C<:Number,M<:SparseMatrixCSC{C}}
+    isempty(ms) && return convert(SparseMatrixCSC{C,Int}, ms)
+    mrows = size.(ms, 1)
+    mcols = size.(ms, 2)
+    allequal(eachrow(mcols)) && allequal(eachcol(mrows)) ||
+        internalerror("mortar: inconsistent rows or columns")
+    totalrows = sum(i -> size(ms[i, 1], 1), axes(ms, 1))
+    totalcols = sum(i -> size(ms[1, i], 2), axes(ms, 2))
+    totalnnz = sum(nnz, ms)
+    b = CSC{C}(totalcols, totalnnz)
+    for mj in axes(ms, 2), col in axes(ms[1, mj], 2)
+        rowoffset = 0
+        for mi in axes(ms, 1)
+            m = ms[mi, mj]
+            for ptr in nzrange(m, col)
+                row = rowoffset + rowvals(m)[ptr]
+                val = nonzeros(m)[ptr]
+                pushtocolumn!(b, row, val)
+            end
+            rowoffset += size(m, 1)
+        end
+        finalizecolumn!(b)
+    end
+    return sparse(b, totalrows, totalcols)
+end
+
+# # faspath for generators or other collections
 mortar(ms) = length(ms) == 1 ? only(ms) : mortar(collect(ms))
 
 # equivalent to mat = I[:, cols]. Useful for Green function source
@@ -109,8 +137,25 @@ lengths_to_offsets(v) = prepend!(cumsum(v), 0)
 lengths_to_offsets(f::Function, v) = prepend!(accumulate((i,j) -> i + f(j), v; init = 0), 0)
 
 
-# fast tr(A*B) without doing the A*B product
-trace_prod(A, B) = sum(splat(*), zip(A, transpose(B)))
+# fast tr(A*B)
+trace_prod(A, B) = (check_sizes(A,B); unsafe_trace_prod(A, B))
+
+unsafe_trace_prod(A::AbstractMatrix, B::AbstractMatrix) = sum(splat(*), zip(transpose(A), B))
+unsafe_trace_prod(A::Number, B::AbstractMatrix) = A*tr(B)
+unsafe_trace_prod(A::AbstractMatrix, B::Number) = unsafe_trace_prod(B, A)
+unsafe_trace_prod(A::UniformScaling, B::AbstractMatrix) = A.λ*tr(B)
+unsafe_trace_prod(A::AbstractMatrix, B::UniformScaling) = unsafe_trace_prod(B, A)
+unsafe_trace_prod(A::Diagonal, B::Diagonal) = sum(i -> A[i] * B[i], axes(A,1))
+unsafe_trace_prod(A::Diagonal, B::AbstractMatrix) = sum(i -> A[i] * B[i, i], axes(A,1))
+unsafe_trace_prod(A::AbstractMatrix, B::Diagonal) = unsafe_trace_prod(B, A)
+unsafe_trace_prod(A::Diagonal, B::Number) = only(A) * B
+unsafe_trace_prod(A::Number, B::Diagonal) = unsafe_trace_prod(B, A)
+unsafe_trace_prod(A::Union{SMatrix,UniformScaling,Number}, B::Union{SMatrix,UniformScaling,Number}) =
+     tr(A*B)
+
+check_sizes(A::AbstractMatrix,B::AbstractMatrix) = size(A,2) == size(B,1) ||
+    throw(DimensionMismatch("A has dimensions $(size(A)) but B has dimensions $(size(B))"))
+check_sizes(_, _) = nothing
 
 # Taken from Base julia, now deprecated there
 function permute!!(a, p::AbstractVector{<:Integer})
@@ -156,7 +201,7 @@ function permutecols!!(a::AbstractMatrix, p::AbstractVector{<:Integer})
     a
 end
 
-function swapcols!(a::AbstractMatrix, i, j)
+Base.@propagate_inbounds function swapcols!(a::AbstractMatrix, i, j)
     i == j && return
     cols = axes(a,2)
     @boundscheck i in cols || throw(BoundsError(a, (:,i)))

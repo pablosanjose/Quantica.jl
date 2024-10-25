@@ -57,7 +57,8 @@ displayname(s::Sublat) = sublatname(s) == Symbol(:_) ? "pending" : string(":", s
 
 function Base.show(io::IO, c::CellSites)
     i = get(io, :indent, "")
-    print(io, i, summary(c), "\n")
+    print(io, i, summary(c), "\n",
+"$i  Sites : $(siteindices(c))")
 end
 
 Base.summary(c::CellSites{L,V}) where {L,V} =
@@ -195,7 +196,7 @@ end
 showstring(h::Union{Hamiltonian,ParametricHamiltonian}, i) =
 "$i  Bloch harmonics  : $(length(harmonics(h)))
 $i  Harmonic size    : $((n -> "$n × $n")(size(h, 1)))
-$i  Orbitals         : $(norbitals(h))
+$i  Orbitals         : $(norbitals(h, :))
 $i  Element type     : $(displaytype(blocktype(h)))
 $i  Onsites          : $(nonsites(h))
 $i  Hoppings         : $(nhoppings(h))
@@ -379,6 +380,23 @@ Base.summary(g::GreenSlice{T,E,L}) where {T,E,L} =
 #endregion
 
 ############################################################################################
+# SparseIndices
+#region
+
+function Base.show(io::IO, s::SparseIndices)
+    i = get(io, :indent, "")
+    print(io, i, summary(s))
+end
+
+Base.summary(::PairIndices) =
+    "PairIndices: a form of SparseIndices used to sparsely index an object such as a GreenFunction on a selection of site pairs"
+
+Base.summary(::DiagIndices) =
+    "DiagIndices: a form of SparseIndices used to index the diagonal of an object such as a GreenFunction"
+
+#endregion
+
+############################################################################################
 # Conductance
 #region
 
@@ -527,14 +545,14 @@ Base.summary(::CurrentDensitySlice{T}) where {T} =
 
 # For simplified printing of the array typename
 
-function Base.showarg(io::IO, ::OrbitalSliceMatrix{<:Any,M}, toplevel) where {M}
+function Base.showarg(io::IO, ::OrbitalSliceMatrix{T,M}, toplevel) where {T,M}
     toplevel || print(io, "::")
-    print(io,  "OrbitalSliceMatrix{$M}")
+    print(io,  "OrbitalSliceMatrix{$T,$M}")
 end
 
-function Base.showarg(io::IO, ::OrbitalSliceVector{<:Any,M}, toplevel) where {M}
+function Base.showarg(io::IO, ::OrbitalSliceVector{T,M}, toplevel) where {T,M}
     toplevel || print(io, "::")
-    print(io,  "OrbitalSliceVector{$M}")
+    print(io,  "OrbitalSliceVector{$T,$M}")
 end
 
 #endregion

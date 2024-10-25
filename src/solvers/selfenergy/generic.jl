@@ -47,7 +47,7 @@ function SelfEnergy(hparent::AbstractHamiltonian, gslice::GreenSlice, model::Abs
     # apply model to lat0 to get hcoupling
     interblockmodel = interblock(model, 1:nparent, nparent+1:ntotal)
     hcoupling = hamiltonian(lat0, interblockmodel;
-        orbitals = vcat(norbitals(hparent), norbitals(gslice)))
+        orbitals = vcat(norbitals(hparent, :), norbitals(gslice, :)))
     solver´ = SelfEnergyGenericSolver(gslice, hcoupling, nparent)
     return SelfEnergy(solver´, lsparent)
 end

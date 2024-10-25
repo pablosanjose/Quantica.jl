@@ -44,6 +44,11 @@ end
     g = LP.linear() |> hopping(0) + @onsite((;ω=0) -> ω)|> greenfunction;
     @test only(g[sites(SA[1],1)](1.0; ω = 0)) ≈ 1.0   atol = 0.000001
     @test only(g[sites(SA[1],1)](1.0; ω = -1)) ≈ 0.5  atol = 0.000001
+    gs = g[sites(SA[1],1)]
+    @test gs(0.2) !== gs(0.3)
+    @test Quantica.call!(gs, 0.2) === Quantica.call!(gs, 0.2)
+    gs = g[cells = SA[2]]
+    @test Quantica.call!(gs, 0.2) === Quantica.call!(gs, 0.2)
 end
 
 @testset "greenfunction with contacts" begin
@@ -178,7 +183,7 @@ end
         attach(nothing, region = RP.circle(1)) |> greenfunction(GS.KPM(order = 500))
     gωs = g[1](ω)
     ρflat´ = -imag.(diag(gωs))/pi
-    ρ´ = ldos(g[1])(ω)
+    ρ´ = ldos(g[1], kernel = I)(ω)
     @test all(<(0.01), abs.(ρ .- ρ´))
     @test all(<(0.01), abs.(ρflat .- ρflat´))
     @test_throws ArgumentError g[sites((), 3:4)](ω)
@@ -251,7 +256,7 @@ end
 
     # exercise band digagonal fastpath
     g = h |> greenfunction(GS.Bands(ϕs, ϕs))
-    @test g(-0.2)[diagonal(sites(SA[1,2], :))] isa AbstractVector
+    @test g(-0.2)[diagonal(sites(SA[1,2], :))] isa AbstractMatrix
 end
 
 @testset "greenfunction 32bit" begin
@@ -284,52 +289,67 @@ end
     end
 end
 
-@testset "greenfunction diagonal slicing" begin
+@testset "greenfunction sparse slicing" begin
     g = HP.graphene(a0 = 1, t0 = 1, orbitals = (2,1)) |> supercell((2,-2), region = r -> 0<=r[2]<=5) |>
         attach(nothing, cells = 2, region = r -> 0<=r[2]<=2) |> attach(nothing, cells = 3) |>
         greenfunction(GS.Schur(boundary = -2))
     ω = 0.6
-    @test g[diagonal(2)](ω) isa OrbitalSliceVector
+    @test g[diagonal(2)](ω) isa OrbitalSliceMatrix
     @test g[diagonal(2)](ω) == g(ω)[diagonal(2)]
-    @test size(g[diagonal(1)](ω)) == (12,)
-    @test size(g[diagonal(1, kernel = I)](ω)) == (8,)
-    @test length(g[diagonal(:)](ω)) == length(g[diagonal(1)](ω)) + length(g[diagonal(2)](ω)) == 48
-    @test length(g[diagonal(:, kernel = I)](ω)) == length(g[diagonal(1, kernel = I)](ω)) + length(g[diagonal(2, kernel = I)](ω)) == 32
-    @test length(g[diagonal(cells = 2:3)](ω)) == 72
-    @test length(g[diagonal(cells = 2:3, kernel = I)](ω)) == 48
-    @test ldos(g[1])(ω) ≈ -imag.(g[diagonal(1; kernel = I)](ω)) ./ π
-
+    @test g[diagonal(:)](ω) == g(ω)[diagonal(:)]
+    @test size(g[diagonal(1)](ω)) == (12,12)
+    @test size(g[diagonal(1, kernel = I)](ω)) == (8,8)
+    @test size(g[diagonal(:)](ω),1) == size(g[diagonal(1)](ω),1) + size(g[diagonal(2)](ω),1) == 48
+    @test size(g[diagonal(:, kernel = I)](ω),1) == size(g[diagonal(1, kernel = I)](ω),1) + size(g[diagonal(2, kernel = I)](ω),1) == 32
+    @test size(g[diagonal(cells = 2:3)](ω)) == (72, 72)
+    @test size(g[diagonal(cells = 2:3, kernel = I)](ω)) == (48, 48)
+    @test ldos(g[1], kernel = I)(ω) ≈ -imag.(diag(g[diagonal(1; kernel = I)](ω))) ./ π
+    gs = g[diagonal(cells = 2:3)]
+    @test Quantica.call!(gs, ω) === Quantica.call!(gs, 2ω)
     inds = (1, :, (; cells = 1, sublats = :B), sites(2, 1:3), sites(0, 2), sites(3, :))
-    for i in inds, j in inds
-        @test g(0.2)[diagonal(i)] isa Union{OrbitalSliceVector, AbstractVector}
+    for i in inds
+        @test g(0.2)[diagonal(i)] isa Union{OrbitalSliceMatrix, AbstractMatrix}
     end
+    gg = g(ω)[sitepairs(range = 1/sqrt(3))]
+    @test gg isa OrbitalSliceMatrix{ComplexF64,Quantica.SparseMatrixCSC{ComplexF64, Int64}}
+    @test size(gg) == Quantica.flatsize(g) .* (3, 1)
+    @test_throws DimensionMismatch g(ω)[sitepairs(range = 1, sublats = :B => :B, kernel = SA[1 0; 0 -1])]
+    gg = g(ω)[sitepairs(range = 1, sublats = :A => :A, kernel = I)]
+    @test size(gg) == size(g, 1) .* (3, 1)
+
+    g = HP.graphene(a0 = 1, t0 = 1, orbitals = (2,1)) |> supercell((1, -1)) |>
+           greenfunction(GS.Schur(boundary = -2))
+    ω = 0.6
+    gg = g(ω)[sitepairs(range = 1)]
+    gg´ = g(ω)[orbaxes(gg)...]
+    @test gg .* gg´ ≈ gg .* gg
 end
 
-@testset "densitymatrix diagonal slicing" begin
+@testset "densitymatrix sparse slicing" begin
     g1 = LP.honeycomb() |> hamiltonian(hopping(0.1I, sublats = (:A,:B) .=> (:A,:B), range = 1) - plusadjoint(@hopping((; t=1) -> t*SA[0.4 1], sublats = :B => :A)), orbitals = (1,2)) |>
         supercell((1,-1), region = r -> -2<=r[2]<=2) |> attach(nothing, region = RP.circle(1), sublats = :B) |>
         attach(nothing, sublats = :A, cells = 0, region = r->r[2]<0) |> greenfunction(GS.Schur())
     g2 = LP.square() |> hopping(1) - onsite(1) |> supercell(3) |> supercell |> attach(nothing, region = RP.circle(2)) |> greenfunction(GS.Spectrum())
     g3 = LP.triangular() |> hamiltonian(hopping(-I) + onsite(1.8I), orbitals = 2) |> supercell(10) |> supercell |>
         attach(nothing, region = RP.circle(2)) |> attach(nothing, region = RP.circle(2, SA[1,2])) |> greenfunction(GS.KPM(bandrange=(-4,5)))
-    for g in (g1, g2, g3)
-        ρ0 = densitymatrix(g[diagonal(1)], 5)
-        ρ = densitymatrix(g[diagonal(1)])
-        @test g[diagonal(1)](0.2) == g(0.2)[diagonal(1)]
-        @test g[diagonal(:)](0.2) == g(0.2)[diagonal(:)]
-        @test g[diagonal(1)](0.2) isa OrbitalSliceVector
-        @test isapprox(ρ0(), ρ())
-        @test isapprox(ρ0(0.2), ρ(0.2))
-        if g !== g3 # KPM doesn't support finite temperatures yet
-            @test isapprox(ρ0(0.2, 0.3), ρ(0.2, 0.3))
-        end
-        if g === g1 || g === g3
-            ρ0 = densitymatrix(g[diagonal(1, kernel = SA[0 1; 1 0])], 5)
-            ρ = densitymatrix(g[diagonal(1, kernel = SA[0 1; 1 0])])
-            @test isapprox(ρ0(), ρ(); atol = 1e-8)
-            @test isapprox(ρ0(0.2), ρ(0.2); atol = 1e-8)
-        end
+    # KPM doesn't support finite temperatures or generic indexing yet, so g3 excluded from this loop
+    for g in (g1, g2), inds in (diagonal(1), diagonal(:), sitepairs(range = 1))
+        ρ0 = densitymatrix(g[inds], 5)
+        ρ = densitymatrix(g[inds])
+        @test isapprox(ρ0(), ρ(); atol = 1e-7)
+        @test isapprox(ρ0(0.2), ρ(0.2); atol = 1e-7)
+        @test isapprox(ρ0(0.2, 0.3), ρ(0.2, 0.3))
     end
+    for g in (g1, g3)
+        ρ0 = densitymatrix(g[diagonal(1, kernel = SA[0 1; 1 0])], 5)
+        ρ = densitymatrix(g[diagonal(1, kernel = SA[0 1; 1 0])])
+        @test isapprox(ρ0(), ρ(); atol = 1e-8)
+        @test isapprox(ρ0(0.2), ρ(0.2); atol = 1e-8)
+    end
+    g = HP.graphene(orbitals = 2) |> supercell((1,-1)) |> greenfunction
+    ρ0 = densitymatrix(g[sitepairs(range = 1)], 6)
+    mat = ρ0(0.2, 0.3)
+    @test Quantica.nnz(parent(mat)) < length(parent(mat))  # no broken sparsity
 end
 
 @testset "OrbitalSliceArray slicing" begin
@@ -359,6 +379,9 @@ end
     c = sites(SA[1], 1)
     view(gmat, c)
     @test (@allocations view(gmat, c)) <= 2
+    i, j = orbaxes(gmat)
+    @test g(0.2)[i, j] isa Quantica.OrbitalSliceMatrix
+    @test gmat[c] isa Matrix
 end
 
 function testcond(g0; nambu = false)
@@ -466,6 +489,8 @@ end
     g0 = LP.square() |> hamiltonian(hopping(1)) |> supercell(region = RP.square(10)) |> attach(glead, reverse = true; region = contact2) |> attach(glead; region = contact1) |> greenfunction;
     testcond(g0)
 
+    contact1 = r -> r[1] ≈ 5 && -1 <= r[2] <= 1
+    contact2 = r -> r[1] ≈ -5 && -1 <= r[2] <= 1
     glead = LP.square() |> hamiltonian(hopping(I) + onsite(SA[0 1; 1 0]), orbitals = 2) |> supercell((1,0), region = r -> -1 <= r[2] <= 1) |> greenfunction(GS.Schur(boundary = 0));
     g0 = LP.square() |> hamiltonian(hopping(I), orbitals = 2) |> supercell(region = RP.square(10)) |> attach(glead, reverse = true; region = contact2) |> attach(glead; region = contact1) |> greenfunction;
     testcond(g0; nambu = true)

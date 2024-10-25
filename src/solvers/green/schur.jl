@@ -660,14 +660,11 @@ decay_lengths(g::AbstractHamiltonian1D, µ = 0, args...; params...) =
 #   Does not support non-Nothing contacts
 #region
 
-struct DensityMatrixSchurSolver{T,A,G<:GreenFunctionSchurLead{T},R,O<:NamedTuple}
-    g::G                            # parent of GreenSlice
+struct DensityMatrixSchurSolver{T,A,G<:GreenSlice{T},O<:NamedTuple}
+    gs::G                           # parent of GreenSlice
     orbaxes::A                      # axes of GreenSlice (orbrows, orbcols)
-    ρmat::R                         # it spans the full orbitalslices (axes) of GreenSlice.
-                                    # can be a Matrix or a Vector (if A::DiagIndices)
     hmat::Matrix{Complex{T}}        # it spans just the unit cell, dense Bloch matrix
     psis::Matrix{Complex{T}}        # it spans just the unit cell, Eigenstates
-    fmat::Matrix{Complex{T}}        # it spans just the unit cell, f(hmat)
     opts::O                         # kwargs for quadgk
 end
 
@@ -678,19 +675,12 @@ function densitymatrix(s::AppliedSchurGreenSolver, gs::GreenSlice; atol = 1e-7, 
         argerror("Boundaries not implemented for DensityMatrixSchurSolver. Consider using the generic integration solver.")
     has_selfenergy(gs) && argerror("The Schur densitymatrix solver currently support only `nothing` contacts")
     g = parent(gs)
-    ρmat = similar_Array(gs)
     hmat = similar_Array(hamiltonian(g))
     psis = similar(hmat)
-    fmat = similar(hmat)
     orbaxes = orbrows(gs), orbcols(gs)
     opts = (; atol, quadgk_opts...)
-    solver = DensityMatrixSchurSolver(g, orbaxes, ρmat, hmat, psis, fmat, opts)
+    solver = DensityMatrixSchurSolver(gs, orbaxes, hmat, psis, opts)
     return DensityMatrix(solver, gs)
-end
-
-struct FermiEigenstates{T}
-    psis::Matrix{Complex{T}}
-    fpsis::Matrix{Complex{T}}
 end
 
 # API
@@ -698,94 +688,35 @@ end
 ## call
 
 # use computed Fermi points to integrate spectral function by segments
+# returns an AbstractMatrix
 function (s::DensityMatrixSchurSolver)(µ, kBT; params...)
-    λs = propagating_eigvals(s.g, µ + 0im, 1e-2; params...)
+    g = parent(s.gs)
+    λs = propagating_eigvals(g, µ + 0im, 1e-2; params...)
     ϕs = @. real(-im*log(λs))
     xs = sort!(ϕs ./ (2π))
     pushfirst!(xs, -0.5)
     push!(xs, 0.5)
     xs = unique!(xs)
-    integrand(x) = fermi_h!(s, 2π * x, µ, inv(kBT); params...)
-    result = similar(s.ρmat)
-    fx! = (y, x) -> (y .= integrand(x))
+    result = call!_output(s.gs)
+    integrand!(x) = fermi_h!(result, s, 2π * x, µ, inv(kBT); params...)
+    fx! = (y, x) -> (y .= integrand!(x))
     quadgk!(fx!, result, xs...; s.opts...)
     return result
 end
 
-function fermi_h!(s, ϕ, µ, β = 0; params...)
-    h = parent(s.g)
+function fermi_h!(result, s, ϕ, µ, β = 0; params...)
+    h = hamiltonian(s.gs)
+    bs = blockstructure(h)
     # Similar to spectrum(h, ϕ; params...), but less work (no sort! or sanitization)
     copy!(s.hmat, call!(h, ϕ; params...))  # sparse to dense
     ϵs, psis = eigen!(s.hmat)
     # special-casing β = Inf with views turns out to be slower
     fs = (@. ϵs = fermi(ϵs - µ, β))
-    fpsis = (s.psis .= fs .* psis')
-    ρmat = fill_rho_blocks!(s, psis, fpsis, ϕ, s.orbaxes...)
-    return ρmat
+    fpsis = (s.psis .= psis .* transpose(fs))
+    ρcell = EigenProduct(bs, psis, fpsis, ϕ)
+    getindex!(result, ρcell, s.orbaxes...)
+    return result
 end
-
-# fillblock! consistent with Base.getindex(g::GreenSolution, args...) see greenfunction.jl
-# uses views into fmat = f(ϵₙ) * ψₙ * ψₘ' to fill blocks in the ρmat = parent or OrbitalSliceMatrix
-function fill_rho_blocks!(s::DensityMatrixSchurSolver, psis, fpsis, ϕ, i, j)
-    ρmat, fmat = s.ρmat, s.fmat
-    mul!(fmat, psis, fpsis)
-    oj = 0  # offsets
-    for cj in cellsdict_or_single_cellorbs(j)
-        oi = 0
-        for ci in cellsdict_or_single_cellorbs(i)
-            ρview = view(ρmat, oi + 1:oi + norbitals(ci), oj + 1:oj + norbitals(cj))
-            fview = view(fmat, orbindices(ci), orbindices(cj))
-            copy!(ρview, fview)
-            phase = cis(only(cell(ci) - cell(cj)) * ϕ)
-            ρview .*= phase
-            oi += norbitals(ci)
-        end
-        oj += norbitals(cj)
-    end
-    return ρmat
-end
-
-cellsdict_or_single_cellorbs(i::AnyOrbitalSlice) = cellsdict(i)
-cellsdict_or_single_cellorbs(i::AnyCellOrbitals) = (i,)
-
-# fastpath for direct CellOrbitals indexing. Not sure it's worth it.
-function fill_rho_blocks!(s::DensityMatrixSchurSolver, psis, fpsis, ϕ, i::AnyCellOrbitals, j::AnyCellOrbitals)
-    vpsis = view(psis, orbindices(i), :)
-    vfpsis = view(fpsis, :, orbindices(j))
-    phase = cis(only(cell(i) - cell(j)) * ϕ)
-    mul!(s.ρmat, vpsis, vfpsis, phase, 0)
-    return s.ρmat
-end
-
-# diagonal indexing
-fill_rho_blocks!(s::DensityMatrixSchurSolver, psis, fpsis, ϕ, di::DiagIndices, ::DiagIndices) =
-    append_diagonal!(empty!(s.ρmat), FermiEigenstates(psis, fpsis), parent(di), kernel(di), s.g)
-
-# this driver gets called by append_diagonal(d, fe, o, kernel, g), see greenfunction.jl
-function append_diagonal!(d, fe::FermiEigenstates, o::AnyCellOrbitals, kernel; post = identity)
-    for orbs in orbgroups(o)
-        v, v´ = view(fe.psis, orbs, :), view(fe.fpsis, :, orbs)
-        append_trace_or_diag!(d, kernel, v, v´, post)
-    end
-    return d
-end
-
-function append_trace_or_diag!(d::AbstractVector{T}, ::Missing, v, v´, post) where {T}
-    for i in axes(v, 1)
-        val = zero(T)
-        for j in axes(v, 2)
-            val += v[i, j] * v´[j, i]
-        end
-        push!(d, post(val))
-    end
-    return d
-end
-
-append_trace_or_diag!(d, kernel, v, v´, post) = push!(d, post(kernel_trace_multiply(kernel, v, v´)))
-
-kernel_trace_multiply(kernel::UniformScaling, v, v´) = kernel.λ * trace_prod(v, v´)
-kernel_trace_multiply(kernel::Number, v, v´) = kernel * trace_prod(v, v´)
-kernel_trace_multiply(kernel, v, v´) = trace_prod(kernel * v, v´)
 
 #endregion
 

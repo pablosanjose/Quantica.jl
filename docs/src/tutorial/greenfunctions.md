@@ -213,7 +213,7 @@ julia> g(0.2)
 GreenSolution{Float64,2,0}: Green function at arbitrary positions, but at a fixed energy
 
 julia> g(0.2)[1, 3]
-5×5 OrbitalSliceMatrix{Matrix{ComplexF64}}:
+5×5 OrbitalSliceMatrix{ComplexF64,Matrix{ComplexF64}}:
  -2.56906+0.000123273im  -4.28767+0.00020578im   -4.88512+0.000234514im  -4.28534+0.00020578im    -2.5664+0.000123273im
  -4.28767+0.00020578im   -7.15613+0.00034351im   -8.15346+0.000391475im  -7.15257+0.00034351im    -4.2836+0.000205781im
  -4.88512+0.000234514im  -8.15346+0.000391475im  -9.29002+0.000446138im  -8.14982+0.000391476im  -4.88095+0.000234514im
@@ -221,7 +221,7 @@ julia> g(0.2)[1, 3]
   -2.5664+0.000123273im   -4.2836+0.000205781im  -4.88095+0.000234514im  -4.28211+0.000205781im  -2.56469+0.000123273im
 
 julia> g(0.2)[siteselector(region = RP.circle(1, (0.5, 0))), 3]
-2×5 OrbitalSliceMatrix{Matrix{ComplexF64}}:
+2×5 OrbitalSliceMatrix{ComplexF64,Matrix{ComplexF64}}:
  0.0749214+3.15744e-8im   0.124325+5.27948e-8im   0.141366+6.01987e-8im   0.124325+5.27948e-8im  0.0749214+3.15744e-8im
  -0.374862+2.15287e-5im  -0.625946+3.5938e-5im   -0.712983+4.09561e-5im  -0.624747+3.59379e-5im   -0.37348+2.15285e-5im
 ```

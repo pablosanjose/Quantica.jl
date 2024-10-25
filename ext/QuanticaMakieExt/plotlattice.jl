@@ -150,7 +150,7 @@ function _hoppingprimitives(ls::LatticeSlice{<:Any,E}, ls´, h, opts, siteradii)
     return hp, hp´
 end
 
-maybe_evaluate_observable(o::Quantica.IndexableObservable, ls) = o[ls]
+maybe_evaluate_observable(o::Quantica.IndexableObservable, ls) = parent(o[ls])
 maybe_evaluate_observable(x, ls) = x
 
 maybe_getindex(v::AbstractVector{<:Number}, i) = v[i]
@@ -189,9 +189,9 @@ push_siteopacity!(sp, siteopacity::Real, shellopacity, i, r, is_shell) = push!(s
 push_siteopacity!(sp, siteopacity::Function, shellopacity, i, r, is_shell) = push!(sp.opacities, is_shell ? siteopacity(i, r) : shellopacity)
 push_siteopacity!(sp, siteopacity, shellopacity, i, r, is_shell) = argerror("Unrecognized siteradius")
 
-push_siteradius!(sp, siteradius::Real, i, r) = push!(sp.radii, siteradius)
+push_siteradius!(sp, siteradius::Number, i, r) = push!(sp.radii, siteradius)
 push_siteradius!(sp, siteradius::Function, i, r) = push!(sp.radii, siteradius(i, r))
-push_siteradius!(sp, siteradius, i, r) = argerror("Unrecognized siteradius")
+push_siteradius!(sp, siteradius, i, r) = argerror("Unrecognized siteradius of type $(typeof(siteradius))")
 
 push_sitetooltip!(sp, i, r, mat) = push!(sp.tooltips, matrixstring(i, mat))
 push_sitetooltip!(sp, i, r) = push!(sp.tooltips, positionstring(i, r))
@@ -230,9 +230,9 @@ push_hopopacity!(hp, hopopacity::Real, shellopacity, ij, rdr, is_shell) = push!(
 push_hopopacity!(hp, hopopacity::Function, shellopacity, ij, rdr, is_shell) = push!(hp.opacities, hopopacity(ij, rdr))
 push_hopopacity!(hp, hopopacity, shellopacity, ij, rdr, is_shell) = argerror("Unrecognized hopradius")
 
-push_hopradius!(hp, hopradius::Real, ij, rdr) = push!(hp.radii, hopradius)
+push_hopradius!(hp, hopradius::Number, ij, rdr) = push!(hp.radii, hopradius)
 push_hopradius!(hp, hopradius::Function, ij, rdr) = push!(hp.radii, hopradius(ij, rdr))
-push_hopradius!(hp, hopradius, ij, rdr) = argerror("Unrecognized hopradius")
+push_hopradius!(hp, hopradius, ij, rdr) = argerror("Unrecognized hopradius of type $(typeof(hopradius))")
 
 push_hoptooltip!(hp, (i, j), mat) = push!(hp.tooltips, matrixstring(i, j, mat))
 

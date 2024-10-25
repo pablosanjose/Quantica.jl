@@ -734,20 +734,29 @@ Base.getindex(s::BandsGreenSlicer{<:Any,Missing}, i::CellOrbitals, j::CellOrbita
 Base.getindex(s::BandsGreenSlicer, i::CellOrbitals, j::CellOrbitals) =
     semi_band_slice(s, i, j)
 
-function inf_band_slice(s::BandsGreenSlicer{C}, i::CellOrbitals, j::CellOrbitals) where {C}
+function inf_band_slice(s::BandsGreenSlicer{C}, i::Union{SparseIndices,CellOrbitals}, j::Union{SparseIndices,CellOrbitals}) where {C}
     solver = s.solver
     gmat = zeros(C, norbitals(i), norbitals(j))
     inf_band_slice!(gmat, s.ω, (i, j), solver.subband, solver.subbandsimps)
     return gmat
 end
 
-function inf_band_slice!(gmat, ω, (i, j)::Tuple{CellOrbitals,CellOrbitals},
+function inf_band_slice!(gmat, ω, (i, j)::Tuple{Union{SparseIndices,CellOrbitals},Union{SparseIndices,CellOrbitals}},
         subband::Subband, subbandsimps::SubbandSimplices,
         simpinds = eachindex(simplices(subband)))
-    dist = cell(i) - cell(j)
-    orbs = orbindices(i), orbindices(j)
+    dist = dist_or_zero(i, j)
+    orbs = orbstuple_or_orbranges(i, j)
     return inf_band_slice!(gmat, ω, dist, orbs, subband, subbandsimps, simpinds)
 end
+
+## Fast codepath for diagonal slices
+dist_or_zero(i, j) = cell(i) - cell(j)
+dist_or_zero(i::S, j::S) where {S<:SparseIndices{<:AnyCellOrbitals}} = zero(cell(parent(i)))
+
+# can be all orbitals in i⊗j, or a range of orbitals for each site along diagonal
+orbstuple_or_orbranges(i, j) = orbindices(i), orbindices(j)
+orbstuple_or_orbranges(i::S, j::S) where {S<:SparseIndices{<:AnyCellOrbitals}} =
+    orbranges(parent(i))
 
 # main driver
 function inf_band_slice!(gmat, ω, dist, orbs, subband, subbandsimps, simpinds)
@@ -849,7 +858,7 @@ function muladd_ψPψ⁺!(gmat, α, ψ, (rows, cols)::Tuple)
     return gmat
 end
 
-# fallback for a generic rngs collection (used e.g. by rngs = orbs in append_diagonal! below)
+# fill in only rngs blocks in diagonal of gmat (used by fast codepath for diagonal indexing)
 function muladd_ψPψ⁺!(gmat, α, ψ, rngs)
     for rng in rngs
         if length(rng) == 1
@@ -873,28 +882,12 @@ minimal_callsafe_copy(s::BandsGreenSlicer, parentham, parentcontacts) = s  # it 
 #endregion
 
 ############################################################################################
-# append_diagonal!
-#   optimized block diagonal of g[::CellOrbitals] for BandsGreenSlicer without boundary
-#   otherwise we need to do it the normal way
+# getindex_diag: optimized cell indexing for BandsGreenSlicer, used by diagonal indexing
 #region
 
-function append_diagonal!(d, gω::GreenSolution{T,<:Any,<:Any,G}, o::AnyCellOrbitals, kernel; kw...) where {T,G<:BandsGreenSlicer{<:Any,Missing}}
-    s = slicer(gω)   # BandsGreenSlicer
-    norbs = flatsize(gω)
-    rngs = orbranges(o)
-    dist = zero(cell(o))
-    C = complex(T)
-    gmat = Matrix{C}(undef, norbs, norbs)
-    for rng in rngs
-        gmat[rng, rng] .= zero(C)
-    end
-    subband, subbandsimps = s.solver.subband, s.solver.subbandsimps
-    simpinds = eachindex(simplices(subband))
-    # to main driver with orbs = rngs
-    inf_band_slice!(gmat, s.ω, dist, rngs, subband, subbandsimps, simpinds)
-    orbs = orbindranges(kernel, o)
-    return append_diagonal!(d, gmat, orbs, kernel; kw...)
-end
+# triggers fast codepath above
+getindex_diag(gω::GreenSolution{T,<:Any,<:Any,G}, o::CellOrbitalsGrouped) where {T,G<:BandsGreenSlicer{<:Any,Missing}} =
+    inf_band_slice(slicer(gω), SparseIndices(o, Missing), SparseIndices(o, Missing))
 
 #endregion
 

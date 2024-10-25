@@ -145,7 +145,7 @@ options(I::Integrator) = I.quadgk_opts
 # scalar version
 function call!(I::Integrator{<:Any,Missing}; params...)
     fx = x -> begin
-        y = call!(I.integrand, x; params...)
+        y = call!(I.integrand, x; params...)  # should be a scalar
         I.callback(x, y)
         return y
     end
@@ -157,12 +157,13 @@ end
 # nonscalar version
 function call!(I::Integrator; params...)
     fx! = (y, x) -> begin
-        y .= call!(I.integrand, x; params...)
+        y .= serialize(call!(I.integrand, x; params...))
         I.callback(x, y)
         return y
     end
-    result, err = quadgk!(fx!, I.result, I.points...; I.quadgk_opts...)
-    result´ = I.post(result)  # note: post-processing is not element-wise & can be in-place
+    result, err = quadgk!(fx!, serialize(I.result), I.points...; I.quadgk_opts...)
+    # note: post-processing is not element-wise & can be in-place
+    result´ = deserialize(I.result, I.post(result))
     return result´
 end
 
@@ -173,8 +174,8 @@ end
 
 ############################################################################################
 # ldos: local spectral density
-#   d = ldos(::GreenSolution; kernel = I)      -> d[sites...]::Vector
-#   d = ldos(::GreenSlice; kernel = I)         -> d(ω; params...)::Vector
+#   d = ldos(::GreenSolution; kernel = missing)      -> d[sites...]::Vector
+#   d = ldos(::GreenSlice; kernel = missing)         -> d(ω; params...)::Vector
 #   Here ldos is given as Tr(ρᵢᵢ * kernel) where ρᵢᵢ is the spectral function at site i
 #   Here is the generic fallback that uses G. Any more specialized methods need to be added
 #   to each GreenSolver
@@ -182,23 +183,31 @@ end
 
 struct LocalSpectralDensitySolution{T,E,L,G<:GreenSolution{T,E,L},K} <: IndexableObservable
     gω::G
-    kernel::K                      # should return a float when applied to gω[CellSite(n,i)]
+    kernel::K
 end
 
 struct LocalSpectralDensitySlice{T,E,L,G<:GreenSlice{T,E,L},K}
     gs::G
-    kernel::K                      # should return a float when applied to gω[CellSite(n,i)]
+    kernel::K   # also inside gs
 end
 
 #region ## Constructors ##
 
-ldos(gω::GreenSolution; kernel = I) = LocalSpectralDensitySolution(gω, kernel)
+ldos(gω::GreenSolution; kernel = missing) = LocalSpectralDensitySolution(gω, kernel)
 
-function ldos(gs::GreenSlice{T}; kernel = I) where {T}
+function ldos(gs::GreenSlice{T}; kernel = missing) where {T}
     rows(gs) === cols(gs) ||
         argerror("Cannot take ldos of a GreenSlice with rows !== cols")
-    return LocalSpectralDensitySlice(gs, kernel)
+    g = parent(gs)
+    i = ensure_diag_axes(rows(gs), kernel)
+    gs´ = GreenSlice(g, i, i, T)  # forces output eltype to be T<:Real
+    return LocalSpectralDensitySlice(gs´, kernel)
 end
+
+ensure_diag_axes(inds, kernel) = diagonal(inds; kernel)
+ensure_diag_axes(inds::DiagIndices, kernel) = diagonal(parent(inds); kernel)
+ensure_diag_axes(::SparseIndices, _) =
+    argerror("Unexpected sparse indices in GreenSlice")
 
 #endregion
 
@@ -208,27 +217,22 @@ greenfunction(d::LocalSpectralDensitySlice) = d.g
 
 kernel(d::Union{LocalSpectralDensitySolution,LocalSpectralDensitySlice}) = d.kernel
 
-ldos_kernel(g, kernel::UniformScaling) = - kernel.λ * imag(tr(g)) / π
-ldos_kernel(g, kernel) = -imag(tr(g * kernel)) / π
-
 Base.getindex(d::LocalSpectralDensitySolution; selectors...) =
-    d[getindex(lattice(d.gω); selectors...)]
+    d[siteselector(; selectors...)]
 
-Base.getindex(d::LocalSpectralDensitySolution, s::SiteSelector) =
-    d[getindex(lattice(d.gω), s)]
-
-Base.getindex(d::LocalSpectralDensitySolution{T}, i) where {T} =
-    append_diagonal!(T[], d.gω, i, d.kernel, d.gω; post = x -> -imag(x)/π) |>
-        maybe_OrbitalSliceArray(sites_to_orbs(i, d.gω)) # see greenfunction.jl
+function Base.getindex(d::LocalSpectralDensitySolution{T}, i) where {T}
+    di = diagonal(i, kernel = d.kernel)
+    gs = GreenSlice(parent(d.gω), di, di, T)  # get GreenSlice with real output
+    output = getindex!(gs, d.gω; post = x -> -imag(x)/π)
+    return diag(output)
+end
 
 (d::LocalSpectralDensitySlice)(ω; params...) = copy(call!(d, ω; params...))
 
 # fallback through LocalSpectralDensitySolution - overload to allow a more efficient path
 function call!(d::LocalSpectralDensitySlice{T}, ω; params...) where {T}
-    orbslice_or_contact = first(orbinds_or_contactinds(d.gs))
-    gω = call!(parent(d.gs), ω; params...)
-    l = ldos(gω; kernel = d.kernel)
-    return l[orbslice_or_contact]
+    output = call!(d.gs, ω; post = x -> -imag(x)/π, params...)
+    return diag(output)
 end
 
 #endregion
@@ -244,6 +248,9 @@ end
 #   `dir` projects Jᵢⱼ along a certain direction, or takes the norm if missing
 #   We use a default charge = -I, corresponding to normal currents densities in units of e/h
 #region
+
+## TODO: this could probably be refactored using sparse indexing
+## removing GreenSolutionCache and unflat_sparse_slice in the process
 
 struct CurrentDensitySolution{T,E,L,G<:GreenSolution{T,E,L},K,V<:Union{Missing,SVector}} <: IndexableObservable
     gω::G
@@ -483,12 +490,13 @@ end
 
 # generic fallback (for other solvers)
 (ρ::DensityMatrix)(mu = 0, kBT = 0; params...) =
-    ρ.solver(mu, kBT; params...) |> maybe_OrbitalSliceArray(axes(ρ.gs))
+    ρ.solver(mu, kBT; params...)
 # special case for integrator solver
-(ρ::DensityMatrix{<:DensityMatrixIntegratorSolver})(mu = 0, kBT = 0, override = missing; params...) =
-    ρ.solver(mu, kBT, override)(; params...) |> maybe_OrbitalSliceArray(axes(ρ.gs))
+(ρ::DensityMatrix{<:DensityMatrixIntegratorSolver})(mu = 0, kBT = 0, override_path = missing; params...) =
+    ρ.solver(mu, kBT, override_path)(; params...)
 
-(s::DensityMatrixIntegratorSolver)(mu, kBT, override = missing) = s.ifunc(mu, kBT, override);
+(s::DensityMatrixIntegratorSolver)(mu, kBT, override_path = missing) =
+    s.ifunc(mu, kBT, override_path);
 
 # redirects to specialized method
 densitymatrix(gs::GreenSlice; kw...) =
@@ -503,11 +511,11 @@ densitymatrix(gs::GreenSlice, ωmax::Number; opts...) = densitymatrix(gs, (-ωma
 
 function densitymatrix(gs::GreenSlice{T}, ωpoints; omegamap = Returns((;)), imshift = missing, atol = 1e-7, opts...) where {T}
     # check_nodiag_axes(gs)
-    result = similar_Array(gs)
+    result = copy(call!_output(gs))
     opts´ = (; imshift, slope = 1, post = gf_to_rho!, atol, opts...)
     ωpoints_vec = collect(promote_type(T, typeof.(ωpoints)...), ωpoints)
-    function ifunc(mu, kBT, override)
-        ωpoints´ = override_path!(override, ωpoints_vec, ωpoints)
+    function ifunc(mu, kBT, override_path)
+        ωpoints´ = override_path!(override_path, ωpoints_vec, ωpoints)
         ρd = DensityMatrixIntegrand(gs, T(mu), T(kBT), omegamap)
         pts = maybe_insert_mu!(ωpoints_vec, ωpoints´, mu, kBT)
         return Integrator(result, ρd, pts; opts´...)
@@ -548,7 +556,7 @@ function override_path!(pts´, ptsvec::Vector{<:Complex}, pts)
     return pts´
 end
 
-override_path!(override, ptsvec, pts) =
+override_path!(override_path, ptsvec, pts) =
     argerror("Override of real ωpoints not supported, use complex ωpoints upon construction")
 
 #endregion
@@ -558,10 +566,9 @@ override_path!(override, ptsvec, pts) =
 (gf::DensityMatrixIntegrand)(ω; params...) = copy(call!(gf, ω; params...))
 
 function call!(gf::DensityMatrixIntegrand, ω; params...)
-    gω = call!(gf.gs, ω; gf.omegamap(ω)..., params...)
-    f = fermi(ω - gf.mu, inv(gf.kBT))
-    gω .*= f
-    return gω
+    output = call!(gf.gs, ω; gf.omegamap(ω)..., params...)
+    serialize(output) .*= fermi(ω - gf.mu, inv(gf.kBT))
+    return output
 end
 
 function gf_to_rho!(x::AbstractMatrix)
@@ -584,6 +591,10 @@ path(ρ::DensityMatrix{<:DensityMatrixIntegratorSolver}, mu = 0.0, kBT = 0.0) = 
 temperature(D::DensityMatrixIntegrand) = D.kBT
 
 chemicalpotential(D::DensityMatrixIntegrand) = D.mu
+
+Base.parent(ρ::DensityMatrix) = ρ.gs
+
+call!_output(ρ::DensityMatrix) = call!_output(ρ.gs)
 
 #endregion
 
@@ -631,10 +642,10 @@ end
 # generic fallback (for other solvers)
 (j::Josephson)(kBT = 0; params...) = j.solver(kBT; params...)
 # special case for integrator solver
-(j::Josephson{<:JosephsonIntegratorSolver})(kBT = 0, override = missing; params...) =
-    j.solver(kBT, override)(; params...)
+(j::Josephson{<:JosephsonIntegratorSolver})(kBT = 0, override_path = missing; params...) =
+    j.solver(kBT, override_path)(; params...)
 
-(s::JosephsonIntegratorSolver)(kBT, override = missing) = s.ifunc(kBT, override)
+(s::JosephsonIntegratorSolver)(kBT, override_path = missing) = s.ifunc(kBT, override_path)
 
 josephson(gs::GreenSlice{T}, ωmax::Number; kw...) where {T} =
     josephson(gs, (-ωmax, ωmax); kw...)
@@ -651,8 +662,8 @@ function josephson(gs::GreenSlice{T}, ωpoints; omegamap = Returns((;)), phases 
     phases´, traces = sanitize_phases_traces(phases, T)
     opts´ = (; imshift, slope = 1, post = real, atol, opts...)
     ωpoints_vec = collect(promote_type(T, typeof.(ωpoints)...), ωpoints)
-    function ifunc(kBT, override)
-        ωpoints´ = override_path!(override, ωpoints_vec, ωpoints)
+    function ifunc(kBT, override_path)
+        ωpoints´ = override_path!(override_path, ωpoints_vec, ωpoints)
         jd = JosephsonIntegrand(g, T(kBT), contact, tauz, phases´, omegamap,
             traces, Σfull, Σ, similar(Σ), similar(Σ), similar(Σ), similar(tauz, Complex{T}))
         pts = maybe_insert_mu!(ωpoints_vec, ωpoints´, zero(T), kBT)
@@ -700,7 +711,7 @@ function call!(J::JosephsonIntegrand, ω; params...)
 end
 
 function josephson_traces(J, gω, f)
-    gr = gω[J.contactind, J.contactind]
+    gr = view(gω, J.contactind, J.contactind)
     Σi = selfenergy!(J.Σ, gω, J.contactind)
     return josephson_traces!(J, gr, Σi, f)
 end

@@ -18,7 +18,7 @@ function SelfEnergyModelSolver(h::AbstractHamiltonian, model::AbstractModel, orb
     # and fills siteinds::Vector{Int} with the site index for each lat0 site (i.e. for sites ordered by sublattices)
     lat0 = lattice0D(orbslice, siteinds)
     # this is a 0D ParametricHamiltonian to build the Σ(ω) as a view over flat(ph(; ...))
-    ph = hamiltonian(lat0, modelω; orbitals = norbitals(h)) # WARNING: type-unstable orbs
+    ph = hamiltonian(lat0, modelω; orbitals = norbitals(h, :)) # WARNING: type-unstable orbs
     # translation from orbitals in lat0 to orbslice indices
     # i.e. orbital index on orbslice for each orbital in lat0 (this is just a reordering!)
     parentinds = reordered_site_orbitals(siteinds, orbslice)
