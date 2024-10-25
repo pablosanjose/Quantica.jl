@@ -1595,13 +1595,20 @@ Build a `gs::GreenSlice` between sites specified by `src` and `dst`, which can t
 the forms above. Therefore, all the previous single-index slice forms correspond to a
 diagonal block `g[i, i]`.
 
-    g[diagonal(i, kernel = missing)]
+    g[diagonal(i; kernel = missing)]
 
-If `kernel = missing`, efficiently construct `diag(g[i, i])`. If `kernel` is a matrix,
-return `tr(g[site, site] * kernel)` over each site encoded in `i`. Note that if there are
-several orbitals per site, these will have different length (i.e. number of orbitals vs
-number of sites). See also `diagonal`.
+Build a diagonal `gs::GreenSlice` over sites specified by `i`. If `kernel = missing` the
+diagonal entries are `g[o, o]` for orbitals `o` in sites encoded in `i`. If `kernel` is a
+matrix, the diagonal elements are `tr(g[site, site] * kernel)` over each site `i`. Note that
+if there are several orbitals per site, `g[site, site]` may have different sizes (i.e.
+number of orbitals vs number of sites). Upon evaluating `gs(ω)`, the result is a `Diagonal`
+matrix wrapped in an `OrbitalSliceMatrix`, and spans full unit cells.See also `diagonal`.
 
+    g[sitepairs(; kernel = missing, hops...)]
+
+Like the above but for a selection of site pairs selected by `hopselector(; hops...)`. Upon
+evaluating `gs(ω)`, the result is a `SparseMatrixCSC` wrapped in an `OrbitalSliceMatrix`,
+and spans full unit cells. See also `sitepairs`.
 
     g(ω; params...)
 
@@ -1725,7 +1732,7 @@ If `kernel = Q` (a matrix) instead of `missing`, each diagonal block for multior
 For a `gω::GreenSolution`, `gω[diagonal(sel)] = diag(gω[sel, sel])`, although where possible
 the former computation is done more efficiently internally.
 
-    diagonal(kernel = missing, sites...)
+    diagonal(; kernel = missing, sites...)
 
 Equivalent to `diagonal(siteselector(; sites...); kernel)`
 
