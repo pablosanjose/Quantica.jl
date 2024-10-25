@@ -10,14 +10,14 @@ Schematically the process is as follows:
 ```julia
 julia> model_0 = hopping(1); # a possible non-interacting model
 
-julia> model_1 = @onsite((i; Φ = missing) --> Φ[i]);
+julia> model_1 = @onsite((i; Φ = zerofield) --> Φ[i]);
 
-julia> model_2 = @hopping((i, j; Φ = missing) -> Φ[i, j]);Fock
+julia> model_2 = @hopping((i, j; Φ = zerofield) -> Φ[i, j]);Fock
 
 julia> h = lat |> hamiltonian(model_0 + model_1 + model_2)
 ```
 Here `model_1` corresponds to Hartree and onsite-Fock mean field terms, while `model_2` corresponds to inter-site Fock terms.
-The default value of `Φ = missing` corresponds to a vanishing `model_1 + model_2`, i.e. no interactions.
+The default value `Φ = zerofield` is an singleton object that represents no interactions, so `model_1` and `model_2` vanish by default.
 - We build the `GreenFunction` of `h` with `g = greenfunction(h, solver; kw...)` using the `GreenSolver` of choice
 - We construct a `M::MeanField` object using `M = meanfield(g; potential = pot, other_options...)`
 
@@ -74,7 +74,7 @@ With the serializer functionality we can build a version of the fixed-point func
 ```julia
 julia> using SIAMFANLEquations
 
-julia> h = LP.linear() |> supercell(4) |> onsite(r->r[1]) - hopping(1) + @onsite((i; phi = missing) --> phi[i]);
+julia> h = LP.linear() |> supercell(4) |> onsite(r->r[1]) - hopping(1) + @onsite((i; phi = zerofield) --> phi[i]);
 
 julia> M = meanfield(greenfunction(h); onsite = 1, selector = (; range = 0), fock = nothing)
 MeanField{ComplexF64} : builder of Hartree-Fock mean fields
@@ -125,13 +125,15 @@ Note that the content of `pdata` is passed by `aasol` as a third argument to `f!
 
 ## GreenSolvers without support for ParametricHamiltonians
 
-Some `GreenSolver`'s, like `GS.Spectrum` or `GS.KPM`, do not support `ParametricHamiltonian`s. In such cases, the approach above will fail, since it will not be possible to build `g` before knowing `phi`. In such cases one would need to rebuild the `meanfield` object at each step of the fixed-point solver.
+Some `GreenSolver`'s, like `GS.Spectrum` or `GS.KPM`, do not support `ParametricHamiltonian`s. In such cases, the approach above will fail, since it will not be possible to build `g` before knowing `phi`. In such cases one would need to rebuild the `meanfield` object at each step of the fixed-point solver. This is one way to do it.
+
 ```julia
 julia> using SIAMFANLEquations
 
-julia> h = LP.linear() |> supercell(4) |> supercell |> onsite(1) - hopping(1) + @onsite((i; phi = missing) --> phi[i]);
+julia> h = LP.linear() |> supercell(4) |> supercell |> onsite(1) - hopping(1) + @onsite((i; phi) --> phi[i]);
 
-julia> M´(Φ = missing) = meanfield(greenfunction(h(; phi = Φ), GS.Spectrum()); onsite = 1, selector = (; range = 0), fock = nothing)
+julia> M´(phi = zerofield) = meanfield(greenfunction(h(; phi), GS.Spectrum()); onsite = 1, selector = (; range = 0), fock = nothing)
+M´ (generic function with 3 methods)
 
 julia> Φ0 = M´()(0.0, 0.0);
 
@@ -139,7 +141,7 @@ julia> function f!(x, x0, (M´, Φ0))
         Φ = M´(deserialize(Φ0, x0))(0.0, 0.0)
         copy!(x, serialize(Φ))
         return x
-    end;
+           end;
 
 julia> m = 2; x0 = serialize(Φ0); vstore = rand(length(x0), 3m+3);  # order m, initial condition x0, and preallocated space vstore
 

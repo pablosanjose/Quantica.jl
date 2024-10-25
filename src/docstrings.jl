@@ -2602,6 +2602,12 @@ interaction potentials, and `ρ` is the density matrix evaluated at specific che
 potential and temperature. Also `ν = ifelse(nambu, 0.5, 1.0)`, and `v_F(0) = v_H(0) = U`,
 where `U` is the onsite interaction.
 
+    zerofield
+
+An sigleton of type `ZeroField` that represents a zero-values field. It has the property
+that it returns zero no matter how it is indexed (`zerofield[inds...] = 0.0 * I`), so it is
+useful as a default value in a non-spatial model involving mean fields.
+
 ## Keywords
 
 - `potential`: charge-charge potential to use for both Hartree and Fock. Can be a number or a function of position. Default: `1
@@ -2625,26 +2631,34 @@ e.g. `ϕ[sites(2:3), sites(1)]`, see `OrbitalSliceArray` for details.
 # Examples
 
 ```jldoctest
-julia> g = HP.graphene(orbitals = 2, a0 = 1) |> supercell((1,-1)) |> greenfunction;
+julia> model = hopping(I) - @onsite((i; phi = zerofield) --> phi[i]);
 
-julia> M = meanfield(g; selector = (; range = 1), charge = I)
+julia> g = LP.honeycomb() |> hamiltonian(model, orbitals = 2) |> supercell((1,-1)) |> greenfunction;
+
+julia> M = meanfield(g; selector = (; range = 1), charge = I, potential = 0.05)
 MeanField{SMatrix{2, 2, ComplexF64, 4}} : builder of Hartree-Fock mean fields
   Charge type      : 2 × 2 blocks (ComplexF64)
   Hartree pairs    : 14
   Mean field pairs : 28
 
-julia> phi = M(0.2, 0.3);
+julia> phi0 = M(0.2, 0.3);
 
-julia> phi[sites(1), sites(2)] |> Quantica.chopsmall
+julia> phi0[sites(1), sites(2)] |> Quantica.chopsmall
 2×2 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 2 stored entries:
- 0.00239416+0.0im             ⋅
-            ⋅      0.00239416+0.0im
+ 0.00109527+0.0im             ⋅
+            ⋅      0.00109527+0.0im
 
-julia> phi[sites(1)] |> Quantica.chopsmall
+julia> phi0[sites(1)] |> Quantica.chopsmall
 2×2 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 2 stored entries:
- 5.53838+0.0im          ⋅
-         ⋅      5.53838+0.0im
+ 0.296672+0.0im           ⋅
+          ⋅      0.296672+0.0im
 
+julia> phi1 = M(0.2, 0.3; phi = phi0);
+
+julia> phi1[sites(1), sites(2)] |> Quantica.chopsmall
+2×2 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 2 stored entries:
+ 0.00307712+0.0im             ⋅
+            ⋅      0.00307712+0.0im
 ```
 """
 meanfield

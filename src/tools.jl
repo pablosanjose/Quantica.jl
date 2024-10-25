@@ -69,6 +69,7 @@ chopsmall(x::C, atol = sqrt(eps(real(C)))) where {C<:Complex} =
     chopsmall(real(x), atol) + im*chopsmall(imag(x), atol)
 chopsmall(xs, atol) = chopsmall.(xs, Ref(atol))
 chopsmall(xs) = chopsmall.(xs)
+chopsmall(xs::UniformScaling, atol...) = I * chopsmall(xs.λ, atol...)
 
 # Flattens matrix of Matrix{<:Number} into a matrix of Number's
 function mortar(ms::AbstractMatrix{M}) where {C<:Number,M<:Matrix{C}}
