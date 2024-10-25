@@ -156,6 +156,11 @@ end
     @test_throws ArgumentError h()
     h = LP.linear() |> hopping(0) |> @hopping!((o, dr; p=0) -> o)
     @test_throws ArgumentError h()
+
+    # out of bounds indexing
+    h = LP.linear() |>  @hopping((i,j; phi = missing) --> phi[i, j]);
+    ϕ = h[cells = 0]
+    @test h(phi = ϕ) isa Hamiltonian
 end
 
 @testset "hamiltonian supercell" begin

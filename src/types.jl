@@ -543,6 +543,15 @@ boundingbox(l::LatticeSlice) = boundingbox(keys(cellsdict(l)))
 pos(s::CellSitePos) = s.type.r
 ind(s::CellSitePos) = s.inds
 
+function Base.checkbounds(::Type{Bool}, a::OrbitalSliceGrouped, i::CellSitePos)
+    dict = cellsdict(a)
+    if haskey(dict, cell(i))
+        return siteindex(i) in keys(orbgroups(dict[cell(i)]))
+    else
+        return false
+    end
+end
+
 # iterators
 
 sites(l::LatticeSlice) =

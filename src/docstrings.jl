@@ -2630,14 +2630,6 @@ e.g. `ϕ[sites(2:3), sites(1)]`, see `OrbitalSliceArray` for details.
 # Examples
 
 ```jldoctest
-julia> m = meanfield(g; selector = (; range = 10), potential = pot, onsite = 3, fock = nothing)
-MeanField{ComplexF64} : builder of Hartree-Fock mean fields
-  Charge type      : scalar (ComplexF64)
-  Hartree pairs    : 1
-  Mean field pairs : 21
-
-julia> g = HP.graphene(orbitals = 2, a0 = 1) |> supercell((1,-1)) |> greenfunction;
-
 julia> M = meanfield(g; selector = (; range = 1), charge = I)
 MeanField{SMatrix{2, 2, ComplexF64, 4}} : builder of Hartree-Fock mean fields
   Charge type      : 2 × 2 blocks (ComplexF64)
@@ -2646,15 +2638,15 @@ MeanField{SMatrix{2, 2, ComplexF64, 4}} : builder of Hartree-Fock mean fields
 
 julia> Φ0 = M(0.2, 0.3);
 
-julia> Φ0[sites(1), sites(2)]
-2×2 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 4 stored entries:
-   0.00239416+2.1684e-19im         -0.0-0.0im
- -1.82007e-17+1.02672e-18im  0.00239416+1.13841e-17im
+julia> Φ0[sites(1), sites(2)] |> Quantica.chopsmall
+2×2 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 2 stored entries:
+ 0.00239416+0.0im             ⋅
+            ⋅      0.00239416+0.0im
 
-julia> Φ0[sites(1)]
-2×2 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 4 stored entries:
-      5.53838-2.04976e-18im  -2.06596e-17-1.16987e-18im
- -2.06596e-17+1.16987e-18im       5.53838-1.53265e-18im
+julia> Φ0[sites(1)] |> Quantica.chopsmall
+2×2 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 2 stored entries:
+ 5.53838+0.0im          ⋅
+         ⋅      5.53838+0.0im
 ```
 """
 meanfield

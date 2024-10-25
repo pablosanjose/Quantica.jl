@@ -95,15 +95,14 @@ Then we can proceed as in the `f(x) = 1 + atan(x)` example
 julia> m = 2; x0 = serialize(Float64, Φ0); vstore = rand(length(x0), 3m+3);  # order m, initial condition x0, and preallocated space vstore
 
 julia> x = aasol(f!, x0, m, vstore; pdata = (M, Φ0)).solution
-Iteration terminates on entry to aasol.jl
 8-element Vector{Float64}:
- 0.565818503090569
+ 0.5658185030962436
  0.0
- 0.3062161093223203
+ 0.306216109313951
  0.0
- 0.0669636234267607
+ 0.06696362342872919
  0.0
- 0.061001764160349956
+ 0.06100176416107613
  0.0
 
 julia> h´ = h(; phi = deserialize(Φ0, x))
