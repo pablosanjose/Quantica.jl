@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Observables · Quantica.jl</title><meta name="title" content="Observables · Quantica.jl"/><meta property="og:title" content="Observables · Quantica.jl"/><meta property="twitter:title" content="Observables · Quantica.jl"/><meta name="description" content="Documentation for Quantica.jl."/><meta property="og:description" content="Documentation for Quantica.jl."/><meta property="twitter:description" content="Documentation for Quantica.jl."/><meta property="og:url" content="https://pablosanjose.github.io/Quantica.jl/tutorial/observables/"/><meta property="twitter:url" content="https://pablosanjose.github.io/Quantica.jl/tutorial/observables/"/><link rel="canonical" href="https://pablosanjose.github.io/Quantica.jl/tutorial/observables/"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script><link href="../../assets/custom.css" rel="stylesheet" type="text/css"/></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img class="docs-light-only" src="../../assets/logo.svg" alt="Quantica.jl logo"/><img class="docs-dark-only" src="../../assets/logo-dark.svg" alt="Quantica.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">Quantica.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Tutorial</span><ul><li><a class="tocitem" href="../tutorial/">Welcome</a></li><li><a class="tocitem" href="../glossary/">Glossary</a></li><li><a class="tocitem" href="../lattices/">Lattices</a></li><li><a class="tocitem" href="../models/">Models</a></li><li><a class="tocitem" href="../hamiltonians/">Hamiltonians</a></li><li><a class="tocitem" href="../bandstructures/">Bandstructures</a></li><li><a class="tocitem" href="../greenfunctions/">GreenFunctions</a></li><li class="is-active"><a class="tocitem" href>Observables</a><ul class="internal"><li><a class="tocitem" href="#Local-density-of-states-(LDOS)"><span>Local density of states (LDOS)</span></a></li><li><a class="tocitem" href="#Density-matrix"><span>Density matrix</span></a></li><li><a class="tocitem" href="#Current"><span>Current</span></a></li><li><a class="tocitem" href="#Transmission"><span>Transmission</span></a></li><li><a class="tocitem" href="#Conductance"><span>Conductance</span></a></li><li><a class="tocitem" href="#Josephson"><span>Josephson</span></a></li></ul></li></ul></li><li><span class="tocitem">Advanced</span><ul><li><a class="tocitem" href="../../advanced/nonspatial/">Non-spatial models</a></li><li><a class="tocitem" href="../../advanced/serializers/">Serializers</a></li><li><a class="tocitem" href="../../advanced/meanfield/">Self-consistent mean fields</a></li><li><a class="tocitem" href="../../advanced/wannier90/">Wannier90 imports</a></li></ul></li><li><a class="tocitem" href="../../examples/">Examples</a></li><li><a class="tocitem" href="../../api/">API</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Tutorial</a></li><li class="is-active"><a href>Observables</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Observables</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/pablosanjose/Quantica.jl/blob/master/docs/src/tutorial/observables.md#L" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Observables"><a class="docs-heading-anchor" href="#Observables">Observables</a><a id="Observables-1"></a><a class="docs-heading-anchor-permalink" href="#Observables" title="Permalink"></a></h1><p>We are almost at our destination now. We have defined a <code>Lattice</code>, a <code>Model</code> for our system, we applied the <code>Model</code> to the <code>Lattice</code> to obtain a <code>Hamiltonian</code> or a <code>ParametricHamiltonian</code>, and finally, after possibly attaching some contacts to outside reservoirs and specifying a <code>GreenSolver</code>, we obtained a <code>GreenFunction</code>. It is now time to use the <code>GreenFunction</code> to obtain some observables of interest.</p><p>Currently, we have the following observables built into Quantica.jl (with more to come in the future)</p><ul><li><code>ldos</code>: computes the local density of states at specific energy and sites</li><li><code>densitymatrix</code>: computes the density matrix at thermal equilibrium on specific sites.</li><li><code>current</code>: computes the local current density along specific directions, and at specific energy and sites</li><li><code>transmission</code>: computes the total transmission between contacts</li><li><code>conductance</code>: computes the differential conductance <code>dIᵢ/dVⱼ</code> between contacts <code>i</code> and <code>j</code></li><li><code>josephson</code>: computes the supercurrent and the current-phase relation through a given contact in a superconducting system</li></ul><p>See the corresponding docstrings for full usage instructions. Here we will present some basic examples</p><h2 id="Local-density-of-states-(LDOS)"><a class="docs-heading-anchor" href="#Local-density-of-states-(LDOS)">Local density of states (LDOS)</a><a id="Local-density-of-states-(LDOS)-1"></a><a class="docs-heading-anchor-permalink" href="#Local-density-of-states-(LDOS)" title="Permalink"></a></h2><p>Let us compute the LDOS in a cavity like in the previous section. Instead of computing the Green function between a contact to an arbitrary point, we can construct an object <code>d = ldos(g(ω))</code> without any contacts. By using a small imaginary part in <code>ω</code>, we broaden the discrete spectrum, and obtain a finite LDOS. Then, we can pass <code>d</code> directly as a site shader to <code>qplot</code></p><pre><code class="language-julia hljs">julia&gt; h = LP.square() |&gt; onsite(4) - hopping(1) |&gt; supercell(region = r -&gt; norm(r) &lt; 40*(1+0.2*cos(5*atan(r[2],r[1]))));
+
+julia&gt; g = h |&gt; greenfunction;
+
+julia&gt; d = ldos(g(0.1 + 0.001im))
+LocalSpectralDensitySolution{Float64} : local density of states at fixed energy and arbitrary location
+  kernel   : LinearAlgebra.UniformScaling{Bool}(true)
+
+julia&gt; qplot(h, hide = :hops, sitecolor = d, siteradius = d, minmaxsiteradius = (0, 2), sitecolormap = :balance)</code></pre><img src="../../assets/star_shape_ldos.png" alt="LDOS" width="400" class="center"/><p>Note that <code>d[sites...]</code> produces a vector with the LDOS at sites defined by <code>siteselector(; sites...)</code> (<code>d[]</code> is the ldos over all sites). We can also define a <code>kernel</code> to be traced over orbitals to obtain the spectral density of site-local observables (see <code>diagonal</code> slicing in the preceding section).</p><h2 id="Density-matrix"><a class="docs-heading-anchor" href="#Density-matrix">Density matrix</a><a id="Density-matrix-1"></a><a class="docs-heading-anchor-permalink" href="#Density-matrix" title="Permalink"></a></h2><p>We can also compute the convolution of the density of states with the Fermi distribution <code>f(ω)=1/(exp((ω-μ)/kBT) + 1)</code>, which yields the density matrix in thermal equilibrium, at a given temperature <code>kBT</code> and chemical potential <code>μ</code>. This is computed with <code>ρ = densitymatrix(gs, (ωmin, ωmax))</code>. Here <code>gs = g[sites...]</code> is a <code>GreenSlice</code>, and <code>(ωmin, ωmax)</code> are integration bounds (they should span the full bandwidth of the system). Then, <code>ρ(µ, kBT = 0; params...)</code> will yield a matrix over the selected <code>sites</code> for a set of model <code>params</code>.</p><pre><code class="language-julia hljs">julia&gt; ρ = densitymatrix(g[region = RP.circle(1)], (-0.1, 8.1))
+DensityMatrix: density matrix on specified sites using solver of type DensityMatrixIntegratorSolver
+
+julia&gt; @time ρ(4)
+  6.150548 seconds (57.84 k allocations: 5.670 GiB, 1.12% gc time)
+5×5 OrbitalSliceMatrix{ComplexF64,Matrix{ComplexF64}}:
+          0.5+0.0im          -7.34893e-10-3.94035e-15im  0.204478+1.9366e-14im   -7.34889e-10-1.44892e-15im  -5.70089e-10+5.48867e-15im
+ -7.34893e-10+3.94035e-15im           0.5+0.0im          0.200693-2.6646e-14im   -5.70089e-10-1.95251e-15im  -7.34891e-10-2.13804e-15im
+     0.204478-1.9366e-14im       0.200693+2.6646e-14im        0.5+0.0im              0.200693+3.55692e-14im      0.204779-4.27255e-14im
+ -7.34889e-10+1.44892e-15im  -5.70089e-10+1.95251e-15im  0.200693-3.55692e-14im           0.5+0.0im          -7.34885e-10-3.49861e-15im
+ -5.70089e-10-5.48867e-15im  -7.34891e-10+2.13804e-15im  0.204779+4.27255e-14im  -7.34885e-10+3.49861e-15im           0.5+0.0im</code></pre><p>Note that the diagonal is <code>0.5</code>, indicating half-filling.</p><p>The default algorithm used here is slow, as it relies on numerical integration in the complex plane. Some GreenSolvers have more efficient implementations. If they exist, they can be accessed by omitting the <code>(ωmin, ωmax)</code> argument. For example, using <code>GS.Spectrum</code>:</p><pre><code class="language-julia hljs">julia&gt; @time g = h |&gt; greenfunction(GS.Spectrum());
+ 37.638522 seconds (105 allocations: 2.744 GiB, 0.79% gc time)
+
+julia&gt; ρ = densitymatrix(g[region = RP.circle(1)])
+DensityMatrix: density matrix on specified sites with solver of type DensityMatrixSpectrumSolver
+
+julia&gt; @time ρ(4)
+  0.001659 seconds (9 allocations: 430.906 KiB)
+5×5 OrbitalSliceMatrix{ComplexF64,Matrix{ComplexF64}}:
+          0.5+0.0im  -2.21437e-15+0.0im  0.204478+0.0im   2.67668e-15+0.0im   3.49438e-16+0.0im
+ -2.21437e-15+0.0im           0.5+0.0im  0.200693+0.0im  -1.40057e-15+0.0im  -2.92995e-15+0.0im
+     0.204478+0.0im      0.200693+0.0im       0.5+0.0im      0.200693+0.0im      0.204779+0.0im
+  2.67668e-15+0.0im  -1.40057e-15+0.0im  0.200693+0.0im           0.5+0.0im   1.81626e-15+0.0im
+  3.49438e-16+0.0im  -2.92995e-15+0.0im  0.204779+0.0im   1.81626e-15+0.0im           0.5+0.0im</code></pre><p>Note, however, that the computation of <code>g</code> is much slower in this case, due to the need of a full diagonalization. A better algorithm choice in this case is <code>GS.KPM</code>. It requires, however, that we define the region for the density matrix beforehand, as a <code>nothing</code> contact.</p><pre><code class="language-julia hljs">julia&gt; @time g = h |&gt; attach(nothing, region = RP.circle(1)) |&gt; greenfunction(GS.KPM(order = 10000, bandrange = (0,8)));
+Computing moments: 100%|█████████████████████████████████████████████████████████████████████████████████| Time: 0:00:01
+  2.065083 seconds (31.29 k allocations: 11.763 MiB)
+
+julia&gt; ρ = densitymatrix(g[1])
+DensityMatrix: density matrix on specified sites with solver of type DensityMatrixKPMSolver
+
+julia&gt; @time ρ(4)
+  0.006580 seconds (3 allocations: 1.156 KiB)
+5×5 OrbitalSliceMatrix{ComplexF64,Matrix{ComplexF64}}:
+         0.5+0.0im  2.15097e-17+0.0im   0.20456+0.0im  2.15097e-17+0.0im   3.9251e-17+0.0im
+ 2.15097e-17+0.0im          0.5+0.0im  0.200631+0.0im  1.05873e-16+0.0im  1.70531e-18+0.0im
+     0.20456+0.0im     0.200631+0.0im       0.5+0.0im     0.200631+0.0im      0.20482+0.0im
+ 2.15097e-17+0.0im  1.05873e-16+0.0im  0.200631+0.0im          0.5+0.0im  1.70531e-18+0.0im
+  3.9251e-17+0.0im  1.70531e-18+0.0im   0.20482+0.0im  1.70531e-18+0.0im          0.5+0.0im</code></pre><h2 id="Current"><a class="docs-heading-anchor" href="#Current">Current</a><a id="Current-1"></a><a class="docs-heading-anchor-permalink" href="#Current" title="Permalink"></a></h2><p>A similar computation can be done to obtain the current density, using <code>J = current(g(ω), direction = missing)</code>. This time <code>J[sᵢ, sⱼ]</code> yields a sparse matrix of current densities along a given direction for each hopping (or the current norm if <code>direction = missing</code>). Passing <code>J</code> as a hopping shader yields the equilibrium current in a system. In the above example we can add a magnetic flux to make this current finite</p><pre><code class="language-julia hljs">julia&gt; h = LP.square() |&gt; supercell(region = r -&gt; norm(r) &lt; 40*(1+0.2*cos(5*atan(r[2],r[1])))) |&gt; onsite(4) - @hopping((r, dr; B = 0.1) -&gt; cis(B * dr[1] * r[2]));
+
+julia&gt; g = h |&gt; greenfunction;
+
+julia&gt; J = current(g(0.1; B = 0.01))
+CurrentDensitySolution{Float64} : current density at a fixed energy and arbitrary location
+  charge      : LinearAlgebra.UniformScaling{Int64}(-1)
+  direction   : missing
+
+julia&gt; qplot(h, siteradius = 0.08, sitecolor = :black, siteoutline = 0, hopradius = J, hopcolor = J, minmaxhopradius = (0, 2), hopcolormap = :balance, hopdarken = 0)</code></pre><img src="../../assets/star_shape_current.png" alt="Current density with magnetic flux" width="400" class="center"/><div class="admonition is-info"><header class="admonition-header">Remember to construct supercell before applying position-dependent fields</header><div class="admonition-body"><p>Note that we built the supercell before applying the model with the magnetic flux. Not doing so would make the gauge field be repeated in each unit cell when expanding the supercell. This was mentioned in the section on Hamiltonians, and is a common mistake when modeling systems with position dependent fields.</p></div></div><h2 id="Transmission"><a class="docs-heading-anchor" href="#Transmission">Transmission</a><a id="Transmission-1"></a><a class="docs-heading-anchor-permalink" href="#Transmission" title="Permalink"></a></h2><p>The transmission <code>Tᵢⱼ</code> from contact <code>j</code> to contact <code>i</code> can be computed using <code>transmission</code>. This function accepts a <code>GreenSlice</code> between the contact. Let us recover the four-terminal setup of the preceding section, but let&#39;s make it bigger this time</p><pre><code class="language-julia hljs">julia&gt; hcentral = LP.square() |&gt; hopping(-1) |&gt; supercell(region = RP.circle(100) | RP.rectangle((202, 50)) | RP.rectangle((50, 202)))
+
+julia&gt; glead = LP.square() |&gt; hopping(-1) |&gt; supercell((1, 0), region = r -&gt; abs(r[2]) &lt;= 50/2) |&gt; greenfunction(GS.Schur(boundary = 0));
+
+julia&gt; Rot = r -&gt; SA[0 -1; 1 0] * r;  # 90º rotation function
+
+julia&gt; g = hcentral |&gt;
+           attach(glead, region = r -&gt; r[1] ==  101) |&gt;
+           attach(glead, region = r -&gt; r[1] == -101, reverse = true) |&gt;
+           attach(glead, region = r -&gt; r[2] ==  101, transform = Rot) |&gt;
+           attach(glead, region = r -&gt; r[2] == -101, reverse = true, transform = Rot) |&gt;
+           greenfunction;
+
+julia&gt; gx1 = abs2.(g(-3.96)[siteselector(), 1]);
+
+julia&gt; qplot(hcentral, hide = :hops, siteoutline = 1, sitecolor = gx1, siteradius = gx1, minmaxsiteradius = (0, 2), sitecolormap = :balance)</code></pre><img src="../../assets/four_terminal_g_big.png" alt="Green function from right lead" width="400" class="center"/><div class="admonition is-success"><header class="admonition-header">Matrix and vector shaders</header><div class="admonition-body"><p>In the above example <code>gx1</code> is a matrix with one row per orbital in <code>hcentral</code>. The color and radii of each site is obtained from the sum of each row. If <code>gx1</code> were a vector, the color/radius of site <code>i</code> would be taken as <code>gx1[i]</code>. See <code>plotlattice</code> for more details and other shader types.</p></div></div><p>It&#39;s apparent from the plot that the transmission from right to left (<code>T₂₁</code> here) at this energy of <code>0.04</code> is larger than from right to top (<code>T₃₁</code>). Is this true in general? Let us compute the two transmissions as a function of energy. To show the progress of the calculation we can use a monitor package, such as <code>ProgressMeter</code></p><pre><code class="language-julia hljs">julia&gt; using ProgressMeter
+
+julia&gt; T₂₁ = transmission(g[2,1]); T₃₁ = transmission(g[3,1]); ωs = subdiv(-4, 4, 201);
+
+julia&gt; T₂₁ω = @showprogress [T₂₁(ω) for ω in ωs]; T₃₁ω = @showprogress [T₃₁(ω) for ω in ωs];
+Progress: 100%|██████████████████████████████████████████████████████████████| Time: 0:01:02
+Progress: 100%|██████████████████████████████████████████████████████████████| Time: 0:01:00
+
+julia&gt; f = Figure(); a = Axis(f[1,1], xlabel = &quot;ω/t&quot;, ylabel = &quot;T(ω)&quot;); lines!(a, ωs, T₂₁ω, label = L&quot;T_{2,1}&quot;); lines!(a, ωs, T₃₁ω, label = L&quot;T_{3,1}&quot;); axislegend(&quot;Transmission&quot;, position = :lt); f</code></pre><img src="../../assets/four_terminal_T.png" alt="Total transmission from right contact" width="400" class="center"/><p>So we indeed find that the 90-degree transmission <code>T₃₁</code> is indeed larger than the forward transmission <code>T₂₁</code> for all energies. The rapid oscillations are due to mesoscopic fluctuations.</p><div class="admonition is-info"><header class="admonition-header">Total transmission vs transmission probability</header><div class="admonition-body"><p>Note that <code>transmission</code> gives the total transmission, which is the sum of the transmission probability from each orbital in the source contact to any other orbital in the drain contact. As such it is not normalized to 1, but to the number of source orbitals. It also gives the local conductance from a given contact in units of <span>$e^2/h$</span> according to the Landauer formula, <span>$G_j = e^2/h \sum_i T_{ij}(eV)$</span>.</p></div></div><h2 id="Conductance"><a class="docs-heading-anchor" href="#Conductance">Conductance</a><a id="Conductance-1"></a><a class="docs-heading-anchor-permalink" href="#Conductance" title="Permalink"></a></h2><p>Local and non-local differential conductance <span>$G_{ij} = dI_i/dV_j$</span> can be computed with <code>G = conductance(g[i,j])</code>. Calling <code>G(ω)</code> returns the conductance at bias <span>$eV = \omega$</span> in units of <span>$e^2/h$</span>. Let&#39;s look at the local differential conductance into the right contact in the previous example</p><pre><code class="language-julia hljs">julia&gt; G₁₁ = conductance(g[1,1])
+Conductance{Float64}: Zero-temperature conductance dIᵢ/dVⱼ from contacts i,j, in units of e^2/h
+  Current contact  : 1
+  Bias contact     : 1
+
+julia&gt; ωs = subdiv(-4, 4, 201); Gω = @showprogress [G₁₁(ω) for ω in ωs];
+Progress: 100%|██████████████████████████████████████████████████████████████| Time: 0:01:01
+
+julia&gt; f = Figure(); a = Axis(f[1,1], xlabel = &quot;eV/t&quot;, ylabel = &quot;G [e²/h]&quot;); lines!(a, ωs, Gω); f</code></pre><img src="../../assets/four_terminal_cond.png" alt="Local conductance from right contact" width="400" class="center"/><div class="admonition is-warning"><header class="admonition-header">Sign of non-local conductance</header><div class="admonition-body"><p>If you compute a non-local conductance such as <code>conductance(g[2,1])(ω)</code> in this example you will note it is negative. This is actually expected. It means that the current flowing <strong>into</strong> the system through the right contact when you <strong>increase</strong> the bias in a different contact is negative, because the current is actually flowing out into the right reservoir.</p></div></div><p>The conductance can also be computed for hybrid (normal-superconducting) systems. To do so, one first needs to write the model in the Nambu representation, i.e. with particle and hole orbitals on each site (first particles, then holes). In the above examples amounts to switching <code>hopping(-1)</code> to <code>hamiltonian(onsite(Δ*σx) - hopping(σz), orbitals = 2)</code>, with <code>σx = SA[0 1; 1 0]</code>, <code>σz = SA[1 0; 0 -1]</code> and <code>Δ</code> the pairing amplitude. Then we must specify <code>G₁₁ = conductance(g[1,1], nambu = true)</code> to take into account Andreev reflections. The above example with left, bottom and top leads superconducting (with <code>Δ=0.3</code>) yields the following conductance <code>G₁₁</code> in the right (normal) lead (we leave the implementation as an exercise for the reader).</p><img src="../../assets/four_terminal_nambu.png" alt="Local conductance from right contact, with other contacts superconducting" width="400" class="center"/><p>Note that within the gap Andreev reflection leads to an enhancement of conductance, since the contacts are transparent</p><h2 id="Josephson"><a class="docs-heading-anchor" href="#Josephson">Josephson</a><a id="Josephson-1"></a><a class="docs-heading-anchor-permalink" href="#Josephson" title="Permalink"></a></h2><p>The above example showcases normal-superconductor (NS) conductance, which is a Fermi-surface process in response to an electric bias on the normal contacts. In contrast, supercorconductor-superconductor junctions, also known as Josephson junctions, can exhibit supercurrents carried by the full Fermi sea even without a bias. Usually, this supercurrent flows in response to a phase bias between the superconductors, where by phase we mean the complex phase of the <code>Δ</code> order parameter.</p><p>We can compute the supercurrent or the full current-phase relation of a Josephson junction with the command <code>josephson(gs::GreenSlice, ωmax)</code>, where <code>gs = g[contact_id]</code> and <code>ωmax</code> is the full bandwidth of the system (i.e. the maximum energy, in absolute value, spanned by the Fermi sea). This latter quantity can be an estimate or even an upper bound, as it is just used to know up to which energy we should integrate the supercurrent. Let us see an example.</p><pre><code class="language-julia hljs">julia&gt; σz = SA[1 0; 0 -1];
+
+julia&gt; central_region = RP.circle(50) &amp; !RP.circle(40) | RP.rectangle((4, 10), (-50, 0)) | RP.rectangle((4, 10), (50, 0));
+
+julia&gt; h = LP.square() |&gt; hamiltonian(hopping(-σz), orbitals = 2) |&gt; supercell(region = central_region)
+
+julia&gt; Σ(ω, Δ) = SA[-ω Δ; conj(Δ) -ω]/sqrt(1-abs2(Δ))
+
+julia&gt; g = h |&gt;
+    attach(@onsite((ω; Δ = 0.2) -&gt; Σ(ω, Δ)); region = r -&gt; r[1] &lt; -51) |&gt;
+    attach(@onsite((ω; Δ = 0.2, phase = 0) -&gt; Σ(ω, Δ*cis(phase))); region = r -&gt; r[1] &gt; 51) |&gt;
+    greenfunction
+GreenFunction{Float64,2,0}: Green function of a Hamiltonian{Float64,2,0}
+  Solver          : AppliedSparseLUGreenSolver
+  Contacts        : 2
+  Contact solvers : (SelfEnergyModelSolver, SelfEnergyModelSolver)
+  Contact sizes   : (11, 11)
+  Hamiltonian{Float64,2,0}: Hamiltonian on a 0D Lattice in 2D space
+    Bloch harmonics  : 1
+    Harmonic size    : 2884 × 2884
+    Orbitals         : [2]
+    Element type     : 2 × 2 blocks (ComplexF64)
+    Onsites          : 0
+    Hoppings         : 10800
+    Coordination     : 3.7448
+
+julia&gt; J = josephson(g[1], 4.1)
+Integrator: Complex-plane integrator
+  Integration path    : (-4.1 + 1.4901161193847656e-8im, -2.05 + 2.050000014901161im, 0.0 + 1.4901161193847656e-8im)
+  Integration options : (atol = 1.0e-7,)
+  Integrand:          :
+  JosephsonIntegrand{Float64} : Equilibrium (dc) Josephson current observable before integration over energy
+    kBT                     : 0.0
+    Contact                 : 1
+    Number of phase shifts  : 0
+
+julia&gt; qplot(g, children = (; sitecolor = :blue))</code></pre><img src="../../assets/josephson_lat.png" alt="Josephson junction" width="400" class="center"/><p>In this case we have chosen to introduce the superconducting leads with a model self-energy, corresponding to a BCS bulk, but any other self-energy form could be used. We have introduced the phase difference (<code>phase</code>) as a model parameter. We can now evaluate the zero-temperature Josephson current simply with</p><pre><code class="language-julia hljs">julia&gt; J(phase = 0)
+-1.974396994480587e-16
+
+julia&gt; J(phase = 0.2)
+0.004617597139699372</code></pre><p>Note that finite temperatures can be taken using the <code>kBT</code> keyword argument for <code>josephson</code>, see docstring for details.</p><p>One is often interested in the critical current, which is the maximum of the Josephson current over all phase differences. Quantica.jl can compute the integral over a collection of phase differences simultaneously, which is more efficient that computing them one by one. This is done with</p><pre><code class="language-julia hljs">julia&gt; φs = subdiv(0, pi, 11); J = josephson(g[1], 4.1; phases = φs)
+  Integration path    : (-4.1 + 1.4901161193847656e-8im, -2.05 + 2.050000014901161im, 0.0 + 1.4901161193847656e-8im)
+  Integration options : (atol = 1.0e-7,)
+  Integrand:          :
+  JosephsonIntegrand{Float64} : Equilibrium (dc) Josephson current observable before integration over energy
+    kBT                     : 0.0
+    Contact                 : 1
+    Number of phase shifts  : 11
+
+julia&gt; Iφ = J()
+11-element Vector{Float64}:
+ 1.868862401627357e-14
+ 0.007231421775452674
+ 0.014242855188877
+ 0.02081870760779799
+ 0.026752065104401878
+ 0.031847203848574666
+ 0.0359131410974842
+ 0.03871895510547465
+ 0.039762442694035505
+ 0.03680096751905469
+ 2.7677727119798235e-14
+
+julia&gt; f = Figure(); a = Axis(f[1,1], xlabel = &quot;φ&quot;, ylabel = &quot;I [e/h]&quot;); lines!(a, φs, Iφ); scatter!(a, φs, Iφ); f</code></pre><img src="../../assets/josephson_CPR.png" alt="Josephson junction current-phase relation" width="400" class="center"/></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../greenfunctions/">« GreenFunctions</a><a class="docs-footer-nextpage" href="../../advanced/nonspatial/">Non-spatial models »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.7.0 on <span class="colophon-date" title="Friday 25 October 2024 15:59">Friday 25 October 2024</span>. Using Julia version 1.11.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
