@@ -594,28 +594,17 @@ end
     v = serialize(m)
     @test v === parent(m)
     @test deserialize(m, v) === m
-    v = serialize(Float64, m)
-    @test v isa AbstractMatrix{Float64}
-    @test deserialize(m, v) === m
     m = g(0.2)[diagonal(cells = 0)]
     v = serialize(m)
     @test v === parent(m).diag
-    @test deserialize(m, v) === m
-    v = serialize(Float64, m)
-    @test v isa AbstractVector{Float64}
     @test deserialize(m, v) === m
     m = g(0.2)[sitepairs(range = 1)]
     v = serialize(m)
     @test v === Quantica.nonzeros(parent(m))
     @test deserialize(m, v) === m
-    v = serialize(Float64, m)
-    @test v isa AbstractVector{Float64}
-    @test deserialize(m, v) === m
 
     m = g(0.2)[(; cells = 0), (; cells = 0, region = r -> r[1] < 2)]
     m´ = g(0.2)[cells = 0]
     v = serialize(m)
-    @test_throws ArgumentError deserialize(m´, v)
-    v = serialize(Float64, m)
     @test_throws ArgumentError deserialize(m´, v)
 end

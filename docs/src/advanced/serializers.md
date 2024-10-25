@@ -60,4 +60,4 @@ It also allows powerful compression into relevant degrees of freedom through app
 
 ## Serializers of OrbitalSliceArrays
 
-Serialization of `OrbitalSliceArray`s is simpler than for `AbstractHamiltonians`, as there is no need for an intermediate `Serializer` object. To serialize an `m::OrbitalSliceArray` simply do `v = serialize(m)`, or `v = serialize(T::Type, m)` if you want a specific eltype for `v`. To deserialize, just do `m´ = deserialize(m, v)`.
+Serialization of `OrbitalSliceArray`s is simpler than for `AbstractHamiltonians`, as there is no need for an intermediate `Serializer` object. To serialize an `m::OrbitalSliceArray` simply do `v = serialize(m)`. To deserialize, just do `m´ = deserialize(m, v)`.

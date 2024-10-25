@@ -134,8 +134,6 @@ end
 
 serialize(a::OrbitalSliceArray) = serialize_array(parent(a))
 serialize(a::AbstractArray) = serialize_array(a)
-serialize(::Type{T}, a::AbstractArray{T}) where {T} = serialize(a)
-serialize(::Type{T}, a::AbstractArray) where {T} = reinterpret(T, serialize(a))
 
 serialize_array(a::Array) = a
 serialize_array(a::Diagonal{<:Any,<:Vector}) = a.diag

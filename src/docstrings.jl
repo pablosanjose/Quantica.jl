@@ -2457,11 +2457,6 @@ where `h = Quantica.parent_hamiltonian(as)` is the `AbstractHamiltonian` used to
 Return an `Array` of the same eltype as `m` that contains all the stored matrix elements of
 `m`. See `deserialize` for the inverse operation.
 
-    serialize(T::Type, m::OrbitalSliceArray)
-
-As the above, but return an `Array` of the specified eltype `T`, with matrix elements
-reinterpreted as `T`.
-
 ## See also
     `serializer`, `serialize!`, `deserialize`, `deserialize!`
 
