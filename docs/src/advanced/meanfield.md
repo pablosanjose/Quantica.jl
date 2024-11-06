@@ -81,6 +81,7 @@ MeanField{ComplexF64} : builder of Hartree-Fock mean fields
   Charge type      : scalar (ComplexF64)
   Hartree pairs    : 4
   Mean field pairs : 4
+  Nambu            : false
 
 julia> Φ0 = M(0.0, 0.0);
 

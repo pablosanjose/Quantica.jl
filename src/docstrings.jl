@@ -2641,6 +2641,7 @@ MeanField{SMatrix{2, 2, ComplexF64, 4}} : builder of Hartree-Fock mean fields
   Charge type      : 2 × 2 blocks (ComplexF64)
   Hartree pairs    : 14
   Mean field pairs : 28
+  Nambu            : false
 
 julia> phi0 = M(0.2, 0.3);
 

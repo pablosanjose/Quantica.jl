@@ -628,10 +628,13 @@ function Base.show(io::IO, s::MeanField{Q}) where {Q}
     print(io, i, summary(s), "\n",
 "$i  Charge type      : $(displaytype(Q))
 $i  Hartree pairs    : $(nnz(hartree_matrix(s)))
-$i  Mean field pairs : $(nnz(fock_matrix(s)))")
+$i  Mean field pairs : $(nnz(fock_matrix(s)))
+$i  Nambu            : $(nambustring(s))")
 end
 
 Base.summary(::MeanField{Q}) where {Q} =
     "MeanField{$Q} : builder of Hartree-Fock mean fields"
+
+nambustring(s) = isnambu(s) ? "true $(isrotatednambu(s) ? "(rotated basis)" : "")" : "false"
 
 #endregion
