@@ -2617,6 +2617,7 @@ where `U` is the onsite interaction.
 - `onsite`: charge-charge onsite potential. Overrides both Hartree and Fock potentials for onsite interactions. Default: `hartree(0)`
 - `charge`: a number (in single-orbital systems) or a matrix (in multi-orbital systems) representing the charge operator on each site. Default: `I`
 - `nambu::Bool`: specifies whether the model is defined in Nambu space. In such case, `charge` should also be in Nambu space, typically `SA[1 0; 0 -1]` or similar. Default: `false`
+- `namburotation::Bool`: if `nambu == true` and spinful systems, specifies whether the spinor basis is `[c↑, c↓, c↓⁺, -c↑⁺]` (`namburotation = true`) or `[c↑, c↓, c↑⁺, c↓⁺]` (`namburotation = false`). Default: `false`
 - `selector::NamedTuple`: a collection of `hopselector` directives that defines the pairs of sites (`pair_selection` above) that interact through the charge-charge potential. Default: `(; range = 0)` (i.e. onsite)
 
 Any additional keywords `kw` are passed to the `densitymatrix` function used to compute the
