@@ -421,7 +421,7 @@ end
     @test h((1,2)) == h3((1,2))
     h = LP.square() |> @hopping((; t=1) -> t) |> supercell((2,0), (0, 1))
     h´ = h |> transform(r -> SA[r[2], r[1]])
-    @test sites(lattice(h´)) == sites(h´.h.lattice) != sites(lattice(parent(h´)))
+    @test sites(lattice(h´)) == sites(h´.h.lattice) == sites(lattice(parent(h´)))
     @test sites(lattice(h´)) == [SA[0,0], SA[0,1]]
     h´´ = reverse(h´)
     @test bravais_matrix(lattice(h´´)) == - bravais_matrix(lattice(h´))

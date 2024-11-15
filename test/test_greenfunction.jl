@@ -561,6 +561,13 @@ end
     @test g.contacts.selfenergies[2].solver.hlead[(0,)] === g.contacts.selfenergies[1].solver.hlead[(0,)]
     @test g.contacts.selfenergies[2].solver.hlead[(1,)] === g.contacts.selfenergies[1].solver.hlead[(-1,)]
     @test g.contacts.selfenergies[2].solver.hlead[(-1,)] === g.contacts.selfenergies[1].solver.hlead[(1,)]
+
+    # ensure full dealiasing of lattices in attach
+    model = hopping(SA[1 0; 0 -1]) + @onsite((; µ = 0) -> SA[-µ 0; 0 µ])
+    h = LP.linear() |> hamiltonian(model, orbitals = 2)
+    glead = h |> greenfunction(GS.Schur(boundary = 0))
+    g = h |> attach(glead, cells = 1) |> greenfunction(GS.Schur(boundary = 0));
+    @test sites(lattice(h)) == [SA[0.0]]
 end
 
 @testset "meanfield" begin
