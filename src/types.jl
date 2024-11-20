@@ -1623,14 +1623,6 @@ Base.copy(h::Hamiltonian) = Hamiltonian(
 copy_lattice(h::Hamiltonian) = Hamiltonian(
     copy(lattice(h)), blockstructure(h), harmonics(h), bloch(h))
 
-function copy_lattice(h1::Hamiltonian, h2::Hamiltonian)
-    @assert lattice(h1) === lattice(h2)
-    lat´ = copy(lattice(h1))
-    h1´ = Hamiltonian(lat´, blockstructure(h1), harmonics(h1), bloch(h1))
-    h2´ = Hamiltonian(lat´, blockstructure(h2), harmonics(h2), bloch(h2))
-    return h1´, h2´
-end
-
 copy_harmonics_shallow(h::Hamiltonian) = Hamiltonian(
     lattice(h), blockstructure(h), copy(harmonics(h)), bloch(h))
 
@@ -1705,7 +1697,7 @@ LinearAlgebra.ishermitian(h::ParametricHamiltonian) =
     argerror("`ishermitian(::ParametricHamiltonian)` not supported, as the result can depend on the values of parameters.")
 
 copy_lattice(p::ParametricHamiltonian) = ParametricHamiltonian(
-    copy_lattice(p.hparent, p.h)..., p.modifiers, p.allptrs, p.allparams)
+    copy_lattice(p.hparent), p.h, p.modifiers, p.allptrs, p.allparams)
 
 copy_harmonics_shallow(p::ParametricHamiltonian) = ParametricHamiltonian(
     copy_harmonics_shallow(p.hparent), copy_harmonics_shallow(p.h), p.modifiers, p.allptrs, p.allparams)
