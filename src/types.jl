@@ -1697,7 +1697,7 @@ LinearAlgebra.ishermitian(h::ParametricHamiltonian) =
     argerror("`ishermitian(::ParametricHamiltonian)` not supported, as the result can depend on the values of parameters.")
 
 copy_lattice(p::ParametricHamiltonian) = ParametricHamiltonian(
-    copy_lattice(p.hparent), p.h, p.modifiers, p.allptrs, p.allparams)
+    p.hparent, copy_lattice(p.h), p.modifiers, p.allptrs, p.allparams)
 
 copy_harmonics_shallow(p::ParametricHamiltonian) = ParametricHamiltonian(
     copy_harmonics_shallow(p.hparent), copy_harmonics_shallow(p.h), p.modifiers, p.allptrs, p.allparams)
