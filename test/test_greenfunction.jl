@@ -531,7 +531,7 @@ end
     @test typeof(ρ0sol) == typeof(ρsol)
 end
 
-@testset "aliasing" begin
+@testset "greenfunction aliasing" begin
     # Issue #267
     g = LP.linear() |> hamiltonian(@hopping((; q = 1) -> q*I), orbitals = 2) |> greenfunction
     g´ = Quantica.minimal_callsafe_copy(g)
