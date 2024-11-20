@@ -2464,6 +2464,10 @@ where `h = Quantica.parent_hamiltonian(as)` is the `AbstractHamiltonian` used to
 Return an `Array` of the same eltype as `m` that contains all the stored matrix elements of
 `m`. See `deserialize` for the inverse operation.
 
+    serialize(T::Type, m::OrbitalSliceArray)
+
+Reinterpret `serialize(m)` as a collection with eltype `T`
+
 ## See also
     `serializer`, `serialize!`, `deserialize`, `deserialize!`
 
@@ -2492,7 +2496,8 @@ serialize(s)` restored (i.e. overwritten). See `serialize` for details.
 
 Reconstruct an `OrbitalSliceArray` with the same structure as `m` but with the matrix
 elements enconded in `v`. This `v` is typically the result of a `serialize` call to a
-another similar `m`, but the only requirement is that is has the correct size.
+another similar `m`, but the only requirement is that is has the correct size. If `v` has
+the wrong eltype, it will be reintepreted to match the eltype of `m`.
 
 ## See also
     `serializer`, `serialize`, `serialize!`, `deserialize!`
@@ -2611,12 +2616,13 @@ where `U` is the onsite interaction.
 
 ## Keywords
 
-- `potential`: charge-charge potential to use for both Hartree and Fock. Can be a number or a function of position. Default: `1
+- `potential`: charge-charge potential to use for both Hartree and Fock. Can be a number or a function of position. Default: `1`
 - `hartree`: charge-charge potential `v_H` for the Hartree mean field. Can be a number or a function of position. Overrides `potential`. Default: `potential`
 - `fock`: charge-charge potential `v_F` for the Fock mean field. Can be a number, a function of position or `nothing`. In the latter case all Fock terms (even onsite) will be dropped. Default: `hartree`
 - `onsite`: charge-charge onsite potential. Overrides both Hartree and Fock potentials for onsite interactions. Default: `hartree(0)`
 - `charge`: a number (in single-orbital systems) or a matrix (in multi-orbital systems) representing the charge operator on each site. Default: `I`
 - `nambu::Bool`: specifies whether the model is defined in Nambu space. In such case, `charge` should also be in Nambu space, typically `SA[1 0; 0 -1]` or similar. Default: `false`
+- `namburotation::Bool`: if `nambu == true` and spinful systems, specifies whether the spinor basis is `[c↑, c↓, c↓⁺, -c↑⁺]` (`namburotation = true`) or `[c↑, c↓, c↑⁺, c↓⁺]` (`namburotation = false`). Default: `false`
 - `selector::NamedTuple`: a collection of `hopselector` directives that defines the pairs of sites (`pair_selection` above) that interact through the charge-charge potential. Default: `(; range = 0)` (i.e. onsite)
 
 Any additional keywords `kw` are passed to the `densitymatrix` function used to compute the
@@ -2641,6 +2647,7 @@ MeanField{SMatrix{2, 2, ComplexF64, 4}} : builder of Hartree-Fock mean fields
   Charge type      : 2 × 2 blocks (ComplexF64)
   Hartree pairs    : 14
   Mean field pairs : 28
+  Nambu            : false
 
 julia> phi0 = M(0.2, 0.3);
 

@@ -540,19 +540,14 @@ Base.summary(::CurrentDensitySlice{T}) where {T} =
 #endregion
 
 ############################################################################################
-# OrbitalSliceMatrix
+# AbstractOrbitalArray
 #region
 
 # For simplified printing of the array typename
 
-function Base.showarg(io::IO, ::OrbitalSliceMatrix{T,M}, toplevel) where {T,M}
+function Base.showarg(io::IO, ::A, toplevel) where {T,M,A<:AbstractOrbitalArray{T,M}}
     toplevel || print(io, "::")
-    print(io,  "OrbitalSliceMatrix{$T,$M}")
-end
-
-function Base.showarg(io::IO, ::OrbitalSliceVector{T,M}, toplevel) where {T,M}
-    toplevel || print(io, "::")
-    print(io,  "OrbitalSliceVector{$T,$M}")
+    print(io,  "$(nameof(A)){$T,$M}")
 end
 
 #endregion
@@ -619,7 +614,7 @@ display_parameters(s::AppliedSerializer{<:Any,<:ParametricHamiltonian}) = string
 
 
 ############################################################################################
-# MeanField and EvaluatedMeanField
+# MeanField
 #region
 
 function Base.show(io::IO, s::MeanField{Q}) where {Q}
@@ -628,10 +623,13 @@ function Base.show(io::IO, s::MeanField{Q}) where {Q}
     print(io, i, summary(s), "\n",
 "$i  Charge type      : $(displaytype(Q))
 $i  Hartree pairs    : $(nnz(hartree_matrix(s)))
-$i  Mean field pairs : $(nnz(fock_matrix(s)))")
+$i  Mean field pairs : $(nnz(fock_matrix(s)))
+$i  Nambu            : $(nambustring(s))")
 end
 
 Base.summary(::MeanField{Q}) where {Q} =
     "MeanField{$Q} : builder of Hartree-Fock mean fields"
+
+nambustring(s) = isnambu(s) ? "true $(is_nambu_rotated(s) ? "(rotated basis)" : "")" : "false"
 
 #endregion

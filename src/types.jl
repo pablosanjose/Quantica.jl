@@ -2247,8 +2247,8 @@ GreenSlice(parent::GreenFunction{T}, rows::GreenIndices, cols::GreenIndices, ::T
     GreenSlice(parent, rows, cols, similar_slice(C, orbindices(rows), orbindices(cols)))
 
 function GreenSlice(parent, rows, cols, type...)
-    if rows isa DiagIndices || cols isa DiagIndices
-        rows === cols || argerror("Diagonal indices should be identical for rows and columns")
+    if rows isa SparseIndices || cols isa SparseIndices
+        rows === cols || argerror("Sparse indices should be identical for rows and columns")
     end
     rows´ = greenindices(rows, parent)
     cols´ = cols === rows ? rows´ : greenindices(cols, parent)
@@ -2511,13 +2511,27 @@ SparseArrays.nnz(h::BarebonesOperator) = sum(har -> nnz(matrix(har)), harmonics(
 #   if missing, the dimension does not span orbitals but something else
 #region
 
-struct OrbitalSliceArray{C,N,M<:AbstractArray{C,N},A<:NTuple{N,Union{OrbitalSliceGrouped,Missing}}} <: AbstractArray{C,N}
+abstract type AbstractOrbitalArray{C,N,M} <: AbstractArray{C,N} end
+
+const AbstractOrbitalVector{C,M} = AbstractOrbitalArray{C,1,M}
+const AbstractOrbitalMatrix{C,M} = AbstractOrbitalArray{C,2,M}
+
+struct OrbitalSliceArray{C,N,M<:AbstractArray{C,N},A<:NTuple{N,Union{OrbitalSliceGrouped,Missing}}} <: AbstractOrbitalArray{C,N,M}
     parent::M
     orbaxes::A
 end
 
 const OrbitalSliceVector{C,V,A} = OrbitalSliceArray{C,1,V,A}
 const OrbitalSliceMatrix{C,M,A} = OrbitalSliceArray{C,2,M,A}
+
+struct CompressedOrbitalMatrix{C<:Union{Number,SArray},M,O<:OrbitalSliceMatrix{C,M},E,D} <: AbstractOrbitalMatrix{C,M}
+    omat::O
+    hermitian::Bool
+    encoder::E
+    decoder::D
+end
+
+#region ## Contructors ##
 
 OrbitalSliceVector(v::AbstractVector, axes) = OrbitalSliceArray(v, axes)
 OrbitalSliceMatrix(m::AbstractMatrix, axes) = OrbitalSliceArray(m, axes)
@@ -2537,8 +2551,27 @@ function OrbitalSliceMatrix{C}(::UndefInitializer, oi::SparseIndices{<:Hamiltoni
     return OrbitalSliceArray(mat, (i, j))
 end
 
+CompressedOrbitalMatrix(o::OrbitalSliceMatrix; hermitian = false, encoder = identity, decoder = identity) =
+    CompressedOrbitalMatrix(o, hermitian, encoder, decoder)
+
+Base.similar(::OrbitalSliceArray, mat, orbaxes) = OrbitalSliceArray(mat, orbaxes)
+Base.similar(a::CompressedOrbitalMatrix, mat, orbaxes) =
+    CompressedOrbitalMatrix(similar(a.omat, mat, orbaxes), a.hermitian, a.encoder, a.decoder)
+
+#endregion
+#region ## API ##
+
 orbaxes(a::OrbitalSliceArray) = a.orbaxes
+orbaxes(a::CompressedOrbitalMatrix) = orbaxes(a.omat)
 
 Base.parent(a::OrbitalSliceArray) = a.parent
+Base.parent(a::CompressedOrbitalMatrix) = parent(a.omat)
 
+encoder(a::CompressedOrbitalMatrix) = a.encoder
+
+decoder(a::CompressedOrbitalMatrix) = a.decoder
+
+LinearAlgebra.ishermitian(a::CompressedOrbitalMatrix) = a.hermitian
+
+#endregion
 #endregion
