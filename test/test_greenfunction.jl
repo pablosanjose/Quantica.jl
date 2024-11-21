@@ -601,7 +601,6 @@ end
     @test_throws ArgumentError meanfield(g)
     g = LP.honeycomb() |> hamiltonian(hopping(I), orbitals = (2,1)) |> greenfunction
     @test_throws ArgumentError meanfield(g)
-
 end
 
 @testset begin "OrbitalSliceArray serialization"

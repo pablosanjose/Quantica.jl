@@ -48,7 +48,7 @@ function meanfield(g::GreenFunction{T,E}, args...;
     hFock = lat |> hopping((r, dr) -> iszero(dr) ? Uf : T(Vf(dr)); selector..., includeonsite = true)
     hHartree = (Uf == U && Vh === Vf) ? hFock :
         lat |> hopping((r, dr) -> iszero(dr) ? U : T(Vh(dr)); selector..., includeonsite = true)
-
+    # this drops zeros
     potHartree = T.(sum(unflat, harmonics(hHartree)))
 
     oaxes = orbaxes(call!_output(gs))
@@ -61,7 +61,8 @@ function meanfield(g::GreenFunction{T,E}, args...;
 
     # this is important for the fast orbrange-based implementation of MeanField evaluation
     check_cell_order(hFock_slice, rho)
-    potFock = T.(parent(hFock_slice))
+    # this does not drop zeros. Important to keep diagonal zeros
+    potFock = convert(SparseMatrixCSC{T,Int}, parent(hFock_slice))
 
     encoder, decoder = nambu ? NambuEncoderDecoder(is_nambu_rotated´) : (identity, identity)
     S = typeof(encoder(zero(Q)))
@@ -208,7 +209,7 @@ function maybe_nambufy_traces!(traces, m::MeanField{B}) where {B}
 end
 
 diag_real_tr_rho_Q(ρ, Q) =
-    [real(unsafe_trace_prod(Q, view(ρ, rng, rng))) for rng in siteindexdict(orbaxes(ρ, 2))]
+    [real(unsafe_trace_prod(Q, view(parent(ρ), rng, rng))) for rng in siteindexdict(orbaxes(ρ, 2))]
 
 hole_id(::Type{<:SMatrix{2,2}}) = SA[0 0; 0 1]
 hole_id(::Type{<:SMatrix{4,4}}) = SA[0 0 0 0; 0 0 0 0; 0 0 1 0; 0 0 0 1]
