@@ -33,6 +33,7 @@ function meanfield(g::GreenFunction{T,E}, args...;
     Vf = sanitize_potential(fock)
     U = onsite === missing ? T(Vh(zero(SVector{E,T}))) : T(onsite)
     Uf = onsite === missing ? T(Vf(zero(SVector{E,T}))) : T(onsite)
+    Uf = fock === nothing ? zero(Uf) : Uf
     B = blocktype(hamiltonian(g))
     is_nambu_rotated´ = sanitize_nambu_rotated(namburotation, nambu, B)
     Q = sanitize_charge(charge, B, nambu, is_nambu_rotated´)
