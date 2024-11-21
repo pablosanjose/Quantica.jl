@@ -586,6 +586,7 @@ Base.view(a::CompressedOrbitalMatrix, i::AnyCellSites, j::AnyCellSites = i) =
 
 @inline function getindex_scalar(a::CompressedOrbitalMatrix, (i,j)::NTuple{2,Integer})
     dec = decoder(a)
+    # Only lower-triangle is stored in the hermitian case
     if ishermitian(a)
         if i < j
             return dec(parent(a)[j, i])'

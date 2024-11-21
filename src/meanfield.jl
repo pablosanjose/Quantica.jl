@@ -170,7 +170,7 @@ function call!(m::MeanField{B}, args...; chopsmall = true, params...) where {B}
         viiQ = ifelse(m.nambu, 0.5*hartree_pot[col], hartree_pot[col]) * Q
         for ptr in nzrange(fock_pot, col)
             row = rows[ptr]
-            row > col && ishermitian(meanfield) && continue   # skip upper triangle
+            row < col && ishermitian(meanfield) && continue   # skip upper triangle
             vij = nzs[ptr]
             ρij = view(ρFock, rowrngs[row], colrngs[col])
             vQρijQ = vij * Q * sanitize_block(B, ρij) * Q
