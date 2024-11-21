@@ -716,7 +716,7 @@ julia> h[sites(1), sites(2)]
  1.0+0.0im  0.0+0.0im
 
 julia> ph = h |> @hopping!((t; p = 3) -> p*t); ph[region = RP.square(1)]
-4×4 OrbitalSliceMatrix{ComplexF64,SparseArrays.SparseMatrixCSC{ComplexF64, Int64}}:
+4×4 OrbitalSliceMatrix{ComplexF64,SparseMatrixCSC}:
  0.0+0.0im  0.0+0.0im  0.0+0.0im  3.0+0.0im
  0.0+0.0im  0.0+0.0im  3.0+0.0im  0.0+0.0im
  0.0+0.0im  3.0+0.0im  0.0+0.0im  0.0+0.0im
@@ -1684,7 +1684,7 @@ julia> gω[ss] == gs(0.1; t = 2)
 true
 
 julia> summary(gω[ss])
-"14×14 OrbitalSliceMatrix{ComplexF64,Matrix{ComplexF64}}"
+"14×14 OrbitalSliceMatrix{ComplexF64,Array}"
 ```
 
 # See also
@@ -2302,7 +2302,7 @@ used e.g. to index another `OrbitalSliceArray` or to inspect the indices of each
 julia> g = HP.graphene(orbitals = 2) |> supercell((1,-1)) |> greenfunction;
 
 julia> d = ldos(g[cells = SA[0]])(2); summary(d)
-"8-element OrbitalSliceVector{Float64,Vector{Float64}}"
+"8-element OrbitalSliceVector{Float64,Array}"
 
 julia> a = only(orbaxes(d))
 OrbitalSliceGrouped{Float64,2,1} : collection of subcells of orbitals (grouped by sites) for a 1D lattice in 2D space
@@ -2632,8 +2632,11 @@ mean field, see above
 
     M(µ = 0, kBT = 0; params...)    # where M::MeanField
 
-Build an `Φ::OrbitalSliceMatrix` that can be indexed at different sites or pairs of sites,
-e.g. `ϕ[sites(2:3), sites(1)]`, see `OrbitalSliceArray` for details.
+Build an `Φ::CompressedOrbitalMatrix`, which is a special form of `OrbitalSliceMatrix` that
+can be indexed at pairs of individual sites, e.g. `ϕ[sites(2), sites(1)]` to return an
+`SMatrix`. This type of matrix is less flexible than `OrbitalSliceMatrix` but is fully
+static, and can encode symmetries. Its features are implementation details and are bound to
+change. The returned `Φ` is just meant to be used in non-spatial models, see Examples below.
 
 # Examples
 
@@ -2652,25 +2655,25 @@ MeanField{SMatrix{2, 2, ComplexF64, 4}} : builder of Hartree-Fock mean fields
 julia> phi0 = M(0.2, 0.3);
 
 julia> phi0[sites(1), sites(2)] |> Quantica.chopsmall
-2×2 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 2 stored entries:
- 0.00109527+0.0im             ⋅
-            ⋅      0.00109527+0.0im
+2×2 SMatrix{2, 2, ComplexF64, 4} with indices SOneTo(2)×SOneTo(2):
+ 0.00109527+0.0im         0.0+0.0im
+        0.0+0.0im  0.00109527+0.0im
 
 julia> phi0[sites(1)] |> Quantica.chopsmall
-2×2 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 2 stored entries:
- 0.296672+0.0im           ⋅
-          ⋅      0.296672+0.0im
+2×2 SMatrix{2, 2, ComplexF64, 4} with indices SOneTo(2)×SOneTo(2):
+ 0.296672+0.0im       0.0+0.0im
+      0.0+0.0im  0.296672+0.0im
 
 julia> phi1 = M(0.2, 0.3; phi = phi0);
 
 julia> phi1[sites(1), sites(2)] |> Quantica.chopsmall
-2×2 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 2 stored entries:
- 0.00307712+0.0im             ⋅
-            ⋅      0.00307712+0.0im
+2×2 SMatrix{2, 2, ComplexF64, 4} with indices SOneTo(2)×SOneTo(2):
+ 0.00307712+0.0im         0.0+0.0im
+        0.0+0.0im  0.00307712+0.0im
 ```
 
 # See also
-    `zerofield`, `densitymatrix`, `OrbitalSliceMatrix`
+    `zerofield`, `densitymatrix`
 """
 meanfield
 
