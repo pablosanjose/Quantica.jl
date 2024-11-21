@@ -564,12 +564,25 @@ end
 end
 
 @testset "meanfield" begin
-    oh = LP.honeycomb() |> hamiltonian(hopping(SA[1 im; -im 1]) - onsite(SA[1 0; 0 -1], sublats = :A), orbitals = 2) |> supercell((1,-1))
+    oh = LP.honeycomb() |> hamiltonian(hopping(SA[1 im; -im -1]) - onsite(SA[1 0; 0 -1], sublats = :A), orbitals = 2) |> supercell((1,-1))
     g = oh |> greenfunction
     Q = SA[0 -im; im 0]
     m = meanfield(g; selector = (; range = 1), potential = 2, fock = 1.5, charge = Q)
     Φ = m(0.2, 0.3)
-    @test Φ[sites(1), sites(2)] ≈ -1.5 * Q * m.rhoFock(0.2, 0.3)[sites(1), sites(2)] * Q
+    ρ12 = m.rhoFock(0.2, 0.3)[sites(1), sites(2)]
+    @test Φ[sites(1), sites(2)] ≈ -1.5 * Q * ρ12 * Q
+
+    # nambu
+    oh = LP.linear() |> hamiltonian(hopping((r, dr) -> SA[1 sign(dr[1]); -sign(dr[1]) -1]) - onsite(SA[1 0; 0 -1]), orbitals = 2)
+    g = oh |> greenfunction
+    Q = SA[1 0; 0 -1]
+    m = meanfield(g; selector = (; range = 1), nambu = true, hartree = r -> 1/(1+norm(r)), fock = 1.5, charge = Q)
+    @test_throws ArgumentError m(0.2, 0.3)  # µ cannot be nonzero
+    Φ = m(0, 0.3)
+    ρ11 = m.rhoFock(0, 0.3)[sites(1), sites(1)] - SA[0 0; 0 1]
+    fock = -1.5 * Q * ρ11 * Q
+    hartree = 0.5*Q*(tr(Q*ρ11)*(1+1/2+1/2))
+    @test Φ[sites(1), sites(1)] ≈ hartree + fock
 
     g = LP.linear() |> hopping(1) |> greenfunction
     pot(r) = 1/norm(r)
@@ -586,6 +599,7 @@ end
     @test_throws ArgumentError meanfield(g)
     g = LP.honeycomb() |> hamiltonian(hopping(I), orbitals = (2,1)) |> greenfunction
     @test_throws ArgumentError meanfield(g)
+
 end
 
 @testset begin "OrbitalSliceArray serialization"

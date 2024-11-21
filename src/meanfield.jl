@@ -31,10 +31,11 @@ function meanfield(g::GreenFunction{T,E}, args...;
 
     Vh = sanitize_potential(hartree)
     Vf = sanitize_potential(fock)
-    is_nambu_rotated´ = sanitize_nambu_rotated(namburotation, nambu)
-    Q = sanitize_charge(charge, blocktype(hamiltonian(g)), nambu, is_nambu_rotated´)
     U = onsite === missing ? T(Vh(zero(SVector{E,T}))) : T(onsite)
-    Uf = fock === nothing ? zero(U) : U
+    Uf = onsite === missing ? T(Vf(zero(SVector{E,T}))) : T(onsite)
+    B = blocktype(hamiltonian(g))
+    is_nambu_rotated´ = sanitize_nambu_rotated(namburotation, nambu, B)
+    Q = sanitize_charge(charge, B, nambu, is_nambu_rotated´)
 
     isempty(boundaries(g)) || argerror("meanfield does not currently support systems with boundaries")
     isfinite(U) || argerror("Onsite potential must be finite, consider setting `onsite`")
@@ -78,8 +79,11 @@ sanitize_potential(x::Function) = x
 sanitize_potential(x::Nothing) = Returns(0)
 sanitize_potential(_) = argerror("Invalid potential: use a number or a function of position")
 
-sanitize_nambu_rotated(is_nambu_rotated, nambu) =
+sanitize_nambu_rotated(is_nambu_rotated, nambu, ::Type{<:SMatrix{2,2}}) = false
+sanitize_nambu_rotated(is_nambu_rotated, nambu, ::Type{<:SMatrix{4,4}}) =
     nambu ? sanitize_nambu_rotated(is_nambu_rotated) : false
+sanitize_nambu_rotated(is_nambu_rotated, nambu, B) =
+    nambu ? nambu_dim_error(B) : false
 sanitize_nambu_rotated(::Missing) =
     argerror("Must specify `namburotation` (true or false)")
 sanitize_nambu_rotated(is_nambu_rotated::Bool) = is_nambu_rotated
@@ -91,15 +95,20 @@ function sanitize_charge(charge, B, nambu, is_rotated)
 end
 
 sanitize_charge(charge, B) = sanitize_block(B, charge)
-sanitize_charge(charge, ::Type{<:SMatrixView}) =
-    argerror("meanfield does not currently support systems with heterogeneous orbitals")
+sanitize_charge(charge, ::Type{<:SMatrixView}) = meanfield_multiorbital_error()
 
 check_nambu(Q::S, is_rotated) where {S<:Union{SMatrix{2,2},SMatrix{4,4}}} =
     nambu_redundants(Q) ≈ nambu_adjoint_significants(Q, is_rotated) ||
+    nambu_sym_error(Q)
+check_nambu(Q::S, is_rotated) where {S<:SMatrix} = nambu_dim_error(S)
+check_nambu(Q, is_rotated) = nambu_sym_error(Q)
+
+nambu_dim_error(::Type{S}) where {N,S<:SMatrix{N,N}} =
+    argerror("Nambu `meanfield` currently only understand 2×2 and 4×4 Nambu spaces, got $N×$N")
+meanfield_multiorbital_error() =
+    argerror("`meanfield` does not currently support systems with heterogeneous orbitals")
+nambu_sym_error(Q) =
     argerror("Matrix $Q does not satisfy Nambu symmetry")
-check_nambu(::SMatrix{N,N}, is_rotated) where {N} =
-    argerror("Quantica currently only understand 2×2 and 4×4 Nambu spaces, got $N×$N")
-check_nambu(Q, is_rotated) = argerror("$Q does not satisfy Nambu symmetry")
 
 nambu_significants(mat::SMatrix{4,4}) = mat[:, SA[1,2]]
 nambu_significants(mat::SMatrix{2,2}) = mat[:, 1]
@@ -153,12 +162,13 @@ is_nambu_rotated(m::MeanField) = m.is_nambu_rotated
 function call!(m::MeanField{B}, args...; chopsmall = true, params...) where {B}
     Q, hartree_pot, fock_pot = m.charge, m.onsite_tmp, m.potFock
     rowrngs, colrngs = m.rowcol_ranges
-    trρQ = m.rhoHartree(args...; params...)
-    mul!(hartree_pot, m.potHartree, diag(parent(trρQ)))
+    check_zero_mu(m, args...)
+    trρQ = maybe_nambufy_traces!(diag(parent(m.rhoHartree(args...; params...))), m)
+    mul!(hartree_pot, m.potHartree, trρQ)
     ρFock = m.rhoFock(args...; params...)
     meanfield = m.output
-    mf_parent = parent(meanfield)
-    fill!(mf_parent, zero(eltype(mf_parent)))
+    meanfield_parent = parent(meanfield)
+    fill!(nonzeros(meanfield_parent), zero(eltype(meanfield_parent)))
     if chopsmall
         hartree_pot .= Quantica.chopsmall.(hartree_pot)  # this is a Vector
         nzs = nonzeros(parent(ρFock))
@@ -167,7 +177,7 @@ function call!(m::MeanField{B}, args...; chopsmall = true, params...) where {B}
     rows, cols, nzs = rowvals(fock_pot), axes(fock_pot, 2), nonzeros(fock_pot)
     for col in cols
         # 1/2 to compensate for the factor 2 from nambu trace
-        viiQ = ifelse(m.nambu, 0.5*hartree_pot[col], hartree_pot[col]) * Q
+        viiQ = hartree_pot[col] * Q
         for ptr in nzrange(fock_pot, col)
             row = rows[ptr]
             row < col && ishermitian(meanfield) && continue   # skip upper triangle
@@ -175,14 +185,31 @@ function call!(m::MeanField{B}, args...; chopsmall = true, params...) where {B}
             ρij = view(ρFock, rowrngs[row], colrngs[col])
             vQρijQ = vij * Q * sanitize_block(B, ρij) * Q
             if row == col
-                mf_parent[row, col] = encoder(meanfield)(viiQ - vQρijQ)
+                meanfield_parent[row, col] = encoder(meanfield)(viiQ - vQρijQ)
             else
-                mf_parent[row, col] = encoder(meanfield)(-vQρijQ)
+                meanfield_parent[row, col] = encoder(meanfield)(-vQρijQ)
             end
         end
     end
     return meanfield
 end
+
+check_zero_mu(m, µ, _...) = !m.nambu || iszero(µ) ||
+    argerror("Tried to evaluate a Nambu mean field at a nonzero µ = $µ")
+
+# turns tr(ρ*Q) into 0.5*tr((ρ-SA[0 0; 0 I])Q) if nambu
+function maybe_nambufy_traces!(traces, m::MeanField{B}) where {B}
+    if isnambu(m)
+        shift = tr(m.charge * hole_id(B))
+        traces .-= shift
+        traces .*= 0.5
+    end
+    return traces
+end
+
+hole_id(::Type{<:SMatrix{2,2}}) = SA[0 0; 0 1]
+hole_id(::Type{<:SMatrix{4,4}}) = SA[0 0 0 0; 0 0 0 0; 0 0 1 0; 0 0 0 1]
+hole_id(S) = nambu_dim_error(S)
 
 ## ZeroField
 

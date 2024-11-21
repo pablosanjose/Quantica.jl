@@ -164,6 +164,7 @@ numbertype(::Lattice{T}) where {T} = T
 
 zerocell(::Bravais{<:Any,<:Any,L}) where {L} = zero(SVector{L,Int})
 zerocell(::Lattice{<:Any,<:Any,L}) where {L} = zero(SVector{L,Int})
+zerocell(::Val{L}) where {L} = zero(SVector{L,Int})
 
 zerocellsites(l::Lattice, i) = sites(zerocell(l), i)
 
@@ -519,6 +520,8 @@ ncells(x::CellIndicesDict) = length(x)
 ncells(x::CellIndices) = 1
 
 cell(s::CellIndices) = s.cell
+cell(s::CellIndices{L}, ::LatticeSlice{<:Any,<:Any,L}) where {L} = s.cell
+cell(::CellIndices{0}, ::LatticeSlice{<:Any,<:Any,L}) where {L} = zerocell(Val(L))
 
 cells(l::LatticeSlice) = keys(l.cellsdict)
 
@@ -543,10 +546,19 @@ boundingbox(l::LatticeSlice) = boundingbox(keys(cellsdict(l)))
 pos(s::CellSitePos) = s.type.r
 ind(s::CellSitePos) = s.inds
 
-function Base.checkbounds(::Type{Bool}, a::OrbitalSliceGrouped, i::CellSitePos)
+# checkbounds axis
+checkbounds_axis_or_orbaxis(a::AbstractOrbitalMatrix, i, axis) =
+    checkbounds(Bool, axes(a, axis), i)
+
+# checkbounds orbaxis
+checkbounds_axis_or_orbaxis(a::AbstractOrbitalMatrix, i::CellIndices, axis) =
+    checkbounds_axis_or_orbaxis(orbaxes(a, axis), i)
+
+function checkbounds_axis_or_orbaxis(a::OrbitalSliceGrouped, i::CellIndices)
     dict = cellsdict(a)
-    if haskey(dict, cell(i))
-        return siteindex(i) in keys(orbgroups(dict[cell(i)]))
+    c = cell(i, a)
+    if haskey(dict, c)
+        return siteindex(i) in keys(orbgroups(dict[c]))
     else
         return false
     end
@@ -2562,7 +2574,8 @@ Base.similar(a::CompressedOrbitalMatrix, mat, orbaxes) =
 #region ## API ##
 
 orbaxes(a::OrbitalSliceArray) = a.orbaxes
-orbaxes(a::CompressedOrbitalMatrix) = orbaxes(a.omat)
+orbaxes(a::OrbitalSliceArray, i::Integer) = a.orbaxes[i]
+orbaxes(a::CompressedOrbitalMatrix, args...) = orbaxes(a.omat, args...)
 
 Base.parent(a::OrbitalSliceArray) = a.parent
 Base.parent(a::CompressedOrbitalMatrix) = parent(a.omat)

@@ -77,7 +77,7 @@ julia> using SIAMFANLEquations
 julia> h = LP.linear() |> supercell(4) |> onsite(r->r[1]) - hopping(1) + @onsite((i; phi = zerofield) --> phi[i]);
 
 julia> M = meanfield(greenfunction(h); onsite = 1, selector = (; range = 0), fock = nothing)
-MeanField{ComplexF64} : builder of Hartree-Fock mean fields
+MeanField{ComplexF64} : builder of Hartree-Fock-Bogoliubov mean fields
   Charge type      : scalar (ComplexF64)
   Hartree pairs    : 4
   Mean field pairs : 4

@@ -546,8 +546,8 @@ Base.getindex(a::AbstractOrbitalMatrix, i::AnyCellSites, j::AnyCellSites = i) =
 Base.getindex(a::AbstractOrbitalMatrix, i::C, j::C = i) where {B,C<:CellSitePos{<:Any,<:Any,<:Any,B}} =
     checkbounds(Bool, a, i, j) ? sanitize_block(B, view(a, i, j)) : zero(B)
 
-Base.checkbounds(::Type{Bool}, a::AbstractOrbitalMatrix, i::CellSitePos, j::CellSitePos) =
-    checkbounds(Bool, first(orbaxes(a)), i) && checkbounds(Bool, last(orbaxes(a)), j)
+Base.checkbounds(::Type{Bool}, a::AbstractOrbitalMatrix, i, j) =
+    checkbounds_axis_or_orbaxis(a, i, 1) && checkbounds_axis_or_orbaxis(a, j, 2)
 
 Base.view(a::AbstractOrbitalMatrix, i::AnyCellSites, j::AnyCellSites = i) =
     view(parent(a), indexcollection(a, i, j)...)
@@ -581,10 +581,10 @@ LinearAlgebra.norm(a::AbstractOrbitalMatrix) = norm(parent(a))
 ## CompressedOrbitalMatrix
 
 # decoding access
-Base.view(a::CompressedOrbitalMatrix, i::AnyCellSites, j::AnyCellSites = i) =
-    getindex_scalar(a, only.(indexcollection(a, i, j)))
+Base.view(a::CompressedOrbitalMatrix{C}, i::AnyCellSites, j::AnyCellSites = i) where {C} =
+    checkbounds(Bool, a, i, j) ? getindex_scalar(a, only.(indexcollection(a, i, j))) : zero(decoder(a)(zero(C)))
 
-@inline function getindex_scalar(a::CompressedOrbitalMatrix, (i,j)::NTuple{2,Integer})
+@inline function getindex_scalar(a::CompressedOrbitalMatrix{C}, (i,j)::NTuple{2,Integer}) where {C}
     dec = decoder(a)
     # Only lower-triangle is stored in the hermitian case
     if ishermitian(a)

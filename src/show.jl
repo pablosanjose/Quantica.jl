@@ -632,7 +632,7 @@ $i  Nambu            : $(nambustring(s))")
 end
 
 Base.summary(::MeanField{Q}) where {Q} =
-    "MeanField{$Q} : builder of Hartree-Fock mean fields"
+    "MeanField{$Q} : builder of Hartree-Fock-Bogoliubov mean fields"
 
 nambustring(s) = isnambu(s) ? "true $(is_nambu_rotated(s) ? "(rotated basis)" : "")" : "false"
 

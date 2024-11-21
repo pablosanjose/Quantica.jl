@@ -2599,10 +2599,10 @@ decay_lengths
 """
     meanfield(g::GreenFunction, args...; kw...)
 
-Build a `M::MeanField` object that can be used to compute the Hartree-Fock mean field `Φ`
-between selected sites interacting through a given charge-charge potential. The density
-matrix used to build the mean field is obtained with `densitymatrix(g[pair_selection],
-args...; kw...)`, see `densitymatrix` for details.
+Build a `M::MeanField` object that can be used to compute the Hartree-Fock-Bogoliubov mean
+field `Φ` between selected sites interacting through a given charge-charge potential. The
+density matrix used to build the mean field is obtained with
+`densitymatrix(g[pair_selection], args...; kw...)`, see `densitymatrix` for details.
 
 The mean field between site `i` and `j` is defined as `Φᵢⱼ = δᵢⱼ hartreeᵢ + fockᵢⱼ`, where
 
@@ -2646,7 +2646,7 @@ julia> model = hopping(I) - @onsite((i; phi = zerofield) --> phi[i]);  # see zer
 julia> g = LP.honeycomb() |> hamiltonian(model, orbitals = 2) |> supercell((1,-1)) |> greenfunction;
 
 julia> M = meanfield(g; selector = (; range = 1), charge = I, potential = 0.05)
-MeanField{SMatrix{2, 2, ComplexF64, 4}} : builder of Hartree-Fock mean fields
+MeanField{SMatrix{2, 2, ComplexF64, 4}} : builder of Hartree-Fock-Bogoliubov mean fields
   Charge type      : 2 × 2 blocks (ComplexF64)
   Hartree pairs    : 14
   Mean field pairs : 28
