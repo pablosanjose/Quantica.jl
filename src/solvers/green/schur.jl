@@ -83,8 +83,8 @@ function nearest_cell_harmonics(h)
     is_nearest ||
         argerror("Too many or too few harmonics. Perhaps try `supercell` to ensure strictly nearest-cell harmonics.")
     hm, h0, hp = h[hybrid(-1)], h[hybrid(0)], h[hybrid(1)]
-    flat(hm) == flat(hp)' ||
-        argerror("The Hamiltonian should have h[1] == h[-1]' to use the Schur solver")
+    flat(hm) ≈ flat(hp)' ||
+        argerror("The Hamiltonian should have h[1] ≈ h[-1]' to use the Schur solver")
     return hm, h0, hp
 end
 
@@ -696,7 +696,7 @@ function (s::DensityMatrixSchurSolver)(µ, kBT; params...)
     xs = sort!(ϕs ./ (2π))
     pushfirst!(xs, -0.5)
     push!(xs, 0.5)
-    xs = unique!(xs)
+    xs = [mean(view(xs, rng)) for rng in approxruns(xs)]  # elliminate approximate duplicates
     result = call!_output(s.gs)
     integrand!(x) = fermi_h!(result, s, 2π * x, µ, inv(kBT); params...)
     fx! = (y, x) -> (y .= integrand!(x))

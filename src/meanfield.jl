@@ -48,9 +48,9 @@ function meanfield(g::GreenFunction{T,E}, args...;
 
     lat = lattice(hamiltonian(g))
     # The sparse structure of hFock will be inherited by the evaluated mean field. Need onsite.
-    hFock = lat |> hopping((r, dr) -> iszero(dr) ? Uf : Vf(dr); selector..., includeonsite = true)
+    hFock = lat |> hopping((r, dr) -> iszero(dr) ? Uf : T(Vf(dr)); selector..., includeonsite = true)
     hHartree = (Uf == U && Vh === Vf) ? hFock :
-        lat |> hopping((r, dr) -> iszero(dr) ? U : Vh(dr); selector..., includeonsite = true)
+        lat |> hopping((r, dr) -> iszero(dr) ? U : T(Vh(dr)); selector..., includeonsite = true)
 
     potHartree = sum(unflat, harmonics(hHartree))
 
@@ -75,10 +75,10 @@ function meanfield(g::GreenFunction{T,E}, args...;
     return MeanField(output, potHartree, potFock, rhoHartree, rhoFock, Q, nambu, is_nambu_rotated´, rowcol_ranges, onsite_tmp)
 end
 
-sanitize_potential(x::Number) = Returns(x)
+sanitize_potential(x::Real) = Returns(x)
 sanitize_potential(x::Function) = x
 sanitize_potential(x::Nothing) = Returns(0)
-sanitize_potential(_) = argerror("Invalid potential: use a number or a function of position")
+sanitize_potential(_) = argerror("Invalid potential: use a real number or a function of position")
 
 sanitize_nambu_rotated(is_nambu_rotated, nambu, ::Type{<:SMatrix{2,2}}) = false
 sanitize_nambu_rotated(is_nambu_rotated, nambu, ::Type{<:SMatrix{4,4}}) =
