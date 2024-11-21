@@ -2086,7 +2086,7 @@ The `quadgk_opts` are extra keyword arguments (other than `atol`) to pass on to 
 
 Currently, the following GreenSolvers implement dedicated densitymatrix algorithms:
 
-- `GS.Schur`: based on numerical integration over Bloch phase. Boundaries are not currently supported. No `opts`.
+- `GS.Schur`: based on numerical integration over Bloch phase. Boundaries and non-empty contacts are not currently supported. Assumes Hermitian Hamiltonian. No `opts`.
 - `GS.Spectrum`: based on summation occupation-weigthed eigenvectors. No `opts`.
 - `GS.KPM`: based on the Chebyshev expansion of the Fermi function. Currently only works for zero temperature and only supports `nothing` contacts (see `attach`). No `opts`.
 

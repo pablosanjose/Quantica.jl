@@ -7,17 +7,16 @@
 #   we precompute v_H^{ik} = \sum_n v_H(r_{i0} - r_{kn}), exploiting ρ translation symmetry
 #region
 
-struct MeanField{B,T,C<:CompressedOrbitalMatrix,S<:SparseMatrixCSC,H<:DensityMatrix,F<:DensityMatrix}
+struct MeanField{B,T,C<:CompressedOrbitalMatrix,S<:SparseMatrixCSC,F<:DensityMatrix}
     output::C
     potHartree::S
     potFock::S
-    rhoHartree::H
-    rhoFock::F
+    rho::F
     charge::B
     nambu::Bool
     is_nambu_rotated::Bool
     rowcol_ranges::NTuple{2,Vector{UnitRange{Int}}}
-    onsite_tmp::Vector{Complex{T}}
+    onsite_tmp::Vector{T}
 end
 
 struct ZeroField end
@@ -41,10 +40,8 @@ function meanfield(g::GreenFunction{T,E}, args...;
     isempty(boundaries(g)) || argerror("meanfield does not currently support systems with boundaries")
     isfinite(U) || argerror("Onsite potential must be finite, consider setting `onsite`")
 
-    gsHartree = g[diagonal(; cells = 0, kernel = Q)]
-    rhoHartree = densitymatrix(gsHartree, args...; kw...)
-    gsFock = g[sitepairs(; selector..., includeonsite = true)]
-    rhoFock = densitymatrix(gsFock, args...; kw...)
+    gs = g[sitepairs(; selector..., includeonsite = true)]
+    rho = densitymatrix(gs, args...; kw...)
 
     lat = lattice(hamiltonian(g))
     # The sparse structure of hFock will be inherited by the evaluated mean field. Need onsite.
@@ -52,19 +49,19 @@ function meanfield(g::GreenFunction{T,E}, args...;
     hHartree = (Uf == U && Vh === Vf) ? hFock :
         lat |> hopping((r, dr) -> iszero(dr) ? U : T(Vh(dr)); selector..., includeonsite = true)
 
-    potHartree = sum(unflat, harmonics(hHartree))
+    potHartree = T.(sum(unflat, harmonics(hHartree)))
 
-    oaxes = orbaxes(call!_output(gsFock))
+    oaxes = orbaxes(call!_output(gs))
     rowcol_ranges = collect.(orbranges.(oaxes))
-    onsite_tmp = similar(diag(parent(call!_output(gsHartree))))
+    onsite_tmp = Vector{T}(undef, length(last(rowcol_ranges)))
 
-    # build potFock with identical axes as the output of rhoFock
+    # build potFock with identical axes as the output of rho
     cells_fock = cells(first(oaxes))
     hFock_slice = hFock[(; cells = cells_fock), (; cells = 0)]
 
     # this is important for the fast orbrange-based implementation of MeanField evaluation
-    check_cell_order(hFock_slice, rhoFock)
-    potFock = parent(hFock_slice)
+    check_cell_order(hFock_slice, rho)
+    potFock = T.(parent(hFock_slice))
 
     encoder, decoder = nambu ? NambuEncoderDecoder(is_nambu_rotated´) : (identity, identity)
     S = typeof(encoder(zero(Q)))
@@ -72,7 +69,7 @@ function meanfield(g::GreenFunction{T,E}, args...;
     sparse_enc = similar(output, S)
     output = CompressedOrbitalMatrix(sparse_enc; encoder, decoder, hermitian = true)
 
-    return MeanField(output, potHartree, potFock, rhoHartree, rhoFock, Q, nambu, is_nambu_rotated´, rowcol_ranges, onsite_tmp)
+    return MeanField(output, potHartree, potFock, rho, Q, nambu, is_nambu_rotated´, rowcol_ranges, onsite_tmp)
 end
 
 sanitize_potential(x::Real) = Returns(x)
@@ -91,6 +88,7 @@ sanitize_nambu_rotated(is_nambu_rotated::Bool) = is_nambu_rotated
 
 function sanitize_charge(charge, B, nambu, is_rotated)
     Q = sanitize_charge(charge, B)
+    ishermitian(Q) || argerror("Charge $Q should be Hermitian")
     nambu && check_nambu(Q, is_rotated)
     return Q
 end
@@ -137,9 +135,9 @@ function NambuEncoderDecoder(is_nambu_rotated)
     return encoder, decoder
 end
 
-function check_cell_order(hFock_slice, rhoFock)
+function check_cell_order(hFock_slice, rho)
     opot = first(orbaxes(hFock_slice))
-    orho = first(orbaxes(call!_output(rhoFock.gs)))
+    orho = first(orbaxes(call!_output(rho.gs)))
     cells(opot) == cells(orho) || internalerror("meanfield: Cell order mismatch between potential and density matrix")
     return nothing
 end
@@ -164,15 +162,15 @@ function call!(m::MeanField{B}, args...; chopsmall = true, params...) where {B}
     Q, hartree_pot, fock_pot = m.charge, m.onsite_tmp, m.potFock
     rowrngs, colrngs = m.rowcol_ranges
     check_zero_mu(m, args...)
-    trρQ = maybe_nambufy_traces!(diag(parent(m.rhoHartree(args...; params...))), m)
+    ρ = m.rho(args...; params...)
+    trρQ = maybe_nambufy_traces!(diag_real_tr_rho_Q(ρ, Q), m)
     mul!(hartree_pot, m.potHartree, trρQ)
-    ρFock = m.rhoFock(args...; params...)
     meanfield = m.output
     meanfield_parent = parent(meanfield)
     fill!(nonzeros(meanfield_parent), zero(eltype(meanfield_parent)))
     if chopsmall
         hartree_pot .= Quantica.chopsmall.(hartree_pot)  # this is a Vector
-        nzs = nonzeros(parent(ρFock))
+        nzs = nonzeros(parent(ρ))
         nzs .= Quantica.chopsmall.(nzs)
     end
     rows, cols, nzs = rowvals(fock_pot), axes(fock_pot, 2), nonzeros(fock_pot)
@@ -183,7 +181,7 @@ function call!(m::MeanField{B}, args...; chopsmall = true, params...) where {B}
             row = rows[ptr]
             row < col && ishermitian(meanfield) && continue   # skip upper triangle
             vij = nzs[ptr]
-            ρij = view(ρFock, rowrngs[row], colrngs[col])
+            ρij = view(ρ, rowrngs[row], colrngs[col])
             vQρijQ = vij * Q * sanitize_block(B, ρij) * Q
             if row == col
                 meanfield_parent[row, col] = encoder(meanfield)(viiQ - vQρijQ)
@@ -208,6 +206,9 @@ function maybe_nambufy_traces!(traces, m::MeanField{B}) where {B}
     end
     return traces
 end
+
+diag_real_tr_rho_Q(ρ, Q) =
+    [real(unsafe_trace_prod(Q, view(ρ, rng, rng))) for rng in siteindexdict(orbaxes(ρ, 2))]
 
 hole_id(::Type{<:SMatrix{2,2}}) = SA[0 0; 0 1]
 hole_id(::Type{<:SMatrix{4,4}}) = SA[0 0 0 0; 0 0 0 0; 0 0 1 0; 0 0 0 1]
