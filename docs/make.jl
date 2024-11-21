@@ -13,7 +13,7 @@ makedocs(;
         canonical="https://pablosanjose.github.io/Quantica.jl",
         assets=["assets/custom.css"],
         size_threshold_ignore = [
-            api.md
+            "api.md"
         ]
     ),
     pages=[
