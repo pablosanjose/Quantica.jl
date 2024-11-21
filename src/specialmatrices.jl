@@ -600,6 +600,26 @@ Base.view(a::CompressedOrbitalMatrix{C}, i::AnyCellSites, j::AnyCellSites = i) w
     return dec(parent(a)[i, j])
 end
 
+## checkbounds
+
+# checkbounds axis
+checkbounds_axis_or_orbaxis(a::AbstractOrbitalMatrix, i, axis) =
+    checkbounds(Bool, axes(a, axis), i)
+
+# checkbounds orbaxis
+checkbounds_axis_or_orbaxis(a::AbstractOrbitalMatrix, i::CellIndices, axis) =
+    checkbounds_axis_or_orbaxis(orbaxes(a, axis), i)
+
+function checkbounds_axis_or_orbaxis(a::AbstractOrbitalMatrix, i::CellIndices)
+    dict = cellsdict(a)
+    c = cell(i, a)
+    if haskey(dict, c)
+        return siteindex(i) in keys(orbgroups(dict[c]))
+    else
+        return false
+    end
+end
+
 ## broadcasting
 
 # following the manual: https://docs.julialang.org/en/v1/manual/interfaces/#man-interface-array

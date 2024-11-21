@@ -546,24 +546,6 @@ boundingbox(l::LatticeSlice) = boundingbox(keys(cellsdict(l)))
 pos(s::CellSitePos) = s.type.r
 ind(s::CellSitePos) = s.inds
 
-# checkbounds axis
-checkbounds_axis_or_orbaxis(a::AbstractOrbitalMatrix, i, axis) =
-    checkbounds(Bool, axes(a, axis), i)
-
-# checkbounds orbaxis
-checkbounds_axis_or_orbaxis(a::AbstractOrbitalMatrix, i::CellIndices, axis) =
-    checkbounds_axis_or_orbaxis(orbaxes(a, axis), i)
-
-function checkbounds_axis_or_orbaxis(a::OrbitalSliceGrouped, i::CellIndices)
-    dict = cellsdict(a)
-    c = cell(i, a)
-    if haskey(dict, c)
-        return siteindex(i) in keys(orbgroups(dict[c]))
-    else
-        return false
-    end
-end
-
 # iterators
 
 sites(l::LatticeSlice) =
