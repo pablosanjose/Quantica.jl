@@ -608,9 +608,9 @@ checkbounds_axis_or_orbaxis(a::AbstractOrbitalMatrix, i, axis) =
 
 # checkbounds orbaxis
 checkbounds_axis_or_orbaxis(a::AbstractOrbitalMatrix, i::CellIndices, axis) =
-    checkbounds_axis_or_orbaxis(orbaxes(a, axis), i)
+    checkbounds_orbaxis(orbaxes(a, axis), i)
 
-function checkbounds_axis_or_orbaxis(a::AbstractOrbitalMatrix, i::CellIndices)
+function checkbounds_orbaxis(a::LatticeSlice, i::CellIndices)
     dict = cellsdict(a)
     c = cell(i, a)
     if haskey(dict, c)
