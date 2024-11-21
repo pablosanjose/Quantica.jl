@@ -689,6 +689,7 @@ end
 
 # use computed Fermi points to integrate spectral function by segments
 # returns an AbstractMatrix
+# we don't use Integrator, because that is meant for integrals over energy, not momentum
 function (s::DensityMatrixSchurSolver)(µ, kBT; params...)
     g = parent(s.gs)
     λs = propagating_eigvals(g, µ + 0im, 1e-2; params...)
@@ -709,7 +710,7 @@ function fermi_h!(result, s, ϕ, µ, β = 0; params...)
     bs = blockstructure(h)
     # Similar to spectrum(h, ϕ; params...), but less work (no sort! or sanitization)
     copy!(s.hmat, call!(h, ϕ; params...))  # sparse to dense
-    ϵs, psis = eigen!(s.hmat)
+    ϵs, psis = eigen!(Hermitian(s.hmat))
     # special-casing β = Inf with views turns out to be slower
     fs = (@. ϵs = fermi(ϵs - µ, β))
     fpsis = (s.psis .= psis .* transpose(fs))
