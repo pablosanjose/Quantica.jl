@@ -194,6 +194,7 @@ function call!(m::MeanField{B}, args...; chopsmall = true, params...) where {B}
     return meanfield
 end
 
+check_zero_mu(_) = nothing
 check_zero_mu(m, µ, _...) = !m.nambu || iszero(µ) ||
     argerror("Tried to evaluate a Nambu mean field at a nonzero µ = $µ")
 
