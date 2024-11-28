@@ -2543,13 +2543,14 @@ true
 deserialize!
 
 """
-    Quantica.gaps(h::Hamiltonian1D{T}, µ = 0; atol = eps(T))
+    Quantica.gaps(h::Hamiltonian1D{T}, µ = 0; atol = eps(T), kw...)
 
 Compute the energy gaps of a 1D Hamiltonian `h` at chemical potential `µ`. The result is a
 `Vector{T}` of the local minima of the `|ϵ(ϕ) - µ|`, where `ϵ(ϕ)` is the energy band closest
 to `µ` and `ϕ ∈ [-π,π]` is the Bloch phase. The `atol` parameter is the absolute tolerance
 used to determine the local minima versus `ϕ`, which are computed using the `Schur` solver
-for 1D Hamiltonians.
+for 1D Hamiltonians. The keywords `kw` are passed to the ArnoldiMethod `partialschur!`
+eigensolver (`kw = (; nev = 1)` by default).
 
 The `LinearMaps` and `ArnoldiMethod` packages must be loaded to enable this functionality.
 
@@ -2567,10 +2568,21 @@ julia> Quantica.gaps(h(U=2))
 ```
 
 # See also:
-    `Quantica.decay_lengths`
+    `Quantica.gap`, `Quantica.decay_lengths`
 
 """
 gaps
+
+"""
+    Quantica.gap(h::Hamiltonian1D{T}, µ = 0; atol = eps(T), kw...)
+
+Compute the minimal gap around `µ`, see `Quantica.gaps`
+
+# See also:
+    `Quantica.gaps`, `Quantica.decay_lengths`
+
+"""
+gap
 
 """
     Quantica.decay_lengths(g::GreenFunctionSchurLead, µ = 0; reverse = false)
