@@ -50,6 +50,9 @@ Then, the self-consistent Hamiltonian is given by `h(; Φ = Φ_sol, params...)`.
 
 The key problem is to actually find the fixed point of the `M` function. The naive iteration above is not optimal, and often does not converge. To do a better job we should use a dedicated fixed-point solver.
 
+!!! note "Superconducting systems"
+    Superconducting (Nambu) Hamiltonians obey the same equations for the Hartree and Fock mean fields, with a proper definition of `Q`, and an extra `1/2` coefficient in the Hartree trace, see the `meanfield` doctring.
+
 ## Using an external fixed-point solver
 
 We now show how to approach such a fixed-point problem. We will employ an external library to solve generic fixed-point problems, and show how to make it work with Quantica `MeanField` objects efficiently. Many generic fixed-point solver backends exist. Here we use the SIAMFANLEquations.jl package. It provides a simple utility `aasol(f, x0)` that computes the solution of `f(x) = x` with initial condition `x0` using Anderson acceleration. This is an example of how it works to compute the fixed point of function `f(x) = 1 + atan(x)`
