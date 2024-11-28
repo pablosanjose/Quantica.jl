@@ -12,6 +12,9 @@ makedocs(;
         prettyurls=get(ENV, "CI", "false") == "true",
         canonical="https://pablosanjose.github.io/Quantica.jl",
         assets=["assets/custom.css"],
+        size_threshold_ignore = [
+            "api.md"
+        ]
     ),
     pages=[
         "Home" => "index.md",
