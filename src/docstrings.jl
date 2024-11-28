@@ -716,7 +716,7 @@ julia> h[sites(1), sites(2)]
  1.0+0.0im  0.0+0.0im
 
 julia> ph = h |> @hopping!((t; p = 3) -> p*t); ph[region = RP.square(1)]
-4×4 OrbitalSliceMatrix{ComplexF64,SparseArrays.SparseMatrixCSC{ComplexF64, Int64}}:
+4×4 OrbitalSliceMatrix{ComplexF64,SparseMatrixCSC}:
  0.0+0.0im  0.0+0.0im  0.0+0.0im  3.0+0.0im
  0.0+0.0im  0.0+0.0im  3.0+0.0im  0.0+0.0im
  0.0+0.0im  3.0+0.0im  0.0+0.0im  0.0+0.0im
@@ -1684,7 +1684,7 @@ julia> gω[ss] == gs(0.1; t = 2)
 true
 
 julia> summary(gω[ss])
-"14×14 OrbitalSliceMatrix{ComplexF64,Matrix{ComplexF64}}"
+"14×14 OrbitalSliceMatrix{ComplexF64,Array}"
 ```
 
 # See also
@@ -2086,7 +2086,7 @@ The `quadgk_opts` are extra keyword arguments (other than `atol`) to pass on to 
 
 Currently, the following GreenSolvers implement dedicated densitymatrix algorithms:
 
-- `GS.Schur`: based on numerical integration over Bloch phase. Boundaries are not currently supported. No `opts`.
+- `GS.Schur`: based on numerical integration over Bloch phase. Boundaries and non-empty contacts are not currently supported. Assumes Hermitian Hamiltonian. No `opts`.
 - `GS.Spectrum`: based on summation occupation-weigthed eigenvectors. No `opts`.
 - `GS.KPM`: based on the Chebyshev expansion of the Fermi function. Currently only works for zero temperature and only supports `nothing` contacts (see `attach`). No `opts`.
 
@@ -2302,7 +2302,7 @@ used e.g. to index another `OrbitalSliceArray` or to inspect the indices of each
 julia> g = HP.graphene(orbitals = 2) |> supercell((1,-1)) |> greenfunction;
 
 julia> d = ldos(g[cells = SA[0]])(2); summary(d)
-"8-element OrbitalSliceVector{Float64,Vector{Float64}}"
+"8-element OrbitalSliceVector{Float64,Array}"
 
 julia> a = only(orbaxes(d))
 OrbitalSliceGrouped{Float64,2,1} : collection of subcells of orbitals (grouped by sites) for a 1D lattice in 2D space
@@ -2464,6 +2464,10 @@ where `h = Quantica.parent_hamiltonian(as)` is the `AbstractHamiltonian` used to
 Return an `Array` of the same eltype as `m` that contains all the stored matrix elements of
 `m`. See `deserialize` for the inverse operation.
 
+    serialize(T::Type, m::OrbitalSliceArray)
+
+Reinterpret `serialize(m)` as a collection with eltype `T`
+
 ## See also
     `serializer`, `serialize!`, `deserialize`, `deserialize!`
 
@@ -2492,7 +2496,8 @@ serialize(s)` restored (i.e. overwritten). See `serialize` for details.
 
 Reconstruct an `OrbitalSliceArray` with the same structure as `m` but with the matrix
 elements enconded in `v`. This `v` is typically the result of a `serialize` call to a
-another similar `m`, but the only requirement is that is has the correct size.
+another similar `m`, but the only requirement is that is has the correct size. If `v` has
+the wrong eltype, it will be reintepreted to match the eltype of `m`.
 
 ## See also
     `serializer`, `serialize`, `serialize!`, `deserialize!`
@@ -2606,10 +2611,10 @@ decay_lengths
 """
     meanfield(g::GreenFunction, args...; kw...)
 
-Build a `M::MeanField` object that can be used to compute the Hartree-Fock mean field `Φ`
-between selected sites interacting through a given charge-charge potential. The density
-matrix used to build the mean field is obtained with `densitymatrix(g[pair_selection],
-args...; kw...)`, see `densitymatrix` for details.
+Build a `M::MeanField` object that can be used to compute the Hartree-Fock-Bogoliubov mean
+field `Φ` between selected sites interacting through a given charge-charge potential. The
+density matrix used to build the mean field is obtained with
+`densitymatrix(g[pair_selection], args...; kw...)`, see `densitymatrix` for details.
 
 The mean field between site `i` and `j` is defined as `Φᵢⱼ = δᵢⱼ hartreeᵢ + fockᵢⱼ`, where
 
@@ -2623,12 +2628,13 @@ where `U` is the onsite interaction.
 
 ## Keywords
 
-- `potential`: charge-charge potential to use for both Hartree and Fock. Can be a number or a function of position. Default: `1
+- `potential`: charge-charge potential to use for both Hartree and Fock. Can be a number or a function of position. Default: `1`
 - `hartree`: charge-charge potential `v_H` for the Hartree mean field. Can be a number or a function of position. Overrides `potential`. Default: `potential`
 - `fock`: charge-charge potential `v_F` for the Fock mean field. Can be a number, a function of position or `nothing`. In the latter case all Fock terms (even onsite) will be dropped. Default: `hartree`
 - `onsite`: charge-charge onsite potential. Overrides both Hartree and Fock potentials for onsite interactions. Default: `hartree(0)`
 - `charge`: a number (in single-orbital systems) or a matrix (in multi-orbital systems) representing the charge operator on each site. Default: `I`
 - `nambu::Bool`: specifies whether the model is defined in Nambu space. In such case, `charge` should also be in Nambu space, typically `SA[1 0; 0 -1]` or similar. Default: `false`
+- `namburotation::Bool`: if `nambu == true` and spinful systems, specifies whether the spinor basis is `[c↑, c↓, c↓⁺, -c↑⁺]` (`namburotation = true`) or `[c↑, c↓, c↑⁺, c↓⁺]` (`namburotation = false`). Default: `false`
 - `selector::NamedTuple`: a collection of `hopselector` directives that defines the pairs of sites (`pair_selection` above) that interact through the charge-charge potential. Default: `(; range = 0)` (i.e. onsite)
 
 Any additional keywords `kw` are passed to the `densitymatrix` function used to compute the
@@ -2638,8 +2644,11 @@ mean field, see above
 
     M(µ = 0, kBT = 0; params...)    # where M::MeanField
 
-Build an `Φ::OrbitalSliceMatrix` that can be indexed at different sites or pairs of sites,
-e.g. `ϕ[sites(2:3), sites(1)]`, see `OrbitalSliceArray` for details.
+Build an `Φ::CompressedOrbitalMatrix`, which is a special form of `OrbitalSliceMatrix` that
+can be indexed at pairs of individual sites, e.g. `ϕ[sites(2), sites(1)]` to return an
+`SMatrix`. This type of matrix is less flexible than `OrbitalSliceMatrix` but is fully
+static, and can encode symmetries. Its features are implementation details and are bound to
+change. The returned `Φ` is just meant to be used in non-spatial models, see Examples below.
 
 # Examples
 
@@ -2649,33 +2658,34 @@ julia> model = hopping(I) - @onsite((i; phi = zerofield) --> phi[i]);  # see zer
 julia> g = LP.honeycomb() |> hamiltonian(model, orbitals = 2) |> supercell((1,-1)) |> greenfunction;
 
 julia> M = meanfield(g; selector = (; range = 1), charge = I, potential = 0.05)
-MeanField{SMatrix{2, 2, ComplexF64, 4}} : builder of Hartree-Fock mean fields
+MeanField{SMatrix{2, 2, ComplexF64, 4}} : builder of Hartree-Fock-Bogoliubov mean fields
   Charge type      : 2 × 2 blocks (ComplexF64)
   Hartree pairs    : 14
   Mean field pairs : 28
+  Nambu            : false
 
 julia> phi0 = M(0.2, 0.3);
 
 julia> phi0[sites(1), sites(2)] |> Quantica.chopsmall
-2×2 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 2 stored entries:
- 0.00109527+0.0im             ⋅
-            ⋅      0.00109527+0.0im
+2×2 SMatrix{2, 2, ComplexF64, 4} with indices SOneTo(2)×SOneTo(2):
+ 0.00109527+0.0im         0.0+0.0im
+        0.0+0.0im  0.00109527+0.0im
 
 julia> phi0[sites(1)] |> Quantica.chopsmall
-2×2 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 2 stored entries:
- 0.296672+0.0im           ⋅
-          ⋅      0.296672+0.0im
+2×2 SMatrix{2, 2, ComplexF64, 4} with indices SOneTo(2)×SOneTo(2):
+ 0.296672+0.0im       0.0+0.0im
+      0.0+0.0im  0.296672+0.0im
 
 julia> phi1 = M(0.2, 0.3; phi = phi0);
 
 julia> phi1[sites(1), sites(2)] |> Quantica.chopsmall
-2×2 SparseArrays.SparseMatrixCSC{ComplexF64, Int64} with 2 stored entries:
- 0.00307712+0.0im             ⋅
-            ⋅      0.00307712+0.0im
+2×2 SMatrix{2, 2, ComplexF64, 4} with indices SOneTo(2)×SOneTo(2):
+ 0.00307712+0.0im         0.0+0.0im
+        0.0+0.0im  0.00307712+0.0im
 ```
 
 # See also
-    `zerofield`, `densitymatrix`, `OrbitalSliceMatrix`
+    `zerofield`, `densitymatrix`
 """
 meanfield
 

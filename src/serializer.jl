@@ -128,22 +128,27 @@ end
 
 
 ############################################################################################
-# serialize and deserialize for OrbitalSliceArray
+# serialize and deserialize for AbstractOrbitalArray
 #   extract underlying data and reconstruct an object using such data
 #region
 
-serialize(a::OrbitalSliceArray) = serialize_array(parent(a))
+serialize(a::AbstractOrbitalArray) = serialize_array(parent(a))
 serialize(a::AbstractArray) = serialize_array(a)
+serialize(::Type{T}, a::AbstractArray) where {T} = reinterpret(T, serialize(a))
 
 serialize_array(a::Array) = a
 serialize_array(a::Diagonal{<:Any,<:Vector}) = a.diag
 serialize_array(a::SparseMatrixCSC) = nonzeros(a)
 
-deserialize(a, v) = (check_serializer_size(a, v); _deserialize(a, v))
+deserialize(a::AbstractArray{T}, v::AbstractArray) where {T} =
+    deserialize(a, reinterpret(T, v))
+deserialize(a::AbstractArray{T}, v::AbstractArray{T}) where {T} =
+    (check_serializer_size(a, v); unsafe_deserialize(a, v))
 
-_deserialize(a::OrbitalSliceArray, v::AbstractArray) =
-    OrbitalSliceArray(deserialize_array(parent(a), v), orbaxes(a))
-_deserialize(a::AbstractArray, v::AbstractArray) = deserialize_array(a, v)
+unsafe_deserialize(a::AbstractOrbitalArray, v::AbstractArray) =
+    similar(a, deserialize_array(parent(a), v), orbaxes(a))
+unsafe_deserialize(a::AbstractArray, v::AbstractArray) =
+    deserialize_array(a, v)
 
 deserialize_array(::AbstractArray{<:Any,N}, v::AbstractArray{<:Any,N}) where {N} = v
 deserialize_array(::Diagonal, v::AbstractVector) =

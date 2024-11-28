@@ -83,8 +83,8 @@ function nearest_cell_harmonics(h)
     is_nearest ||
         argerror("Too many or too few harmonics. Perhaps try `supercell` to ensure strictly nearest-cell harmonics.")
     hm, h0, hp = h[hybrid(-1)], h[hybrid(0)], h[hybrid(1)]
-    flat(hm) == flat(hp)' ||
-        argerror("The Hamiltonian should have h[1] == h[-1]' to use the Schur solver")
+    flat(hm) ≈ flat(hp)' ||
+        argerror("The Hamiltonian should have h[1] ≈ h[-1]' to use the Schur solver")
     return hm, h0, hp
 end
 
@@ -689,6 +689,7 @@ end
 
 # use computed Fermi points to integrate spectral function by segments
 # returns an AbstractMatrix
+# we don't use Integrator, because that is meant for integrals over energy, not momentum
 function (s::DensityMatrixSchurSolver)(µ, kBT; params...)
     g = parent(s.gs)
     λs = propagating_eigvals(g, µ + 0im, 1e-2; params...)
@@ -696,7 +697,7 @@ function (s::DensityMatrixSchurSolver)(µ, kBT; params...)
     xs = sort!(ϕs ./ (2π))
     pushfirst!(xs, -0.5)
     push!(xs, 0.5)
-    xs = unique!(xs)
+    xs = [mean(view(xs, rng)) for rng in approxruns(xs)]  # elliminate approximate duplicates
     result = call!_output(s.gs)
     integrand!(x) = fermi_h!(result, s, 2π * x, µ, inv(kBT); params...)
     fx! = (y, x) -> (y .= integrand!(x))
@@ -709,7 +710,7 @@ function fermi_h!(result, s, ϕ, µ, β = 0; params...)
     bs = blockstructure(h)
     # Similar to spectrum(h, ϕ; params...), but less work (no sort! or sanitization)
     copy!(s.hmat, call!(h, ϕ; params...))  # sparse to dense
-    ϵs, psis = eigen!(s.hmat)
+    ϵs, psis = eigen!(Hermitian(s.hmat))
     # special-casing β = Inf with views turns out to be slower
     fs = (@. ϵs = fermi(ϵs - µ, β))
     fpsis = (s.psis .= psis .* transpose(fs))

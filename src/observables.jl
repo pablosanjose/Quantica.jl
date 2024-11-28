@@ -163,7 +163,7 @@ function call!(I::Integrator; params...)
     end
     result, err = quadgk!(fx!, serialize(I.result), I.points...; I.quadgk_opts...)
     # note: post-processing is not element-wise & can be in-place
-    result´ = deserialize(I.result, I.post(result))
+    result´ = unsafe_deserialize(I.result, I.post(result))
     return result´
 end
 
