@@ -14,9 +14,8 @@ function testgreen(h, s; kw...)
     z = zero(SVector{L,Int})
     o = Quantica.unitvector(1, SVector{L,Int})
     conts = ntuple(identity, ncontacts(h))
-    locs = (sites(z, :), sites(z, 2), sites(1:2), sites(o, (1,2)),
-            CellOrbitals(o, 1), CellOrbitals(z, 1:2), CellOrbitals(z, SA[2,1]),
-            conts...)
+    locs = (sites(z, :), sites(z, 2), sites(1:2), sites(o, (1,2)), (; cells = z),
+        CellOrbitals(o, 1), CellOrbitals(z, :), CellOrbitals(z, SA[1,2]), conts...)
     for loc in locs, loc´ in locs
         gs = g[loc, loc´]
         @test gs isa GreenSlice
@@ -333,8 +332,8 @@ end
     g3 = LP.triangular() |> hamiltonian(hopping(-I) + onsite(1.8I), orbitals = 2) |> supercell(10) |> supercell |>
         attach(nothing, region = RP.circle(2)) |> attach(nothing, region = RP.circle(2, SA[1,2])) |> greenfunction(GS.KPM(bandrange=(-4,5)))
     # KPM doesn't support finite temperatures or generic indexing yet, so g3 excluded from this loop
-    for g in (g1, g2), inds in (diagonal(1), diagonal(:), sitepairs(range = 1))
-        ρ0 = densitymatrix(g[inds], 5)
+    for g in (g1, g2), inds in (diagonal(1), diagonal(:), sitepairs(range = 1)), path in (5, Paths.radial(1,π/6), Paths.sawtooth(5))
+        ρ0 = densitymatrix(g[inds], path)
         ρ = densitymatrix(g[inds])
         @test isapprox(ρ0(), ρ(); atol = 1e-7)
         @test isapprox(ρ0(0.2), ρ(0.2); atol = 1e-7)
@@ -403,38 +402,38 @@ function testcond(g0; nambu = false)
 end
 
 function testjosephson(g0)
-    J1 = josephson(g0[1], 4; phases = subdiv(0, pi, 10))
-    J2 = josephson(g0[2], 4; phases = subdiv(0, pi, 10))
-    J3 = josephson(g0[1], (-4, 0); phases = subdiv(0, pi, 10))
-    J4 = josephson(g0[1], range(-4, 0, 3); phases = subdiv(0, pi, 10))
-    J5 = josephson(g0[1], (-4,-2+3im,0) .+ sqrt(eps(Float64))*im; phases = subdiv(0, pi, 10))
+    J1 = josephson(g0[1], 1; phases = subdiv(0, pi, 10))
+    J2 = josephson(g0[2], 1; phases = subdiv(0, pi, 10))
+    J3 = josephson(g0[1], (-5, 0); phases = subdiv(0, pi, 10))
+    J4 = josephson(g0[1], Paths.sawtooth(range(-5, 0, 3)); phases = subdiv(0, pi, 10))
+    p5(µ, T) = ifelse(iszero(T),(-5,-2+3im,0),(-5,-2+3im,0,2+3im,5)) .+ sqrt(eps(Float64))*im
+    J5 = josephson(g0[1], Paths.polygon(p5); phases = subdiv(0, pi, 10))
     j1 = J1()
     @test all(>=(0), Quantica.chopsmall.(j1))
-    @test all(((j1, j2) -> ≈(j1, j2, atol = 0.000001)).(j1, J2()))
-    @test all(((j1, j2) -> ≈(j1, j2, atol = 0.000001)).(j1, J3()))
-    @test all(((j1, j2) -> ≈(j1, j2, atol = 0.000001)).(j1, J4()))
-    @test all(((j1, j2) -> ≈(j1, j2, atol = 0.000001)).(j1, J5()))
-    # path override
-    j5 = J5(0.2)
-    j5´ = J5(0.2, (-4,-2+0.1im,0) .+ sqrt(eps(Float64))*im)
-    @test j5 != j5´ && j5 ≈ j5´
+    @test all(((j1, j2) -> ≈(j1, j2, atol = 1e-6)).(j1, J2()))
+    @test all(((j1, j2) -> ≈(j1, j2, atol = 1e-6)).(j1, J3()))
+    @test all(((j1, j2) -> ≈(j1, j2, atol = 1e-6)).(j1, J4()))
+    @test all(((j1, j2) -> ≈(j1, j2, atol = 1e-6)).(j1, J5()))
+    @test all(((j1, j2) -> ≈(j1, j2, atol = 1e-6)).(J1(0.1), J5(0.1)))
+
     j = Quantica.integrand(J1)
-    @test Quantica.call!(j, 0.2+0.3im) isa Vector
-    @test typeof.(Quantica.path.((J1, J2, J3, J4, J5))) ==
-        (Vector{ComplexF64}, Vector{ComplexF64}, NTuple{3, ComplexF64}, Vector{ComplexF64}, NTuple{3, ComplexF64})
+    @test Quantica.call!(j, 0.2) isa Vector
+    # static length of integration points (required for QuadGK.quadgk type-stability)
+    @test typeof.(Quantica.points.((J1, J2, J3, J4, J5))) ==
+        (Vector{ComplexF64}, Vector{ComplexF64}, Vector{ComplexF64}, Vector{ComplexF64}, Tuple{ComplexF64, ComplexF64, ComplexF64})
     # integration path logic
-    J = josephson(g0[1], (-4, -1))
+    J = josephson(g0[1], Paths.sawtooth(-4, -1))
     @test J() <= eps(Float64)
-    p1, p2 = Quantica.path(J, 0), Quantica.path(J, 0.2)
-    @test p1 isa NTuple{3,ComplexF64}    # tuple sawtooth
-    @test p2 isa Vector{ComplexF64} && length(p2) == 5
-    J = josephson(g0[1], (-4, 0); phases = subdiv(0, pi, 10))
-    p1, p2 = Quantica.path(J, 0), Quantica.path(J, 0.2)
-    @test p1 isa NTuple{3,ComplexF64}    # tuple sawtooth
-    @test p2 isa NTuple{3,ComplexF64}
+    p1, p2 = Quantica.points(J, 0), Quantica.points(J, 0.2)
+    @test p1 isa Vector{ComplexF64} && length(p1) == 3    # tuple sawtooth
+    @test p2 isa Vector{ComplexF64} && length(p2) == 3
+    J = josephson(g0[1], Paths.sawtooth(-4, 0); phases = subdiv(0, pi, 10))
+    p1, p2 = Quantica.points(J, 0), Quantica.points(J, 0.2)
+    @test p1 isa Vector{ComplexF64} && length(p1) == 3    # tuple sawtooth
+    @test p2 isa Vector{ComplexF64} && length(p2) == 3
     @test all(p2 .≈ p1)
-    J = josephson(g0[1], (-4, 1); phases = subdiv(0, pi, 10))
-    p1, p2 = Quantica.path(J, 0), Quantica.path(J, 0.2)
+    J = josephson(g0[1], Paths.sawtooth(-4, 1); phases = subdiv(0, pi, 10))
+    p1, p2 = Quantica.points(J, 0), Quantica.points(J, 0.2)
     @test p1 isa Vector{ComplexF64} && length(p1) == 3 && maximum(real(p1)) == 0
     @test p2 isa Vector{ComplexF64} && length(p2) == 5 && maximum(real(p2)) == 1
 end
@@ -448,8 +447,9 @@ end
     @test size(J1(0.2)) == size(J2(0.2)) == (3, 3)
     @test 2*J1(0.2; B = 0.1) ≈ J2(0.2; B = 0.1)
 
-    ρ = densitymatrix(g1[cells = SA[1]], 5)
-    @test Quantica.path(ρ) isa Vector{ComplexF64} && length(Quantica.path(ρ)) == 3
+    ρ = densitymatrix(g1[cells = SA[1]], Paths.sawtooth(5))
+    @test length(Quantica.points(ρ)) == 3
+    @test Quantica.points(ρ) isa Vector{ComplexF64}
     @test all(≈(0.5), diag(ρ(0, 0; B=0.3))) # half filling
     ρ = densitymatrix(g1[cells = SA[1]], 7)
     @test all(<(0.96), real(diag(ρ(4, 1; B=0.1)))) # thermal depletion
@@ -464,11 +464,17 @@ end
     @test ρ1() ≈ ρ2() atol = 0.00001
     @test ρ2() ≈ ρ3() atol = 0.00001
     gLU´ = h |> attach(nothing; reg...) |> greenfunction(GS.SparseLU());
-    ρ1´ = densitymatrix(gLU´[1], (-3, 3))
+    ρ1´ = densitymatrix(gLU´[1], Paths.sawtooth(-3, 3))
     @test ρ1() ≈ ρ1´()
     gSpectrum´ = h |> attach(nothing; reg...) |> greenfunction(GS.Spectrum());
     ρ2´ = densitymatrix(gSpectrum´[1])
     @test ρ2() ≈ ρ2´()
+
+    # parameter-dependent paths
+    g = LP.linear() |> supercell(3) |> hamiltonian(@onsite((; Δ = 0.1) -> SA[0 Δ; Δ 0]) + hopping(SA[1 0; 0 -1]), orbitals = 2) |> greenfunction
+    ρ = densitymatrix(g[sites(1:2), sites(1:2)], Paths.polygon((µ,kBT; Δ) -> (-5, -Δ+im, 0, Δ+im, 5)))
+    @test tr(ρ(; Δ = 0.2)) ≈ 2
+    @test all(Quantica.points(ρ; Δ = 0.3) .== (-5, -0.3 + 1.0im, 0, 0.3 + 1.0im, 5))
 
     ρ = densitymatrix(g2[(; cells = SA[0]), (; cells = SA[1])], 5)
     ρ0 = ρ(0, 0; B=0.3)
@@ -489,9 +495,9 @@ end
     g0 = LP.square() |> hamiltonian(hopping(1)) |> supercell(region = RP.square(10)) |> attach(glead, reverse = true; region = contact2) |> attach(glead; region = contact1) |> greenfunction;
     testcond(g0)
 
+    glead = LP.square() |> hamiltonian(hopping(I) + onsite(SA[0 1; 1 0]), orbitals = 2) |> supercell((1,0), region = r -> -1 <= r[2] <= 1) |> greenfunction(GS.Schur(boundary = 0));
     contact1 = r -> r[1] ≈ 5 && -1 <= r[2] <= 1
     contact2 = r -> r[1] ≈ -5 && -1 <= r[2] <= 1
-    glead = LP.square() |> hamiltonian(hopping(I) + onsite(SA[0 1; 1 0]), orbitals = 2) |> supercell((1,0), region = r -> -1 <= r[2] <= 1) |> greenfunction(GS.Schur(boundary = 0));
     g0 = LP.square() |> hamiltonian(hopping(I), orbitals = 2) |> supercell(region = RP.square(10)) |> attach(glead, reverse = true; region = contact2) |> attach(glead; region = contact1) |> greenfunction;
     testcond(g0; nambu = true)
     testjosephson(g0)
@@ -501,7 +507,7 @@ end
     g0 = LP.square() |> hamiltonian(hopping(I), orbitals = 2) |> supercell(region = RP.square(10)) |> attach(glead, reverse = true; region = contact2) |> attach(glead; region = contact1) |> greenfunction;
     J1 = josephson(g0[1], 4; phases = subdiv(0, pi, 10), omegamap = ω ->(; ω))
     J2 = josephson(g0[1], 4; phases = subdiv(0, pi, 10))
-    @test Quantica.integrand(J1)(-2 + 0.00001*im) != Quantica.integrand(J2)(-2 + 0.00001*im)
+    @test Quantica.integrand(J1)(-2) != Quantica.integrand(J2)(-2)
 
     # test fermi at zero temperature
     g = LP.linear() |> hopping(1) |> supercell(3) |> supercell |> greenfunction(GS.Spectrum())
@@ -509,7 +515,7 @@ end
 
     # test DensityMatrixSchurSolver
     g = LP.honeycomb() |> hamiltonian(hopping(I) + @onsite((; w=0) -> SA[w 1; 1 -w], sublats = :A), orbitals = (2,1)) |> supercell((1,-1), region = r->-2<r[2]<2) |> greenfunction(GS.Schur());
-    ρ0 = densitymatrix(g[cells = (SA[2],SA[4]), sublats = :A], (-4, 4))
+    ρ0 = densitymatrix(g[cells = (SA[2],SA[4]), sublats = :A], Paths.sawtooth(-4, 4))
     ρ = densitymatrix(g[cells = (SA[2],SA[4]), sublats = :A])
     ρ0sol = ρ(0.2, 0.3)
     ρsol = ρ(0.2, 0.3)
@@ -529,6 +535,23 @@ end
     ρsol = ρ()
     @test maximum(abs, ρ0sol - ρsol) < 1e-7
     @test typeof(ρ0sol) == typeof(ρsol)
+
+    # off-diagonal rho
+    is = (; region = r -> 0 <= r[1] <= 4)
+    js = (; region = r -> 2 <= r[1] <= 6)
+    ρ0 = densitymatrix(g[is, js])
+    ρ1 = densitymatrix(g[is, js], 4)
+    ρ2 = densitymatrix(g[is, js], Paths.sawtooth(4))
+    @test ρ0() ≈ ρ1() ≈ ρ2()
+    @test ρ0(0.1, 0.2) ≈ ρ1(0.1, 0.2) ≈ ρ2(0.1, 0.2)
+
+    is = (; region = r -> 0 <= r[1] <= 4)
+    js = sites(SA[1], 1:2)
+    ρ0 = densitymatrix(g[is, js])
+    ρ1 = densitymatrix(g[is, js], 4)
+    ρ2 = densitymatrix(g[is, js], Paths.sawtooth(4))
+    @test ρ0() ≈ ρ1() ≈ ρ2()
+    @test ρ0(0.1, 0.2) ≈ ρ1(0.1, 0.2) ≈ ρ2(0.1, 0.2)
 end
 
 @testset "greenfunction aliasing" begin
@@ -581,7 +604,7 @@ end
     ρ12 = m.rho(0.2, 0.3)[sites(1), sites(2)]
     @test Φ[sites(1), sites(2)] ≈ -1.5 * Q * ρ12 * Q
 
-    # nambu
+    # spinless nambu
     oh = LP.linear() |> hamiltonian(hopping((r, dr) -> SA[1 sign(dr[1]); -sign(dr[1]) -1]) - onsite(SA[1 0; 0 -1]), orbitals = 2)
     g = oh |> greenfunction
     Q = SA[1 0; 0 -1]
@@ -589,6 +612,32 @@ end
     @test_throws ArgumentError m(0.2, 0.3)  # µ cannot be nonzero
     Φ = m(0, 0.3)
     ρ11 = m.rho(0, 0.3)[sites(1), sites(1)] - SA[0 0; 0 1]
+    fock = -1.5 * Q * ρ11 * Q
+    hartree = 0.5*Q*(tr(Q*ρ11)*(1+1/2+1/2))
+    @test Φ[sites(1), sites(1)] ≈ hartree + fock
+
+    # spinful nambu - unrotated
+    σzτz = SA[1 0 0 0; 0 1 0 0; 0 0 -1 0; 0 0 0 -1]
+    σyτy = SA[0 0 0 -1; 0 0 1 0; 0 1 0 0; -1 0 0 0]
+    oh = LP.linear() |> hamiltonian(hopping(σzτz) - onsite(0.1 * σyτy), orbitals = 4)
+    g = oh |> greenfunction
+    Q = σzτz
+    m = meanfield(g; selector = (; range = 1), nambu = true, namburotation = false, hartree = r -> 1/(1+norm(r)), fock = 1.5, charge = Q)
+    Φ = m(0, 0.3)
+    ρ11 = m.rho(0, 0.3)[sites(1), sites(1)] - SA[0 0 0 0; 0 0 0 0; 0 0 1 0; 0 0 0 1]
+    fock = -1.5 * Q * ρ11 * Q
+    hartree = 0.5*Q*(tr(Q*ρ11)*(1+1/2+1/2))
+    @test Φ[sites(1), sites(1)] ≈ hartree + fock
+
+    # spinful nambu - rotated
+    σzτz = SA[1 0 0 0; 0 1 0 0; 0 0 -1 0; 0 0 0 -1]
+    σ0τx = SA[0 0 1 0; 0 0 0 1; 1 0 0 0; 0 1 0 0]
+    oh = LP.linear() |> hamiltonian(hopping(σzτz) - onsite(0.1 * σ0τx), orbitals = 4)
+    g = oh |> greenfunction
+    Q = σzτz
+    m = meanfield(g; selector = (; range = 1), nambu = true, namburotation = true, hartree = r -> 1/(1+norm(r)), fock = 1.5, charge = Q)
+    Φ = m(0, 0.3)
+    ρ11 = m.rho(0, 0.3)[sites(1), sites(1)] - SA[0 0 0 0; 0 0 0 0; 0 0 1 0; 0 0 0 1]
     fock = -1.5 * Q * ρ11 * Q
     hartree = 0.5*Q*(tr(Q*ρ11)*(1+1/2+1/2))
     @test Φ[sites(1), sites(1)] ≈ hartree + fock

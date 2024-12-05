@@ -101,6 +101,8 @@ end
 Base.view(s::SparseLUGreenSlicer, ::Colon, ::Colon) =
     compute_or_retrieve_green(s, s.unitcindsall, s.unitcindsall, s.source64, s.sourceC)
 
+# Here it is assumed that CellOrbitals has explicit orbindices (i.e. not Colon)
+# This is enforced by indexing in greenfunction.jl
 function Base.view(s::SparseLUGreenSlicer{C}, i::CellOrbitals, j::CellOrbitals) where {C}
     # we only preallocate if we actually need to call ldiv! below (empty unitg cache)
     must_call_ldiv! = !isdefined(s, :unitg)

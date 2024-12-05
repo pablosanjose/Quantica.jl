@@ -883,12 +883,14 @@ minimal_callsafe_copy(s::BandsGreenSlicer, parentham, parentcontacts) = s  # it 
 
 ############################################################################################
 # getindex_diag: optimized cell indexing for BandsGreenSlicer, used by diagonal indexing
+#   no need to compute full ψ * ψ' if only diagonal is needed
 #region
 
 # triggers fast codepath above
-getindex_diag(gω::GreenSolution{T,<:Any,<:Any,G}, o::CellOrbitalsGrouped) where {T,G<:BandsGreenSlicer{<:Any,Missing}} =
-    inf_band_slice(slicer(gω), SparseIndices(o, Missing), SparseIndices(o, Missing))
+getindex_diag(gω::GreenSolution{T,<:Any,<:Any,G}, o::CellOrbitalsGrouped, symmetrize) where {T,G<:BandsGreenSlicer{<:Any,Missing}} =
+    maybe_symmetrized_matrix(
+        inf_band_slice(slicer(gω), SparseIndices(o, Missing), SparseIndices(o, Missing)),
+        symmetrize)
 
 #endregion
-
 #endregion

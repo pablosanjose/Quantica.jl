@@ -28,7 +28,7 @@ export sublat, bravais_matrix, lattice, sites, supercell, hamiltonian,
        plusadjoint, neighbors, siteselector, hopselector, diagonal, sitepairs,
        unflat, torus, transform, translate, combine,
        spectrum, energies, states, bands, subdiv,
-       greenfunction, selfenergy, attach,
+       greenfunction, selfenergy, attach, Paths,
        plotlattice, plotlattice!, plotbands, plotbands!, qplot, qplot!, qplotdefaults,
        conductance, josephson, ldos, current, transmission, densitymatrix,
        OrbitalSliceArray, OrbitalSliceVector, OrbitalSliceMatrix, orbaxes, siteindexdict,
@@ -63,6 +63,7 @@ include("transform.jl")
 include("mesh.jl")
 include("bands.jl")
 include("greenfunction.jl")
+include("integrator.jl")
 include("observables.jl")
 include("meanfield.jl")
 # Plumbing

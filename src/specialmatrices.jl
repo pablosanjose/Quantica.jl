@@ -663,13 +663,14 @@ Broadcast.broadcast_unalias(dest::AbstractOrbitalArray, src::AbstractOrbitalArra
 #   the product. x is a scalar. Inspired by LowRankMatrices.jl
 #region
 
-struct EigenProduct{T,M<:AbstractMatrix{Complex{T}},O<:OrbitalBlockStructure} <: AbstractMatrix{T}
+# U and V may be SubArrays with different index type, so we need MU and MV
+struct EigenProduct{T,MU<:AbstractMatrix{Complex{T}},MV<:AbstractMatrix{Complex{T}},O<:OrbitalBlockStructure} <: AbstractMatrix{T}
     blockstruct::O
-    U::M
-    V::M
+    U::MU
+    V::MV
     phi::T
     x::Complex{T}
-    function EigenProduct{T,M,O}(blockstruct::O, U::M, V::M, phi::T, x::Complex{T}) where {T,M<:AbstractMatrix{Complex{T}},O<:OrbitalBlockStructure}
+    function EigenProduct{T,MU,MV,O}(blockstruct::O, U::MU, V::MV, phi::T, x::Complex{T}) where {T,MU<:AbstractMatrix{Complex{T}},MV<:AbstractMatrix{Complex{T}},O<:OrbitalBlockStructure}
         axes(U, 2) != axes(V, 2) && argerror("U and V must have identical column axis")
         return new(blockstruct, U, V, phi, x)
     end
@@ -677,8 +678,8 @@ end
 
 #region ## Constructors ##
 
-EigenProduct(blockstruct::O, U::M, V::M, phi = zero(T), x = one(Complex{T})) where {T,M<:AbstractMatrix{Complex{T}},O<:OrbitalBlockStructure} =
-    EigenProduct{T,M,O}(blockstruct, U, V, T(phi), Complex{T}(x))
+EigenProduct(blockstruct::O, U::MU, V::MV, phi = zero(T), x = one(Complex{T})) where {T,MU<:AbstractMatrix{Complex{T}},MV<:AbstractMatrix{Complex{T}},O<:OrbitalBlockStructure} =
+    EigenProduct{T,MU,MV,O}(blockstruct, U, V, T(phi), Complex{T}(x))
 
 #endregion
 
@@ -726,4 +727,82 @@ Base.:*(P::EigenProduct, x::Number) = x*P
 LinearAlgebra.tr(P::EigenProduct) = sum(xy -> first(xy) * conj(last(xy)), zip(P.U, P.V)) * P.x
 
 #endregion
+
+
+############################################################################################
+## SymmetrizedMatrix
+#   Given A::AbstractMatrix and sym::Number, build sym*A + (sym*A)' lazily
+#region
+
+struct SymmetrizedMatrix{T,M<:AbstractMatrix{T}} <: AbstractMatrix{T}
+    mat::M
+    sym::T
+    function SymmetrizedMatrix{T,M}(mat::AbstractMatrix{T}, sym::T) where {T,M}
+        is_square(mat) || argerror("Cannot symmetrized non-square matrix")
+        return new(mat, sym)
+    end
+end
+
+SymmetrizedMatrix(mat::M, sym::Number) where {T,M<:AbstractMatrix{T}} =
+    SymmetrizedMatrix{T,M}(mat, T(sym))
+
+# Minimal AbstractArray interface
+Base.size(a::SymmetrizedMatrix) = size(a.mat)
+Base.IndexStyle(::Type{<:SymmetrizedMatrix}) = IndexCartesian()
+Base.@propagate_inbounds Base.getindex(a::SymmetrizedMatrix, i::Int, j::Int) =
+    a.sym*getindex(a.mat, i, j) + conj(a.sym * getindex(a.mat, j, i))
+
+#endregion
+
+############################################################################################
+## symmetrization functions - see greenfunction.jl
+#   If symmetrize == sym::Number, we do output .= post(sym*gij + conj(sym)*gji').
+#   Otherwise just output .= post(gij)
+#region
+
+function maybe_symmetrize!(out, gij, ::Missing; post = identity)
+    out .= post.(gij)
+    return out
+end
+
+function maybe_symmetrize!(out, (gij, gji´), sym::Number; post = identity)
+    out .= post.(sym .* gij .+ conj(sym) .* gji´)
+    return out
+end
+
+# see specialmatrices.jl
+maybe_symmetrized_matrix(mat::AbstractArray, ::Missing) = mat
+maybe_symmetrized_matrix(mat::AbstractArray, sym::Number) = SymmetrizedMatrix(mat, sym)
+
+maybe_symmetrized_view!(output, g, i, j, ::Missing; kw...) =
+    (maybe_symmetrize!(parent(output), view(g, i, j), missing; kw...); output)
+
+maybe_symmetrized_view!(output, g, i, j, sym, ; kw...) =
+    (maybe_symmetrize!(parent(output), (view(g, i, j), view(g, j, i)'), sym; kw...); output)
+
+maybe_symmetrized_getindex!(output, g, i, j, ::Missing; kw...) =
+    maybe_symmetrize!(output, g[i, j], missing; kw...)
+
+function maybe_symmetrized_getindex!(output, g, i, j, sym; kw...)
+    gij = g[i, j]
+    gji´ = i == j ? gij' : g[j, i]'
+    return maybe_symmetrize!(output, (gij, gji´), sym; kw...)
+end
+
+maybe_symmetrized_getindex(g, i, j, ::Missing; post = identity) = post.(g[i, j])
+
+function maybe_symmetrized_getindex(g, i, j, sym; kw...)
+    gij = g[i, j]   # careful, this could be non-mutable
+    if i == j
+        gij = maybe_symmetrize!(gij, (gij, copy(gij')), sym; kw...)
+    else
+        gij = maybe_symmetrize!(gij, (gij, g[j, i]'), sym; kw...)
+    end
+    return gij
+end
+
+# in case gij above is non-mutable
+maybe_symmetrize!(::StaticArray, (gij, gji´), sym::Number; post = identity) =
+    post.(sym * gij + conj(sym) * gji´)
+
 #endregion
