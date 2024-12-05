@@ -76,3 +76,4 @@ include("green/spectrum.jl")
 include("green/schur.jl")
 include("green/kpm.jl")
 include("green/bands.jl")
+include("green/internal.jl")    # solvers for internal use only

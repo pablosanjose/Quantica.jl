@@ -359,6 +359,11 @@ sites_to_orbs(c::SparseIndices{<:Any,<:Hamiltonian}, _) = c
 # unused
 # sites_to_orbs_nogroups(cs::CellOrbitals, _) =  cs
 
+## CellOrbitals{L,Colon} -> CellOrbitals with explicit index range
+
+sites_to_orbs(cs::CellOrbitals{<:Any,Colon}, g) =
+    sites_to_orbs_nogroups(sites(cell(cs), :), g)
+
 ## DiagIndices -> DiagIndices
 
 function sites_to_orbs(d::DiagIndices, g)
@@ -403,14 +408,13 @@ end
 
 ## convert CellSites -> CellOrbitalsGrouped
 
-sites_to_orbs(c::CellSites, g, ker...) =
-    sites_to_orbs(sanitize_cellindices(c, g), blockstructure(g), ker...)
+sites_to_orbs(c::CellSites, g) =
+    sites_to_orbs(sanitize_cellindices(c, g), blockstructure(g))
 
-function sites_to_orbs(cs::CellSites, os::OrbitalBlockStructure, ker...)
-    os´ = maybe_scalarize(os, ker...)
+function sites_to_orbs(cs::CellSites, os::OrbitalBlockStructure)
     sites = siteindices(cs)
-    groups = _groups(sites, os´) # sites, orbranges
-    orbinds = _orbinds(sites, groups, os´)
+    groups = _groups(sites, os) # sites, orbranges
+    orbinds = _orbinds(sites, groups, os)
     return CellOrbitalsGrouped(cell(cs), orbinds, Dictionary(groups...))
 end
 

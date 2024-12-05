@@ -38,16 +38,16 @@ Note that `d[sites...]` produces a vector with the LDOS at sites defined by `sit
 We can also compute the convolution of the density of states with the Fermi distribution `f(ω)=1/(exp((ω-μ)/kBT) + 1)`, which yields the density matrix in thermal equilibrium, at a given temperature `kBT` and chemical potential `μ`. This is computed with `ρ = densitymatrix(gs, (ωmin, ωmax))`. Here `gs = g[sites...]` is a `GreenSlice`, and `(ωmin, ωmax)` are integration bounds (they should span the full bandwidth of the system). Then, `ρ(µ, kBT = 0; params...)` will yield a matrix over the selected `sites` for a set of model `params`.
 ```julia
 julia> ρ = densitymatrix(g[region = RP.circle(1)], (-0.1, 8.1))
-DensityMatrix: density matrix on specified sites using solver of type DensityMatrixIntegratorSolver
+DensityMatrix{DensityMatrixIntegratorSolver}: density matrix on specified sites
 
 julia> @time ρ(4)
-  6.150548 seconds (57.84 k allocations: 5.670 GiB, 1.12% gc time)
-5×5 OrbitalSliceMatrix{ComplexF64,Matrix{ComplexF64}}:
-          0.5+0.0im          -7.34893e-10-3.94035e-15im  0.204478+1.9366e-14im   -7.34889e-10-1.44892e-15im  -5.70089e-10+5.48867e-15im
- -7.34893e-10+3.94035e-15im           0.5+0.0im          0.200693-2.6646e-14im   -5.70089e-10-1.95251e-15im  -7.34891e-10-2.13804e-15im
-     0.204478-1.9366e-14im       0.200693+2.6646e-14im        0.5+0.0im              0.200693+3.55692e-14im      0.204779-4.27255e-14im
- -7.34889e-10+1.44892e-15im  -5.70089e-10+1.95251e-15im  0.200693-3.55692e-14im           0.5+0.0im          -7.34885e-10-3.49861e-15im
- -5.70089e-10-5.48867e-15im  -7.34891e-10+2.13804e-15im  0.204779+4.27255e-14im  -7.34885e-10+3.49861e-15im           0.5+0.0im
+  4.594645 seconds (111.82 k allocations: 4.890 GiB, 2.81% gc time, 0.86% compilation time)
+5×5 OrbitalSliceMatrix{ComplexF64,Array}:
+          0.5+0.0im          -7.35075e-10+3.40256e-15im  0.204478+4.46023e-14im  -7.35077e-10-1.13342e-15im  -5.70426e-10-2.22213e-15im
+ -7.35075e-10-3.40256e-15im           0.5+0.0im          0.200693-4.46528e-14im  -5.70431e-10+3.53853e-15im  -7.35092e-10-4.07992e-16im
+     0.204478-4.46023e-14im      0.200693+4.46528e-14im       0.5+0.0im              0.200693+6.7793e-14im       0.204779-6.78156e-14im
+ -7.35077e-10+1.13342e-15im  -5.70431e-10-3.53853e-15im  0.200693-6.7793e-14im            0.5+0.0im            -7.351e-10+2.04708e-15im
+ -5.70426e-10+2.22213e-15im  -7.35092e-10+4.07992e-16im  0.204779+6.78156e-14im    -7.351e-10-2.04708e-15im           0.5+0.0im
 ```
 
 Note that the diagonal is `0.5`, indicating half-filling.
@@ -55,39 +55,43 @@ Note that the diagonal is `0.5`, indicating half-filling.
 The default algorithm used here is slow, as it relies on numerical integration in the complex plane. Some GreenSolvers have more efficient implementations. If they exist, they can be accessed by omitting the `(ωmin, ωmax)` argument. For example, using `GS.Spectrum`:
 ```julia
 julia> @time g = h |> greenfunction(GS.Spectrum());
- 37.638522 seconds (105 allocations: 2.744 GiB, 0.79% gc time)
+ 18.249136 seconds (75 allocations: 1.567 GiB, 0.67% gc time)
 
 julia> ρ = densitymatrix(g[region = RP.circle(1)])
-DensityMatrix: density matrix on specified sites with solver of type DensityMatrixSpectrumSolver
+DensityMatrix{DensityMatrixSpectrumSolver}: density matrix on specified sites
 
-julia> @time ρ(4)
-  0.001659 seconds (9 allocations: 430.906 KiB)
-5×5 OrbitalSliceMatrix{ComplexF64,Matrix{ComplexF64}}:
-          0.5+0.0im  -2.21437e-15+0.0im  0.204478+0.0im   2.67668e-15+0.0im   3.49438e-16+0.0im
- -2.21437e-15+0.0im           0.5+0.0im  0.200693+0.0im  -1.40057e-15+0.0im  -2.92995e-15+0.0im
-     0.204478+0.0im      0.200693+0.0im       0.5+0.0im      0.200693+0.0im      0.204779+0.0im
-  2.67668e-15+0.0im  -1.40057e-15+0.0im  0.200693+0.0im           0.5+0.0im   1.81626e-15+0.0im
-  3.49438e-16+0.0im  -2.92995e-15+0.0im  0.204779+0.0im   1.81626e-15+0.0im           0.5+0.0im
+julia> @time ρ(4)  # second-run timing
+  0.029662 seconds (7 allocations: 688 bytes)
+5×5 OrbitalSliceMatrix{ComplexF64,Array}:
+         0.5+0.0im   -6.6187e-16+0.0im  0.204478+0.0im   2.49658e-15+0.0im  -2.6846e-16+0.0im
+ -6.6187e-16+0.0im           0.5+0.0im  0.200693+0.0im  -2.01174e-15+0.0im   1.2853e-15+0.0im
+    0.204478+0.0im      0.200693+0.0im       0.5+0.0im      0.200693+0.0im     0.204779+0.0im
+ 2.49658e-15+0.0im  -2.01174e-15+0.0im  0.200693+0.0im           0.5+0.0im  1.58804e-15+0.0im
+ -2.6846e-16+0.0im    1.2853e-15+0.0im  0.204779+0.0im   1.58804e-15+0.0im          0.5+0.0im
+
 ```
 
 Note, however, that the computation of `g` is much slower in this case, due to the need of a full diagonalization. A better algorithm choice in this case is `GS.KPM`. It requires, however, that we define the region for the density matrix beforehand, as a `nothing` contact.
 ```julia
 julia> @time g = h |> attach(nothing, region = RP.circle(1)) |> greenfunction(GS.KPM(order = 10000, bandrange = (0,8)));
-Computing moments: 100%|█████████████████████████████████████████████████████████████████████████████████| Time: 0:00:01
-  2.065083 seconds (31.29 k allocations: 11.763 MiB)
+Computing moments: 100%|███████████████████████████████████████████████████████████████████████████████████████| Time: 0:00:01
+  1.360412 seconds (51.17 k allocations: 11.710 MiB)
 
 julia> ρ = densitymatrix(g[1])
-DensityMatrix: density matrix on specified sites with solver of type DensityMatrixKPMSolver
+DensityMatrix{DensityMatrixKPMSolver}: density matrix on specified sites
 
 julia> @time ρ(4)
-  0.006580 seconds (3 allocations: 1.156 KiB)
-5×5 OrbitalSliceMatrix{ComplexF64,Matrix{ComplexF64}}:
+  0.004024 seconds (3 allocations: 688 bytes)
+5×5 OrbitalSliceMatrix{ComplexF64,Array}:
          0.5+0.0im  2.15097e-17+0.0im   0.20456+0.0im  2.15097e-17+0.0im   3.9251e-17+0.0im
  2.15097e-17+0.0im          0.5+0.0im  0.200631+0.0im  1.05873e-16+0.0im  1.70531e-18+0.0im
      0.20456+0.0im     0.200631+0.0im       0.5+0.0im     0.200631+0.0im      0.20482+0.0im
  2.15097e-17+0.0im  1.05873e-16+0.0im  0.200631+0.0im          0.5+0.0im  1.70531e-18+0.0im
   3.9251e-17+0.0im  1.70531e-18+0.0im   0.20482+0.0im  1.70531e-18+0.0im          0.5+0.0im
 ```
+
+!!! note "Alternative integration paths"
+    The integration algorithm allows many different integration paths that can be adjusted to each problem, see the `Paths` docstring. Another versatile choice is `Paths.radial(ωrate, ϕ)`. This one is called with `ϕ = π/4` when doing `ρ = densitymatrix(gs::GreenSlice, ωrate::Number)`. In the example above this is slightly faster than the `(ωmin, ωmax)` choice, which resorts to `Paths.sawtooth(ωmin, ωmax)`.
 
 ## Current
 
@@ -238,14 +242,7 @@ GreenFunction{Float64,2,0}: Green function of a Hamiltonian{Float64,2,0}
     Coordination     : 3.7448
 
 julia> J = josephson(g[1], 4.1)
-Integrator: Complex-plane integrator
-  Integration path    : (-4.1 + 1.4901161193847656e-8im, -2.05 + 2.050000014901161im, 0.0 + 1.4901161193847656e-8im)
-  Integration options : (atol = 1.0e-7,)
-  Integrand:          :
-  JosephsonIntegrand{Float64} : Equilibrium (dc) Josephson current observable before integration over energy
-    kBT                     : 0.0
-    Contact                 : 1
-    Number of phase shifts  : 0
+Josephson{JosephsonIntegratorSolver}: equilibrium Josephson current at a specific contact
 
 julia> qplot(g, children = (; sitecolor = :blue))
 ```
@@ -257,37 +254,31 @@ In this case we have chosen to introduce the superconducting leads with a model 
 corresponding to a BCS bulk, but any other self-energy form could be used. We have introduced the phase difference (`phase`) as a model parameter. We can now evaluate the zero-temperature Josephson current simply with
 ```julia
 julia> J(phase = 0)
--1.974396994480587e-16
+1.992660837638158e-12
 
 julia> J(phase = 0.2)
-0.004617597139699372
+0.0046175971391935605
 ```
 Note that finite temperatures can be taken using the `kBT` keyword argument for `josephson`, see docstring for details.
 
 One is often interested in the critical current, which is the maximum of the Josephson current over all phase differences. Quantica.jl can compute the integral over a collection of phase differences simultaneously, which is more efficient that computing them one by one. This is done with
 ```julia
 julia> φs = subdiv(0, pi, 11); J = josephson(g[1], 4.1; phases = φs)
-  Integration path    : (-4.1 + 1.4901161193847656e-8im, -2.05 + 2.050000014901161im, 0.0 + 1.4901161193847656e-8im)
-  Integration options : (atol = 1.0e-7,)
-  Integrand:          :
-  JosephsonIntegrand{Float64} : Equilibrium (dc) Josephson current observable before integration over energy
-    kBT                     : 0.0
-    Contact                 : 1
-    Number of phase shifts  : 11
+Josephson{JosephsonIntegratorSolver}: equilibrium Josephson current at a specific contact
 
 julia> Iφ = J()
 11-element Vector{Float64}:
- 1.868862401627357e-14
- 0.007231421775452674
- 0.014242855188877
- 0.02081870760779799
- 0.026752065104401878
- 0.031847203848574666
- 0.0359131410974842
- 0.03871895510547465
- 0.039762442694035505
- 0.03680096751905469
- 2.7677727119798235e-14
+ -6.361223111882911e-13
+  0.007231421776215144
+  0.01424285518831463
+  0.020818707606469377
+  0.026752065101976884
+  0.031847203846513975
+  0.035913141096514584
+  0.038718955102068034
+  0.03976244268586444
+  0.036800967573567184
+ -1.437196514806921e-12
 
 julia> f = Figure(); a = Axis(f[1,1], xlabel = "φ", ylabel = "I [e/h]"); lines!(a, φs, Iφ); scatter!(a, φs, Iφ); f
 ```

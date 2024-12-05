@@ -39,6 +39,8 @@
         @test nothing === show(stdout, sites(SA[1], 2:4))
         @test nothing === show(stdout, sites(:))
         @test nothing === show(stdout, sites(SA[0], :))
+        m = LP.linear() |> hopping(1) |> greenfunction |> meanfield
+        @test nothing === show(stdout, m)
     end
     h = first(hs)
     @test nothing === show(stdout, serializer(h))

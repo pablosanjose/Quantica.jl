@@ -71,6 +71,10 @@ chopsmall(xs, atol) = chopsmall.(xs, Ref(atol))
 chopsmall(xs) = chopsmall.(xs)
 chopsmall(xs::UniformScaling, atol...) = I * chopsmall(xs.λ, atol...)
 
+mul_scalar_or_array!(x::Number, factor) = factor * x
+mul_scalar_or_array!(x::Tuple, factor) = factor .* x
+mul_scalar_or_array!(x::AbstractArray, factor) = (x .*= factor; x)
+
 # Flattens matrix of Matrix{<:Number} into a matrix of Number's
 function mortar(ms::AbstractMatrix{M}) where {C<:Number,M<:Matrix{C}}
     isempty(ms) && return convert(Matrix{C}, ms)
@@ -137,6 +141,15 @@ lengths_to_offsets(v::NTuple{<:Any,Integer}) = (0, cumsum(v)...)
 lengths_to_offsets(v) = prepend!(cumsum(v), 0)
 lengths_to_offsets(f::Function, v) = prepend!(accumulate((i,j) -> i + f(j), v; init = 0), 0)
 
+# remove elements of xs after and including the first for which f(x) is true
+function cut_tail!(f, xs)
+    i = 1
+    for outer i in eachindex(xs)
+        f(xs[i]) && break
+    end
+    resize!(xs, i-1)
+    return xs
+end
 
 # fast tr(A*B)
 trace_prod(A, B) = (check_sizes(A,B); unsafe_trace_prod(A, B))

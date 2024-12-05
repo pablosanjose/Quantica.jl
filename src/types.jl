@@ -558,11 +558,14 @@ sites(l::LatticeSlice, blocktype::Type) =
 cellsites(cs::Union{SiteSlice,OrbitalSliceGrouped}) = cellsites(cs.cellsdict)
 cellsites(cdict::CellIndicesDict) =
     (CellSite(cell(cinds), i) for cinds in cdict for i in siteindices(cinds))
+# unused
+# cellsites(cs::CellSites) = (CellSite(cell(cs), i) for i in siteindices(cs))
 
 # single-orbital (CellOrbital) iterator
 cellorbs(co::Union{OrbitalSlice,OrbitalSliceGrouped}) = cellorbs(co.cellsdict)
 cellorbs(codict::Union{CellOrbitalsDict,CellOrbitalsGroupedDict}) =
     (CellOrbital(cell(corbs), i) for corbs in codict for i in orbindices(corbs))
+cellorbs(corbs::CellOrbitals) = (CellOrbital(cell(corbs), i) for i in orbindices(corbs))
 
 # orbitals in unit cell for each site
 orbgroups(s::CellOrbitalsGrouped) = s.type.groups
@@ -592,6 +595,8 @@ Base.length(c::CellIndices) = length(c.inds)
 Base.parent(ls::LatticeSlice) = ls.lat
 
 Base.copy(ls::LatticeSlice) = LatticeSlice(ls.lat, copy(ls.cellsdict))
+
+Base.collect(ci::CellIndices) = CellIndices(ci.cell, collect(ci.inds), ci.type)
 
 #endregion
 #endregion
@@ -2085,8 +2090,8 @@ boundingbox(oh::OpenHamiltonian) =
 struct ContactOrbitals{L}
     orbsdict::CellOrbitalsGroupedDict{L}    # non-extended orbital indices for merged contact
     corbsdict::Vector{CellOrbitalsGroupedDict{L}}  # same for each contact (alias of Σ's)
-    contactinds::Vector{Vector{Int}}        # orbital indices in orbdict for each contact
-    offsets::Vector{Int}                    # orbsdict offset from number of orbs per cell
+    contactinds::Vector{Vector{Int}}        # orbital indices in corbdict for each contact
+    offsets::Vector{Int}                    # corbsdict offset from number of orbs per cell
 end
 
 struct Contacts{L,N,S<:NTuple{N,SelfEnergy},O<:OrbitalSliceGrouped}
@@ -2257,6 +2262,7 @@ greenindices(g::GreenSlice) = g.rows, g.cols
 #  - OrbitalSliceMatrix for i,j both OrbitalSliceGrouped
 #  - OrbitalSliceMatrix for i,j both SparseIndices of OrbitalSliceGrouped
 #  - Matrix otherwise
+
 similar_slice(::Type{C}, i::OrbitalSliceGrouped, j::OrbitalSliceGrouped) where {C} =
     OrbitalSliceMatrix{C}(undef, i, j)
 
@@ -2326,6 +2332,12 @@ latslice(g::GreenFunction, i) = orbslice(g.contacts, i)
 zerocell(g::Union{GreenFunction,GreenSolution,GreenSlice}) = zerocell(lattice(g))
 
 solver(g::GreenFunction) = g.solver
+solver(g::GreenSlice) = g.parent.solver
+
+swap_solver(g::GreenFunction, s::AppliedGreenSolver) =
+    GreenFunction(g.parent, s, g.contacts)
+swap_solver(g::GreenSlice, s::AppliedGreenSolver) =
+    GreenSlice(swap_solver(g.parent, s), g.rows, g.cols, similar(g.output))
 
 contacts(g::GreenFunction) = g.contacts
 contacts(g::Union{GreenSolution,GreenSlice}) = contacts(parent(g))

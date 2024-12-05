@@ -428,26 +428,26 @@ Base.summary(::Transmission) =
 
 #endregion
 
-############################################################################################
-# Integrator
-#region
+# ############################################################################################
+# # Integrator
+# #region
 
-function Base.show(io::IO, I::Integrator)
-    i = get(io, :indent, "")
-    print(io, i, summary(I), "\n",
-"$i  Integration path    : $(path(I))
-$i  Integration options : $(display_namedtuple(options(I)))
-$i  Integrand           : ")
-    ioindent = IOContext(io, :indent => i * "  ")
-    show(ioindent, integrand(I))
-end
+# function Base.show(io::IO, I::Integrator)
+#     i = get(io, :indent, "")
+#     print(io, i, summary(I), "\n",
+# "$i  Integration path    : $(path(I))
+# $i  Integration options : $(display_namedtuple(options(I)))
+# $i  Integrand           : ")
+#     ioindent = IOContext(io, :indent => i * "  ")
+#     show(ioindent, integrand(I))
+# end
 
-Base.summary(::Integrator) = "Integrator: Complex-plane integrator"
+# Base.summary(::Integrator) = "Integrator: Complex-plane integrator"
 
 
-display_namedtuple(nt::NamedTuple) = isempty(nt) ? "()" : "$nt"
+# display_namedtuple(nt::NamedTuple) = isempty(nt) ? "()" : "$nt"
 
-#endregion
+# #endregion
 
 ############################################################################################
 # Josephson and DensityMatrix integrands
