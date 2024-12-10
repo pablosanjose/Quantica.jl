@@ -26,7 +26,7 @@ struct ZeroField end
 function meanfield(g::GreenFunction{T,E}, args...;
     potential = Returns(1), hartree = potential, fock = hartree,
     onsite = missing, charge = I, nambu::Bool = false, namburotation = missing,
-    selector::NamedTuple = (; range = 0), selector_hartree = selector, kw...) where {T,E}
+    selector::NamedTuple = (; range = 0), selector_fock = selector, selector_hartree = selector, kw...) where {T,E}
 
     Vh = sanitize_potential(hartree)
     Vf = sanitize_potential(fock)
@@ -40,13 +40,13 @@ function meanfield(g::GreenFunction{T,E}, args...;
     isempty(boundaries(g)) || argerror("meanfield does not currently support systems with boundaries")
     isfinite(U) || argerror("Onsite potential must be finite, consider setting `onsite`")
 
-    gs = g[sitepairs(; selector..., includeonsite = true)]
+    gs = g[sitepairs(; selector_fock..., includeonsite = true)]
     rho = densitymatrix(gs, args...; kw...)
 
     lat = lattice(hamiltonian(g))
     # The sparse structure of hFock will be inherited by the evaluated mean field. Need onsite.
-    hFock = lat |> hopping((r, dr) -> iszero(dr) ? Uf : T(Vf(dr)); selector..., includeonsite = true)
-    hHartree = (Uf == U && Vh == Vf && selector == selector_hartree) ? hFock :
+    hFock = lat |> hopping((r, dr) -> iszero(dr) ? Uf : T(Vf(dr)); selector_fock..., includeonsite = true)
+    hHartree = (Uf == U && Vh == Vf && selector_fock == selector_hartree) ? hFock :
         lat |> hopping((r, dr) -> iszero(dr) ? U : T(Vh(dr)); selector_hartree..., includeonsite = true)
     # this drops zeros
     potHartree = T.(sum(unflat, harmonics(hHartree)))
@@ -66,7 +66,7 @@ function meanfield(g::GreenFunction{T,E}, args...;
 
     encoder, decoder = nambu ? NambuEncoderDecoder(is_nambu_rotated´) : (identity, identity)
     S = typeof(encoder(zero(Q)))
-    output = call!_output(g[sitepairs(; selector..., includeonsite = true, kernel = Q)])
+    output = call!_output(g[sitepairs(; selector_fock..., includeonsite = true, kernel = Q)])
     sparse_enc = similar(output, S)
     output = CompressedOrbitalMatrix(sparse_enc; encoder, decoder, hermitian = true)
 
