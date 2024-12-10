@@ -697,7 +697,7 @@ function (s::DensityMatrixSchurSolver)(µ, kBT; params...)
     xs = sort!(ϕs ./ (2π))
     pushfirst!(xs, -0.5)
     push!(xs, 0.5)
-    xs = [mean(view(xs, rng)) for rng in approxruns(xs)]  # elliminate approximate duplicates
+    xs = [mean(view(xs, rng)) for rng in approxruns(xs)]  # eliminate approximate duplicates
     result = call!_output(s.gs)
     integrand!(x) = fermi_h!(result, s, 2π * x, µ, inv(kBT); params...)
     fx! = (y, x) -> (y .= integrand!(x))
