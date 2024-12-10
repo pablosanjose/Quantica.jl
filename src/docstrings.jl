@@ -2670,7 +2670,8 @@ where `U` is the onsite interaction.
 - `charge`: a number (in single-orbital systems) or a matrix (in multi-orbital systems) representing the charge operator on each site. Default: `I`
 - `nambu::Bool`: specifies whether the model is defined in Nambu space. In such case, `charge` should also be in Nambu space, typically `SA[1 0; 0 -1]` or similar. Default: `false`
 - `namburotation::Bool`: if `nambu == true` and spinful systems, specifies whether the spinor basis is `[c↑, c↓, c↓⁺, -c↑⁺]` (`namburotation = true`) or `[c↑, c↓, c↑⁺, c↓⁺]` (`namburotation = false`). Default: `false`
-- `selector::NamedTuple`: a collection of `hopselector` directives that defines the pairs of sites (`pair_selection` above) that interact through the charge-charge potential. Default: `(; range = 0)` (i.e. onsite)
+- `selector::NamedTuple`: a collection of `hopselector` directives that defines the pairs of sites (`pair_selection` above) that interact through the charge-charge potential. Default: `(; range = 0)` (i.e. only onsite)
+- `selector_hartree::NamedTuple`: same as `selector`, but restricted to the Hartree interaction. Useful to do efficient Hartree-only simulations, by setting `fock = 0` and leaving `selector` at its `(; range =0)` default. Then, having a large range in `selector_hartree` will be cheap. Default: `selector`.
 
 Any additional keywords `kw` are passed to the `densitymatrix` function used to compute the
 mean field, see above

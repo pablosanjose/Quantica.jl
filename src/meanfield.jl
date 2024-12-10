@@ -26,7 +26,7 @@ struct ZeroField end
 function meanfield(g::GreenFunction{T,E}, args...;
     potential = Returns(1), hartree = potential, fock = hartree,
     onsite = missing, charge = I, nambu::Bool = false, namburotation = missing,
-    selector::NamedTuple = (; range = 0), kw...) where {T,E}
+    selector::NamedTuple = (; range = 0), selector_hartree = selector, kw...) where {T,E}
 
     Vh = sanitize_potential(hartree)
     Vf = sanitize_potential(fock)
@@ -46,8 +46,8 @@ function meanfield(g::GreenFunction{T,E}, args...;
     lat = lattice(hamiltonian(g))
     # The sparse structure of hFock will be inherited by the evaluated mean field. Need onsite.
     hFock = lat |> hopping((r, dr) -> iszero(dr) ? Uf : T(Vf(dr)); selector..., includeonsite = true)
-    hHartree = (Uf == U && Vh === Vf) ? hFock :
-        lat |> hopping((r, dr) -> iszero(dr) ? U : T(Vh(dr)); selector..., includeonsite = true)
+    hHartree = (Uf == U && Vh == Vf && selector == selector_hartree) ? hFock :
+        lat |> hopping((r, dr) -> iszero(dr) ? U : T(Vh(dr)); selector_hartree..., includeonsite = true)
     # this drops zeros
     potHartree = T.(sum(unflat, harmonics(hHartree)))
 
