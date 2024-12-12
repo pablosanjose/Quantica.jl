@@ -64,6 +64,7 @@ KrylovKit = "0b1a1467-8014-51b9-945f-bf0ae24f4b77"
 Arpack = "7d9fca2a-8960-54d3-9f78-7d1dccf2cb97"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 
 [targets]
 test = ["Test", "LinearMaps", "ArnoldiMethod", "KrylovKit", "Arpack", "CairoMakie", "Distributed"]
