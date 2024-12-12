@@ -547,12 +547,13 @@ Base.summary(::CurrentDensitySlice{T}) where {T} =
 
 function Base.showarg(io::IO, ::A, toplevel) where {T,M,A<:AbstractOrbitalArray{T,<:Any,M}}
     toplevel || print(io, "::")
-    print(io,  "$(nameof(A)){$T,$(nameof(M))}")
+    print(io,  "$(shortalias(A)){$T,$M}")
 end
 
-Base.nameof(::Type{<:OrbitalSliceMatrix}) = "OrbitalSliceMatrix"
-Base.nameof(::Type{<:OrbitalSliceVector}) = "OrbitalSliceVector"
-Base.nameof(::Type{<:CompressedOrbitalMatrix}) = "CompressedOrbitalMatrix"
+shortalias(::Type{<:OrbitalSliceMatrix}) = "OrbitalSliceMatrix"
+shortalias(::Type{<:OrbitalSliceVector}) = "OrbitalSliceVector"
+shortalias(::Type{<:CompressedOrbitalMatrix}) = "CompressedOrbitalMatrix"
+shortalias(::Type{A}) where {A} = nameof(A)
 
 #endregion
 
