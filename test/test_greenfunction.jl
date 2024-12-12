@@ -629,4 +629,10 @@ end
     m´ = g(0.2)[cells = 0]
     v = serialize(m)
     @test_throws ArgumentError deserialize(m´, v)
+
+    # issue #327
+    using Distributed; addprocs(1) # for Serialization
+    @everywhere using Quantica
+    g = LP.linear() |> hopping(1) |> attach(nothing, cells = 0) |> greenfunction
+    @test remotecall_fetch(g[1], 2, 0) isa OrbitalSliceMatrix
 end

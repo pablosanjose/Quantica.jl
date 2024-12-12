@@ -716,7 +716,7 @@ julia> h[sites(1), sites(2)]
  1.0+0.0im  0.0+0.0im
 
 julia> ph = h |> @hopping!((t; p = 3) -> p*t); ph[region = RP.square(1)]
-4×4 OrbitalSliceMatrix{ComplexF64,SparseMatrixCSC}:
+4×4 OrbitalSliceMatrix{ComplexF64,SparseArrays.SparseMatrixCSC{ComplexF64, Int64}}:
  0.0+0.0im  0.0+0.0im  0.0+0.0im  3.0+0.0im
  0.0+0.0im  0.0+0.0im  3.0+0.0im  0.0+0.0im
  0.0+0.0im  3.0+0.0im  0.0+0.0im  0.0+0.0im
@@ -1684,7 +1684,7 @@ julia> gω[ss] == gs(0.1; t = 2)
 true
 
 julia> summary(gω[ss])
-"14×14 OrbitalSliceMatrix{ComplexF64,Array}"
+"14×14 OrbitalSliceMatrix{ComplexF64,Matrix{ComplexF64}}"
 ```
 
 # See also
@@ -1752,7 +1752,7 @@ julia> g(1)[diagonal(:)]                            # g(ω = 1) diagonal on all 
       0.0+0.0im             0.0+0.0im             0.0+0.0im        -0.10919-0.0839858im
 
 julia> g(1)[diagonal(:, kernel = SA[1 0; 0 -1])]    # σz spin density of the above
-2×2 OrbitalSliceMatrix{ComplexF64,LinearAlgebra.Diagonal{ComplexF64, Vector{ComplexF64}}}:
+4×4 OrbitalSliceMatrix{ComplexF64,LinearAlgebra.Diagonal{ComplexF64, Vector{ComplexF64}}}:
  5.61885e-12+1.38778e-17im           0.0+0.0im
          0.0+0.0im          -5.61882e-12+2.77556e-17im
 ```
@@ -1845,7 +1845,7 @@ GreenFunction{Float64,2,0}: Green function of a Hamiltonian{Float64,2,0}
     Coordination     : 2.94065
 
 julia> ldos(g(0.2))[1]
-6-element OrbitalSliceVector{Vector{Float64}}:
+6-element OrbitalSliceVector{Float64,Vector{Float64}}:
  0.036802204179316955
  0.034933055722650375
  0.03493305572265026
@@ -2302,7 +2302,7 @@ used e.g. to index another `OrbitalSliceArray` or to inspect the indices of each
 julia> g = HP.graphene(orbitals = 2) |> supercell((1,-1)) |> greenfunction;
 
 julia> d = ldos(g[cells = SA[0]])(2); summary(d)
-"8-element OrbitalSliceVector{Float64,Array}"
+"8-element OrbitalSliceVector{Float64,Vector{Float64}}"
 
 julia> a = only(orbaxes(d))
 OrbitalSliceGrouped{Float64,2,1} : collection of subcells of orbitals (grouped by sites) for a 1D lattice in 2D space

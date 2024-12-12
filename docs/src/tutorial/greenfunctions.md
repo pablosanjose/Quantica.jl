@@ -213,7 +213,7 @@ julia> g(0.2)
 GreenSolution{Float64,2,0}: Green function at arbitrary positions, but at a fixed energy
 
 julia> g(0.2)[1, 3]
-5×5 OrbitalSliceMatrix{ComplexF64,Matrix{ComplexF64}}:
+5×5 OrbitalSliceArray{ComplexF64,Array}:
  -2.56906+0.000123273im  -4.28767+0.00020578im   -4.88512+0.000234514im  -4.28534+0.00020578im    -2.5664+0.000123273im
  -4.28767+0.00020578im   -7.15613+0.00034351im   -8.15346+0.000391475im  -7.15257+0.00034351im    -4.2836+0.000205781im
  -4.88512+0.000234514im  -8.15346+0.000391475im  -9.29002+0.000446138im  -8.14982+0.000391476im  -4.88095+0.000234514im
@@ -221,7 +221,7 @@ julia> g(0.2)[1, 3]
   -2.5664+0.000123273im   -4.2836+0.000205781im  -4.88095+0.000234514im  -4.28211+0.000205781im  -2.56469+0.000123273im
 
 julia> g(0.2)[siteselector(region = RP.circle(1, (0.5, 0))), 3]
-2×5 OrbitalSliceMatrix{ComplexF64,Matrix{ComplexF64}}:
+2×5 OrbitalSliceArray{ComplexF64,Array}:
  0.0749214+3.15744e-8im   0.124325+5.27948e-8im   0.141366+6.01987e-8im   0.124325+5.27948e-8im  0.0749214+3.15744e-8im
  -0.374862+2.15287e-5im  -0.625946+3.5938e-5im   -0.712983+4.09561e-5im  -0.624747+3.59379e-5im   -0.37348+2.15285e-5im
 ```
@@ -248,19 +248,19 @@ GreenFunction{Float64,2,2}: Green function of a Hamiltonian{Float64,2,2}
     Coordination     : 3.0
 
 julia> g(0.5)[diagonal(cells = (0, 0))]
-4-element OrbitalSliceVector{Vector{ComplexF64}}:
-  -0.3497363468480622 - 0.3118358260294266im
-  -0.3497363468271048 - 0.31183582602942655im
-  -0.3497363468402952 - 0.31183582602942667im
- -0.34973634686125243 - 0.3118358260294267im
+4×4 OrbitalSliceMatrix{ComplexF64,LinearAlgebra.Diagonal{ComplexF64, Vector{ComplexF64}}}:
+ -0.349736-0.311836im        0.0+0.0im             0.0+0.0im             0.0+0.0im
+       0.0+0.0im       -0.349736-0.311836im        0.0+0.0im             0.0+0.0im
+       0.0+0.0im             0.0+0.0im       -0.349736-0.311836im        0.0+0.0im
+       0.0+0.0im             0.0+0.0im             0.0+0.0im       -0.349736-0.311836im
 ```
 
 Note that we get an `OrbitalSliceVector`, which is equal to the diagonal `diag(g(0.5)[cells = (0, 0)])`. Like the `g` `OrbitalSliceMatrix`, this vector is resolved in orbitals, of which there are two per site and four per unit cell in this case. Using `diagonal(sᵢ; kernel = K)` we can collect all the orbitals of different sites, and compute `tr(g[site, site] * K)` for a given matrix `K`. This is useful to obtain spectral densities. In the above example, and interpreting the two orbitals per site as the electron spin, we could obtain the spin density along the `x` axis, say, using `σx = SA[0 1; 1 0]` as `kernel`,
 ```julia
 julia> g(0.5)[diagonal(cells = (0, 0), kernel = SA[0 1; 1 0])]
-2-element OrbitalSliceVector{Vector{ComplexF64}}:
-   4.26186044627701e-12 - 2.2846013280115095e-17im
- -4.261861877528737e-12 + 1.9177925470610777e-17im
+2×2 OrbitalSliceMatrix{ComplexF64,LinearAlgebra.Diagonal{ComplexF64, Vector{ComplexF64}}}:
+ -2.57031e-12-2.62859e-17im          0.0+0.0im
+          0.0+0.0im          2.57031e-12+2.27291e-17im
 ```
 which is zero in this spin-degenerate case
 
