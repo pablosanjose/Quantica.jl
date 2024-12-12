@@ -610,6 +610,9 @@ end
     @test_throws ArgumentError meanfield(g)
 end
 
+using Distributed; addprocs(1) # for Serialization below
+@everywhere using Quantica
+
 @testset begin "OrbitalSliceArray serialization"
     g = LP.linear() |> supercell(4) |> supercell |> hamiltonian(hopping(I), orbitals = 2) |> greenfunction
     m = g(0.2)[cells = 0]
@@ -631,8 +634,6 @@ end
     @test_throws ArgumentError deserialize(m´, v)
 
     # issue #327
-    using Distributed; addprocs(1) # for Serialization
-    @everywhere using Quantica
     g = LP.linear() |> hopping(1) |> attach(nothing, cells = 0) |> greenfunction
     @test remotecall_fetch(g[1], 2, 0) isa OrbitalSliceMatrix
 end
