@@ -552,6 +552,16 @@ end
     ρ2 = densitymatrix(g[is, js], Paths.sawtooth(4))
     @test ρ0() ≈ ρ1() ≈ ρ2()
     @test ρ0(0.1, 0.2) ≈ ρ1(0.1, 0.2) ≈ ρ2(0.1, 0.2)
+
+    # parametric path and system
+    g = LP.linear() |> supercell |> @onsite((; o = 0.5) -> o) |> greenfunction
+    ρ = densitymatrix(g[], Paths.polygon((µ, T; o = 0.5) -> o > µ ? (-1, µ, o + im, 1) : (-1, o + im, µ, 1)))
+    @test real(only(ρ(0, 0; o = -0.5))) ≈ 1
+    @test real(only(ρ(0, 0; o = 0.5))) < 1e-7
+    @test real(only(ρ(0, 0; o = 1.5))) < 1e-7
+    @test real(only(ρ(0, 0; o = -1.5))) < 1e-7
+    d = Quantica.integrand(ρ)
+    @test_throws MethodError d(2; o = 0.8)
 end
 
 @testset "greenfunction aliasing" begin

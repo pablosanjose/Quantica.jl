@@ -2186,8 +2186,7 @@ josephson
 Return the complex integrand `d::JosephsonIntegrand` whose integral over frequency yields
 the Josephson current, `J(kBT; params...) = Re(∫dx d(x; params...))`, where `ω(x) =
 Quantica.point(x, d)` is a path parametrization over real variable `x` . To evaluate the `d`
-for a given `x` and parameters, use `d(x; params...)`, or `call!(d, x; params...)` for its
-mutating (non-allocating) version.
+for a given `x`, use `d(x)`, or `call!(d, x)` for its mutating (non-allocating) version.
 
     Quantica.integrand(ρ::DensityMatrix{<:DensityMatrixIntegratorSolver}, mu = 0, kBT = 0; params...)
 

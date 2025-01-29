@@ -37,6 +37,9 @@ call!_output(c::Contacts) = selfenergyblocks(c)
 
 ############################################################################################
 # GreenFuntion call! API
+#   `symmetrize` and `post` allow to obtain gij and conj(gji) combinations efficiently.
+#   Useful when computing e.g. the spectral density A = (Gʳ-Gʳ')/2πi on a non-diagonal slice
+#   These kwargs are currently not documented - see specialmatrices.jl
 #region
 
 (g::GreenFunction)(ω; params...) = minimal_callsafe_copy(call!(g, ω; params...))

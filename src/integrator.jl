@@ -157,9 +157,9 @@ options(I::Integrator) = I.quadgk_opts
 
 ## call! ##
 # scalar version
-function call!(I::Integrator{<:Any,Missing}; params...)
+function call!(I::Integrator{<:Any,Missing})
     fx = x -> begin
-        y = call!(I.integrand, x; params...)  # should be a scalar
+        y = call!(I.integrand, x)  # should be a scalar
         I.callback(x, y)
         return y
     end
@@ -169,9 +169,9 @@ function call!(I::Integrator{<:Any,Missing}; params...)
 end
 
 # nonscalar version
-function call!(I::Integrator{<:Any,T}; params...) where {T}
+function call!(I::Integrator{<:Any,T}) where {T}
     fx! = (y, x) -> begin
-        y .= serialize(call!(I.integrand, x; params...))
+        y .= serialize(call!(I.integrand, x))
         I.callback(x, y)
         return nothing
     end
@@ -181,7 +181,7 @@ function call!(I::Integrator{<:Any,T}; params...) where {T}
     return result´
 end
 
-(I::Integrator)(; params...) = copy(call!(I; params...))
+(I::Integrator)() = copy(call!(I))
 
 #endregion
 #endregion
