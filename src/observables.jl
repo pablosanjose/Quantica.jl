@@ -361,14 +361,12 @@ end
 
 # produces integrand_transform!(gs(ω´; omegamap(ω´)..., params...) * f(ω´-mu))
 # with ω´ = path_transform(ω)
-struct DensityMatrixIntegrand{G<:GreenSlice,T,O,P<:AbstractIntegrationPath,PT,PAR<:NamedTuple}
-    gs::G
+struct DensityMatrixIntegrand{T,GF<:Function,P<:AbstractIntegrationPath,PT}
+    gsfunc::GF         # (ω, symmetrize) -> gs(ω; symmetrize, omegamap(ω)..., params...)
     mu::T
     kBT::T
-    omegamap::O        # function: returns changed system parameters for each ω
     path::P            # AbstractIntegrationPath object
     pts::PT            # ω-points that define specific integration path, derived from `path`
-    params::PAR        # fixed params used for path, to be passed to gs
 end
 
 # Default solver (integration in complex plane)
@@ -405,7 +403,8 @@ function densitymatrix(gs::GreenSlice{T}, path::AbstractIntegrationPath; omegama
     function ifunc(mu, kBT; params...)
         pts = points(path, mu, kBT; params...)
         realpts = realpoints(path, pts)
-        ρd = DensityMatrixIntegrand(gs, T(mu), T(kBT), omegamap, path, pts, NamedTuple(params))
+        gsfunc(ω, symmetrize) = call!(gs, ω; symmetrize, omegamap(ω)..., params...)
+        ρd = DensityMatrixIntegrand(gsfunc, T(mu), T(kBT), path, pts)
         return Integrator(result, ρd, realpts; opts´...)
     end
     return DensityMatrix(DensityMatrixIntegratorSolver(ifunc), gs)
@@ -444,7 +443,7 @@ function call!(ρi::DensityMatrixIntegrand, x)
     j = jacobian(x, ρi.path, ρi.pts)
     f = fermi(chopsmall(ω - ρi.mu), inv(ρi.kBT))
     symmetrize = -j*f/(2π*im)
-    output = call!(ρi.gs, ω; symmetrize, ρi.omegamap(ω)..., ρi.params...)
+    output = ρi.gsfunc(ω, symmetrize)
     return output
 end
 
@@ -488,16 +487,14 @@ call!_output(ρ::DensityMatrix) = call!_output(ρ.gs)
 #   Keywords opts are passed to quadgk for the integral
 #region
 
-struct JosephsonIntegrand{T<:AbstractFloat,P<:Union{Missing,AbstractArray},O,G<:GreenFunction{T},PA,PT,PAR<:NamedTuple}
-    g::G
+struct JosephsonIntegrand{T<:AbstractFloat,P<:Union{Missing,AbstractArray},GF<:Function,PA,PT}
+    gfunc::GF                   # ω -> g(ω; params...)
     kBT::T
     contactind::Int             # contact index
     tauz::Vector{Int}           # precomputed diagonal of tauz
     phaseshifts::P              # missing or collection of phase shifts to apply
-    omegamap::O                 # function that maps ω to parameters
     path::PA                    # AbstractIntegrationPath
     pts::PT                     # points in actual integration path, derived from `path`
-    params::PAR                 # params used for path, to be used for g
     traces::P                   # preallocated workspace
     Σ::Matrix{Complex{T}}       # preallocated workspace, full self-energy
     ΣggΣ::Matrix{Complex{T}}    # preallocated workspace
@@ -539,7 +536,8 @@ function josephson(gs::GreenSlice{T}, path::AbstractIntegrationPath; omegamap = 
     function ifunc(kBT; params...)
         pts = points(path, 0, kBT; params...)
         realpts = realpoints(path, pts)
-        jd = JosephsonIntegrand(g, T(kBT), contact, tauz, phases´, omegamap, path, pts, NamedTuple(params),
+        gfunc(ω) = call!(g, ω; omegamap(ω)..., params...)
+        jd = JosephsonIntegrand(gfunc, T(kBT), contact, tauz, phases´, path, pts,
             traces, Σfull, Σ, similar(Σ), similar(Σ), similar(Σ), similar(tauz, Complex{T}))
         return Integrator(traces, jd, realpts; opts´...)
     end
@@ -572,7 +570,7 @@ end
 
 function call!(Ji::JosephsonIntegrand, x)
     ω = point(x, Ji.path, Ji.pts)
-    gω = call!(Ji.g, ω; Ji.omegamap(ω)..., Ji.params...)
+    gω = Ji.gfunc(ω)
     f = fermi(ω, inv(Ji.kBT))
     traces = josephson_traces(Ji, gω, f)
     traces = mul_scalar_or_array!(traces, jacobian(x, Ji.path, Ji.pts))
