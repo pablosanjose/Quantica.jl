@@ -1229,7 +1229,7 @@ Equivalent to `torus(h, phases_or_axes)`, but returning an `n`-dimensional
 `h´::ParametricHamiltonian` with an additional parameter called `param_name`. When calling
 `h´(...; param_name = (ϕ₁,...,ϕₙ)`, params...)`, Bloch phases `(ϕ₁,...,ϕₙ)` are applied
 along stitched directions (in addition to the ones specified in `phases_or_axes`, if any).
-`param_name` can also take any `AbstractArray`.
+`param_name` can also take any `AbstractArray`, or a `Number` if `n=1`.
 
 # Examples
 

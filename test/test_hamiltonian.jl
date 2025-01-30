@@ -226,7 +226,7 @@ end
     for o in (1, (2,3))
         h = LatticePresets.honeycomb() |> hamiltonian(hopping((r, dr) -> 1/norm(dr) * I, range = 10), orbitals = o)
         @test_throws ArgumentError torus(h, (1,2,3))
-        @test_throws ArgumentError torus(h, 1)
+        @test_throws MethodError torus(h, 1)
         wh = h |> torus((1,2))
         @test wh(()) ≈ h(SA[1,2])
         wh = torus(h, (1,:))
@@ -239,15 +239,16 @@ end
         wh = torus(h, (:,:))
         @test wh == h
         @test wh !== h
-        h = LP.linear() |> supercell(2) |> hopping(1) |> @hopping!((t, r, dr) -> t*(r[1]-1/2))
-        @test_warn "unexpected results for position-dependent modifiers" torus(h, (0.2,))
     end
-    h2D = LP.square() |> supercell(2, 2) |> hopping(1)
-    @test_warn "A modified and a non-modified hopping have been wrapped into one" @torus(h2D, SA[2], ϕ)
-    h2D = LP.square() |> supercell(3, 2) |> hopping(1, range = √2)
-    @test_warn "Two modified hoppings have been wrapped into one" @torus(h2D, SA[2], ϕ)
-    h2D = LP.square() |> supercell(3, 3) |> hopping(1, range = √2)
-    @test_nowarn @torus(h2D, SA[2], ϕ)
+    h = LP.linear() |> supercell(2) |> hopping(1) |> @hopping!((t, r, dr) -> t*(r[1]-1/2))
+    @test_warn "Two modified hoppings have been wrapped into one" torus(h, (0.2,))
+    h = LP.square() |> supercell(2, 2) |> hopping(1)
+    @test_warn "A modified and a non-modified hopping have been wrapped into one" @torus(h, SA[2], ϕ)
+    h = LP.square() |> supercell(3, 2) |> hopping(1, range = √2)
+    @test_warn "Two modified hoppings have been wrapped into one" @torus(h, SA[2], ϕ)
+    h = LP.square() |> supercell(3, 3) |> hopping(1, range = √2)
+    h´ = @test_nowarn @torus(h, SA[2], ϕ)
+    @test h(SA[0.2, 0.3]) ≈ h´(SA[0.2]; ϕ = 0.3)
 end
 
 @testset "hamiltonian HybridSparseMatrix" begin
