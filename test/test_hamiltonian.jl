@@ -161,6 +161,14 @@ end
     h = LP.linear() |>  @hopping((i,j; phi = zerofield) --> phi[i, j]);
     ϕ = h[cells = 0]
     @test h(phi = ϕ) isa Hamiltonian
+
+    # catch unbounded modifiers
+    h = LP.honeycomb() |> hopping(1)
+    @test_nowarn h |> @hopping!(t->2t; range = Inf)
+    @test_nowarn h |> @hopping!(t->2t; dcells = Returns(true))
+    @test_nowarn h |> @hopping!(t->2t; region = Returns(true))
+    @test_nowarn h |> @onsite!(o->2o; region = Returns(true))
+    @test_nowarn h |> @onsite!(o->2o; cells = Returns(true))
 end
 
 @testset "hamiltonian supercell" begin
@@ -234,6 +242,12 @@ end
         h = LP.linear() |> supercell(2) |> hopping(1) |> @hopping!((t, r, dr) -> t*(r[1]-1/2))
         @test_warn "unexpected results for position-dependent modifiers" torus(h, (0.2,))
     end
+    h2D = LP.square() |> supercell(2, 2) |> hopping(1)
+    @test_warn "A modified and a non-modified hopping have been wrapped into one" @torus(h2D, SA[2], ϕ)
+    h2D = LP.square() |> supercell(3, 2) |> hopping(1, range = √2)
+    @test_warn "Two modified hoppings have been wrapped into one" @torus(h2D, SA[2], ϕ)
+    h2D = LP.square() |> supercell(3, 3) |> hopping(1, range = √2)
+    @test_nowarn @torus(h2D, SA[2], ϕ)
 end
 
 @testset "hamiltonian HybridSparseMatrix" begin

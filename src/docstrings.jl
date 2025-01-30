@@ -1162,24 +1162,39 @@ julia> h((0,0))
 plusadjoint
 
 """
-
     torus(h::AbstractHamiltonian, (ϕ₁, ϕ₂,...))
 
 For an `h` of lattice dimension `L` and a set of `L` Bloch phases `ϕ = (ϕ₁, ϕ₂,...)`,
 contruct a new `h´::AbstractHamiltonian` on a bounded torus, i.e. with all Bravais
 vectors eliminated by stitching the lattice onto itself along the corresponding Bravais
-vector. Intercell hoppings along stitched directions will pick up a Bloch phase
-`exp(-iϕ⋅dn)`.
+vector. Intercell hoppings along stitched directions will pick up Bloch phases
+`exp(-iϕ⋅dn)`, where the `dn` vectors are the cell indices of each harmonic.
 
 If a number `L´` of phases `ϕᵢ` are `:` instead of numbers, the corresponding Bravais
 vectors will not be stitched, and the resulting `h´` will have a finite lattice dimension
-`L´`.
+`L´ <= L`.
+
+    torus(h::AbstractHamiltonian, wrapped_axes::SVector)
+
+Like the above with phases `ϕ = 0` along axes given by `wrapped_axes`, leaving the remaining
+axes unstitched. With this syntax, `wrapped_axes` should be a sorted SVector of unique
+integers in the range 1:L.
 
 ## Currying
 
-    h |> torus((ϕ₁, ϕ₂,...))
+    h |> torus(x)
 
-Currying syntax equivalent to `torus(h, (ϕ₁, ϕ₂,...))`.
+Currying syntax equivalent to `torus(h, x)`.
+
+## Warning on modifier collisions
+
+For `h::ParametricHamiltonian`s which have modifiers on hoppings, wrapping can be
+problematic whenever a modified and an unmodified hopping, or two modified hoppings, get
+wrapped into a single hopping in the final `ParametricHamiltonian`. The reason is that the
+modifier is applied to the hopping sum. This can be a problem if the modifier is e.g.
+position dependent or nonlinear, since then the modified sum may not be equal to the sum of
+modified hoppings. Quantica will emit a warning whenever it detects this situation. One
+solution in such cases is to use a larger supercell before wrapping.
 
 # Examples
 
@@ -1196,12 +1211,48 @@ Hamiltonian{Float64,2,1}: Hamiltonian on a 1D Lattice in 2D space
 
 julia> h2D((0.3, 0.2)) ≈ h1D(0.3)
 true
+
+julia> torus(h2D, (:, 0)) == torus(h2D, SA[2])
+true
 ```
 
 # See also
-    `hamiltonian`, `supercell`
+    `@torus`, `hamiltonian`, `supercell`
 """
 torus
+
+"""
+
+    @torus(h, phases_or_axes, param_name)
+
+Equivalent to `torus(h, phases_or_axes)`, but returning an `n`-dimensional
+`h´::ParametricHamiltonian` with an additional parameter called `param_name`. When calling
+`h´(...; param_name = (ϕ₁,...,ϕₙ)`, params...)`, Bloch phases `(ϕ₁,...,ϕₙ)` are applied
+along stitched directions (in addition to the ones specified in `phases_or_axes`, if any).
+`param_name` can also take any `AbstractArray`.
+
+# Examples
+
+```jldoctest
+julia> h2D = HP.graphene() |> supercell(2); h1D = torus(h2D, (:, 0.3)); h1D´ = @torus(h2D, SA[2], ϕ)
+ParametricHamiltonian{Float64,2,1}: Parametric Hamiltonian on a 1D Lattice in 2D space
+  Bloch harmonics  : 3
+  Harmonic size    : 8 × 8
+  Orbitals         : [1, 1]
+  Element type     : scalar (ComplexF64)
+  Onsites          : 0
+  Hoppings         : 24
+  Coordination     : 3.0
+  Parameters       : [:ϕ]
+
+julia> h1D´(0.5; ϕ = 0.3) ≈ h1D(0.5)
+true
+```
+
+# See also
+    `torus`, `hamiltonian`, `supercell`
+"""
+macro torus end
 
 """
     unflat(dn)

@@ -26,6 +26,36 @@ padtuple(t, x, N) = ntuple(i -> i <= length(t) ? t[i] : x, N)
     return s[is, is]
 end
 
+# find indices in range 1:L that are not in inds, assuming inds is sorted and unique
+inds_complement(::Val{L}, inds::NTuple{L´,Integer}) where {L,L´} =
+    _inds_complement(ntuple(zero, Val(L-L´)), 1, 1, inds...)
+
+function _inds_complement(v::NTuple{N}, vn, rn, i, inds...) where {N}
+    if i != rn
+        # static analog of v[vn] = rn
+        v´ = ntuple(i -> ifelse(i == vn, rn, v[i]), Val(N))
+        return _inds_complement(v´, vn+1, rn+1, inds...)
+    else
+        return _inds_complement(v, vn, rn+1, i, inds...)
+    end
+end
+_inds_complement(v, vn, rn) = v
+
+# repeated elements in an integer array
+onlyrepeated(v) = onlyrepeated!(copy(v))
+function onlyrepeated!(v)
+    sort!(v)
+    i´ = 0
+    for (i, rng) in enumerate(equalruns(v))
+        if length(rng) > 1
+            i´ += 1
+            v[i´] = v[first(rng)]
+        end
+    end
+    resize!(v, i´)
+    return v
+end
+
 @noinline internalerror(func::String) =
     throw(ErrorException("Internal error in $func. Please file a bug report at https://github.com/pablosanjose/Quantica.jl/issues"))
 

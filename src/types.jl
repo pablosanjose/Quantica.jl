@@ -170,7 +170,9 @@ zerocellsites(l::Lattice, i) = sites(zerocell(l), i)
 
 Base.length(l::Lattice) = nsites(l)
 
-Base.copy(l::Lattice) = deepcopy(l)
+Base.copy(l::Lattice) = Lattice(copy(l.bravais), copy(l.unitcell), copy(l.nranges))
+Base.copy(b::Bravais{T,E,L}) where {T,E,L} = Bravais{T,E,L}(copy(b.matrix))
+Base.copy(u::Unitcell{T,E}) where {T,E} = Unitcell{T,E}(copy(u.sites), copy(u.names), copy(u.offsets))
 
 Base.:(==)(l::Lattice, l´::Lattice) = l.bravais == l´.bravais && l.unitcell == l´.unitcell
 Base.:(==)(b::Bravais, b´::Bravais) = b.matrix == b´.matrix

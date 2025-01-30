@@ -8,7 +8,7 @@ add!(m::TightbindingModel) = b -> add!(b, m)
 # direct site indexing
 function add!(b::IJVBuilder, val, c::CellSites, d::CellSites)
     c´, d´ = sanitize_cellindices(c, b), sanitize_cellindices(d, b)
-    ijv = b[cell(d´) - cell(c´)]
+    ijv = b[cell(d´)-cell(c´)]
     B = blocktype(b)
     val´ = mask_block(B, val)   # Warning: we don't check matrix size here, just conversion to B
     add!(ijv, val´, siteindices(c´), siteindices(d´))
@@ -24,7 +24,7 @@ function add!(b::IJVBuilder, val, c::CellSites)
     return b
 end
 
-add!(ijv::IJV, v, i::Integer, j::Integer = i) = push!(ijv, (i, j, v))
+add!(ijv::IJV, v, i::Integer, j::Integer=i) = push!(ijv, (i, j, v))
 
 function add!(ijv::IJV, v, is, js)
     foreach(Iterators.product(is, js)) do (i, j)
@@ -42,7 +42,7 @@ end
 
 
 # block may be a tuple of row-col index ranges, to restrict application of model
-function add!(b::IJVBuilder, model::TightbindingModel, block = missing)
+function add!(b::IJVBuilder, model::TightbindingModel, block=missing)
     lat = lattice(b)
     bs = blockstructure(b)
     amodel = apply(model, (lat, bs))
@@ -50,7 +50,7 @@ function add!(b::IJVBuilder, model::TightbindingModel, block = missing)
     return b
 end
 
-function add!(b::IJVBuilderWithModifiers, model::ParametricModel, block = missing)
+function add!(b::IJVBuilderWithModifiers, model::ParametricModel, block=missing)
     m0 = basemodel(model)
     ms = filterblock.(modifier.(terms(model)), Ref(block))
     add!(b, m0, block)
@@ -148,10 +148,10 @@ hamiltonian(lat::Lattice, m::Interblock{<:ParametricModel}; kw...) = parametric(
     hamiltonian(lat, basemodel(parent(m)), block(m); kw...),
     modifier.(terms(parent(m)))...)
 
-hamiltonian(lat::Lattice, m::TightbindingModel = TightbindingModel(), block = missing; orbitals = Val(1)) =
+hamiltonian(lat::Lattice, m::TightbindingModel=TightbindingModel(), block=missing; orbitals=Val(1)) =
     hamiltonian!(IJVBuilder(lat, orbitals), m, block)
 
-function hamiltonian!(b::IJVBuilder, m::TightbindingModel, block = missing)
+function hamiltonian!(b::IJVBuilder, m::TightbindingModel, block=missing)
     add!(b, m, block)
     return hamiltonian(b)
 end
@@ -260,10 +260,10 @@ call!(h::Hamiltonian{<:Any,<:Any,0}, ::Tuple{}; params...) = h[()]
 call!(h::Hamiltonian, ft::FrankenTuple) = call!(h, Tuple(ft))
 
 # shortcut (see call!_output further below)
-flat_bloch!(h::Hamiltonian{<:Any,<:Any,0}, ::SVector{0}, axis = missing) = h[()]
+flat_bloch!(h::Hamiltonian{<:Any,<:Any,0}, ::SVector{0}, axis=missing) = h[()]
 
 # returns a flat sparse matrix
-function flat_bloch!(h::Hamiltonian{T}, φs::SVector, axis = missing) where {T}
+function flat_bloch!(h::Hamiltonian{T}, φs::SVector, axis=missing) where {T}
     hbloch = bloch(h)
     needs_initialization(hbloch) && initialize_bloch!(hbloch, harmonics(h))
     fbloch = flat(hbloch)
@@ -279,7 +279,7 @@ function addblochs!(dst::SparseMatrixCSC, h::Hamiltonian, φs, axis)
     for har in hars
         iszero(dcell(har)) && isvelocity && continue
         e⁻ⁱᵠᵈⁿ = cis(-dot(φs, dcell(har)))
-        isvelocity && (e⁻ⁱᵠᵈⁿ *= - im * dcell(har)[axis])
+        isvelocity && (e⁻ⁱᵠᵈⁿ *= -im * dcell(har)[axis])
         merged_mul!(dst, matrix(har), e⁻ⁱᵠᵈⁿ, 1, 1)  # see tools.jl
     end
     return dst
@@ -481,7 +481,8 @@ Base.getindex(h::Hamiltonian; kw...) = h[siteselector(; kw...)]
 Base.getindex(h::ParametricHamiltonian, i, j) = getindex(call!(h), i, j)
 Base.getindex(h::Hamiltonian, i, j) = getindex(h, sites_to_orbs(i, h), sites_to_orbs(j, h))
 # we need AbstractHamiltonian here to avoid ambiguities with dn above
-Base.getindex(h::AbstractHamiltonian, i) = (i´ = sites_to_orbs(i, h); getindex(h, i´, i´))
+Base.getindex(h::AbstractHamiltonian, i) = (i´ = sites_to_orbs(i, h);
+getindex(h, i´, i´))
 
 Base.getindex(h::AbstractHamiltonian, ::SparseIndices...) =
     argerror("Sparse indexing not yet supported for AbstractHamiltonian")
@@ -490,7 +491,7 @@ Base.getindex(h::AbstractHamiltonian, ::SparseIndices...) =
 Base.getindex(h::Hamiltonian, i::OrbitalSliceGrouped, j::OrbitalSliceGrouped) =
     OrbitalSliceMatrix(
         mortar((h[si, sj] for si in cellsdict(i), sj in cellsdict(j))),
-    (i, j))
+        (i, j))
 
 Base.getindex(h::Hamiltonian, i::AnyOrbitalSlice, j::AnyOrbitalSlice) =
     mortar((h[si, sj] for si in cellsdict(i), sj in cellsdict(j)))
@@ -508,9 +509,9 @@ function Base.getindex(h::Hamiltonian{T}, i::AnyCellOrbitals, j::AnyCellOrbitals
     return mat
 end
 
-Base.view(h::ParametricHamiltonian, i::CellSites, j::CellSites = i) = view(call!(h), i, j)
+Base.view(h::ParametricHamiltonian, i::CellSites, j::CellSites=i) = view(call!(h), i, j)
 
-function Base.view(h::Hamiltonian, i::CellSites, j::CellSites = i)
+function Base.view(h::Hamiltonian, i::CellSites, j::CellSites=i)
     oi, oj = sites_to_orbs_nogroups(i, h), sites_to_orbs_nogroups(j, h)
     dn = cell(oi) - cell(oj)
     return view(h[dn], orbindices(oi), orbindices(oj))
@@ -535,7 +536,7 @@ nonsites(h::Hamiltonian) = nnzdiag(h[unflat()])
 # avoid call!, since params can have no default
 nonsites(h::ParametricHamiltonian) = nonsites(hamiltonian(h))
 
-coordination(h::AbstractHamiltonian) = iszero(nhoppings(h)) ? 0.0 : round(nhoppings(h) / nsites(lattice(h)), digits = 5)
+coordination(h::AbstractHamiltonian) = iszero(nhoppings(h)) ? 0.0 : round(nhoppings(h) / nsites(lattice(h)), digits=5)
 
 #endregion
 
@@ -546,7 +547,7 @@ coordination(h::AbstractHamiltonian) = iszero(nhoppings(h)) ? 0.0 : round(nhoppi
 #region
 
 function unitcell_hamiltonian(h::Hamiltonian)
-    lat = lattice(lattice(h); bravais = ())
+    lat = lattice(lattice(h); bravais=())
     bs = blockstructure(h)
     hars = [Harmonic(SVector{0,Int}(), matrix(first(harmonics(h))))]
     return Hamiltonian(lat, bs, hars)
@@ -562,7 +563,7 @@ unitcell_hamiltonian(ph::ParametricHamiltonian) = unitcell_hamiltonian(hamiltoni
 #   builder.modifiers isa Vector{Any} in that case.
 #region
 
-function combine(hams::AbstractHamiltonian...; coupling::AbstractModel = TightbindingModel())
+function combine(hams::AbstractHamiltonian...; coupling::AbstractModel=TightbindingModel())
     check_unique_names(coupling, hams...)
     lat = combine(lattice.(hams)...)
     builder = IJVBuilder(lat, hams...)
@@ -594,44 +595,75 @@ maybe_add_modifiers(b, ::TightbindingModel) = b
 #endregion
 
 ############################################################################################
-# torus(::Hamiltonian, phases)
+# torus(::Hamiltonian, phases::Tuple)
+# torus(::Hamiltonian, wrapaxes::SVector)
 #region
 
 torus(phases) = h -> torus(h, phases)
 
-function torus(h::Hamiltonian{<:Any,<:Any,L}, phases) where {L}
-    check_torus_phases(phases, L)
-    wa, ua = split_axes(phases)  # indices for wrapped and unwrapped axes
-    iszero(length(wa)) && return minimal_callsafe_copy(h)
+#region ## torus(::Hamiltonian, phases)
+
+function torus(h::AbstractHamiltonian, phases)
+    wp, wa, ua = split_axes(h, phases)
+    isempty(wa) && return minimal_callsafe_copy(h)
+    return _torus(h, wp, wa, ua)
+end
+
+# wa, ua = tuples of indices of wrapped/unwrapped axes
+# wp = phases along wrapped axes
+function _torus(h::Hamiltonian, wp, wa, ua)
     lat = lattice(h)
     b´ = bravais_matrix(lat)[:, SVector(ua)]
-    lat´ = lattice(lat; bravais = b´)
+    lat´ = lattice(lat; bravais=b´)
     bs´ = blockstructure(h)
     bloch´ = copy_matrices(bloch(h))
-    hars´ = stitch_harmonics(harmonics(h), phases, wa, ua)
+    hars´ = stitch_harmonics(harmonics(h), wp, wa, ua)
     return Hamiltonian(lat´, bs´, hars´, bloch´)
 end
 
-check_torus_phases(phases, L) = length(phases) == L ||
-    argerror("Expected $L `torus` phases, got $(length(phases))")
+function _torus(p::ParametricHamiltonian, wp, wa, ua)
+    h = parent(p)
+    h´ = _torus(h, wp, wa, ua)
+    ams = modifiers(p)
+    L = latdim(h)
+    S = SMatrix{L,L,Int}(I)[SVector(ua), :] # dnnew = S * dnold
+    ptrmap = pointer_map(h, h´, S)    # [[(ptr´ of har´[S*dn]) for ptr in har] for har in h]
+    harmap = harmonics_map(h, h´, S)  # [(index of har´[S*dn]) for har in h]
+    ams´ = stitch_modifier.(ams, Ref(ptrmap), Ref(harmap))
+    p´ = hamiltonian(h´, ams´...)
+    return p´
+end
 
-split_axes(phases) = split_axes((), (), 1, phases...)
-split_axes(wa, ua, n, x::Colon, xs...) = split_axes(wa, (ua..., n), n+1, xs...)
-split_axes(wa, ua, n, x, xs...) = split_axes((wa..., n), ua, n+1, xs...)
-split_axes(wa, ua, n) = wa, ua
+# indices for wrapped and unwrapped axes, and wrapped phases
+function split_axes(::AbstractHamiltonian{<:Any,<:Any,L}, phases::Tuple) where {L}
+    length(phases) == L || argerror("Expected $L `torus` phases, got $(length(phases))")
+    return _split_axes((), (), (), 1, phases...)
+end
 
-function stitch_harmonics(hars, phases, wa::NTuple{W}, ua::NTuple{U}) where {W,U}
-    phases_w = SVector(phases)[SVector(wa)]
+_split_axes(wp, wa, ua, n, ::Colon, xs...) = _split_axes(wp, wa, (ua..., n), n + 1, xs...)
+_split_axes(wp, wa, ua, n, x, xs...) = _split_axes((wp..., x), (wa..., n), ua, n + 1, xs...)
+_split_axes(wp, wa, ua, n) = wp, wa, ua
+
+function split_axes(::AbstractHamiltonian{<:Any,<:Any,L}, wrapaxes::SVector) where {L}
+    allunique(wrapaxes) && issorted(wrapaxes) && all(i -> 1<=i<=L, wrapaxes) ||
+        argerror("Wrap axes should be a sorted SVector of unique axis indices between 1 and $L")
+    wa = Tuple(wrapaxes)
+    wp = Tuple(zero(wrapaxes))
+    ua = inds_complement(Val(L), wa)
+    return wp, wa, ua
+end
+
+function stitch_harmonics(hars, phases_w, wa::NTuple{W}, ua::NTuple{U}) where {W,U}
     dcells_u = SVector{U,Int}[dcell(har)[SVector(ua)] for har in hars]
     dcells_w = SVector{W,Int}[dcell(har)[SVector(wa)] for har in hars]
-    unique_dcells_u = unique!(sort(dcells_u, by = norm))
+    unique_dcells_u = unique!(sort(dcells_u, by=norm))
     groups = [findall(==(dcell), dcells_u) for dcell in unique_dcells_u]
     hars´ = [summed_harmonic(inds, hars, phases_w, dcells_u, dcells_w) for inds in groups]
     return hars´
 end
 
 function summed_harmonic(inds, hars::Vector{<:Harmonic{<:Any,<:Any,B}}, phases_w, dcells_u, dcells_w) where {B}
-    I,J,V = Int[], Int[], B[]
+    I, J, V = Int[], Int[], B[]
     for i in inds
         I´, J´, V´ = findnz(unflat(matrix(hars[i])))
         dn_w = dcells_w[i]
@@ -648,29 +680,8 @@ function summed_harmonic(inds, hars::Vector{<:Harmonic{<:Any,<:Any,B}}, phases_w
     return Harmonic(dn_u, HybridSparseMatrix(bs, mat))
 end
 
-#endregion
-
-############################################################################################
-# torus(::ParametricHamiltonian, phases)
-#region
-
-function torus(p::ParametricHamiltonian, phases)
-    wa, ua = split_axes(phases)  # indices for wrapped and unwrapped axes
-    iszero(length(wa)) && return minimal_callsafe_copy(p)
-    h = parent(p)
-    h´ = torus(h, phases)
-    ams = modifiers(p)
-    L = latdim(lattice(h))
-    S = SMatrix{L,L,Int}(I)[SVector(ua), :] # dnnew = S * dnold
-    ptrmap = pointer_map(h, h´, S)    # [[(ptr´ of har´[S*dn]) for ptr in har] for har in h]
-    harmap = harmonics_map(h, h´, S)  # [(index of har´[S*dn]) for har in h]
-    ams´ = stitch_modifier.(ams, Ref(ptrmap), Ref(harmap))
-    p´ = hamiltonian(h´, ams´...)
-    return p´
-end
-
 pointer_map(h, h´, S) =
-    [pointer_map(har, first(harmonic_index(h´, S*dcell(har)))) for har in harmonics(h)]
+    [pointer_map(har, first(harmonic_index(h´, S * dcell(har)))) for har in harmonics(h)]
 
 function pointer_map(har, har´)
     ptrs´ = Int[]
@@ -688,7 +699,7 @@ function pointer_map(har, har´)
     return ptrs´
 end
 
-harmonics_map(h, h´, S) = [last(harmonic_index(h´, S*dcell(har))) for har in harmonics(h)]
+harmonics_map(h, h´, S) = [last(harmonic_index(h´, S * dcell(har))) for har in harmonics(h)]
 
 function stitch_modifier(m::AppliedOnsiteModifier, ptrmap, _)
     ptrs´ = first(ptrmap)
@@ -705,15 +716,74 @@ function stitch_modifier(m::AppliedHoppingModifier, ptrmap, harmap)
         push!(ps´[i´], (ptrs´[ptr], r, dr, si, sj, orborbs))
     end
     sort!.(ps´)
-    check_ptr_duplicates(first(ps´))
+    check_ptr_duplicates(ps´, ptrmap, harmap)
     return AppliedHoppingModifier(m, ps´)
 end
 
-function check_ptr_duplicates(h0ptrs)
-    has_duplicates_ptrs = !allunique(first(p) for p in h0ptrs)
-    has_duplicates_ptrs &&
-        @warn "The wrapped ParametricHamiltonian has a modifier on hoppings that are the sum of intra- and intercell hoppings. The modifier will be applied to the sum, which may lead to unexpected results for position-dependent modifiers."
+# pss = [ps...], and ps = [(ptr, ...), ...] are modified hoppings on a given wrapped harmonic
+# We firts check if no pointer ptr appears twice in each harmonic
+# if it does it means that two hoppings in two original harmonics affected by the modifier
+# become the same hopping in the wrapped Hamiltonian, which can be problematic
+# Then we check if a modified and a non-modified original hoppings become the same after wrapping
+# first append all the ptr´ pointers coming from each unwrapped harmonics into the same wrapped harmonic
+# now find all ptr´ that are duplicate (i.e. that have multiple unwrapped harmonic sources)
+# now, for each of these wrapped harmonics, find the modified ps = [(ptr´,...),...]
+# if any ptr´ in ps appears in the duplicate list of that harmonic, it means that the
+# corresponding wrapped hopping comes from summing a modified hopping and an unmodified hopping
+function check_ptr_duplicates(pss, ptrmap, harmap)
+    message0 =  "The modifier will be applied to the sum, which may lead to unexpected results e.g. with non-linear or position-dependent modifiers. A possible fix is to use an enlarged supercell."
+    message1 = "Two modified hoppings have been wrapped into one. " * message0
+    message2 = "A modified and a non-modified hopping have been wrapped into one. " * message0
+    # First check if two modified hoppings have been wrapped into one
+    for ps in pss
+        has_duplicates_ptrs = !allunique(first(p) for p in ps)
+        if has_duplicates_ptrs
+            @warn message1
+            return nothing # warn only once
+        end
+    end
+    # Now check if a modified and a non-modified hoppings have been wrapped into one
+    merged_ptrmaps = Int[]
+    for (indhar´, ps) in enumerate(pss)
+        empty!(merged_ptrmaps)
+        for (har_ptrmap, indhar) in zip(ptrmap, harmap)
+            if indhar == indhar´
+                append!(merged_ptrmaps, har_ptrmap)
+            end
+        end
+        repeated_ptrs = onlyrepeated!(merged_ptrmaps)
+        isempty(repeated_ptrs) && continue
+        for (p, _...) in ps  # p are not repeated
+            if p in repeated_ptrs
+                @warn message2
+                return nothing
+            end
+        end
+    end
     return nothing
 end
+
+#endregion
+#endregion
+
+
+############################################################################################
+# @torus(h, phases, ϕname)
+#region
+
+macro torus(h, phases_or_axes, name)
+    quote
+        wp, wa, ua = split_axes($(esc(h)), $(esc(phases_or_axes)))
+        was = SVector(wa)
+        mod = @hopping!((t, i, j; $name = $missing) -->
+            t * blochphase((cell(i) - cell(j))[was], $(esc(name))); dcells = !iszero)
+        h´ = $(esc(h)) |> mod
+        _torus(h´, wp, wa, ua)
+    end
+end
+
+blochphase(dn, ::Missing) = 1
+blochphase(dn, ϕ) = blochphase(dn, sanitize_SVector(ϕ))
+blochphase(dn, ϕ::AbstractVector) = cis(-dot(dn, ϕ))
 
 #endregion
