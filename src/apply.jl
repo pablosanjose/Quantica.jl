@@ -116,7 +116,7 @@ function recursive_push!(v::Vector{SVector{L,Int}}, fcell::Function) where {L}
     return v
 end
 
-# for cells::Function with a list of cells (from a LatticeSlice)
+# for cells::Function with a list of cells (from e.g. a LatticeSlice)
 function recursive_push!(v::Vector{SVector{L,Int}}, fcell::Function, cells) where {L}
     for cell in cells
         fcell(cell) && push!(v, cell)
@@ -178,7 +178,7 @@ apply(m::BlockModifier, h::Hamiltonian, shifts = missing) =
 function apply(m::OnsiteModifier, h::Hamiltonian, shifts = missing, block = missing)
     f = parametric_function(m)
     sel = selector(m)
-    asel = apply(sel, lattice(h))
+    asel = apply(sel, lattice(h), ()) # no selected cells if cells::Function
     ptrs = modifier_pointers(h, asel, shifts, block)
     B = blocktype(h)
     spatial = is_spatial(m)
@@ -188,7 +188,8 @@ end
 function apply(m::HoppingModifier, h::Hamiltonian, shifts = missing, block = missing)
     f = parametric_function(m)
     sel = selector(m)
-    asel = apply(sel, lattice(h))
+    dcells = dcell.(harmonics(h))
+    asel = apply(sel, lattice(h), dcells) # we pass available dcells, in case sel is unbounded
     ptrs = modifier_pointers(h, asel, shifts, block)
     B = blocktype(h)
     spatial = is_spatial(m)
@@ -196,7 +197,7 @@ function apply(m::HoppingModifier, h::Hamiltonian, shifts = missing, block = mis
 end
 
 function modifier_pointers(h::Hamiltonian{T,E,L,B}, s::AppliedSiteSelector{T,E,L}, shifts = missing, block = missing) where {T,E,L,B}
-    isempty(cells(s)) || argerror("Cannot constrain cells in an onsite modifier, cell periodicity is assumed.")
+    isempty(cells(s)) || iszero(only(cells(s))) || argerror("Cannot constrain to nonzero cells in an onsite modifier, cell periodicity is assumed.")
     ptrs = Tuple{Int,SVector{E,T},CellSitePos{T,E,L,B},Int}[]
     har0 = first(harmonics(h))
     return push_pointers!(ptrs, h, har0, s, shifts, block)

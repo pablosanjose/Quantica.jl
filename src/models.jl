@@ -69,6 +69,9 @@ function parse_term(macroname, x, ys...)
     if x isa Expr && x.head == :parameters
         kw = x
         f, N, params, spatial = parse_term_body(macroname, only(ys))
+    # elseif x isa Expr && x.head == :block  # received a quoted expression
+    #     dump(x)
+    #     return parse_term(macroname, only(x.args), ys...)
     else
         kw = parse_term_parameters(ys...)
         f, N, params, spatial = parse_term_body(macroname, x)
