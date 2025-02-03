@@ -2396,7 +2396,7 @@ OrbitalSliceGrouped{Float64,2,1} : collection of subcells of orbitals (grouped b
   Total sites : 4
 
 julia> siteindexdict(a)
-4-element Dictionaries.Dictionary{Quantica.CellIndices{1, Int64, Quantica.SiteLike}, UnitRange{Int64}}
+4-element Dictionaries.Dictionary{Quantica.CellIndices{1, Int64, Quantica.SiteLike}, UnitRange{Int64}}:
  CellSites{1,Int64} : 1 site in cell zero
   Sites : 1 │ 1:2
  CellSites{1,Int64} : 1 site in cell zero
@@ -2670,7 +2670,7 @@ Compute the minimal gap around `µ`, see `Quantica.gaps`
 gap
 
 """
-    Quantica.decay_lengths(g::GreenFunctionSchurLead, µ = 0; reverse = false)
+    Quantica.decay_lengths(g::GreenFunctionSchurLead1D, µ = 0; reverse = false)
     Quantica.decay_lengths(h::AbstractHamiltonian1D, µ = 0; reverse = false)
 
 Compute the decay lengths of evanescent modes of a 1D `AbstractHamiltonian` `h` or a 1D

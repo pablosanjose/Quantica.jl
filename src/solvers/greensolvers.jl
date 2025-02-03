@@ -32,13 +32,15 @@ using Quantica: Quantica, AbstractGreenSolver, I
 
 struct SparseLU <:AbstractGreenSolver end
 
-struct Schur{T<:AbstractFloat} <: AbstractGreenSolver
+struct Schur{T<:AbstractFloat,O<:NamedTuple} <: AbstractGreenSolver
     shift::T                      # Tunable parameter in algorithm, see Ω in scattering.pdf
     boundary::T                   # Cell index for boundary (float to allow boundary at Inf)
     axis::Int                     # free axis to use for n-dimensional AbstractHamiltonians
+    integrate_opts::O             # quadgk opts for integrals (for hams in more than 1D)
 end
 
-Schur(; shift = 1.0, boundary = Inf, axis = 1) = Schur(shift, float(boundary), axis)
+Schur(; shift = 1.0, boundary = Inf, axis = 1, atol = 1e-7, integrate_opts...) =
+    Schur(shift, float(boundary), axis, (; atol, integrate_opts...))
 
 struct KPM{B<:Union{Missing,NTuple{2}},A} <: AbstractGreenSolver
     order::Int

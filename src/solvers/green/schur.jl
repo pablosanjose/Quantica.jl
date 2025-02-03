@@ -101,7 +101,7 @@ function nearest_cell_harmonics(h)
         dn == SA[0] || dn == SA[1] || dn == SA[-1]
     end
     is_nearest ||
-        argerror("Too many or too few harmonics. Perhaps try `supercell` to ensure strictly nearest-cell harmonics.")
+        argerror("Too many or too few harmonics (need 3, got $(length(harmonics(h)))). Perhaps try `supercell` to ensure strictly nearest-cell harmonics.")
     hm, h0, hp = h[hybrid(-1)], h[hybrid(0)], h[hybrid(1)]
     flat(hm) ≈ flat(hp)' ||
         argerror("The Hamiltonian should have h[1] ≈ h[-1]' to use the Schur solver")
@@ -335,8 +335,8 @@ mutable struct AppliedSchurGreenSolver{T,B,O,O∞,G,G∞} <: AppliedGreenSolver
     end
 end
 
-const GreenFunctionSchurEmptyLead{T,E} = GreenFunction{T,E,1,<:AppliedSchurGreenSolver,<:Any,<:EmptyContacts}
-const GreenFunctionSchurLead{T,E} = GreenFunction{T,E,1,<:AppliedSchurGreenSolver,<:Any,<:Any}
+const GreenFunctionSchurEmptyLead1D{T,E} = GreenFunction{T,E,1,<:AppliedSchurGreenSolver,<:Any,<:EmptyContacts}
+const GreenFunctionSchurLead1D{T,E} = GreenFunction{T,E,1,<:AppliedSchurGreenSolver,<:Any,<:Any}
 
 AppliedSchurGreenSolver{G,G∞}(fsolver::SchurFactorsSolver{T,B}, boundary, ohL::O, ohR::O, oh∞::O∞) where {T,B,O,O∞,G,G∞} =
     AppliedSchurGreenSolver{T,B,O,O∞,G,G∞}(fsolver, boundary, ohL, ohR, oh∞)
@@ -370,7 +370,7 @@ end
 
 #region ## apply ##
 
-function apply(s::GS.Schur, h::AbstractHamiltonian1D{T}, contacts::Contacts) where {T}
+function apply(s::GS.Schur, h::AbstractHamiltonian1D{T}, contacts) where {T}
     h´ = hamiltonian(h)
     fsolver = SchurFactorsSolver(h´, s.shift)  # aliasing of h´
     boundary = T(round(only(s.boundary)))
@@ -397,9 +397,6 @@ function schur_openhams_types(fsolver, h, boundary)
     return ohL, ohR, oh∞, G, G∞
 end
 
-apply(::GS.Schur, h::AbstractHamiltonian, cs::Contacts) =
-    argerror("Can only use GreenSolvers.Schur with 1D AbstractHamiltonians")
-
 const GFUnit{T,E,H,N,S} =
     GreenFunction{T,E,0,AppliedSparseLUGreenSolver{Complex{T}},H,Contacts{0,N,S,OrbitalSliceGrouped{T,E,0}}}
 
@@ -423,7 +420,7 @@ end
 
 function build_slicer(s::AppliedSchurGreenSolver, g, ω, Σblocks, corbitals; params...)
     # overwrites hamiltonian(g) with params whenever parent(g) isa ParametricHamiltonian
-    # Necessary because its harmonics are aliased in the SchurFactorSolver inside gsolver
+    # Necessary because its harmonics are aliased in the SchurFactorSolver inside s
     call!(parent(g); params...)
     g0slicer = SchurGreenSlicer(ω, s)
     gslicer = maybe_TMatrixSlicer(g0slicer, Σblocks, corbitals)
@@ -470,6 +467,7 @@ mutable struct SchurGreenSlicer{C,A<:AppliedSchurGreenSolver}  <: GreenSlicer{C}
     function SchurGreenSlicer{C,A}(ω, solver) where {C,A}
         # call! the expensive fsolver only once to compute Schur factors, necessary to
         # evaluate unitcell selfenergies in OpenHamiltonians of solver
+        # (see skipsolve_internal = true further below)
         call!(solver.fsolver, ω)
         s = new()
         s.ω = ω
@@ -492,9 +490,9 @@ function Base.getproperty(s::SchurGreenSlicer, f::Symbol)
         d = size(s.L, 2)
         # Issue #268: the result of the following call!'s depends on the current value of h0
         # which aliases the parent h. This is only a problem if `s` was obtained through
-        # `gs = call!(g, ω; params...)`. In that case, doing call!(g, ω; params´...) before
-        # gs[sites...] will be call!-ing e.g. solver.g∞ with the wrong h0 (the one from
-        # params´...). However, if `gs = g(ω; params...)` a copy was made, so it is safe.
+        # `gω = call!(g, ω; params...)`. In that case, doing call!(g, ω; params´...) before
+        # gω[sites...] will be call!-ing e.g. solver.g∞ with the wrong h0 (the one from
+        # params´...). However, if `gω = g(ω; params...)` a copy was made, so it is safe.
         if f == :G₋₁₋₁
             # we ran SchurFactorSolver when constructing s, so skipsolve_internal = true
             # to avoid running it again
@@ -646,10 +644,10 @@ end
 #   computes schur_eigenvalues of all lead modes
 #region
 
-schur_eigvals(g::GreenFunctionSchurLead, ω::Real; params...) =
+schur_eigvals(g::GreenFunctionSchurLead1D, ω::Real; params...) =
     schur_eigvals(g, retarded_omega(ω, solver(g)); params...)
 
-function schur_eigvals(g::GreenFunctionSchurLead, ω::Complex; params...)
+function schur_eigvals(g::GreenFunctionSchurLead1D, ω::Complex; params...)
     h = parent(g)                   # get the (Parametric)Hamiltonian from g
     call!(h; params...)             # update the (Parametric)Hamiltonian with the params
     sf = g.solver.fsolver           # obtain the SchurFactorSolver that computes the AB pencil
@@ -671,7 +669,7 @@ propagating_eigvals(g, ω, margin = 0; params...) =
         filter!(λ -> abs(λ) ≈ 1, schur_eigvals(g, ω; params...)) :
         filter!(λ -> 1 - margin < abs(λ) < 1 + margin, schur_eigvals(g, ω; params...))
 
-function decay_lengths(g::GreenFunctionSchurLead, args...; reverse = false, params...)
+function decay_lengths(g::GreenFunctionSchurLead1D, args...; reverse = false, params...)
     λs = reverse ? advanced_eigvals(g, args...; params...) :  retarded_eigvals(g, args...; params...)
     ls = @. -1/log(abs(λs))         # compute the decay lengths in units of a0
     return ls
@@ -705,6 +703,7 @@ function densitymatrix(s::AppliedSchurGreenSolver, gs::GreenSlice; atol = 1e-7, 
     hmat = similar_Array(hamiltonian(g))
     psis = similar(hmat)
     orbaxes = orbrows(gs), orbcols(gs)
+    # possibly override the default quadgk_opts in solver
     opts = (; atol, quadgk_opts...)
     solver = DensityMatrixSchurSolver(gs, orbaxes, hmat, psis, opts)
     return DensityMatrix(solver, gs)
@@ -753,55 +752,74 @@ end
 # AppliedSchurGreenSolver in 2D
 #region
 
-# struct AppliedSchurGreenSolverND{L,S<:AppliedSchurGreenSolver,F}  <: AppliedGreenSolver
-#     solver1D::S
-#     wrapped_axes::NTuple{L,Int}
-#     phase_func::F                   #  phase_func(ϕ) = (; param_name = ϕ)
-# end
+struct AppliedSchurGreenSolver2D{L,H<:AbstractHamiltonian1D,S<:AppliedSchurGreenSolver,F,P<:NamedTuple}  <: AppliedGreenSolver
+    h1D::H
+    solver1D::S
+    axis1D::Int
+    wrapped_axes::SVector{L,Int}
+    phase_func::F                   #  phase_func(ϕ) = (; param_name = ϕ)
+    integrate_opts::P
+end
 
-# const GreenFunctionSchurND{T,L} = GreenFunction{T,<:Any,L,<:AppliedSchurGreenSolverND}
+const GreenFunctionSchur2D{T,L} = GreenFunction{T,<:Any,L,<:AppliedSchurGreenSolver2D}
 
-# # should not have any contacts (we defer to TMatrixSlicer for that)
-# struct SchurGreenSlicerND{C,S<:GreenSlicer{C},S<:AppliedSchurGreenSolverND} <: GreenSlicer{C}
-#     ω::C
-#     g0slicer1D::S
-#     solver::S
-# end
+# should not have any contacts (we defer to TMatrixSlicer for that)
+struct SchurGreenSlicer2D{C,S<:AppliedSchurGreenSolver2D,F<:Function} <: GreenSlicer{C}
+    ω::C
+    solver::S
+    slicer_generator::F
+end
 
-# function apply(s::GS.Schur, h::AbstractHamiltonian, contacts::Contacts)
-#     L = latdim(h)
-#     wrapped_axes = inds_complement(Val(L), (s.axis,))
-#     h´ = @torus(h, wrapped_axes, ϕ_internal)
-#     phase_func(ϕ_internal) = (; ϕ_internal)
-#     solver1D = apply(s, h´, contacts)
-#     return AppliedSchurGreenSolverND(solver1D, wrapped_axes, phase_func)
-# end
+function apply(s::GS.Schur, h::AbstractHamiltonian, _)
+    L = latdim(h)
+    L == 2 ||
+        argerror("GreenSolvers.Schur currently only implemented for 1D and 2D AbstractHamiltonians")
+    axis1D = s.axis
+    wrapped_axes = sanitize_SVector(inds_complement(Val(L), (axis1D,)))
+    h1D = @torus(h, wrapped_axes, ϕ_internal)
+    phase_func(ϕ_internal) = (; ϕ_internal)
+    # we don't pass contacts to solver1D. They will be applied with T-matrix slicer
+    solver1D = apply(s, h1D, missing)
+    return AppliedSchurGreenSolver2D(h1D, solver1D, axis1D, wrapped_axes, phase_func, s.integrate_opts)
+end
 
-# #region ## API ##
+#region ## API ##
 
-# minimal_callsafe_copy(s::AppliedSchurGreenSolver, args...) =
-#     AppliedSchurGreenSolverND(minimal_callsafe_copy(s.solver1D, args...), s.wrapped_axes, s.phase_func)
+function minimal_callsafe_copy(s::AppliedSchurGreenSolver2D, args...)
+    h1D´ = minimal_callsafe_copy(s.h1D)
+    solver1D´ = minimal_callsafe_copy(s.solver1D, h1D´, missing)
+    return AppliedSchurGreenSolver2D(h1D´, solver1D´, s.axis1D, s.wrapped_axes, s.phase_func, s.integrate_opts)
+end
 
-# needs_omega_shift(s::AppliedSchurGreenSolverND) = needs_omega_shift(s.solver1D)
+minimal_callsafe_copy(s::SchurGreenSlicer2D, args...) =
+    SchurGreenSlicer2D(s.ω, minimal_callsafe_copy(s.solver, args...), s.slicer_generator)
 
-# (s::AppliedSchurGreenSolverND)(args...) = SchurGreenSlicerND(s.solver1D(args...), s)
+function build_slicer(s::AppliedSchurGreenSolver2D, g, ω, Σblocks, corbitals; params...)
+    function slicer_generator(s, ϕ_internal)
+        # updates h1D that is aliased into solver1D.fsolver with the apropriate phases,
+        # included in params
+        call!(s.h1D; params..., s.phase_func(ϕ_internal)...)
+        return SchurGreenSlicer(ω, s.solver1D)
+    end
+    g0slicer = SchurGreenSlicer2D(ω, s, slicer_generator)
+    gslicer = maybe_TMatrixSlicer(g0slicer, Σblocks, corbitals)
+    return gslicer
+end
 
-# # hook in one step above gsolver(ω, Σblocks, corbs), to use params and g - see greenfunction.jl
-# function build_slicer(g, gsolver::AppliedSchurGreenSolverND, ω, Σblocks, corbs; params...)
-#     # overwrites hamiltonian(g) with params whenever parent(g) isa ParametricHamiltonian
-#     # Necessary because its harmonics are aliased in the SchurFactorSolver inside gsolver
-#     call!(parent(g); params...)
-#     g0slicer1D = SchurGreenSlicer(ω, gsolver.solver1D)
-#     g0slicer = SchurGreenSlicerND(ω, g0slicer1D, s)
-#     gslicer = maybe_TMatrixSlicer(g0slicer, Σblocks, corbitals)
-#     return gslicer
-# end
-
-# function Base.getindex(s::SchurGreenSlicerND, i::CellOrbitals, j::CellOrbitals)
-#     dn = cell(i) - cell(j)
-#     s1D = s.g0slicer1D
-#     integrand(ϕ...) = s1D[i,j]
-# end
+function Base.getindex(s::SchurGreenSlicer2D, i::CellOrbitals, j::CellOrbitals)
+    uas, was = SVector(s.solver.axis1D), s.solver.wrapped_axes
+    ni, nj = cell(i), cell(j)
+    i´, j´ = CellOrbitals(ni[uas], orbindices(i)), CellOrbitals(nj[uas], orbindices(j))
+    dn = (ni - nj)[was]
+    function integrand_wrapped(ϕ)
+        ϕs = sanitize_SVector(ϕ)
+        s1D = s.slicer_generator(s.solver, ϕs)
+        gij = s1D[i´, j´] .* cis(-dot(dn, ϕs))
+        return gij
+    end
+    integral, err = quadgk(integrand_wrapped, -π, π; s.solver.integrate_opts...)
+    return integral ./ (2π)
+end
 
 #endregion
 

@@ -1,5 +1,5 @@
 ############################################################################################
-# SelfEnergy(h, glead::GreenFunctionSchurEmptyLead; kw...)
+# SelfEnergy(h, glead::GreenFunctionSchurEmptyLead1D; kw...)
 #   Extended self energy solver for deflated ΣL or ΣR Schur factors of lead unitcell
 #   See notes on solvers/green/schur.jl
 #region
@@ -37,7 +37,7 @@ end
 # semi-infinite lead (possibly by first transforming the lead lattice with `transform`)
 # and if so, builds the extended Self Energy directly, using the same intercell coupling of
 # the lead, but using the correct site order of hparent
-function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurEmptyLead; reverse = false, transform = missing, kw...)
+function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurEmptyLead1D; reverse = false, transform = missing, kw...)
     lsparent = contact_orbslice(hparent; kw...)
     schursolver = solver(glead)
     fsolver = schurfactorsolver(schursolver)
@@ -176,7 +176,7 @@ end
 # through the model coupling. The lead is transformed with `transform` to align it to
 # hparent. Then we apply the model to the 0D lattice of hparent's selected surface plus the
 # lead unit cell, and then build an extended self energy
-function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead, model::AbstractModel;
+function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead1D, model::AbstractModel;
                     reverse = false, transform = missing, kw...)
     check_lead_contact_reversal(glead, reverse)
     schursolver = solver(glead)
@@ -262,23 +262,23 @@ function selfenergy_plottables(s::SelfEnergyCouplingSchurSolver, ls::LatticeSlic
     return (p1, p2, p3)
 end
 
-check_lead_contact_reversal(::GreenFunctionSchurLead, reverse) =
+check_lead_contact_reversal(::GreenFunctionSchurLead1D, reverse) =
     reverse && @warn "Using `reverse` on a lead with additional contacts. Note that contacts will not be reversed, only the Bravais vectors of the lead"
 
-check_lead_contact_reversal(::GreenFunctionSchurEmptyLead, reverse) = nothing
+check_lead_contact_reversal(::GreenFunctionSchurEmptyLead1D, reverse) = nothing
 
 #endregion
 
 #endregion
 
 ############################################################################################
-# SelfEnergy(h, glead::GreenFunctionSchurLead; kw...)
+# SelfEnergy(h, glead::GreenFunctionSchurLead1D; kw...)
 #   Regular (Generic) self energy, since Extended is not possible for lead with contacts
-#   Otherwise equivalent to SelfEnergy(h, glead::GreenFunctionSchurEmptyLead; kw...)
+#   Otherwise equivalent to SelfEnergy(h, glead::GreenFunctionSchurEmptyLead1D; kw...)
 #   reverse is not allowed since lead contacts cannot be reversed
 #region
 
-function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead; reverse = false, transform = missing, sites...)
+function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead1D; reverse = false, transform = missing, sites...)
     blocksizes(blockstructure(glead)) == blocksizes(blockstructure(hparent)) ||
         argerror("The orbital/sublattice structure of parent and lead Hamiltonians do not match")
     check_lead_contact_reversal(glead, reverse)
