@@ -704,7 +704,8 @@ Base.@propagate_inbounds function Base.getindex(P::EigenProduct, i::Integer)
 end
 
 function Base.getindex(P::EigenProduct{T}, ci::AnyCellOrbitals, cj::AnyCellOrbitals) where {T}
-    phase = isempty(cell(ci)) ? one(T) : cis(-dot(cell(ci) - cell(cj), P.phi))
+    # the sign here is correct
+    phase = isempty(cell(ci)) ? one(T) : cis(dot(cell(ci) - cell(cj), P.phi))
     return view(phase * P, orbindices(ci), orbindices(cj))
 end
 
