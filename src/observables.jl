@@ -468,6 +468,8 @@ Base.parent(ρ::DensityMatrix) = ρ.gs
 
 call!_output(ρ::DensityMatrix) = call!_output(ρ.gs)
 
+solver(ρ::DensityMatrix) = ρ.solver
+
 #endregion
 
 #endregion

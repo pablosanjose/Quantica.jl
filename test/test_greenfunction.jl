@@ -139,7 +139,6 @@ end
 
 @testset "GreenSolvers applicability" begin
     h = HP.graphene()
-    @test_throws ArgumentError greenfunction(h, GS.Schur())
     @test_throws ArgumentError greenfunction(h, GS.KPM())
     @test_throws ArgumentError greenfunction(h, GS.SparseLU())
     @test_throws ArgumentError greenfunction(h, GS.Spectrum())

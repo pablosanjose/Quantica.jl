@@ -647,10 +647,12 @@ end
 schur_eigvals(g::GreenFunctionSchurLead1D, ω::Real; params...) =
     schur_eigvals(g, retarded_omega(ω, solver(g)); params...)
 
-function schur_eigvals(g::GreenFunctionSchurLead1D, ω::Complex; params...)
-    h = parent(g)                   # get the (Parametric)Hamiltonian from g
+schur_eigvals(g::GreenFunctionSchurLead1D, ω::Complex; params...) =
+    schur_eigvals((parent(g), g.solver), ω; params...)
+
+function schur_eigvals((h, solver)::Tuple{AbstractHamiltonian1D,AppliedSchurGreenSolver}, ω::Complex; params...)
     call!(h; params...)             # update the (Parametric)Hamiltonian with the params
-    sf = g.solver.fsolver           # obtain the SchurFactorSolver that computes the AB pencil
+    sf = solver.fsolver             # obtain the SchurFactorSolver that computes the AB pencil
     update_LR!(sf)                  # Ensure L and R matrices are updated after updating h
     update_iG!(sf, ω)               # shift inverse G with ω
     A, B = pencilAB!(sf)            # build the pecil
@@ -681,81 +683,13 @@ decay_lengths(g::AbstractHamiltonian1D, µ = 0, args...; params...) =
 #endregion
 
 ############################################################################################
-# densitymatrix - dedicated Schur method (integration with Fermi points as segments)
-#   Does not support non-Nothing contacts
-#region
-
-struct DensityMatrixSchurSolver{T,A,G<:GreenSlice{T},O<:NamedTuple}
-    gs::G                           # parent of GreenSlice
-    orbaxes::A                      # axes of GreenSlice (orbrows, orbcols)
-    hmat::Matrix{Complex{T}}        # it spans just the unit cell, dense Bloch matrix
-    psis::Matrix{Complex{T}}        # it spans just the unit cell, Eigenstates
-    opts::O                         # kwargs for quadgk
-end
-
-## Constructor
-
-function densitymatrix(s::AppliedSchurGreenSolver, gs::GreenSlice; atol = 1e-7, quadgk_opts...)
-    isempty(boundaries(s)) ||
-        argerror("Boundaries not implemented for DensityMatrixSchurSolver. Consider using the generic integration solver.")
-    has_selfenergy(gs) && argerror("The Schur densitymatrix solver currently support only `nothing` contacts")
-    g = parent(gs)
-    hmat = similar_Array(hamiltonian(g))
-    psis = similar(hmat)
-    orbaxes = orbrows(gs), orbcols(gs)
-    # possibly override the default quadgk_opts in solver
-    opts = (; atol, quadgk_opts...)
-    solver = DensityMatrixSchurSolver(gs, orbaxes, hmat, psis, opts)
-    return DensityMatrix(solver, gs)
-end
-
-# API
-
-## call
-
-# use computed Fermi points to integrate spectral function by segments
-# returns an AbstractMatrix
-# we don't use Integrator, because that is meant for integrals over energy, not momentum
-function (s::DensityMatrixSchurSolver)(µ, kBT; params...)
-    g = parent(s.gs)
-    λs = propagating_eigvals(g, µ + 0im, 1e-2; params...)
-    ϕs = @. real(-im*log(λs))
-    xs = sort!(ϕs ./ (2π))
-    pushfirst!(xs, -0.5)
-    push!(xs, 0.5)
-    xs = [mean(view(xs, rng)) for rng in approxruns(xs)]  # eliminate approximate duplicates
-    result = call!_output(s.gs)
-    integrand!(x) = fermi_h!(result, s, 2π * x, µ, inv(kBT); params...)
-    fx! = (y, x) -> (y .= integrand!(x))
-    quadgk!(fx!, result, xs...; s.opts...)
-    return result
-end
-
-function fermi_h!(result, s, ϕ, µ, β = 0; params...)
-    h = hamiltonian(s.gs)
-    bs = blockstructure(h)
-    # Similar to spectrum(h, ϕ; params...), but less work (no sort! or sanitization)
-    copy!(s.hmat, call!(h, ϕ; params...))  # sparse to dense
-    ϵs, psis = eigen!(Hermitian(s.hmat))
-    # special-casing β = Inf with views turns out to be slower
-    fs = (@. ϵs = fermi(ϵs - µ, β))
-    fpsis = (s.psis .= psis .* transpose(fs))
-    ρcell = EigenProduct(bs, psis, fpsis, ϕ)
-    getindex!(result, ρcell, s.orbaxes...)
-    return result
-end
-
-#endregion
-
-
-############################################################################################
 # AppliedSchurGreenSolver in 2D
 #region
 
 struct AppliedSchurGreenSolver2D{L,H<:AbstractHamiltonian1D,S<:AppliedSchurGreenSolver,F,P<:NamedTuple}  <: AppliedGreenSolver
     h1D::H
     solver1D::S
-    axis1D::Int
+    axis1D::SVector{1,Int}
     wrapped_axes::SVector{L,Int}
     phase_func::F                   #  phase_func(ϕ) = (; param_name = ϕ)
     integrate_opts::P
@@ -774,8 +708,8 @@ function apply(s::GS.Schur, h::AbstractHamiltonian, _)
     L = latdim(h)
     L == 2 ||
         argerror("GreenSolvers.Schur currently only implemented for 1D and 2D AbstractHamiltonians")
-    axis1D = s.axis
-    wrapped_axes = sanitize_SVector(inds_complement(Val(L), (axis1D,)))
+    axis1D = SVector(s.axis)
+    wrapped_axes = inds_complement(Val(L), axis1D)
     h1D = @torus(h, wrapped_axes, ϕ_internal)
     phase_func(ϕ_internal) = (; ϕ_internal)
     # we don't pass contacts to solver1D. They will be applied with T-matrix slicer
@@ -807,22 +741,126 @@ function build_slicer(s::AppliedSchurGreenSolver2D, g, ω, Σblocks, corbitals; 
 end
 
 function Base.getindex(s::SchurGreenSlicer2D, i::CellOrbitals, j::CellOrbitals)
-    uas, was = SVector(s.solver.axis1D), s.solver.wrapped_axes
+    uas, was = s.solver.axis1D, s.solver.wrapped_axes
     ni, nj = cell(i), cell(j)
     i´, j´ = CellOrbitals(ni[uas], orbindices(i)), CellOrbitals(nj[uas], orbindices(j))
     dn = (ni - nj)[was]
-    function integrand_wrapped(ϕ)
-        ϕs = sanitize_SVector(ϕ)
+    function integrand(x)
+        ϕs = sanitize_SVector(2π * x)
         s1D = s.slicer_generator(s.solver, ϕs)
         gij = s1D[i´, j´] .* cis(-dot(dn, ϕs))
         return gij
     end
-    integral, err = quadgk(integrand_wrapped, -π, π; s.solver.integrate_opts...)
-    return integral ./ (2π)
+    integral, err = quadgk(integrand, -0.5, 0.5; s.solver.integrate_opts...)
+    return integral
 end
 
+boundaries(s::AppliedSchurGreenSolver2D) = boundaries(s.solver1D)
+
 #endregion
 
 #endregion
+
+
+############################################################################################
+# densitymatrix - dedicated Schur method (integration with Fermi points as segments)
+#   1D and 2D routines. Does not support non-Nothing contacts
+#region
+
+struct DensityMatrixSchurSolver{T,L,A,G<:GreenSlice{T,<:Any,L},O<:NamedTuple}
+    gs::G                           # GreenSlice
+    orbaxes::A                      # axes of GreenSlice (orbrows, orbcols)
+    hmat::Matrix{Complex{T}}        # it spans just the unit cell, dense Bloch matrix
+    psis::Matrix{Complex{T}}        # it spans just the unit cell, Eigenstates
+    opts::O                         # kwargs for quadgk
+end
+
+## Constructor
+
+function densitymatrix(s::Union{AppliedSchurGreenSolver,AppliedSchurGreenSolver2D}, gs::GreenSlice; atol = 1e-7, quadgk_opts...)
+    check_no_boundaries_schur(s)
+    check_no_contacts_schur(gs)
+    return densitymatrix_schur(gs; atol, quadgk_opts...)
+end
+
+check_no_boundaries_schur(s) = isempty(boundaries(s)) ||
+    argerror("Boundaries not implemented for DensityMatrixSchurSolver. Consider using the generic integration solver.")
+
+check_no_contacts_schur(gs) = has_selfenergy(gs) &&
+    argerror("The Schur densitymatrix solver currently support only `nothing` contacts")
+
+function densitymatrix_schur(gs; opts...)
+    g = parent(gs)
+    hmat = similar_Array(hamiltonian(g))
+    psis = similar(hmat)
+    orbaxes = orbrows(gs), orbcols(gs)
+    solver = DensityMatrixSchurSolver(gs, orbaxes, hmat, psis, NamedTuple(opts))
+    return DensityMatrix(solver, gs)
+end
+
+# API
+
+## call
+
+# use computed Fermi points to integrate spectral function by segments
+# returns an AbstractMatrix
+# we don't use Integrator, because that is meant for integrals over energy, not momentum
+(s::DensityMatrixSchurSolver)(µ, kBT; params...) = integrate_rho_schur(s, µ, kBT; params...)
+
+function integrate_rho_schur(s::DensityMatrixSchurSolver{<:Any,1}, µ, kBT; params...)
+    result = call!_output(s.gs)
+    g = parent(s.gs)
+    xs = fermi_points_integration_path(g, µ; params...)
+    integrand!(x) = fermi_h!(result, s, SA[2π * x], µ, inv(kBT); params...)
+    fx! = (y, x) -> (y .= integrand!(x))
+    quadgk!(fx!, result, xs...; s.opts...)
+    return result
+end
+
+function integrate_rho_schur(s::DensityMatrixSchurSolver{<:Any,2}, µ, kBT; params...)
+    s2D = solver(s.gs)
+    result = call!_output(s.gs)
+    h1D, s1D = (s2D.h1D, s2D.solver1D)
+
+    axisorder = SA[only(s2D.axis1D), only(s2D.wrapped_axes)]
+
+    integrand_inner!(result, (x1, x2)) =
+        fermi_h!(result, s, 2π * SA[x1, x2][axisorder], µ, inv(kBT); params...)
+
+    function integrand_outer!(result, x2)
+        xs = fermi_points_integration_path((h1D, s1D), µ; params..., s2D.phase_func(SA[2π*x2])...)
+        inner! = (y, x1) -> (y .= integrand_inner!(result, (x1, x2)))
+        quadgk!(inner!, result, xs...; s.opts...)
+        return result
+    end
+
+    quadgk!(integrand_outer!, result, -0.5, 0.5; s.opts...)
+    return result
+end
+
+# this g can be a GreenFunction or a (h1D, s1D) pair
+function fermi_points_integration_path(g, µ; params...)
+    λs = propagating_eigvals(g, µ + 0im, 1e-2; params...)
+    ϕs = @. real(-im*log(λs))
+    xs = sort!(ϕs ./ (2π))
+    pushfirst!(xs, -0.5)
+    push!(xs, 0.5)
+    xs = [mean(view(xs, rng)) for rng in approxruns(xs)]  # eliminate approximate duplicates
+    return xs
+end
+
+function fermi_h!(result, s, ϕ, µ, β = 0; params...)
+    h = hamiltonian(s.gs)
+    bs = blockstructure(h)
+    # Similar to spectrum(h, ϕ; params...), but less work (no sort! or sanitization)
+    copy!(s.hmat, call!(h, ϕ; params...))  # sparse to dense
+    ϵs, psis = eigen!(Hermitian(s.hmat))
+    # special-casing β = Inf with views turns out to be slower
+    fs = (@. ϵs = fermi(ϵs - µ, β))
+    fpsis = (s.psis .= psis .* transpose(fs))
+    ρcell = EigenProduct(bs, psis, fpsis, ϕ)
+    getindex!(result, ρcell, s.orbaxes...)
+    return result
+end
 
 #endregion top

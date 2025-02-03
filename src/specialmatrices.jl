@@ -659,18 +659,19 @@ Broadcast.broadcast_unalias(dest::AbstractOrbitalArray, src::AbstractOrbitalArra
 
 ############################################################################################
 ## EigenProduct
-#   A matrix P = X * U * V' that is stored in terms of matrices U and V without computing
+#   A matrix P = x * U * V' that is stored in terms of matrices U and V without computing
 #   the product. x is a scalar. Inspired by LowRankMatrices.jl
 #region
 
 # U and V may be SubArrays with different index type, so we need MU and MV
-struct EigenProduct{T,MU<:AbstractMatrix{Complex{T}},MV<:AbstractMatrix{Complex{T}},O<:OrbitalBlockStructure} <: AbstractMatrix{T}
+# phi is a 1D Bloch phase to compute x = cis(-only(dn)*phi)
+struct EigenProduct{T,L,MU<:AbstractMatrix{Complex{T}},MV<:AbstractMatrix{Complex{T}},O<:OrbitalBlockStructure} <: AbstractMatrix{T}
     blockstruct::O
     U::MU
     V::MV
-    phi::T
+    phi::SVector{L,T}
     x::Complex{T}
-    function EigenProduct{T,MU,MV,O}(blockstruct::O, U::MU, V::MV, phi::T, x::Complex{T}) where {T,MU<:AbstractMatrix{Complex{T}},MV<:AbstractMatrix{Complex{T}},O<:OrbitalBlockStructure}
+    function EigenProduct{T,L,MU,MV,O}(blockstruct::O, U::MU, V::MV, phi::SVector{L,T}, x::Complex{T}) where {T,L,MU<:AbstractMatrix{Complex{T}},MV<:AbstractMatrix{Complex{T}},O<:OrbitalBlockStructure}
         axes(U, 2) != axes(V, 2) && argerror("U and V must have identical column axis")
         return new(blockstruct, U, V, phi, x)
     end
@@ -678,8 +679,8 @@ end
 
 #region ## Constructors ##
 
-EigenProduct(blockstruct::O, U::MU, V::MV, phi = zero(T), x = one(Complex{T})) where {T,MU<:AbstractMatrix{Complex{T}},MV<:AbstractMatrix{Complex{T}},O<:OrbitalBlockStructure} =
-    EigenProduct{T,MU,MV,O}(blockstruct, U, V, T(phi), Complex{T}(x))
+EigenProduct(blockstruct::O, U::MU, V::MV, phi::SVector{L} = SA[zero(T)], x = one(Complex{T})) where {T,L,MU<:AbstractMatrix{Complex{T}},MV<:AbstractMatrix{Complex{T}},O<:OrbitalBlockStructure} =
+    EigenProduct{T,L,MU,MV,O}(blockstruct, U, V, sanitize_SVector(SVector{L,T}, phi), Complex{T}(x))
 
 #endregion
 
@@ -703,7 +704,7 @@ Base.@propagate_inbounds function Base.getindex(P::EigenProduct, i::Integer)
 end
 
 function Base.getindex(P::EigenProduct{T}, ci::AnyCellOrbitals, cj::AnyCellOrbitals) where {T}
-    phase = isempty(cell(ci)) ? one(T) : cis(only(cell(ci) - cell(cj)) * P.phi)
+    phase = isempty(cell(ci)) ? one(T) : cis(-dot(cell(ci) - cell(cj), P.phi))
     return view(phase * P, orbindices(ci), orbindices(cj))
 end
 
@@ -715,7 +716,7 @@ Base.axes(P::EigenProduct) = axes(P.U, 1), axes(P.V, 1)
 Base.size(P::EigenProduct) = size(P.U, 1), size(P.V, 1)
 # Base.iterate(a::EigenProduct, i...) = iterate(parent(a), i...)
 Base.length(P::EigenProduct) = prod(size(P))
-Base.IndexStyle(::Type{T}) where {M,T<:EigenProduct{<:Any,M}} = IndexStyle(M)
+Base.IndexStyle(::Type{T}) where {M,T<:EigenProduct{<:Any,<:Any,M}} = IndexStyle(M)
 Base.similar(P::EigenProduct) = EigenProduct(P.blockstruct, similar(P.U), similar(P.V), P.phi, P.x)
 Base.similar(P::EigenProduct, t::Type) = EigenProduct(P.blockstruct, similar(P.U, t), similar(P.V, t), P.phi, P.x)
 Base.copy(P::EigenProduct) = EigenProduct(P.blockstruct, copy(P.U), copy(P.V), P.phi, P.x)
