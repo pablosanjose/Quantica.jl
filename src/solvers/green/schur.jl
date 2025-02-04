@@ -809,32 +809,34 @@ end
 
 function integrate_rho_schur(s::DensityMatrixSchurSolver{<:Any,1}, µ, kBT; params...)
     result = call!_output(s.gs)
+    data = serialize(result)
     g = parent(s.gs)
     xs = fermi_points_integration_path(g, µ; params...)
-    integrand!(x) = fermi_h!(result, s, SA[2π * x], µ, inv(kBT); params...)
+    integrand!(x) = fermi_h!(s, SA[2π * x], µ, inv(kBT); params...)
     fx! = (y, x) -> (y .= integrand!(x))
-    quadgk!(fx!, result, xs...; s.opts...)
+    quadgk!(fx!, data, xs...; s.opts...)
     return result
 end
 
 function integrate_rho_schur(s::DensityMatrixSchurSolver{<:Any,2}, µ, kBT; params...)
     s2D = solver(s.gs)
     result = call!_output(s.gs)
+    data = serialize(result)
     h1D, s1D = (s2D.h1D, s2D.solver1D)
 
     axisorder = SA[only(s2D.axis1D), only(s2D.wrapped_axes)]
 
-    integrand_inner!(result, (x1, x2)) =
-        fermi_h!(result, s, 2π * SA[x1, x2][axisorder], µ, inv(kBT); params...)
+    integrand_inner!(x1, x2) =
+        fermi_h!(s, 2π * SA[x1, x2][axisorder], µ, inv(kBT); params...)
 
-    function integrand_outer!(result, x2)
+    function integrand_outer!(data, x2)
         xs = fermi_points_integration_path((h1D, s1D), µ; params..., s2D.phase_func(SA[2π*x2])...)
-        inner! = (y, x1) -> (y .= integrand_inner!(result, (x1, x2)))
-        quadgk!(inner!, result, xs...; s.opts...)
-        return result
+        inner! = (y, x1) -> (y .= integrand_inner!(x1, x2))
+        quadgk!(inner!, data, xs...; s.opts...)
+        return data
     end
 
-    quadgk!(integrand_outer!, result, -0.5, 0.5; s.opts...)
+    quadgk!(integrand_outer!, data, -0.5, 0.5; s.opts...)
     return result
 end
 
@@ -856,7 +858,7 @@ function sanitize_integration_path(xs, (xmin, xmax) = (-0.5, 0.5))
     return xs´
 end
 
-function fermi_h!(result, s, ϕ, µ, β = 0; params...)
+function fermi_h!(s, ϕ, µ, β = 0; params...)
     h = hamiltonian(s.gs)
     bs = blockstructure(h)
     # Similar to spectrum(h, ϕ; params...), but less work (no sort! or sanitization)
@@ -866,8 +868,10 @@ function fermi_h!(result, s, ϕ, µ, β = 0; params...)
     fs = (@. ϵs = fermi(ϵs - µ, β))
     fpsis = (s.psis .= psis .* transpose(fs))
     ρcell = EigenProduct(bs, psis, fpsis, ϕ)
+    result = call!_output(s.gs)
     getindex!(result, ρcell, s.orbaxes...)
-    return result
+    data = serialize(result)
+    return data
 end
 
 #endregion top
