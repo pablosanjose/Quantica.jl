@@ -839,14 +839,21 @@ function integrate_rho_schur(s::DensityMatrixSchurSolver{<:Any,2}, µ, kBT; para
 end
 
 # this g can be a GreenFunction or a (h1D, s1D) pair
-function fermi_points_integration_path(g, µ; params...)
+fermi_points_integration_path(g, µ; params...) =
+    sanitize_integration_path(fermi_points(g, µ; params...))
+
+function fermi_points(g, µ; params...)
     λs = propagating_eigvals(g, µ + 0im, 1e-2; params...)
-    ϕs = @. real(-im*log(λs))
-    xs = sort!(ϕs ./ (2π))
-    pushfirst!(xs, -0.5)
-    push!(xs, 0.5)
-    xs = [mean(view(xs, rng)) for rng in approxruns(xs)]  # eliminate approximate duplicates
+    xs = @. real(-im*log(λs)) / (2π)
     return xs
+end
+
+function sanitize_integration_path(xs, (xmin, xmax) = (-0.5, 0.5))
+    sort!(xs)
+    pushfirst!(xs, xmin)
+    push!(xs, xmax)
+    xs´ = [mean(view(xs, rng)) for rng in approxruns(xs)]  # eliminate approximate duplicates
+    return xs´
 end
 
 function fermi_h!(result, s, ϕ, µ, β = 0; params...)
