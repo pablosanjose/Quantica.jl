@@ -789,12 +789,12 @@ check_no_boundaries_schur(s) = isempty(boundaries(s)) ||
 check_no_contacts_schur(gs) = has_selfenergy(gs) &&
     argerror("The Schur densitymatrix solver currently support only `nothing` contacts")
 
-function densitymatrix_schur(gs; opts...)
+function densitymatrix_schur(gs; quadgk_opts...)
     g = parent(gs)
     hmat = similar_Array(hamiltonian(g))
     psis = similar(hmat)
     orbaxes = orbrows(gs), orbcols(gs)
-    solver = DensityMatrixSchurSolver(gs, orbaxes, hmat, psis, NamedTuple(opts))
+    solver = DensityMatrixSchurSolver(gs, orbaxes, hmat, psis, NamedTuple(quadgk_opts))
     return DensityMatrix(solver, gs)
 end
 

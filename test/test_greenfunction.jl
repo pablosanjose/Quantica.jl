@@ -1,5 +1,5 @@
 using Quantica: GreenFunction, GreenSlice, GreenSolution, zerocell, CellOrbitals, ncontacts,
-    solver
+    solver, Diagonal
 
 using ArnoldiMethod  # for KPM bandrange
 

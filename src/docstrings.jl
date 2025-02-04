@@ -1188,13 +1188,14 @@ Currying syntax equivalent to `torus(h, x)`.
 
 ## Warning on modifier collisions
 
-For `h::ParametricHamiltonian`s which have modifiers on hoppings, wrapping can be
-problematic whenever a modified and an unmodified hopping, or two modified hoppings, get
-wrapped into a single hopping in the final `ParametricHamiltonian`. The reason is that the
-modifier is applied to the hopping sum. This can be a problem if the modifier is e.g.
-position dependent or nonlinear, since then the modified sum may not be equal to the sum of
-modified hoppings. Quantica will emit a warning whenever it detects this situation. One
-solution in such cases is to use a larger supercell before wrapping.
+If two or more hoppings of a `h::ParametricHamiltonian` get stitched into a single one by
+`torus`, and any of them depends on parameters, a warning is thrown. The reason is that
+these hoppings will be summed, and since the sum is the target of modifiers (because at
+least one of the summed hoppings are parameter-dependent), the modifiers will be applied to
+the sum, not to the original hoppings before being summed. This is typically not what the
+used intends, so the warning should not be ignored. A solution is to use a larger supercell
+before calling `torus`.
+
 
 # Examples
 
@@ -1230,6 +1231,15 @@ Equivalent to `torus(h, phases_or_axes)`, but returning an `n`-dimensional
 `h´(...; param_name = (ϕ₁,...,ϕₙ)`, params...)`, Bloch phases `(ϕ₁,...,ϕₙ)` are applied
 along stitched directions (in addition to the ones specified in `phases_or_axes`, if any).
 `param_name` can also take any `AbstractArray`, or a `Number` if `n=1`.
+
+## Warning on modifier collisions
+
+If two or more hoppings get stitched into a single one by `@torus`, and any of them depends
+on parameters, a warning is thrown. The reason is that these hoppings will be summed, and
+since the sum is the target of modifiers (because at least one of the summed hoppings are
+parameter-dependent), the modifiers will be applied to the sum, not to the original hoppings
+before being summed. This is typically not what the used intends, so the warning should not
+be ignored. A solution is to use a larger supercell before calling `@torus`.
 
 # Examples
 
@@ -1753,8 +1763,10 @@ possible keyword arguments are
 - `GS.Spectrum(; spectrum_kw...)` : Diagonalization solver for 0D Hamiltonians using `spectrum(h; spectrum_kw...)`
     - `spectrum_kw...` : keyword arguments passed on to `spectrum`
     - This solver does not accept ParametricHamiltonians. Convert to Hamiltonian with `h(; params...)` first. Contact self-energies that depend on parameters are supported.
-- `GS.Schur(; boundary = Inf)` : Solver for 1D Hamiltonians based on a deflated, generalized Schur factorization
+- `GS.Schur(; boundary = Inf, axis = 1, integrate_opts...)` : Solver for 1D and 2D Hamiltonians based on a deflated, generalized Schur factorization
     - `boundary` : 1D cell index of a boundary cell, or `Inf` for no boundaries. Equivalent to removing that specific cell from the lattice when computing the Green function.
+    - If the system is 2D, the wavevector along transverse axis (the one different from the 1D `axis` given in the options) is numerically integrated using QuadGK with options given by `integrate_opts`.
+    - In 2D systems a warning may be thrown associated to conflicts in torus wrapping which should not be ignored. See `@torus` for details.
 - `GS.KPM(; order = 100, bandrange = missing, kernel = I)` : Kernel polynomial method solver for 0D Hamiltonians
     - `order` : order of the expansion in Chebyshev polynomials `Tₙ(h)` of the Hamiltonian `h` (lowest possible order is `n = 0`).
     - `bandrange` : a `(min_energy, max_energy)::Tuple` interval that encompasses the full band of the Hamiltonian. If `missing`, it is computed automatically, but `using ArnoldiMethod` is required first.
@@ -2136,7 +2148,7 @@ The `quadgk_opts` are extra keyword arguments (other than `atol`) to pass on to 
 
 Currently, the following GreenSolvers implement dedicated densitymatrix algorithms:
 
-- `GS.Schur`: based on numerical integration over Bloch phase. Boundaries and non-empty contacts are not currently supported. Assumes Hermitian Hamiltonian. No `opts`.
+- `GS.Schur`: based on numerical integration over Bloch phase (1D and 2D). Boundaries and non-empty contacts are not currently supported. Assumes a Hermitian AbstractHamiltonian. No `opts`.
 - `GS.Spectrum`: based on summation occupation-weigthed eigenvectors. No `opts`.
 - `GS.KPM`: based on the Chebyshev expansion of the Fermi function. Currently only works for zero temperature and only supports `nothing` contacts (see `attach`). No `opts`.
 

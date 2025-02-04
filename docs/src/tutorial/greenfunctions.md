@@ -63,38 +63,37 @@ The currently implemented `GreenSolvers` (abbreviated as `GS`) are the following
 
 - `GS.SparseLU()`
 
-  For bounded (`L=0`) AbstractHamiltonians. Default for `L=0`.
+  For bounded (`L == 0`) AbstractHamiltonians. Default for `L == 0`.
 
   Uses a sparse `LU` factorization to compute the inverse of `⟨i|ω - H - Σ(ω)|j⟩`, where `Σ(ω)` is the self-energy from the contacts.
 
 
 - `GS.Spectrum(; spectrum_kw...)`
 
-  For bounded (`L=0`) Hamiltonians. This solver does not accept ParametricHamiltonians. Convert to Hamiltonian with `h(; params...)` first.
+  For bounded (`L == 0`) Hamiltonians. This solver does not accept ParametricHamiltonians. Convert to Hamiltonian with `h(; params...)` first.
 
   Uses a diagonalization of `H`, obtained with `spectrum(H; spectrum_kw...)`, to compute the `G⁰ᵢⱼ` using the Lehmann representation `∑ₖ⟨i|ϕₖ⟩⟨ϕₖ|j⟩/(ω - ϵₖ)`. Any eigensolver supported by `spectrum` can be used here. If there are contacts, it dresses `G⁰` using a T-matrix approach, `G = G⁰ + G⁰TG⁰`.
 
 
 - `GS.KPM(order = 100, bandrange = missing, kernel = I)`
 
-  For bounded (`L=0`) Hamiltonians, and restricted to sites belonging to contacts (see the section on Contacts).
+  For bounded (`L == 0`) Hamiltonians, and restricted to sites belonging to contacts (see the section on Contacts).
 
   It precomputes the Chebyshev momenta, and incorporates the contact self energy with a T-matrix approach.
 
 
-- `GS.Schur(boundary = Inf)`
+- `GS.Schur(boundary = In, axis = 1, integrate_options...)`
 
-  For 1D (`L=1`) AbstractHamiltonians with only nearest-cell coupling. Default for `L=1`.
+  For 1D (`L == 1`) and 2D (`L == 2`) AbstractHamiltonians with only nearest-cell coupling along `axis`. Default for `L=1`.
 
-  Uses a deflating Generalized Schur (QZ) factorization of the generalized eigenvalue problem to compute the unit-cell self energies.
-  The Dyson equation then yields the Green function between arbitrary unit cells, which is further dressed using a T-matrix approach if the lead has any attached self-energy.
-
+  Uses a deflating Generalized Schur (QZ) factorization of the generalized eigenvalue 1D problem along `axis` to compute the unit-cell self energies.
+  The Dyson equation then yields the Green function between arbitrary unit cells, which is further dressed using a T-matrix approach if the lead has any attached self-energy. Wavevector along transverse axes in 2D systes are numerically integrated with the QuadGK package using `integrate_options`.
 
 - `GS.Bands(bandsargs...; boundary = missing, bandskw...)`
 
-  For unbounded (`L>0`) Hamiltonians.
+  For unbounded (`L > 0`) Hamiltonians.
 
-  It precomputes a bandstructure `b = bands(h, bandsargs...; kw..., split = false)` and then uses analytic expressions for the contribution of each subband simplex to the `GreenSolution`. If `boundary = dir => cell_pos`, it takes into account the reflections on an infinite boundary perpendicular to Bravais vector number `dir`, so that all sites with cell index `c[dir] <= cell_pos` are removed. Contacts are incorporated using a T-matrix approach.
+  It precomputes a bandstructure `b = bands(h, bandsargs...; kw..., split = false)` and then uses analytic expressions for the contribution of each subband simplex to the `GreenSolution`. If `boundary = dir => cell_pos`, it takes into account the reflections on an infinite boundary perpendicular to Bravais vector number `dir`, so that all sites with cell index `c[dir] <= cell_pos` are removed. Contacts are incorporated using a T-matrix approach. Note that this method, while quite general, is approximate, as it uses linear interpolation of bands within each simplex, so it may suffer from precision issues.
 
   To retrieve the bands from a `g::GreenFunction` that used the `GS.Bands` solver, we may use `bands(g)`.
 
