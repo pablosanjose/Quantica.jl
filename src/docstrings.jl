@@ -1821,7 +1821,9 @@ Create a selection of site pairs `s::SparseIndices` used to sparsely index into 
 `g::GreenFunction` or `g::GreenSolution`, as `g[s]`. Of the resulting `OrbitalSliceMatrix`
 only the selected pairs of matrix elements will be computed, leaving the rest as zero
 (sparse matrix). The sparse matrix spans the minimum number of complete unit cells to
-include all site pairs
+include all site pairs.
+
+Tip: if onsite terms are required use `includeonsite = true` as a keyword in `s`.
 
 If `kernel = Q` (a matrix instead of `missing`), each of these site blocks `gᵢⱼ` will be
 replaced by `Tr(kernel * gᵢⱼ)`.
