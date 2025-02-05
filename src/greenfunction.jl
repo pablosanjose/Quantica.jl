@@ -42,7 +42,8 @@ call!_output(c::Contacts) = selfenergyblocks(c)
 #   These kwargs are currently not documented - see specialmatrices.jl
 #region
 
-(g::GreenFunction)(ω; params...) = minimal_callsafe_copy(call!(g, ω; params...))
+# no need to minimal_callsafe_copy here, because a GreenSolution cannot be call!ed again
+(g::GreenFunction)(ω; params...) = call!(g, ω; params...)
 (g::GreenSlice)(ω; params...) = copy(call!(g, ω; params...))
 
 call!(g::G, ω; params...) where {T,G<:Union{GreenFunction{T},GreenSlice{T}}} =
@@ -609,16 +610,10 @@ end
 ensure_mutable_matrix(m::SMatrix) = Matrix(m)
 ensure_mutable_matrix(m::AbstractMatrix) = m
 
-minimal_callsafe_copy(s::TMatrixSlicer, parentham, parentcontacts) = TMatrixSlicer(
-    minimal_callsafe_copy(s.g0slicer, parentham, parentcontacts),
-    s.tmatrix, s.gcontacts, s.contactorbs)
-
 Base.view(::NothingSlicer, i::Union{Integer,Colon}...) =
     internalerror("view(::NothingSlicer): unreachable reached")
 
 Base.getindex(::NothingSlicer, i::CellOrbitals...) = argerror("Slicer does not support generic indexing")
-
-minimal_callsafe_copy(s::NothingSlicer, parentham, parentcontacts) = s
 
 #endregion
 #endregion

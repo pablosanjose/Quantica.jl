@@ -24,9 +24,6 @@ spectrum(s::AppliedSpectrumGreenSolver) = s.spectrum
 minimal_callsafe_copy(s::AppliedSpectrumGreenSolver, parentham, parentcontacts) =
     AppliedSpectrumGreenSolver(s.spectrum)
 
-minimal_callsafe_copy(s::SpectrumGreenSlicer, parentham, parentcontacts) =
-    SpectrumGreenSlicer(s.ω, s.solver)
-
 #endregion
 
 #region ## apply ##

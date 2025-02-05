@@ -37,7 +37,7 @@ end
 
 needs_omega_shift(s::AppliedModelGreenSolver) = false
 
-minimal_callsafe_copy(s::Union{ModelGreenSlicer,AppliedModelGreenSolver}, args...) = s
+minimal_callsafe_copy(s::AppliedModelGreenSolver, args...) = s
 
 Base.getindex(s::ModelGreenSlicer, is::CellOrbitals, js::CellOrbitals) =
     [s.fω(i, j) for i in cellorbs(is), j in cellorbs(js)]

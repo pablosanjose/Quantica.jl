@@ -11,9 +11,8 @@
 #      - view(gs, ::Int, ::Int) -> g(ω; kw...) between specific contacts (has error fallback)
 #      - view(gs, ::Colon, ::Colon) -> g(ω; kw...) between all contacts (has error fallback)
 #      - Both of the above are of type `SubArray`
-#   It must also implement generic slicing, and minimal copying
+#   It must also implement generic slicing
 #      - gs[i::CellOrbitals, j::CellOrbitals] -> must return a `Matrix` for type stability
-#      - minimal_callsafe_copy(gs, parentham, parentcontacts)
 #   The user-facing indexing API accepts:
 #      - i::Integer -> Sites of Contact number i
 #      - sites(cell::Tuple, sind::Int)::Subcell -> Single site in a cell

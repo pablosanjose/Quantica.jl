@@ -146,14 +146,6 @@ similar_source64(s::SparseLUGreenSlicer, j::CellOrbitals) =
 # getindex must return a Matrix
 Base.getindex(s::SparseLUGreenSlicer, i::CellOrbitals, j::CellOrbitals) = copy(view(s, i, j))
 
-# the lazy unitg field only aliases source64 or a copy of it. It is not necessary to
-# maintain the alias, as this is just a prealloc for a full-cell slice. We don't even need
-# to copy it, since once it is computed, it is never modified, only read
-function minimal_callsafe_copy(s::SparseLUGreenSlicer{C}, parentham, parentcontacts) where {C}
-    s´ = SparseLUGreenSlicer{C}(s.fact, s.nonextrng, s.unitcinds, s.unitcindsall, copy(s.source64))
-    isdefined(s, :unitg) && (s´.unitg = s.unitg)
-    return s´
-end
 
 #endregion
 
