@@ -2424,15 +2424,6 @@ function minimal_callsafe_copy(g::GreenFunction)
     return GreenFunction(parent´, solver´, contacts´)
 end
 
-# function minimal_callsafe_copy(g::GreenSolution)
-#     parentg´ = minimal_callsafe_copy(g.parent)
-#     parentham = hamiltonian(parentg´)
-#     parentcontacts = contacts(parentg´)
-#     slicer´ = minimal_callsafe_copy(g.slicer, parentham, parentcontacts)
-#     g´ = GreenSolution(parentg´, slicer´, g.contactΣs, g.contactorbs)
-#     return g´
-# end
-
 minimal_callsafe_copy(g::GreenSlice) =
     GreenSlice(minimal_callsafe_copy(g.parent), g.rows, g.cols, copy(g.output))
 
