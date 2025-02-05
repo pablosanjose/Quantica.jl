@@ -1765,7 +1765,7 @@ possible keyword arguments are
     - This solver does not accept ParametricHamiltonians. Convert to Hamiltonian with `h(; params...)` first. Contact self-energies that depend on parameters are supported.
 - `GS.Schur(; boundary = Inf, axis = 1, integrate_opts...)` : Solver for 1D and 2D Hamiltonians based on a deflated, generalized Schur factorization
     - `boundary` : 1D cell index of a boundary cell, or `Inf` for no boundaries. Equivalent to removing that specific cell from the lattice when computing the Green function.
-    - If the system is 2D, the wavevector along transverse axis (the one different from the 1D `axis` given in the options) is numerically integrated using QuadGK with options given by `integrate_opts`.
+    - If the system is 2D, the wavevector along transverse axis (the one different from the 1D `axis` given in the options) is numerically integrated using QuadGK with options given by `integrate_opts`, which is `(; atol = 1e-7, order = 5)` by default.
     - In 2D systems a warning may be thrown associated to conflicts in torus wrapping which should not be ignored. See `@torus` for details.
 - `GS.KPM(; order = 100, bandrange = missing, kernel = I)` : Kernel polynomial method solver for 0D Hamiltonians
     - `order` : order of the expansion in Chebyshev polynomials `Tₙ(h)` of the Hamiltonian `h` (lowest possible order is `n = 0`).

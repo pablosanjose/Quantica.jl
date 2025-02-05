@@ -777,10 +777,10 @@ end
 
 ## Constructor
 
-function densitymatrix(s::Union{AppliedSchurGreenSolver,AppliedSchurGreenSolver2D}, gs::GreenSlice; atol = 1e-7, quadgk_opts...)
+function densitymatrix(s::Union{AppliedSchurGreenSolver,AppliedSchurGreenSolver2D}, gs::GreenSlice; atol = 1e-7, order = 5, quadgk_opts...)
     check_no_boundaries_schur(s)
     check_no_contacts_schur(gs)
-    return densitymatrix_schur(gs; atol, quadgk_opts...)
+    return densitymatrix_schur(gs; atol, order, quadgk_opts...)
 end
 
 check_no_boundaries_schur(s) = isempty(boundaries(s)) ||
@@ -832,11 +832,12 @@ function integrate_rho_schur(s::DensityMatrixSchurSolver{<:Any,2}, µ, kBT; para
     function integrand_outer!(data, x2)
         xs = fermi_points_integration_path((h1D, s1D), µ; params..., s2D.phase_func(SA[2π*x2])...)
         inner! = (y, x1) -> (y .= integrand_inner!(x1, x2))
-        quadgk!(inner!, data, xs...; s.opts...)
+        quadgk!(inner!, data, xs...; s.opts..., order = 5)
         return data
     end
 
-    quadgk!(integrand_outer!, data, -0.5, 0.5; s.opts...)
+    quadgk!(integrand_outer!, data, -0.5, 0.0, 0.5; s.opts..., order = 5)
+
     return result
 end
 
@@ -859,7 +860,7 @@ function sanitize_integration_path(xs, (xmin, xmax) = (-0.5, 0.5))
 end
 
 function fermi_h!(s, ϕ, µ, β = 0; params...)
-    h = hamiltonian(s.gs)
+    h = parent(parent(s.gs)) # may be a ParametricHamiltonian
     bs = blockstructure(h)
     # Similar to spectrum(h, ϕ; params...), but less work (no sort! or sanitization)
     copy!(s.hmat, call!(h, ϕ; params...))  # sparse to dense
