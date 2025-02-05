@@ -332,8 +332,10 @@ end
         attach(nothing, region = RP.circle(2)) |> attach(nothing, region = RP.circle(2, SA[1,2])) |> greenfunction(GS.KPM(bandrange=(-4,5)))
     # g3 excluded since KPM doesn't support finite temperatures or generic indexing yet
     for g in (g1, g2), inds in (diagonal(1), diagonal(:), sitepairs(range = 1)), path in (5, Paths.radial(1,π/6), Paths.sawtooth(5))
-        ρ0 = densitymatrix(g[inds], path)
-        ρ = densitymatrix(g[inds])
+        gs = g[inds]
+        gs´ = Quantica.minimal_callsafe_copy(gs)  # exercise minimal_callsafe_copy for different solvers
+        ρ0 = densitymatrix(gs, path)
+        ρ = densitymatrix(gs´)
         @test isapprox(ρ0(), ρ(); atol = 1e-7)
         @test isapprox(ρ0(0.2), ρ(0.2); atol = 1e-7)
         @test isapprox(ρ0(0.2, 0.3), ρ(0.2, 0.3))
@@ -613,6 +615,13 @@ end
     glead = h |> greenfunction(GS.Schur(boundary = 0))
     g = h |> attach(glead, cells = 1) |> greenfunction(GS.Schur(boundary = 0));
     @test sites(lattice(h)) == [SA[0.0]]
+
+    # check minimal_callsafe_copy for 2D Schur
+    g = LP.square() |> supercell(1,3) |> @onsite((; mu = 0) -> mu) - hopping(1) |> greenfunction(GS.Schur());
+    gs = g[cells = 1]
+    gs´ = Quantica.minimal_callsafe_copy(gs)
+    @test Quantica.call!(gs, 0.2; q = 2) !== Quantica.call!(gs´, 0.2; q = 2)
+    @test Quantica.call!(gs, 0.2; q = 2) === Quantica.call!(gs, 0.2; q = 2)
 end
 
 @testset "meanfield" begin
