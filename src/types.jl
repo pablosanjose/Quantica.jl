@@ -1171,6 +1171,8 @@ end
 
 Base.size(s::SparseMatrixView, i...) = size(s.mat, i...)
 
+# Definition of minimal_callsafe_copy
+# if x´ = minimal_callsafe_copy(x), then a call!(x, ...; ...) will not affect x´ in any way
 minimal_callsafe_copy(s::SparseMatrixView) =
     SparseMatrixView(view(copy(parent(s.matview)), s.matview.indices...), copy(s.mat), s.ptrs)
 
@@ -1681,6 +1683,8 @@ blocktype(h::ParametricHamiltonian) = blocktype(parent(h))
 
 lattice(h::ParametricHamiltonian) = lattice(hamiltonian(h))
 
+# Definition of minimal_callsafe_copy
+# if x´ = minimal_callsafe_copy(x), then a call!(x, ...; ...) will not affect x´ in any way
 function minimal_callsafe_copy(p::ParametricHamiltonian)
     h´ = minimal_callsafe_copy(p.h)
     modifiers´ = maybe_relink_serializer.(p.modifiers, Ref(h´))
@@ -2418,15 +2422,6 @@ function minimal_callsafe_copy(g::GreenFunction)
     contacts´ = minimal_callsafe_copy(g.contacts)
     solver´ = minimal_callsafe_copy(g.solver, parent´, contacts´)
     return GreenFunction(parent´, solver´, contacts´)
-end
-
-function minimal_callsafe_copy(g::GreenSolution)
-    parentg´ = minimal_callsafe_copy(g.parent)
-    parentham = hamiltonian(parentg´)
-    parentcontacts = contacts(parentg´)
-    slicer´ = minimal_callsafe_copy(g.slicer, parentham, parentcontacts)
-    g´ = GreenSolution(parentg´, slicer´, g.contactΣs, g.contactorbs)
-    return g´
 end
 
 minimal_callsafe_copy(g::GreenSlice) =

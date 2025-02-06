@@ -877,8 +877,6 @@ view_or_copy(ψ, rows::Union{Colon,AbstractRange}, cols::Union{Colon,AbstractRan
     view(ψ, rows, cols)
 view_or_copy(ψ, rows, cols) = ψ[rows, cols]
 
-minimal_callsafe_copy(s::BandsGreenSlicer, parentham, parentcontacts) = s  # it is read-only
-
 #endregion
 
 ############################################################################################

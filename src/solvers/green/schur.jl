@@ -621,20 +621,6 @@ end
 maybe_SMatrix(G::Matrix, rows::SVector{L}, cols::SVector{L´}) where {L,L´} = SMatrix{L,L´}(G)
 maybe_SMatrix(G, rows, cols) = G
 
-# TODO: Perhaps too conservative
-function minimal_callsafe_copy(s::SchurGreenSlicer, parentham, parentcontacts)
-    s´ = SchurGreenSlicer(s.ω, minimal_callsafe_copy(s.solver, parentham, parentcontacts))
-    isdefined(s, :G₋₁₋₁)    && (s´.G₋₁₋₁    = minimal_callsafe_copy(s.G₋₁₋₁, parentham, parentcontacts))
-    isdefined(s, :G₁₁)      && (s´.G₁₁      = minimal_callsafe_copy(s.G₁₁, parentham, parentcontacts))
-    isdefined(s, :G∞₀₀)     && (s´.G∞₀₀     = minimal_callsafe_copy(s.G∞₀₀, parentham, parentcontacts))
-    isdefined(s, :L´G∞₀₀)   && (s´.L´G∞₀₀   = copy(s.L´G∞₀₀))
-    isdefined(s, :R´G∞₀₀)   && (s´.R´G∞₀₀   = copy(s.R´G∞₀₀))
-    isdefined(s, :G₁₁L)     && (s´.G₁₁L     = copy(s.G₁₁L))
-    isdefined(s, :G₋₁₋₁R)   && (s´.G₋₁₋₁R   = copy(s.G₋₁₋₁R))
-    isdefined(s, :R´G₁₁L)   && (s´.R´G₁₁L   = copy(s.R´G₁₁L))
-    isdefined(s, :L´G₋₁₋₁R) && (s´.L´G₋₁₋₁R = copy(s.L´G₋₁₋₁R))
-    return s´
-end
 #endregion
 
 #endregion
@@ -724,9 +710,6 @@ function minimal_callsafe_copy(s::AppliedSchurGreenSolver2D, args...)
     solver1D´ = minimal_callsafe_copy(s.solver1D, h1D´, missing)
     return AppliedSchurGreenSolver2D(h1D´, solver1D´, s.axis1D, s.wrapped_axes, s.phase_func, s.integrate_opts)
 end
-
-minimal_callsafe_copy(s::SchurGreenSlicer2D, args...) =
-    SchurGreenSlicer2D(s.ω, minimal_callsafe_copy(s.solver, args...), s.slicer_generator)
 
 function build_slicer(s::AppliedSchurGreenSolver2D, g, ω, Σblocks, corbitals; params...)
     function slicer_generator(s, ϕ_internal)
