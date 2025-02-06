@@ -778,7 +778,7 @@ end
 
 ## Constructor
 
-function densitymatrix(s::Union{AppliedSchurGreenSolver,AppliedSchurGreenSolver2D}, gs::GreenSlice; callback = missing, atol = 1e-7, order = 5, quadgk_opts...)
+function densitymatrix(s::Union{AppliedSchurGreenSolver,AppliedSchurGreenSolver2D}, gs::GreenSlice; callback = Returns(nothing), atol = 1e-7, order = 5, quadgk_opts...)
     check_no_boundaries_schur(s)
     check_no_contacts_schur(gs)
     return densitymatrix_schur(gs; callback, atol, order, quadgk_opts...)
@@ -790,7 +790,7 @@ check_no_boundaries_schur(s) = isempty(boundaries(s)) ||
 check_no_contacts_schur(gs) = has_selfenergy(gs) &&
     argerror("The Schur densitymatrix solver currently support only `nothing` contacts")
 
-function densitymatrix_schur(gs; callback = missing, quadgk_opts...)
+function densitymatrix_schur(gs; callback = Returns(nothing), quadgk_opts...)
     g = parent(gs)
     hmat = similar_Array(hamiltonian(g))
     psis = similar(hmat)
@@ -816,7 +816,7 @@ function integrate_rho_schur(s::DensityMatrixSchurSolver{<:Any,1}, µ, kBT; para
     function integrand!(x)
         ϕ = 2π * x
         z = fermi_h!(s, SA[ϕ], µ, inv(kBT); params...)
-        s.callback === missing || s.callback(ϕ, z)
+        s.callback(ϕ, z)
         return z
     end
     fx! = (y, x) -> (y .= integrand!(x))
@@ -835,7 +835,7 @@ function integrate_rho_schur(s::DensityMatrixSchurSolver{<:Any,2}, µ, kBT; para
     function integrand_inner!(x1, x2)
         ϕ = 2π * SA[x1, x2][axisorder]
         z = fermi_h!(s, ϕ, µ, inv(kBT); params...)
-        s.callback === missing || s.callback(ϕ..., z)
+        s.callback(ϕ..., z)
         return z
     end
 
