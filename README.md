@@ -16,7 +16,9 @@ Quantica.jl requires Julia v1.9 or later.
 - Build and visualize Hamiltonians on discrete lattices of arbitrary dimensions, using tight-binding models with arbitrary number of orbitals
 - Compute and visualize band structures of periodic systems
 - Couple arbitrary Hamiltonians and compute non-interacting Green functions
+- Compute the mean-field Hamiltonian of interacting systems within a Hartree-Fock-Bogoliubov approach
 - Compute transport and spectral observables, such as local density of states, current densities, conductance and Josephson currents
+- Combine a range of diverse solvers designed for specific types of systems and observables
 
 Some of this functionality, particularly visualization, requires loading some plot backend from the Makie repository, such as GLMakie (GPU-accelerated interactive visualization), CairoMakie (for pdf/svg output) or WGLMakie (Web-GL backend for use inside browsers)
 
