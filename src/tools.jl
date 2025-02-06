@@ -27,6 +27,7 @@ padtuple(t, x, N) = ntuple(i -> i <= length(t) ? t[i] : x, N)
 end
 
 # find indices in range 1:L that are not in inds, assuming inds is sorted and unique
+inds_complement(val, inds::SVector) = SVector(inds_complement(val, Tuple(inds)))
 inds_complement(::Val{L}, inds::NTuple{L´,Integer}) where {L,L´} =
     _inds_complement(ntuple(zero, Val(L-L´)), 1, 1, inds...)
 
