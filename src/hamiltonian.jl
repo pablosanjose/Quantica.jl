@@ -595,15 +595,15 @@ maybe_add_modifiers(b, ::TightbindingModel) = b
 #endregion
 
 ############################################################################################
-# torus(::Hamiltonian, phases::Tuple)
-# torus(::Hamiltonian, wrapaxes::SVector)
+# stitch(::Hamiltonian, phases::Tuple)
+# stitch(::Hamiltonian, wrapaxes::SVector)
 #region
 
-torus(phases) = h -> torus(h, phases)
+stitch(phases) = h -> stitch(h, phases)
 
-#region ## torus(::Hamiltonian, phases)
+#region ## stitch(::Hamiltonian, phases)
 
-function torus(h::AbstractHamiltonian, phases)
+function stitch(h::AbstractHamiltonian, phases)
     wp, wa, ua = split_axes(h, phases)
     isempty(wa) && return minimal_callsafe_copy(h)
     return _torus(h, wp, wa, ua)
@@ -636,7 +636,7 @@ end
 
 # indices for wrapped and unwrapped axes, and wrapped phases
 function split_axes(::AbstractHamiltonian{<:Any,<:Any,L}, phases::Tuple) where {L}
-    length(phases) == L || argerror("Expected $L `torus` phases, got $(length(phases))")
+    length(phases) == L || argerror("Expected $L `stitch` phases, got $(length(phases))")
     return _split_axes((), (), (), 1, phases...)
 end
 
@@ -768,10 +768,10 @@ end
 
 
 ############################################################################################
-# @torus(h, phases, ϕname)
+# @stitch(h, phases, ϕname)
 #region
 
-macro torus(h, phases_or_axes, name)
+macro stitch(h, phases_or_axes, name)
     quote
         wp, wa, ua = split_axes($(esc(h)), $(esc(phases_or_axes)))
         was = SVector(wa)

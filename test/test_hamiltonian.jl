@@ -222,32 +222,32 @@ end
     @test Quantica.nsites(h3) == 64
 end
 
-@testset "hamiltonian torus" begin
+@testset "hamiltonian stitch" begin
     for o in (1, (2,3))
         h = LatticePresets.honeycomb() |> hamiltonian(hopping((r, dr) -> 1/norm(dr) * I, range = 10), orbitals = o)
-        @test_throws ArgumentError torus(h, (1,2,3))
-        @test_throws MethodError torus(h, 1)
-        wh = h |> torus((1,2))
+        @test_throws ArgumentError stitch(h, (1,2,3))
+        @test_throws MethodError stitch(h, 1)
+        wh = h |> stitch((1,2))
         @test wh(()) ≈ h(SA[1,2])
-        wh = torus(h, (1,:))
+        wh = stitch(h, (1,:))
         @test wh(SA[2]) ≈ h(SA[1,2])
         h = LatticePresets.honeycomb() |> hamiltonian(hopping((r, dr) -> 1/norm(dr) * I, range = 10)) |> supercell(3)
-        wh = torus(h, (1,2))
+        wh = stitch(h, (1,2))
         @test wh(()) ≈ h(SA[1,2])
-        wh = torus(h, (1,:))
+        wh = stitch(h, (1,:))
         @test wh(SA[2]) ≈ h(SA[1,2])
-        wh = torus(h, (:,:))
+        wh = stitch(h, (:,:))
         @test wh == h
         @test wh !== h
     end
     h = LP.linear() |> supercell(2) |> hopping(1) |> @hopping!((t, r, dr) -> t*(r[1]-1/2))
-    @test_warn "Two modified hoppings have been wrapped into one" torus(h, (0.2,))
+    @test_warn "Two modified hoppings have been wrapped into one" stitch(h, (0.2,))
     h = LP.square() |> supercell(2, 2) |> hopping(1)
-    @test_warn "A modified and a non-modified hopping have been wrapped into one" @torus(h, SA[2], ϕ)
+    @test_warn "A modified and a non-modified hopping have been wrapped into one" @stitch(h, SA[2], ϕ)
     h = LP.square() |> supercell(3, 2) |> hopping(1, range = √2)
-    @test_warn "Two modified hoppings have been wrapped into one" @torus(h, SA[2], ϕ)
+    @test_warn "Two modified hoppings have been wrapped into one" @stitch(h, SA[2], ϕ)
     h = LP.square() |> supercell(3, 3) |> hopping(1, range = √2)
-    h´ = @test_nowarn @torus(h, SA[2], ϕ)
+    h´ = @test_nowarn @stitch(h, SA[2], ϕ)
     @test h(SA[0.2, 0.3]) ≈ h´(SA[0.2]; ϕ = 0.3)
 end
 
@@ -367,15 +367,15 @@ end
     # Old bug in apply
     h = LP.honeycomb() |> supercell(2) |> onsite(1) |> @onsite!(o -> 0; sublats = :A)
     @test tr(h((0,0))) == 4
-    # torus and supercell commutativity with modifier application
+    # stitch and supercell commutativity with modifier application
     h = LP.linear() |> hopping(1) |> supercell(3) |> @onsite!((o,r; E = 1)-> E*r[1]) |> @hopping!((t, r,dr; A = SA[1])->t*cis(dot(A,dr[1])))
     @test supercell(h(), 4)((1,)) ≈ supercell(h, 4)((1,))
-    @test torus(h, (2,))(()) ≈ torus(h(), (2,))(()) ≈ h((2,))
+    @test stitch(h, (2,))(()) ≈ stitch(h(), (2,))(()) ≈ h((2,))
     h = LP.linear() |> supercell(3) |> @hopping((r,dr; ϕ = 1) -> cis(ϕ * dr[1]))
     @test supercell(h(), 4)((1,)) ≈ supercell(h, 4)((1,))
-    @test torus(h(), (2,))(()) ≈ h((2,))
+    @test stitch(h(), (2,))(()) ≈ h((2,))
     h0 = LP.square() |> hopping(1) |> supercell(3) |> @hopping!((t, r, dr; A = SA[1,2]) -> t*cis(A'dr))
-    h = torus(h0, (0.2,:))
+    h = stitch(h0, (0.2,:))
     @test h0((0.2, 0.3)) ≈ h((0.3,))
     # non-spatial models
     h = LP.linear() |> @hopping((i,j) --> ind(i) + ind(j)) + @onsite((i; k = 1) --> pos(i)[k])
