@@ -176,9 +176,9 @@ Note that unspecified parameters take their default values when using the call s
 
 Like with lattices, we can transform an `h::AbstractHamiltonians` using `supercell`, `reverse`, `transform` and `translate`. All these except `supercell` operate only on the underlying `lattice(h)` of `h`, leaving the hoppings and onsite elements unchanged. Meanwhile, `supercell` acts on `lattice(h)` but also copies the hoppings and onsites of `h` onto the new sites, preserving the periodicity of the original `h`.
 
-Additionally, we can also use `torus` and `@torus`, which makes the `h` lattice periodic along some (or all) of its Bravais vectors, while leaving the rest unbounded.
+Additionally, we can also use `stitch` and `@stitch`, which makes the `h` lattice periodic along some (or all) of its Bravais vectors, while leaving the rest unbounded.
 ```julia
-julia> torus(HP.graphene(), (0, :))
+julia> stitch(HP.graphene(), (0, :))
 Hamiltonian{Float64,2,1}: Hamiltonian on a 1D Lattice in 2D space
   Bloch harmonics  : 3
   Harmonic size    : 2 × 2
@@ -188,11 +188,11 @@ Hamiltonian{Float64,2,1}: Hamiltonian on a 1D Lattice in 2D space
   Hoppings         : 4
   Coordination     : 2.0
 ```
-The `phases` argument of `torus(h, phases)` is a `Tuple` of real numbers and/or colons (`:`), of length equal to the lattice dimension of `h`. Each real number `ϕᵢ` corresponds to a Bravais vector along which the transformed lattice will become periodic, picking up a phase `exp(iϕᵢ)` in the new hoppings, while each colon leaves the lattice unbounded along the corresponding Bravais vector. (Check the `torus` and `@torus` docstrings for additional syntax and functionality.)
-In a way, `torus` is the dual to `supercell`, in that it applies a different boundary condition to the lattice along the eliminated Bravais vectors, periodic instead of open, as in the case of `supercell`. The phases `ϕᵢ` are also connected to Bloch phases, in the sense that e.g. `torus(h, (ϕ₁, :))(; ϕ₂) == h(ϕ₁, ϕ₂)`.
+The `phases` argument of `stitch(h, phases)` is a `Tuple` of real numbers and/or colons (`:`), of length equal to the lattice dimension of `h`. Each real number `ϕᵢ` corresponds to a Bravais vector along which the transformed lattice will become periodic, picking up a phase `exp(iϕᵢ)` in the new hoppings, while each colon leaves the lattice unbounded along the corresponding Bravais vector. (Check the `stitch` and `@stitch` docstrings for additional syntax and functionality.)
+In a way, `stitch` is the dual to `supercell`, in that it applies a different boundary condition to the lattice along the eliminated Bravais vectors, periodic instead of open, as in the case of `supercell`. The phases `ϕᵢ` are also connected to Bloch phases, in the sense that e.g. `stitch(h, (ϕ₁, :))(; ϕ₂) == h(ϕ₁, ϕ₂)`.
 
-!!! warning "Caveat of the Bloch-torus duality"
-    The relation `h´(()) = h(phases)` with `h´ = torus(h, phases)` is quite general. However, with some `h::ParametricHamiltonian`s that include nonlinear or position-dependent modifiers, this may not hold. The reason is that if two or more hoppings in `h` are summed to a single hopping in `h´`, any modifier in the latter will be applied to the sum, not to the original hoppings before the sum. Quantica will warn the user if it detects such a situation. One solution is to use a larger supercell for `h` so that no sum of hoppings occurs upon applying `torus`.
+!!! warning "Caveat of the Bloch-stitch duality"
+    The relation `h´(()) = h(phases)` with `h´ = stitch(h, phases)` is quite general. However, with some `h::ParametricHamiltonian`s that include nonlinear or position-dependent modifiers, this may not hold. The reason is that if two or more hoppings in `h` are summed to a single hopping in `h´`, any modifier in the latter will be applied to the sum, not to the original hoppings before the sum. Quantica will warn the user if it detects such a situation. One solution is to use a larger supercell for `h` so that no sum of hoppings occurs upon applying `stitch`.
 
 It's important to understand that, when transforming an `h::AbstractHamiltonian`, the model used to build `h` is not re-evaluated. Hoppings and onsite energies are merely copied so as to preserve the periodicity of the original `h`. As a consequence, these two constructions give different Hamiltonians
 ```julia
@@ -221,7 +221,7 @@ julia> h2[()]
 ```
 As a consequence, `h` and `supercell(h)` represent exactly the same system, with the same observables, but with a different choice of unitcell.
 
-These two different behaviors make sense in different situations, so it is important to be aware of the order dependence of transformations. Similar considerations apply to `transform`, `translate` and `torus` when models are position dependent.
+These two different behaviors make sense in different situations, so it is important to be aware of the order dependence of transformations. Similar considerations apply to `transform`, `translate` and `stitch` when models are position dependent.
 
 ## Combining Hamiltonians
 

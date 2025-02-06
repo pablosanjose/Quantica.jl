@@ -696,7 +696,7 @@ function apply(s::GS.Schur, h::AbstractHamiltonian, _)
         argerror("GreenSolvers.Schur currently only implemented for 1D and 2D AbstractHamiltonians")
     axis1D = SVector(s.axis)
     wrapped_axes = inds_complement(Val(L), axis1D)
-    h1D = @torus(h, wrapped_axes, ϕ_internal)
+    h1D = @stitch(h, wrapped_axes, ϕ_internal)
     phase_func(ϕ_internal) = (; ϕ_internal)
     # we don't pass contacts to solver1D. They will be applied with T-matrix slicer
     solver1D = apply(s, h1D, missing)

@@ -1162,19 +1162,19 @@ julia> h((0,0))
 plusadjoint
 
 """
-    torus(h::AbstractHamiltonian, (ϕ₁, ϕ₂,...))
+    stitch(h::AbstractHamiltonian, (ϕ₁, ϕ₂,...))
 
 For an `h` of lattice dimension `L` and a set of `L` Bloch phases `ϕ = (ϕ₁, ϕ₂,...)`,
-contruct a new `h´::AbstractHamiltonian` on a bounded torus, i.e. with all Bravais
-vectors eliminated by stitching the lattice onto itself along the corresponding Bravais
-vector. Intercell hoppings along stitched directions will pick up Bloch phases
-`exp(-iϕ⋅dn)`, where the `dn` vectors are the cell indices of each harmonic.
+contruct a new `h´::AbstractHamiltonian` with all Bravais vectors eliminated by stitching
+the lattice onto itself along the corresponding Bravais vector. Intercell hoppings along
+stitched directions will pick up Bloch phases `exp(-iϕ⋅dn)`, where the `dn` vectors are the
+cell indices of each harmonic.
 
 If a number `L´` of phases `ϕᵢ` are `:` instead of numbers, the corresponding Bravais
 vectors will not be stitched, and the resulting `h´` will have a finite lattice dimension
 `L´ <= L`.
 
-    torus(h::AbstractHamiltonian, wrapped_axes::SVector)
+    stitch(h::AbstractHamiltonian, wrapped_axes::SVector)
 
 Like the above with phases `ϕ = 0` along axes given by `wrapped_axes`, leaving the remaining
 axes unstitched. With this syntax, `wrapped_axes` should be a sorted SVector of unique
@@ -1182,25 +1182,25 @@ integers in the range 1:L.
 
 ## Currying
 
-    h |> torus(x)
+    h |> stitch(x)
 
-Currying syntax equivalent to `torus(h, x)`.
+Currying syntax equivalent to `stitch(h, x)`.
 
 ## Warning on modifier collisions
 
 If two or more hoppings of a `h::ParametricHamiltonian` get stitched into a single one by
-`torus`, and any of them depends on parameters, a warning is thrown. The reason is that
+`stitch`, and any of them depends on parameters, a warning is thrown. The reason is that
 these hoppings will be summed, and since the sum is the target of modifiers (because at
 least one of the summed hoppings are parameter-dependent), the modifiers will be applied to
 the sum, not to the original hoppings before being summed. This is typically not what the
 used intends, so the warning should not be ignored. A solution is to use a larger supercell
-before calling `torus`.
+before calling `stitch`.
 
 
 # Examples
 
 ```jldoctest
-julia> h2D = HP.graphene(); h1D = torus(h2D, (:, 0.2))
+julia> h2D = HP.graphene(); h1D = stitch(h2D, (:, 0.2))
 Hamiltonian{Float64,2,1}: Hamiltonian on a 1D Lattice in 2D space
   Bloch harmonics  : 3
   Harmonic size    : 2 × 2
@@ -1213,20 +1213,20 @@ Hamiltonian{Float64,2,1}: Hamiltonian on a 1D Lattice in 2D space
 julia> h2D((0.3, 0.2)) ≈ h1D(0.3)
 true
 
-julia> torus(h2D, (:, 0)) == torus(h2D, SA[2])
+julia> stitch(h2D, (:, 0)) == stitch(h2D, SA[2])
 true
 ```
 
 # See also
-    `@torus`, `hamiltonian`, `supercell`
+    `@stitch`, `hamiltonian`, `supercell`
 """
-torus
+stitch
 
 """
 
-    @torus(h, phases_or_axes, param_name)
+    @stitch(h, phases_or_axes, param_name)
 
-Equivalent to `torus(h, phases_or_axes)`, but returning an `n`-dimensional
+Equivalent to `stitch(h, phases_or_axes)`, but returning an `n`-dimensional
 `h´::ParametricHamiltonian` with an additional parameter called `param_name`. When calling
 `h´(...; param_name = (ϕ₁,...,ϕₙ)`, params...)`, Bloch phases `(ϕ₁,...,ϕₙ)` are applied
 along stitched directions (in addition to the ones specified in `phases_or_axes`, if any).
@@ -1234,17 +1234,17 @@ along stitched directions (in addition to the ones specified in `phases_or_axes`
 
 ## Warning on modifier collisions
 
-If two or more hoppings get stitched into a single one by `@torus`, and any of them depends
+If two or more hoppings get stitched into a single one by `@stitch`, and any of them depends
 on parameters, a warning is thrown. The reason is that these hoppings will be summed, and
 since the sum is the target of modifiers (because at least one of the summed hoppings are
 parameter-dependent), the modifiers will be applied to the sum, not to the original hoppings
 before being summed. This is typically not what the used intends, so the warning should not
-be ignored. A solution is to use a larger supercell before calling `@torus`.
+be ignored. A solution is to use a larger supercell before calling `@stitch`.
 
 # Examples
 
 ```jldoctest
-julia> h2D = HP.graphene() |> supercell(2); h1D = torus(h2D, (:, 0.3)); h1D´ = @torus(h2D, SA[2], ϕ)
+julia> h2D = HP.graphene() |> supercell(2); h1D = stitch(h2D, (:, 0.3)); h1D´ = @stitch(h2D, SA[2], ϕ)
 ParametricHamiltonian{Float64,2,1}: Parametric Hamiltonian on a 1D Lattice in 2D space
   Bloch harmonics  : 3
   Harmonic size    : 8 × 8
@@ -1260,9 +1260,9 @@ true
 ```
 
 # See also
-    `torus`, `hamiltonian`, `supercell`
+    `stitch`, `hamiltonian`, `supercell`
 """
-macro torus end
+macro stitch end
 
 """
     unflat(dn)
@@ -1767,7 +1767,7 @@ possible keyword arguments are
     - `boundary` : 1D cell index of a boundary cell, or `Inf` for no boundaries. Equivalent to removing that specific cell from the lattice when computing the Green function.
     - `callback` : a function `f(ϕ, z)` for 1D systems or `f(ϕ1, ϕ2, z)` for 2D systems that gets called at each Brillouin zone integration point `ϕ` or `(ϕ1, ϕ2)`, and where `z` is the integrand (an array).
     - If the system is 2D, the wavevector along transverse axis (the one different from the 1D `axis` given in the options) is numerically integrated using QuadGK with options given by `integrate_opts`, which is `(; atol = 1e-7, order = 5)` by default.
-    - In 2D systems a warning may be thrown associated to conflicts in torus wrapping which should not be ignored. See `@torus` for details.
+    - In 2D systems a warning may be thrown associated to `stitch` conflicts which should not be ignored. See `@stitch` for details.
 - `GS.KPM(; order = 100, bandrange = missing, kernel = I)` : Kernel polynomial method solver for 0D Hamiltonians
     - `order` : order of the expansion in Chebyshev polynomials `Tₙ(h)` of the Hamiltonian `h` (lowest possible order is `n = 0`).
     - `bandrange` : a `(min_energy, max_energy)::Tuple` interval that encompasses the full band of the Hamiltonian. If `missing`, it is computed automatically, but `using ArnoldiMethod` is required first.
