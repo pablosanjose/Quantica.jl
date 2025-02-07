@@ -1278,6 +1278,16 @@ scalars representing single orbitals. This is only relevant for multi-orbital Ha
 
 Equivalent to `unflat(())`
 
+    unflat(a::OrbitalSliceArray)
+
+Convert an `OrbitalSliceArray` into an array of views, where each view corresponds to a
+block for whole sites (see also `siteindexdict`).
+
+    unflat(f, a::OrbitalSliceArray)
+
+Like above, but apply `f` to each `view` block. Useful e.g. to convert views into StaticArrays with
+`f == SMatrix{N,N}`, see examples.
+
 # Examples
 
 ```
@@ -1285,7 +1295,29 @@ julia> h = HP.graphene(orbitals = 2); h[unflat(0,0)]
 2×2 SparseArrays.SparseMatrixCSC{SMatrix{2, 2, ComplexF64, 4}, Int64} with 2 stored entries:
                      ⋅                       [2.7+0.0im 0.0+0.0im; 0.0+0.0im 2.7+0.0im]
  [2.7+0.0im 0.0+0.0im; 0.0+0.0im 2.7+0.0im]                      ⋅
+
+ julia> hmat = h[cells = (SA[0,0], SA[1,1])]
+8×8 OrbitalSliceMatrix{ComplexF64,SparseArrays.SparseMatrixCSC{ComplexF64, Int64}}:
+ 0.0+0.0im  0.0+0.0im  2.7+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im
+ 0.0+0.0im  0.0+0.0im  0.0+0.0im  2.7+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im
+ 2.7+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im
+ 0.0+0.0im  2.7+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im
+ 0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im  2.7+0.0im  0.0+0.0im
+ 0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im  2.7+0.0im
+ 0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im  2.7+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im
+ 0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im  2.7+0.0im  0.0+0.0im  0.0+0.0im
+
+julia> unflat(SMatrix{2,2}, hmat)
+4×4 Matrix{SMatrix{2, 2, ComplexF64, 4}}:
+ [0.0+0.0im 0.0+0.0im; 0.0+0.0im 0.0+0.0im]  [2.7+0.0im 0.0+0.0im; 0.0+0.0im 2.7+0.0im]  [0.0+0.0im 0.0+0.0im; 0.0+0.0im 0.0+0.0im]  [0.0+0.0im 0.0+0.0im; 0.0+0.0im 0.0+0.0im]
+ [2.7+0.0im 0.0+0.0im; 0.0+0.0im 2.7+0.0im]  [0.0+0.0im 0.0+0.0im; 0.0+0.0im 0.0+0.0im]  [0.0+0.0im 0.0+0.0im; 0.0+0.0im 0.0+0.0im]  [0.0+0.0im 0.0+0.0im; 0.0+0.0im 0.0+0.0im]
+ [0.0+0.0im 0.0+0.0im; 0.0+0.0im 0.0+0.0im]  [0.0+0.0im 0.0+0.0im; 0.0+0.0im 0.0+0.0im]  [0.0+0.0im 0.0+0.0im; 0.0+0.0im 0.0+0.0im]  [2.7+0.0im 0.0+0.0im; 0.0+0.0im 2.7+0.0im]
+ [0.0+0.0im 0.0+0.0im; 0.0+0.0im 0.0+0.0im]  [0.0+0.0im 0.0+0.0im; 0.0+0.0im 0.0+0.0im]  [2.7+0.0im 0.0+0.0im; 0.0+0.0im 2.7+0.0im]  [0.0+0.0im 0.0+0.0im; 0.0+0.0im 0.0+0.0im]
 ```
+
+# See also
+    `flat`, `OrbitalSliceArray`
+
 """
 unflat
 
@@ -1749,7 +1781,7 @@ julia> summary(gω[ss])
 ```
 
 # See also
-    `GreenSolvers`, `diagonal`, `sitepairs`, `ldos`, `conductance`, `current`, `josephson`
+    `GreenSolvers`, `diagonal`, `sitepairs`, `ldos`, `conductance`, `current`, `josephson`, `OrbitalSliceArray`
 """
 greenfunction
 
@@ -1822,7 +1854,7 @@ julia> g(1)[diagonal(:, kernel = SA[1 0; 0 -1])]    # σz spin density of the ab
 ```
 
 # See also
-    `sitepairs`, `greenfunction`, `ldos`, `densitymatrix`
+    `sitepairs`, `greenfunction`, `ldos`, `densitymatrix`, `OrbitalSliceArray`
 """
 diagonal
 
@@ -1861,7 +1893,7 @@ julia> summary(g(1)[sitepairs(range = 1, kernel = SA[1 0; 0 -1])])    # σz spin
 ```
 
 # See also
-    `diagonal`, `hopselector`, `greenfunction`, `ldos`, `densitymatrix`
+    `diagonal`, `hopselector`, `greenfunction`, `ldos`, `densitymatrix`, `OrbitalSliceArray`
 """
 sitepairs
 
@@ -1999,7 +2031,7 @@ julia> J(0.2; B = 0.0)
 ```
 
 # See also
-    `greenfunction`, `ldos`, `conductance`, `josephson`, `transmission`
+    `greenfunction`, `ldos`, `conductance`, `josephson`, `densitymatrix`, `transmission`
 
 """
 current
@@ -2166,6 +2198,9 @@ julia> ρ()  # with mu = kBT = 0 by default
  -0.262865+0.0im        0.5+0.0im
 ```
 
+# See also
+    `greenfunction`, `josephson`, `ldos`, `current`, `conductance`, `transmission`, `OrbitalSliceArray`
+
 """
 densitymatrix
 
@@ -2242,7 +2277,7 @@ julia> J(0.0)
 ```
 
 # See also
-    `greenfunction`,`ldos`, `current`, `conductance`, `transmission`
+    `greenfunction`, `densitymatrix`, `ldos`, `current`, `conductance`, `transmission`, `OrbitalSliceArray`
 """
 josephson
 
@@ -2358,6 +2393,17 @@ Like the above, but returns a view instead of a copy of the indexed orbital matr
 
 Note: `diagonal` indexing is currently not supported by `OrbitalSliceArray`.
 
+# `unflat` conversion
+
+    unflat(mat)
+
+Convert a `mat::OrbitalSliceMatrix` (or an `OrbitalSliceArray` in general) to an array of
+site blocks, where each block is a view into the original `mat`.
+
+    unflat(SMatrix{N,N}, mat)
+
+Like the above but converting each block view into an NxN SMatrix, see `unflat` for details.
+
 # Examples
 
 ```
@@ -2384,7 +2430,7 @@ julia> mat[sites(SA[1], 1)]
 ```
 
 # See also
-    `siteselector`, `cellindices`, `orbaxes`
+    `siteselector`, `cellindices`, `orbaxes`, `unflat`
 """
 OrbitalSliceArray, OrbitalSliceVector, OrbitalSliceMatrix
 
