@@ -2396,6 +2396,10 @@ Return the orbital axes of `A`. This is a tuple of `OrbitalSliceGrouped` objects
 used e.g. to index another `OrbitalSliceArray` or to inspect the indices of each site with
 `siteindexdict`.
 
+    orbaxes(A::OrbitalSliceArray, n)
+
+Like the above, but return only the n-th orbital axis
+
 # Examples
 
 ```jldoctest
