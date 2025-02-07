@@ -616,6 +616,15 @@ end
     g = h |> attach(glead, cells = 1) |> greenfunction(GS.Schur(boundary = 0));
     @test sites(lattice(h)) == [SA[0.0]]
 
+    # test unflat of OrbitalSliceMatrix
+    lat = LP.linear()
+    g = combine(lat, translate(lat, SA[0.5])) |> hamiltonian(onsite(I) - hopping(I), orbitals = (1, 2)) |> greenfunction
+    gmat = g(0.0)[]
+    @test unflat(gmat) isa Matrix{<:SubArray}
+    g = combine(lat, translate(lat, SA[0.5])) |> hamiltonian(onsite(I) - hopping(I), orbitals = 2) |> greenfunction
+    gmat = g(0.0)[]
+    @test unflat(SMatrix{2,2}, gmat) isa Matrix{SMatrix{2,2,ComplexF64,4}}
+
     # check minimal_callsafe_copy for 2D Schur
     g = LP.square() |> supercell(1,3) |> @onsite((; mu = 0) -> mu) - hopping(1) |> greenfunction(GS.Schur());
     gs = g[cells = 1]

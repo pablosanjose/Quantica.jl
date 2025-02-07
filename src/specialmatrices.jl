@@ -549,8 +549,13 @@ Base.getindex(a::AbstractOrbitalMatrix, i::C, j::C = i) where {B,C<:CellSitePos{
 Base.checkbounds(::Type{Bool}, a::AbstractOrbitalMatrix, i, j) =
     checkbounds_axis_or_orbaxis(a, i, 1) && checkbounds_axis_or_orbaxis(a, j, 2)
 
-Base.view(a::AbstractOrbitalMatrix, i::AnyCellSites, j::AnyCellSites = i) =
-    view(parent(a), indexcollection(a, i, j)...)
+# we don't support a mix of index types (e.g. AnyCellSites and UnitRanges) because
+# AnyCellSites can be SparseIndices or DiagIndices
+Base.view(a::AbstractOrbitalArray, I::Vararg{AnyCellSites,M}) where {M} =
+    view(parent(a), indexcollection(a, I...)...)
+# but we have this fallback that works if I are all scalars or ranges
+Base.view(a::AbstractOrbitalArray, I::Vararg{Any,M}) where {M} =
+    view(parent(a), I...)
 
 function indexcollection(a::AbstractOrbitalMatrix, i::AnyCellSites, j::AnyCellSites = i)
     rowslice, colslice = orbaxes(a)
@@ -564,8 +569,6 @@ end
 Base.getindex(a::OrbitalSliceVector, i::AnyCellSites) = copy(view(a, i))
 Base.getindex(a::OrbitalSliceVector, i::C) where {B,C<:CellSitePos{<:Any,<:Any,<:Any,B}} =
     sanitize_block(B, view(a, i))
-
-Base.view(a::OrbitalSliceVector, i::AnyCellSites) = view(parent(a), indexcollection(a, i))
 
 function indexcollection(a::OrbitalSliceVector, i::AnyCellSites)
     rowslice = only(orbaxes(a))
@@ -629,6 +632,23 @@ function checkbounds_orbaxis(a::LatticeSlice, i::CellIndices)
         return false
     end
 end
+
+## unflat
+
+unflat(a::AbstractOrbitalArray) = unflat(identity, a)
+
+function unflat(type, a::AbstractOrbitalArray)
+    itr = Iterators.product(siteindexdict.(orbaxes(a))...)
+    matviews = (rngs -> type(view(a, rngs))).(itr)
+    return matviews
+end
+
+unflat(type, a::AbstractOrbitalMatrix) =
+    [type(view(a, is, js)) for is in siteindexdict(orbaxes(a, 1)), js in siteindexdict(orbaxes(a, 2))]
+
+unflat(type, a::AbstractOrbitalVector) =
+    [type(view(a, is)) for is in siteindexdict(orbaxes(a, 1))]
+
 
 ## broadcasting
 
