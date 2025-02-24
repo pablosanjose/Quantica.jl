@@ -91,7 +91,7 @@ julia&gt; central_region = RP.circle(50) &amp; !RP.circle(40) | RP.rectangle((4,
 
 julia&gt; h = LP.square() |&gt; hamiltonian(hopping(-σz), orbitals = 2) |&gt; supercell(region = central_region)
 
-julia&gt; Σ(ω, Δ) = SA[-ω Δ; conj(Δ) -ω]/sqrt(1-abs2(Δ))
+julia&gt; Σ(ω, Δ) = SA[-ω Δ; conj(Δ) -ω]/sqrt(abs2(Δ)-ω^2)
 
 julia&gt; g = h |&gt;
     attach(@onsite((ω; Δ = 0.2) -&gt; Σ(ω, Δ)); region = r -&gt; r[1] &lt; -51) |&gt;
@@ -115,24 +115,24 @@ julia&gt; J = josephson(g[1], 4.1)
 Josephson{JosephsonIntegratorSolver}: equilibrium Josephson current at a specific contact
 
 julia&gt; qplot(g, children = (; sitecolor = :blue))</code></pre><img src="../../assets/josephson_lat.png" alt="Josephson junction" width="400" class="center"/><p>In this case we have chosen to introduce the superconducting leads with a model self-energy, corresponding to a BCS bulk, but any other self-energy form could be used. We have introduced the phase difference (<code>phase</code>) as a model parameter. We can now evaluate the zero-temperature Josephson current simply with</p><pre><code class="language-julia hljs">julia&gt; J(phase = 0)
-1.992660837638158e-12
+9.006494320662131e-15
 
 julia&gt; J(phase = 0.2)
-0.0046175971391935605</code></pre><p>Note that finite temperatures can be taken using the <code>kBT</code> keyword argument for <code>josephson</code>, see docstring for details.</p><p>One is often interested in the critical current, which is the maximum of the Josephson current over all phase differences. Quantica.jl can compute the integral over a collection of phase differences simultaneously, which is more efficient that computing them one by one. This is done with</p><pre><code class="language-julia hljs">julia&gt; φs = subdiv(0, pi, 11); J = josephson(g[1], 4.1; phases = φs)
+0.0136818423316157</code></pre><p>Note that finite temperatures can be taken using the <code>kBT</code> keyword argument for <code>josephson</code>, see docstring for details.</p><p>One is often interested in the critical current, which is the maximum of the Josephson current over all phase differences. Quantica.jl can compute the integral over a collection of phase differences simultaneously, which is more efficient that computing them one by one. This is done with</p><pre><code class="language-julia hljs">julia&gt; φs = subdiv(0, pi, 11); J = josephson(g[1], 4.1; phases = φs)
 Josephson{JosephsonIntegratorSolver}: equilibrium Josephson current at a specific contact
 
 julia&gt; Iφ = J()
 11-element Vector{Float64}:
- -6.361223111882911e-13
-  0.007231421776215144
-  0.01424285518831463
-  0.020818707606469377
-  0.026752065101976884
-  0.031847203846513975
-  0.035913141096514584
-  0.038718955102068034
-  0.03976244268586444
-  0.036800967573567184
- -1.437196514806921e-12
+ 2.1155016011631047e-14
+ 0.02145885179546492
+ 0.042582378252413726
+ 0.0629936490311923
+ 0.08222057730191891
+ 0.09961314919103786
+ 0.11419800148332125
+ 0.12437368029947522
+ 0.12696035667191413
+ 0.11220061393370946
+ 4.905386208701179e-11
 
-julia&gt; f = Figure(); a = Axis(f[1,1], xlabel = &quot;φ&quot;, ylabel = &quot;I [e/h]&quot;); lines!(a, φs, Iφ); scatter!(a, φs, Iφ); f</code></pre><img src="../../assets/josephson_CPR.png" alt="Josephson junction current-phase relation" width="400" class="center"/></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../greenfunctions/">« GreenFunctions</a><a class="docs-footer-nextpage" href="../../advanced/nonspatial/">Non-spatial models »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.8.1 on <span class="colophon-date" title="Monday 24 February 2025 07:40">Monday 24 February 2025</span>. Using Julia version 1.11.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+julia&gt; f = Figure(); a = Axis(f[1,1], xlabel = &quot;φ&quot;, ylabel = &quot;I [e/h]&quot;); lines!(a, φs, Iφ); scatter!(a, φs, Iφ); f</code></pre><img src="../../assets/josephson_CPR.png" alt="Josephson junction current-phase relation" width="400" class="center"/></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../greenfunctions/">« GreenFunctions</a><a class="docs-footer-nextpage" href="../../advanced/nonspatial/">Non-spatial models »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.8.1 on <span class="colophon-date" title="Monday 24 February 2025 08:20">Monday 24 February 2025</span>. Using Julia version 1.11.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
