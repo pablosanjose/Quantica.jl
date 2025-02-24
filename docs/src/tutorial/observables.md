@@ -221,7 +221,7 @@ julia> central_region = RP.circle(50) & !RP.circle(40) | RP.rectangle((4, 10), (
 
 julia> h = LP.square() |> hamiltonian(hopping(-σz), orbitals = 2) |> supercell(region = central_region)
 
-julia> Σ(ω, Δ) = SA[-ω Δ; conj(Δ) -ω]/sqrt(1-abs2(Δ))
+julia> Σ(ω, Δ) = SA[-ω Δ; conj(Δ) -ω]/sqrt(abs2(Δ)-ω^2)
 
 julia> g = h |>
     attach(@onsite((ω; Δ = 0.2) -> Σ(ω, Δ)); region = r -> r[1] < -51) |>
@@ -254,10 +254,10 @@ In this case we have chosen to introduce the superconducting leads with a model 
 corresponding to a BCS bulk, but any other self-energy form could be used. We have introduced the phase difference (`phase`) as a model parameter. We can now evaluate the zero-temperature Josephson current simply with
 ```julia
 julia> J(phase = 0)
-1.992660837638158e-12
+9.006494320662131e-15
 
 julia> J(phase = 0.2)
-0.0046175971391935605
+0.0136818423316157
 ```
 Note that finite temperatures can be taken using the `kBT` keyword argument for `josephson`, see docstring for details.
 
@@ -268,17 +268,17 @@ Josephson{JosephsonIntegratorSolver}: equilibrium Josephson current at a specifi
 
 julia> Iφ = J()
 11-element Vector{Float64}:
- -6.361223111882911e-13
-  0.007231421776215144
-  0.01424285518831463
-  0.020818707606469377
-  0.026752065101976884
-  0.031847203846513975
-  0.035913141096514584
-  0.038718955102068034
-  0.03976244268586444
-  0.036800967573567184
- -1.437196514806921e-12
+ 2.1155016011631047e-14
+ 0.02145885179546492
+ 0.042582378252413726
+ 0.0629936490311923
+ 0.08222057730191891
+ 0.09961314919103786
+ 0.11419800148332125
+ 0.12437368029947522
+ 0.12696035667191413
+ 0.11220061393370946
+ 4.905386208701179e-11
 
 julia> f = Figure(); a = Axis(f[1,1], xlabel = "φ", ylabel = "I [e/h]"); lines!(a, φs, Iφ); scatter!(a, φs, Iφ); f
 ```
