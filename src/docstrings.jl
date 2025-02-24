@@ -1618,8 +1618,9 @@ an `ExtendedSelfEnergy`, which is numerically more stable than a naive implement
 
 Add a self-energy `Σ(ω) = V´⋅g1D(ω)[surface]⋅V` corresponding to a 1D lead (semi-infinite or
 infinite), but with couplings `V` and `V´`, defined by `coupling`, between `sites` and the
-`surface` lead unitcell (or the one with index zero if there is no boundary) . See also
-Advanced note above.
+`surface` lead unitcell (or the one with index zero if there is no boundary). See also
+Advanced note above. Note that if `coupling` is absent, it defaults to the intercell hopping
+in the `g1D` lead, as described above.
 
 ## Currying
 
