@@ -315,7 +315,7 @@ end
 #region
 
 # Mutable: we delay initialization of some fields until they are first needed (which may be never)
-mutable struct AppliedSchurGreenSolver{T,B,O,O∞,G,G∞} <: AppliedGreenSolver
+mutable struct AppliedSchurGreenSolver{T,B,O,O∞,G,G∞,P} <: AppliedGreenSolver
     fsolver::SchurFactorsSolver{T,B}
     boundary::T
     ohL::O                  # OpenHamiltonian for unitcell with ΣL      (aliases parent h)
@@ -324,13 +324,15 @@ mutable struct AppliedSchurGreenSolver{T,B,O,O∞,G,G∞} <: AppliedGreenSolver
     gL::G                   # Lazy field: GreenFunction for ohL
     gR::G                   # Lazy field: GreenFunction for ohR
     g∞::G∞                  # Lazy field: GreenFunction for oh∞
-    function AppliedSchurGreenSolver{T,B,O,O∞,G,G∞}(fsolver, boundary, ohL, ohR, oh∞) where {T,B,O,O∞,G,G∞}
+    integrate_opts::P       # for algorithms relying on integration (like densitymatrix)
+    function AppliedSchurGreenSolver{T,B,O,O∞,G,G∞,P}(fsolver, boundary, ohL, ohR, oh∞, integrate_opts) where {T,B,O,O∞,G,G∞,P}
         s = new()
         s.fsolver = fsolver
         s.boundary = boundary
         s.ohL = ohL
         s.ohR = ohR
         s.oh∞ = oh∞
+        s.integrate_opts = integrate_opts
         return s
     end
 end
@@ -338,8 +340,8 @@ end
 const GreenFunctionSchurEmptyLead1D{T,E} = GreenFunction{T,E,1,<:AppliedSchurGreenSolver,<:Any,<:EmptyContacts}
 const GreenFunctionSchurLead1D{T,E} = GreenFunction{T,E,1,<:AppliedSchurGreenSolver,<:Any,<:Any}
 
-AppliedSchurGreenSolver{G,G∞}(fsolver::SchurFactorsSolver{T,B}, boundary, ohL::O, ohR::O, oh∞::O∞) where {T,B,O,O∞,G,G∞} =
-    AppliedSchurGreenSolver{T,B,O,O∞,G,G∞}(fsolver, boundary, ohL, ohR, oh∞)
+AppliedSchurGreenSolver{G,G∞}(fsolver::SchurFactorsSolver{T,B}, boundary, ohL::O, ohR::O, oh∞::O∞, iopts::P) where {T,B,O,O∞,G,G∞,P} =
+    AppliedSchurGreenSolver{T,B,O,O∞,G,G∞,P}(fsolver, boundary, ohL, ohR, oh∞, iopts)
 
 #region ## API ##
 
@@ -375,7 +377,7 @@ function apply(s::GS.Schur, h::AbstractHamiltonian1D{T}, contacts) where {T}
     fsolver = SchurFactorsSolver(h´, s.shift)  # aliasing of h´
     boundary = T(round(only(s.boundary)))
     ohL, ohR, oh∞, G, G∞ = schur_openhams_types(fsolver, h, boundary)
-    solver = AppliedSchurGreenSolver{G,G∞}(fsolver, boundary, ohL, ohR, oh∞)
+    solver = AppliedSchurGreenSolver{G,G∞}(fsolver, boundary, ohL, ohR, oh∞, s.integrate_opts)
     return solver
 end
 
@@ -412,7 +414,7 @@ green_type(::H,::S1,::S2) where {T,E,H<:AbstractHamiltonian{T,E},S1,S2} =
 function minimal_callsafe_copy(s::AppliedSchurGreenSolver, parentham, _)
     fsolver´ = minimal_callsafe_copy(s.fsolver, parentham)
     ohL´, ohR´, oh∞´, G, G∞ = schur_openhams_types(fsolver´, parentham, s.boundary)
-    s´ = AppliedSchurGreenSolver{G,G∞}(fsolver´, s.boundary, ohL´, ohR´, oh∞´)
+    s´ = AppliedSchurGreenSolver{G,G∞}(fsolver´, s.boundary, ohL´, ohR´, oh∞´, s.integrate_opts)
     # we don't copy the lazy fields gL, gR, g∞, even if already materialized, since they
     # must be linked to ohL´, ohR´, oh∞´, not the old ones.
     return s´
@@ -426,6 +428,8 @@ function build_slicer(s::AppliedSchurGreenSolver, g, ω, Σblocks, corbitals; pa
     gslicer = maybe_TMatrixSlicer(g0slicer, Σblocks, corbitals)
     return gslicer
 end
+
+integrate_opts(s::AppliedSchurGreenSolver) = s.integrate_opts
 
 #endregion
 
@@ -740,6 +744,8 @@ end
 
 boundaries(s::AppliedSchurGreenSolver2D) = boundaries(s.solver1D)
 
+integrate_opts(s::AppliedSchurGreenSolver2D) = s.integrate_opts
+
 #endregion
 
 #endregion
@@ -761,10 +767,10 @@ end
 
 ## Constructor
 
-function densitymatrix(s::Union{AppliedSchurGreenSolver,AppliedSchurGreenSolver2D}, gs::GreenSlice; callback = Returns(nothing), atol = 1e-7, order = 5, quadgk_opts...)
+function densitymatrix(s::Union{AppliedSchurGreenSolver,AppliedSchurGreenSolver2D}, gs::GreenSlice; callback = Returns(nothing), quadgk_opts...)
     check_no_boundaries_schur(s)
     check_no_contacts_schur(gs)
-    return densitymatrix_schur(gs; callback, atol, order, quadgk_opts...)
+    return densitymatrix_schur(gs; callback, integrate_opts(s)..., quadgk_opts...)
 end
 
 check_no_boundaries_schur(s) = isempty(boundaries(s)) ||
