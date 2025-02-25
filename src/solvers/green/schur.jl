@@ -766,10 +766,10 @@ end
 
 ## Constructor
 
-function densitymatrix(s::Union{AppliedSchurGreenSolver,AppliedSchurGreenSolver2D}, gs::GreenSlice; callback = Returns(nothing), quadgk_opts...)
+function densitymatrix(s::Union{AppliedSchurGreenSolver,AppliedSchurGreenSolver2D}, gs::GreenSlice; int_opts...)
     check_no_boundaries_schur(s)
     check_no_contacts_schur(gs)
-    return densitymatrix_schur(gs; integrate_opts(s)..., callback, quadgk_opts...)
+    return densitymatrix_schur(gs; integrate_opts(s)..., int_opts...)
 end
 
 check_no_boundaries_schur(s) = isempty(boundaries(s)) ||
@@ -778,12 +778,12 @@ check_no_boundaries_schur(s) = isempty(boundaries(s)) ||
 check_no_contacts_schur(gs) = has_selfenergy(gs) &&
     argerror("The Schur densitymatrix solver currently support only `nothing` contacts")
 
-function densitymatrix_schur(gs; integrate_opts...)   # integrate_opts contains callback
+function densitymatrix_schur(gs; callback = Returns(nothing), quadgk_opts...)
     g = parent(gs)
     hmat = similar_Array(hamiltonian(g))
     psis = similar(hmat)
     orbaxes = orbrows(gs), orbcols(gs)
-    solver = DensityMatrixSchurSolver(gs, orbaxes, hmat, psis, NamedTuple(integrate_opts))
+    solver = DensityMatrixSchurSolver(gs, orbaxes, hmat, psis, (; callback, quadgk_opts...))
     return DensityMatrix(solver, gs)
 end
 
@@ -874,7 +874,7 @@ function fermi_h!(s, ϕ, µ, β = 0; params...)
 end
 
 quadgk_opts(s::DensityMatrixSchurSolver) = quadgk_opts(; s.integrate_opts...)
-quadgk_opts(; callback = Return(nothing), quadgk_opts...) = quadgk_opts
+quadgk_opts(; callback = Returns(nothing), quadgk_opts...) = quadgk_opts
 
 callback(s::DensityMatrixSchurSolver) = s.integrate_opts.callback
 
