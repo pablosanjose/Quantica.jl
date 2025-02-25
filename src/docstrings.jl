@@ -1796,9 +1796,8 @@ possible keyword arguments are
 - `GS.Spectrum(; spectrum_kw...)` : Diagonalization solver for 0D Hamiltonians using `spectrum(h; spectrum_kw...)`
     - `spectrum_kw...` : keyword arguments passed on to `spectrum`
     - This solver does not accept ParametricHamiltonians. Convert to Hamiltonian with `h(; params...)` first. Contact self-energies that depend on parameters are supported.
-- `GS.Schur(; boundary = Inf, axis = 1, callback = Returns(nothing), integrate_opts...)` : Solver for 1D and 2D Hamiltonians based on a deflated, generalized Schur factorization
+- `GS.Schur(; boundary = Inf, axis = 1, integrate_opts...)` : Solver for 1D and 2D Hamiltonians based on a deflated, generalized Schur factorization
     - `boundary` : 1D cell index of a boundary cell, or `Inf` for no boundaries. Equivalent to removing that specific cell from the lattice when computing the Green function.
-    - `callback` : a function `f(ϕ, z)` for 1D systems or `f(ϕ1, ϕ2, z)` for 2D systems that gets called at each Brillouin zone integration point `ϕ` or `(ϕ1, ϕ2)`, and where `z` is the integrand (an array).
     - If the system is 2D, the wavevector along transverse axis (the one different from the 1D `axis` given in the options) is numerically integrated using QuadGK with options given by `integrate_opts`, which is `(; atol = 1e-7, order = 5)` by default.
     - In 2D systems a warning may be thrown associated to `stitch` conflicts which should not be ignored. See `@stitch` for details.
 - `GS.KPM(; order = 100, bandrange = missing, kernel = I)` : Kernel polynomial method solver for 0D Hamiltonians
@@ -2175,7 +2174,7 @@ as an `OrbitalSliceMatrix`, see its docstring for further details.
 The generic integration algorithm allows for the following `opts` (see also `josephson`):
 
 - `omegamap`: a function `ω -> (; params...)` that translates `ω` at each point in the integration contour to a set of system parameters. Useful for `ParametricHamiltonians` which include terms `Σ(ω)` that depend on a parameter `ω` (one would then use `omegamap = ω -> (; ω)`). Default: `ω -> (;)`, i.e. no mapped parameters.
-- `callback`: a function to be called as `callback(x, y)` at each point in the integration, where `x` is the contour point and `y` is the integrand evaluated at that point. Useful for inspection and debugging, e.g. `callback(x, y) = @show x`. Default: `Returns(nothing)`.
+- `callback`: a function to be called as `callback(xs..., y)` at each point in the integration, where `xs` is the integration point (e.g. `xs = (ω,)` along a contour) and `y` is the integrand evaluated at that point. Useful for inspection and debugging, e.g. `callback(x, y) = @show x`. Default: `Returns(nothing)`.
 - `atol`: absolute integration tolerance. The default `1e-7` is chosen to avoid excessive integration times when the current is actually zero. Default `1e-7`.
 
 The `quadgk_opts` are extra keyword arguments (other than `atol`) to pass on to the function `QuadGK.quadgk` that is used for the integration.
@@ -2248,7 +2247,7 @@ The generic integration algorithm allows for the following `opts` (see also `den
 
 - `phases` : collection of superconducting phase biases to apply to the contact, so as to efficiently compute the full current-phase relation `[I_J(ϕ) for ϕ in phases]`. Note that each phase bias `ϕ` is applied by a `[cis(-ϕ/2)*I 0*I; 0*I cis(ϕ/2)*I]` rotation to the self energy, which is almost free. If `missing`, a single `I_J` is returned.
 - `omegamap`: a function `ω -> (; params...)` that translates `ω` at each point in the integration contour to a set of system parameters. Useful for `ParametricHamiltonians` which include terms `Σ(ω)` that depend on a parameter `ω` (one would then use `omegamap = ω -> (; ω)`). Default: `ω -> (;)`, i.e. no mapped parameters.
-- `callback`: a function to be called as `callback(x, y)` at each point in the integration, where `x` is the contour point and `y` is the integrand at that point. Useful for inspection and debugging, e.g. `callback(x, y) = @show x`. Default: `Returns(nothing)`.
+- `callback`: a function to be called as `callback(xs..., y)` at each point in the integration, where `xs` is the integration point (e.g. `xs = (ω,)` along a contour) and `y` is the integrand evaluated at that point. Useful for inspection and debugging, e.g. `callback(x, y) = @show x`. Default: `Returns(nothing)`.
 - `atol`: absolute integration tolerance. The default `1e-7` is chosen to avoid excessive integration times when the current is actually zero. Default `1e-7`.
 
 The `quadgk_opts` are extra keyword arguments (other than `atol`) to pass on to the function `QuadGK.quadgk` that is used for the integration.
