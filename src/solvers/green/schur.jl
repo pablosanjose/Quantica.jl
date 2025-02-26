@@ -750,7 +750,7 @@ integrate_opts(s::AppliedSchurGreenSolver2D) = s.integrate_opts
 
 quadgk_opts(s::AppliedSchurGreenSolver2D) = quadgk_opts(; s.integrate_opts...)
 
-callback(s::AppliedSchurGreenSolver2D) = s.integrate_opts.callback
+callback(s::AppliedSchurGreenSolver2D) = get(s.integrate_opts, :callback, Returns(nothing))
 
 #endregion
 
@@ -882,6 +882,6 @@ end
 quadgk_opts(s::DensityMatrixSchurSolver) = quadgk_opts(; s.integrate_opts...)
 quadgk_opts(; callback = Returns(nothing), quadgk_opts...) = quadgk_opts
 
-callback(s::DensityMatrixSchurSolver) = s.integrate_opts.callback
+callback(s::DensityMatrixSchurSolver) = get(s.integrate_opts, :callback, Returns(nothing))
 
 #endregion top
