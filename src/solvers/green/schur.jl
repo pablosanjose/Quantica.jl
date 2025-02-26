@@ -315,7 +315,7 @@ end
 #region
 
 # Mutable: we delay initialization of some fields until they are first needed (which may be never)
-mutable struct AppliedSchurGreenSolver{T,B,O,O∞,G,G∞} <: AppliedGreenSolver
+mutable struct AppliedSchurGreenSolver{T,B,O,O∞,G,G∞,P} <: AppliedGreenSolver
     fsolver::SchurFactorsSolver{T,B}
     boundary::T
     ohL::O                  # OpenHamiltonian for unitcell with ΣL      (aliases parent h)
@@ -324,13 +324,15 @@ mutable struct AppliedSchurGreenSolver{T,B,O,O∞,G,G∞} <: AppliedGreenSolver
     gL::G                   # Lazy field: GreenFunction for ohL
     gR::G                   # Lazy field: GreenFunction for ohR
     g∞::G∞                  # Lazy field: GreenFunction for oh∞
-    function AppliedSchurGreenSolver{T,B,O,O∞,G,G∞}(fsolver, boundary, ohL, ohR, oh∞) where {T,B,O,O∞,G,G∞}
+    integrate_opts::P       # for algorithms relying on integration (like densitymatrix)
+    function AppliedSchurGreenSolver{T,B,O,O∞,G,G∞,P}(fsolver, boundary, ohL, ohR, oh∞, integrate_opts) where {T,B,O,O∞,G,G∞,P}
         s = new()
         s.fsolver = fsolver
         s.boundary = boundary
         s.ohL = ohL
         s.ohR = ohR
         s.oh∞ = oh∞
+        s.integrate_opts = integrate_opts
         return s
     end
 end
@@ -338,8 +340,8 @@ end
 const GreenFunctionSchurEmptyLead1D{T,E} = GreenFunction{T,E,1,<:AppliedSchurGreenSolver,<:Any,<:EmptyContacts}
 const GreenFunctionSchurLead1D{T,E} = GreenFunction{T,E,1,<:AppliedSchurGreenSolver,<:Any,<:Any}
 
-AppliedSchurGreenSolver{G,G∞}(fsolver::SchurFactorsSolver{T,B}, boundary, ohL::O, ohR::O, oh∞::O∞) where {T,B,O,O∞,G,G∞} =
-    AppliedSchurGreenSolver{T,B,O,O∞,G,G∞}(fsolver, boundary, ohL, ohR, oh∞)
+AppliedSchurGreenSolver{G,G∞}(fsolver::SchurFactorsSolver{T,B}, boundary, ohL::O, ohR::O, oh∞::O∞, iopts::P) where {T,B,O,O∞,G,G∞,P} =
+    AppliedSchurGreenSolver{T,B,O,O∞,G,G∞,P}(fsolver, boundary, ohL, ohR, oh∞, iopts)
 
 #region ## API ##
 
@@ -375,7 +377,7 @@ function apply(s::GS.Schur, h::AbstractHamiltonian1D{T}, contacts) where {T}
     fsolver = SchurFactorsSolver(h´, s.shift)  # aliasing of h´
     boundary = T(round(only(s.boundary)))
     ohL, ohR, oh∞, G, G∞ = schur_openhams_types(fsolver, h, boundary)
-    solver = AppliedSchurGreenSolver{G,G∞}(fsolver, boundary, ohL, ohR, oh∞)
+    solver = AppliedSchurGreenSolver{G,G∞}(fsolver, boundary, ohL, ohR, oh∞, s.integrate_opts)
     return solver
 end
 
@@ -412,7 +414,7 @@ green_type(::H,::S1,::S2) where {T,E,H<:AbstractHamiltonian{T,E},S1,S2} =
 function minimal_callsafe_copy(s::AppliedSchurGreenSolver, parentham, _)
     fsolver´ = minimal_callsafe_copy(s.fsolver, parentham)
     ohL´, ohR´, oh∞´, G, G∞ = schur_openhams_types(fsolver´, parentham, s.boundary)
-    s´ = AppliedSchurGreenSolver{G,G∞}(fsolver´, s.boundary, ohL´, ohR´, oh∞´)
+    s´ = AppliedSchurGreenSolver{G,G∞}(fsolver´, s.boundary, ohL´, ohR´, oh∞´, s.integrate_opts)
     # we don't copy the lazy fields gL, gR, g∞, even if already materialized, since they
     # must be linked to ohL´, ohR´, oh∞´, not the old ones.
     return s´
@@ -426,6 +428,8 @@ function build_slicer(s::AppliedSchurGreenSolver, g, ω, Σblocks, corbitals; pa
     gslicer = maybe_TMatrixSlicer(g0slicer, Σblocks, corbitals)
     return gslicer
 end
+
+integrate_opts(s::AppliedSchurGreenSolver) = s.integrate_opts
 
 #endregion
 
@@ -728,17 +732,25 @@ function Base.getindex(s::SchurGreenSlicer2D, i::CellOrbitals, j::CellOrbitals)
     ni, nj = cell(i), cell(j)
     i´, j´ = CellOrbitals(ni[uas], orbindices(i)), CellOrbitals(nj[uas], orbindices(j))
     dn = (ni - nj)[was]
+    solver = s.solver
     function integrand(x)
         ϕs = sanitize_SVector(2π * x)
-        s1D = s.slicer_generator(s.solver, ϕs)
+        s1D = s.slicer_generator(solver, ϕs)
         gij = s1D[i´, j´] .* cis(-dot(dn, ϕs))
+        callback(solver)(ϕs..., gij)
         return gij
     end
-    integral, err = quadgk(integrand, -0.5, 0.5; s.solver.integrate_opts...)
+    integral, err = quadgk(integrand, -0.5, 0.5; quadgk_opts(solver)...)
     return integral
 end
 
 boundaries(s::AppliedSchurGreenSolver2D) = boundaries(s.solver1D)
+
+integrate_opts(s::AppliedSchurGreenSolver2D) = s.integrate_opts
+
+quadgk_opts(s::AppliedSchurGreenSolver2D) = quadgk_opts(s.integrate_opts)
+
+callback(s::AppliedSchurGreenSolver2D) = callback(s.integrate_opts)
 
 #endregion
 
@@ -750,21 +762,20 @@ boundaries(s::AppliedSchurGreenSolver2D) = boundaries(s.solver1D)
 #   1D and 2D routines. Does not support non-Nothing contacts
 #region
 
-struct DensityMatrixSchurSolver{T,L,A,G<:GreenSlice{T,<:Any,L},C,O<:NamedTuple}
+struct DensityMatrixSchurSolver{T,L,A,G<:GreenSlice{T,<:Any,L},O<:NamedTuple}
     gs::G                           # GreenSlice
     orbaxes::A                      # axes of GreenSlice (orbrows, orbcols)
     hmat::Matrix{Complex{T}}        # it spans just the unit cell, dense Bloch matrix
     psis::Matrix{Complex{T}}        # it spans just the unit cell, Eigenstates
-    callback::C                     # missing or a function f(ϕ, z) or f(ϕ1, ϕ2, z)
-    opts::O                         # kwargs for quadgk
+    integrate_opts::O               # callback [missing or a function f(ϕ, z) or f(ϕ1, ϕ2, z)] + kwargs for quadgk
 end
 
 ## Constructor
 
-function densitymatrix(s::Union{AppliedSchurGreenSolver,AppliedSchurGreenSolver2D}, gs::GreenSlice; callback = Returns(nothing), atol = 1e-7, order = 5, quadgk_opts...)
+function densitymatrix(s::Union{AppliedSchurGreenSolver,AppliedSchurGreenSolver2D}, gs::GreenSlice; int_opts...)
     check_no_boundaries_schur(s)
     check_no_contacts_schur(gs)
-    return densitymatrix_schur(gs; callback, atol, order, quadgk_opts...)
+    return densitymatrix_schur(gs; integrate_opts(s)..., int_opts...)
 end
 
 check_no_boundaries_schur(s) = isempty(boundaries(s)) ||
@@ -773,12 +784,12 @@ check_no_boundaries_schur(s) = isempty(boundaries(s)) ||
 check_no_contacts_schur(gs) = has_selfenergy(gs) &&
     argerror("The Schur densitymatrix solver currently support only `nothing` contacts")
 
-function densitymatrix_schur(gs; callback = Returns(nothing), quadgk_opts...)
+function densitymatrix_schur(gs; int_opts...)
     g = parent(gs)
     hmat = similar_Array(hamiltonian(g))
     psis = similar(hmat)
     orbaxes = orbrows(gs), orbcols(gs)
-    solver = DensityMatrixSchurSolver(gs, orbaxes, hmat, psis, callback, NamedTuple(quadgk_opts))
+    solver = DensityMatrixSchurSolver(gs, orbaxes, hmat, psis, NamedTuple(int_opts))
     return DensityMatrix(solver, gs)
 end
 
@@ -799,11 +810,11 @@ function integrate_rho_schur(s::DensityMatrixSchurSolver{<:Any,1}, µ, kBT; para
     function integrand!(x)
         ϕ = 2π * x
         z = fermi_h!(s, SA[ϕ], µ, inv(kBT); params...)
-        s.callback(ϕ, z)
+        callback(s)(ϕ, z)
         return z
     end
     fx! = (y, x) -> (y .= integrand!(x))
-    quadgk!(fx!, data, xs...; s.opts...)
+    quadgk!(fx!, data, xs...; quadgk_opts(s)...)
     return result
 end
 
@@ -818,18 +829,18 @@ function integrate_rho_schur(s::DensityMatrixSchurSolver{<:Any,2}, µ, kBT; para
     function integrand_inner!(x1, x2)
         ϕ = 2π * SA[x1, x2][axisorder]
         z = fermi_h!(s, ϕ, µ, inv(kBT); params...)
-        s.callback(ϕ..., z)
+        callback(s)(ϕ..., z)
         return z
     end
 
     function integrand_outer!(data, x2)
         xs = fermi_points_integration_path((h1D, s1D), µ; params..., s2D.phase_func(SA[2π*x2])...)
         inner! = (y, x1) -> (y .= integrand_inner!(x1, x2))
-        quadgk!(inner!, data, xs...; s.opts..., order = 5)
+        quadgk!(inner!, data, xs...; quadgk_opts(s)...)
         return data
     end
 
-    quadgk!(integrand_outer!, data, -0.5, 0.0, 0.5; s.opts..., order = 5)
+    quadgk!(integrand_outer!, data, -0.5, 0.0, 0.5; quadgk_opts(s)...)
 
     return result
 end
@@ -867,5 +878,9 @@ function fermi_h!(s, ϕ, µ, β = 0; params...)
     data = serialize(result)
     return data
 end
+
+quadgk_opts(s::DensityMatrixSchurSolver) = quadgk_opts(s.integrate_opts)
+
+callback(s::DensityMatrixSchurSolver) = callback(s.integrate_opts)
 
 #endregion top

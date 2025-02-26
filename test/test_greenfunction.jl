@@ -567,6 +567,19 @@ end
     @test ρ0() ≈ ρ1() ≈ ρ2()
     @test ρ0(0.1, 0.2) ≈ ρ1(0.1, 0.2) ≈ ρ2(0.1, 0.2)
 
+    # test DensityMatrixSchurSolver in 2D
+    ref = Ref(0.0)
+    callback(x,z) = (ref[] = sum(abs, z))
+    callback(x,y,z) = (ref[] = sum(abs, z))
+    g = LP.square() |> hopping(1) |> supercell(3,1) |> greenfunction(GS.Schur(; axis = 2, atol = 1e-2, callback))
+    ρ = densitymatrix(g[])
+    @test iszero(ref[])
+    @test all(x->abs(real(x)) < 1e-4, diag(g(0)[]))
+    @test !iszero(ref[])
+    ref = Ref(0.0)
+    @test diag(ρ()) ≈ [0.5,0.5,0.5]
+    @test !iszero(ref[])
+
     # parametric path and system
     g = LP.linear() |> supercell |> @onsite((; o = 0.5) -> o) |> greenfunction
     ρ = densitymatrix(g[], Paths.polygon((µ, T; o = 0.5) -> o > µ ? (-1, µ, o + im, 1) : (-1, o + im, µ, 1)))

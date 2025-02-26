@@ -127,20 +127,18 @@ end # Module
 #   The path is piecewise linear in the form of a triangular sawtooth with a given ± slope
 #region
 
-struct Integrator{I,T,P,O<:NamedTuple,C,F}
-    integrand::I    # call!(integrand, ω::Complex; params...)::Union{Number,Array{Number}}
-    pts::P          # points in the integration interval
-    result::T       # can be missing (for scalar integrand) or a mutable type (nonscalar)
-    quadgk_opts::O  # kwargs for quadgk
-    callback::C     # callback to call at each integration step (callback(ω, i(ω)))
-    post::F         # function to apply to the result of the integration
+struct Integrator{I,T,P,O<:NamedTuple,F}
+    integrand::I        # call!(integrand, ω::Complex; params...)::Union{Number,Array{Number}}
+    pts::P              # points in the integration interval
+    result::T           # can be missing (for scalar integrand) or a mutable type (nonscalar)
+    integrate_opts::O   # kwargs for quadgk + callback to call at each integration step (callback(ω, i(ω)))
+    post::F             # function to apply to the result of the integration
 end
 
 #region ## Constructor ##
 
-function Integrator(result, f, path; post = identity, callback = Returns(nothing), quadgk_opts...)
-    quadgk_opts´ = NamedTuple(quadgk_opts)
-    return Integrator(f, path, result, quadgk_opts´, callback, post)
+function Integrator(result, f, path; post = identity, integrate_opts...)
+        return Integrator(f, path, result, NamedTuple(integrate_opts), post)
 end
 
 Integrator(f, path; kw...) = Integrator(missing, f, path; kw...)
@@ -153,17 +151,17 @@ integrand(I::Integrator) = I.integrand
 
 points(I::Integrator) = I.pts
 
-options(I::Integrator) = I.quadgk_opts
+options(I::Integrator) = I.integrate_opts
 
 ## call! ##
 # scalar version
 function call!(I::Integrator{<:Any,Missing})
     fx = x -> begin
         y = call!(I.integrand, x)  # should be a scalar
-        I.callback(x, y)
+        callback(I)(x, y)
         return y
     end
-    result, err = quadgk(fx, points(I)...; I.quadgk_opts...)
+    result, err = quadgk(fx, points(I)...; quadgk_opts(I)...)
     result´ = I.post(result)
     return result´
 end
@@ -172,16 +170,26 @@ end
 function call!(I::Integrator{<:Any,T}) where {T}
     fx! = (y, x) -> begin
         y .= serialize(call!(I.integrand, x))
-        I.callback(x, y)
+        callback(I)(x, y)
         return nothing
     end
-    result, err = quadgk!(fx!, serialize(I.result), points(I)...; I.quadgk_opts...)
+    result, err = quadgk!(fx!, serialize(I.result), points(I)...; quadgk_opts(I)...)
     # note: post-processing is not element-wise & can be in-place
     result´ = I.post(unsafe_deserialize(I.result, result))
     return result´
 end
 
 (I::Integrator)() = copy(call!(I))
+
+
+callback(t::NamedTuple) = get(t, :callback, Returns(nothing))
+
+callback(I::Integrator) =  callback(I.integrate_opts)
+
+quadgk_opts(t::NamedTuple) = quadgk_opts(; t...)
+quadgk_opts(; callback = Returns(nothing), opts...) = opts
+
+quadgk_opts(i::Integrator) = quadgk_opts(i.integrate_opts)
 
 #endregion
 #endregion

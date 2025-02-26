@@ -731,7 +731,7 @@ end
 # if any ptr´ in ps appears in the duplicate list of that harmonic, it means that the
 # corresponding wrapped hopping comes from summing a modified hopping and an unmodified hopping
 function check_ptr_duplicates(pss, ptrmap, harmap)
-    message0 =  "The modifier will be applied to the sum, which may lead to unexpected results e.g. with non-linear or position-dependent modifiers. A possible fix is to use an enlarged supercell."
+    message0 = "The modifier will be applied to the sum, which may lead to unexpected results e.g. with non-linear or position-dependent modifiers. A possible fix is to use an enlarged supercell."
     message1 = "Two modified hoppings have been wrapped into one. " * message0
     message2 = "A modified and a non-modified hopping have been wrapped into one. " * message0
     # First check if two modified hoppings have been wrapped into one
