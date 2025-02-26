@@ -748,9 +748,9 @@ boundaries(s::AppliedSchurGreenSolver2D) = boundaries(s.solver1D)
 
 integrate_opts(s::AppliedSchurGreenSolver2D) = s.integrate_opts
 
-quadgk_opts(s::AppliedSchurGreenSolver2D) = quadgk_opts(; s.integrate_opts...)
+quadgk_opts(s::AppliedSchurGreenSolver2D) = quadgk_opts(s.integrate_opts)
 
-callback(s::AppliedSchurGreenSolver2D) = get(s.integrate_opts, :callback, Returns(nothing))
+callback(s::AppliedSchurGreenSolver2D) = callback(s.integrate_opts)
 
 #endregion
 
@@ -879,9 +879,8 @@ function fermi_h!(s, ϕ, µ, β = 0; params...)
     return data
 end
 
-quadgk_opts(s::DensityMatrixSchurSolver) = quadgk_opts(; s.integrate_opts...)
-quadgk_opts(; callback = Returns(nothing), quadgk_opts...) = quadgk_opts
+quadgk_opts(s::DensityMatrixSchurSolver) = quadgk_opts(s.integrate_opts)
 
-callback(s::DensityMatrixSchurSolver) = get(s.integrate_opts, :callback, Returns(nothing))
+callback(s::DensityMatrixSchurSolver) = callback(s.integrate_opts)
 
 #endregion top
