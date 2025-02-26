@@ -10,9 +10,9 @@ Schematically the process is as follows:
 ```julia
 julia> model_0 = hopping(1); # a possible non-interacting model
 
-julia> model_1 = @onsite((i; Φ = zerofield) --> Φ[i]);
+julia> model_1 = @onsite((i; Φ = zerofield) --> Φ[i]);       # Onsite Hartree-Fock
 
-julia> model_2 = @hopping((i, j; Φ = zerofield) -> Φ[i, j]);Fock
+julia> model_2 = @hopping((i, j; Φ = zerofield) -> Φ[i, j]); # Non-local Fock
 
 julia> h = lat |> hamiltonian(model_0 + model_1 + model_2)
 ```
