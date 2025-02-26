@@ -732,19 +732,25 @@ function Base.getindex(s::SchurGreenSlicer2D, i::CellOrbitals, j::CellOrbitals)
     ni, nj = cell(i), cell(j)
     i´, j´ = CellOrbitals(ni[uas], orbindices(i)), CellOrbitals(nj[uas], orbindices(j))
     dn = (ni - nj)[was]
+    solver = s.solver
     function integrand(x)
         ϕs = sanitize_SVector(2π * x)
-        s1D = s.slicer_generator(s.solver, ϕs)
+        s1D = s.slicer_generator(solver, ϕs)
         gij = s1D[i´, j´] .* cis(-dot(dn, ϕs))
+        callback(solver)(ϕs..., gij)
         return gij
     end
-    integral, err = quadgk(integrand, -0.5, 0.5; s.solver.integrate_opts...)
+    integral, err = quadgk(integrand, -0.5, 0.5; quadgk_opts(solver)...)
     return integral
 end
 
 boundaries(s::AppliedSchurGreenSolver2D) = boundaries(s.solver1D)
 
 integrate_opts(s::AppliedSchurGreenSolver2D) = s.integrate_opts
+
+quadgk_opts(s::AppliedSchurGreenSolver2D) = quadgk_opts(; s.integrate_opts...)
+
+callback(s::AppliedSchurGreenSolver2D) = s.integrate_opts.callback
 
 #endregion
 
