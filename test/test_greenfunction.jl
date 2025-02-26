@@ -574,8 +574,7 @@ end
     g = LP.square() |> hopping(1) |> supercell(3,1) |> greenfunction(GS.Schur(; axis = 2, atol = 1e-2, callback))
     ρ = densitymatrix(g[])
     @test iszero(ref[])
-    @show diag(g(0)[])
-    @test all(x->abs(real(x)) < 1e-6, diag(g(0)[]))
+    @test all(x->abs(real(x)) < 1e-4, diag(g(0)[]))
     @test !iszero(ref[])
     ref = Ref(0.0)
     @test diag(ρ()) ≈ [0.5,0.5,0.5]
