@@ -119,7 +119,7 @@ nambu_adjoint_significants(mat::SMatrix{N,N}, is_rotated) where {N} =
     nambu_adjoint_significants(nambu_significants(mat), is_rotated)
 
 function nambu_adjoint_significants(lmat::SVector{2}, _)
-    return -SA[0 1; 1 0] * conj(lmat)
+    return SA[0 1; -1 0] * conj(lmat)
 end
 
 function nambu_adjoint_significants(lmat::SMatrix{4,2}, is_rotated)

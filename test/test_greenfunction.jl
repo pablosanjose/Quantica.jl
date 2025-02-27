@@ -663,10 +663,11 @@ end
     @test Φ[sites(1), sites(2)] ≈ -1.5 * Q * ρ12 * Q
 
     # spinless nambu
-    oh = LP.linear() |> hamiltonian(hopping((r, dr) -> SA[1 sign(dr[1]); -sign(dr[1]) -1]) - onsite(SA[1 0; 0 -1]), orbitals = 2)
+    oh = LP.linear() |> hamiltonian(hopping((r, dr) -> SA[1 sign(dr[1]); -sign(dr[1]) -1]) - onsite(SA[1 0.1; 0.1 -1]), orbitals = 2)
     g = oh |> greenfunction
     Q = SA[1 0; 0 -1]
     m = meanfield(g; selector = (; range = 1), nambu = true, hartree = r -> 1/(1+norm(r)), fock = 1.5, charge = Q)
+    @test !iszero(m()[sites(1)][1,2])       # decoder preserves pairing
     @test_throws ArgumentError m(0.2, 0.3)  # µ cannot be nonzero
     Φ = m(0, 0.3)
     ρ11 = m.rho(0, 0.3)[sites(1), sites(1)] - SA[0 0; 0 1]
