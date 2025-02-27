@@ -589,6 +589,11 @@ end
     @test real(only(ρ(0, 0; o = -1.5))) < 1e-7
     d = Quantica.integrand(ρ)
     @test_throws MethodError d(2; o = 0.8)
+
+    # test that contacts are ignored when building a GreenSlice identity
+    g = LP.linear() |> supercell(2) |> hopping(1) |> attach(@onsite(ω->error())) |> greenfunction
+    @test_throws ErrorException g(0)[]
+    @test g[sites(1), sites(1:2)](2I) == SA[2 0]  # doesn't throw
 end
 
 @testset "greenfunction aliasing" begin
