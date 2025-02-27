@@ -411,13 +411,14 @@ function densitymatrix(gs::GreenSlice{T}, path::AbstractIntegrationPath; omegama
 end
 
 # we need to add the arc path segment from -∞ to ∞ * p.cisinf
+# we use the syntax gs(::UniformScaling) to find the identity matrix of our slice, see internal.jl
 function post_transform_rho(p::RadialPath, gs)
     arc = gs((p.angle/π)*I)
-    function post(x)
+    function post!(x)
         x .+= arc
         return x
     end
-    return post
+    return post!
 end
 
 post_transform_rho(::AbstractIntegrationPath, _) = identity

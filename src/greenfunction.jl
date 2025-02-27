@@ -57,7 +57,7 @@ end
 function call!(g::GreenFunction{T}, ω::Complex{T}; params...) where {T}
     gsolver = solver(g)
     contacts´ = contacts(g)
-    Σblocks = call!(contacts´, ω; params...)
+    Σblocks = supports_contacts(gsolver) ? call!(contacts´, ω; params...) : missing
     corbs = contactorbitals(contacts´)
     slicer = build_slicer(gsolver, g, ω, Σblocks, corbs; params...)
     return GreenSolution(g, slicer, Σblocks, corbs)
@@ -78,6 +78,8 @@ retarded_omega(ω::T, s::AppliedGreenSolver) where {T<:Real} =
 
 # fallback, may be overridden
 needs_omega_shift(s::AppliedGreenSolver) = true
+
+supports_contacts(s::AppliedGreenSolver) = true
 
 #endregion
 

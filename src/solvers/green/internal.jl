@@ -3,6 +3,7 @@
 #   Given a function f(ω) that returns a function fω(::CellOrbital, ::CellOrbital),
 #   implement an AppliedGreenSolver that returns a s::ModelGreenSlicer that returns fω(i,j)
 #   for each single orbital when calling getindex(s, ::CellOrbitals...). view not supported.
+#   Contact self energies are ignored.
 #region
 
 struct AppliedModelGreenSolver{F} <: AppliedGreenSolver
@@ -18,6 +19,7 @@ end
 
 ## API ##
 
+# build an identity matrix over the slice. We use an AppliedModelGreenSolver for this
 function (g::GreenSlice)(x::UniformScaling)
     s = AppliedModelGreenSolver(Returns((i, j) -> ifelse(i == j, x.λ, zero(x.λ))))
     g´ = swap_solver(g, s)
@@ -36,6 +38,8 @@ function build_slicer(s::AppliedModelGreenSolver, g, ω::C, Σblocks, contactorb
 end
 
 needs_omega_shift(s::AppliedModelGreenSolver) = false
+
+supports_contacts(s::AppliedModelGreenSolver) = false
 
 minimal_callsafe_copy(s::AppliedModelGreenSolver, args...) = s
 
