@@ -348,7 +348,7 @@ end
 #endregion
 
 ############################################################################################
-# default_plottable and default_parameters
+# default_plottable and parameters
 #   Retrieves the relevant object to plot with the relevant parameters
 #   Necessary to support e.g. qplot(g(; new_params...))
 # region
@@ -362,10 +362,10 @@ default_plottable(oh::OpenHamiltonian; params...) = call!(oh.h; params...)
 # fallback
 default_plottable(l; params...) = l
 
-default_parameters(g::GreenFunction{<:Any,<:Any,<:Any,<:FixedParamGreenSolver}) =
+parameters(g::GreenFunction{<:Any,<:Any,<:Any,<:FixedParamGreenSolver}) =
     parameters(solver(g))
 # fallback
-default_parameters(g) = (;)
+parameters(g) = (;)
 
 #endregion
 

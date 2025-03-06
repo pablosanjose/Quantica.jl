@@ -700,7 +700,7 @@ selector(t::AbstractModelTerm) = t.selector
 
 functor(t::AbstractModelTerm) = t.f
 
-parameters(t::AbstractParametricTerm) = t.f.params
+parameter_names(t::AbstractParametricTerm) = t.f.params
 
 coefficient(t::OnsiteTerm) = t.coefficient
 coefficient(t::HoppingTerm) = t.coefficient
@@ -832,7 +832,7 @@ AppliedHoppingModifier(m::AppliedHoppingModifier, sel::Selector) =
 selector(m::Modifier) = m.selector
 selector(m::AppliedModifier) = m.parentselector
 
-parameters(m::AbstractModifier) = m.f.params
+parameter_names(m::AbstractModifier) = m.f.params
 
 parametric_function(m::AbstractModifier) = m.f
 
@@ -1490,8 +1490,8 @@ Base.parent(s::AppliedSerializer) = s.parent
 selectors(s::Serializer) = s.selectors
 selectors(s::AppliedSerializer) = selectors(s.parent)
 
-parameters(s::Serializer) = (s.parameter,)
-parameters(s::AppliedSerializer) = parameters(s.parent)
+parameter_names(s::Serializer) = (s.parameter,)
+parameter_names(s::AppliedSerializer) = parameter_names(s.parent)
 
 encoder(s::Serializer) = s.encoder
 encoder(s::AppliedSerializer) = encoder(s.parent)
@@ -1664,7 +1664,7 @@ hamiltonian(h::ParametricHamiltonian) = h.h
 
 bloch(h::ParametricHamiltonian) = h.h.bloch
 
-parameters(h::ParametricHamiltonian) = h.allparams
+parameter_names(h::ParametricHamiltonian) = h.allparams
 
 modifiers(h::ParametricHamiltonian) = h.modifiers
 modifiers(h::Hamiltonian) = ()

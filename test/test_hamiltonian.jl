@@ -391,7 +391,7 @@ end
         @hopping(r->0, sublats, range = 2) + @onsite((r; p = 3) ->3p; sublats) + @onsite((r; q = 3) ->3q, sublats, region = RP.circle(2)) |>
         @hopping!((t, r, dr; p = 1) -> p+r[2], dcells = SVector{2,Int}[]) |> @onsite!((o, r; q = 1) -> o + q, sublats, region = RP.circle(3))
     @test h0 isa ParametricHamiltonian
-    @test Quantica.parameters(h0) == [:p, :q]
+    @test Quantica.parameter_names(h0) == [:p, :q]
 end
 
 @testset "ExternalPresets.wannier90" begin
@@ -606,7 +606,7 @@ end
     # Serializer -> ParametricHamiltonian conversion
     hs = hamiltonian(serializer(h0; parameter = :mystream))
     @test hs isa ParametricHamiltonian
-    @test Quantica.parameters(hs) == [:mystream]
+    @test Quantica.parameter_names(hs) == [:mystream]
     @test h0 == hamiltonian(hs)
     @test hs.modifiers[1].h === hs.h
     hs = hamiltonian(serializer(h1))

@@ -199,14 +199,14 @@ function parametric!(p::ParametricHamiltonian, ms::AppliedModifier...)
     allmodifiers = (modifiers(p)..., ms...)
     # restores aliasing of any serializer to h
     relinked_modifiers = maybe_relink_serializer.(allmodifiers, Ref(h))
-    allparams = parameters(p)
+    allparams = parameter_names(p)
     merge_parameters!(allparams, ms...)
     allptrs = pointers(p)
     merge_pointers!(allptrs, ms...)
     return ParametricHamiltonian(hparent, h, relinked_modifiers, allptrs, allparams)
 end
 
-merge_parameters!(p, m, ms...) = merge_parameters!(append!(p, parameters(m)), ms...)
+merge_parameters!(p, m, ms...) = merge_parameters!(append!(p, parameter_names(m)), ms...)
 merge_parameters!(p) = unique!(sort!(p))
 
 merge_pointers!(p, m, ms...) = merge_pointers!(_merge_pointers!(p, m), ms...)
@@ -422,7 +422,7 @@ function applymodifiers!(h, m::AppliedHoppingModifier{B}; kw...) where {B<:SMatr
 end
 
 function applymodifiers!(h, m::AppliedSerializer; kw...)
-    pname = only(parameters(m))
+    pname = only(parameter_names(m))
     nkw = NamedTuple(kw)
     # this should override hamiltonian(s), which should be aliased with h
     haskey(nkw, pname) && deserialize!(m, nkw[pname])

@@ -8,7 +8,7 @@ using Quantica: Lattice, LatticeSlice, AbstractHamiltonian, Hamiltonian, OpenHam
       ParametricHamiltonian, Harmonic, Bravais, SVector, GreenFunction, GreenSolution,
       argerror, harmonics, sublats, siterange, site, norm,
       normalize, nsites, nzrange, rowvals, nonzeros, sanitize_SVector,
-      default_plottable, default_parameters
+      default_plottable, parameters
 
 import Quantica: plotlattice, plotlattice!, plotbands, plotbands!, qplot, qplot!, qplotdefaults
 

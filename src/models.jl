@@ -137,13 +137,13 @@ zero_model(term::ParametricHoppingTerm) =
 
 function modifier(term::ParametricOnsiteTerm{N}) where {N}
     f = (o, args...; kw...) -> o + term(args...; kw...)
-    pf = ParametricFunction{N+1}(f, parameters(term))
+    pf = ParametricFunction{N+1}(f, parameter_names(term))
     return OnsiteModifier(pf, selector(term), is_spatial(term))
 end
 
 function modifier(term::ParametricHoppingTerm{N}) where {N}
     f = (t, args...; kw...) -> t + term(args...; kw...)
-    pf = ParametricFunction{N+1}(f, parameters(term))
+    pf = ParametricFunction{N+1}(f, parameter_names(term))
     return HoppingModifier(pf, selector(term), is_spatial(term))
 end
 
@@ -156,16 +156,16 @@ model_ω_to_param(model::ParametricModel) =
 model_ω_to_param(model::TightbindingModel) = model_ω_to_param(ParametricModel(model))
 
 function model_ω_to_param(term::ParametricOnsiteTerm{N}, default = 0) where {N}
-    # parameters(term) only needed for reporting, we omit adding :ω_internal
+    # parameter_names(term) only needed for reporting, we omit adding :ω_internal
     f = (args...; ω_internal = default, kw...) -> term(ω_internal, args...; kw...)
-    pf = ParametricFunction{N-1}(f, parameters(term))
+    pf = ParametricFunction{N-1}(f, parameter_names(term))
     return ParametricOnsiteTerm(pf, selector(term), coefficient(term), is_spatial(term))
 end
 
 function model_ω_to_param(term::ParametricHoppingTerm{N}, default = 0) where {N}
-    # parameters(term) only needed for reporting, we omit adding :ω_internal
+    # parameter_names(term) only needed for reporting, we omit adding :ω_internal
     f = (args...; ω_internal = default, kw...) -> term(ω_internal, args...; kw...)
-    pf = ParametricFunction{N-1}(f, parameters(term))
+    pf = ParametricFunction{N-1}(f, parameter_names(term))
     return ParametricHoppingTerm(pf, selector(term), coefficient(term), is_spatial(term))
 end
 
