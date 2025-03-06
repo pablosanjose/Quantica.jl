@@ -26,7 +26,7 @@
 selfenergy_plottables(s::SelfEnergy) = selfenergy_plottables(s.solver, orbslice(s))
 
 # fallback
-selfenergy_plottables(s::AbstractSelfEnergySolver, parent_latslice) = (parent_latslice,)
+selfenergy_plottables(::AbstractSelfEnergySolver, parent_latslice) = (parent_latslice,)
 
 include("selfenergy/nothing.jl")
 include("selfenergy/model.jl")

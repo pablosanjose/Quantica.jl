@@ -323,6 +323,9 @@ function sublatsites(l::LatticeSlice, s::Integer, store = missing)
     return gen
 end
 
+lattice0D(::CellIndices, store...) =
+    argerror("Attaching a GreenSlice with direct site indexing (i.e. of the form `g[sites(...)]`) is currently unsupported. Use a `siteselector` instead.")
+
 #endregion
 
 ############################################################################################

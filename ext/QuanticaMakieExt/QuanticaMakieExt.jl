@@ -7,7 +7,8 @@ using Makie.GeometryBasics: Ngon
 using Quantica: Lattice, LatticeSlice, AbstractHamiltonian, Hamiltonian, OpenHamiltonian,
       ParametricHamiltonian, Harmonic, Bravais, SVector, GreenFunction, GreenSolution,
       argerror, harmonics, sublats, siterange, site, norm,
-      normalize, nsites, nzrange, rowvals, nonzeros, sanitize_SVector, default_hamiltonian
+      normalize, nsites, nzrange, rowvals, nonzeros, sanitize_SVector,
+      default_plottable, default_parameters
 
 import Quantica: plotlattice, plotlattice!, plotbands, plotbands!, qplot, qplot!, qplotdefaults
 

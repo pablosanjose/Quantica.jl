@@ -498,7 +498,8 @@ function Makie.plot!(plot::PlotLattice{Tuple{G}}) where {G<:Union{GreenFunction,
     g = to_value(plot[1])
     gsel = haskey(plot, :selector) && plot[:selector][] !== missing ?
         plot[:selector][] : green_selector(g)
-    h = default_hamiltonian(g)
+    params = default_parameters(g)
+    h = default_plottable(g; params...)
     latslice = lattice(h)[gsel]
     latslice´ = Quantica.growdiff(latslice, h)
     L = Quantica.latdim(h)
@@ -534,7 +535,8 @@ function Makie.plot!(plot::PlotLattice{Tuple{G}}) where {G<:Union{GreenFunction,
             Σplottables = Quantica.selfenergy_plottables(Σ)
             for Σp in Σplottables
                 plottables, kws = get_plottables_and_kws(Σp)
-                plotlattice!(plot, plottables...; plot.attributes..., hide = hideΣ, marker = squaremarker, kws..., Σkw...)
+                plottables´ = default_plottable.(plottables; params...)
+                plotlattice!(plot, plottables´...; plot.attributes..., hide = hideΣ, marker = squaremarker, kws..., Σkw...)
             end
         end
     end
