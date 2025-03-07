@@ -43,7 +43,7 @@ function ParametricHamiltonian{E}(ph::ParametricHamiltonian) where {E}
     h = Hamiltonian{E}(hamiltonian(ph))
     ms = modifiers(ph)
     ptrs = pointers(ph)
-    pars = parameters(ph)
+    pars = parameter_names(ph)
     return ParametricHamiltonian(hparent, h, ms, ptrs, pars)
 end
 

@@ -165,7 +165,7 @@ function Base.show(io::IO, t::Union{AbstractModelTerm,Modifier})
     end
     if t isa AbstractParametricTerm || t isa Modifier
         print(io, "\n", "$(i)  Argument type     : $(display_argument_type(t))")
-        print(io, "\n", "$(i)  Parameters        : $(parameters(t))")
+        print(io, "\n", "$(i)  Parameters        : $(parameter_names(t))")
     end
 end
 
@@ -230,7 +230,7 @@ displaytype(::Type{T}) where {T} = "scalar ($T)"
 showextrainfo(io, i, h) = nothing
 
 showextrainfo(io, i, h::ParametricHamiltonian) = print(io, i, "\n",
-"$i  Parameters       : $(parameters(h))")
+"$i  Parameters       : $(parameter_names(h))")
 
 showextrainfo(io, i, o::Operator) = showextrainfo(io, i, hamiltonian(o))
 #endregion
@@ -587,7 +587,7 @@ function Base.show(io::IO, s::Serializer)
     i = get(io, :indent, "")
     ioindent = IOContext(io, :indent => i * "  ")
     print(io, i, summary(s), "\n",
-"$i  Stream parameter  : :$(only(parameters(s)))
+"$i  Stream parameter  : :$(only(parameter_names(s)))
 $i  Output eltype     : $(eltype(s))
 $i  Encoder/Decoder   : $(display_encdec(encoder(s)))")
 end
@@ -598,7 +598,7 @@ function Base.show(io::IO, s::AppliedSerializer)
     print(io, i, summary(s), "\n",
 "$i  Object            : $(nameof(typeof(parent_hamiltonian(s))))
 $i  Object parameters : $(display_parameters(s))
-$i  Stream parameter  : :$(only(parameters(s)))
+$i  Stream parameter  : :$(only(parameter_names(s)))
 $i  Output eltype     : $(eltype(s))
 $i  Encoder/Decoder   : $(display_encdec(encoder(s)))
 $i  Length            : $(length(s))")
@@ -613,7 +613,7 @@ display_encdec(::Function) = "Single"
 display_encdec(::Tuple) = "(Onsite, Hopping pairs)"
 
 display_parameters(s::AppliedSerializer{<:Any,<:Hamiltonian}) = "none"
-display_parameters(s::AppliedSerializer{<:Any,<:ParametricHamiltonian}) = string(parameters(parent_hamiltonian(s)))
+display_parameters(s::AppliedSerializer{<:Any,<:ParametricHamiltonian}) = string(parameter_names(parent_hamiltonian(s)))
 
 #endregion
 

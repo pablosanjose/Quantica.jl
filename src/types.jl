@@ -700,7 +700,7 @@ selector(t::AbstractModelTerm) = t.selector
 
 functor(t::AbstractModelTerm) = t.f
 
-parameters(t::AbstractParametricTerm) = t.f.params
+parameter_names(t::AbstractParametricTerm) = t.f.params
 
 coefficient(t::OnsiteTerm) = t.coefficient
 coefficient(t::HoppingTerm) = t.coefficient
@@ -832,7 +832,7 @@ AppliedHoppingModifier(m::AppliedHoppingModifier, sel::Selector) =
 selector(m::Modifier) = m.selector
 selector(m::AppliedModifier) = m.parentselector
 
-parameters(m::AbstractModifier) = m.f.params
+parameter_names(m::AbstractModifier) = m.f.params
 
 parametric_function(m::AbstractModifier) = m.f
 
@@ -1490,8 +1490,8 @@ Base.parent(s::AppliedSerializer) = s.parent
 selectors(s::Serializer) = s.selectors
 selectors(s::AppliedSerializer) = selectors(s.parent)
 
-parameters(s::Serializer) = (s.parameter,)
-parameters(s::AppliedSerializer) = parameters(s.parent)
+parameter_names(s::Serializer) = (s.parameter,)
+parameter_names(s::AppliedSerializer) = parameter_names(s.parent)
 
 encoder(s::Serializer) = s.encoder
 encoder(s::AppliedSerializer) = encoder(s.parent)
@@ -1563,9 +1563,6 @@ function harmonic_index(h::AbstractHamiltonian, dn)
     boundserror(harmonics(h), dn)
     return first(harmonics(h)), 1  # unreachable
 end
-
-# Unless params are given, it returns the Hamiltonian with defaults parameters
-default_hamiltonian(h::AbstractHamiltonian; params...) = h(; params...)
 
 # type-stable computation of common blocktype (for e.g. combine)
 blocktype(h::AbstractHamiltonian, hs::AbstractHamiltonian...) =
@@ -1667,7 +1664,7 @@ hamiltonian(h::ParametricHamiltonian) = h.h
 
 bloch(h::ParametricHamiltonian) = h.h.bloch
 
-parameters(h::ParametricHamiltonian) = h.allparams
+parameter_names(h::ParametricHamiltonian) = h.allparams
 
 modifiers(h::ParametricHamiltonian) = h.modifiers
 modifiers(h::Hamiltonian) = ()
@@ -2055,8 +2052,6 @@ selfenergies(oh::OpenHamiltonian) = oh.selfenergies
 
 hamiltonian(oh::OpenHamiltonian) = oh.h
 
-default_hamiltonian(oh::OpenHamiltonian) = default_hamiltonian(oh.h)
-
 lattice(oh::OpenHamiltonian) = lattice(oh.h)
 
 zerocell(h::OpenHamiltonian) = zerocell(parent(h))
@@ -2319,10 +2314,6 @@ orbindices(i::GreenIndices) = i.orbinds
 
 # returns the Hamiltonian field
 hamiltonian(g::Union{GreenFunction,GreenSolution,GreenSlice}) = hamiltonian(g.parent)
-
-# Like the above, but it may not be === the field (it can be a copy with parameters applied)
-# needed for qplot(g(; params...))
-default_hamiltonian(g::GreenFunction) = default_hamiltonian(parent(g))  # default params
 
 lattice(g::Union{GreenFunction,GreenSolution,GreenSlice}) = lattice(g.parent)
 

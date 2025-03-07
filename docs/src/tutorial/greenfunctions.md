@@ -110,6 +110,8 @@ The supported `attach` forms are the following
 
   This is the generic form of `attach`, which couples some sites `i` of a `g::Greenfunction` (defined by the slice `gs = g[i]`), to `sites` of `h` using a `coupling` model. This results in a self-energy `Σ(ω) = V´⋅gs(ω)⋅V` on `h` `sites`, where `V` and `V´` are couplings matrices given by `coupling`.
 
+  Note: currently, `attach` of a `GreenSlice` created with direct site indexing (e.g. `gs = g[sites(3)]`) is not supported. Use a `siteselector` instead, such as `gs = g[cells = 1]`.
+
 
 - **Dummy self-energy**
 

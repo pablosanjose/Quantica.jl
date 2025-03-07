@@ -345,8 +345,27 @@ function minimal_callsafe_copy(s::FixedParamGreenSolver, parentham, parentcontac
     return s´
 end
 
-default_hamiltonian(g::GreenFunction{<:Any,<:Any,<:Any,<:FixedParamGreenSolver}) =
-    default_hamiltonian(parent(g); parameters(solver(g))...)
+#endregion
+
+############################################################################################
+# default_plottable and parameters
+#   Retrieves the relevant object to plot with the relevant parameters
+#   Necessary to support e.g. qplot(g(; new_params...))
+# region
+
+default_plottable(g::GreenFunction; params...) = call!(parent(g); params...)
+
+default_plottable(h::AbstractHamiltonian; params...) = call!(h; params...)
+
+default_plottable(oh::OpenHamiltonian; params...) = call!(oh.h; params...)
+
+# fallback
+default_plottable(l; params...) = l
+
+parameters(g::GreenFunction{<:Any,<:Any,<:Any,<:FixedParamGreenSolver}) =
+    parameters(solver(g))
+# fallback
+parameters(g) = (;)
 
 #endregion
 
