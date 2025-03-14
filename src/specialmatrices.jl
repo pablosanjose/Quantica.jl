@@ -783,13 +783,13 @@ Base.@propagate_inbounds Base.getindex(a::SymmetrizedMatrix, i::Int, j::Int) =
 #region
 
 function maybe_symmetrize!(out, gij, ::Missing; post = identity)
-    out .= post.(gij)
-    return out
+    out .= gij
+    return maybe_broadcast!(post, out)
 end
 
 function maybe_symmetrize!(out, (gij, gji´), sym::Number; post = identity)
-    out .= post.(sym .* gij .+ conj(sym) .* gji´)
-    return out
+    out .= sym .* gij .+ conj(sym) .* gji´
+    return maybe_broadcast!(post, out)
 end
 
 # see specialmatrices.jl
@@ -811,7 +811,8 @@ function maybe_symmetrized_getindex!(output, g, i, j, sym; kw...)
     return maybe_symmetrize!(output, (gij, gji´), sym; kw...)
 end
 
-maybe_symmetrized_getindex(g, i, j, ::Missing; post = identity) = post.(g[i, j])
+maybe_symmetrized_getindex(g, i, j, ::Missing; post = identity) =
+    maybe_broadcast!(post, g[i, j])
 
 function maybe_symmetrized_getindex(g, i, j, sym; kw...)
     gij = g[i, j]   # careful, this could be non-mutable
@@ -825,6 +826,6 @@ end
 
 # in case gij above is non-mutable
 maybe_symmetrize!(::StaticArray, (gij, gji´), sym::Number; post = identity) =
-    post.(sym * gij + conj(sym) * gji´)
+    maybe_broadcast!(post, sym * gij + conj(sym) * gji´)
 
 #endregion

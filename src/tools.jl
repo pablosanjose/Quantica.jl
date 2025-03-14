@@ -259,6 +259,9 @@ end
 is_square(a::AbstractMatrix) = size(a, 1) == size(a, 2)
 is_square(a) = false
 
+maybe_broadcast!(::typeof(identity), x) = x
+maybe_broadcast!(f, x) = (x .= f.(x); x)
+
 #endregion
 
 ############################################################################################

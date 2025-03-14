@@ -234,10 +234,10 @@ function getindex_sparse!(output, g, hmask::Hamiltonian, ker; symmetrize = missi
     for har in harmonics(hmask)
         oi = CellIndices(dcell(har), oj)
         mat_cell = getindex_sparse(g, oi, oj, symmetrize)
-        fill_sparse!(har, mat_cell, bs, ker; kw...)
+        # fill_sparse!(har, mat_cell, bs, ker; kw...)
     end
-    fill_sparse!(parent(output), hmask)
-    return output
+    # fill_sparse!(parent(output), hmask)
+    # return output
 end
 
 # non-optimized fallback, can be specialized by solvers
