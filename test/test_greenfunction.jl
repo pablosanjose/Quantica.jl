@@ -29,12 +29,13 @@ end
 
 @testset "basic greenfunctions" begin
     h0 = LP.honeycomb() |> hamiltonian(hopping(SA[0 1; 1 0]), orbitals = 2) |> supercell(region = RP.circle(10))
+    h0´ = h0 |> @hopping!((t; p = 1) -> p*t)
     s0 = GS.SparseLU()
     s0´ = GS.Spectrum()
     h1 = LP.square() |> hamiltonian(@onsite((; o = 1) -> o*I) + hopping(SA[0 1; 1 0]), orbitals = 2) |> supercell((1,0), region = r -> abs(r[2]) < 2)
     s1 = GS.Schur()
     s1´ = GS.Schur(boundary = -1)
-    for (h, s) in zip((h0, h0, h1, h1), (s0, s0´, s1, s1´))
+    for (h, s) in zip((h0, h0, h0´, h1, h1), (s0, s0´, s0´, s1, s1´))
         testgreen(h, s; o = 2)
     end
     # This ensures that flat_sync! is called with multiorbitals when call!-ing ph upon calling g
@@ -146,7 +147,7 @@ end
     @test_throws ArgumentError greenfunction(h, GS.Schur())
     @test_throws ArgumentError greenfunction(h, GS.Bands())
     h = LP.honeycomb() |> @onsite((; o = 1) -> o*I) |> supercell
-    @test_throws ArgumentError greenfunction(h, GS.Spectrum())
+    @test greenfunction(h, GS.Spectrum()) isa GreenFunction
     @test greenfunction(h(), GS.Spectrum()) isa GreenFunction
 end
 
