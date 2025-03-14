@@ -2,11 +2,11 @@
 # Spectrum - for 0D AbstractHamiltonians
 #region
 
-struct AppliedSpectrumGreenSolver{B,S<:Spectrum{<:Any,B}} <: AppliedGreenSolver
+struct AppliedSpectrumGreenSolver{S<:Spectrum} <: AppliedGreenSolver
     spectrum::S
 end
 
-struct SpectrumGreenSlicer{C,B,S<:AppliedSpectrumGreenSolver{B}} <: GreenSlicer{C}
+struct SpectrumGreenSlicer{C,S<:AppliedSpectrumGreenSolver} <: GreenSlicer{C}
     ω::C
     solver::S
 end
