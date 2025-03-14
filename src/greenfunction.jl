@@ -318,6 +318,8 @@ struct FixedParamGreenSolver{P,G<:GreenFunction} <: AppliedGreenSolver
     params::P
 end
 
+Base.parent(s::FixedParamGreenSolver) = s.gfixed
+
 parameters(s::FixedParamGreenSolver) = s.params
 
 function (g::GreenFunction)(; params...)
@@ -336,10 +338,12 @@ maybe_apply_params(xs...; params...) = minimal_callsafe_copy(xs...)
 
 (g::GreenSlice)(; params...) = GreenSlice(parent(g)(; params...), greenindices(g)...)
 
-# params are ignored, solver.params are used instead. T required to disambiguate.
+# params are only used as overrides of solver.params. T required to disambiguate.
 function call!(g::GreenFunction{T,<:Any,<:Any,<:FixedParamGreenSolver}, ω::Complex{T}; params...) where {T}
+    isempty(params) ||
+        @warn("Called a FixedParamGreenSolver with non-empty parameters. These will be ignored.")
     s = solver(g)
-    return call!(s.gfixed, ω; s.params...)
+    return call!(s.gfixed, ω; s.params...)  # we pass s.params in case they were not applied (e.g. to contacts)
 end
 
 function minimal_callsafe_copy(s::FixedParamGreenSolver, parentham, parentcontacts)

@@ -110,8 +110,8 @@ function (s::DensityMatrixSpectrumSolver)(µ, kBT; params...)
     bs = blockstructure(s.gs)
     es, psis = spectrum(s.solver; params...)
     β = inv(kBT)
-    fs = (@. es = fermi(es - µ, β)) # doesn't allocate
-    fpsis = psis .* transpose(fs)   # allocates
+    fs = (@. fermi(es - µ, β))
+    fpsis = psis .* transpose(fs)
     ρcell = EigenProduct(bs, psis, fpsis)
     result = call!_output(s.gs)
     getindex!(result, ρcell, s.orbaxes...)

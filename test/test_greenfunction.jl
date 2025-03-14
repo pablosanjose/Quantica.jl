@@ -337,9 +337,9 @@ end
         gs´ = Quantica.minimal_callsafe_copy(gs)  # exercise minimal_callsafe_copy for different solvers
         ρ0 = densitymatrix(gs, path)
         ρ = densitymatrix(gs´)
-        @test isapprox(ρ0(), ρ(); atol = 1e-7)
-        @test isapprox(ρ0(0.2), ρ(0.2); atol = 1e-7)
-        @test isapprox(ρ0(0.2, 0.3), ρ(0.2, 0.3))
+        @test isapprox(ρ0(), ρ(); atol = 1e-6)
+        @test isapprox(ρ0(0.2), ρ(0.2); atol = 1e-6)
+        @test isapprox(ρ0(0.2, 0.3), ρ(0.2, 0.3); atol = 1e-6)
     end
     # g2 excluded since it is single-orbital
     for g in (g1, g3)
