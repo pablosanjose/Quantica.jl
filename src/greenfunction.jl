@@ -314,34 +314,42 @@ view_or_scalar(mat_cell, orb::Integer, orb´::Integer) = mat_cell[orb, orb´]
 #region
 
 struct FixedParamGreenSolver{P,G<:GreenFunction} <: AppliedGreenSolver
-    gparent::G
+    gfixed::G
     params::P
 end
 
-Base.parent(s::FixedParamGreenSolver) = s.gparent
+Base.parent(s::FixedParamGreenSolver) = s.gfixed
 
 parameters(s::FixedParamGreenSolver) = s.params
 
 function (g::GreenFunction)(; params...)
-    h´ = minimal_callsafe_copy(parent(g))
-    c´ = minimal_callsafe_copy(contacts(g))
-    s´ = minimal_callsafe_copy(solver(g), h´, c´)
-    gparent = GreenFunction(h´, s´, c´)
-    return GreenFunction(h´, FixedParamGreenSolver(gparent, params), c´)
+    h´ = maybe_apply_params(parent(g); params...)
+    c´ = maybe_apply_params(contacts(g); params...)
+    s´ = maybe_apply_params(solver(g), h´, c´; params...)
+    gfixed = GreenFunction(h´, s´, c´)
+    return GreenFunction(h´, FixedParamGreenSolver(gfixed, params), c´)
 end
+
+# should be callsafe_copy, to avoid interfering with the original object when call!ing
+maybe_apply_params(h::ParametricHamiltonian; params...) =
+    minimal_callsafe_copy(call!(h; params...))
+# fallback (if we don't know how to apply params for this object)
+maybe_apply_params(xs...; params...) = minimal_callsafe_copy(xs...)
 
 (g::GreenSlice)(; params...) = GreenSlice(parent(g)(; params...), greenindices(g)...)
 
-# params are ignored, solver.params are used instead. T required to disambiguate.
+# params are only used as overrides of solver.params. T required to disambiguate.
 function call!(g::GreenFunction{T,<:Any,<:Any,<:FixedParamGreenSolver}, ω::Complex{T}; params...) where {T}
+    isempty(params) ||
+        @warn("Called a FixedParamGreenSolver with non-empty parameters. These will be ignored.")
     s = solver(g)
-    return call!(s.gparent, ω; s.params...)
+    return call!(s.gfixed, ω; s.params...)  # we pass s.params in case they were not applied (e.g. to contacts)
 end
 
 function minimal_callsafe_copy(s::FixedParamGreenSolver, parentham, parentcontacts)
-    solver´ = minimal_callsafe_copy(solver(s.gparent), parentham, parentcontacts)
-    gparent = GreenFunction(parentham, solver´, parentcontacts)
-    s´ = FixedParamGreenSolver(gparent, s.params)
+    solver´ = minimal_callsafe_copy(solver(s.gfixed), parentham, parentcontacts)
+    gfixed = GreenFunction(parentham, solver´, parentcontacts)
+    s´ = FixedParamGreenSolver(gfixed, s.params)
     return s´
 end
 

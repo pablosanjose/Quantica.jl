@@ -129,7 +129,7 @@ Note that the content of `pdata` is passed by `aasol` as a third argument to `f!
 
 ## GreenSolvers without support for ParametricHamiltonians
 
-Some `GreenSolver`'s, like `GS.Spectrum` or `GS.KPM`, do not support `ParametricHamiltonian`s. In such cases, the approach above will fail, since it will not be possible to build `g` before knowing `phi`. In such cases one would need to rebuild the `meanfield` object at each step of the fixed-point solver. This is one way to do it.
+Some `GreenSolver`'s, like `GS.KPM`, do not support `ParametricHamiltonian`s. In such cases, the approach above will fail, since it will not be possible to build `g` before knowing `phi`. In such cases one would need to rebuild the `meanfield` object at each step of the fixed-point solver. This is one way to do it.
 
 ```julia
 julia> using SIAMFANLEquations

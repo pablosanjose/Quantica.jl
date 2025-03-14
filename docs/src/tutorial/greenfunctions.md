@@ -70,7 +70,7 @@ The currently implemented `GreenSolvers` (abbreviated as `GS`) are the following
 
 - `GS.Spectrum(; spectrum_kw...)`
 
-  For bounded (`L == 0`) Hamiltonians. This solver does not accept ParametricHamiltonians. Convert to Hamiltonian with `h(; params...)` first.
+  For bounded (`L == 0`) AbstractHamiltonians.
 
   Uses a diagonalization of `H`, obtained with `spectrum(H; spectrum_kw...)`, to compute the `G⁰ᵢⱼ` using the Lehmann representation `∑ₖ⟨i|ϕₖ⟩⟨ϕₖ|j⟩/(ω - ϵₖ)`. Any eigensolver supported by `spectrum` can be used here. If there are contacts, it dresses `G⁰` using a T-matrix approach, `G = G⁰ + G⁰TG⁰`.
 
