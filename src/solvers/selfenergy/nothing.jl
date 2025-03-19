@@ -3,7 +3,7 @@
 #    Empty self energy at selectors
 #region
 
-struct SelfEnergyEmptySolver{C} <: RegularSelfEnergySolver
+struct SelfEnergyNothingSolver{C} <: EmptySelfEnergySolver      # <: RegularSelfEnergySolver
     emptymat::SparseMatrixCSC{C,Int}
 end
 
@@ -11,16 +11,14 @@ function SelfEnergy(h::AbstractHamiltonian{T}, ::Nothing; kw...) where {T}
     orbslice = contact_orbslice(h; kw...)
     norbs = norbitals(orbslice)
     emptyΣ = spzeros(Complex{T}, norbs, norbs)
-    solver = SelfEnergyEmptySolver(emptyΣ)
+    solver = SelfEnergyNothingSolver(emptyΣ)
     return SelfEnergy(solver, orbslice)
 end
 
-call!(s::SelfEnergyEmptySolver, ω; params...) = s.emptymat
+call!(s::SelfEnergyNothingSolver, ω; params...) = s.emptymat
 
-call!_output(s::SelfEnergyEmptySolver) = s.emptymat
+call!_output(s::SelfEnergyNothingSolver) = s.emptymat
 
-has_selfenergy(::SelfEnergyEmptySolver) = false
-
-minimal_callsafe_copy(s::SelfEnergyEmptySolver) = s
+minimal_callsafe_copy(s::SelfEnergyNothingSolver) = s
 
 #endregion

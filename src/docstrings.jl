@@ -1367,17 +1367,13 @@ EigenSolvers
     spectrum(h::AbstractHamiltonian, ϕs; solver = EigenSolvers.LinearAlgebra(), transform = missing, params...)
 
 Compute the `Spectrum` of the Bloch matrix `h(ϕs; params...)` using the specified
-eigensolver, with `transform` applied to the resulting eigenenergies, if not `missing`.
-Eigenpairs are sorted by the real part of their energy. See `EigenSolvers` for available
-solvers and their options.
+eigensolver (`solver(h(ϕs; params...))`), with `transform` applied to the resulting
+eigenenergies, if not `missing`. Eigenpairs are sorted by the real part of their energy. See
+`EigenSolvers` for available solvers and their options.
 
     spectrum(h::AbstractHamiltonian; kw...)
 
 For a 0D `h`, equivalent to `spectrum(h, (); kw...)`
-
-    spectrum(m::AbstractMatrix; solver = EigenSolvers.LinearAlgebra()], transform = missing)
-
-Compute the `Spectrum` of matrix `m` using `solver` and `transform`.
 
     spectrum(b::Bandstructure, ϕs)
 
@@ -1793,9 +1789,8 @@ solvers. The alias `GS` can be used in place of `GS`. Currently supported solver
 possible keyword arguments are
 
 - `GS.SparseLU()` : Direct inversion solver for 0D Hamiltonians using a `SparseArrays.lu(hmat)` factorization
-- `GS.Spectrum(; spectrum_kw...)` : Diagonalization solver for 0D AbstractHamiltonians using `spectrum(h; spectrum_kw...)`
-    - `spectrum_kw...` : keyword arguments passed on to `spectrum`
-    - Contact self-energies are supported, even if they depend on parameters.
+- `GS.Spectrum(; solver = ES.LinearAlgebra())` : Solver for 0D AbstractHamiltonians that relies on the computation of its spectrum with the provided eigensolver, see `EigenSolvers`
+    - Contact self-energies are supported, even if they depend on parameters. For Green functions self-energies are incorporated exactly using a T-matrix approach.
     - For Green functions of `h::ParametricHamiltonian`s, the spectrum of `h` for given parameters is computed on each call to `g(ω; params...)`. This is suboptimal if we want to scan `ω` for fixed `params`. In such case consider doing `g´ = g(; params...)` (this evaluates the spectrum once) and then `g´(ω)` in your ω-loop.
 - `GS.Schur(; boundary = Inf, axis = 1, integrate_opts...)` : Solver for 1D and 2D Hamiltonians based on a deflated, generalized Schur factorization and (possibly) integration over the Brillouin zone.
     - `boundary` : 1D cell index of a boundary cell, or `Inf` for no boundaries. Equivalent to removing that specific cell from the lattice when computing the Green function.
@@ -1933,7 +1928,7 @@ julia> g = HP.graphene(a0 = 1, t0 = 1) |> supercell(region = RP.circle(20)) |> a
 GreenFunction{Float64,2,0}: Green function of a Hamiltonian{Float64,2,0}
   Solver          : AppliedKPMGreenSolver
   Contacts        : 1
-  Contact solvers : (SelfEnergyEmptySolver,)
+  Contact solvers : (SelfEnergyNothingSolver,)
   Contact sizes   : (6,)
   Hamiltonian{Float64,2,0}: Hamiltonian on a 0D Lattice in 2D space
     Bloch harmonics  : 1
@@ -2184,7 +2179,7 @@ The `quadgk_opts` are extra keyword arguments (other than `atol`) to pass on to 
 Currently, the following GreenSolvers implement dedicated densitymatrix algorithms:
 
 - `GS.Schur`: based on numerical integration over Bloch phase (1D and 2D). Boundaries and non-empty contacts are not currently supported. Assumes a Hermitian AbstractHamiltonian. `opts` can contain a `callback`.
-- `GS.Spectrum`: based on summation occupation-weigthed eigenvectors. No `opts`.
+- `GS.Spectrum`: based on summation of occupation-weighted eigenvectors for 0D systems. Any self-energies `Σ(ω)` are evaluated at `ω = µ` (Fermi energy), which is not exact in general, and may not give the same result as the exact integration algorithm in this case. No `opts`.
 - `GS.KPM`: based on the Chebyshev expansion of the Fermi function. Currently only works for zero temperature and only supports `nothing` contacts (see `attach`). No `opts`.
 
 # Example

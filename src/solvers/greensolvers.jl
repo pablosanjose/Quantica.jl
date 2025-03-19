@@ -27,7 +27,7 @@
 
 module GreenSolvers
 
-using Quantica: Quantica, AbstractGreenSolver, I
+using Quantica: Quantica, AbstractGreenSolver, AbstractEigenSolver, I
 
 struct SparseLU <:AbstractGreenSolver end
 
@@ -51,11 +51,11 @@ end
 KPM(; order = 100, bandrange = missing, padfactor = 1.01, kernel = I) =
     KPM(order, bandrange, kernel, padfactor)
 
-struct Spectrum{K} <:AbstractGreenSolver
-    spectrumkw::K
+struct Spectrum{S<:AbstractEigenSolver} <:AbstractGreenSolver
+    solver::S
 end
 
-Spectrum(; spectrumkw...) = Spectrum(NamedTuple(spectrumkw))
+Spectrum(; solver = Quantica.ES.LinearAlgebra()) = Spectrum(solver)
 
 struct Bands{B<:Union{Missing,Pair},A,K} <: AbstractGreenSolver
     bandsargs::A    # sorted to make slices easier

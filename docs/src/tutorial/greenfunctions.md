@@ -68,21 +68,21 @@ The currently implemented `GreenSolvers` (abbreviated as `GS`) are the following
   Uses a sparse `LU` factorization to compute the inverse of `⟨i|ω - H - Σ(ω)|j⟩`, where `Σ(ω)` is the self-energy from the contacts.
 
 
-- `GS.Spectrum(; spectrum_kw...)`
+- `GS.Spectrum(; solver = ES.LinearAlgebra())`
 
   For bounded (`L == 0`) AbstractHamiltonians.
 
-  Uses a diagonalization of `H`, obtained with `spectrum(H; spectrum_kw...)`, to compute the `G⁰ᵢⱼ` using the Lehmann representation `∑ₖ⟨i|ϕₖ⟩⟨ϕₖ|j⟩/(ω - ϵₖ)`. Any eigensolver supported by `spectrum` can be used here. If there are contacts, it dresses `G⁰` using a T-matrix approach, `G = G⁰ + G⁰TG⁰`.
+  Uses a diagonalization of a 0D Hamiltonian computed with `solver(h)`, to compute the `G⁰ᵢⱼ` using the Lehmann representation `∑ₖ⟨i|ϕₖ⟩⟨ϕₖ|j⟩/(ω - ϵₖ)`. Any solver from `EigenSolvers` can be used here. If there are contacts, it dresses `G⁰` using a T-matrix approach, `G = G⁰ + G⁰TG⁰`.
 
 
-- `GS.KPM(order = 100, bandrange = missing, kernel = I)`
+- `GS.KPM(; order = 100, bandrange = missing, kernel = I)`
 
   For bounded (`L == 0`) Hamiltonians, and restricted to sites belonging to contacts (see the section on Contacts).
 
   It precomputes the Chebyshev momenta, and incorporates the contact self energy with a T-matrix approach.
 
 
-- `GS.Schur(boundary = In, axis = 1, integrate_options...)`
+- `GS.Schur(; boundary = In, axis = 1, integrate_options...)`
 
   For 1D (`L == 1`) and 2D (`L == 2`) AbstractHamiltonians with only nearest-cell coupling along `axis`. Default for `L=1`.
 

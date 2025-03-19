@@ -4,9 +4,9 @@
 #   ization, possibly using inverse-free self-energies (using extended sites).
 #region
 
-# invgreen aliases contacts (they are not implemented through a TMatrixSlicer)
+# invgreenmat aliases contacts (they are not implemented through a TMatrixSlicer)
 struct AppliedSparseLUGreenSolver{C} <: AppliedGreenSolver
-    invgreen::InverseGreenBlockSparse{C}    # aliases parent contacts
+    invgreenmat::InverseGreenBlockSparse{C}                # aliases parent contacts Σblocks
 end
 
 mutable struct SparseLUGreenSlicer{C} <:GreenSlicer{C}
@@ -32,7 +32,7 @@ end
 
 #region ## API ##
 
-inverse_green(s::AppliedSparseLUGreenSolver) = s.invgreen
+inverse_green_blockmat(s::AppliedSparseLUGreenSolver) = s.invgreenmat
 
 unitcellinds_contacts(s::SparseLUGreenSlicer) = s.unitcinds
 unitcellinds_contacts(s::SparseLUGreenSlicer, i::Integer) =
@@ -41,7 +41,7 @@ unitcellinds_contacts(s::SparseLUGreenSlicer, i::Integer) =
 unitcellinds_contacts_merged(s::SparseLUGreenSlicer) = s.unitcindsall
 
 function minimal_callsafe_copy(s::AppliedSparseLUGreenSolver, parentham, parentcontacts)
-    invgreen´ = inverse_green(parentham, parentcontacts)
+    invgreen´ = inverse_green_blockmat(parentham, parentcontacts)
     return AppliedSparseLUGreenSolver(invgreen´)
 end
 
@@ -50,8 +50,8 @@ end
 #region ## apply ##
 
 function apply(::GS.SparseLU, h::AbstractHamiltonian0D, cs::Contacts)
-    invgreen = inverse_green(h, cs)
-    return AppliedSparseLUGreenSolver(invgreen)
+    invgreenmat = inverse_green_blockmat(h, cs)
+    return AppliedSparseLUGreenSolver(invgreenmat)
 end
 
 apply(::GS.SparseLU, h::AbstractHamiltonian, cs::Contacts) =
@@ -61,18 +61,19 @@ apply(::GS.SparseLU, h::AbstractHamiltonian, cs::Contacts) =
 
 #region ## call ##
 
-# Σblocks and contactorbitals are not used here, because they are already inside invgreen
+# Σblocks and contactorbitals are not used here, because they are already aliased inside invgreenmat
+# and have been updated by call!(contacts, ω; ...) from the calling call!(::GreenFunction, ω; params...)
 function build_slicer(s::AppliedSparseLUGreenSolver{C}, g, ω, Σblocks, contactorbitals; params...) where {C}
-    # We must apply params to hamiltonian(g) because its base harmonic is aliased into invgreen as a MatrixBlock
+    # We must apply params to hamiltonian(g) because its base harmonic is aliased into invgreenmat as a MatrixBlock
     call!(parent(g); params...)
-    invgreen = s.invgreen
-    nonextrng = orbrange(invgreen)
-    unitcinds = invgreen.unitcinds
-    unitcindsall = invgreen.unitcindsall
-    source64 = convert(Matrix{ComplexF64}, s.invgreen.source)
-    # the H0 and Σs inside invgreen have already been updated by the parent call!(g, ω; ...)
-    update!(invgreen, ω)
-    igmat = matrix(invgreen)
+    invgreenmat = s.invgreenmat
+    nonextrng = orbrange(invgreenmat)
+    unitcinds = invgreenmat.unitcinds
+    unitcindsall = invgreenmat.unitcindsall
+    source64 = convert(Matrix{ComplexF64}, s.invgreenmat.source)
+    # the H0 and Σs inside invgreenmat have already been updated by the parent call!(g, ω; ...)
+    update!(invgreenmat, ω)
+    igmat = matrix(invgreenmat)
 
     fact = try
         lu(igmat)

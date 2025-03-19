@@ -447,27 +447,27 @@ dense_addblocks!(mat) = mat
 ## InverseGreenBlockSparse
 #region
 
-# inverse_green from 0D AbstractHamiltonian + contacts
-function inverse_green(h::AbstractHamiltonian{T,<:Any,0}, contacts) where {T}
+# inverse_green_blockmat from 0D AbstractHamiltonian + contacts
+function inverse_green_blockmat(h::AbstractHamiltonian0D{T}, contacts) where {T}
     hdim = flatsize(h)
     haxis = 1:hdim
     ωblock = MatrixBlock((zero(Complex{T}) * I)(hdim), haxis, haxis)
     hblock = MatrixBlock(call!_output(h), haxis, haxis)
-    mat, unitcinds, unitcindsall = inverse_green_mat((ωblock, -hblock), hdim, contacts)
+    mat, unitcinds, unitcindsall = inverse_green_mat_contactinds((ωblock, -hblock), hdim, contacts)
     source = zeros(Complex{T}, size(mat, 2), length(unitcindsall))
     nonextrng = 1:flatsize(h)
     return InverseGreenBlockSparse(mat, nonextrng, unitcinds, unitcindsall, source)
 end
 
 # case without contacts
-function inverse_green_mat(blocks, _, ::Contacts{<:Any,0})
+function inverse_green_mat_contactinds(blocks, _, ::Contacts{<:Any,0})
     mat = BlockSparseMatrix(blocks...)
     unitcinds = Vector{Int}[]
     unitcindsall = Int[]
     return mat, unitcinds, unitcindsall
 end
 
-function inverse_green_mat(blocks, hdim, contacts)
+function inverse_green_mat_contactinds(blocks, hdim, contacts)
     Σs = selfenergies(contacts)
     extoffset = hdim
     unitcinds = [orbindices(only(cellsdict(contacts, i))) for i in 1:ncontacts(contacts)]

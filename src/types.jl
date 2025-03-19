@@ -1305,6 +1305,7 @@ minimal_callsafe_copy(m::MatrixBlock) =
   # InverseGreenBlockSparse
   #    BlockSparseMatrix representing G⁻¹ on a unitcell (+ possibly extended sites)
   #    with self-energies as blocks. It knows which indices correspond to which contacts
+  #    Constructor inverse_green_blockmat(h, contacts) in specialmatrices.jl
   #region
 
 struct InverseGreenBlockSparse{C}
@@ -1857,6 +1858,8 @@ energies(s::Spectrum) = s.eigen.values
 
 states(s::Spectrum) = s.eigen.vectors
 
+LinearAlgebra.eigen(s::Spectrum) = s.eigen
+
 blockstructure(s::Spectrum) = s.blockstruct
 blockstructure(b::Bandstructure) = b.blockstruct
 
@@ -1961,6 +1964,7 @@ Base.length(b::Bandstructure) = length(b.subbands)
 abstract type AbstractSelfEnergySolver end
 abstract type RegularSelfEnergySolver <: AbstractSelfEnergySolver end
 abstract type ExtendedSelfEnergySolver <: AbstractSelfEnergySolver end
+abstract type EmptySelfEnergySolver <: RegularSelfEnergySolver end
 
 #endregion
 
@@ -2000,6 +2004,8 @@ struct SelfEnergy{T,E,L,S<:AbstractSelfEnergySolver}
     end
 end
 
+const EmptySelfEnergy{T,E,L} = SelfEnergy{T,E,L,<:EmptySelfEnergySolver}
+
 #region ## Constructors ##
 
 SelfEnergy(solver::S, orbslice::OrbitalSliceGrouped{T,E,L}) where {T,E,L,S<:AbstractSelfEnergySolver} =
@@ -2013,10 +2019,9 @@ orbslice(Σ::SelfEnergy) = Σ.orbslice
 
 solver(Σ::SelfEnergy) = Σ.solver
 
-# check if we have any non-empty selfenergies
-has_selfenergy(s::SelfEnergy) = has_selfenergy(solver(s))
-has_selfenergy(s::AbstractSelfEnergySolver) = true
-# see nothing.jl for override for the case of SelfEnergyEmptySolver
+# check selfenergy is empty, defined by solver::EmptySelfEnergySolver
+has_selfenergy(s::EmptySelfEnergy) = false
+has_selfenergy(s::SelfEnergy) = true
 
 call!(Σ::SelfEnergy, ω; params...) = call!(Σ.solver, ω; params...)
 
@@ -2101,7 +2106,7 @@ struct Contacts{L,N,S<:NTuple{N,SelfEnergy},O<:OrbitalSliceGrouped}
     orbslice::O
 end
 
-const EmptyContacts{L} = Contacts{L,0,Tuple{}}
+const EmptyContacts{L,N} = Contacts{L,N,<:NTuple{N,EmptySelfEnergy}}
 
 #region ## Constructors ##
 
@@ -2424,6 +2429,35 @@ Base.:(==)(g::GreenSlice, g´::GreenSlice) = function_not_defined("==")
 
 #endregion
 #endregion
+
+
+############################################################################################
+# InverseGreen0D
+#region
+
+struct InverseGreen0D{T,E,H<:AbstractHamiltonian{T,E,0},C<:Contacts}
+    h::H
+    contacts::C
+    mat::InverseGreenBlockSparse{Complex{T}}
+end
+
+inverse_green(h::AbstractHamiltonian0D, c::Contacts) =
+    InverseGreen0D(h, c, inverse_green_blockmat(h, c))
+
+hamiltonian(s::InverseGreen0D) = s.h
+
+matrix(s::InverseGreen0D) = matrix(s.mat)
+
+# returns a sparse matrix, possibly including extended sites
+function call!(s::InverseGreen0D, ω; params...)
+    # update matrixblocks inside s.mat
+    call!(s.h; params...)
+    call!(s.contacts, ω; params...)
+    update!(s.mat, ω)
+    return matrix(s)
+end
+
+call!_output(s::InverseGreen0D) = matrix(s)
 
 ############################################################################################
 # Operator - Hamiltonian-like operator representing observables other than a Hamiltonian

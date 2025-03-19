@@ -146,9 +146,9 @@ end
 mutable struct SelfEnergyCouplingSchurSolver{C,G,H,S<:SparseMatrixView,S´<:SparseMatrixView} <: ExtendedSelfEnergySolver
     gunit::G
     hcoupling::H
-    V´::S´                              # aliases a view of hcoupling
-    g⁻¹::InverseGreenBlockSparse{C}     # aliases the one in solver(gunit)::AppliedSparseLUGreenSolver
-    V::S                                # aliases a view of hcoupling
+    V´::S´                           # aliases a view of hcoupling
+    g⁻¹::InverseGreenBlockSparse{C}  # aliases the one in solver(gunit)::AppliedSparseLUGreenSolver
+    V::S                             # aliases a view of hcoupling
 end
 
 #region ## Constructors ##
@@ -157,15 +157,15 @@ end
 # It relies on gunit having a AppliedSparseLUGreenSolver, so a sparse g⁻¹ can be extracted
 function SelfEnergyCouplingSchurSolver(gunit::GreenFunction{T}, hcoupling::AbstractHamiltonian{T}, nparent) where {T}
     hmatrix = call!_output(hcoupling)
-    invgreen = inverse_green(solver(gunit))       # the solver is AppliedSparseLUGreenSolver
+    invgreenmat = inverse_green_blockmat(solver(gunit))       # the solver is AppliedSparseLUGreenSolver
     lastflatparent = last(flatrange(hcoupling, nparent))
-    size(hmatrix, 1) == lastflatparent + length(orbrange(invgreen)) ||
-        internalerror("SelfEnergyCouplingSchurSolver builder: $(size(hmatrix, 1)) != $lastflatparent + $(length(orbrange(invgreen)))")
+    size(hmatrix, 1) == lastflatparent + length(orbrange(invgreenmat)) ||
+        internalerror("SelfEnergyCouplingSchurSolver builder: $(size(hmatrix, 1)) != $lastflatparent + $(length(orbrange(invgreenmat)))")
     parentrng, leadrng = 1:lastflatparent, lastflatparent+1:size(hmatrix, 1)
-    sizeV = size(invgreen, 1), lastflatparent
+    sizeV = size(invgreenmat, 1), lastflatparent
     V = SparseMatrixView(view(hmatrix, leadrng, parentrng), sizeV)
     V´ = SparseMatrixView(view(hmatrix, parentrng, leadrng), reverse(sizeV))
-    return SelfEnergyCouplingSchurSolver(gunit, hcoupling, V´, invgreen, V)
+    return SelfEnergyCouplingSchurSolver(gunit, hcoupling, V´, invgreenmat, V)
 end
 
 #endregion
@@ -250,7 +250,7 @@ function minimal_callsafe_copy(s::SelfEnergyCouplingSchurSolver)
     gunit´ = minimal_callsafe_copy(s.gunit)
     s´ = SelfEnergyCouplingSchurSolver(gunit´, hcoupling´,
         minimal_callsafe_copy(s.V´, hcoupling´),
-        inverse_green(solver(gunit´)),      # alias of the invgreen from the solver
+        inverse_green_blockmat(solver(gunit´)),      # alias of the invgreenmat from the solver
         minimal_callsafe_copy(s.V, hcoupling´))
     return s´
 end
