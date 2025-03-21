@@ -21,4 +21,6 @@ call!_output(s::SelfEnergyNothingSolver) = s.emptymat
 
 minimal_callsafe_copy(s::SelfEnergyNothingSolver) = s
 
+needs_omega_shift(::SelfEnergyNothingSolver) = false
+
 #endregion

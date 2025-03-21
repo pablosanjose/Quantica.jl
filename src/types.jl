@@ -2023,7 +2023,14 @@ solver(Σ::SelfEnergy) = Σ.solver
 has_selfenergy(s::EmptySelfEnergy) = false
 has_selfenergy(s::SelfEnergy) = true
 
-call!(Σ::SelfEnergy, ω; params...) = call!(Σ.solver, ω; params...)
+call!(Σ::SelfEnergy{T}, ω; params...) where {T} =
+    call!(Σ, real_or_complex_convert(T, ω); params...)
+
+call!(Σ::SelfEnergy{T}, ω::T; params...) where {T} =
+    call!(Σ, retarded_omega(ω, solver(Σ)); params...)
+
+call!(Σ::SelfEnergy{T}, ω::Complex{T}; params...) where {T} =
+    call!(Σ.solver, ω; params...)
 
 call!_output(Σ::SelfEnergy) = call!_output(solver(Σ))
 
@@ -2031,6 +2038,9 @@ call!_output(Σ::SelfEnergy) = call!_output(solver(Σ))
 
 minimal_callsafe_copy(Σ::SelfEnergy) =
     SelfEnergy(minimal_callsafe_copy(Σ.solver), Σ.orbslice)
+
+# fallback
+needs_omega_shift(s::AbstractSelfEnergySolver) = true
 
 #endregion
 #endregion

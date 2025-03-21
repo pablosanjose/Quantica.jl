@@ -73,8 +73,7 @@ call!(gs::GreenSlice{T}, ω::Complex{T}; post = identity, symmetrize = missing, 
 real_or_complex_convert(::Type{T}, ω::Real) where {T<:Real} = convert(T, ω)
 real_or_complex_convert(::Type{T}, ω::Complex) where {T<:Real} = convert(Complex{T}, ω)
 
-retarded_omega(ω::T, s::AppliedGreenSolver) where {T<:Real} =
-    ω + im * sqrt(eps(float(T))) * needs_omega_shift(s)
+retarded_omega(ω::T, s) where {T<:Real} = ω + im * sqrt(eps(float(T))) * needs_omega_shift(s)
 
 # fallback, may be overridden
 needs_omega_shift(s::AppliedGreenSolver) = true

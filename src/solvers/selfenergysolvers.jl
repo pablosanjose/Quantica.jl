@@ -13,6 +13,7 @@
 #   Optional: AbstractSelfEnergySolver's can also implement `selfenergy_plottables`
 #     - selfenergy_plottables(s::AbstractSelfEnergySolver, parent_latslice)
 #       -> collection of tuples to be passed to plotlattice!(axis, tup...) for visualization
+#     - needs_omega_shift(s::AbstractSelfEnergySolver) -> Bool (default true)
 #   Aliasing: AbstractSelfEnergySolver's are not allowed to alias anything from outside
 ############################################################################################
 

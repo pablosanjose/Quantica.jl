@@ -24,7 +24,7 @@ end
 #region ## API ##
 
 minimal_callsafe_copy(s::AppliedSpectrumGreenSolver{<:InverseGreen0DEigenSolver}, parentham, parentcontacts) =
-    apply(s.solver, parentham, parentcontacts)
+    apply(s.eigen.solver, parentham, parentcontacts)
 # parentham needs to be non-parametric and s.eigen is its eigenspectrum, so no need to recompute
 minimal_callsafe_copy(s::AppliedSpectrumGreenSolver{<:Eigen}, parentham, parentcontacts) = s
 
@@ -69,6 +69,8 @@ function get_eigen(solver, mat, h)
     # mat´ could be dense, while mat is sparse, so if not egal, we copy
     # the solver always receives the type of matrix mat´ declared by ES.input_matrix
     eigen = solver(mat´)
+    # _, psis = eigen
+    # orthonormalize!(psis)
     return eigen
 end
 

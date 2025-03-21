@@ -267,6 +267,8 @@ check_lead_contact_reversal(::GreenFunctionSchurLead1D, reverse) =
 
 check_lead_contact_reversal(::GreenFunctionSchurEmptyLead1D, reverse) = nothing
 
+needs_omega_shift(::SelfEnergyCouplingSchurSolver) = true
+
 #endregion
 
 #endregion
