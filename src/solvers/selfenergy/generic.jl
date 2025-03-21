@@ -81,5 +81,7 @@ function selfenergy_plottables(s::SelfEnergyGenericSolver, ls::LatticeSlice)
     return (p1, p2)
 end
 
+needs_omega_shift(s::SelfEnergyGenericSolver) = needs_omega_shift(parent(s.gslice).solver)
+
 #endregion
 #endregion
