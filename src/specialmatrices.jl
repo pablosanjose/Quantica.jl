@@ -678,29 +678,69 @@ Broadcast.broadcast_unalias(dest::AbstractOrbitalArray, src::AbstractOrbitalArra
 #endregion
 
 ############################################################################################
-## EigenProduct
-#   A matrix P = x * U * V' that is stored in terms of matrices U and V without computing
-#   the product. x is a scalar. Inspired by LowRankMatrices.jl
+## LazyPseudoInverse
+#   Represents pinv(V) without computing the full pseudoinverse explicitly
 #region
 
-# U and V may be SubArrays with different index type, so we need MU and MV
+struct LazyPseudoInverse{M<:Factorization,A<:Union{Missing,Vector}}
+    V::M
+    tmp::A  # to compute ldiv! in place if V isa Factorization
+end
+
+lazypseudoinverse(V::AbstractArray{T}) where {T} =
+    LazyPseudoInverse(factorize(V), Vector{T}(undef, size(V, 2)))
+
+function Base.view(P::LazyPseudoInverse, ::Colon, j::Integer)
+    fill!(P.tmp, 0)
+    P.tmp[j] = 1
+    ldiv!(P.V, P.tmp)
+    return P.tmp
+end
+
+Base.view(P::LazyPseudoInverse, i::Integer, j::Integer) = view(P, :, j)[i]
+
+Base.getindex(P::LazyPseudoInverse, I...) = copy(view(P, I...))
+
+Base.size(P::LazyPseudoInverse, I...) = size(P.V, I...)
+Base.axes(P::LazyPseudoInverse) = axes(P.V)
+Base.axes(P::LazyPseudoInverse, i) = axes(P.V)[i] # LU doesn't have axes(::LU, i)
+
+Base.similar(P::LazyPseudoInverse, t::Type...) =
+    LazyPseudoInverse(P.V, similar(P.tmp, t...))
+
+Base.copy(P::LazyPseudoInverse) = LazyPseudoInverse(P.V, copy(P.tmp))
+
+matrix(P::LazyPseudoInverse) = P.V \ I
+
+Base.:*(U, P::LazyPseudoInverse) = U / P.V
+Base.:*(P::LazyPseudoInverse, U) = P.V \ U
+
+#endregion
+
+############################################################################################
+## EigenProduct
+#   A matrix P = x * U * pinv(V) that is stored in terms of matrices U and V without comput-
+#   ing the product or the pseudoinverse. x is a scalar. Inspired by LowRankMatrices.jl
+#region
+
+# U and V⁻¹ may be SubArrays with different index type, so we need MU and MV
 # phi is a 1D Bloch phase to compute x = cis(-only(dn)*phi)
-struct EigenProduct{T,L,MU<:AbstractMatrix{Complex{T}},MV<:AbstractMatrix{Complex{T}},O<:OrbitalBlockStructure} <: AbstractMatrix{T}
+struct EigenProduct{T,L,MU<:AbstractMatrix{Complex{T}},MV,O<:OrbitalBlockStructure} <: AbstractMatrix{T}
     blockstruct::O
     U::MU
-    V::MV
+    V⁻¹::MV
     phi::SVector{L,T}
     x::Complex{T}
-    function EigenProduct{T,L,MU,MV,O}(blockstruct::O, U::MU, V::MV, phi::SVector{L,T}, x::Complex{T}) where {T,L,MU<:AbstractMatrix{Complex{T}},MV<:AbstractMatrix{Complex{T}},O<:OrbitalBlockStructure}
-        axes(U, 2) != axes(V, 2) && argerror("U and V must have identical column axis")
-        return new(blockstruct, U, V, phi, x)
+    function EigenProduct{T,L,MU,MV,O}(blockstruct::O, U::MU, V⁻¹::MV, phi::SVector{L,T}, x::Complex{T}) where {T,L,MU<:AbstractMatrix{Complex{T}},MV,O<:OrbitalBlockStructure}
+        axes(U, 2) != axes(V⁻¹, 1) && argerror("U and V must have identical column axis")
+        return new(blockstruct, U, V⁻¹, phi, x)
     end
 end
 
 #region ## Constructors ##
 
-EigenProduct(blockstruct::O, U::MU, V::MV, phi::SVector{L} = SA[zero(T)], x = one(Complex{T})) where {T,L,MU<:AbstractMatrix{Complex{T}},MV<:AbstractMatrix{Complex{T}},O<:OrbitalBlockStructure} =
-    EigenProduct{T,L,MU,MV,O}(blockstruct, U, V, sanitize_SVector(SVector{L,T}, phi), Complex{T}(x))
+EigenProduct(blockstruct::O, U::MU, V⁻¹::MV, phi::SVector{L} = SA[zero(T)], x = one(Complex{T})) where {T,L,MU<:AbstractMatrix{Complex{T}},MV,O<:OrbitalBlockStructure} =
+    EigenProduct{T,L,MU,MV,O}(blockstruct, U, V⁻¹, sanitize_SVector(SVector{L,T}, phi), Complex{T}(x))
 
 #endregion
 
@@ -709,13 +749,9 @@ EigenProduct(blockstruct::O, U::MU, V::MV, phi::SVector{L} = SA[zero(T)], x = on
 blockstructure(P::EigenProduct) = P.blockstruct
 
 Base.@propagate_inbounds function Base.getindex(P::EigenProduct, i::Integer, j::Integer)
-    ret = zero(eltype(P))
     @boundscheck checkbounds(P.U, i, :)
-    @boundscheck checkbounds(P.V, j, :)
-    @inbounds for k in axes(P.U, 2)
-        ret = muladd(P.U[i, k], conj(P.V[j, k]), ret)
-    end
-    return P.x * ret
+    @boundscheck checkbounds(P.V⁻¹, :, j)
+    return P.x * dot(view(P.U', :, i), view(P.V⁻¹, :, j))
 end
 
 Base.@propagate_inbounds function Base.getindex(P::EigenProduct, i::Integer)
@@ -726,27 +762,30 @@ end
 function Base.getindex(P::EigenProduct{T}, ci::AnyCellOrbitals, cj::AnyCellOrbitals) where {T}
     # the sign here is correct
     phase = isempty(cell(ci)) ? one(T) : cis(dot(cell(ci) - cell(cj), P.phi))
-    return view(phase * P, orbindices(ci), orbindices(cj))
+    # return view(phase * P, orbindices(ci), orbindices(cj))
+    mat = P.U * P.V⁻¹
+    mat .* phase
+    return mat
 end
 
-Base.view(P::EigenProduct, is, js) =
-    EigenProduct(P.blockstruct, view(P.U, is, :), view(P.V, js, :), P.phi, P.x)
+# Base.view(P::EigenProduct, is, js) =
+#     EigenProduct(P.blockstruct, view(P.U, is, :), view(P.V⁻¹, :, js), P.phi, P.x)
 
 # AbstractArray interface
-Base.axes(P::EigenProduct) = axes(P.U, 1), axes(P.V, 1)
-Base.size(P::EigenProduct) = size(P.U, 1), size(P.V, 1)
+Base.axes(P::EigenProduct) = axes(P.U, 1), axes(P.V⁻¹, 2)
+Base.size(P::EigenProduct) = size(P.U, 1), size(P.V⁻¹, 2)
 # Base.iterate(a::EigenProduct, i...) = iterate(parent(a), i...)
 Base.length(P::EigenProduct) = prod(size(P))
 Base.IndexStyle(::Type{T}) where {M,T<:EigenProduct{<:Any,<:Any,M}} = IndexStyle(M)
-Base.similar(P::EigenProduct) = EigenProduct(P.blockstruct, similar(P.U), similar(P.V), P.phi, P.x)
-Base.similar(P::EigenProduct, t::Type) = EigenProduct(P.blockstruct, similar(P.U, t), similar(P.V, t), P.phi, P.x)
-Base.copy(P::EigenProduct) = EigenProduct(P.blockstruct, copy(P.U), copy(P.V), P.phi, P.x)
+Base.similar(P::EigenProduct) = EigenProduct(P.blockstruct, similar(P.U), similar(P.V⁻¹), P.phi, P.x)
+Base.similar(P::EigenProduct, t::Type) = EigenProduct(P.blockstruct, similar(P.U, t), similar(P.V⁻¹, t), P.phi, P.x)
+Base.copy(P::EigenProduct) = EigenProduct(P.blockstruct, copy(P.U), copy(P.V⁻¹), P.phi, P.x)
 Base.eltype(::EigenProduct{T}) where {T} = Complex{T}
 
-Base.:*(x::Number, P::EigenProduct) = EigenProduct(P.blockstruct, P.U, P.V, P.phi, P.x * x)
+Base.:*(x::Number, P::EigenProduct) = EigenProduct(P.blockstruct, P.U, P.V⁻¹, P.phi, P.x * x)
 Base.:*(P::EigenProduct, x::Number) = x*P
 
-LinearAlgebra.tr(P::EigenProduct) = sum(xy -> first(xy) * conj(last(xy)), zip(P.U, P.V)) * P.x
+LinearAlgebra.tr(P::EigenProduct) = unsafe_trace_prod(P.U, P.V⁻¹)
 
 #endregion
 

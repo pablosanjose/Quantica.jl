@@ -872,7 +872,7 @@ function fermi_h!(s, ϕ, µ, β = 0; params...)
     # special-casing β = Inf with views turns out to be slower
     fs = (@. ϵs = fermi(ϵs - µ, β))
     fpsis = (s.psis .= psis .* transpose(fs))
-    ρcell = EigenProduct(bs, psis, fpsis, ϕ)
+    ρcell = EigenProduct(bs, fpsis, psis', ϕ)
     result = call!_output(s.gs)
     getindex!(result, ρcell, s.orbaxes...)
     data = serialize(result)

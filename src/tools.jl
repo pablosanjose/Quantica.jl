@@ -195,8 +195,7 @@ unsafe_trace_prod(A::Diagonal, B::AbstractMatrix) = sum(i -> A[i] * B[i, i], axe
 unsafe_trace_prod(A::AbstractMatrix, B::Diagonal) = unsafe_trace_prod(B, A)
 unsafe_trace_prod(A::Diagonal, B::Number) = only(A) * B
 unsafe_trace_prod(A::Number, B::Diagonal) = unsafe_trace_prod(B, A)
-unsafe_trace_prod(A::Union{SMatrix,UniformScaling,Number}, B::Union{SMatrix,UniformScaling,Number}) =
-     tr(A*B)
+unsafe_trace_prod(A, B) = tr(A * B)
 
 check_sizes(A::AbstractMatrix,B::AbstractMatrix) = size(A,2) == size(B,1) ||
     throw(DimensionMismatch("A has dimensions $(size(A)) but B has dimensions $(size(B))"))

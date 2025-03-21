@@ -9,35 +9,37 @@ end
 
 struct AppliedSpectrumGreenSolver{S<:Union{Spectrum,SpectrumSolver}} <: AppliedGreenSolver
     spectrum::S
+    ishermitian::Bool   # false if S<:SpectrumSolver, since we still don't know if ishermitian(h(; params...))
 end
 
 struct SpectrumGreenSlicer{C,S<:Spectrum} <: GreenSlicer{C}
     ω::C
     spectrum::S
+    ishermitian::Bool
 end
-
-#region ## Constructor ##
-
-
-#end
 
 #region ## API ##
 
-# Parent ham needs to be non-parametric, so no need to alias
+# parentham needs to be non-parametric, so no need to alias
 minimal_callsafe_copy(s::AppliedSpectrumGreenSolver{<:Spectrum}, parentham, parentcontacts) =
-    AppliedSpectrumGreenSolver(s.spectrum)
+    AppliedSpectrumGreenSolver(s.spectrum, ishermitian(parentham))
 minimal_callsafe_copy(s::AppliedSpectrumGreenSolver{<:SpectrumSolver}, parentham, parentcontacts) =
-    AppliedSpectrumGreenSolver(SpectrumSolver(parentham, s.spectrum.solver))
+    AppliedSpectrumGreenSolver(SpectrumSolver(parentham, s.spectrum.solver), false)
+
+LinearAlgebra.ishermitian(s::AppliedSpectrumGreenSolver{<:Spectrum}; _...) = s.ishermitian
+LinearAlgebra.ishermitian(s::AppliedSpectrumGreenSolver{<:SpectrumSolver}; params...) =
+    ishermitian(call!(s.spectrum.h; params...))
+LinearAlgebra.ishermitian(s::SpectrumGreenSlicer) = s.ishermitian
 
 #endregion
 
 #region ## apply ##
 
 apply(s::GS.Spectrum, h::Hamiltonian{<:Any,<:Any,0}, ::Contacts) =
-    AppliedSpectrumGreenSolver(spectrum(h; s.spectrumkw...))
+    AppliedSpectrumGreenSolver(spectrum(h; s.spectrumkw...), ishermitian(h))
 
 apply(s::GS.Spectrum, h::ParametricHamiltonian{<:Any,<:Any,0}, ::Contacts) =
-    AppliedSpectrumGreenSolver(SpectrumSolver(h, s))
+    AppliedSpectrumGreenSolver(SpectrumSolver(h, s), false)
 
 apply(::GS.Spectrum, h::AbstractHamiltonian, ::Contacts) =
     argerror("Can only use GS.Spectrum with bounded (L=0) AbstractHamiltonians. Received one with lattice dimension L=$(latdim(h))")
@@ -48,7 +50,7 @@ apply(::GS.Spectrum, h::AbstractHamiltonian, ::Contacts) =
 
 function build_slicer(s::AppliedSpectrumGreenSolver, g, ω, Σblocks, corbitals; params...)
     sp = spectrum(s; params...)
-    g0slicer = SpectrumGreenSlicer(complex(ω), sp)
+    g0slicer = SpectrumGreenSlicer(complex(ω), sp, ishermitian(s; params...))
     gslicer = maybe_TMatrixSlicer(g0slicer, Σblocks, corbitals)
     return gslicer
 end
@@ -60,8 +62,11 @@ spectrum(s::AppliedSpectrumGreenSolver{<:SpectrumSolver}; params...) =
     spectrum(call!(s.spectrum.h; params...); s.spectrum.solver.spectrumkw...)
 
 # FixedParamGreenSolver support
-maybe_apply_params(s::AppliedSpectrumGreenSolver{<:SpectrumSolver}, h, c; params...) =
-    AppliedSpectrumGreenSolver(spectrum(call!(h; params...); s.spectrum.solver.spectrumkw...))
+function maybe_apply_params(s::AppliedSpectrumGreenSolver{<:SpectrumSolver}, h, c; params...)
+    h´ = call!(h; params...)
+    sp = spectrum(h´; s.spectrum.solver.spectrumkw...)
+    return AppliedSpectrumGreenSolver(sp, ishermitian(h´))
+end
 
 #endregion
 
@@ -72,12 +77,13 @@ maybe_apply_params(s::AppliedSpectrumGreenSolver{<:SpectrumSolver}, h, c; params
 #   We don't implement view over contacts because that is taken care of by TMatrixSlicer
 #region
 
-function Base.getindex(s::SpectrumGreenSlicer{C}, i::CellOrbitals{0}, j::CellOrbitals{0}) where {C}
+function Base.getindex(s::SpectrumGreenSlicer, i::CellOrbitals{0}, j::CellOrbitals{0})
     oi, oj = orbindices(i), orbindices(j)
     es, psis = s.spectrum
-    vi, vj = view(psis, oi, :), view(psis, oj, :)
-    vj´ = vj' ./ (s.ω .- es)
-    return vi * vj´
+    ωes = (s.ω .- es)
+    vi = view(psis, oi, :) ./ transpose(ωes)
+    sij = ishermitian(s) ? vi * view(psis, oj, :)' : vi * lazypseudoinverse(view(psis, oj, :))
+    return sij
 end
 
 #endregion
@@ -112,9 +118,12 @@ function (s::DensityMatrixSpectrumSolver)(µ, kBT; params...)
     β = inv(kBT)
     fs = (@. fermi(es - µ, β))
     fpsis = psis .* transpose(fs)
-    ρcell = EigenProduct(bs, psis, fpsis)
     result = call!_output(s.gs)
-    getindex!(result, ρcell, s.orbaxes...)
+    if ishermitian(s.solver)
+        getindex!(result, EigenProduct(bs, fpsis, psis'), s.orbaxes...)
+    else
+        getindex!(result, EigenProduct(bs, fpsis, lazypseudoinverse(psis)), s.orbaxes...)
+    end
     return result
 end
 
