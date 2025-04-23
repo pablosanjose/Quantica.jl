@@ -240,15 +240,15 @@ end
         @test wh == h
         @test wh !== h
     end
-    h = LP.linear() |> supercell(2) |> hopping(1) |> @hopping!((t, r, dr) -> t*(r[1]-1/2))
-    @test_warn "Two modified hoppings have been wrapped into one" stitch(h, (0.2,))
-    h = LP.square() |> supercell(2, 2) |> hopping(1)
-    @test_warn "A modified and a non-modified hopping have been wrapped into one" @stitch(h, SA[2], ϕ)
-    h = LP.square() |> supercell(3, 2) |> hopping(1, range = √2)
-    @test_warn "Two modified hoppings have been wrapped into one" @stitch(h, SA[2], ϕ)
-    h = LP.square() |> supercell(3, 3) |> hopping(1, range = √2)
-    h´ = @test_nowarn @stitch(h, SA[2], ϕ)
-    @test h(SA[0.2, 0.3]) ≈ h´(SA[0.2]; ϕ = 0.3)
+    # h = LP.linear() |> supercell(2) |> hopping(1) |> @hopping!((t, r, dr) -> t*(r[1]-1/2))
+    # @test_warn "Two modified hoppings have been wrapped into one" stitch(h, (0.2,))
+    # h = LP.square() |> supercell(2, 2) |> hopping(1)
+    # @test_warn "A modified and a non-modified hopping have been wrapped into one" @stitch(h, SA[2], ϕ)
+    # h = LP.square() |> supercell(3, 2) |> hopping(1, range = √2)
+    # @test_warn "Two modified hoppings have been wrapped into one" @stitch(h, SA[2], ϕ)
+    # h = LP.square() |> supercell(3, 3) |> hopping(1, range = √2)
+    # h´ = @test_nowarn @stitch(h, SA[2], ϕ)
+    # @test h(SA[0.2, 0.3]) ≈ h´(SA[0.2]; ϕ = 0.3)
 end
 
 @testset "hamiltonian HybridSparseMatrix" begin

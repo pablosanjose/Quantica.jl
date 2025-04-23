@@ -187,7 +187,7 @@ parametric(p::ParametricHamiltonian, ms::AnyAbstractModifier...) =
 
 parametric!(p::ParametricHamiltonian) = p
 
-# This should not be exported, because it doesn't modify p in place (because of modifiers)
+# This should not be exported, because it doesn't actually modify p in place (because of modifiers)
 function parametric!(p::ParametricHamiltonian, ms::AnyModifier...)
     ams = apply.(ms, Ref(parent(p)))
     return parametric!(p, ams...)
@@ -278,7 +278,7 @@ function addblochs!(dst::SparseMatrixCSC, h::Hamiltonian, φs, axis)
     isvelocity = axis isa Integer
     for har in hars
         iszero(dcell(har)) && isvelocity && continue
-        e⁻ⁱᵠᵈⁿ = cis(-dot(φs, dcell(har)))
+        e⁻ⁱᵠᵈⁿ = blochfactor(dcell(har), φs)
         isvelocity && (e⁻ⁱᵠᵈⁿ *= -im * dcell(har)[axis])
         merged_mul!(dst, matrix(har), e⁻ⁱᵠᵈⁿ, 1, 1)  # see tools.jl
     end
@@ -298,6 +298,11 @@ end
 
 @noinline checkbloch(::AbstractHamiltonian{<:Any,<:Any,L}, ::SVector{L´}) where {L,L´} =
     L == L´ || throw(ArgumentError("Need $L Bloch phases, got $(L´)"))
+
+# rerturns e⁻ⁱᵠᵈⁿ or 1 if φ is missing
+blochfactor(dn, ::Missing) = 1
+blochfactor(dn, φ) = blochfactor(dn, sanitize_SVector(φ))
+blochfactor(dn, φ::AbstractVector) = cis(-dot(dn, φ))
 
 # ouput of a call!(h, ϕs)
 call!_output(h::Hamiltonian) = flat_unsafe(bloch(h))
@@ -595,23 +600,45 @@ maybe_add_modifiers(b, ::TightbindingModel) = b
 #endregion
 
 ############################################################################################
-# stitch(::Hamiltonian, phases::Tuple)
-# stitch(::Hamiltonian, wrapaxes::SVector)
+# stitch(::AbstractHamiltonian, phases::Tuple)
+# stitch(::AbstractHamiltonian, wrapaxes::SVector)
 #region
+
+struct StitchModifier{H<:ParametricHamiltonian,W<:Tuple,D<:Tuple} <: AppliedModifier
+    ph::H
+    wrapped_phases::W
+    groups_dcells_uv::D
+end
+
+StitchModifier(ph, (wp, wa, ua)) =
+    StitchModifier(ph, wp, stitch_groups(harmonics(parent(ph)), wa, ua))
+
+# groups of harmonic indices with same unwrapped (i.e. non-wrapped) dcell
+# dcells_u = dcell for each harmonic along unwrapped axes
+# dcells_w = dcell for each harmonic along wrapped axes
+function stitch_groups(hars, wa::NTuple{W}, ua::NTuple{U}) where {W,U}
+    dcells_u = SVector{U,Int}[dcell(har)[SVector(ua)] for har in hars]
+    dcells_w = SVector{W,Int}[dcell(har)[SVector(wa)] for har in hars]
+    unique_dcells_u = unique!(sort(dcells_u, by=norm))
+    groups = [findall(==(dcell), dcells_u) for dcell in unique_dcells_u]
+    return groups, dcells_u, dcells_w
+end
+
+stitch_groups(m::StitchModifier) = m.groups_dcells_uv
+
+#region ## stitch(::AbstractHamiltonian, ...)
 
 stitch(phases) = h -> stitch(h, phases)
 
-#region ## stitch(::Hamiltonian, phases)
-
 function stitch(h::AbstractHamiltonian, phases)
     wp, wa, ua = split_axes(h, phases)
-    isempty(wa) && return minimal_callsafe_copy(h)
-    return _torus(h, wp, wa, ua)
+    return _stitch(h, wp, wa, ua)
 end
 
 # wa, ua = tuples of indices of wrapped/unwrapped axes
 # wp = phases along wrapped axes
-function _torus(h::Hamiltonian, wp, wa, ua)
+function _stitch(h::Hamiltonian, wp, wa, ua)
+    isempty(wa) && return minimal_callsafe_copy(h)
     lat = lattice(h)
     b´ = bravais_matrix(lat)[:, SVector(ua)]
     lat´ = lattice(lat; bravais=b´)
@@ -621,17 +648,12 @@ function _torus(h::Hamiltonian, wp, wa, ua)
     return Hamiltonian(lat´, bs´, hars´, bloch´)
 end
 
-function _torus(p::ParametricHamiltonian, wp, wa, ua)
-    h = parent(p)
-    h´ = _torus(h, wp, wa, ua)
-    ams = modifiers(p)
-    L = latdim(h)
-    S = SMatrix{L,L,Int}(I)[SVector(ua), :] # dnnew = S * dnold
-    ptrmap = pointer_map(h, h´, S)    # [[(ptr´ of har´[S*dn]) for ptr in har] for har in h]
-    harmap = harmonics_map(h, h´, S)  # [(index of har´[S*dn]) for har in h]
-    ams´ = stitch_modifier.(ams, Ref(ptrmap), Ref(harmap))
-    p´ = hamiltonian(h´, ams´...)
-    return p´
+function _stitch(ph::ParametricHamiltonian, wp, wa, ua)
+    isempty(wa) && return minimal_callsafe_copy(ph)
+    h = parent(ph)
+    h´ = _stitch(h, missing, wa, ua)  # this returns a zero matrix
+    ph´ = parametric(h´, StitchModifier(ph, (wp, wa, ua)))
+    return ph´
 end
 
 # indices for wrapped and unwrapped axes, and wrapped phases
@@ -653,22 +675,19 @@ function split_axes(::AbstractHamiltonian{<:Any,<:Any,L}, wrapaxes::SVector) whe
     return wp, wa, ua
 end
 
-function stitch_harmonics(hars, phases_w, wa::NTuple{W}, ua::NTuple{U}) where {W,U}
-    dcells_u = SVector{U,Int}[dcell(har)[SVector(ua)] for har in hars]
-    dcells_w = SVector{W,Int}[dcell(har)[SVector(wa)] for har in hars]
-    unique_dcells_u = unique!(sort(dcells_u, by=norm))
-    groups = [findall(==(dcell), dcells_u) for dcell in unique_dcells_u]
-    hars´ = [summed_harmonic(inds, hars, phases_w, dcells_u, dcells_w) for inds in groups]
+function stitch_harmonics(hars, phases_w, wa, ua)
+    groups, dcells_u, dcells_w = stitch_groups(hars, wa, ua)
+    hars´ = [sum_harmonics_group(hars, inds, phases_w, dcells_u, dcells_w) for inds in groups]
     return hars´
 end
 
-function summed_harmonic(inds, hars::Vector{<:Harmonic{<:Any,<:Any,B}}, phases_w, dcells_u, dcells_w) where {B}
+# similar to merge_sparse in tools.jl, but we sum everything with bloch phases
+function sum_harmonics_group(hars::Vector{<:Harmonic{<:Any,<:Any,B}}, inds, phases_w, dcells_u, dcells_w) where {B}
     I, J, V = Int[], Int[], B[]
     for i in inds
         I´, J´, V´ = findnz(unflat(matrix(hars[i])))
         dn_w = dcells_w[i]
-        e⁻ⁱᵠᵈⁿ = cis(-dot(phases_w, dn_w))
-        V´ .*= e⁻ⁱᵠᵈⁿ
+        apply_bloch_phases!(V´, phases_w, dn_w)
         append!(I, I´)
         append!(J, J´)
         append!(V, V´)
@@ -680,87 +699,50 @@ function summed_harmonic(inds, hars::Vector{<:Harmonic{<:Any,<:Any,B}}, phases_w
     return Harmonic(dn_u, HybridSparseMatrix(bs, mat))
 end
 
-pointer_map(h, h´, S) =
-    [pointer_map(har, first(harmonic_index(h´, S * dcell(har)))) for har in harmonics(h)]
-
-function pointer_map(har, har´)
-    ptrs´ = Int[]
-    mat, mat´ = unflat(matrix(har)), unflat(matrix(har´))
-    rows, rows´ = rowvals(mat), rowvals(mat´)
-    for col in axes(mat, 2), ptr in nzrange(mat, col)
-        row = rows[ptr]
-        for ptr´ in nzrange(mat´, col)
-            if row == rows´[ptr´]
-                push!(ptrs´, ptr´)
-                break
-            end
-        end
-    end
-    return ptrs´
+function apply_bloch_phases!(vals, phases_w, dn_w)
+    e⁻ⁱᵠᵈⁿ = blochfactor(dn_w, phases_w)
+    vals .*= e⁻ⁱᵠᵈⁿ
+    return vals
 end
 
-harmonics_map(h, h´, S) = [last(harmonic_index(h´, S * dcell(har))) for har in harmonics(h)]
+# If phases are missing, we just store structural zeros (for the parametric case)
+apply_bloch_phases!(vals::AbstractArray{T}, ::Missing, _) where {T} = fill!(vals, zero(T))
 
-function stitch_modifier(m::AppliedOnsiteModifier, ptrmap, _)
-    ptrs´ = first(ptrmap)
-    p´ = [(ptrs´[ptr], r, s, orbs) for (ptr, r, s, orbs) in pointers(m)]
-    return AppliedOnsiteModifier(m, p´)
+function applymodifiers!(ph, m::StitchModifier; kw...)
+    h_parent = call!(m.ph; kw...)
+    hars_parent = harmonics(h_parent)
+    h = hamiltonian(ph)
+    wp = m.wrapped_phases
+    groups, dcells_u, dcells_w = stitch_groups(m)
+    # is are stitched harmonics, iu are unstitched harmonics
+    for inds in groups
+        sum_harmonics_group!(h, hars_parent, inds, wp, dcells_u, dcells_w)
+    end
+    return ph
 end
 
-function stitch_modifier(m::AppliedHoppingModifier, ptrmap, harmap)
-    ps = pointers(m)
-    ps´ = [similar(first(ps), 0) for _ in 1:maximum(harmap)]
-    for (i, p) in enumerate(ps), (ptr, r, dr, si, sj, orborbs) in p
-        i´ = harmap[i]
-        ptrs´ = ptrmap[i]
-        push!(ps´[i´], (ptrs´[ptr], r, dr, si, sj, orborbs))
+# inds are hars_parent indices
+function sum_harmonics_group!(h, hars_parent, inds, phases_w, dcells_u, dcells_w)
+    dn_u = dcells_u[first(inds)]
+    mat = h[dn_u]  # flat sparse matrix
+    for i in inds
+        dn_w = dcells_w[i]
+        e⁻ⁱᵠᵈⁿ = blochfactor(phases_w, dn_w)
+        mat_parent = flat(hars_parent[i])  # flat sparse matrix
+        # by construction, all structural elements in mat_parent are also in mat
+        merged_flat_mul!(mat, mat_parent, e⁻ⁱᵠᵈⁿ, 1, 1)     # see tools.jl
     end
-    sort!.(ps´)
-    check_ptr_duplicates(ps´, ptrmap, harmap)
-    return AppliedHoppingModifier(m, ps´)
+    return h
 end
 
-# pss = [ps...], and ps = [(ptr, ...), ...] are modified hoppings on a given wrapped harmonic
-# We firts check if no pointer ptr appears twice in each harmonic
-# if it does it means that two hoppings in two original harmonics affected by the modifier
-# become the same hopping in the wrapped Hamiltonian, which can be problematic
-# Then we check if a modified and a non-modified original hoppings become the same after wrapping
-# first append all the ptr´ pointers coming from each unwrapped harmonics into the same wrapped harmonic
-# now find all ptr´ that are duplicate (i.e. that have multiple unwrapped harmonic sources)
-# now, for each of these wrapped harmonics, find the modified ps = [(ptr´,...),...]
-# if any ptr´ in ps appears in the duplicate list of that harmonic, it means that the
-# corresponding wrapped hopping comes from summing a modified hopping and an unmodified hopping
-function check_ptr_duplicates(pss, ptrmap, harmap)
-    message0 = "The modifier will be applied to the sum, which may lead to unexpected results e.g. with non-linear or position-dependent modifiers. A possible fix is to use an enlarged supercell."
-    message1 = "Two modified hoppings have been wrapped into one. " * message0
-    message2 = "A modified and a non-modified hopping have been wrapped into one. " * message0
-    # First check if two modified hoppings have been wrapped into one
-    for ps in pss
-        has_duplicates_ptrs = !allunique(first(p) for p in ps)
-        if has_duplicates_ptrs
-            @warn message1
-            return nothing # warn only once
-        end
+parameter_names(m::StitchModifier) = parameter_names(m.ph)
+
+function _merge_pointers!(p, m::StitchModifier)
+    hars = harmonics(hamiltonian(m.ph))
+    for (pn, har) in zip(p, hars)
+        append!(pn, eachindex(nonzeros(unflat(har))))
     end
-    # Now check if a modified and a non-modified hoppings have been wrapped into one
-    merged_ptrmaps = Int[]
-    for (indhar´, ps) in enumerate(pss)
-        empty!(merged_ptrmaps)
-        for (har_ptrmap, indhar) in zip(ptrmap, harmap)
-            if indhar == indhar´
-                append!(merged_ptrmaps, har_ptrmap)
-            end
-        end
-        repeated_ptrs = onlyrepeated!(merged_ptrmaps)
-        isempty(repeated_ptrs) && continue
-        for (p, _...) in ps  # p are not repeated
-            if p in repeated_ptrs
-                @warn message2
-                return nothing
-            end
-        end
-    end
-    return nothing
+    return p
 end
 
 #endregion
@@ -769,6 +751,7 @@ end
 
 ############################################################################################
 # @stitch(h, phases, ϕname)
+#    Note that blochfactor returns 1 if the phase is Missing
 #region
 
 macro stitch(h, phases_or_axes, name)
@@ -776,14 +759,10 @@ macro stitch(h, phases_or_axes, name)
         wp, wa, ua = split_axes($(esc(h)), $(esc(phases_or_axes)))
         was = SVector(wa)
         mod = @hopping!((t, i, j; $name = $missing) -->
-            t * blochphase((cell(i) - cell(j))[was], $(esc(name))); dcells = !iszero)
+            t * blochfactor((cell(i) - cell(j))[was], $(esc(name))); dcells = !iszero)
         h´ = $(esc(h)) |> mod
-        _torus(h´, wp, wa, ua)
+        isempty(wa) ? h´ : _stitch(h´, wp, wa, ua)
     end
 end
-
-blochphase(dn, ::Missing) = 1
-blochphase(dn, ϕ) = blochphase(dn, sanitize_SVector(ϕ))
-blochphase(dn, ϕ::AbstractVector) = cis(-dot(dn, ϕ))
 
 #endregion

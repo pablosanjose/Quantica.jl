@@ -191,9 +191,6 @@ Hamiltonian{Float64,2,1}: Hamiltonian on a 1D Lattice in 2D space
 The `phases` argument of `stitch(h, phases)` is a `Tuple` of real numbers and/or colons (`:`), of length equal to the lattice dimension of `h`. Each real number `ϕᵢ` corresponds to a Bravais vector along which the transformed lattice will become periodic, picking up a phase `exp(iϕᵢ)` in the new hoppings, while each colon leaves the lattice unbounded along the corresponding Bravais vector. (Check the `stitch` and `@stitch` docstrings for additional syntax and functionality.)
 In a way, `stitch` is the dual to `supercell`, in that it applies a different boundary condition to the lattice along the eliminated Bravais vectors, periodic instead of open, as in the case of `supercell`. The phases `ϕᵢ` are also connected to Bloch phases, in the sense that e.g. `stitch(h, (ϕ₁, :))(; ϕ₂) == h(ϕ₁, ϕ₂)`.
 
-!!! warning "Caveat of the Bloch-stitch duality"
-    The relation `h´(()) = h(phases)` with `h´ = stitch(h, phases)` is quite general. However, with some `h::ParametricHamiltonian`s that include nonlinear or position-dependent modifiers, this may not hold. The reason is that if two or more hoppings in `h` are summed to a single hopping in `h´`, any modifier in the latter will be applied to the sum, not to the original hoppings before the sum. Quantica will warn the user if it detects such a situation. One solution is to use a larger supercell for `h` so that no sum of hoppings occurs upon applying `stitch`.
-
 It's important to understand that, when transforming an `h::AbstractHamiltonian`, the model used to build `h` is not re-evaluated. Hoppings and onsite energies are merely copied so as to preserve the periodicity of the original `h`. As a consequence, these two constructions give different Hamiltonians
 ```julia
 julia> h1 = LP.linear() |> supercell(4) |> hamiltonian(onsite(r -> r[1]));
