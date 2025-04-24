@@ -1186,17 +1186,6 @@ integers in the range 1:L.
 
 Currying syntax equivalent to `stitch(h, x)`.
 
-## Warning on modifier collisions
-
-If two or more hoppings of a `h::ParametricHamiltonian` get stitched into a single one by
-`stitch`, and any of them depends on parameters, a warning is thrown. The reason is that
-these hoppings will be summed, and since the sum is the target of modifiers (because at
-least one of the summed hoppings are parameter-dependent), the modifiers will be applied to
-the sum, not to the original hoppings before being summed. This is typically not what the
-used intends, so the warning should not be ignored. A solution is to use a larger supercell
-before calling `stitch`.
-
-
 # Examples
 
 ```jldoctest
@@ -1231,15 +1220,6 @@ Equivalent to `stitch(h, phases_or_axes)`, but returning an `n`-dimensional
 `h´(...; param_name = (ϕ₁,...,ϕₙ), params...)`, Bloch phases `(ϕ₁,...,ϕₙ)` are applied
 along stitched directions (in addition to the ones specified in `phases_or_axes`, if any).
 `param_name` can also take any `AbstractArray`, or a `Number` if `n=1`.
-
-## Warning on modifier collisions
-
-If two or more hoppings get stitched into a single one by `@stitch`, and any of them depends
-on parameters, a warning is thrown. The reason is that these hoppings will be summed, and
-since the sum is the target of modifiers (because at least one of the summed hoppings are
-parameter-dependent), the modifiers will be applied to the sum, not to the original hoppings
-before being summed. This is typically not what the used intends, so the warning should not
-be ignored. A solution is to use a larger supercell before calling `@stitch`.
 
 # Examples
 
@@ -1801,7 +1781,6 @@ possible keyword arguments are
     - `boundary` : 1D cell index of a boundary cell, or `Inf` for no boundaries. Equivalent to removing that specific cell from the lattice when computing the Green function.
     - If the system is 2D, the wavevector along the transverse axis (the one different from the 1D `axis` given in the options) is numerically integrated using QuadGK with options given by `integrate_opts`, which is `(; atol = 1e-7)` by default.
     - `integrate_opts` can also contain a `callback = f`, where `f` is a function that will be called `f(ϕs..., y)` at each point in the momentum integration. Here `ϕs` is the integration point in the Brillouin zone and `y` is the integrand evaluated at that point. Useful for inspection and debugging, e.g. `callback(x, y) = @show x`. Default: `Returns(nothing)`.
-    - In 2D systems a warning may be thrown associated to `stitch` conflicts which should not be ignored. See `@stitch` for details.
 - `GS.KPM(; order = 100, bandrange = missing, kernel = I)` : Kernel polynomial method solver for 0D Hamiltonians
     - `order` : order of the expansion in Chebyshev polynomials `Tₙ(h)` of the Hamiltonian `h` (lowest possible order is `n = 0`).
     - `bandrange` : a `(min_energy, max_energy)::Tuple` interval that encompasses the full band of the Hamiltonian. If `missing`, it is computed automatically, but `using ArnoldiMethod` is required first.

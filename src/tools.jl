@@ -331,14 +331,17 @@ function merged_mul!(C::SparseMatrixCSC{<:Number}, A::HybridSparseMatrix, b::Num
     return C
 end
 
-function merged_mul!(C::SparseMatrixCSC{<:Number}, ::OrbitalBlockStructure, A::SparseMatrixCSC{B}, b::Number, α = 1, β = 0) where {B<:Complex}
+merged_mul!(C::SparseMatrixCSC{<:Number}, ::OrbitalBlockStructure, A::SparseMatrixCSC{B}, b::Number, α = 1, β = 0) where {B<:Complex} =
+    merged_flat_mul!(C, A, b, α, β)
+
+function merged_flat_mul!(C::SparseMatrixCSC{<:Number}, A::SparseMatrixCSC{<:Number}, b::Number, α = 1, β = 0)
     nzA = nonzeros(A)
     nzC = nonzeros(C)
     αb = α * b
-    if length(nzA) == length(nzC)  # assume idential structure (C has merged structure)
+    if length(nzA) == length(nzC)  # assume identical structure (C has merged structure)
         @. nzC = muladd(αb, nzA, β * nzC)
     else
-        # A has less elements than C
+        # A has less elements than C, but C includes all of A
         for col in axes(A, 2), p in nzrange(A, col)
             row = rowvals(A)[p]
             for p´ in nzrange(C, col)
