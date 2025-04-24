@@ -240,15 +240,36 @@ end
         @test wh == h
         @test wh !== h
     end
-    # h = LP.linear() |> supercell(2) |> hopping(1) |> @hopping!((t, r, dr) -> t*(r[1]-1/2))
-    # @test_warn "Two modified hoppings have been wrapped into one" stitch(h, (0.2,))
-    # h = LP.square() |> supercell(2, 2) |> hopping(1)
-    # @test_warn "A modified and a non-modified hopping have been wrapped into one" @stitch(h, SA[2], ϕ)
-    # h = LP.square() |> supercell(3, 2) |> hopping(1, range = √2)
-    # @test_warn "Two modified hoppings have been wrapped into one" @stitch(h, SA[2], ϕ)
-    # h = LP.square() |> supercell(3, 3) |> hopping(1, range = √2)
-    # h´ = @test_nowarn @stitch(h, SA[2], ϕ)
-    # @test h(SA[0.2, 0.3]) ≈ h´(SA[0.2]; ϕ = 0.3)
+    # Two modified hoppings wrapped into one
+    h = LP.linear() |> supercell(2) |> hopping(1) |> @hopping!((t, r, dr) -> t*(r[1]-1/2))
+    h´ = stitch(h, (0.2,))
+    @test h(SA[0.2]) ≈ h´(SA[])
+    @test !(h(SA[0.3]) ≈ h´(SA[]))
+    h = LP.square() |> supercell(3, 2) |> hamiltonian(hopping(SA[0 1; 1 0], range = √2), orbitals = 2)
+    h´ = @stitch(h, SA[2], ϕ)
+    @test h´(SA[0.1]) ≈ h(SA[0.1,0])
+    @test h´(SA[0.1], ϕ=0.3) ≈ h(SA[0.1,0.3])
+    @test !(h´(SA[0.1], ϕ=0.2) ≈ h(SA[0.1,0.3]))
+
+    # A modified and a non-modified hopping have been wrapped into one
+    h = LP.square() |> supercell(2, 2) |> hopping(1)
+    h´ = @stitch(h, SA[2], ϕ)
+    @test h´(SA[0.1]) ≈ h(SA[0.1,0])
+    @test h´(SA[0.1], ϕ=0.3) ≈ h(SA[0.1,0.3])
+
+    # No collision
+    h = LP.square() |> supercell(3, 3) |> hopping(1, range = √2)
+    h´ = @stitch(h, SA[2], ϕ)
+    @test h´(SA[0.1]) ≈ h(SA[0.1,0])
+    @test h´(SA[0.1], ϕ=0.3) ≈ h(SA[0.1,0.3])
+
+    # multiple axes
+    h = LP.cubic() |> supercell(2) |> hopping(1, range = √2)
+    h´ = @stitch(h, SA[1,3], ϕ)
+    h´´ = stitch(h, (0.2, :, :))
+    h´´´ = h´ |> @hopping!((t; d = 0.5) -> t * d)
+    @test h(SA[0.2,0.3,0.4]) ≈ h´(SA[0.3]; ϕ = SA[0.2,0.4]) ≈ h´´(SA[0.3,0.4]) ≈ h´´´(SA[0.3]; ϕ = SA[0.2,0.4], d = 1)
+    @test !(h(SA[0.2,0.3,0.4]) ≈ h´´´(SA[0.3]; ϕ = SA[0.2,0.4]))
 end
 
 @testset "hamiltonian HybridSparseMatrix" begin
