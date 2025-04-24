@@ -233,13 +233,6 @@ function _merge_pointers!(p, m::AppliedHoppingModifier)
     return p
 end
 
-function _merge_pointers!(p, sm::AppliedSerializer)
-    for (pn, ps) in zip(p, pointers(sm)), p in ps
-        push!(pn, Base.front(p)...)
-    end
-    return p
-end
-
 #endregion
 
 ############################################################################################
@@ -426,14 +419,6 @@ function applymodifiers!(h, m::AppliedHoppingModifier{B}; kw...) where {B<:SMatr
     return h
 end
 
-function applymodifiers!(h, m::AppliedSerializer; kw...)
-    pname = only(parameter_names(m))
-    nkw = NamedTuple(kw)
-    # this should override hamiltonian(s), which should be aliased with h
-    haskey(nkw, pname) && deserialize!(m, nkw[pname])
-    return h
-end
-
 # ouput of a *full* call!(p, ϕs; kw...)
 call!_output(p::ParametricHamiltonian) = call!_output(hamiltonian(p))
 
@@ -607,7 +592,7 @@ maybe_add_modifiers(b, ::TightbindingModel) = b
 struct StitchModifier{H<:ParametricHamiltonian,W<:Tuple,D<:Tuple} <: AppliedModifier
     ph::H
     wrapped_phases::W
-    groups_dcells_uv::D
+    groups_dcells_uw::D
 end
 
 StitchModifier(ph, (wp, wa, ua)) =
@@ -624,7 +609,7 @@ function stitch_groups(hars, wa::NTuple{W}, ua::NTuple{U}) where {W,U}
     return groups, dcells_u, dcells_w
 end
 
-stitch_groups(m::StitchModifier) = m.groups_dcells_uv
+stitch_groups(m::StitchModifier) = m.groups_dcells_uw
 
 #region ## stitch(::AbstractHamiltonian, ...)
 
@@ -651,7 +636,7 @@ end
 function _stitch(ph::ParametricHamiltonian, wp, wa, ua)
     isempty(wa) && return minimal_callsafe_copy(ph)
     h = parent(ph)
-    h´ = _stitch(h, missing, wa, ua)  # this returns a zero matrix
+    h´ = _stitch(h, missing, wa, ua)  # this returns a zero Hamiltonian
     ph´ = parametric(h´, StitchModifier(ph, (wp, wa, ua)))
     return ph´
 end
@@ -708,13 +693,16 @@ end
 # If phases are missing, we just store structural zeros (for the parametric case)
 apply_bloch_phases!(vals::AbstractArray{T}, ::Missing, _) where {T} = fill!(vals, zero(T))
 
+#endregion
+
+#region ## applymodifier! API
+
 function applymodifiers!(ph, m::StitchModifier; kw...)
     h_parent = call!(m.ph; kw...)
     hars_parent = harmonics(h_parent)
     h = hamiltonian(ph)
     wp = m.wrapped_phases
     groups, dcells_u, dcells_w = stitch_groups(m)
-    # is are stitched harmonics, iu are unstitched harmonics
     for inds in groups
         sum_harmonics_group!(h, hars_parent, inds, wp, dcells_u, dcells_w)
     end
@@ -724,13 +712,13 @@ end
 # inds are hars_parent indices
 function sum_harmonics_group!(h, hars_parent, inds, phases_w, dcells_u, dcells_w)
     dn_u = dcells_u[first(inds)]
-    mat = h[dn_u]  # flat sparse matrix
+    mat = h[dn_u]                               # flat sparse matrix
     for i in inds
         dn_w = dcells_w[i]
         e⁻ⁱᵠᵈⁿ = blochfactor(phases_w, dn_w)
-        mat_parent = flat(hars_parent[i])  # flat sparse matrix
-        # by construction, all structural elements in mat_parent are also in mat
-        merged_flat_mul!(mat, mat_parent, e⁻ⁱᵠᵈⁿ, 1, 1)     # see tools.jl
+        mat_parent = flat(hars_parent[i])       # flat sparse matrix
+        # by construction, all structural elements in mat_parent are in mat too. See tools.jl
+        merged_flat_mul!(mat, mat_parent, e⁻ⁱᵠᵈⁿ, 1, 1)
     end
     return h
 end
