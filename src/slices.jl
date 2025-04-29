@@ -380,7 +380,7 @@ end
 # creates a Hamiltonian with same blocktype as g, or complex if kernel::Missing
 # this may be used as an intermediate to build sparse versions of g[i,j]
 sites_to_orbs(d::PairIndices{<:HopSelector}, g) =
-    SparseIndices(g, hopping(I, parent(d)), kernel(d))
+    SparseIndices(g, hopping(I, parent(d)); kernel = kernel(d))
 
 sites_to_orbs(d::PairIndices{<:Hamiltonian}, g) = d
 

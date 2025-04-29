@@ -658,21 +658,24 @@ end
     Q = SA[0 1; im 0]  # nonhermitian charge not allowed
     @test_throws ArgumentError meanfield(g; selector = (; range = 1), potential = 2, fock = 1.5, charge = Q)
     Q = SA[0 -im; im 0]
-    m = meanfield(g; selector = (; range = 1), potential = 2, fock = 1.5, charge = Q)
+    m = meanfield(g; selector = (; range = 1), potential = 2, fock = 1.5, hartree = 0, charge = Q, nambu = false)
     Φ = m(0.2, 0.3)
-    ρ12 = m.rho(0.2, 0.3)[sites(1), sites(2)]
+    ρ = m.rho(0.2, 0.3)
+    ρ12 = ρ[sites(1), sites(2)]
+    ρ11 = ρ[sites(1), sites(1)]
     @test !iszero(Φ[sites(1), sites(2)])
-    @test Φ[sites(1), sites(2)] ≈ -1.5 * Q * ρ12 * Q
+    @test Φ[sites(1), sites(2)] ≈ - 1.5 * Q * ρ12 * Q
+    @test Φ[sites(1), sites(1)] ≈ - 1.5 * Q * ρ11 * Q
 
     # model potential
-    m = meanfield(g; hartree = nothing, fock = hopping(2, range = 1)+onsite(3), charge = Q)
+    g = LP.linear() |> hamiltonian(hopping(SA[1 im; -im -1]) - onsite(SA[1 0; 0 -1]), orbitals = 2) |> greenfunction
+    Q = SA[0 -im; im 0]
+    m = meanfield(g; hartree = hopping((r,dr)->norm(dr), range = 1) + onsite(2), fock = hopping(2, range = 1)+onsite(2), charge = Q, nambu = false)
     Φ = m(0.2, 0.3)
-    ρ12 = m.rho(0.2, 0.3)[sites(1), sites(2)]
-    ρ11 = m.rho(0.2, 0.3)[sites(1), sites(1)]
-    @test !iszero(Φ[sites(1), sites(2)])
-    @test !iszero(Φ[sites(1), sites(1)])
-    @test Φ[sites(1), sites(2)] ≈ -2.0 * Q * ρ12 * Q
-    @test Φ[sites(1), sites(1)] ≈ -3.0 * Q * ρ11 * Q
+    ρ = m.rho(0.2, 0.3)
+    ρ11 = ρ[sites(1), sites(1)]
+    @test !iszero(ρ11)
+    @test Φ[sites(1), sites(1)] ≈ Q*(tr(Q*ρ11)*(2 + 2)) - 2 * Q * ρ11 * Q
 
     # spinless nambu
     oh = LP.linear() |> hamiltonian(hopping((r, dr) -> SA[1 sign(dr[1]); -sign(dr[1]) -1]) - onsite(SA[1 0.1; 0.1 -1]), orbitals = 2)
