@@ -23,31 +23,30 @@ struct ZeroField end
 
 #region ## Constructors ##
 
-function meanfield(g::GreenFunction{T,E}, args...;
+function meanfield(g::GreenFunction{T}, args...;
     potential = Returns(1), hartree = potential, fock = hartree,
     onsite = missing, charge = I, nambu::Bool = false, namburotation = missing,
-    selector::NamedTuple = (; range = 0), selector_fock = selector, selector_hartree = selector, kw...) where {T,E}
+    selector::NamedTuple = (; range = 0), selector_fock = selector, selector_hartree = selector, kw...) where {T}
 
-    Vh = sanitize_potential(hartree)
-    Vf = sanitize_potential(fock)
-    U = onsite === missing ? T(Vh(zero(SVector{E,T}))) : T(onsite)
-    Uf = onsite === missing ? T(Vf(zero(SVector{E,T}))) : T(onsite)
-    Uf = fock === nothing ? zero(Uf) : Uf
+    isempty(boundaries(g)) || argerror("meanfield does not currently support systems with boundaries")
+
     B = blocktype(hamiltonian(g))
     is_nambu_rotated´ = sanitize_nambu_rotated(namburotation, nambu, B)
     Q = sanitize_charge(charge, B, nambu, is_nambu_rotated´)
 
-    isempty(boundaries(g)) || argerror("meanfield does not currently support systems with boundaries")
-    isfinite(U) || argerror("Onsite potential must be finite, consider setting `onsite`")
-
-    gs = g[sitepairs(; selector_fock..., includeonsite = true)]
-    rho = densitymatrix(gs, args...; kw...)
+    hartreemodel = meanfield_models(g, onsite, hartree, selector_hartree)
+    fockmodel = meanfield_models(g, onsite, fock, selector_fock)
 
     lat = lattice(hamiltonian(g))
-    # The sparse structure of hFock will be inherited by the evaluated mean field. Need onsite.
-    hFock = lat |> hopping((r, dr) -> iszero(dr) ? Uf : T(Vf(dr)); selector_fock..., includeonsite = true)
-    hHartree = (Uf == U && Vh == Vf && selector_fock == selector_hartree) ? hFock :
-        lat |> hopping((r, dr) -> iszero(dr) ? U : T(Vh(dr)); selector_hartree..., includeonsite = true)
+    # scalar Hamiltonians that encode interactions between sites
+    hFock = lat |> fockmodel
+    hHartree = lat |> hartreemodel
+
+    # SparseIndices(g, fockmodel) is like sitepairs(; ...) but using the selectors of all the model terms
+    gs = g[SparseIndices(g, fockmodel)]
+    gsQ = g[SparseIndices(g, fockmodel; kernel = Q)]
+    rho = densitymatrix(gs, args...; kw...)
+
     # this drops zeros
     potHartree = T.(sum(unflat, harmonics(hHartree)))
 
@@ -66,12 +65,29 @@ function meanfield(g::GreenFunction{T,E}, args...;
 
     encoder, decoder = nambu ? NambuEncoderDecoder(is_nambu_rotated´) : (identity, identity)
     S = typeof(encoder(zero(Q)))
-    output = call!_output(g[sitepairs(; selector_fock..., includeonsite = true, kernel = Q)])
-    sparse_enc = similar(output, S)
+    sparse_enc = similar(call!_output(gsQ), S)
     output = CompressedOrbitalMatrix(sparse_enc; encoder, decoder, hermitian = true)
 
     return MeanField(output, potHartree, potFock, rho, Q, nambu, is_nambu_rotated´, rowcol_ranges, onsite_tmp)
 end
+
+# Potential-based usage
+function meanfield_models(::GreenFunction{T,E}, onsite, potential, selector) where {T,E}
+    V = sanitize_potential(potential)
+    U = onsite === missing ? T(V(zero(SVector{E,T}))) : T(onsite)
+    U = potential === nothing ? zero(U) : U
+
+    isfinite(U) || argerror("Onsite potential must be finite, consider setting `onsite`")
+
+    # The sparse structure of hFock will be inherited by the evaluated mean field. Need onsite.
+    model = hopping((r, dr) -> iszero(dr) ? U*I : T(V(dr))*I; selector..., includeonsite = true)
+    return model
+end
+
+# Model-based usage
+meanfield_models(::GreenFunction, _, model::TightbindingModel, _) = model + onsite(0I)
+meanfield_models(::GreenFunction, _, model::AbstractModel, _) =
+    argerror("Meanfield potentials cannot currently be parametric models. Use non-parametric `onsite`/`hopping` models instead.")
 
 sanitize_potential(x::Real) = Returns(x)
 sanitize_potential(x::Function) = x

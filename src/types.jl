@@ -452,11 +452,6 @@ cellinds_to_dict(cs::CellIndices{L}) where {L} = cellinds_to_dict(SVector(cs))
 cellinds_to_dict(cs::AbstractVector{C}) where {L,C<:CellSite{L}} =
     cellinds_to_dict(CellSites{L,Vector{Int}}.(cs))
 
-# scalarize only if kernel is not missing
-maybe_scalarize(s) = s
-maybe_scalarize(s, kernel::Missing) = s
-maybe_scalarize(s, kernel) = scalarize(s)
-
 # make OrbitalSliceGrouped scalar (i.e. groups are siteindex => siteindex:siteindex)
 scalarize(s::OrbitalSliceGrouped) = OrbitalSliceGrouped(s.lat, scalarize(s.cellsdict))
 scalarize(d::CellOrbitalsGroupedDict) = scalarize.(d)
@@ -715,6 +710,10 @@ narguments(::ParametricFunction{N}) where {N} = N
 
 is_spatial(t::AbstractParametricTerm) = t.spatial
 is_spatial(t) = true
+
+swap_elements(m::TightbindingModel, x) = TightbindingModel(swap_elements.(terms(m), Ref(x)))
+swap_elements(t::OnsiteTerm, x) = OnsiteTerm(x, t.selector, t.coefficient)
+swap_elements(t::HoppingTerm, x) = HoppingTerm(x, t.selector, t.coefficient)
 
 ## call API##
 
@@ -2166,6 +2165,18 @@ function GreenSlice(parent, rows, cols, type...)
     return GreenSlice(parent, rows´, cols´, type...)
 end
 
+# build a SparseIndices{<:Hamiltonian} using a model
+# the Hamiltonian is just an encoding for a sparse structure of harmonics
+function SparseIndices(g, model::TightbindingModel; kernel = missing)
+    hg = hamiltonian(g)
+    bs = maybe_scalarize(blockstructure(hg), kernel)
+    b = IJVBuilder(lattice(hg), bs)
+    # Take a model with trivial elements, compatible with any blockstructure
+    model´ = swap_elements(model, I)
+    h = hamiltonian!(b, model´)
+    return SparseIndices(h, kernel)
+end
+
 # see sites_to_orbs in slices.jl
 greenindices(inds, g) = GreenIndices(inds, sites_to_orbs(inds, g))
 greenindices(g::GreenSlice) = g.rows, g.cols
@@ -2189,6 +2200,10 @@ similar_slice(::Type{C}, i::S, j::S) where {C,S<:SparseIndices{<:AnyCellOrbitals
 similar_slice(::Type{C}, i, j) where {C} =
     Matrix{C}(undef, length(i), length(j))
 
+# scalarize only if kernel is not missing
+maybe_scalarize(s) = s
+maybe_scalarize(s, kernel::Missing) = s
+maybe_scalarize(s, kernel) = scalarize(s)
 maybe_scalarize(i::SparseIndices{<:Union{AnyOrbitalSlice,AnyCellOrbitals}}) =
     SparseIndices(maybe_scalarize(i.inds, i.kernel), i.kernel)
 maybe_scalarize(i::SparseIndices) = i

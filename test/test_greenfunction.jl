@@ -661,7 +661,18 @@ end
     m = meanfield(g; selector = (; range = 1), potential = 2, fock = 1.5, charge = Q)
     Φ = m(0.2, 0.3)
     ρ12 = m.rho(0.2, 0.3)[sites(1), sites(2)]
+    @test !iszero(Φ[sites(1), sites(2)])
     @test Φ[sites(1), sites(2)] ≈ -1.5 * Q * ρ12 * Q
+
+    # model potential
+    m = meanfield(g; hartree = nothing, fock = hopping(2, range = 1)+onsite(3), charge = Q)
+    Φ = m(0.2, 0.3)
+    ρ12 = m.rho(0.2, 0.3)[sites(1), sites(2)]
+    ρ11 = m.rho(0.2, 0.3)[sites(1), sites(1)]
+    @test !iszero(Φ[sites(1), sites(2)])
+    @test !iszero(Φ[sites(1), sites(1)])
+    @test Φ[sites(1), sites(2)] ≈ -2.0 * Q * ρ12 * Q
+    @test Φ[sites(1), sites(1)] ≈ -3.0 * Q * ρ11 * Q
 
     # spinless nambu
     oh = LP.linear() |> hamiltonian(hopping((r, dr) -> SA[1 sign(dr[1]); -sign(dr[1]) -1]) - onsite(SA[1 0.1; 0.1 -1]), orbitals = 2)

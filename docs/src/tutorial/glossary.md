@@ -7,8 +7,8 @@ This is a summary of the type of objects you will be studying.
 - **`SiteSelector`**: a rule that defines a subset of sites in a `Lattice` (not necessarily restricted to a single unit cell)
 - `HopSelector`: a rule that defines a subset of site pairs in a `Lattice` (not necessarily restricted to the same unit cell)
 - **`LatticeSlice`**: a *finite* subset of sites in a `Lattice`, defined by their cell index (an `L`-dimensional integer vector, usually denoted by `n` or `cell`) and their site index within the unit cell (an integer). A `LatticeSlice` an be constructed by combining a `Lattice` and a (bounded) `SiteSelector`.
-- **`AbstractModel`**: either a `TightBindingModel` or a `ParametricModel`
-  - **`TightBindingModel`**: a set of `HoppingTerm`s and `OnsiteTerm`s
+- **`AbstractModel`**: either a `TightbindingModel` or a `ParametricModel`
+  - **`TightbindingModel`**: a set of `HoppingTerm`s and `OnsiteTerm`s
     - **`OnsiteTerm`**: a rule that, applied to a single site, produces a scalar or a (square) matrix that represents the intra-site Hamiltonian elements (single or multi-orbital)
     - **`HoppingTerm`**: a rule that, applied to a pair of sites, produces a scalar or a matrix that represents the inter-site Hamiltonian elements (single or multi-orbital)
   - **`ParametricModel`**: a set of `ParametricOnsiteTerm`s and `ParametricHoppingTerm`s
