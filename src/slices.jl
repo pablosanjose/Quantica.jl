@@ -379,15 +379,10 @@ end
 
 # creates a Hamiltonian with same blocktype as g, or complex if kernel::Missing
 # this may be used as an intermediate to build sparse versions of g[i,j]
-function sites_to_orbs(d::PairIndices{<:HopSelector}, g)
-    hg = hamiltonian(g)
-    ker = kernel(d)
-    bs = maybe_scalarize(blockstructure(hg), ker)
-    b = IJVBuilder(lattice(hg), bs)
-    hopsel = parent(d)
-    h = hamiltonian!(b, hopping(I, hopsel))
-    return SparseIndices(h, ker)   # OrbitalPairIndices
-end
+sites_to_orbs(d::PairIndices{<:HopSelector}, g) =
+    SparseIndices(g, hopping(I, parent(d)); kernel = kernel(d))
+
+sites_to_orbs(d::PairIndices{<:Hamiltonian}, g) = d
 
 ## convert SiteSlice -> OrbitalSliceGrouped
 

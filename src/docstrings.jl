@@ -1815,7 +1815,7 @@ Equivalent to `diagonal(siteselector(; sites...); kernel)`
 
 ## Keywords
 
-    - `kernel`: if missing, all orbitals in the diagonal `g[i, i]` are returned when indexing `g[diagonal(i)]`. Otherwise, `Tr(g[site, site]*kernel)` for each site included in `i` is returned.
+- `kernel`: if missing, all orbitals in the diagonal `g[i, i]` are returned when indexing `g[diagonal(i)]`. Otherwise, `Tr(g[site, site]*kernel)` for each site included in `i` is returned.
 
 # Example
 ```julia
@@ -1860,7 +1860,7 @@ Equivalent to `sitepairs(hopselector(; hops...); kernel)`
 
 ## Keywords
 
-    - `kernel`: if missing, all orbitals blocks `gᵢⱼ = g[i, j]` between selected sites pairs (i,j) are returned when indexing `g[sitepairs(...)]`. Otherwise, `gᵢⱼ` is replaced by `Tr(gᵢⱼ*kernel)`.
+- `kernel`: if missing, all orbitals blocks `gᵢⱼ = g[i, j]` between selected sites pairs (i,j) are returned when indexing `g[sitepairs(...)]`. Otherwise, `gᵢⱼ` is replaced by `Tr(gᵢⱼ*kernel)`.
 
 # Example
 ```julia
@@ -2772,6 +2772,12 @@ where `U` is the onsite interaction.
 
 Any additional keywords `kw` are passed to the `densitymatrix` function used to compute the
 mean field, see above
+
+If a non-parametric `TightbindingModel` is passed to the `hartree` and/or `fock` keywords,
+the model will be used to define the interaction, by translating `onsite` terms into onsite
+interactions, and `hopping` terms into inter-site interactions. In such case, the
+corresponding `selector_hartree` and/or `selector_fock` will be ignored. See `onsite` and
+`hopping` for details on defining non-parametric models.
 
 ## Evaluation and Indexing
 
