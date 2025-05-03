@@ -199,3 +199,45 @@ function blockindices(hams::NTuple{N,Any}) where {N}
 end
 
 #endregion
+
+############################################################################################
+# Pauli matrices
+#region
+
+const pauli_names = (;
+    x = 1, y = 2, z = 3, I = 0,
+    II = (0,0), Ix = (0,1), Iy = (0,2), Iz = (0,3),
+    xI = (1,0), xx = (1,1), xy = (1,2), xz = (1,3),
+    yI = (2,0), yx = (2,1), yy = (2,2), yz = (2,3),
+    zI = (3,0), zx = (3,1), zy = (3,2), zz = (3,3))
+
+function σ(n::Integer)
+    if n == 0
+        return SA[1.0 + 0im 0; 0 1]
+    elseif n == 1
+        return SA[0.0 + 0im 1; 1 0]
+    elseif n == 2
+        return SA[0.0 + 0im -im; im 0]
+    elseif n == 3
+        return SA[1.0 + 0im 0; 0 -1]
+    else
+        argerror("Pauli matrix index $n out of range (0-3)")
+    end
+end
+
+σ((θ, ϕ)::Tuple{Real,Real}) = σ(1)*sin(θ)*cos(ϕ) + σ(2)*sin(θ)*sin(ϕ) + σ(3)*cos(θ)
+σ(v::SVector{3}) = dot(normalize(v), SA[σ(1), σ(2), σ(3)])
+
+σ(n1, n2, ns...) = kron(σ(n1), σ(n2), σ.(ns)...)
+
+function σ(s::Symbol)
+    if haskey(pauli_names, s)
+        return σ(pauli_names[s]...)
+    else
+        argerror("Unrecognized Pauli matrix identifier $s, should be one of $(keys(pauli_names))")
+    end
+end
+
+Base.getproperty(::typeof(σ), s::Symbol) = σ(s)
+
+#endregion

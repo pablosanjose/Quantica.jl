@@ -1,6 +1,6 @@
 using Quantica: Hamiltonian, ParametricHamiltonian, BarebonesOperator, OrbitalSliceMatrix, SparseMatrixCSC,
       sites, nsites, nonsites, nhoppings, coordination, flat, hybrid, transform!, nnz, nonzeros, dcell, harmonics,
-      parent_hamiltonian, call!, Serializer, AppliedSerializer
+      parent_hamiltonian, call!, Serializer, AppliedSerializer, σ
 
 @testset "basic hamiltonians" begin
     presets = (LatticePresets.linear, LatticePresets.square, LatticePresets.triangular, LatticePresets.honeycomb,
@@ -660,4 +660,13 @@ end
     @test hs(onsite = SA[1], U = 3)[()] == SA[1;;]
     hs´ = supercell(hs, 2)
     @test hs´(onsite = SA[10,20], U = 3)[()] == SA[10 -im; im 20]
+end
+
+@testset "Pauli matrices" begin
+    @test σ(0) == σ.I == SA[1 0; 0 1]
+    @test σ(1) == σ.x == SA[0 1; 1 0]
+    @test σ(2) == σ.y == SA[0 -im; im 0]
+    @test σ(3) == σ.z == SA[1 0; 0 -1]
+    @test σ(:z, 1) == σ.zx == SA[0 1 0 0; 1 0 0 0; 0 0 0 -1; 0 0 -1 0]
+    @test σ((π/2, 0.2)) ≈ σ(1)*cos(0.2) + σ(2)*sin(0.2)
 end
