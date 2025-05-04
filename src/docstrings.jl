@@ -2841,3 +2841,42 @@ a usage example.
 
 """
 zerofield
+
+"""
+    Quantica.σ(n::Int)
+
+Return `n`-th Pauli matrix as a `SMatrix{2,2,ComplexF64}`, where `n = 0,1,2,3`.
+
+    Quantica.σ(name::Symbol)
+
+Return Pauli matrix by name. Valid names are `:I`, `:x`, `:y`, `:z` for `n = 0,1,2,3`,
+respectively. Can also use `σ.name`. If `name` is a juxtaposition of two of the above (e.g.
+`σ.xy`), the result will be the direct product of the two matrices (i.e. `σ(:x, :y)`, see
+below).
+
+    Quantica.σ((θ, ϕ)::Tuple)
+
+Return `σ(1)*sin(θ)*cos(ϕ) + σ(2)*sin(θ)*sin(ϕ) + σ(3)*cos(θ)`, i.e. the Pauli matrix in the
+Bloch sphere.
+
+    Quantica.σ(n1, n2, ...)
+
+Return the direct product `σ(n1)⊗σ(n2)⊗...`.
+
+# Examples
+
+```jldoctest
+julia> using Quantica: σ
+
+julia> σ.xz
+4×4 SMatrix{4, 4, ComplexF64, 16} with indices SOneTo(4)×SOneTo(4):
+ 0.0+0.0im   0.0+0.0im  1.0+0.0im   0.0+0.0im
+ 0.0+0.0im  -0.0+0.0im  0.0+0.0im  -1.0+0.0im
+ 1.0+0.0im   0.0+0.0im  0.0+0.0im   0.0+0.0im
+ 0.0+0.0im  -1.0+0.0im  0.0+0.0im  -0.0+0.0im
+
+julia> σ((π/2, π/4)) ≈ cos(π/4)*σ.x + sin(π/4)*σ.y
+true
+```
+"""
+σ
