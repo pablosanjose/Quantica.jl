@@ -2759,10 +2759,10 @@ where `U` is the onsite interaction.
 
 ## Keywords
 
-- `potential`: charge-charge potential to use for both Hartree and Fock. Can be a number or a function of position. Default: `1`
-- `hartree`: charge-charge potential `v_H` for the Hartree mean field. Can be a number or a function of position. Overrides `potential`. Default: `potential`
-- `fock`: charge-charge potential `v_F` for the Fock mean field. Can be a number, a function of position or `nothing`. In the latter case all Fock terms (even onsite) will be dropped. Default: `hartree`
-- `onsite`: charge-charge onsite potential. Overrides both Hartree and Fock potentials for onsite interactions, unless `fock = nothing` (it then overrides only Hartree, see above). Default: `hartree(0)`
+- `potential`: charge-charge potential to use for both Hartree and Fock. Can be `nothing`, a number, a function of position or a non-parametric model. Default: `1`
+- `hartree`: charge-charge potential `v_H` for the Hartree mean field. Can be `nothing`, a number, a function of position or a non-parametric model. Overrides `potential`. Default: `potential`
+- `fock`: charge-charge potential `v_F` for the Fock mean field. Can be `nothing`, a number, a function of position or a non-parametric model. Default: `hartree`
+- `onsite`: charge-charge onsite potential. If not `missing` it overrides both Hartree and Fock potentials for onsite interactions (unless they are `nothing`). Default: `missing`
 - `charge`: a number (in single-orbital systems) or a matrix (in multi-orbital systems) representing the charge operator on each site. Default: `I`
 - `nambu::Bool`: specifies whether the model is defined in Nambu space. In such case, `charge` should also be in Nambu space, typically `SA[1 0; 0 -1]` or similar. Default: `false`
 - `namburotation::Bool`: if `nambu == true` and spinful systems, specifies whether the spinor basis is `[c↑, c↓, c↓⁺, -c↑⁺]` (`namburotation = true`) or `[c↑, c↓, c↑⁺, c↓⁺]` (`namburotation = false`). Default: `false`
@@ -2773,11 +2773,11 @@ where `U` is the onsite interaction.
 Any additional keywords `kw` are passed to the `densitymatrix` function used to compute the
 mean field, see above
 
-If a non-parametric `TightbindingModel` is passed to the `hartree` and/or `fock` keywords,
-the model will be used to define the interaction, by translating `onsite` terms into onsite
-interactions, and `hopping` terms into inter-site interactions. In such case, the
-corresponding `selector_hartree` and/or `selector_fock` will be ignored. See `onsite` and
-`hopping` for details on defining non-parametric models.
+If a non-parametric `TightbindingModel` is passed to the `potential`, `hartree` and/or
+`fock` keywords, the model will be used to define the interaction, by translating `onsite`
+terms into onsite interactions, and `hopping` terms into inter-site interactions. In such
+case, the corresponding `selector_hartree` and/or `selector_fock` will be ignored. See
+`onsite` and `hopping` for details on defining non-parametric models.
 
 ## Evaluation and Indexing
 
