@@ -47,6 +47,8 @@ call!_output(s::SelfEnergyModelSolver) =
 minimal_callsafe_copy(s::SelfEnergyModelSolver) =
     SelfEnergyModelSolver(minimal_callsafe_copy(s.ph), s.parentinds)
 
+needs_omega_shift(::SelfEnergyModelSolver) = false
+
 #endregion
 
 #endregion top
