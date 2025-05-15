@@ -44,13 +44,17 @@ end
 function Quantica.qplot(h::PlotLatticeArgumentType;
     fancyaxis = true, axis = axis_defaults(h, fancyaxis), figure = user_default_figure, inspector = true, plotkw...)
     fig, ax = empty_fig_axis(h; fancyaxis, axis, figure)
-    plotkw´ = (isAxis3 = ax isa Axis3, inspector, plotkw...)   # isAxis3 necessary to fix marker scaling
+    plotkw´ = (isAxis3 = ax isa Axis3, plotkw...)   # isAxis3 necessary to fix marker scaling
     plotlattice!(ax, h; plotkw´...)
     inspector && DataInspector(; default_inspector..., user_default_inspector...)
     return fig
 end
 
-Quantica.qplot!(x::PlotLatticeArgumentType; kw...) = plotlattice!(x; kw...)
+function Quantica.qplot!(x::PlotLatticeArgumentType; inspector = true, kw...)
+    p = plotlattice!(x; kw...)
+    inspector && DataInspector(; default_inspector..., user_default_inspector...)
+    return p
+end
 
 #endregion
 
