@@ -26,21 +26,22 @@
 #   Computes also the leftward PL*L*Z11´, Z21´, L'*PL', with  Σₗ = PL L Z11´ Z21´⁻¹ L' PL'
 #region
 
-struct SchurWorkspace{C}
+struct SchurWorkspace{T}
     GL::Matrix{ComplexF64}
     GR::Matrix{ComplexF64}
-    LG::Matrix{C}
-    RG::Matrix{C}
-    A::Matrix{C}
-    B::Matrix{C}
-    Z11::Matrix{C}
-    Z21::Matrix{C}
-    Z11´::Matrix{C}
-    Z21´::Matrix{C}
-    LD::Matrix{C}
-    DL::Matrix{C}
-    RD::Matrix{C}
-    DR::Matrix{C}
+    LG::Matrix{Complex{T}}
+    RG::Matrix{Complex{T}}
+    A::Matrix{Complex{T}}
+    B::Matrix{Complex{T}}
+    Z11::Matrix{Complex{T}}
+    Z21::Matrix{Complex{T}}
+    Z11´::Matrix{Complex{T}}
+    Z21´::Matrix{Complex{T}}
+    LD::Matrix{Complex{T}}
+    DL::Matrix{Complex{T}}
+    RD::Matrix{Complex{T}}
+    DR::Matrix{Complex{T}}
+    workspace::GeneralizedEigenWs{Complex{T},Matrix{Complex{T}},T}
 end
 
 struct SchurFactorsSolver{T,B}
@@ -57,7 +58,7 @@ struct SchurFactorsSolver{T,B}
     L::Matrix{ComplexF64}                             # l<=r ? PL : PL*H' === hp PR  (n × min(l,r))
     R::Matrix{ComplexF64}                             # l<=r ? PR*H === hm PL : PR   (n × min(l,r))
     R´L´::Matrix{ComplexF64}                          # [R'; -L']. L and R must be dense for iG \ (L,R)
-    tmp::SchurWorkspace{Complex{T}}                   # L, R, R´L´ need 64bit
+    tmp::SchurWorkspace{T}                   # L, R, R´L´ need 64bit
 end
 
 #region ## Constructors ##
@@ -73,11 +74,12 @@ function SchurFactorsSolver(h::Hamiltonian{T,<:Any,1}, shift = one(Complex{T})) 
     R´L´ = [R'; -L']
     iG, (p, pd) = store_diagonal_ptrs(fh0)
     ptrs = (p, pd, pd[sinds])
-    workspace = SchurWorkspace{Complex{T}}(size(L), length(linds), length(rinds))
+    workspace = SchurWorkspace{T}(size(L), length(linds), length(rinds))
     return SchurFactorsSolver(T(shift), hm, h0, hp, l_leq_r, iG, ptrs, linds, rinds, sinds, L, R, R´L´, workspace)
 end
 
-function SchurWorkspace{C}((n, d), l, r) where {C}
+function SchurWorkspace{T}((n, d), l, r) where {T}
+    C = Complex{T}
     GL = Matrix{ComplexF64}(undef, n, d)
     GR = Matrix{ComplexF64}(undef, n, d)
     LG = Matrix{C}(undef, d, n)
@@ -92,7 +94,8 @@ function SchurWorkspace{C}((n, d), l, r) where {C}
     DL = Matrix{C}(undef, d, l)
     RD = Matrix{C}(undef, r, d)
     DR = Matrix{C}(undef, d, r)
-    return SchurWorkspace(GL, GR, LG, RG, A, B, Z11, Z21, Z11´, Z21´, LD, DL, RD, DR)
+    workspace = GeneralizedEigenWs(A, rvecs=true)
+    return SchurWorkspace(GL, GR, LG, RG, A, B, Z11, Z21, Z11´, Z21´, LD, DL, RD, DR, workspace)
 end
 
 function nearest_cell_harmonics(h)
@@ -646,7 +649,8 @@ function schur_eigvals((h, solver)::Tuple{AbstractHamiltonian1D,AppliedSchurGree
     update_LR!(sf)                  # Ensure L and R matrices are updated after updating h
     update_iG!(sf, ω)               # shift inverse G with ω
     A, B = pencilAB!(sf)            # build the pecil
-    λs = eigvals!(A, B)             # extract the λs as geeraized eigenvales of the pencil
+    # extract the λs as generaized eigenvales of the pencil using workspace
+    λs = fast_complex_eigvals!(sf.tmp.workspace, A, B)
     return λs
 end
 
@@ -842,9 +846,7 @@ function integrate_rho_schur(s::DensityMatrixSchurSolver{<:Any,2}, µ, kBT; para
         return data
     end
 
-    # quadgk!(integrand_outer!, data, -0.5, 0.0, 0.5; quadgk_opts(s)...)
-    integrand_inner!(0.4, -0.5)
-
+    quadgk!(integrand_outer!, data, -0.5, 0.0, 0.5; quadgk_opts(s)...)
     return result
 end
 
@@ -871,23 +873,19 @@ function fermi_h!(s, ϕ, µ, β = 0; params...)
     bs = blockstructure(h)
     # Similar to spectrum(h, ϕ; params...), but less work (no sort! or sanitization)
     copy!(s.hmat, call!(h, ϕ; params...))  # sparse to dense
-    # ϵs, psis = fast_hermitian_eigen!(s.workspace, s.hmat)
-    # # special-casing β = Inf with views turns out to be slower
-    # fs = (@. ϵs = fermi(ϵs - µ, β))
-    # fpsis = (s.psis .= psis .* transpose(fs))
-    # ρcell = EigenProduct(bs, psis, fpsis, ϕ)
-    # result = call!_output(s.gs)
-    # getindex!(result, ρcell, s.orbaxes...)
-    # data = serialize(result)
-    # return data
+    ϵs, psis = fast_hermitian_eigen!(s.workspace, s.hmat)
+    # special-casing β = Inf with views turns out to be slower
+    fs = (@. ϵs = fermi(ϵs - µ, β))
+    fpsis = (s.psis .= psis .* transpose(fs))
+    ρcell = EigenProduct(bs, psis, fpsis, ϕ)
+    result = call!_output(s.gs)
+    getindex!(result, ρcell, s.orbaxes...)
+    data = serialize(result)
+    return data
 end
 
 quadgk_opts(s::DensityMatrixSchurSolver) = quadgk_opts(s.integrate_opts)
 
 callback(s::DensityMatrixSchurSolver) = callback(s.integrate_opts)
-
-# Uses a workspace to avoid allocations (thanks FastLapackInterface.jl)
-fast_hermitian_eigen!(ws, A; sortby::Union{Function,Nothing}=nothing) =
-    Eigen(LinearAlgebra.sorteig!(LAPACK.syevr!(ws, 'V', 'A', 'U', A, 0.0, 0.0, 0, 0, -1.0)..., sortby)...)
 
 #endregion top
