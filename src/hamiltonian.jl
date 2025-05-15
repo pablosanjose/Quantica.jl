@@ -316,7 +316,9 @@ call!(p::ParametricHamiltonian, ft::FrankenTuple) = call!(p, Tuple(ft); NamedTup
 function call!(ph::ParametricHamiltonian; kw...)
     reset_to_parent!(ph)
     h = hamiltonian(ph)
-    applymodifiers!(h, modifiers(ph)...; kw...)
+    foreach(modifiers(ph)) do m
+        applymodifiers!(h, m; kw...)
+    end
     flat_sync!(h)  # modifiers are applied to unflat, need to be synced to flat
     return h
 end
@@ -340,10 +342,6 @@ function reset_to_parent!(ph)
     end
     return ph
 end
-
-applymodifiers!(h; kw...) = h
-
-applymodifiers!(h, m, m´, ms...; kw...) = applymodifiers!(applymodifiers!(h, m; kw...), m´, ms...; kw...)
 
 applymodifiers!(h, m::Modifier; kw...) = applymodifiers!(h, apply(m, h); kw...)
 

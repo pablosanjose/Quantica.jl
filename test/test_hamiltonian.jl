@@ -413,6 +413,10 @@ end
         @hopping!((t, r, dr; p = 1) -> p+r[2], dcells = SVector{2,Int}[]) |> @onsite!((o, r; q = 1) -> o + q, sublats, region = RP.circle(3))
     @test h0 isa ParametricHamiltonian
     @test Quantica.parameter_names(h0) == [:p, :q]
+
+    # no allocations even for large models
+    h = LP.linear() |> sum(@onsite((; a = 0) -> 0) for _ in 1:20)
+    Quantica.call!(h; a=0); @test (@allocations Quantica.call!(h; a=0)) <= 1
 end
 
 @testset "ExternalPresets.wannier90" begin
