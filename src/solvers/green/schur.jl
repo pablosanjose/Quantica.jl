@@ -768,6 +768,7 @@ struct DensityMatrixSchurSolver{T,L,A,G<:GreenSlice{T,<:Any,L},O<:NamedTuple}
     hmat::Matrix{Complex{T}}        # it spans just the unit cell, dense Bloch matrix
     psis::Matrix{Complex{T}}        # it spans just the unit cell, Eigenstates
     integrate_opts::O               # callback [missing or a function f(ϕ, z) or f(ϕ1, ϕ2, z)] + kwargs for quadgk
+    workspace::HermitianEigenWs{ComplexF64, Matrix{ComplexF64}, Float64} # workspace for non-allocating eigen!
 end
 
 ## Constructor
@@ -789,7 +790,8 @@ function densitymatrix_schur(gs; int_opts...)
     hmat = similar_Array(hamiltonian(g))
     psis = similar(hmat)
     orbaxes = orbrows(gs), orbcols(gs)
-    solver = DensityMatrixSchurSolver(gs, orbaxes, hmat, psis, NamedTuple(int_opts))
+    workspace = HermitianEigenWs(hmat, vecs=true)  # from FastLapackInterface.jl
+    solver = DensityMatrixSchurSolver(gs, orbaxes, hmat, psis, NamedTuple(int_opts), workspace)
     return DensityMatrix(solver, gs)
 end
 
@@ -840,7 +842,8 @@ function integrate_rho_schur(s::DensityMatrixSchurSolver{<:Any,2}, µ, kBT; para
         return data
     end
 
-    quadgk!(integrand_outer!, data, -0.5, 0.0, 0.5; quadgk_opts(s)...)
+    # quadgk!(integrand_outer!, data, -0.5, 0.0, 0.5; quadgk_opts(s)...)
+    integrand_inner!(0.4, -0.5)
 
     return result
 end
@@ -868,19 +871,23 @@ function fermi_h!(s, ϕ, µ, β = 0; params...)
     bs = blockstructure(h)
     # Similar to spectrum(h, ϕ; params...), but less work (no sort! or sanitization)
     copy!(s.hmat, call!(h, ϕ; params...))  # sparse to dense
-    ϵs, psis = eigen!(Hermitian(s.hmat))
-    # special-casing β = Inf with views turns out to be slower
-    fs = (@. ϵs = fermi(ϵs - µ, β))
-    fpsis = (s.psis .= psis .* transpose(fs))
-    ρcell = EigenProduct(bs, psis, fpsis, ϕ)
-    result = call!_output(s.gs)
-    getindex!(result, ρcell, s.orbaxes...)
-    data = serialize(result)
-    return data
+    # ϵs, psis = fast_hermitian_eigen!(s.workspace, s.hmat)
+    # # special-casing β = Inf with views turns out to be slower
+    # fs = (@. ϵs = fermi(ϵs - µ, β))
+    # fpsis = (s.psis .= psis .* transpose(fs))
+    # ρcell = EigenProduct(bs, psis, fpsis, ϕ)
+    # result = call!_output(s.gs)
+    # getindex!(result, ρcell, s.orbaxes...)
+    # data = serialize(result)
+    # return data
 end
 
 quadgk_opts(s::DensityMatrixSchurSolver) = quadgk_opts(s.integrate_opts)
 
 callback(s::DensityMatrixSchurSolver) = callback(s.integrate_opts)
+
+# Uses a workspace to avoid allocations (thanks FastLapackInterface.jl)
+fast_hermitian_eigen!(ws, A; sortby::Union{Function,Nothing}=nothing) =
+    Eigen(LinearAlgebra.sorteig!(LAPACK.syevr!(ws, 'V', 'A', 'U', A, 0.0, 0.0, 0, 0, -1.0)..., sortby)...)
 
 #endregion top
