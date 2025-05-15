@@ -31,7 +31,11 @@ function Quantica.qplot(b::PlotBandsArgumentType;
     return fig
 end
 
-Quantica.qplot!(b::PlotBandsArgumentType; kw...) = plotbands!(b; kw...)
+function Quantica.qplot!(b::PlotBandsArgumentType; inspector = true, kw...)
+    p = plotbands!(b; kw...)
+    inspector && DataInspector(; default_inspector..., user_default_inspector...)
+    return p
+end
 
 #endregion
 

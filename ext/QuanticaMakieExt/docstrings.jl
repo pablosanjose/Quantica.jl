@@ -33,11 +33,12 @@ cycling over them if necessary.
 qplot
 
 """
-    qplot!(object; plotkw...)
+    qplot!(object; inspector = true, plotkw...)
 
 Render `object` on the currently active scene using either `plotlattice!` (for lattice-based
 objects) or `plotbands!` (for bands-based object), and passing `plotkw` keywords along. See
-their respective docstrings for possible keywords.
+their respective docstrings for possible keywords. Keyword `inspector = true` activates plot
+tooltips, see also `qplot`.
 
 """
 qplot!
