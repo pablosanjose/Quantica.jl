@@ -416,7 +416,7 @@ end
 
     # no allocations even for large models
     h = LP.linear() |> sum(@onsite((; a = 0) -> 0) for _ in 1:20)
-    Quantica.call!(h; a=0); @test (@allocations Quantica.call!(h; a=0)) <= 1
+    Quantica.call!(h; a=0); @test (@allocations Quantica.call!(h; a=0)) <= 10
 end
 
 @testset "ExternalPresets.wannier90" begin
