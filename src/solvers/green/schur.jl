@@ -831,23 +831,24 @@ function integrate_rho_schur(s::DensityMatrixSchurSolver{<:Any,2}, µ, kBT; para
     h1D, s1D = (s2D.h1D, s2D.solver1D)
 
     axisorder = SA[only(s2D.axis1D), only(s2D.wrapped_axes)]
+    packed = (; µ, kBT, params, data, h1D, s1D, s2D, s, axisorder)
 
-    function integrand_inner!(x1, x2)
-        ϕ = 2π * SA[x1, x2][axisorder]
-        z = fermi_h!(s, ϕ, µ, inv(kBT); params...)
-        callback(s)(ϕ..., z)
-        return z
-    end
-
-    function integrand_outer!(data, x2)
-        xs = fermi_points_integration_path((h1D, s1D), µ; params..., s2D.phase_func(SA[2π*x2])...)
-        inner! = (y, x1) -> (y .= integrand_inner!(x1, x2))
-        quadgk!(inner!, data, xs...; quadgk_opts(s)...)
-        return data
-    end
-
-    quadgk!(integrand_outer!, data, -0.5, 0.0, 0.5; quadgk_opts(s)...)
+    quadgk!((data, x2) -> integrand_outer!(data, x2; packed...), data, -0.5, 0.0, 0.5; quadgk_opts(s)...)
     return result
+end
+
+function integrand_inner!(x1, x2; s, µ, kBT, params, axisorder, _...)
+    ϕ = 2π * SA[x1, x2][axisorder]
+    z = fermi_h!(s, ϕ, µ, inv(kBT); params...)
+    callback(s)(ϕ..., z)
+    return z
+end
+
+function integrand_outer!(data, x2; h1D, s1D, s2D, µ, s, params, kw...)
+    xs = fermi_points_integration_path((h1D, s1D), µ; params..., s2D.phase_func(SA[2π*x2])...)
+    inner! = (y, x1) -> (y .= integrand_inner!(x1, x2; µ, s, params, kw...))
+    quadgk!(inner!, data, xs...; quadgk_opts(s)...)
+    return data
 end
 
 # this g can be a GreenFunction or a (h1D, s1D) pair
