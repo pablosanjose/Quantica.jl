@@ -254,11 +254,11 @@ update_colors!(p::Union{SitePrimitives,HoppingPrimitives}, plot) =
 
 update_colors!(p::SitePrimitives, plot, extremahues, extremaops) =
     update_colors!(p, extremahues, extremaops, plot[:sitecolor][], plot[:siteopacity][],
-        Makie.ColorSchemes.colorschemes[plot[:sitecolormap][]], plot[:sitedarken][])
+        get_colorscheme(plot[:sitecolormap][]), plot[:sitedarken][])
 
 update_colors!(p::HoppingPrimitives, plot, extremahues, extremaops) =
     update_colors!(p, extremahues, extremaops, plot[:hopcolor][], plot[:hopopacity][],
-        Makie.ColorSchemes.colorschemes[plot[:hopcolormap][]], plot[:hopdarken][])
+        get_colorscheme(plot[:hopcolormap][]), plot[:hopdarken][])
 
 function update_colors!(p, extremahues, extremaops, pcolor, popacity, colormap, pdarken)
     resize!(p.colors, length(p.hues))

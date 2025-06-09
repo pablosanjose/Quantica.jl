@@ -53,5 +53,7 @@ function resolve_cross_references!(plot::PlotLattice)
     return plot
 end
 
+get_colorscheme(name::Symbol) = Makie.ColorSchemes.colorschemes[name]
+get_colorscheme(cs::Makie.ColorScheme) = cs
 
 #endregion

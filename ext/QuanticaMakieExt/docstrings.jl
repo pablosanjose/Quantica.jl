@@ -72,7 +72,7 @@ inter-site links, and a representation of contacts.
 - `boundarycolor = RGBAf(1,0,0)`: color of boundary cells for GreenFunction plots
 - `boundaryopacity = 0.07`: opacity of boundary cells for GreenFunction plots
 - `sitecolor = missing`: color of sites, as a index in `sitecolormap`, a named color, a `Makie.Colorant`, a collection of either, or as a site shader (see below). If `missing`, cycle through `sitecolormap`. If a collection, cycle through that.
-- `sitecolormap = :Spectral_9`: colormap to use for `sitecolor` (see options in https://tinyurl.com/cschemes)
+- `sitecolormap = :Spectral_9`: colormap to use for `sitecolor` (see options in https://tinyurl.com/cschemes, or create your own with ColorSchemes.jl)
 - `siteopacity = missing`: opacity of sites, as a real between 0 and 1, or as a site shader (see below). If `missing`, obey `shellopacity`.
 - `siteradius = 0.25`: radius of sites as a real in units of lattice dimensions, or as a site shader (see below)
 - `minmaxsiteradius = (0.0, 0.5)`: if `sitedradius` is a shader, minimum and maximum site radius.
@@ -80,7 +80,7 @@ inter-site links, and a representation of contacts.
 - `siteoutlinedarken = 0.6`: darkening factor of the outline around flat sites
 - `sitedarken = 0.0`: darkening factor for sites
 - `hopcolor = missing`: color of hops, as a index in `hopcolormap`, a named color, a `Makie.Colorant`, a collection of either, or as a hop shader (see below). If `missing`, cycle through `sitecolormap`. If a collection, cycle through that.
-- `hopcolormap = :Spectral_9`: colormap to use for `hopcolor` (see options in https://tinyurl.com/cschemes)
+- `hopcolormap = :Spectral_9`: colormap to use for `hopcolor` (see options in https://tinyurl.com/cschemes, or create your own with ColorSchemes.jl)
 - `hopopacity = missing`: opacity of hops, as a real between 0 and 1, or as a hop shader (see below)
 - `hopradius = 0.03`: radius of hops as a real number in units of lattice dimensions, or as a hop shader (see below)
 - `hoppixels = 6`: if `flat = true` fixed hop linewidth in pixels, or maximum pixel linewidth if `hopradius` is a shader.
@@ -129,7 +129,7 @@ subbands or subband slices (e.g. `ss = b[1:4]` or `ss = b[(:,0,:)]`).
 ## Keywords
 
 - `color = missing`: color of subbands, as a index in `colormap`, a named color, a `Makie.Colorant`, or as a band shader (see below). If `missing`, cycle through `colormap`.
-- `colormap = :Spectral_9`: colormap to use for `color` (see options in https://tinyurl.com/cschemes)
+- `colormap = :Spectral_9`: colormap to use for `color` (see options in https://tinyurl.com/cschemes, or create your own with ColorSchemes.jl)
 - `opacity = 1.0`: opacity of subbands, as a real between 0 and 1 or as a band shader (see below)
 - `size = 2`: stroke thickness, in pixels, when plotting line-like features. May also be a band shader in 2D plots (see below)
 - `minmaxsize = (0, 6)`: if `size` is a shader, minimum and maximum stroke thickness, in pixels.
