@@ -61,4 +61,6 @@ end
     h = LatticePresets.honeycomb(a0 = 1) |> hamiltonian(model)
     b = bands(h(α = 0.05), range(0, 2pi, length=60), range(0, 2pi, length = 60))
     @test qplot(b, color = (psi, e, k) -> angle(psi[1] / psi[2]), colormap = :cyclic_mrybm_35_75_c68_n256, inspector = true) isa Figure
+    cs = Makie.ColorScheme([colorant"red", colorant"black"])
+    @test qplot(b, color = (psi, e, k) -> angle(psi[1] / psi[2]), colormap = cs, inspector = true) isa Figure
 end
