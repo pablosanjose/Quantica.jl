@@ -58,7 +58,7 @@ struct SchurFactorsSolver{T,B}
     L::Matrix{ComplexF64}                             # l<=r ? PL : PL*H' === hp PR  (n × min(l,r))
     R::Matrix{ComplexF64}                             # l<=r ? PR*H === hm PL : PR   (n × min(l,r))
     R´L´::Matrix{ComplexF64}                          # [R'; -L']. L and R must be dense for iG \ (L,R)
-    tmp::SchurWorkspace{T}                   # L, R, R´L´ need 64bit
+    tmp::SchurWorkspace{T}                            # L, R, R´L´ need 64bit
 end
 
 #region ## Constructors ##
