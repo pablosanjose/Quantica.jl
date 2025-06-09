@@ -2444,13 +2444,6 @@ end
 const OrbitalSliceVector{C,V,A} = OrbitalSliceArray{C,1,V,A}
 const OrbitalSliceMatrix{C,M,A} = OrbitalSliceArray{C,2,M,A}
 
-struct CompressedOrbitalMatrix{C<:Union{Number,SArray},M,O<:OrbitalSliceMatrix{C,M},E,D} <: AbstractOrbitalMatrix{C,M}
-    omat::O
-    hermitian::Bool
-    encoder::E
-    decoder::D
-end
-
 #region ## Contructors ##
 
 OrbitalSliceVector(v::AbstractVector, axes) = OrbitalSliceArray(v, axes)
@@ -2471,21 +2464,48 @@ function OrbitalSliceMatrix{C}(::UndefInitializer, oi::SparseIndices{<:Hamiltoni
     return OrbitalSliceArray(mat, (i, j))
 end
 
-CompressedOrbitalMatrix(o::OrbitalSliceMatrix; hermitian = false, encoder = identity, decoder = identity) =
-    CompressedOrbitalMatrix(o, hermitian, encoder, decoder)
-
-Base.similar(::OrbitalSliceArray, mat, orbaxes) = OrbitalSliceArray(mat, orbaxes)
-Base.similar(a::CompressedOrbitalMatrix, mat, orbaxes) =
-    CompressedOrbitalMatrix(similar(a.omat, mat, orbaxes), a.hermitian, a.encoder, a.decoder)
-
 #endregion
 #region ## API ##
 
 orbaxes(a::OrbitalSliceArray) = a.orbaxes
 orbaxes(a::OrbitalSliceArray, i::Integer) = a.orbaxes[i]
-orbaxes(a::CompressedOrbitalMatrix, args...) = orbaxes(a.omat, args...)
 
 Base.parent(a::OrbitalSliceArray) = a.parent
+
+Base.similar(::OrbitalSliceArray, mat, orbaxes) = OrbitalSliceArray(mat, orbaxes)
+
+#endregion
+#endregion
+
+############################################################################################
+# CompressedOrbitalMatrix: a special type of OrbitalSliceArray with these constraints
+#   - its parent eltype is the full, unflat blocktype
+#   - each block element is compressed using a function encoder
+#   - when indexed of viewed with a single CellSite it returns a full block, no allocations
+#   - it cannot be indexed with more CellSites (e.g. index ranges sites(1:3))
+#region
+
+struct CompressedOrbitalMatrix{C<:Union{Number,SArray},M,O<:OrbitalSliceMatrix{C,M},E,D} <: AbstractOrbitalMatrix{C,M}
+    omat::O
+    hermitian::Bool
+    encoder::E
+    decoder::D
+end
+
+#region ## Constructors ##
+
+CompressedOrbitalMatrix(o::OrbitalSliceMatrix; hermitian = false, encoder = identity, decoder = identity) =
+    CompressedOrbitalMatrix(o, hermitian, encoder, decoder)
+
+#endregion
+
+#region ## API ##
+
+orbaxes(a::CompressedOrbitalMatrix, args...) = orbaxes(a.omat, args...)
+
+Base.similar(a::CompressedOrbitalMatrix, mat, orbaxes) =
+    CompressedOrbitalMatrix(similar(a.omat, mat, orbaxes), a.hermitian, a.encoder, a.decoder)
+
 Base.parent(a::CompressedOrbitalMatrix) = parent(a.omat)
 
 encoder(a::CompressedOrbitalMatrix) = a.encoder
@@ -2493,6 +2513,45 @@ encoder(a::CompressedOrbitalMatrix) = a.encoder
 decoder(a::CompressedOrbitalMatrix) = a.decoder
 
 LinearAlgebra.ishermitian(a::CompressedOrbitalMatrix) = a.hermitian
+
+# decoding access
+Base.view(a::CompressedOrbitalMatrix, i::AnyCellSites, j::AnyCellSites = i) =
+    argerror("Indexing a CompressedOrbitalMatrix over multiple sites or site pairs is not supported")
+
+Base.view(a::CompressedOrbitalMatrix, i::AnyCellSite, j::AnyCellSite = i) =
+    decode_block(a, i, j)
+
+# secialized Base.getindex(a::AbstractOrbitalMatrix, ::CellSitePos...), slightly faster
+Base.getindex(a::CompressedOrbitalMatrix, i::C, j::C = i) where {B,C<:CellSitePos{<:Any,<:Any,<:Any,B}} =
+    checkbounds(Bool, a, i, j) ? decode_block(a, i, j) : zero(B)
+
+@inline function decode_block(a::CompressedOrbitalMatrix, ci, cj)
+    # see specialmatrices.jl for indexcollection
+    i, j = only.(indexcollection(a, ci, cj))
+    # Only lower-triangle is stored in the hermitian case
+    if ishermitian(a)
+        # we find the indices for a[sites(-ni, j), sites(0, i)],
+        # the conjugate of a[sites(ni, i), sites(0, j)],
+        ci´, cj´ = sites(-cell(ci), siteindex(cj)), sites(cell(cj), siteindex(ci))
+        i´, j´ = only.(indexcollection(a, ci´, cj´))
+        val = decode_block_hermitian(a, i, j)
+        val´ = decode_block_hermitian(a, i´, j´)'
+        return 0.5 * (val + val´)
+    end
+    dec = decoder(a)
+    return dec(parent(a)[i, j])
+end
+
+function decode_block_hermitian(a::CompressedOrbitalMatrix, i, j)
+    dec = decoder(a)
+    if i < j
+        return dec(parent(a)[j, i])'
+    elseif i == j
+        return dec(parent(a)[i, j])
+    else
+        return dec(parent(a)[i, j])
+    end
+end
 
 #endregion
 #endregion
