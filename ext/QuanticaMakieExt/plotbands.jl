@@ -125,7 +125,7 @@ function update_colors!(p::MeshPrimitives, plot)
     extremaops = safeextrema(p.opacities)
     color = plot[:color][]
     opacity = plot[:opacity][]
-    colormap = Makie.ColorSchemes.colorschemes[plot[:colormap][]]
+    colormap = get_colorscheme(plot[:colormap][])
     # reuse update_colors! from plotlattice.jl
     return update_colors!(p, extremahues, extremaops, color, opacity, colormap, 0.0)
 end
