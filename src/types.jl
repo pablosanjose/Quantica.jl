@@ -102,7 +102,6 @@ sublatindex(l::Lattice, name::Symbol) = sublatindex(l.unitcell, name)
 
 function sublatindex(u::Unitcell, name::Symbol)
     i = findfirst(==(name), sublatnames(u))
-    i === nothing && boundserror(u, string(name))
     return i
 end
 

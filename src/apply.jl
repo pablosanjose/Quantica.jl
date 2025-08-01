@@ -51,8 +51,11 @@ sublatindex_or_zero(lat, i::Integer) = ifelse(1 <= i <= nsublats(lat), Int(i), 0
 
 function sublatindex_or_zero(lat, name::Symbol)
     i = sublatindex(lat, name)
-    return ifelse(i === nothing, 0, Int(i))
+    return sublatindex_or_zero(i)
 end
+
+sublatindex_or_zero(i::Number) = Int(i)
+sublatindex_or_zero(_) = 0
 
 sanitize_minmaxrange(r, lat) = sanitize_minmaxrange((zero(numbertype(lat)), r), lat)
 sanitize_minmaxrange((rmin, rmax)::Tuple{Any,Any}, lat) =
