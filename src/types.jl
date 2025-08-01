@@ -98,11 +98,14 @@ sublatname(l::Lattice, s) = sublatname(l.unitcell, s)
 sublatname(u::Unitcell, s) = u.names[s]
 sublatname(s::Sublat) = s.name
 
-sublatindex(l::Lattice, name::Symbol) = sublatindex(l.unitcell, name)
+sublatindex_or_nothing(l::Lattice, name::Symbol) = sublatindex_or_nothing(l.unitcell, name)
 
-function sublatindex(u::Unitcell, name::Symbol)
-    i = findfirst(==(name), sublatnames(u))
-    i === nothing && boundserror(u, string(name))
+# May return nothing
+sublatindex_or_nothing(u::Unitcell, name::Symbol) = findfirst(==(name), sublatnames(u))
+
+function sublatindex_or_error(u, s)
+    i = sublatindex_or_nothing(u, s)
+    i === nothing && boundserror(u, string(s))
     return i
 end
 
@@ -123,14 +126,14 @@ sites(u::Unitcell) = u.sites
 sites(u::Unitcell, sublat) = view(u.sites, siterange(u, sublat))
 sites(u::Unitcell, ::Missing) = sites(u)            # to work with QuanticaMakieExt
 sites(l::Lattice, name::Symbol) = sites(unitcell(l), name)
-sites(u::Unitcell, name::Symbol) = sites(u, sublatindex(u, name))
+sites(u::Unitcell, name::Symbol) = sites(u, sublatindex_or_error(u, name))
 
 site(l::Lattice, i) = sites(l)[i]
 site(l::Lattice, i, dn) = site(l, i) + bravais_matrix(l) * dn
 
 siterange(l::Lattice, sublat...) = siterange(l.unitcell, sublat...)
 siterange(u::Unitcell, sublat::Integer) = (1+u.offsets[sublat]):u.offsets[sublat+1]
-siterange(u::Unitcell, name::Symbol) = siterange(u, sublatindex(u, name))
+siterange(u::Unitcell, name::Symbol) = siterange(u, sublatindex_or_error(u, name))
 siterange(u::Unitcell) = 1:last(u.offsets)
 
 sitesublat(lat::Lattice, siteidx) = sitesublat(lat.unitcell.offsets, siteidx)
@@ -1457,7 +1460,7 @@ flatsize(h::AbstractHamiltonian, args...) = flatsize(blockstructure(h), args...)
 flatrange(h::AbstractHamiltonian, iunflat) = flatrange(blockstructure(h), iunflat)
 
 flatrange(h::AbstractHamiltonian, name::Symbol) =
-    sublatorbrange(blockstructure(h), sublatindex(lattice(h), name))
+    sublatorbrange(blockstructure(h), sublatindex_or_error(lattice(h), name))
 
 zerocell(h::AbstractHamiltonian) = zerocell(lattice(h))
 

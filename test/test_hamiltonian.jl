@@ -118,6 +118,8 @@ end
         sublatshop = ifelse(sublats === missing, missing, sublats´ => sublats)
         @test Quantica.apply(hopselector(; range, dcells, region = regionhop, sublats = sublatshop), lat) isa Quantica.AppliedHopSelector
     end
+    # Unmatched sublattice (Issue #361)
+    @test (LP.linear(; names = :C) |> onsite(1; sublats = :A)) isa Hamiltonian
 end
 
 @testset "models" begin
