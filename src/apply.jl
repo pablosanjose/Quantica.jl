@@ -50,7 +50,7 @@ sublatindex_or_zero(lat, ::Missing) = missing
 sublatindex_or_zero(lat, i::Integer) = ifelse(1 <= i <= nsublats(lat), Int(i), 0)
 
 function sublatindex_or_zero(lat, name::Symbol)
-    i = sublatindex(lat, name)
+    i = sublatindex_or_nothing(lat, name)
     return sublatindex_or_zero(i)
 end
 
