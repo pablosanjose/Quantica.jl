@@ -500,6 +500,7 @@ end
 
 function Makie.plot!(plot::PlotLattice{Tuple{G}}) where {G<:Union{GreenFunction,OpenHamiltonian}}
     g = to_value(plot[1])
+    attr = Attributes(plot)
     gsel = haskey(plot, :selector) && plot[:selector][] !== missing ?
         plot[:selector][] : green_selector(g)
     params = parameters(g)
@@ -516,31 +517,31 @@ function Makie.plot!(plot::PlotLattice{Tuple{G}}) where {G<:Union{GreenFunction,
         blatslice´ = latslice´[bsel]
         if L > 1
             bkws = (; hide = (:axes, :sites, :hops), cellcolor = :boundarycolor, cellopacity = :boundaryopacity)
-            isempty(blatslice) || plotlattice!(plot, Attributes(plot), blatslice; bkws...)
-            isempty(blatslice´) || plotlattice!(plot, Attributes(plot), blatslice´; bkws...)
+            isempty(blatslice) || plotlattice!(plot, attr, blatslice; bkws...)
+            isempty(blatslice´) || plotlattice!(plot, attr, blatslice´; bkws...)
         end
         hideB = Quantica.tupleflatten(:bravais, plot[:hide][])
         bkws´ = (; hide = hideB, sitecolor = :boundarycolor, siteopacity = :boundaryopacity,
             siteradiusfactor = sqrt(2), marker = squaremarker)
-        isempty(blatslice) || plotlattice!(plot, Attributes(plot), blatslice; bkws´...)
-        isempty(blatslice´) || plotlattice!(plot, Attributes(plot), blatslice´; bkws´...)
+        isempty(blatslice) || plotlattice!(plot, attr, blatslice; bkws´...)
+        isempty(blatslice´) || plotlattice!(plot, attr, blatslice´; bkws´...)
 
     end
 
     # plot cells
-    plotlattice!(plot, Attributes(plot), h, latslice, latslice)
+    plotlattice!(plot, attr, h, latslice, latslice)
 
     # plot contacts
     if !ishidden((:contact, :contacts), plot)
-        Σkws = Iterators.cycle(parse_children(plot[:children]))
+        Σkws = Iterators.cycle(parse_children(attr[:children][]))
         Σs = Quantica.selfenergies(g)
-        hideΣ = Quantica.tupleflatten(:bravais, plot[:hide][])
+        hideΣ = Quantica.tupleflatten(:bravais, attr[:hide][])
         for (Σ, Σkw) in zip(Σs, Σkws)
             Σplottables = Quantica.selfenergy_plottables(Σ)
             for Σp in Σplottables
                 plottables, kws = get_plottables_and_kws(Σp)
                 plottables´ = default_plottable.(plottables; params...)
-                plotlattice!(plot, Attributes(plot), plottables´...; hide = hideΣ, marker = squaremarker, kws..., Σkw...)
+                plotlattice!(plot, attr, plottables´...; hide = hideΣ, marker = squaremarker, kws..., Σkw...)
             end
         end
     end
@@ -551,7 +552,6 @@ parse_children(::Missing) = (NamedTuple(),)
 parse_children(p::Tuple) = p
 parse_children(p::NamedTuple) = (p,)
 parse_children(p::Attributes) = parse_children(NamedTuple(p))
-parse_children(p::Observable) = parse_children(p[])
 
 sanitize_selector(::Missing, lat) = Quantica.siteselector(; cells = Quantica.zerocell(lat))
 sanitize_selector(s::Quantica.SiteSelector, lat) = s
