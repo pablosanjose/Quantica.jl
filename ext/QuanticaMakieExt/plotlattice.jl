@@ -374,20 +374,20 @@ primitive_linewidth(normr, hopradius, hoppixels) = hoppixels * normr
 function Makie.plot!(plot::PlotLattice{Tuple{L}}) where {L<:Lattice}
     lat = to_value(plot[1])
     h = Quantica.hamiltonian(lat)
-    return plotlattice!(plot, h; plot.attributes...)
+    return plotlattice!(plot, Attributes(plot), h)
 end
 
 function Makie.plot!(plot::PlotLattice{Tuple{L}}) where {L<:LatticeSlice}
     ls = to_value(plot[1])
     lat = Quantica.parent(ls)
     h = Quantica.hamiltonian(lat)
-    return plotlattice!(plot, h, ls; plot.attributes...)
+    return plotlattice!(plot, Attributes(plot), h, ls)
 end
 
 function Makie.plot!(plot::PlotLattice{Tuple{L}}) where {L<:ParametricHamiltonian}
     ph = to_value(plot[1])
     h = ph()
-    return plotlattice!(plot, h; plot.attributes...)
+    return plotlattice!(plot, Attributes(plot), h)
 end
 
 function Makie.plot!(plot::PlotLattice{Tuple{H}}) where {H<:Hamiltonian}
@@ -395,20 +395,20 @@ function Makie.plot!(plot::PlotLattice{Tuple{H}}) where {H<:Hamiltonian}
     lat = Quantica.lattice(h)
     sel = sanitize_selector(plot[:selector][], lat)
     latslice = lat[sel]
-    return plotlattice!(plot, h, latslice; plot.attributes...)
+    return plotlattice!(plot, Attributes(plot), h, latslice)
 end
 
 # For E < 2 Hamiltonians, promote to 2D
 function Makie.plot!(plot::PlotLattice{Tuple{H}}) where {H<:Hamiltonian{<:Any,1}}
     h = Hamiltonian{2}(to_value(plot[1]))
-    return plotlattice!(plot, h; plot.attributes...)
+    return plotlattice!(plot, Attributes(plot), h)
 end
 
 function Makie.plot!(plot::PlotLattice{Tuple{H,S}}) where {H<:Hamiltonian{<:Any,1},S<:LatticeSlice}
     h = Hamiltonian{2}(to_value(plot[1]))
     lat = Quantica.lattice(h)
     l = Quantica.unsafe_replace_lattice(to_value(plot[2]), lat)
-    return plotlattice!(plot, h, l; plot.attributes...)
+    return plotlattice!(plot, Attributes(plot), h, l)
 end
 
 function Makie.plot!(plot::PlotLattice{Tuple{H,S,S´}}) where {H<:Hamiltonian{<:Any,1},S<:LatticeSlice,S´<:LatticeSlice}
@@ -416,14 +416,14 @@ function Makie.plot!(plot::PlotLattice{Tuple{H,S,S´}}) where {H<:Hamiltonian{<:
     lat = Quantica.lattice(h)
     l  = Quantica.unsafe_replace_lattice(to_value(plot[2]), lat)
     l´ = Quantica.unsafe_replace_lattice(to_value(plot[3]), lat)
-    return plotlattice!(plot, h, l, l´; plot.attributes...)
+    return plotlattice!(plot, Attributes(plot), h, l, l´)
 end
 
 function Makie.plot!(plot::PlotLattice{Tuple{H,S}}) where {H<:Hamiltonian,S<:LatticeSlice}
     h = to_value(plot[1])
     latslice = to_value(plot[2])
     latslice´ = Quantica.growdiff(latslice, h)
-    return plotlattice!(plot, h, latslice, latslice´; plot.attributes...)
+    return plotlattice!(plot, Attributes(plot), h, latslice, latslice´)
 end
 
 function Makie.plot!(plot::PlotLattice{Tuple{H,S,S´}}) where {H<:Hamiltonian,S<:LatticeSlice,S´<:LatticeSlice}
@@ -500,6 +500,7 @@ end
 
 function Makie.plot!(plot::PlotLattice{Tuple{G}}) where {G<:Union{GreenFunction,OpenHamiltonian}}
     g = to_value(plot[1])
+    attr = Attributes(plot)
     gsel = haskey(plot, :selector) && plot[:selector][] !== missing ?
         plot[:selector][] : green_selector(g)
     params = parameters(g)
@@ -515,32 +516,32 @@ function Makie.plot!(plot::PlotLattice{Tuple{G}}) where {G<:Union{GreenFunction,
         blatslice = latslice[bsel]
         blatslice´ = latslice´[bsel]
         if L > 1
-            bkws = (; plot.attributes..., hide = (:axes, :sites, :hops), cellcolor = :boundarycolor, cellopacity = :boundaryopacity)
-            isempty(blatslice) || plotlattice!(plot, blatslice; bkws...)
-            isempty(blatslice´) || plotlattice!(plot, blatslice´; bkws...)
+            bkws = (; hide = (:axes, :sites, :hops), cellcolor = :boundarycolor, cellopacity = :boundaryopacity)
+            isempty(blatslice) || plotlattice!(plot, attr, blatslice; bkws...)
+            isempty(blatslice´) || plotlattice!(plot, attr, blatslice´; bkws...)
         end
         hideB = Quantica.tupleflatten(:bravais, plot[:hide][])
-        bkws´ = (; plot.attributes..., hide = hideB, sitecolor = :boundarycolor, siteopacity = :boundaryopacity,
+        bkws´ = (; hide = hideB, sitecolor = :boundarycolor, siteopacity = :boundaryopacity,
             siteradiusfactor = sqrt(2), marker = squaremarker)
-        isempty(blatslice) || plotlattice!(plot, blatslice; bkws´...)
-        isempty(blatslice´) || plotlattice!(plot, blatslice´; bkws´...)
+        isempty(blatslice) || plotlattice!(plot, attr, blatslice; bkws´...)
+        isempty(blatslice´) || plotlattice!(plot, attr, blatslice´; bkws´...)
 
     end
 
     # plot cells
-    plotlattice!(plot, h, latslice, latslice´; plot.attributes...)
+    plotlattice!(plot, attr, h, latslice, latslice)
 
     # plot contacts
     if !ishidden((:contact, :contacts), plot)
-        Σkws = Iterators.cycle(parse_children(plot[:children]))
+        Σkws = Iterators.cycle(parse_children(attr[:children][]))
         Σs = Quantica.selfenergies(g)
-        hideΣ = Quantica.tupleflatten(:bravais, plot[:hide][])
+        hideΣ = Quantica.tupleflatten(:bravais, attr[:hide][])
         for (Σ, Σkw) in zip(Σs, Σkws)
             Σplottables = Quantica.selfenergy_plottables(Σ)
             for Σp in Σplottables
                 plottables, kws = get_plottables_and_kws(Σp)
                 plottables´ = default_plottable.(plottables; params...)
-                plotlattice!(plot, plottables´...; plot.attributes..., hide = hideΣ, marker = squaremarker, kws..., Σkw...)
+                plotlattice!(plot, attr, plottables´...; hide = hideΣ, marker = squaremarker, kws..., Σkw...)
             end
         end
     end
@@ -551,7 +552,6 @@ parse_children(::Missing) = (NamedTuple(),)
 parse_children(p::Tuple) = p
 parse_children(p::NamedTuple) = (p,)
 parse_children(p::Attributes) = parse_children(NamedTuple(p))
-parse_children(p::Observable) = parse_children(p[])
 
 sanitize_selector(::Missing, lat) = Quantica.siteselector(; cells = Quantica.zerocell(lat))
 sanitize_selector(s::Quantica.SiteSelector, lat) = s
@@ -688,7 +688,7 @@ function plotbravais!(plot::PlotLattice, lat::Lattice{<:Any,E,L}, latslice) wher
     r0 = Point{E,Float32}(Quantica.mean(Quantica.sites(lat))) - 0.5 * vtot
     if !ishidden(:axes, plot)
         for (v, color) in zip(vs, (:red, :green, :blue))
-            arrows!(plot, [r0], [v]; color, inspectable = false)
+            arrows3d!(plot, [r0], [v]; color, inspectable = false, markerscale = 1)
         end
     end
     if !ishidden((:cell, :cells), plot) && L > 1
