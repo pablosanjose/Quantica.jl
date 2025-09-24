@@ -265,6 +265,22 @@ maybe_broadcast!(f, x) = (x .= f.(x); x)
 #endregion
 
 ############################################################################################
+# FastLapackInterface tools
+#   Uses a preallocated workspace. Functions adapted from LinearAlgebra.jl
+#region
+
+fast_hermitian_eigen!(ws, A; sortby::Union{Function,Nothing}=nothing) =
+    Eigen(LinearAlgebra.sorteig!(LAPACK.syevr!(ws, 'V', 'A', 'U', A, 0.0, 0.0, 0, 0, -1.0)..., sortby)...)
+
+function fast_complex_eigvals!(ws, A::StridedMatrix{T}, B::StridedMatrix{T}) where T<:LinearAlgebra.BlasComplex
+    alpha, beta, _, _ = LAPACK.ggev!(ws, 'N', 'N', A, B)
+    ws.β .= alpha ./ beta
+    return sort!(ws.β, by = real)
+end
+
+#endregion
+
+############################################################################################
 # SparseMatrixCSC tools
 # all merged_* functions assume matching structure of sparse matrices
 #region
