@@ -77,6 +77,7 @@ function foreach_cell(f, sel::AppliedSiteSelector)
         iter = BoxIterator(zerocell(lat))
         keepgoing = true        # will search until we find at least one
         for cell in iter
+            incells(cell, sel) || continue
             found = f(cell)
             if found || keepgoing
                 acceptcell!(iter, cell)
@@ -91,20 +92,20 @@ function foreach_cell(f, sel::AppliedSiteSelector)
     return nothing
 end
 
-
 function foreach_cell(f, sel::AppliedHopSelector)
     isnull(sel) && return nothing
     lat = lattice(sel)
     dcells_list = dcells(sel)
     if isempty(dcells_list) # no dcells specified
         iter = BoxIterator(zerocell(lat))
-        for dn in iter
-            found = f(dn)
-            found && acceptcell!(iter, dn)
+        for dcell in iter
+            indcells(dcell, sel) || continue
+            found = f(dcell)
+            found && acceptcell!(iter, dcell)
         end
     else
-        for dn in dcells_list
-            f(dn)
+        for dcell in dcells_list
+            f(dcell)
         end
     end
     return nothing

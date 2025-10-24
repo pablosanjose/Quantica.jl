@@ -204,6 +204,7 @@ struct AppliedSiteSelector{T,E,L}
     region::FunctionWrapper{Bool,Tuple{SVector{E,T}}}
     sublats::Vector{Int}
     cells::Vector{SVector{L,Int}}
+    cellsf::FunctionWrapper{Bool,Tuple{SVector{L,T}}} # Returns(true) if the original cells is not a function
     isnull::Bool    # if isnull, the selector selects nothing, regardless of other fields
 end
 
@@ -221,6 +222,7 @@ struct AppliedHopSelector{T,E,L}
     region::FunctionWrapper{Bool,Tuple{SVector{E,T},SVector{E,T}}}
     sublats::Vector{Pair{Int,Int}}
     dcells::Vector{SVector{L,Int}}
+    dcellsf::FunctionWrapper{Bool,Tuple{SVector{L,T}}}    # Returns(true) if the original dcells is not a function
     range::Tuple{T,T}
     includeonsite::Bool  # undocumented/internal: don't skip onsite
     isnull::Bool    # if isnull, the selector selects nothing, regardless of other fields
@@ -261,8 +263,8 @@ inregion((r, dr), s::AppliedHopSelector) = s.region(r, dr)
 insublats(n, s::AppliedSiteSelector) = isempty(s.sublats) || n in s.sublats
 insublats(npair::Pair, s::AppliedHopSelector) = isempty(s.sublats) || npair in s.sublats
 
-incells(cell, s::AppliedSiteSelector) = isempty(s.cells) || cell in s.cells
-indcells(dcell, s::AppliedHopSelector) = isempty(s.dcells) || dcell in s.dcells
+incells(cell, s::AppliedSiteSelector) = (isempty(s.cells) && s.cellsf(cell)) || cell in s.cells
+indcells(dcell, s::AppliedHopSelector) = (isempty(s.dcells) && s.dcellsf(dcell)) || dcell in s.dcells
 
 iswithinrange(dr, s::AppliedHopSelector) = iswithinrange(dr, s.range)
 iswithinrange(dr, (rmin, rmax)::Tuple{Real,Real}) =  ifelse(sign(rmin)*rmin^2 <= dr'dr <= rmax^2, true, false)

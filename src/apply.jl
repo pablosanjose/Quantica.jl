@@ -12,28 +12,28 @@
 apply(s::Union{SiteSelector,HopSelector}, l::LatticeSlice) = apply(s, parent(l), cells(l))
 
 function apply(s::SiteSelector, lat::Lattice{T,E,L}, cells...) where {T,E,L}
-    region = r -> applied_region(r, s.region)
+    region = applied_region(s.region)
     intsublats = recursive_apply(name -> sublatindex_or_zero(lat, name), s.sublats)
     sublats = recursive_push!(Int[], intsublats)
-    cells = recursive_push!(SVector{L,Int}[], sanitize_cells(s.cells, Val(L)), cells...)
+    cells, cellsf = applied_cells!(SVector{L,Int}[], sanitize_cells(s.cells, Val(L)), cells...)
     unique!(sort!(sublats))
     # we don't sort cells, in case we have received them as an explicit list
     unique!(cells)
-    # isnull: to distinguish in a type-stable way between s.cells === missing and no-selected-cells
-    # and the same for sublats
-    isnull = (s.cells !== missing && isempty(cells)) || (s.sublats !== missing && isempty(sublats))
-    return AppliedSiteSelector{T,E,L}(lat, region, sublats, cells, isnull)
+    # isnull: to distinguish in a type-stable way between s.cells::Union{Missing,Function}
+    # and no-selected-cells; and the same for sublats
+    isnull = isnull_sel(s.cells, cells) || isnull_sel(s.sublats, sublats)
+    return AppliedSiteSelector{T,E,L}(lat, region, sublats, cells, cellsf, isnull)
 end
 
 function apply(s::HopSelector, lat::Lattice{T,E,L}, cells...) where {T,E,L}
     rmin, rmax = sanitize_minmaxrange(s.range, lat)
     L > 0 && s.dcells === missing && rmax === missing &&
         throw(ErrorException("Tried to apply an infinite-range HopSelector on an unbounded lattice"))
-    sign = ifelse(s.adjoint, -1, 1)
-    region = (r, dr) -> applied_region((r, sign*dr), s.region)
+    flipdr = ifelse(s.adjoint, -1, 1)
+    region = applied_region(flipdr, s.region)
     intsublats = recursive_apply(names -> sublatindex_or_zero(lat, names), s.sublats)
     sublats = recursive_push!(Pair{Int,Int}[], intsublats)
-    dcells = recursive_push!(SVector{L,Int}[], sanitize_cells(s.dcells, Val(L)), cells...)
+    dcells, dcellsf = applied_cells!(SVector{L,Int}[], sanitize_cells(s.dcells, Val(L)), cells...)
     unique!(sublats)
     unique!(dcells)
     if s.adjoint
@@ -42,8 +42,8 @@ function apply(s::HopSelector, lat::Lattice{T,E,L}, cells...) where {T,E,L}
     end
     includeonsite = s.includeonsite
     # isnull: see above
-    isnull = (s.dcells !== missing && isempty(dcells)) || (s.sublats !== missing && isempty(sublats))
-    return AppliedHopSelector{T,E,L}(lat, region, sublats, dcells, (rmin, rmax), includeonsite, isnull)
+    isnull = isnull_sel(s.dcells, dcells) || isnull_sel(s.sublats, sublats)
+    return AppliedHopSelector{T,E,L}(lat, region, sublats, dcells, dcellsf, (rmin, rmax), includeonsite, isnull)
 end
 
 sublatindex_or_zero(lat, ::Missing) = missing
@@ -72,10 +72,23 @@ sanitize_cells(cells, ::Val{L}) where {L} = sanitize_SVector.(SVector{L,Int}, ce
 
 padrange(r::Real, m) = isfinite(r) ? float(r) + m * sqrt(eps(float(r))) : float(r)
 
-applied_region(r, ::Missing) = true
-applied_region((r, dr)::Tuple{SVector,SVector}, region::Function) =
-    ifelse(region(r, dr), true, false)
-applied_region(r::SVector, region::Function) = ifelse(region(r), true, false)
+applied_region(::Missing) = Returns(true)
+applied_region(region::Function) = r -> ifelse(region(r), true, false)
+applied_region(flipdr, ::Missing) = Returns(true)
+applied_region(flipdr, region::Function) = (r, dr) -> ifelse(region(r, flipdr*dr), true, false)
+
+# returns filled v::Vector, cellsf::Function (latter is Returns(true) by default)
+# if cells is a function, we return an empty v, and keep cellsf = cells for later evaluation
+applied_cells!(v, cells) = (recursive_push!(v, cells), Returns(true))
+applied_cells!(v, fcells::Function) = (v, fcells)
+applied_cells!(v, _, cells) = (copyto!(v, cells),  Returns(true))
+
+function applied_cells!(v, fcells::Function, cells)
+    for cell in cells
+        fcells(cell) && push!(v, cell)
+    end
+    return (v,  Returns(true))
+end
 
 recursive_apply(f, t::Tuple) = recursive_apply.(f, t)
 recursive_apply(f, t::AbstractVector) = recursive_apply.(f, t)
@@ -102,33 +115,6 @@ function recursive_push!(v::Vector{Pair{T,T}}, (xs, ys)::Pair) where {T}
     return v
 end
 
-# for cells::Function without list of cells
-function recursive_push!(v::Vector{SVector{L,Int}}, fcell::Function) where {L}
-    iter = BoxIterator(zero(SVector{L,Int}))
-    keepgoing = true
-    for cell in iter
-        found = fcell(cell)
-        if found || keepgoing
-            acceptcell!(iter, cell)
-            if found
-                push!(v, cell)
-                keepgoing = false
-            end
-        end
-    end
-    return v
-end
-
-# for cells::Function with a list of cells (from e.g. a LatticeSlice)
-function recursive_push!(v::Vector{SVector{L,Int}}, fcell::Function, cells) where {L}
-    for cell in cells
-        fcell(cell) && push!(v, cell)
-    end
-    return v
-end
-
-recursive_push!(v::Vector, f, cells) = recursive_push!(v, f)
-
 applyrange(ss::Tuple, h::AbstractHamiltonian) = applyrange.(ss, Ref(h))
 applyrange(s::Modifier, h::AbstractHamiltonian) = s
 applyrange(s::AppliedHoppingModifier, h::ParametricHamiltonian) =
@@ -137,6 +123,9 @@ applyrange(s::HopSelector, lat::Lattice) = hopselector(s; range = sanitize_minma
 
 applyrange(r::Neighbors, lat::Lattice) = nrange(Int(r), lat)
 applyrange(r::Real, lat::Lattice) = r
+
+isnull_sel(::Union{Missing,Function}, _) = false
+isnull_sel(_, list) = isempty(list)
 
 #endregion
 
