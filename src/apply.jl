@@ -11,21 +11,21 @@
 
 apply(s::Union{SiteSelector,HopSelector}, l::LatticeSlice) = apply(s, parent(l), cells(l))
 
-function apply(s::SiteSelector, lat::Lattice{T,E,L}, cells...) where {T,E,L}
+function apply(s::SiteSelector, lat::Lattice{T,E,L}, only_these_cells...) where {T,E,L}
     region = applied_region(s.region)
     intsublats = recursive_apply(name -> sublatindex_or_zero(lat, name), s.sublats)
     sublats = recursive_push!(Int[], intsublats)
-    cells, cellsf = applied_cells!(SVector{L,Int}[], sanitize_cells(s.cells, Val(L)), cells...)
+    cells, cellsf = applied_cells!(SVector{L,Int}[], sanitize_cells(s.cells, Val(L)), only_these_cells...)
     unique!(sort!(sublats))
     # we don't sort cells, in case we have received them as an explicit list
     unique!(cells)
     # isnull: to distinguish in a type-stable way between s.cells::Union{Missing,Function}
     # and no-selected-cells; and the same for sublats
-    isnull = isnull_sel(s.cells, cells) || isnull_sel(s.sublats, sublats)
+    isnull = isnull_sel(s.cells, cells, only_these_cells...) || isnull_sel(s.sublats, sublats)
     return AppliedSiteSelector{T,E,L}(lat, region, sublats, cells, cellsf, isnull)
 end
 
-function apply(s::HopSelector, lat::Lattice{T,E,L}, cells...) where {T,E,L}
+function apply(s::HopSelector, lat::Lattice{T,E,L}, only_these_cells...) where {T,E,L}
     rmin, rmax = sanitize_minmaxrange(s.range, lat)
     L > 0 && s.dcells === missing && rmax === missing &&
         throw(ErrorException("Tried to apply an infinite-range HopSelector on an unbounded lattice"))
@@ -33,7 +33,7 @@ function apply(s::HopSelector, lat::Lattice{T,E,L}, cells...) where {T,E,L}
     region = applied_region(flipdr, s.region)
     intsublats = recursive_apply(names -> sublatindex_or_zero(lat, names), s.sublats)
     sublats = recursive_push!(Pair{Int,Int}[], intsublats)
-    dcells, dcellsf = applied_cells!(SVector{L,Int}[], sanitize_cells(s.dcells, Val(L)), cells...)
+    dcells, dcellsf = applied_cells!(SVector{L,Int}[], sanitize_cells(s.dcells, Val(L)), only_these_cells...)
     unique!(sublats)
     unique!(dcells)
     if s.adjoint
@@ -42,7 +42,7 @@ function apply(s::HopSelector, lat::Lattice{T,E,L}, cells...) where {T,E,L}
     end
     includeonsite = s.includeonsite
     # isnull: see above
-    isnull = isnull_sel(s.dcells, dcells) || isnull_sel(s.sublats, sublats)
+    isnull = isnull_sel(s.dcells, dcells, only_these_cells...) || isnull_sel(s.sublats, sublats)
     return AppliedHopSelector{T,E,L}(lat, region, sublats, dcells, dcellsf, (rmin, rmax), includeonsite, isnull)
 end
 
@@ -81,7 +81,7 @@ applied_region(flipdr, region::Function) = (r, dr) -> ifelse(region(r, flipdr*dr
 # if cells is a function, we return an empty v, and keep cellsf = cells for later evaluation
 applied_cells!(v, cells) = (recursive_push!(v, cells), Returns(true))
 applied_cells!(v, fcells::Function) = (v, fcells)
-applied_cells!(v, _, cells) = (copyto!(v, cells),  Returns(true))
+applied_cells!(v, _, cells) = applied_cells!(v, Returns(true), cells)
 
 function applied_cells!(v, fcells::Function, cells)
     for cell in cells
@@ -125,7 +125,8 @@ applyrange(r::Neighbors, lat::Lattice) = nrange(Int(r), lat)
 applyrange(r::Real, lat::Lattice) = r
 
 isnull_sel(::Union{Missing,Function}, _) = false
-isnull_sel(_, list) = isempty(list)
+# If we have a specific list of cells to choose from, then null is always isempty(list)
+isnull_sel(_, list, only_these_cells...) = isempty(list)
 
 #endregion
 
