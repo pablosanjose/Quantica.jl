@@ -23,14 +23,14 @@ neighbors(n::Int, lat::Lattice) = nrange(n, lat)
 # Base.in constructors
 #region
 
-function Base.in((s, r)::Tuple{Int,SVector{E,T}}, sel::AppliedSiteSelector{T,E}) where {T,E}
-    return !isnull(sel) && inregion(r, sel) &&
+function Base.in((s, r, cell)::Tuple{Int,SVector{E,T}}, sel::AppliedSiteSelector{T,E}) where {T,E}
+    return !isnull(sel) && inregion((r,cell), sel) &&
            insublats(s, sel)
 end
 
 function Base.in((s, r, cell)::Tuple{Int,SVector{E,T},SVector{L,Int}}, sel::AppliedSiteSelector{T,E,L}) where {T,E,L}
     return !isnull(sel) && incells(cell, sel) &&
-           inregion(r, sel) &&
+           inregion((r, cell), sel) &&
            insublats(s, sel)
 end
 
@@ -55,7 +55,7 @@ function Base.in(((j, i), (sj, si), (r, dr), dcell)::Tuple{Pair, Pair,Tuple,SVec
             indcells(dcell, sel) &&
             insublats(sj => si, sel) &&
             iswithinrange(dr, sel) &&
-            inregion((r, dr), sel)
+            inregion((r, dr, dcell), sel)
 end
 
 isonsite((j, i), dn) = ifelse(i == j && iszero(dn), true, false)
@@ -118,7 +118,7 @@ function foreach_site(f, sel::AppliedSiteSelector, cell::SVector)
         is = siterange(lat, s)
         for i in is
             r = site(lat, i, cell)
-            inregion(r, sel) && f(s, i, r)
+            inregion((r, cell), sel) && f(s, i, r)
         end
     end
     return nothing
@@ -141,7 +141,7 @@ function foreach_hop(f, sel::AppliedHopSelector, kdtrees::Vector{<:KDTree}, ni::
                 r, dr = rdr(site(lat, j, nj) => site(lat, i, ni))
                 # Make sure we don't stop searching cells until we reach minimum range
                 isbelowrange(dr, sel) && (found = true)
-                if iswithinrange(dr, sel) && inregion((r, dr), sel)
+                if iswithinrange(dr, sel) && inregion((r, dr, ni), sel)
                     found = true
                     f((si, sj), (i, j), (r, dr))
                 end

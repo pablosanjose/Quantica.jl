@@ -120,6 +120,11 @@ end
     end
     # Unmatched sublattice (Issue #361)
     @test (LP.linear(; names = :C) |> onsite(1; sublats = :A)) isa Hamiltonian
+    # cell selector function with constraint
+    @test (LP.linear() |> supercell(2) |> hopping(1; range = 1)) |> nhoppings == 4
+    @test (LP.linear() |> supercell(2) |> hopping(1; range = 1, dcells = !iszero)) |> nhoppings == 2
+    @test LP.linear()[ region = RP.circle(1)] |> nsites == 3
+    @test LP.linear()[cells = !iszero, region = RP.circle(1)] |> nsites == 2
 end
 
 @testset "models" begin
