@@ -89,6 +89,7 @@ recursive_apply(f, (a,b)::Pair) = recursive_apply(f, a) => recursive_apply(f, b)
 recursive_apply(f, x) = f(x)
 
 recursive_push!(v::Vector, ::Missing) = v
+recursive_push!(v::Vector{S}, ::Tuple{}) where {S<:SVector} = v  # when cellcandidates = ()
 # if a selector is a Function, we cannot add anything specific without explicit search
 recursive_push!(v::Vector, ::Function) = v
 recursive_push!(v::Vector{T}, x::T) where {T} = push!(v, x)
