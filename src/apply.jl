@@ -24,7 +24,7 @@ function apply(s::SiteSelector, lat::Lattice{T,E,L}, cellcandidates...) where {T
     unique!(cells)
     # isnull: to distinguish in a type-stable way between s.cells === missing and no-selected-cells
     # and the same for sublats
-    isnull =  isnull_selector(s.cells, cells) && isnull_selector(s.sublats, sublats)
+    isnull =  isnull_selector(s.cells, cells) || isnull_selector(s.sublats, sublats)
     return AppliedSiteSelector{T,E,L}(lat, region, sublats, cells, isnull)
 end
 
@@ -45,7 +45,7 @@ function apply(s::HopSelector, lat::Lattice{T,E,L}, cellcandidates...) where {T,
     end
     includeonsite = s.includeonsite
     # isnull: see above
-    isnull = isnull_selector(s.dcells, dcells) && isnull_selector(s.sublats, sublats)
+    isnull = isnull_selector(s.dcells, dcells) || isnull_selector(s.sublats, sublats)
     return AppliedHopSelector{T,E,L}(lat, region, sublats, dcells, (rmin, rmax), includeonsite, isnull)
 end
 
