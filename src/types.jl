@@ -201,7 +201,7 @@ const SiteSelectorAll = SiteSelector{Missing,Missing,Missing}
 
 struct AppliedSiteSelector{T,E,L}
     lat::Lattice{T,E,L}
-    region::FunctionWrapper{Bool,Tuple{SVector{E,T}}}
+    region::FunctionWrapper{Bool,Tuple{SVector{E,T},SVector{L,Int}}}  # region(r, cell)
     sublats::Vector{Int}
     cells::Vector{SVector{L,Int}}
     isnull::Bool    # if isnull, the selector selects nothing, regardless of other fields
@@ -218,7 +218,7 @@ end
 
 struct AppliedHopSelector{T,E,L}
     lat::Lattice{T,E,L}
-    region::FunctionWrapper{Bool,Tuple{SVector{E,T},SVector{E,T}}}
+    region::FunctionWrapper{Bool,Tuple{SVector{E,T},SVector{E,T},SVector{L,Int}}} # region(r, dr, dcell)
     sublats::Vector{Pair{Int,Int}}
     dcells::Vector{SVector{L,Int}}
     range::Tuple{T,T}
@@ -255,8 +255,8 @@ hoprange(s::HopSelector) = s.range
 includeonsite(ap::AppliedHopSelector) = ap.includeonsite
 
 # if isempty(s.dcells) or isempty(s.sublats), none were specified, so we must accept any
-inregion(r, s::AppliedSiteSelector) = s.region(r)
-inregion((r, dr), s::AppliedHopSelector) = s.region(r, dr)
+inregion((r, dn), s::AppliedSiteSelector) = s.region(r, dn)
+inregion((r, dr, dn), s::AppliedHopSelector) = s.region(r, dr, dn)
 
 insublats(n, s::AppliedSiteSelector) = isempty(s.sublats) || n in s.sublats
 insublats(npair::Pair, s::AppliedHopSelector) = isempty(s.sublats) || npair in s.sublats
