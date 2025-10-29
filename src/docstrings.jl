@@ -1101,7 +1101,7 @@ HoppingModifier{ParametricFunction{3}}:
   Argument type     : spatial
   Parameters        : [:A]
 
-julia> LP.honeycomb() |> hamiltonian(model) |> supercell(10) |> hamiltonian(peierls)
+julia> LP.honeycomb() |> hamiltonian(model) |> supercell(10) |> peierls
 ParametricHamiltonian{Float64,2,2}: Parametric Hamiltonian on a 2D Lattice in 2D space
   Bloch harmonics  : 5
   Harmonic size    : 200 × 200
