@@ -19,7 +19,7 @@ jobs:
           - '1'
           - '1.10'
           # - 'pre'
-          - 'nightly'
+          # - 'nightly'
         os:
           - ubuntu-latest
           - macOS-latest
