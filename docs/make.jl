@@ -11,7 +11,7 @@ makedocs(;
     format=Documenter.HTML(;
         prettyurls=get(ENV, "CI", "false") == "true",
         canonical="https://pablosanjose.github.io/Quantica.jl",
-        assets=["assets/custom.css"],
+        assets=["assets/custom.css", "assets/QUDYMA_favicon.ico"],
         size_threshold_ignore = [
             "api.md"
         ]
