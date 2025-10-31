@@ -248,7 +248,7 @@ end
 call!(h::Hamiltonian; params...) = flat_sync!(h)  # mimic partial call!(p::ParametricHamiltonian; params...)
 call!(h::Hamiltonian, φ1::Number, φ2::Number, φs::Number...; params...) =
     argerror("To obtain the (flat) Bloch matrix of `h` use `h(ϕs)`, where `ϕs` is a collection of `L=$(latdim(lattice(h)))` Bloch phases")
-call!(h::Hamiltonian{T}, φs; params...) where {T} = flat_bloch!(h, sanitize_SVector(T, φs))
+call!(h::Hamiltonian{T}, φs, axis = missing; params...) where {T} = flat_bloch!(h, sanitize_SVector(T, φs), axis)
 call!(h::Hamiltonian{<:Any,<:Any,0}, ::Tuple{}; params...) = h[()]
 call!(h::Hamiltonian, ft::FrankenTuple) = call!(h, Tuple(ft))
 
@@ -271,7 +271,7 @@ function addblochs!(dst::SparseMatrixCSC, h::Hamiltonian, φs, axis)
     isvelocity = axis isa Integer
     for har in hars
         iszero(dcell(har)) && isvelocity && continue
-        e⁻ⁱᵠᵈⁿ = blochfactor(dcell(har), φs)
+        e⁻ⁱᵠᵈⁿ = blochfactor(dcell(har), φs, axis)
         isvelocity && (e⁻ⁱᵠᵈⁿ *= -im * dcell(har)[axis])
         merged_mul!(dst, matrix(har), e⁻ⁱᵠᵈⁿ, 1, 1)  # see tools.jl
     end
@@ -296,6 +296,9 @@ end
 blochfactor(dn, ::Missing) = 1
 blochfactor(dn, φ) = blochfactor(dn, sanitize_SVector(φ))
 blochfactor(dn, φ::AbstractVector) = cis(-dot(dn, φ))
+# returns e⁻ⁱᵠᵈⁿ or a ϕ-velocity derivative if an axis::Integer is given
+blochfactor(dn, φ, axis::Missing) = blochfactor(dn, φ)
+blochfactor(dn, φ, axis::Integer) = -im * dn[axis]*blochfactor(dn, φ)
 
 # ouput of a call!(h, ϕs)
 call!_output(h::Hamiltonian) = flat_unsafe(bloch(h))
@@ -308,9 +311,9 @@ call!_output(h::Hamiltonian{<:Any,<:Any,0}) = flat_unsafe(h[hybrid()])
 #region
 
 (p::ParametricHamiltonian)(; kw...) = copy(call!(p; kw...))
-(p::ParametricHamiltonian)(phis; kw...) = copy(call!(call!(p; kw...), phis))
+(p::ParametricHamiltonian)(phis, axis = missing; kw...) = copy(call!(call!(p; kw...), phis, axis))
 
-call!(p::ParametricHamiltonian, phi; kw...) = call!(call!(p; kw...), phi)
+call!(p::ParametricHamiltonian, phi, axis = missing; kw...) = call!(call!(p; kw...), phi, axis)
 call!(p::ParametricHamiltonian, ft::FrankenTuple) = call!(p, Tuple(ft); NamedTuple(ft)...)
 
 function call!(ph::ParametricHamiltonian; kw...)

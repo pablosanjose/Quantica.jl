@@ -33,7 +33,8 @@ export sublat, bravais_matrix, lattice, sites, supercell, hamiltonian,
        conductance, josephson, ldos, current, transmission, densitymatrix,
        OrbitalSliceArray, OrbitalSliceVector, OrbitalSliceMatrix, orbaxes, siteindexdict,
        serializer, serialize, serialize!, deserialize!, deserialize,
-       meanfield, zerofield
+       meanfield, zerofield,
+       berry_curvature
 
 export LatticePresets, LP, RegionPresets, RP, HamiltonianPresets, HP, ExternalPresets, EP
 export EigenSolvers, ES, GreenSolvers, GS

@@ -334,7 +334,8 @@ function Base.show(io::IO, b::Bandstructure)
 "$i  Subbands  : $(nsubbands(b))
 $i  Vertices  : $(nvertices(b))
 $i  Edges     : $(nedges(b))
-$i  Simplices : $(nsimplices(b))")
+$i  Simplices : $(nsimplices(b))
+$i  Metadata  : $(metadata_type(b))")
 end
 
 Base.summary(::Bandstructure{T,E,L}) where {T,E,L} =
