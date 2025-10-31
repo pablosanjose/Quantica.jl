@@ -1456,6 +1456,7 @@ subdiv(-π, π, 49)`.
 - `projectors::Bool`: whether to compute interpolating subspaces in each simplex (for use as GreenSolver). Default: `true`
 - `warn::Bool`: whether to emit warning when band dislocations are encountered. Default: `true`
 - `showprogress::Bool`: whether to show or not a progress bar. Default: `true`
+- `metadata`: a callable object that implements `metadata(xs, eigen::Eigen, rng::UnitRange) -> data` used to attach `data` to each band vertex at point `[xs..., ϵ]`, where `rng` denotes the interval of (possibly degenerate) energies in `eigen`. See also `berry_curvature` and `plotbands`. Default: `Returns(missing)`
 - `defects`: (experimental) a collection of extra points to add to the mesh, typically the location of topological band defects such as Dirac points, so that interpolation avoids creating dislocation defects in the bands. You need to also increase `patches` to repair the subband dislocations using the added defect vertices. Default: `()`
 - `patches::Integer`: (experimental) if a dislocation is encountered, attempt to patch it by searching for the defect recursively to a given order, or using the provided `defects` (preferred). Default: `0`
 
@@ -1492,6 +1493,12 @@ or a `:` (unconstrained along that dimension). For bands of an `L`-dimensional l
 `slice` will be padded to an `L+1`-long tuple with `:` if necessary. The result is a
 collection of of sliced `Subband`s.
 
+## Vertex metadata
+
+The `metadata` keyword allows to compute properties associated to band vertices that depend
+on the full spectrum at point `xs`. The prototipical example is `metadata =
+berry_curvature(h)`, were `h` is a 2D Hamiltonian.
+
 # Examples
 
 ```
@@ -1503,6 +1510,7 @@ Bandstructure{Float64,3,2}: 3D Bandstructure over a 2-dimensional parameter spac
   Vertices  : 5000
   Edges     : 14602
   Simplices : 9588
+  Metadata  : Missing
 
 julia> bands(h, phis, phis; mapping = (x, y) -> ftuple(0, x; t = y/2π))
 Bandstructure{Float64,3,2}: 3D Bandstructure over a 2-dimensional parameter space of type Float64
@@ -1510,6 +1518,7 @@ Bandstructure{Float64,3,2}: 3D Bandstructure over a 2-dimensional parameter spac
   Vertices  : 4950
   Edges     : 14553
   Simplices : 9604
+  Metadata  : Missing
 
 julia> bands(h(t = 1), subdiv((0, 2, 3), (20, 30)); mapping = (0, 2, 3) => (:Γ, :M, :K))
 Bandstructure{Float64,2,1}: 2D Bandstructure over a 1-dimensional parameter space of type Float64
@@ -1517,6 +1526,7 @@ Bandstructure{Float64,2,1}: 2D Bandstructure over a 1-dimensional parameter spac
   Vertices  : 97
   Edges     : 96
   Simplices : 96
+  Metadata  : Missing
 ```
 
 # See also

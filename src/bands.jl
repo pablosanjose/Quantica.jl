@@ -71,21 +71,23 @@ bands(h::AbstractHamiltonian{<:Any,<:Any,L}; kw...) where {L} =
 default_band_ticks(::Val{L}) where {L} = ntuple(Returns(subdiv(-π, π, 49)), Val(L))
 
 function bands(h::AbstractHamiltonian, mesh::Mesh{S};
-         solver = ES.LinearAlgebra(), transform = missing, mapping = missing, kw...) where {S<:SVector}
+         solver = ES.LinearAlgebra(), transform = missing, mapping = missing, metadata = Returns(missing), kw...) where {S<:SVector}
     mapping´ = sanitize_mapping(mapping, h)
     solvers = eigensolvers_thread_pool(solver, h, S, mapping´, transform)
     hf = apply_map(mapping´, h, S)
-    ss = subbands(hf, solvers, mesh; kw...)
+    mf = apply_map(mapping´, metadata, S)
+    ss = subbands(hf, mf, solvers, mesh; kw...)
     os = blockstructure(h)
     return Bandstructure(ss, solvers, os)
 end
 
 function bands(h::Function, mesh::Mesh{S};
-         solver = ES.LinearAlgebra(), transform = missing, mapping = missing, kw...) where {S<:SVector}
+         solver = ES.LinearAlgebra(), transform = missing, mapping = missing, metadata = Returns(missing), kw...) where {S<:SVector}
     mapping´ = sanitize_mapping(mapping, h)
     solvers = eigensolvers_thread_pool(solver, h, S, mapping´, transform)
     hf = apply_map(mapping´, h, S)
-    ss = subbands(hf, solvers, mesh; kw...)
+    mf = apply_map(mapping´, metadata, S)
+    ss = subbands(hf, mf, solvers, mesh; kw...)
     return ss
 end
 
@@ -99,11 +101,11 @@ end
 copy_if_hamiltonian(h::AbstractHamiltonian) = minimal_callsafe_copy(h)
 copy_if_hamiltonian(f) = f
 
-function subbands(hf, solvers, basemesh::Mesh{SVector{L,T}};
-         showprogress = true, defects = (), patches = 0, degtol = missing, split = true, warn = true, projectors = false, metadata = Returns(missing)) where {T,L}
+function subbands(hf, mf, solvers, basemesh::Mesh{SVector{L,T}};
+         showprogress = true, defects = (), patches = 0, degtol = missing, split = true, warn = true, projectors = false) where {T,L}
     defects´ = sanitize_Vector_of_SVectors(SVector{L,T}, defects)
     degtol´ = degtol isa Number ? degtol : sqrt(eps(real(T)))
-    subbands = subbands_precompilable(hf, solvers, basemesh, showprogress, defects´, patches, degtol´, split, warn, projectors, metadata)
+    subbands = subbands_precompilable(hf, mf, solvers, basemesh, showprogress, defects´, patches, degtol´, split, warn, projectors)
     return subbands
 end
 
@@ -121,12 +123,11 @@ sanitize_mapping((xs, nodes)::Pair, ::Val{L}) where {L} =
 sanitize_mapping((xs, nodes)::Pair{X,S}, ::Val{L}) where {N,L,T,X<:NTuple{N,Real},S<:NTuple{N,SVector{L,T}}} =
     polygonpath(xs, nodes)
 
-function subbands_precompilable(hf::FunctionWrapper, solvers::Vector{A}, basemesh::Mesh{SVector{L,T}},
-    showprogress, defects, patches, degtol, split, warn, projectors, metadata) where {T,L,A<:AppliedEigenSolver{T,L}}
+function subbands_precompilable(hf::FunctionWrapper, mf::FunctionWrapper{M}, solvers::Vector{A}, basemesh::Mesh{SVector{L,T}},
+    showprogress, defects, patches, degtol, split, warn, projectors) where {T,L,A<:AppliedEigenSolver{T,L},M}
 
     basemesh = copy(basemesh) # will become part of Band, possibly refined
     eigens = Vector{EigenComplex{T}}(undef, length(vertices(basemesh)))
-    M = metadata_type(metadata)
     bandverts = BandVertex{T,L+1,M}[]
     bandneighs = Vector{Int}[]
     bandneideg = similar(bandneighs)
@@ -134,9 +135,9 @@ function subbands_precompilable(hf::FunctionWrapper, solvers::Vector{A}, basemes
     crossed = NTuple{6,Int}[]
     frustrated = similar(crossed)
     subbands = Subband{T,L+1,M}[]
-    data = (; hf, solvers, basemesh, eigens, bandverts, bandneighs, bandneideg, coloffsets,
+    data = (; hf, mf, solvers, basemesh, eigens, bandverts, bandneighs, bandneideg, coloffsets,
               L, crossed, frustrated, subbands, defects, patches, showprogress, degtol,
-              split, warn, projectors, metadata)
+              split, warn, projectors)
 
     # Step 1 - Diagonalize:
     # Uses multiple SpectrumSolvers (one per Julia thread) to diagonalize h at each
@@ -297,7 +298,7 @@ function append_bands_column!(data, basevert, eigen)
             @warn "Encountered a highly degenerate point in bandstructure (deg = $deg), which will likely slow down the computation of projectors"
         state = orthonormalize!(view(states, :, rng))
         energy = mean(i -> energies[i], rng)
-        metadata = data.metadata(basevert, eigen, rng)
+        metadata = data.mf(basevert, eigen, rng)
         push!(data.bandverts, BandVertex(basevert, energy, state, metadata))
     end
     push!(data.coloffsets, length(data.bandverts))
@@ -823,7 +824,7 @@ metadata_type(_) = argerror("metadata of unknown type")
 #   Abelian and non-Abelian Berry curvature constructors for bands metadata
 #region
 
-struct BerryCurvatureAbelian{T,H<:Hamiltonian{T,<:Any,2}} <: BandMetadataGenerator{T}
+struct BerryCurvatureAbelian{T,H<:AbstractHamiltonian{T,<:Any,2}} <: BandMetadataGenerator{T}
     h::H
     ∂1h::SparseMatrixCSC{Complex{T},Int}
     ∂2h::SparseMatrixCSC{Complex{T},Int}
@@ -839,13 +840,11 @@ end
 
 ## API ##
 
-berry_curvature(h::Hamiltonian{<:Any,<:Any, 2}) = BerryCurvatureAbelian(h)
-berry_curvature(h::Hamiltonian) =
-    argerror("Berry curvature requires a 2D Hamiltonian, got $(latdim(h))D.")
-berry_curvature(::ParametricHamiltonian) =
-    argerror("Berry curvature requires a non-parametric Hamiltonian. Perhaps you meant `berry_curvature(h(; params...))`?")
+berry_curvature(h::AbstractHamiltonian{<:Any,<:Any, 2}) = BerryCurvatureAbelian(h)
+berry_curvature(h::AbstractHamiltonian) =
+    argerror("Berry curvature requires a 2D AbstractHamiltonian, got $(latdim(h))D.")
 
-function (B::BerryCurvatureAbelian{T})(ϕs, (energies, states), rng) where {T}
+function (B::BerryCurvatureAbelian{T})(ϕs, (energies, states), rng; params...) where {T}
     length(rng) == 1 ||
         argerror("BerryCurvatureAbelian can only be constructed for non-degenerate bands, found degeneracy $(length(rng)).")
     n = only(rng)

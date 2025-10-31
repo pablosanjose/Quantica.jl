@@ -250,7 +250,7 @@ call!(h::Hamiltonian, φ1::Number, φ2::Number, φs::Number...; params...) =
     argerror("To obtain the (flat) Bloch matrix of `h` use `h(ϕs)`, where `ϕs` is a collection of `L=$(latdim(lattice(h)))` Bloch phases")
 call!(h::Hamiltonian{T}, φs, axis = missing; params...) where {T} = flat_bloch!(h, sanitize_SVector(T, φs), axis)
 call!(h::Hamiltonian{<:Any,<:Any,0}, ::Tuple{}; params...) = h[()]
-call!(h::Hamiltonian, ft::FrankenTuple) = call!(h, Tuple(ft))
+call!(h::Hamiltonian, ft::FrankenTuple, axis = missing) = call!(h, Tuple(ft), axis)
 
 # shortcut (see call!_output further below)
 flat_bloch!(h::Hamiltonian{<:Any,<:Any,0}, ::SVector{0}, axis=missing) = h[()]
@@ -314,7 +314,7 @@ call!_output(h::Hamiltonian{<:Any,<:Any,0}) = flat_unsafe(h[hybrid()])
 (p::ParametricHamiltonian)(phis, axis = missing; kw...) = copy(call!(call!(p; kw...), phis, axis))
 
 call!(p::ParametricHamiltonian, phi, axis = missing; kw...) = call!(call!(p; kw...), phi, axis)
-call!(p::ParametricHamiltonian, ft::FrankenTuple) = call!(p, Tuple(ft); NamedTuple(ft)...)
+call!(p::ParametricHamiltonian, ft::FrankenTuple, axis = missing) = call!(p, Tuple(ft), axis; NamedTuple(ft)...)
 
 function call!(ph::ParametricHamiltonian; kw...)
     reset_to_parent!(ph)
