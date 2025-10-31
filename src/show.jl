@@ -334,7 +334,8 @@ function Base.show(io::IO, b::Bandstructure)
 "$i  Subbands  : $(nsubbands(b))
 $i  Vertices  : $(nvertices(b))
 $i  Edges     : $(nedges(b))
-$i  Simplices : $(nsimplices(b))")
+$i  Simplices : $(nsimplices(b))
+$i  Metadata  : $(metadata_type(b))")
 end
 
 Base.summary(::Bandstructure{T,E,L}) where {T,E,L} =
@@ -636,5 +637,19 @@ Base.summary(::MeanField{Q}) where {Q} =
     "MeanField{$Q} : builder of Hartree-Fock-Bogoliubov mean fields"
 
 nambustring(s) = isnambu(s) ? "true $(is_nambu_rotated(s) ? "(rotated basis)" : "")" : "false"
+
+#endregion
+
+############################################################################################
+# BerryCurvature
+#region
+
+function Base.show(io::IO, b::BerryCurvatureAbelian)
+    i = get(io, :indent, "")
+    print(io, i, summary(b))
+end
+
+Base.summary(::BerryCurvatureAbelian) =
+    "BerryCurvatureAbelian: Abelian Berry curvature generator of a 2D AbstractHamiltonian"
 
 #endregion

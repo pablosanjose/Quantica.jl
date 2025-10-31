@@ -63,4 +63,7 @@ end
     @test qplot(b, color = (psi, e, k) -> angle(psi[1] / psi[2]), colormap = :cyclic_mrybm_35_75_c68_n256, inspector = true) isa Figure
     cs = Makie.ColorScheme([colorant"red", colorant"black"])
     @test qplot(b, color = (psi, e, k) -> angle(psi[1] / psi[2]), colormap = cs, inspector = true) isa Figure
+    cs = Makie.ColorScheme([colorant"red", colorant"white", colorant"blue"])
+    b = bands(h(α = 0.05), range(0, 2pi, length=60), range(0, 2pi, length = 60); metadata = berry_curvature(h(α = 0.05)))
+    @test qplot(b, color = (psi, e, k, m) -> m, colormap = cs, inspector = true) isa Figure
 end

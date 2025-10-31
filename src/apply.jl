@@ -425,6 +425,19 @@ function apply_map(mapping, hf::Function, ::Type{S}) where {T,S<:SVector{<:Any,T
     return FunctionWrapper{SparseMatrixCSC{Complex{T},Int},Tuple{S}}(sfunc)
 end
 
+function apply_map(mapping, m::AbstractBandsMetadata{M}, ::Type{S}) where {M,T,S<:SVector{<:Any,T}}
+    function sfunc(φs, eigen, rng)
+        φs´ = apply_map(mapping, φs)    # can be a FrankenTuple
+        data = m(φs´, eigen, rng)
+        return data
+    end
+    return FunctionWrapper{M,Tuple{S,EigenComplex{T},UnitRange{Int}}}(sfunc)
+end
+
+# for the case of a metadata = Returns{Missing}
+apply_map(_, m::MissingBandMetadata, ::Type{S}) where {T,S<:SVector{<:Any,T}} =
+    FunctionWrapper{Missing,Tuple{S,EigenComplex{T},UnitRange{Int}}}(Returns(missing))
+
 #endregion
 
 ############################################################################################

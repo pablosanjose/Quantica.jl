@@ -134,7 +134,7 @@ end
 @testset "bandstructures/spectrum slices" begin
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(-1, range = 1/√3)) |> supercell(4)
     b = bands(h, subdiv(0, 2pi, 13), subdiv(0, 2pi, 15), showprogress = false)
-    @test b[(:, pi)] isa Vector{Quantica.Subband{Float64,2}}
+    @test b[(:, pi)] isa Vector{Quantica.Subband{Float64,2,Missing}}
     @test length(b[(pi,)]) == length(b[(pi, :)]) == length(b[(pi, :, :)]) == 1
     @test b[1] isa Quantica.Subband
     @test b[[1,end]] isa Vector{<:Quantica.Subband}
@@ -157,4 +157,16 @@ end
     @test Quantica.gap(h(U = 1)) ≈ 1
     @test Quantica.gap(h(U = 0.1)) ≈ 0.1
     @test Quantica.gap(h(U = 0.0)) ≈ 0.0
+end
+
+@testset "berry curvature" begin
+    SOC(dr) = ifelse(iseven(round(Int, atan(dr[2], dr[1])/(pi/3))), im, -im)
+    model = hopping(1) + @hopping((r, dr; α = 0) -> α * SOC(dr); sublats = :A => :A, range = 1) - @hopping((r, dr; α = 0) -> α * SOC(dr); sublats = :B => :B, range = 1)
+    h = LatticePresets.honeycomb(a0 = 1) |> hamiltonian(model)
+    bc = berry_curvature(h(α = 0.05))
+    chern = mean([bc(SA[ϕ1,ϕ2],1) for ϕ1 in range(0, 2pi, 101)[1:end-1], ϕ2 in range(0, 2pi, 101)[1:end-1]])/2π
+    @test chern ≈ -1
+    bc = berry_curvature(h)
+    chern = mean([bc(SA[ϕ1,ϕ2],2; α = 0.05) for ϕ1 in range(0, 2pi, 101)[1:end-1], ϕ2 in range(0, 2pi, 101)[1:end-1]])/2π
+    @test chern ≈ 1
 end

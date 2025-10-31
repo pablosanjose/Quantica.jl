@@ -1689,23 +1689,24 @@ struct AppliedEigenSolver{T<:AbstractFloat,L}
     solver::FunctionWrapper{EigenComplex{T},Tuple{SVector{L,T}}}
 end
 
-struct BandVertex{T<:AbstractFloat,E}
-    coordinates::SVector{E,Complex{T}}       # SVector(momentum..., energy)
+struct BandVertex{T,E,M}
+    coordinates::SVector{E,Complex{T}}    # SVector(momentum..., energy)
     states::MatrixView{Complex{T}}
+    metadata::M                           # any extra metadata(ϕs, eigen, state_index_range)
 end
 
 # Subband: an AbstractMesh with manifold_dimension (S-1) = embedding_dimension (E) - 1
 # and with interval search trees to allow slicing
 # CAUTION: "embedding" dimension E here refers to the Mesh object (unrelated to Lattice's E)
 #   unlike a Subband, a general Mesh can have S≠E, like a 1D curve (S=2) in  3D (E=3) space.
-struct Subband{T,E} <: AbstractMesh{BandVertex{T,E},E}  # we restrict S == E
-    mesh::Mesh{BandVertex{T,E},E}
+struct Subband{T,E,M} <: AbstractMesh{BandVertex{T,E,M},E}  # we restrict S == E
+    mesh::Mesh{BandVertex{T,E,M},E}
     trees::NTuple{E,IntervalTree{T,IntervalValue{T,Int}}} # for interval searches
     projstates::Dict{Tuple{Int,Int},Matrix{Complex{T}}} # (simpind, vind) => projected_states
 end
 
-struct Bandstructure{T,E,L,B} # E = L+1
-    subbands::Vector{Subband{T,E}}
+struct Bandstructure{T,E,L,B,M} # E = L+1
+    subbands::Vector{Subband{T,E,M}}
     solvers::Vector{AppliedEigenSolver{T,L}}  # one per Julia thread
     blockstruct::OrbitalBlockStructure{B}
 end
@@ -1722,11 +1723,12 @@ function Spectrum(ss::Vector{Subband{<:Any,1}}, os::OrbitalBlockStructure)
     return Spectrum(eigen, os)
 end
 
-BandVertex(ke::SVector{N}, s::MatrixView{Complex{T}}) where {N,T} =
-    BandVertex(SVector{N,Complex{T}}(ke), s)
-BandVertex(ke, s::Matrix) = BandVertex(ke, view(s, :, 1:size(s, 2)))
-BandVertex(k, e, s::Matrix) = BandVertex(k, e, view(s, :, 1:size(s, 2)))
-BandVertex(k, e, s::SubArray) = BandVertex(vcat(k, e), s)
+BandVertex(ke::SVector{N}, s::MatrixView{Complex{T}}, m) where {N,T} =
+    BandVertex(SVector{N,Complex{T}}(ke), s, m)
+BandVertex(ke, s::Matrix, m) = BandVertex(ke, view(s, :, 1:size(s, 2)), m)
+BandVertex(k, e, s::Matrix, m) = BandVertex(k, e, view(s, :, 1:size(s, 2)), m)
+BandVertex(k, e, s::SubArray, m) = BandVertex(vcat(k, e), s, m)
+
 
 Subband(verts::Vector{<:BandVertex{<:Any,E}}, neighs::Vector) where {E} =
     Subband(Mesh{E}(verts, neighs))
@@ -1743,7 +1745,7 @@ function Subband(mesh::Mesh{<:BandVertex{T}}, trees) where {T}
     return Subband(mesh, trees, projs)
 end
 
-function subband_trees(verts::Vector{BandVertex{T,E}}, simps) where {T,E}
+function subband_trees(verts::Vector{<:BandVertex{T,E}}, simps) where {T,E}
     trees = ntuple(Val(E)) do i
         list = [IntervalValue(shrinkright(extrema(j->coordinates(verts[j])[i], s))..., n)
                      for (n, s) in enumerate(simps)]
@@ -1800,6 +1802,8 @@ energy(v::BandVertex) = last(v.coordinates)
 base_coordinates(v::BandVertex) = SVector(Base.front(Tuple(coordinates(v))))
 
 states(v::BandVertex) = v.states
+
+metadata(v::BandVertex) = v.metadata
 
 degeneracy(v::BandVertex) = size(v.states, 2)
 

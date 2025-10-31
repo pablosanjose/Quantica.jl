@@ -32,6 +32,7 @@ Bandstructure{Float64,3,2}: 3D Bandstructure over a 2-dimensional parameter spac
   Vertices  : 720
   Edges     : 2016
   Simplices : 1296
+  Metadata  : Missing
 ```
 The first argument is the `AbstractHamiltonian`. Here it is defined on an `L=2` dimensional lattice. The subsequent arguments are collections of Bloch phases on each of the `L` axes of the Brillouin zone, whose direct product `ϕ₁points` ⊗ `ϕ₂points` defines our base mesh of `ϕᵢ` points. Here it is a uniform 19×19 grid. We can once more use `qplot` to visualize the bandstructure, or more precisely the band meshes:
 ```julia
@@ -94,6 +95,7 @@ Bandstructure{Float64,3,2}: 3D Bandstructure over a 2-dimensional parameter spac
   Vertices  : 249
   Edges     : 664
   Simplices : 416
+  Metadata  : Missing
 
 julia> qplot(b, nodedarken = 0.5, axis = (; aspect = (1,1,1), perspectiveness = 0.5, xlabel = "ϕ", ylabel = "t´/t", zlabel = "ϵ"), fancyaxis = false)
 ```
@@ -127,6 +129,7 @@ Bandstructure{Float64,3,2}: 3D Bandstructure over a 2-dimensional parameter spac
   Vertices  : 15376
   Edges     : 44152
   Simplices : 28696
+  Metadata  : Missing
 
 julia> qplot(b, hide = (:nodes, :wireframe))
 
@@ -145,6 +148,7 @@ Bandstructure{Float64,4,3}: 4D Bandstructure over a 3-dimensional parameter spac
   Vertices  : 68921
   Edges     : 462520
   Simplices : 384000
+  Metadata  : Missing
 
 julia> qplot(b[(:, :, :, 0.2)], hide = (:nodes, :wireframe))
 ```
@@ -154,3 +158,33 @@ julia> qplot(b[(:, :, :, 0.2)], hide = (:nodes, :wireframe))
 
 !!! warning "On simplex orientation of bandstructure slices"
     The above example showcases a current (cosmetic) limitation of the band slicing algorithm: it sometimes fails to align all faces of the resulting manifold to the same orientation. The dark and bright regions of the surface above reveals that approximately half of the faces in this case are facing inward and the rest outward.
+
+## Band metadata
+
+We can compute metadata associated to each vertex of a bandstructure. This is done with the `metadata` keyword of `bands`, which accepts a callable object `metadata = f` that implements the interface `f(xs..., eigen::Eigen, rng::UnitRange) -> data`. Here `xs..., ϵ` are the mesh coordinates of the vertex, `(ϵs, ψs) = eigen` is the full spectrum at point `xs`, and `rng` is a range of indices of `eigen`.
+
+This functionality is useful, for example, to compute the Berry curvature across a 2D bandstructure. The following example computes the Berry curvature of a gapped graphene model and colors the bands accordingly
+```julia
+julia> h = LP.honeycomb() |> onsite(0.5, sublats = :A) - onsite(0.5, sublats = :B) + hopping(1)
+Hamiltonian{Float64,2,2}: Hamiltonian on a 2D Lattice in 2D space
+  Bloch harmonics  : 5
+  Harmonic size    : 2 × 2
+  Orbitals         : [1, 1]
+  Element type     : scalar (ComplexF64)
+  Onsites          : 2
+  Hoppings         : 6
+  Coordination     : 3.0
+
+julia> b = bands(h; metadata = berry_curvature(h))  # here `h` needs to be a 2D non-parametric Hamiltonian.
+Bandstructure{Float64,3,2}: 3D Bandstructure over a 2-dimensional parameter space of type Float64
+  Subbands  : 2
+  Vertices  : 4802
+  Edges     : 14016
+  Simplices : 9216
+  Metadata  : Float64
+
+julia> qplot(b, color = (ψ,ϵ,k,m) -> m, hide = :wireframe, size = 0, colormap = :balance)
+```
+```@raw html
+<img src="../../assets/berry_curvature.png" alt="Berry curvature of a gapped graphene model" width="400" class="center"/>
+```

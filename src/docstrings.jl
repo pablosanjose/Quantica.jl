@@ -1456,6 +1456,7 @@ subdiv(-π, π, 49)`.
 - `projectors::Bool`: whether to compute interpolating subspaces in each simplex (for use as GreenSolver). Default: `true`
 - `warn::Bool`: whether to emit warning when band dislocations are encountered. Default: `true`
 - `showprogress::Bool`: whether to show or not a progress bar. Default: `true`
+- `metadata::AbstractBandsMetadata`: a callable object that implements `metadata(xs, eigen::Eigen, rng::UnitRange) -> data` used to attach `data` to each band vertex at point `[xs..., ϵ]`, where `rng` denotes the interval of (possibly degenerate) energies in `eigen`. See also `berry_curvature` and `plotbands`. Default: `missing`
 - `defects`: (experimental) a collection of extra points to add to the mesh, typically the location of topological band defects such as Dirac points, so that interpolation avoids creating dislocation defects in the bands. You need to also increase `patches` to repair the subband dislocations using the added defect vertices. Default: `()`
 - `patches::Integer`: (experimental) if a dislocation is encountered, attempt to patch it by searching for the defect recursively to a given order, or using the provided `defects` (preferred). Default: `0`
 
@@ -1492,6 +1493,13 @@ or a `:` (unconstrained along that dimension). For bands of an `L`-dimensional l
 `slice` will be padded to an `L+1`-long tuple with `:` if necessary. The result is a
 collection of of sliced `Subband`s.
 
+## Vertex metadata
+
+The `metadata` keyword allows to compute properties associated to band vertices that depend
+on the full spectrum at point `xs`. The prototipical example is `metadata =
+berry_curvature(h)`, where `h` is a 2D `AbstractHamiltonian``. The Berry curvature can then
+be visualized using `plotbands` shaders like `color = (ψ, ϵ, k, metadata) -> metadata`.
+
 # Examples
 
 ```
@@ -1503,6 +1511,7 @@ Bandstructure{Float64,3,2}: 3D Bandstructure over a 2-dimensional parameter spac
   Vertices  : 5000
   Edges     : 14602
   Simplices : 9588
+  Metadata  : Missing
 
 julia> bands(h, phis, phis; mapping = (x, y) -> ftuple(0, x; t = y/2π))
 Bandstructure{Float64,3,2}: 3D Bandstructure over a 2-dimensional parameter space of type Float64
@@ -1510,6 +1519,7 @@ Bandstructure{Float64,3,2}: 3D Bandstructure over a 2-dimensional parameter spac
   Vertices  : 4950
   Edges     : 14553
   Simplices : 9604
+  Metadata  : Missing
 
 julia> bands(h(t = 1), subdiv((0, 2, 3), (20, 30)); mapping = (0, 2, 3) => (:Γ, :M, :K))
 Bandstructure{Float64,2,1}: 2D Bandstructure over a 1-dimensional parameter space of type Float64
@@ -1517,10 +1527,11 @@ Bandstructure{Float64,2,1}: 2D Bandstructure over a 1-dimensional parameter spac
   Vertices  : 97
   Edges     : 96
   Simplices : 96
+  Metadata  : Missing
 ```
 
 # See also
-    `spectrum`, `subdiv`
+    `spectrum`, `subdiv`, `berry_curvature`
 """
 bands
 
@@ -2880,3 +2891,57 @@ true
 ```
 """
 σ
+
+"""
+    berry_curvature(h2D::AbstractHamiltonian)
+
+Build a `BerryCurvatureAbelian <: AbstractBandsMetadata` object that can be used to compute
+the Berry curvature of a 2D Hamiltonian `h2D`. It can also be passed to `bands` using the
+`metadata` kwarg. The Berry curvature is computed using a Kubo-like formula that does not
+involve numerical derivatives, but requires computing the full spectrum at each k-point.
+Currently, it also assumes non-degenerate bands, and will error otherwise. Non-Abelian
+generalizations will be added in the future.
+
+## Evaluation
+
+    bc(ϕs; params...)
+
+For `bc::BerryCurvatureAbelian`, compute the Berry curvature of the AbstractHamiltonian at
+the Bloch phases `ϕs::SVector` and for the specified `params`. The result is a vector of the
+Berry curvature of each subband at the specified `ϕs`. The normalization of the Berry
+curvature is such that its mean value over discretized Bloch phases `ϕ_i = range(0, 2π, N)`
+gives `2πC`, where `C` is the integer Chern number of the band.
+
+    bc(ϕs, i; params...)
+
+Like the above, but return only the Berry curvature of band `i`.
+
+# Examples
+```jldoctest
+julia> h = LP.honeycomb() |> @onsite((; m = 0.5) -> m, sublats = :A) - @onsite((; m = 0.5) -> m, sublats = :B) + hopping(1);
+
+julia> bc = berry_curvature(h);
+
+julia> bc(SA[2π/3, -2π/3]; m = 0.2)
+2-element Vector{Float64}:
+  427.366406832304
+ -427.366406832304
+
+julia> SOC(dr) = ifelse(iseven(round(Int, atan(dr[2], dr[1])/(pi/3))), im, -im);
+
+julia> model = hopping(1) + @hopping((r, dr; α = 0) -> α * SOC(dr); sublats = :A => :A, range = 1) - @hopping((r, dr; α = 0) -> α * SOC(dr); sublats = :B => :B, range = 1);
+
+julia> h = LatticePresets.honeycomb(a0 = 1) |> hamiltonian(model);
+
+julia> bc = berry_curvature(h(α = 0.05));
+
+julia> chern = mean([bc(SA[ϕ1,ϕ2],1) for ϕ1 in range(0, 2pi, 101)[1:end-1], ϕ2 in range(0, 2pi, 101)[1:end-1]])/2π;
+
+julia> round(chern, digits=8)
+-1.0
+```
+
+# See also
+    `bands`
+"""
+berry_curvature
