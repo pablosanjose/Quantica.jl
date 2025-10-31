@@ -11,7 +11,7 @@
         minmaxsize = (0, 6),
         nodesizefactor = 4,
         nodedarken = 0.0,
-        hide = ()   # :nodes, :bands, :wireframe
+        hide = ()   # :nodes, :bands, :wireframe, :simplices, :mesh
     )
 end
 
@@ -192,7 +192,7 @@ function plotmeshes!(plot, mp::MeshPrimitives{<:Any,3})
     transparency = has_transparencies(plot[:opacity][])
     if !ishidden((:bands, :subbands), plot)
         simps = simplices_matrix(mp)
-        if !ishidden((:wireframe, :simplices), plot)
+        if !ishidden((:wireframe, :mesh, :simplices), plot)
             color´ = darken.(mp.colors, plot[:nodedarken][])
             poly!(plot, mp.verts, simps; color = mp.colors, inspectable = false, transparency,
                  strokewidth = plot[:size][])
