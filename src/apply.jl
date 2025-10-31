@@ -435,8 +435,8 @@ function apply_map(mapping, m::BandMetadataGenerator{M}, ::Type{S}) where {M,T,S
 end
 
 # for the case of a metadata = Returns{Missing}
-apply_map(_, m::Returns{M}, ::Type{S}) where {M,T,S<:SVector{<:Any,T}} =
-    FunctionWrapper{M,Tuple{S,EigenComplex{T},UnitRange{Int}}}(m)
+apply_map(_, m::MissingBandMetadata, ::Type{S}) where {T,S<:SVector{<:Any,T}} =
+    FunctionWrapper{Missing,Tuple{S,EigenComplex{T},UnitRange{Int}}}(Returns{Missing})
 
 #endregion
 

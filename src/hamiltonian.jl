@@ -314,7 +314,7 @@ call!_output(h::Hamiltonian{<:Any,<:Any,0}) = flat_unsafe(h[hybrid()])
 (p::ParametricHamiltonian)(phis, axis = missing; kw...) = copy(call!(call!(p; kw...), phis, axis))
 
 call!(p::ParametricHamiltonian, phi, axis = missing; kw...) = call!(call!(p; kw...), phi, axis)
-call!(p::ParametricHamiltonian, ft::FrankenTuple, axis = missing) = call!(p, Tuple(ft), axis; NamedTuple(ft)...)
+call!(p::ParametricHamiltonian, ft::FrankenTuple, axis = missing) = call!(p, Tuple(ft)..., axis; NamedTuple(ft)...)
 
 function call!(ph::ParametricHamiltonian; kw...)
     reset_to_parent!(ph)

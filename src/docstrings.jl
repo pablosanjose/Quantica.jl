@@ -1456,7 +1456,7 @@ subdiv(-π, π, 49)`.
 - `projectors::Bool`: whether to compute interpolating subspaces in each simplex (for use as GreenSolver). Default: `true`
 - `warn::Bool`: whether to emit warning when band dislocations are encountered. Default: `true`
 - `showprogress::Bool`: whether to show or not a progress bar. Default: `true`
-- `metadata`: a callable object that implements `metadata(xs, eigen::Eigen, rng::UnitRange) -> data` used to attach `data` to each band vertex at point `[xs..., ϵ]`, where `rng` denotes the interval of (possibly degenerate) energies in `eigen`. See also `berry_curvature` and `plotbands`. Default: `Returns(missing)`
+- `metadata::BandMetadataGenerator`: a callable object that implements `metadata(xs, eigen::Eigen, rng::UnitRange) -> data` used to attach `data` to each band vertex at point `[xs..., ϵ]`, where `rng` denotes the interval of (possibly degenerate) energies in `eigen`. See also `berry_curvature` and `plotbands`. Default: `missing`
 - `defects`: (experimental) a collection of extra points to add to the mesh, typically the location of topological band defects such as Dirac points, so that interpolation avoids creating dislocation defects in the bands. You need to also increase `patches` to repair the subband dislocations using the added defect vertices. Default: `()`
 - `patches::Integer`: (experimental) if a dislocation is encountered, attempt to patch it by searching for the defect recursively to a given order, or using the provided `defects` (preferred). Default: `0`
 
@@ -1497,7 +1497,8 @@ collection of of sliced `Subband`s.
 
 The `metadata` keyword allows to compute properties associated to band vertices that depend
 on the full spectrum at point `xs`. The prototipical example is `metadata =
-berry_curvature(h)`, were `h` is a 2D Hamiltonian.
+berry_curvature(h)`, where `h` is a 2D AbstractHamiltonian. The Berry curvature can then be
+visualized using `plotbands` shaders like `color = (ψ, ϵ, k, metadata) -> metadata`.
 
 # Examples
 

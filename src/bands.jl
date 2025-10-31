@@ -71,22 +71,24 @@ bands(h::AbstractHamiltonian{<:Any,<:Any,L}; kw...) where {L} =
 default_band_ticks(::Val{L}) where {L} = ntuple(Returns(subdiv(-π, π, 49)), Val(L))
 
 function bands(h::AbstractHamiltonian, mesh::Mesh{S};
-         solver = ES.LinearAlgebra(), transform = missing, mapping = missing, metadata = Returns(missing), kw...) where {S<:SVector}
+         solver = ES.LinearAlgebra(), transform = missing, mapping = missing, metadata = missing, kw...) where {S<:SVector}
     mapping´ = sanitize_mapping(mapping, h)
+    metadata´ = BandMetadataGenerator(metadata)
     solvers = eigensolvers_thread_pool(solver, h, S, mapping´, transform)
     hf = apply_map(mapping´, h, S)
-    mf = apply_map(mapping´, metadata, S)
+    mf = apply_map(mapping´, metadata´, S)
     ss = subbands(hf, mf, solvers, mesh; kw...)
     os = blockstructure(h)
     return Bandstructure(ss, solvers, os)
 end
 
 function bands(h::Function, mesh::Mesh{S};
-         solver = ES.LinearAlgebra(), transform = missing, mapping = missing, metadata = Returns(missing), kw...) where {S<:SVector}
+         solver = ES.LinearAlgebra(), transform = missing, mapping = missing, metadata = missing, kw...) where {S<:SVector}
     mapping´ = sanitize_mapping(mapping, h)
+    metadata´ = BandMetadataGenerator(metadata)
     solvers = eigensolvers_thread_pool(solver, h, S, mapping´, transform)
     hf = apply_map(mapping´, h, S)
-    mf = apply_map(mapping´, metadata, S)
+    mf = apply_map(mapping´, metadata´, S)
     ss = subbands(hf, mf, solvers, mesh; kw...)
     return ss
 end
@@ -812,10 +814,16 @@ end
 
 abstract type BandMetadataGenerator{M} end
 
-metadata_type(::Returns{M}) where {M} = M
 metadata_type(::BandMetadataGenerator{M}) where {M} = M
 metadata_type(::Bandstructure{<:Any,<:Any,<:Any,<:Any,M}) where {M} = M
 metadata_type(_) = argerror("metadata of unknown type")
+
+struct MissingBandMetadata <: BandMetadataGenerator{Missing}
+end
+
+BandMetadataGenerator(::Missing) = MissingBandMetadata()
+BandMetadataGenerator(m::BandMetadataGenerator) = m
+BandMetadataGenerator(_) = argerror("metadata should be `missing` or a valid `BandMetadataGenerator` object")
 
 #endregion
 
