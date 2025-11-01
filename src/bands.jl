@@ -73,7 +73,7 @@ default_band_ticks(::Val{L}) where {L} = ntuple(Returns(subdiv(-π, π, 49)), Va
 function bands(h::AbstractHamiltonian, mesh::Mesh{S};
          solver = ES.LinearAlgebra(), transform = missing, mapping = missing, metadata = missing, kw...) where {S<:SVector}
     mapping´ = sanitize_mapping(mapping, h)
-    metadata´ = BandMetadataGenerator(metadata)
+    metadata´ = bands_metadata(metadata)
     solvers = eigensolvers_thread_pool(solver, h, S, mapping´, transform)
     hf = apply_map(mapping´, h, S)
     mf = apply_map(mapping´, metadata´, S)
@@ -85,7 +85,7 @@ end
 function bands(h::Function, mesh::Mesh{S};
          solver = ES.LinearAlgebra(), transform = missing, mapping = missing, metadata = missing, kw...) where {S<:SVector}
     mapping´ = sanitize_mapping(mapping, h)
-    metadata´ = BandMetadataGenerator(metadata)
+    metadata´ = bands_metadata(metadata)
     solvers = eigensolvers_thread_pool(solver, h, S, mapping´, transform)
     hf = apply_map(mapping´, h, S)
     mf = apply_map(mapping´, metadata´, S)
@@ -809,21 +809,21 @@ end
 #endregion
 
 ############################################################################################
-# BandMetadataGenerator
+# AbstractBandsMetadata
 #region
 
-abstract type BandMetadataGenerator{M} end
+abstract type AbstractBandsMetadata{M} end
 
-metadata_type(::BandMetadataGenerator{M}) where {M} = M
+metadata_type(::AbstractBandsMetadata{M}) where {M} = M
 metadata_type(::Bandstructure{<:Any,<:Any,<:Any,<:Any,M}) where {M} = M
 metadata_type(_) = argerror("metadata of unknown type")
 
-struct MissingBandMetadata <: BandMetadataGenerator{Missing}
+struct MissingBandMetadata <: AbstractBandsMetadata{Missing}
 end
 
-BandMetadataGenerator(::Missing) = MissingBandMetadata()
-BandMetadataGenerator(m::BandMetadataGenerator) = m
-BandMetadataGenerator(_) = argerror("metadata should be `missing` or a valid `BandMetadataGenerator` object")
+bands_metadata(::Missing) = MissingBandMetadata()
+bands_metadata(m::AbstractBandsMetadata) = m
+bands_metadata(_) = argerror("metadata should be `missing` or a valid `AbstractBandsMetadata` object")
 
 #endregion
 
@@ -832,7 +832,7 @@ BandMetadataGenerator(_) = argerror("metadata should be `missing` or a valid `Ba
 #   Abelian and non-Abelian Berry curvature constructors for bands metadata
 #region
 
-struct BerryCurvatureAbelian{T,H<:AbstractHamiltonian{T,<:Any,2}} <: BandMetadataGenerator{T}
+struct BerryCurvatureAbelian{T,H<:AbstractHamiltonian{T,<:Any,2}} <: AbstractBandsMetadata{T}
     h::H
     ∂1h::SparseMatrixCSC{Complex{T},Int}
     ∂2h::SparseMatrixCSC{Complex{T},Int}
@@ -867,10 +867,19 @@ function (B::BerryCurvatureAbelian{T})(ϕs, (energies, states), rng; params...) 
     for (em, ψm) in zip(energies, eachcol(states))
         em == en && continue
         denom = (en - em)^2
-        term = dot(∂1ψn, ψm) * dot(ψm, ∂2ψn) / denom
-        curvature += -2*imag(term)
+        term = 2im*dot(∂1ψn, ψm) * dot(ψm, ∂2ψn) / denom
+        curvature += real(term)
     end
     return curvature
 end
+
+(B::BerryCurvatureAbelian)(ϕs, i; params...) = B(ϕs, spectrum(B.h, ϕs; params...), i)
+
+function (B::BerryCurvatureAbelian)(ϕs; params...)
+    (ϵs, ψs) = spectrum(B.h, ϕs; params...)
+    return [B(ϕs, (ϵs, ψs), i) for i in eachindex(ϵs)]
+end
+
+
 
 #endregion

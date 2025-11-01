@@ -425,7 +425,7 @@ function apply_map(mapping, hf::Function, ::Type{S}) where {T,S<:SVector{<:Any,T
     return FunctionWrapper{SparseMatrixCSC{Complex{T},Int},Tuple{S}}(sfunc)
 end
 
-function apply_map(mapping, m::BandMetadataGenerator{M}, ::Type{S}) where {M,T,S<:SVector{<:Any,T}}
+function apply_map(mapping, m::AbstractBandsMetadata{M}, ::Type{S}) where {M,T,S<:SVector{<:Any,T}}
     function sfunc(φs, eigen, rng)
         φs´ = apply_map(mapping, φs)    # can be a FrankenTuple
         data = m(φs´, eigen, rng)

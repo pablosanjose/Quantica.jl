@@ -87,7 +87,7 @@ end
 
 check_arguments(_...) = nothing
 check_arguments(f::Function, vert) = applicable(f, ψϵkm(vert)...) ||
-    argerror("Functional shader with wrong number of arguments. If `m::BandMetadataGenerator` is not `missing`, the function must accept `ψ, ϵ, k, m` arguments, otherwise `ψ, ϵ, k`.")
+    argerror("Functional shader with wrong number of arguments. If `m::AbstractBandsMetadata` is not `missing`, the function must accept `ψ, ϵ, k, m` arguments, otherwise `ψ, ϵ, k`.")
 
 ψϵkm(vert::Quantica.BandVertex) = (Quantica.states(vert), Quantica.energy(vert),  Quantica.base_coordinates(vert), Quantica.metadata(vert))
 ψϵkm(vert::Quantica.BandVertex{<:Any,<:Any,Missing}) = (Quantica.states(vert), Quantica.energy(vert),  Quantica.base_coordinates(vert))
