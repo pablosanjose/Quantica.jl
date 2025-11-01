@@ -692,7 +692,7 @@ function plotbravais!(plot::PlotLattice, lat::Lattice{<:Any,E,L}, latslice) wher
         end
     end
     if !ishidden((:cell, :cells), plot) && L > 1
-        cellcolor = parse(RGBAf, plot[:cellcolor][])
+        cellcolor = maybe_parse_color(plot[:cellcolor][])
         colface = transparent(cellcolor, plot[:cellopacity][])
         coledge = transparent(cellcolor, 5 * plot[:cellopacity][])
         rect = Rect{L,Int}(Point{L,Int}(0), Point{L,Int}(1))
@@ -711,6 +711,9 @@ function plotbravais!(plot::PlotLattice, lat::Lattice{<:Any,E,L}, latslice) wher
 
     return plot
 end
+
+maybe_parse_color(c::Makie.Colorant) = c
+maybe_parse_color(c) = parse(RGBAf, c)
 
 #endregion
 

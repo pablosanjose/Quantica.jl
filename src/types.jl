@@ -1689,7 +1689,7 @@ struct AppliedEigenSolver{T<:AbstractFloat,L}
     solver::FunctionWrapper{EigenComplex{T},Tuple{SVector{L,T}}}
 end
 
-struct BandVertex{T<:AbstractFloat,E,M}
+struct BandVertex{T,E,M}
     coordinates::SVector{E,Complex{T}}    # SVector(momentum..., energy)
     states::MatrixView{Complex{T}}
     metadata::M                           # any extra metadata(ϕs, eigen, state_index_range)

@@ -134,7 +134,7 @@ end
 @testset "bandstructures/spectrum slices" begin
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(-1, range = 1/√3)) |> supercell(4)
     b = bands(h, subdiv(0, 2pi, 13), subdiv(0, 2pi, 15), showprogress = false)
-    @test b[(:, pi)] isa Vector{Quantica.Subband{Float64,2}}
+    @test b[(:, pi)] isa Vector{Quantica.Subband{Float64,2,Missing}}
     @test length(b[(pi,)]) == length(b[(pi, :)]) == length(b[(pi, :, :)]) == 1
     @test b[1] isa Quantica.Subband
     @test b[[1,end]] isa Vector{<:Quantica.Subband}
