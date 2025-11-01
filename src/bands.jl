@@ -731,7 +731,7 @@ slice_axes(dim::Int) = ()
 
 all_axes(::Subband{<:Any,E}) where {E} = ntuple(identity, Val(E))
 
-slice_vertex_type(::Subband{T,<:Any,M}, ::NTuple{N}) where {T,N,M} = BandVertex{T,N,M}
+slice_vertex_type(::Subband{T,<:Any}, ::NTuple{N}) where {T,N} = BandVertex{T,N,Missing}
 
 slice_skey_type(::NTuple{N}) where {N} = SVector{N+1,Int}
 
@@ -754,7 +754,7 @@ function slice_simplex!(data, simp)
             dvpar = edgemat[paraxes, :]
             kε = kε0[paraxes] + dvpar * λs
             φ = interpolate_state_along_edges(λs, vertices(data.subband), simp, sub)
-            push!(data.verts, BandVertex(kε, φ))
+            push!(data.verts, BandVertex(kε, φ, missing))
             push!(data.neighs, Int[])
             vind = length(data.verts)
             data.vinds[key] = vind
