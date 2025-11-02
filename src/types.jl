@@ -285,6 +285,8 @@ Base.NamedTuple(s::HopSelector) =
 
 ############################################################################################
 # MatrixElementTypes
+#   The SMatrixView type is a kind of SMatrix that pads the input matrix with zeros if its
+#   size is smaller than required.
 #region
 
 struct SMatrixView{N,M,T,NM}

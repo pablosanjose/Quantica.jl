@@ -830,53 +830,108 @@ bands_metadata(_) = argerror("metadata should be `missing` or a valid `AbstractB
 ############################################################################################
 # BerryCurvature
 #   Abelian and non-Abelian Berry curvature constructors for bands metadata
+#   Uses Eq. (1.13) in Xiao, Chang, and Niu. Rev. Mod. Phys. 82, 1959--2007 (2010).
 #region
 
-struct BerryCurvatureAbelian{T,H<:AbstractHamiltonian{T,<:Any,2}} <: AbstractBandsMetadata{T}
+struct BerryCurvature{M,T,H<:AbstractHamiltonian{T,<:Any,2}} <: AbstractBandsMetadata{M}
     h::H
     ∂1h::SparseMatrixCSC{Complex{T},Int}
     ∂2h::SparseMatrixCSC{Complex{T},Int}
-    tmp1::Vector{Complex{T}}
-    tmp2::Vector{Complex{T}}
+    ∂1hψn::Matrix{Complex{T}}
+    ∂2hψn::Matrix{Complex{T}}
+    ψn´∂1h´ψm::Vector{Complex{T}}
+    ψn´∂2h´ψm::Vector{Complex{T}}
+    result_type::Type{M}
 end
 
-function BerryCurvatureAbelian(h)
+BerryCurvature(h, maxdim) =
+    BerryCurvature(_berry_temporaries(h, maxdim)..., _berry_type(h, maxdim))
+
+function _berry_temporaries(h::AbstractHamiltonian{T}, maxdim) where {T}
+    maxdim´ = sanitize_maxdim(maxdim)
     ∂1h, ∂2h = h(SA[0,0], 1), h(SA[0,0], 2)
-    tmp = zeros(blockeltype(h), flatsize(h))
-    return BerryCurvatureAbelian(h, ∂1h, ∂2h, tmp, copy(tmp))
+    ∂1hψn = zeros(Complex{T}, flatsize(h), maxdim´)
+    ∂2hψn = copy(∂1hψn)
+    ψn´∂1h´ψm = zeros(Complex{T}, maxdim´)
+    ψn´∂2h´ψm = copy(ψn´∂1h´ψm)
+    return (h, ∂1h, ∂2h, ∂1hψn, ∂2hψn, ψn´∂1h´ψm, ψn´∂2h´ψm)
 end
+
+sanitize_maxdim(::Missing) = 1
+sanitize_maxdim(maxdim::Integer) = maxdim > 0 ? maxdim :
+    argerror("maxdim must be a positive integer, got $maxdim.")
+sanitize_maxdim(_) = argerror("maxdim must be a positive integer or `missing`.")
+
+_berry_type(::AbstractHamiltonian{T}, ::Missing) where {T} = T
+_berry_type(::AbstractHamiltonian{T}, maxdim) where {T} = Matrix{Complex{T}}
 
 ## API ##
 
-berry_curvature(h::AbstractHamiltonian{<:Any,<:Any, 2}) = BerryCurvatureAbelian(h)
-berry_curvature(h::AbstractHamiltonian) =
+berry_curvature(h::AbstractHamiltonian{<:Any,<:Any,2}; maxdim = missing) =
+    BerryCurvature(h, maxdim)
+
+berry_curvature(h::AbstractHamiltonian; kw...) =
     argerror("Berry curvature requires a 2D AbstractHamiltonian, got $(latdim(h))D.")
 
-function (B::BerryCurvatureAbelian{T})(ϕs, (energies, states), rng; params...) where {T}
-    length(rng) == 1 ||
-        argerror("BerryCurvatureAbelian can only be constructed for non-degenerate bands, found degeneracy $(length(rng)).")
-    n = only(rng)
-    ψn = view(states, :, n)
-    en = energies[n]
-    curvature = zero(T)
-    ∂1h, ∂2h = B.∂1h, B.∂2h
-    copy!(nonzeros(∂1h), nonzeros(call!(B.h, ϕs, 1; params...)))
-    copy!(nonzeros(∂2h), nonzeros(call!(B.h, ϕs, 2; params...)))
-    ∂1ψn = mul!(B.tmp1, ∂1h, ψn)
-    ∂2ψn = mul!(B.tmp2, ∂2h, ψn)
-    jacobian = (2π)^2
-    for (em, ψm) in zip(energies, eachcol(states))
-        em == en && continue
-        curvature += jacobian*real(2im*dot(∂1ψn, ψm) * dot(ψm, ∂2ψn) / (en - em)^2)
-    end
-    return curvature
-end
+(B::BerryCurvature)(ϕs, i; params...) = B(ϕs, spectrum(B.h, ϕs; params...), i; params...)
 
-(B::BerryCurvatureAbelian)(ϕs, i; params...) = B(ϕs, spectrum(B.h, ϕs; params...), i)
-
-function (B::BerryCurvatureAbelian)(ϕs; params...)
+function (B::BerryCurvature{<:Any,T})(ϕs; atol = sqrt(eps(real(T))), params...) where {T}
     (ϵs, ψs) = spectrum(B.h, ϕs; params...)
-    return [B(ϕs, (ϵs, ψs), i; params...) for i in eachindex(ϵs)]
+    return [B(ϕs, (ϵs, ψs), rng; params...) for rng in approxruns(ϵs, atol)]
 end
+
+(B::BerryCurvature)(ϕs, spectrum, i::Integer; params...) = B(ϕs, spectrum, i:i; params...)
+
+function (B::BerryCurvature{<:Any,T})(ϕs, (energies, states), rng::UnitRange; params...) where {T}
+    maxdim = size(B.ψn´∂1h´ψm, 1)
+    dim = length(rng)
+    dim <= maxdim ||
+        argerror("This `BerryCurvature` is built for maximum degeneracy $maxdim, got $(length(rng)).")
+    ψn = view(states, :, rng)
+    copy!(nonzeros(B.∂1h), nonzeros(call!(B.h, ϕs, 1; params...)))
+    copy!(nonzeros(B.∂2h), nonzeros(call!(B.h, ϕs, 2; params...)))
+    ∂1hψn, ∂2hψn = ∂xhψn(B, rng)
+    mul!(∂1hψn, B.∂1h, ψn)
+    mul!(∂2hψn, B.∂2h, ψn)
+    result = _berry_kubo(B, energies, states, rng)
+    return result
+end
+
+# Abelian case
+function _berry_kubo(B::BerryCurvature{M}, energies, states, rng) where {M<:AbstractFloat}
+    en = energies[only(rng)]
+    result = zero(M)
+    ∂1hψn, ∂2hψn = ∂xhψn(B, rng)
+    for (i, em) in enumerate(energies)
+        i in rng && continue
+        ψm = view(states, :, i)
+         # note: ∂1h' = -∂1h
+        result += real(-2im*dot(∂1hψn, ψm) * dot(ψm, ∂2hψn) / (em-en)^2)
+    end
+    result *= (2π)^2  # BZ jacobian
+    return result
+end
+
+# Non-Abelian
+function _berry_kubo(B::BerryCurvature{M}, energies, states, rng) where {T,M<:Matrix{Complex{T}}}
+    dim = length(rng)
+    en = mean(view(energies, rng))
+    result = zeros(Complex{T}, dim, dim)
+    ∂1hψn, ∂2hψn = ∂xhψn(B, rng)
+    ψn´∂1h´ψm, ψn´∂2h´ψm = ψn´∂xh´ψm(B, rng)
+    for (i, em) in enumerate(energies)
+        i in rng && continue
+        ψm = view(states, :, i)
+        mul!(ψn´∂1h´ψm, ∂1hψn', ψm)
+        mul!(ψn´∂2h´ψm, ∂2hψn', ψm)
+        mul!(result, ψn´∂1h´ψm, ψn´∂2h´ψm', -im/(en-em)^2, 1)        # note: ∂2h' = -∂2h
+    end
+    result .+= result'   # to account for the missing x <-> y term (Hermitian conjugate)
+    result .*= (2π)^2    # BZ jacobian
+    return result
+end
+
+∂xhψn(B::BerryCurvature, rng) = view(B.∂1hψn, :, 1:length(rng)), view(B.∂2hψn, :, 1:length(rng))
+ψn´∂xh´ψm(B::BerryCurvature, rng) = view(B.ψn´∂1h´ψm, 1:length(rng), :), view(B.ψn´∂2h´ψm, 1:length(rng), :)
 
 #endregion

@@ -558,7 +558,7 @@ these functions are
 # Examples
 
 ```jldoctest
-julia> h = LP.honeycomb() |> hamiltonian(hopping(1, range = neighbors(2), sublats = (:A, :B) .=> (:A, :B)))
+julia> h = LP.honeycomb() |> hopping(1, range = neighbors(2), sublats = (:A, :B) .=> (:A, :B))
 Hamiltonian{Float64,2,2}: Hamiltonian on a 2D Lattice in 2D space
   Bloch harmonics  : 7
   Harmonic size    : 2 × 2
@@ -568,7 +568,7 @@ Hamiltonian{Float64,2,2}: Hamiltonian on a 2D Lattice in 2D space
   Hoppings         : 12
   Coordination     : 6.0
 
-julia> h = LP.honeycomb() |> hamiltonian(hopping(1, range = (neighbors(2), neighbors(3)), sublats = (:A, :B) => (:A, :B)))
+julia> h = LP.honeycomb() |> hopping(1, range = (neighbors(2), neighbors(3)), sublats = (:A, :B) => (:A, :B))
 Hamiltonian{Float64,2,2}: Hamiltonian on a 2D Lattice in 2D space
   Bloch harmonics  : 9
   Harmonic size    : 2 × 2
@@ -835,7 +835,7 @@ TightbindingModel: model with 2 terms
     Cells             : any
     Coefficient       : 1
 
-julia> LP.honeycomb() |> supercell(2) |> hamiltonian(model)
+julia> LP.honeycomb() |> supercell(2) |> model
 Hamiltonian{Float64,2,2}: Hamiltonian on a 2D Lattice in 2D space
   Bloch harmonics  : 1
   Harmonic size    : 8 × 8
@@ -987,7 +987,7 @@ ParametricModel: model with 1 term
     Argument type     : spatial
     Parameters        : [:t, :A]
 
-julia> LP.honeycomb() |> supercell(2) |> hamiltonian(model)
+julia> LP.honeycomb() |> supercell(2) |> model
 ParametricHamiltonian{Float64,2,2}: Parametric Hamiltonian on a 2D Lattice in 2D space
   Bloch harmonics  : 5
   Harmonic size    : 8 × 8
@@ -1042,7 +1042,7 @@ OnsiteModifier{ParametricFunction{1}}:
   Argument type     : spatial
   Parameters        : [:W]
 
-julia> LP.honeycomb() |> hamiltonian(model) |> supercell(10) |> hamiltonian(disorder)
+julia> LP.honeycomb() |> model |> supercell(10) |> disorder
 ParametricHamiltonian{Float64,2,2}: Parametric Hamiltonian on a 2D Lattice in 2D space
   Bloch harmonics  : 1
   Harmonic size    : 200 × 200
@@ -1101,7 +1101,7 @@ HoppingModifier{ParametricFunction{3}}:
   Argument type     : spatial
   Parameters        : [:A]
 
-julia> LP.honeycomb() |> hamiltonian(model) |> supercell(10) |> peierls
+julia> LP.honeycomb() |> model |> supercell(10) |> peierls
 ParametricHamiltonian{Float64,2,2}: Parametric Hamiltonian on a 2D Lattice in 2D space
   Bloch harmonics  : 5
   Harmonic size    : 200 × 200
@@ -1503,7 +1503,7 @@ be visualized using `plotbands` shaders like `color = (ψ, ϵ, k, metadata) -> m
 # Examples
 
 ```
-julia> phis = range(0, 2pi, length = 50); h = LP.honeycomb() |> hamiltonian(@hopping((; t = 1) -> t));
+julia> phis = range(0, 2pi, length = 50); h = LP.honeycomb() |> @hopping((; t = 1) -> t);
 
 julia> bands(h(t = 1), phis, phis)
 Bandstructure{Float64,3,2}: 3D Bandstructure over a 2-dimensional parameter space of type Float64
@@ -1624,7 +1624,7 @@ Curried form equivalent to `attach(h, args...; sites...)`.
 ```jldoctest
 julia> # A graphene flake with two out-of-plane cubic-lattice leads
 
-julia> g1D = LP.cubic(names = :C) |> hamiltonian(hopping(1)) |> supercell((0,0,1), region = RP.square(4)) |> greenfunction(GS.Schur(boundary = 0));
+julia> g1D = LP.cubic(names = :C) |> hopping(1) |> supercell((0,0,1), region = RP.square(4)) |> greenfunction(GS.Schur(boundary = 0));
 
 julia> coupling = hopping(1, range = 2);
 
@@ -1741,7 +1741,7 @@ it may lead to unexpected aliasing
 
 # Example
 ```jldoctest
-julia> g = LP.honeycomb() |> hamiltonian(@hopping((; t = 1) -> t)) |> supercell(region = RP.circle(10)) |> greenfunction(GS.SparseLU())
+julia> g = LP.honeycomb() |> @hopping((; t = 1) -> t) |> supercell(region = RP.circle(10)) |> greenfunction(GS.SparseLU())
 GreenFunction{Float64,2,0}: Green function of a Hamiltonian{Float64,2,0}
   Solver          : AppliedSparseLUGreenSolver
   Contacts        : 0
@@ -2002,7 +2002,7 @@ Note: Evaluating the current density returns a `SparseMatrixCSC` currently, inst
 ```
 julia> # A semi-infinite 1D lead with a magnetic field `B`
 
-julia> g = LP.square() |> supercell((1,0), region = r->-2<r[2]<2) |> hamiltonian(@hopping((r, dr; B = 0.1) -> cis(B * dr' * SA[r[2],-r[1]]))) |> greenfunction(GS.Schur(boundary = 0));
+julia> g = LP.square() |> supercell((1,0), region = r->-2<r[2]<2) |> @hopping((r, dr; B = 0.1) -> cis(B * dr' * SA[r[2],-r[1]])) |> greenfunction(GS.Schur(boundary = 0));
 
 julia> J = current(g[cells = SA[1]])
 CurrentDensitySlice{Float64} : current density at a fixed location and arbitrary energy
@@ -2060,9 +2060,9 @@ Compute the conductance at the specified contacts.
 ```jldoctest
 julia> # A central system g0 with two 1D leads and transparent contacts
 
-julia> glead = LP.square() |> hamiltonian(hopping(1)) |> supercell((1,0), region = r->-2<r[2]<2) |> greenfunction(GS.Schur(boundary = 0));
+julia> glead = LP.square() |> hopping(1) |> supercell((1,0), region = r->-2<r[2]<2) |> greenfunction(GS.Schur(boundary = 0));
 
-julia> g0 = LP.square() |> hamiltonian(hopping(1)) |> supercell(region = r->-2<r[2]<2 && r[1]≈0) |> attach(glead, reverse = true) |> attach(glead) |> greenfunction;
+julia> g0 = LP.square() |> hopping(1) |> supercell(region = r->-2<r[2]<2 && r[1]≈0) |> attach(glead, reverse = true) |> attach(glead) |> greenfunction;
 
 julia> G = conductance(g0[1])
 Conductance{Float64}: Zero-temperature conductance dIᵢ/dVⱼ from contacts i,j, in units of e^2/h
@@ -2099,9 +2099,9 @@ Compute the transmission `Tᵢⱼ(ω)` at a given `ω` and for the specified `pa
 ```jldoctest
 julia> # A central system g0 with two 1D leads and transparent contacts
 
-julia> glead = LP.square() |> hamiltonian(hopping(1)) |> supercell((1,0), region = r->-2<r[2]<2) |> greenfunction(GS.Schur(boundary = 0));
+julia> glead = LP.square() |> hopping(1) |> supercell((1,0), region = r->-2<r[2]<2) |> greenfunction(GS.Schur(boundary = 0));
 
-julia> g0 = LP.square() |> hamiltonian(hopping(1)) |> supercell(region = r->-2<r[2]<2 && r[1]≈0) |> attach(glead, reverse = true) |> attach(glead) |> greenfunction;
+julia> g0 = LP.square() |> hopping(1) |> supercell(region = r->-2<r[2]<2 && r[1]≈0) |> attach(glead, reverse = true) |> attach(glead) |> greenfunction;
 
 julia> T = transmission(g0[2, 1])
 Transmission: total transmission between two different contacts
@@ -2893,28 +2893,35 @@ true
 σ
 
 """
-    berry_curvature(h2D::AbstractHamiltonian)
+    berry_curvature(h2D::AbstractHamiltonian; maxdim = missing)
 
-Build a `BerryCurvatureAbelian <: AbstractBandsMetadata` object that can be used to compute
-the Berry curvature of a 2D Hamiltonian `h2D`. It can also be passed to `bands` using the
-`metadata` kwarg. The Berry curvature is computed using a Kubo-like formula that does not
-involve numerical derivatives, but requires computing the full spectrum at each k-point.
-Currently, it also assumes non-degenerate bands, and will error otherwise. Non-Abelian
-generalizations will be added in the future.
+Build a `BerryCurvature <: AbstractBandsMetadata` object that can be used to compute the
+Abelian or non-Abelian Berry curvature of a 2D Hamiltonian `h2D`. It can also be passed to
+`bands` using the `metadata` kwarg. The Berry curvature is computed using a Kubo-like
+formula that does not involve numerical derivatives, but requires computing the full
+spectrum at each k-point.
+
+When not `missing`, the kwarg `maxdim` specifies the maximum dimension of degenerate
+subspaces for computing the non-Abelian Berry curvature.
 
 ## Evaluation
 
     bc(ϕs; params...)
 
-For `bc::BerryCurvatureAbelian`, compute the Berry curvature of the AbstractHamiltonian at
+For `bc::BerryCurvature`, compute the Berry curvature of the AbstractHamiltonian at
 the Bloch phases `ϕs::SVector` and for the specified `params`. The result is a vector of the
 Berry curvature of each subband at the specified `ϕs`. The normalization of the Berry
 curvature is such that its mean value over discretized Bloch phases `ϕ_i = range(0, 2π, N)`
 gives `2πC`, where `C` is the integer Chern number of the band.
 
-    bc(ϕs, i; params...)
+    bc(ϕs, i::Integer; params...)
 
-Like the above, but return only the Berry curvature of band `i`.
+Like the above, but return only the Abelian Berry curvature of band `i`.
+
+    bc(ϕs, rng::UnitRange; params...)
+
+Like the above, but return the non-Abelian Berry curvature of bands `i` in `rng`. This
+requires `maxdim >= length(rng)`.
 
 # Examples
 ```jldoctest
@@ -2924,21 +2931,27 @@ julia> bc = berry_curvature(h);
 
 julia> bc(SA[2π/3, -2π/3]; m = 0.2)
 2-element Vector{Float64}:
-  427.366406832304
  -427.366406832304
+  427.366406832304
+
+julia> bc = berry_curvature(h, maxdim = 2);
+
+julia> bc(SA[2π/3, -2π/3]; m = 0.0)  # non-Abelian case for degenerate Dirac point
+1-element Vector{Matrix{ComplexF64}}:
+ [0.0 + 0.0im 0.0 + 0.0im; 0.0 + 0.0im 0.0 + 0.0im]
 
 julia> SOC(dr) = ifelse(iseven(round(Int, atan(dr[2], dr[1])/(pi/3))), im, -im);
 
 julia> model = hopping(1) + @hopping((r, dr; α = 0) -> α * SOC(dr); sublats = :A => :A, range = 1) - @hopping((r, dr; α = 0) -> α * SOC(dr); sublats = :B => :B, range = 1);
 
-julia> h = LatticePresets.honeycomb(a0 = 1) |> hamiltonian(model);
+julia> h = LatticePresets.honeycomb(a0 = 1) |> model;
 
 julia> bc = berry_curvature(h(α = 0.05));
 
 julia> chern = mean([bc(SA[ϕ1,ϕ2],1) for ϕ1 in range(0, 2pi, 101)[1:end-1], ϕ2 in range(0, 2pi, 101)[1:end-1]])/2π;
 
 julia> round(chern, digits=8)
--1.0
+1.0
 ```
 
 # See also

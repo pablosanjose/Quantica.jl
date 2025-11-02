@@ -161,9 +161,7 @@ julia> qplot(b[(:, :, :, 0.2)], hide = (:nodes, :wireframe))
 
 ## Band metadata
 
-We can compute metadata associated to each vertex of a bandstructure. This is done with the `metadata` keyword of `bands`, which accepts a callable object `metadata = f` that implements the interface `f(xs..., eigen::Eigen, rng::UnitRange) -> data`. Here `xs..., ϵ` are the mesh coordinates of the vertex, `(ϵs, ψs) = eigen` is the full spectrum at point `xs`, and `rng` is a range of indices of `eigen`.
-
-This functionality is useful, for example, to compute the Berry curvature across a 2D bandstructure. The following example computes the Berry curvature of a gapped graphene model and colors the bands accordingly
+We can compute metadata associated to each vertex of a bandstructure. This is done with the `metadata` keyword of `bands`, which accepts a callable object of a `AbstractBandsMetadata` subtype. Currently we have `m = berry_curvature(h)` as a possible metadata object. It computes the (Abelian or non-Abelian) Berry curvature of the subbands of a 2D `h::AbstractHamiltonian` at given Bloch phases `φs` with `m(φs [, subband_indices])`.  The following example computes the Abelian Berry curvature of a gapped graphene model and colors the bands accordingly
 ```julia
 julia> h = LP.honeycomb() |> onsite(0.5, sublats = :A) - onsite(0.5, sublats = :B) + hopping(1)
 Hamiltonian{Float64,2,2}: Hamiltonian on a 2D Lattice in 2D space
@@ -175,7 +173,15 @@ Hamiltonian{Float64,2,2}: Hamiltonian on a 2D Lattice in 2D space
   Hoppings         : 6
   Coordination     : 3.0
 
-julia> b = bands(h; metadata = berry_curvature(h))  # here `h` needs to be a 2D non-parametric Hamiltonian.
+julia> m = berry_curvature(h)
+BerryCurvature: Abelian Berry curvature generator of a 2D AbstractHamiltonian
+
+julia> m(SA[2π/3,4π/3])
+2-element Vector{Float64}:
+  68.37862509316868
+ -68.37862509316868
+
+julia> b = bands(h; metadata = m)  # here `h` needs to be a 2D non-parametric Hamiltonian.
 Bandstructure{Float64,3,2}: 3D Bandstructure over a 2-dimensional parameter space of type Float64
   Subbands  : 2
   Vertices  : 4802
@@ -188,3 +194,6 @@ julia> qplot(b, color = (ψ,ϵ,k,m) -> m, hide = :wireframe, size = 0, colormap 
 ```@raw html
 <img src="../../assets/berry_curvature.png" alt="Berry curvature of a gapped graphene model" width="400" class="center"/>
 ```
+
+!!! tip "Non-abelian Berry curvature"
+    The `berry_curvature` metadata generator can also compute the non-Abelian Berry curvature of at most `d`-degenerate subspaces with the syntax `bc = berry_curvature(h; maxdim = d)`. The non-Abelian Berry curvature of states with indices in `rng::UnitRange` are computed with `bc(φs, rng)`. This returns a `Matrix` of size `length(rng)`×`length(rng)`. This requires `length(rng)<=d`.

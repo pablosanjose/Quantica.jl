@@ -644,12 +644,12 @@ nambustring(s) = isnambu(s) ? "true $(is_nambu_rotated(s) ? "(rotated basis)" : 
 # BerryCurvature
 #region
 
-function Base.show(io::IO, b::BerryCurvatureAbelian)
+function Base.show(io::IO, b::BerryCurvature)
     i = get(io, :indent, "")
     print(io, i, summary(b))
 end
 
-Base.summary(::BerryCurvatureAbelian) =
-    "BerryCurvatureAbelian: Abelian Berry curvature generator of a 2D AbstractHamiltonian"
+Base.summary(::BerryCurvature) =
+    "BerryCurvature: Abelian Berry curvature generator of a 2D AbstractHamiltonian"
 
 #endregion
