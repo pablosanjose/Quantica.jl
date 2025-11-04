@@ -873,6 +873,8 @@ berry_curvature(h::AbstractHamiltonian{<:Any,<:Any,2}; maxdim = missing) =
 berry_curvature(h::AbstractHamiltonian; kw...) =
     argerror("Berry curvature requires a 2D AbstractHamiltonian, got $(latdim(h))D.")
 
+maxdim(B::BerryCurvature) = size(B.ψn´∂1h´ψm, 1)
+
 (B::BerryCurvature)(ϕs, i; params...) = B(ϕs, spectrum(B.h, ϕs; params...), i; params...)
 
 function (B::BerryCurvature{<:Any,T})(ϕs; atol = sqrt(eps(real(T))), params...) where {T}
@@ -883,10 +885,10 @@ end
 (B::BerryCurvature)(ϕs, spectrum, i::Integer; params...) = B(ϕs, spectrum, i:i; params...)
 
 function (B::BerryCurvature{<:Any,T})(ϕs, (energies, states), rng::UnitRange; params...) where {T}
-    maxdim = size(B.ψn´∂1h´ψm, 1)
+    mdim = maxdim(B)
     dim = length(rng)
-    dim <= maxdim ||
-        argerror("This `BerryCurvature` is built for maximum degeneracy $maxdim, got $(length(rng)).")
+    dim <= mdim ||
+        argerror("This `BerryCurvature` is built for maximum degeneracy $mdim, got $(length(rng)).")
     ψn = view(states, :, rng)
     copy!(nonzeros(B.∂1h), nonzeros(call!(B.h, ϕs, 1; params...)))
     copy!(nonzeros(B.∂2h), nonzeros(call!(B.h, ϕs, 2; params...)))

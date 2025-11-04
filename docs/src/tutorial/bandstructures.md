@@ -174,7 +174,7 @@ Hamiltonian{Float64,2,2}: Hamiltonian on a 2D Lattice in 2D space
   Coordination     : 3.0
 
 julia> m = berry_curvature(h)
-BerryCurvature: Abelian Berry curvature generator of a 2D AbstractHamiltonian
+BerryCurvature: Abelian Berry curvature of a 2D AbstractHamiltonian
 
 julia> m(SA[2π/3,4π/3])
 2-element Vector{Float64}:

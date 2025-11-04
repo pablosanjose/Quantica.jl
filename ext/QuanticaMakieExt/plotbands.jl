@@ -121,8 +121,10 @@ push_subbandsize!(mp, size::Function, vert, s) = push!(mp.sizes, size(ψϵkm(ver
 push_subbandsize!(mp, size, vert, s) = argerror("Unrecognized size")
 
 push_subbandtooltip!(mp, vert, s, iv) = push_subbandtooltip!(mp, ψϵkm(vert), s, iv)
-push_subbandtooltip!(mp, (ψ, ϵ, k, _...)::Tuple, s, iv) =
+push_subbandtooltip!(mp, (ψ, ϵ, k)::NTuple{3,Any}, s, iv) =
     push!(mp.tooltips, "Subband $s, vertex $iv:\n k = $k\n ϵ = $ϵ\n degeneracy = $(size(ψ, 2))")
+push_subbandtooltip!(mp, (ψ, ϵ, k, m)::NTuple{4,Any}, s, iv) =
+    push!(mp.tooltips, "Subband $s, vertex $iv:\n k = $k\n ϵ = $ϵ\n degeneracy = $(size(ψ, 2))\n metadata = $m")
 
 ## update_color! ##
 

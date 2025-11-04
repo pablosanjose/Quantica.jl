@@ -649,7 +649,10 @@ function Base.show(io::IO, b::BerryCurvature)
     print(io, i, summary(b))
 end
 
-Base.summary(::BerryCurvature) =
-    "BerryCurvature: Abelian Berry curvature generator of a 2D AbstractHamiltonian"
+Base.summary(::BerryCurvature{<:Number}) =
+    "BerryCurvature: Abelian Berry curvature of a 2D AbstractHamiltonian"
+
+Base.summary(B::BerryCurvature) =
+    "BerryCurvature: Non-Abelian Berry curvature of a 2D AbstractHamiltonian, with maximum dimension $(maxdim(B))"
 
 #endregion

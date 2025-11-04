@@ -169,4 +169,9 @@ end
     bc = berry_curvature(h)
     chern = mean([bc(SA[ϕ1,ϕ2],2; α = 0.05) for ϕ1 in range(0, 2pi, 101)[1:end-1], ϕ2 in range(0, 2pi, 101)[1:end-1]])/2π
     @test chern ≈ -1
+    # Non-Abelian case
+    h2 = h |> supercell(2)
+    bc = berry_curvature(h, maxdim = 3)
+    @test length(bc(SA[2π/3, -2π/3]; α = 0.0)) == 3
+    @test isapprox(bc(SA[2π/3, -2π/3], 4:5; α = 0.0), [0 0; 0 0]; atol = 1e-8)
 end
