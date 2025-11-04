@@ -171,7 +171,7 @@ end
     @test chern ≈ -1
     # Non-Abelian case
     h2 = h |> supercell(2)
-    bc = berry_curvature(h, maxdim = 3)
+    bc = berry_curvature(h2, maxdim = 3)
     @test length(bc(SA[2π/3, -2π/3]; α = 0.0)) == 3
     @test isapprox(bc(SA[2π/3, -2π/3], 4:5; α = 0.0), [0 0; 0 0]; atol = 1e-8)
 end
