@@ -2796,9 +2796,10 @@ case, the corresponding `selector_hartree` and/or `selector_fock` will be ignore
 
 Build an `Φ::CompressedOrbitalMatrix`, which is a special form of `OrbitalSliceMatrix` that
 can be indexed at pairs of individual sites, e.g. `ϕ[sites(2), sites(1)]` to return an
-`SMatrix`. This type of matrix is less flexible than `OrbitalSliceMatrix` but is fully
-static, and can encode symmetries. Its features are implementation details and are bound to
-change. The returned `Φ` is just meant to be used in non-spatial models, see Examples below.
+`SMatrix`. This `CompressedOrbitalMatrix` is less flexible than `OrbitalSliceMatrix` but is
+fully static, and can encode symmetries. Its features are implementation details and are
+bound to change. The returned `Φ` is just meant to be used in non-spatial models, see
+Examples below.
 
 # Examples
 
