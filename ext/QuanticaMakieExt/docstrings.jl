@@ -139,7 +139,7 @@ subbands or subband slices (e.g. `ss = b[1:4]` or `ss = b[(:,0,:)]`).
 
 ## Shaders
 The element properties in the list above that accept band shaders may take either of these options
-- `(ψ, ϵ, ϕs) -> Real`: a real function of the eigenstates `ψ::Matrix` in the subband, eigenenergy `ϵ`, and Bloch phases `ϕs::SVector`.
+- `(ψ, ϵ, ϕs[, metadata]) -> Real`: a real function of the eigenstates `ψ::Matrix` in the subband, eigenenergy `ϵ`, and Bloch phases `ϕs::SVector`. If `metadata` was computed, it will be passed as a fourth argument.
 
 """
 plotbands
