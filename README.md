@@ -35,7 +35,7 @@ julia> SOC(dr) = ifelse(iseven(round(Int, atan(dr[2], dr[1])/(pi/3))), im, -im);
 
 julia> model = hopping(1, range = 1/√3) + @hopping((r, dr; α = 0) -> α * SOC(dr); sublats = :A => :A, range = 1) - @hopping((r, dr; α = 0) -> α * SOC(dr); sublats = :B => :B, range = 1);
 
-julia> h = LatticePresets.honeycomb(a0 = 1) |> hamiltonian(model)
+julia> h = LatticePresets.honeycomb(a0 = 1) |> model
 ParametricHamiltonian{Float64,2,2}: Parametric Hamiltonian on a 2D Lattice in 2D space
   Bloch harmonics  : 7
   Harmonic size    : 2 × 2

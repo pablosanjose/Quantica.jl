@@ -11,7 +11,7 @@
         minmaxsize = (0, 6),
         nodesizefactor = 4,
         nodedarken = 0.0,
-        hide = ()   # :nodes, :bands, :wireframe
+        hide = ()   # :nodes, :bands, :wireframe, :simplices, :mesh
     )
 end
 
@@ -74,18 +74,23 @@ function bandprimitives!(mp, mesh, s, (hue, opacity, size))
     offset = length(mp.verts)
     append!(mp.simps, offset .+ reinterpret(Int, Quantica.simplices(mesh)))
     for (ivert, vert) in enumerate(Quantica.vertices(mesh))
-        ψ = Quantica.states(vert)
+        ivert == 1 && check_arguments.((hue, opacity, size), Ref(vert))
         kϵ = Quantica.coordinates(vert)
-        k = Quantica.base_coordinates(vert)
-        ϵ = Quantica.energy(vert)
         push!(mp.verts, kϵ)
-        push_subbandhue!(mp, hue, ψ, ϵ, k, s)
-        push_subbandopacity!(mp, opacity, ψ, ϵ, k, s)
-        push_subbandsize!(mp, size, ψ, ϵ, k, s)
-        push_subbandtooltip!(mp, ψ, ϵ, k, s, ivert)
+        push_subbandhue!(mp, hue, vert, s)
+        push_subbandopacity!(mp, opacity, vert, s)
+        push_subbandsize!(mp, size, vert, s)
+        push_subbandtooltip!(mp, vert, s, ivert)
     end
     return mp
 end
+
+check_arguments(_...) = nothing
+check_arguments(f::Function, vert) = applicable(f, ψϵkm(vert)...) ||
+    argerror("Functional shader with wrong number of arguments. If `m::AbstractBandsMetadata` is not `missing`, the function must accept `ψ, ϵ, k, m` arguments, otherwise `ψ, ϵ, k`.")
+
+ψϵkm(vert::Quantica.BandVertex) = (Quantica.states(vert), Quantica.energy(vert),  Quantica.base_coordinates(vert), Quantica.metadata(vert))
+ψϵkm(vert::Quantica.BandVertex{<:Any,<:Any,Missing}) = (Quantica.states(vert), Quantica.energy(vert),  Quantica.base_coordinates(vert))
 
 #endregion
 
@@ -100,23 +105,26 @@ simplices_matrix(mp::MeshPrimitives{<:Any,S}) where {S} = reshape(mp.simps, S, l
 
 ## push! ##
 
-push_subbandhue!(mp, ::Missing, ψ, ϵ, k, s) = push!(mp.hues, s)
-push_subbandhue!(mp, hue::Real, ψ, ϵ, k, s) = push!(mp.hues, hue)
-push_subbandhue!(mp, hue::Function, ψ, ϵ, k, s) = push!(mp.hues, hue(ψ, ϵ, k))
-push_subbandhue!(mp, ::Symbol, ψ, ϵ, k, s) = push!(mp.hues, 0f0)
-push_subbandhue!(mp, ::Makie.Colorant, ψ, ϵ, k, s) = push!(mp.hues, 0f0)
-push_subbandhue!(mp, hue, ψ, ϵ, k, s) = argerror("Unrecognized color")
+push_subbandhue!(mp, ::Missing, vert, s) = push!(mp.hues, s)
+push_subbandhue!(mp, hue::Real, vert, s) = push!(mp.hues, hue)
+push_subbandhue!(mp, hue::Function, vert, s) = push!(mp.hues, hue(ψϵkm(vert)...))
+push_subbandhue!(mp, ::Symbol, vert, s) = push!(mp.hues, 0f0)
+push_subbandhue!(mp, ::Makie.Colorant, vert, s) = push!(mp.hues, 0f0)
+push_subbandhue!(mp, hue, vert, s) = argerror("Unrecognized color")
 
-push_subbandopacity!(mp, opacity::Real, ψ, ϵ, k, s) = push!(mp.opacities, opacity)
-push_subbandopacity!(mp, opacity::Function, ψ, ϵ, k, s) = push!(mp.opacities, opacity(ψ, ϵ, k))
-push_subbandopacity!(mp, opacity, ψ, ϵ, k, s) = argerror("Unrecognized opacity")
+push_subbandopacity!(mp, opacity::Real, vert, s) = push!(mp.opacities, opacity)
+push_subbandopacity!(mp, opacity::Function, vert, s) = push!(mp.opacities, opacity(ψϵkm(vert)...))
+push_subbandopacity!(mp, opacity, vert, s) = argerror("Unrecognized opacity")
 
-push_subbandsize!(mp, size::Real, ψ, ϵ, k, s) = push!(mp.sizes, size)
-push_subbandsize!(mp, size::Function, ψ, ϵ, k, s) = push!(mp.sizes, size(ψ, ϵ, k))
-push_subbandsize!(mp, size, ψ, ϵ, k, s) = argerror("Unrecognized size")
+push_subbandsize!(mp, size::Real, vert, s) = push!(mp.sizes, size)
+push_subbandsize!(mp, size::Function, vert, s) = push!(mp.sizes, size(ψϵkm(vert)...))
+push_subbandsize!(mp, size, vert, s) = argerror("Unrecognized size")
 
-push_subbandtooltip!(mp, ψ, ϵ, k, s, iv) =
+push_subbandtooltip!(mp, vert, s, iv) = push_subbandtooltip!(mp, ψϵkm(vert), s, iv)
+push_subbandtooltip!(mp, (ψ, ϵ, k)::NTuple{3,Any}, s, iv) =
     push!(mp.tooltips, "Subband $s, vertex $iv:\n k = $k\n ϵ = $ϵ\n degeneracy = $(size(ψ, 2))")
+push_subbandtooltip!(mp, (ψ, ϵ, k, m)::NTuple{4,Any}, s, iv) =
+    push!(mp.tooltips, "Subband $s, vertex $iv:\n k = $k\n ϵ = $ϵ\n degeneracy = $(size(ψ, 2))\n metadata = $m")
 
 ## update_color! ##
 
@@ -186,7 +194,7 @@ function plotmeshes!(plot, mp::MeshPrimitives{<:Any,3})
     transparency = has_transparencies(plot[:opacity][])
     if !ishidden((:bands, :subbands), plot)
         simps = simplices_matrix(mp)
-        if !ishidden((:wireframe, :simplices), plot)
+        if !ishidden((:wireframe, :mesh, :simplices), plot)
             color´ = darken.(mp.colors, plot[:nodedarken][])
             poly!(plot, mp.verts, simps; color = mp.colors, inspectable = false, transparency,
                  strokewidth = plot[:size][])

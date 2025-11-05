@@ -1,3 +1,5 @@
+using ArnoldiMethod
+
 @testset "show methods" begin
     hs = HP.graphene(orbitals = 2), HP.graphene(orbitals = (2,1))
     for h in hs
@@ -41,6 +43,10 @@
         @test nothing === show(stdout, sites(SA[0], :))
         m = LP.linear() |> hopping(1) |> greenfunction |> meanfield
         @test nothing === show(stdout, m)
+        B = berry_curvature(h, maxdim = 2)
+        @test nothing === show(stdout, B)
+        B = berry_curvature(h)
+        @test nothing === show(stdout, B)
     end
     h = first(hs)
     @test nothing === show(stdout, serializer(h))

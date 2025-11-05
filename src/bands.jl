@@ -71,21 +71,25 @@ bands(h::AbstractHamiltonian{<:Any,<:Any,L}; kw...) where {L} =
 default_band_ticks(::Val{L}) where {L} = ntuple(Returns(subdiv(-π, π, 49)), Val(L))
 
 function bands(h::AbstractHamiltonian, mesh::Mesh{S};
-         solver = ES.LinearAlgebra(), transform = missing, mapping = missing, kw...) where {S<:SVector}
+         solver = ES.LinearAlgebra(), transform = missing, mapping = missing, metadata = missing, kw...) where {S<:SVector}
     mapping´ = sanitize_mapping(mapping, h)
+    metadata´ = bands_metadata(metadata)
     solvers = eigensolvers_thread_pool(solver, h, S, mapping´, transform)
     hf = apply_map(mapping´, h, S)
-    ss = subbands(hf, solvers, mesh; kw...)
+    mf = apply_map(mapping´, metadata´, S)
+    ss = subbands(hf, mf, solvers, mesh; kw...)
     os = blockstructure(h)
     return Bandstructure(ss, solvers, os)
 end
 
 function bands(h::Function, mesh::Mesh{S};
-         solver = ES.LinearAlgebra(), transform = missing, mapping = missing, kw...) where {S<:SVector}
+         solver = ES.LinearAlgebra(), transform = missing, mapping = missing, metadata = missing, kw...) where {S<:SVector}
     mapping´ = sanitize_mapping(mapping, h)
+    metadata´ = bands_metadata(metadata)
     solvers = eigensolvers_thread_pool(solver, h, S, mapping´, transform)
     hf = apply_map(mapping´, h, S)
-    ss = subbands(hf, solvers, mesh; kw...)
+    mf = apply_map(mapping´, metadata´, S)
+    ss = subbands(hf, mf, solvers, mesh; kw...)
     return ss
 end
 
@@ -99,11 +103,11 @@ end
 copy_if_hamiltonian(h::AbstractHamiltonian) = minimal_callsafe_copy(h)
 copy_if_hamiltonian(f) = f
 
-function subbands(hf, solvers, basemesh::Mesh{SVector{L,T}};
+function subbands(hf, mf, solvers, basemesh::Mesh{SVector{L,T}};
          showprogress = true, defects = (), patches = 0, degtol = missing, split = true, warn = true, projectors = false) where {T,L}
     defects´ = sanitize_Vector_of_SVectors(SVector{L,T}, defects)
     degtol´ = degtol isa Number ? degtol : sqrt(eps(real(T)))
-    subbands = subbands_precompilable(hf, solvers, basemesh, showprogress, defects´, patches, degtol´, split, warn, projectors)
+    subbands = subbands_precompilable(hf, mf, solvers, basemesh, showprogress, defects´, patches, degtol´, split, warn, projectors)
     return subbands
 end
 
@@ -121,19 +125,19 @@ sanitize_mapping((xs, nodes)::Pair, ::Val{L}) where {L} =
 sanitize_mapping((xs, nodes)::Pair{X,S}, ::Val{L}) where {N,L,T,X<:NTuple{N,Real},S<:NTuple{N,SVector{L,T}}} =
     polygonpath(xs, nodes)
 
-function subbands_precompilable(hf::FunctionWrapper, solvers::Vector{A}, basemesh::Mesh{SVector{L,T}},
-    showprogress, defects, patches, degtol, split, warn, projectors) where {T,L,A<:AppliedEigenSolver{T,L}}
+function subbands_precompilable(hf::FunctionWrapper, mf::FunctionWrapper{M}, solvers::Vector{A}, basemesh::Mesh{SVector{L,T}},
+    showprogress, defects, patches, degtol, split, warn, projectors) where {T,L,A<:AppliedEigenSolver{T,L},M}
 
     basemesh = copy(basemesh) # will become part of Band, possibly refined
     eigens = Vector{EigenComplex{T}}(undef, length(vertices(basemesh)))
-    bandverts = BandVertex{T,L+1}[]
+    bandverts = BandVertex{T,L+1,M}[]
     bandneighs = Vector{Int}[]
     bandneideg = similar(bandneighs)
     coloffsets = Int[]
     crossed = NTuple{6,Int}[]
     frustrated = similar(crossed)
-    subbands = Subband{T,L+1}[]
-    data = (; hf, solvers, basemesh, eigens, bandverts, bandneighs, bandneideg, coloffsets,
+    subbands = Subband{T,L+1,M}[]
+    data = (; hf, mf, solvers, basemesh, eigens, bandverts, bandneighs, bandneideg, coloffsets,
               L, crossed, frustrated, subbands, defects, patches, showprogress, degtol,
               split, warn, projectors)
 
@@ -296,7 +300,8 @@ function append_bands_column!(data, basevert, eigen)
             @warn "Encountered a highly degenerate point in bandstructure (deg = $deg), which will likely slow down the computation of projectors"
         state = orthonormalize!(view(states, :, rng))
         energy = mean(i -> energies[i], rng)
-        push!(data.bandverts, BandVertex(basevert, energy, state))
+        metadata = data.mf(basevert, eigen, rng)
+        push!(data.bandverts, BandVertex(basevert, energy, state, metadata))
     end
     push!(data.coloffsets, length(data.bandverts))
     foreach(_ -> push!(data.bandneideg, Int[]), length(data.bandneideg)+1:length(data.bandverts))
@@ -726,7 +731,7 @@ slice_axes(dim::Int) = ()
 
 all_axes(::Subband{<:Any,E}) where {E} = ntuple(identity, Val(E))
 
-slice_vertex_type(::Subband{T,<:Any}, ::NTuple{N}) where {T,N} = BandVertex{T,N}
+slice_vertex_type(::Subband{T,<:Any}, ::NTuple{N}) where {T,N} = BandVertex{T,N,Missing}
 
 slice_skey_type(::NTuple{N}) where {N} = SVector{N+1,Int}
 
@@ -749,7 +754,7 @@ function slice_simplex!(data, simp)
             dvpar = edgemat[paraxes, :]
             kε = kε0[paraxes] + dvpar * λs
             φ = interpolate_state_along_edges(λs, vertices(data.subband), simp, sub)
-            push!(data.verts, BandVertex(kε, φ))
+            push!(data.verts, BandVertex(kε, φ, missing))
             push!(data.neighs, Int[])
             vind = length(data.verts)
             data.vinds[key] = vind
@@ -800,5 +805,135 @@ function interpolate_state_along_edges(λs, vs, simp, sub)
     end
     return φ
 end
+
+#endregion
+
+############################################################################################
+# AbstractBandsMetadata
+#region
+
+abstract type AbstractBandsMetadata{M} end
+
+metadata_type(::AbstractBandsMetadata{M}) where {M} = M
+metadata_type(::Bandstructure{<:Any,<:Any,<:Any,<:Any,M}) where {M} = M
+metadata_type(_) = argerror("metadata of unknown type")
+
+struct MissingBandMetadata <: AbstractBandsMetadata{Missing}
+end
+
+bands_metadata(::Missing) = MissingBandMetadata()
+bands_metadata(m::AbstractBandsMetadata) = m
+bands_metadata(_) = argerror("metadata should be `missing` or a valid `AbstractBandsMetadata` object")
+
+#endregion
+
+############################################################################################
+# BerryCurvature
+#   Abelian and non-Abelian Berry curvature constructors for bands metadata
+#   Uses Eq. (1.13) in Xiao, Chang, and Niu. Rev. Mod. Phys. 82, 1959--2007 (2010).
+#region
+
+struct BerryCurvature{M,T,H<:AbstractHamiltonian{T,<:Any,2}} <: AbstractBandsMetadata{M}
+    h::H
+    ∂1h::SparseMatrixCSC{Complex{T},Int}
+    ∂2h::SparseMatrixCSC{Complex{T},Int}
+    ∂1hψn::Matrix{Complex{T}}
+    ∂2hψn::Matrix{Complex{T}}
+    ψn´∂1h´ψm::Vector{Complex{T}}
+    ψn´∂2h´ψm::Vector{Complex{T}}
+    result_type::Type{M}
+end
+
+BerryCurvature(h, maxdim) =
+    BerryCurvature(_berry_temporaries(h, maxdim)..., _berry_type(h, maxdim))
+
+function _berry_temporaries(h::AbstractHamiltonian{T}, maxdim) where {T}
+    maxdim´ = sanitize_maxdim(maxdim)
+    ∂1h, ∂2h = h(SA[0,0], 1), h(SA[0,0], 2)
+    ∂1hψn = zeros(Complex{T}, flatsize(h), maxdim´)
+    ∂2hψn = copy(∂1hψn)
+    ψn´∂1h´ψm = zeros(Complex{T}, maxdim´)
+    ψn´∂2h´ψm = copy(ψn´∂1h´ψm)
+    return (h, ∂1h, ∂2h, ∂1hψn, ∂2hψn, ψn´∂1h´ψm, ψn´∂2h´ψm)
+end
+
+sanitize_maxdim(::Missing) = 1
+sanitize_maxdim(maxdim::Integer) = maxdim > 0 ? maxdim :
+    argerror("maxdim must be a positive integer, got $maxdim.")
+sanitize_maxdim(_) = argerror("maxdim must be a positive integer or `missing`.")
+
+_berry_type(::AbstractHamiltonian{T}, ::Missing) where {T} = T
+_berry_type(::AbstractHamiltonian{T}, maxdim) where {T} = Matrix{Complex{T}}
+
+## API ##
+
+berry_curvature(h::AbstractHamiltonian{<:Any,<:Any,2}; maxdim = missing) =
+    BerryCurvature(h, maxdim)
+
+berry_curvature(h::AbstractHamiltonian; kw...) =
+    argerror("Berry curvature requires a 2D AbstractHamiltonian, got $(latdim(h))D.")
+
+maxdim(B::BerryCurvature) = size(B.ψn´∂1h´ψm, 1)
+
+(B::BerryCurvature)(ϕs, i; params...) = B(ϕs, spectrum(B.h, ϕs; params...), i; params...)
+
+function (B::BerryCurvature{<:Any,T})(ϕs; atol = sqrt(eps(real(T))), params...) where {T}
+    (ϵs, ψs) = spectrum(B.h, ϕs; params...)
+    return [B(ϕs, (ϵs, ψs), rng; params...) for rng in approxruns(ϵs, atol)]
+end
+
+(B::BerryCurvature)(ϕs, spectrum, i::Integer; params...) = B(ϕs, spectrum, i:i; params...)
+
+function (B::BerryCurvature{<:Any,T})(ϕs, (energies, states), rng::UnitRange; params...) where {T}
+    mdim = maxdim(B)
+    dim = length(rng)
+    dim <= mdim ||
+        argerror("This `BerryCurvature` is built for maximum degeneracy $mdim, got $(length(rng)).")
+    ψn = view(states, :, rng)
+    copy!(nonzeros(B.∂1h), nonzeros(call!(B.h, ϕs, 1; params...)))
+    copy!(nonzeros(B.∂2h), nonzeros(call!(B.h, ϕs, 2; params...)))
+    ∂1hψn, ∂2hψn = ∂xhψn(B, rng)
+    mul!(∂1hψn, B.∂1h, ψn)
+    mul!(∂2hψn, B.∂2h, ψn)
+    result = _berry_kubo(B, energies, states, rng)
+    return result
+end
+
+# Abelian case
+function _berry_kubo(B::BerryCurvature{M}, energies, states, rng) where {M<:AbstractFloat}
+    en = energies[only(rng)]
+    result = zero(M)
+    ∂1hψn, ∂2hψn = ∂xhψn(B, rng)
+    for (i, em) in enumerate(energies)
+        i in rng && continue
+        ψm = view(states, :, i)
+         # note: ∂1h' = -∂1h
+        result += real(-2im*dot(∂1hψn, ψm) * dot(ψm, ∂2hψn) / (em-en)^2)
+    end
+    result *= (2π)^2  # BZ jacobian
+    return result
+end
+
+# Non-Abelian
+function _berry_kubo(B::BerryCurvature{M}, energies, states, rng) where {T,M<:Matrix{Complex{T}}}
+    dim = length(rng)
+    en = mean(view(energies, rng))
+    result = zeros(Complex{T}, dim, dim)
+    ∂1hψn, ∂2hψn = ∂xhψn(B, rng)
+    ψn´∂1h´ψm, ψn´∂2h´ψm = ψn´∂xh´ψm(B, rng)
+    for (i, em) in enumerate(energies)
+        i in rng && continue
+        ψm = view(states, :, i)
+        mul!(ψn´∂1h´ψm, ∂1hψn', ψm)
+        mul!(ψn´∂2h´ψm, ∂2hψn', ψm)
+        mul!(result, ψn´∂1h´ψm, ψn´∂2h´ψm', -im/(en-em)^2, 1)        # note: ∂2h' = -∂2h
+    end
+    result .+= result'   # to account for the missing x <-> y term (Hermitian conjugate)
+    result .*= (2π)^2    # BZ jacobian
+    return result
+end
+
+∂xhψn(B::BerryCurvature, rng) = view(B.∂1hψn, :, 1:length(rng)), view(B.∂2hψn, :, 1:length(rng))
+ψn´∂xh´ψm(B::BerryCurvature, rng) = view(B.ψn´∂1h´ψm, 1:length(rng), :), view(B.ψn´∂2h´ψm, 1:length(rng), :)
 
 #endregion

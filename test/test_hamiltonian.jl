@@ -223,10 +223,10 @@ end
     p2 = SA[0,20]
     lat = LatticePresets.honeycomb()
     model = hopping(1, range = 1/√3) + onsite(2)
-    h1 = lat |> hamiltonian(model) |> supercell(region = r -> norm(r-p1)<3, seed = p1)
-    h2 = lat |> hamiltonian(model) |> supercell(region = r -> norm(r-p2)<3, seed = p2)
+    h1 = lat |> model |> supercell(region = r -> norm(r-p1)<3, seed = p1)
+    h2 = lat |> model |> supercell(region = r -> norm(r-p2)<3, seed = p2)
     h = combine(h1, h2)
-    h3 = lat |> hamiltonian(model) |> supercell(region = r -> norm(r-p1)<3 || norm(r-p2)<3, seed = p2)
+    h3 = lat |> model |> supercell(region = r -> norm(r-p1)<3 || norm(r-p2)<3, seed = p2)
     @test Quantica.nsites(h) == 130
     @test Quantica.nsites(h3) == 64
 end
