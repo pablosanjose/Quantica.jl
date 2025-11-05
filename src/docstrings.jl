@@ -2916,12 +2916,17 @@ gives `2πC`, where `C` is the integer Chern number of the band.
 
     bc(ϕs, i::Integer; params...)
 
-Like the above, but return only the Abelian Berry curvature of band `i`.
+Like `bc(ϕs; params...)`, but return only the Abelian Berry curvature of band `i`.
 
     bc(ϕs, rng::UnitRange; params...)
 
-Like the above, but return the non-Abelian Berry curvature of bands `i` in `rng`. This
-requires `maxdim >= length(rng)`.
+Like `bc(ϕs; params...)`, but return the non-Abelian Berry curvature of bands `i` in `rng`.
+This requires `maxdim >= length(rng)`.
+
+    bc(ϕs, sp, rng; params...)
+
+Like `bc(ϕs, rng; params...)`, but using the precomputed spectrum `sp = spectrum(h2D, ϕs;
+params...)`. Note that if `sp` is not the complete spectrum, the result will not be exact.
 
 # Examples
 ```jldoctest
