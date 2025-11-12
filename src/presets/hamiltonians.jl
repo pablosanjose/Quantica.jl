@@ -55,6 +55,45 @@ function twisted_bilayer_graphene(;
     return combine(hbot, htop; coupling = modelinter)
 end
 
+# from arXiv:2502.17555v1, but γ2 seems wrong
+function rhombohedral_graphene(; N = 4, spinoperator = I, a0 = 0.246, interlayerdistance = a0, γ0 = 3.16, γ1 = 0.445, γ2 = -0.0182, γ3 = -0.319, γ4 = -0.079, γ5 = 0, δ = -0.000066, δAB = 0, kw...)
+    aCC = a0 / sqrt(3)
+    az = interlayerdistance
+    Δz = az*(N-1)
+    d0 = aCC
+    d1 = az
+    d2 = 2 * az
+    d34 = hypot(aCC, az)
+    d5 = hypot(aCC, 2az)
+    op = spinoperator
+    subs3 = (:A => :B, :B => :A)
+    subs4 = (:A => :A, :B => :B)
+    subs5 = subs3
+    inplane(_, dr) = iszero(dr[3])
+    vertical(_, dr) = norm(dr[SA[1,2]]) < eps(Float64)
+
+    lat0 = LP.honeycomb(; a0, dim = 3)
+    Asites = [only(sites(lat0, :A)) + SA[0, aCC, az]*n for n in 0: N-1]
+    Bsites = [only(sites(lat0, :B)) + SA[0, aCC, az]*n for n in 0: N-1]
+    lat = lattice(sublat(Asites, name = :A), sublat(Bsites, name = :B),
+        bravais = bravais_matrix(lat0))
+    Quantica.translate!(lat, -mean(sites(lat)))
+
+    model =
+        @onsite((r; U = 0) -> U * (r[3]/Δz) * op) +
+        onsite(r-> (δAB + δ*ifelse(r[3]≈-Δz/2,1,0)) * op, sublats = :A) +
+        onsite(r-> (-δAB + δ*ifelse(r[3]≈Δz/2,1,0)) * op, sublats = :B) +
+        hopping(γ0*op, range = (d0, d0), region = inplane) +
+        hopping(γ1*op, range = (d1, d1), region = vertical) +
+        hopping(0.5*γ2*op, range = (d2, d2), region = vertical) +
+        hopping(γ3*op, range = (d34, d34), sublats = subs3, region = !inplane) +
+        hopping(γ4*op, range = (d34, d34), sublats = subs4, region = !inplane) +
+        hopping(γ5*op, range = (d5, d5), sublats = subs5, region = !inplane)
+    h = lat |> hamiltonian(model; kw...)
+
+    return h
+end
+
 end # module
 
 const HP = HamiltonianPresets
