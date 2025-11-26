@@ -805,6 +805,10 @@ maybe_symmetrized_view!(output, g, i, j, sym, ; kw...) =
 maybe_symmetrized_getindex!(output, g, i, j, ::Missing; kw...) =
     maybe_symmetrize!(output, g[i, j], missing; kw...)
 
+# case without getindex support - required by getindex!(output, g::Matrix, i, j)
+maybe_symmetrized_getindex!(output, g::Matrix, i::AnyCellOrbitals{0}, j::AnyCellOrbitals{0}, ::Missing; kw...) =
+    maybe_symmetrize!(output, view(g, orbindices(i), orbindices(j)), missing; kw...)
+
 function maybe_symmetrized_getindex!(output, g, i, j, sym; kw...)
     gij = g[i, j]
     gji´ = i == j ? gij' : g[j, i]'

@@ -83,40 +83,91 @@ end
 #endregion
 
 ############################################################################################
-# densitymatrix
-#   specialized DensityMatrix method for GS.Spectrum
+# SpectralSum
+#   a struct for generic spectral sums in 0D systems. Mostly for use in observables.
+#   If ss = SpectralSum(gs::GreenSlice; inplace = true), then S === gs.output is
+#     S = ⟨is| \sum_n kernel(dist(real(ε_n)), |ψ_n⟩) |js⟩ = ss(kernel!, dist; params...),
+#   where ε_n, |ψ_n⟩ are eigenpairs of the parent Hamiltonian and `is`, `js` are orbslices.
+#   If `inplace = true` we must provide a `kernel!(partialsum, f_n, |ψ_n⟩)` function that
+#   adds `kernel(f_n, |ψ_n⟩)` in-place to `partialsum`.
+#   If kernel is missing, it defaults to `kernel(f_n, |ψ_n⟩) = f_n * |ψ_n⟩⟨ψ_n|` although
+#   the implementation uses an `EigenProduct` optimization in this case.
 #region
 
-struct DensityMatrixSpectrumSolver{T,G<:GreenSlice{T},A,S<:AppliedSpectrumGreenSolver}
+struct SpectralSum{G<:GreenSlice,M}
     gs::G
-    orbaxes::A
-    solver::S
+    inplace::Bool
+    temp::M
+end
+
+function SpectralSum(gs::GreenSlice; inplace = true)
+    has_selfenergy(gs) && argerror("SpectrumSum currently support only `nothing` contacts")
+    solver(parent(gs)) isa AppliedSpectrumGreenSolver || argerror("SpectralSum only supports AppliedSpectrumGreenSolver")
+    if inplace
+        temp = similar(call!_output(gs), size(parent(gs)))
+        return SpectralSum(gs, inplace, temp)
+    else
+        return SpectralSum(gs, inplace, missing)
+    end
+end
+
+(ss::SpectralSum)(µ::Real, kBT::Real; params...) =
+    ss(missing, ε -> fermi(ε - µ, inv(kBT)); params...)
+
+(ss::SpectralSum)(kernel!, dist; params...) =
+    ss(kernel!, dist, spectrum(solver(parent(ss.gs)); params...))
+
+# missing kernel!: kernel!(temp, f_n, |ψ_n⟩) = f_n * |ψ_n⟩⟨ψ_n|, EigenProduct optimization
+function (ss::SpectralSum)(::Missing, dist, (εs, psis))
+    gs = ss.gs
+    fs = dist.(real.(εs))
+    fpsis = psis .* transpose(fs)
+    bs = blockstructure(gs)
+    sp_sum = EigenProduct(bs, psis, fpsis)
+    return project_sum(gs, sp_sum)
+end
+
+# general kernel!
+function (ss::SpectralSum)(kernel!, dist, (εs, psis))
+    gs = ss.gs
+    T = eltype(psis)
+    if ss.inplace
+        sp_sum = fill!(ss.temp, zero(T))
+        for (ε, φ) in zip(εs, eachcol(psis))
+            kernel!(sp_sum, dist(real(ε)), φ)
+        end
+    else
+        sp_sum = sum(kernel!(dist(real(ε)), φ) for (ε, φ) in zip(εs, eachcol(psis)))
+    end
+    return project_sum(gs, sp_sum)
+end
+
+function project_sum(gs, sp_sum)
+    result = call!_output(gs)
+    orows, ocols = orbrows(gs), orbcols(gs)
+    getindex!(result, sp_sum, orows, ocols)
+    return result
+end
+
+############################################################################################
+# densitymatrix
+#   specialized densitymatrix method for GS.Spectrum in terms of SpectralSum
+#region
+
+struct DensityMatrixSpectrumSolver{T,G<:GreenSlice{T}}
+    ssum::SpectralSum{G}
 end
 
 ## Constructor
 
-function densitymatrix(s::AppliedSpectrumGreenSolver, gs::GreenSlice)
-    # SpectrumGreenSlicer is 0D, so there is a single cellorbs in dict.
-    # If rows/cols are contacts, we need their orbrows/orbcols (unlike for gs(ω; params...))
-    has_selfenergy(gs) && argerror("The Spectrum densitymatrix solver currently support only `nothing` contacts")
-    orbaxes = orbrows(gs), orbcols(gs)
-    solver = DensityMatrixSpectrumSolver(gs, orbaxes, s)
+function densitymatrix(::AppliedSpectrumGreenSolver, gs::GreenSlice)
+    solver = DensityMatrixSpectrumSolver(SpectralSum(gs))
     return DensityMatrix(solver, gs)
 end
 
 ## call
 
-function (s::DensityMatrixSpectrumSolver)(µ, kBT; params...)
-    bs = blockstructure(s.gs)
-    es, psis = spectrum(s.solver; params...)
-    β = inv(kBT)
-    fs = (@. fermi(es - µ, β))
-    fpsis = psis .* transpose(fs)
-    ρcell = EigenProduct(bs, psis, fpsis)
-    result = call!_output(s.gs)
-    getindex!(result, ρcell, s.orbaxes...)
-    return result
-end
+(s::DensityMatrixSpectrumSolver)(µ, kBT; params...) = s.ssum(µ, kBT; params...)
 
 #endregion
 #endregion
