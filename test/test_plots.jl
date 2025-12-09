@@ -16,6 +16,7 @@ end
     h = LP.honeycomb() |> hamiltonian(hopping(1)) |> supercell(3) |> supercell
     g = h |> attach(nothing) |> greenfunction
     @test qplot(h, hopcolor = :blue, hopradius = ldos(g(0.2)), inspector = true) isa Figure
+    @test qplot(h, hopcolor = :blue, hopradius = (ij, rdr) -> 1), inspector = true) isa Figure
     @test qplot(h, hopcolor = (:blue, RGBAf(1,0,0)), sitecolor = [:orange, :white], inspector = true) isa Figure
     @test qplot(h, hopcolor = :yellow, hopopacity = current(g(0.2)), inspector = true, flat = false) isa Figure
     @test qplot(g, hopcolor = :yellow, hopopacity = (ij, (r, dr)) -> r[1], inspector = true, flat = false) isa Figure
