@@ -2,6 +2,7 @@ using Quantica: GreenFunction, GreenSlice, GreenSolution, zerocell, CellOrbitals
     solver, Diagonal
 
 using ArnoldiMethod  # for KPM bandrange
+using LinearAlgebra
 
 function testgreen(h, s; kw...)
     ω = 0.2
@@ -759,4 +760,22 @@ using Distributed; addprocs(1) # for Serialization below
     # issue #327
     g = LP.linear() |> hopping(1) |> attach(nothing, cells = 0) |> greenfunction
     @test remotecall_fetch(g[1], 2, 0) isa OrbitalSliceMatrix
+end
+
+
+@testset begin "SpectralSum"
+    g = LP.linear() |> @hopping((;t = 1) -> t) |> supercell(10) |> supercell |> greenfunction(GS.Spectrum())
+    gs = getindex(g, siteselector(region = r -> 2<=r[1]<=5))
+    ss = Quantica.SpectralSum(gs)
+    @test ss(0.1, 0; t = 0) ≈ I
+    @test ss(identity; t = 1) do tmp, fn, φn
+        mul!(tmp, φn, φn', 1, 1)
+    end ≈ I
+    ss = Quantica.SpectralSum(gs; inplace = false)
+    @test ss(identity; t = 1) do fn, φn
+        φn * φn'
+    end ≈ I
+    @test ss(<(0)) do fn, φn
+        (φn * φn') .* fn
+    end |> diag ≈ SA[1,1,1,1]/2
 end
