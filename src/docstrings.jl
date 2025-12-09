@@ -1497,8 +1497,9 @@ collection of of sliced `Subband`s.
 
 The `metadata` keyword allows to compute properties associated to band vertices that depend
 on the full spectrum at point `xs`. The prototipical example is `metadata =
-berry_curvature(h)`, where `h` is a 2D `AbstractHamiltonian``. The Berry curvature can then
-be visualized using `plotbands` shaders like `color = (ψ, ϵ, k, metadata) -> metadata`.
+berry_curvature(h)`, where `h` is the 2D `AbstractHamiltonian` whose bands we are plotting.
+The Berry curvature can then be visualized using `plotbands` shaders like `color = (ψ, ϵ, k,
+metadata) -> metadata`.
 
 # Examples
 
