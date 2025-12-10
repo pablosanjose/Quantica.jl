@@ -203,21 +203,25 @@ push_sitetooltip!(sp, i, r) = push!(sp.tooltips, positionstring(i, r))
 # hopcolor here could be a color, a symbol, a vector/tuple of either, a number, a function, or missing
 function push_hopprimitive!(hp, (hopcolor, hopopacity, shellopacity, hopradius, flat), lat, (i, j), (ni, nj), radius, matij, is_shell)
     src, dst = Quantica.site(lat, j, nj), Quantica.site(lat, i, ni)
-    # If end site is opaque (not in outer shell), dst is midpoint, since the inverse hop will be plotted too
-    # otherwise it is shifted by radius´ = radius minus hopradius correction if flat = false, and src also
-    radius´ = flat ? radius : sqrt(max(0, radius^2 - hopradius^2))
-    unitvec = normalize(dst - src)
-    dst = is_shell ? (src + dst)/2 : dst - unitvec * radius´
-    src = src + unitvec * radius´
+    # First we evaluate hop shaders using uncorrected r, dr
     r, dr = (src + dst)/2, (dst - src)
     sj = Quantica.sitesublat(lat, j)
-    push!(hp.centers, r)
-    push!(hp.vectors, dr)
-    push!(hp.indices, (i, j))
     push_hophue!(hp, hopcolor, (i, j), (r, dr), sj)
     push_hopopacity!(hp, hopopacity, shellopacity, (i, j), (r, dr), is_shell)
     push_hopradius!(hp, hopradius, (i, j), (r, dr))
     push_hoptooltip!(hp, (i, j), matij)
+    hopradius´ = last(hp.radii)  # needed below
+    # Now we determine hop position and size
+    # If end site is opaque (not in outer shell), dst is midpoint, since the inverse hop will be plotted too
+    # otherwise it is shifted by radius´ = radius minus hopradius correction if flat = false, and src also
+    radius´ = flat ? radius : sqrt(max(0, radius^2 - hopradius´^2))
+    unitvec = normalize(dst - src)
+    dst = is_shell ? (src + dst)/2 : dst - unitvec * radius´
+    src = src + unitvec * radius´
+    r, dr = (src + dst)/2, (dst - src)
+    push!(hp.centers, r)
+    push!(hp.vectors, dr)
+    push!(hp.indices, (i, j))
     return hp
 end
 
