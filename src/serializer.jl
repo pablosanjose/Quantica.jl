@@ -232,7 +232,6 @@ end
 
 #endregion
 
-
 ############################################################################################
 # serialize and deserialize for AbstractOrbitalArray
 #   extract underlying data and reconstruct an object using such data
@@ -248,6 +247,8 @@ serialize_array(a::SparseMatrixCSC) = nonzeros(a)
 
 deserialize(a::AbstractArray{T}, v::AbstractArray) where {T} =
     deserialize(a, reinterpret(T, v))
+deserialize(a::AbstractArray{T}, v::AbstractVector{T}) where {T} =
+    deserialize(a, reshape(v, size(a)))
 deserialize(a::AbstractArray{T}, v::AbstractArray{T}) where {T} =
     (check_serializer_size(a, v); unsafe_deserialize(a, v))
 
