@@ -762,11 +762,12 @@ using Distributed; addprocs(1) # for Serialization below
     @test remotecall_fetch(g[1], 2, 0) isa OrbitalSliceMatrix
 
     # array serialization
-    result = rand(ComplexF64, 3, 4)
-    result´ = deserialize(result, vec(serialize(Float64, result)))
-    @test result == result´
-    result´[1,1] = 1
-    @test result[1,1] == 1
+    mat = rand(ComplexF64, 3, 4)
+    v = vec(serialize(Float64, mat))
+    mat´ = deserialize(mat, v)
+    @test mat == mat´
+    mat´[1,1] = 1
+    @test mat[1,1] == 1   # although mat !== mat´, their underlying data is the same
 end
 
 

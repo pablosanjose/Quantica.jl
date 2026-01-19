@@ -247,24 +247,23 @@ serialize_array(a::SparseMatrixCSC) = nonzeros(a)
 
 deserialize(a::AbstractArray{T}, v::AbstractArray) where {T} =
     deserialize(a, reinterpret(T, v))
-deserialize(a::AbstractArray{T}, v::AbstractVector{T}) where {T} =
-    deserialize(a, reshape(v, size(a)))
 deserialize(a::AbstractArray{T}, v::AbstractArray{T}) where {T} =
     (check_serializer_size(a, v); unsafe_deserialize(a, v))
 
+# assumes equal eltype T and compatible size
 unsafe_deserialize(a::AbstractOrbitalArray, v::AbstractArray) =
-    similar(a, deserialize_array(parent(a), v), orbaxes(a))
-unsafe_deserialize(a::AbstractArray, v::AbstractArray) =
-    deserialize_array(a, v)
-
-deserialize_array(::AbstractArray{<:Any,N}, v::AbstractArray{<:Any,N}) where {N} = v
-deserialize_array(::Diagonal, v::AbstractVector) =
-    Diagonal(convert(Vector, v))
-deserialize_array(a::SparseMatrixCSC, v::AbstractVector) =
+    similar(a, unsafe_deserialize(parent(a), v), orbaxes(a))
+unsafe_deserialize(a::AbstractArray, v::AbstractArray) = reshape(v, size(a))
+unsafe_deserialize(::Diagonal, v::AbstractVector) = Diagonal(convert(Vector, v))
+unsafe_deserialize(a::SparseMatrixCSC, v::AbstractVector) =
     SparseMatrixCSC(a.m, a.n, a.colptr, a.rowval, convert(Vector, v))
 
 check_serializer_size(a, v) =
     size(serialize(a)) == size(v) ||
-        argerror("Wrong size of serialized array, expected length $(size(serialize(a))), got $(size(v))")
+        argerror("Wrong size of serialized array, expected $(size(serialize(a))), got $(size(v))")
+
+check_serializer_size(a, v::AbstractVector) =
+    length(serialize(a)) == length(v) ||
+        argerror("Wrong length of serialized array, expected $(length(serialize(a))), got $(length(v))")
 
 #endregion
