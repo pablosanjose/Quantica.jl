@@ -253,6 +253,7 @@ deserialize(a::AbstractArray{T}, v::AbstractArray{T}) where {T} =
 # assumes equal eltype T and compatible size
 unsafe_deserialize(a::AbstractOrbitalArray, v::AbstractArray) =
     similar(a, unsafe_deserialize(parent(a), v), orbaxes(a))
+unsafe_deserialize(::AbstractArray{T,N}, v::AbstractArray{T,N}) where {T,N} = v
 unsafe_deserialize(a::AbstractArray, v::AbstractArray) = reshape(v, size(a))
 unsafe_deserialize(::Diagonal, v::AbstractVector) = Diagonal(convert(Vector, v))
 unsafe_deserialize(a::SparseMatrixCSC, v::AbstractVector) =
