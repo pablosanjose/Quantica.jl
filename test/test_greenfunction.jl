@@ -760,6 +760,14 @@ using Distributed; addprocs(1) # for Serialization below
     # issue #327
     g = LP.linear() |> hopping(1) |> attach(nothing, cells = 0) |> greenfunction
     @test remotecall_fetch(g[1], 2, 0) isa OrbitalSliceMatrix
+
+    # array serialization
+    mat = rand(ComplexF64, 3, 4)
+    v = vec(serialize(Float64, mat))
+    mat´ = deserialize(mat, v)
+    @test mat == mat´
+    mat´[1,1] = 1
+    @test mat[1,1] == 1   # although mat !== mat´, their underlying data is the same
 end
 
 
