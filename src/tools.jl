@@ -1,4 +1,42 @@
 ############################################################################################
+# Ranged
+#   Wrapper to hold data with an associated, mutable range
+#region
+
+mutable struct Ranged{V,T}
+    const data::V
+    range::Tuple{T,T}
+end
+
+const RangedVector{T<:AbstractFloat} = Ranged{Vector{T},T}
+
+Ranged(v, (min, max)::Tuple) = Ranged(v, (float(min), float(max)))
+
+RangedVector(v::Vector{T}) where {T} = Ranged(v, (-T(Inf), T(Inf)))
+
+function updated_range!(v::RangedVector{T}) where {T}
+    if v.range == (-T(Inf), T(Inf))
+        v.range = safeextrema(v.data)
+    end
+    return v.range
+end
+
+safeextrema(v::Vector{T}) where {T} = isempty(v) ? (T(0), T(1)) : extrema(v)
+
+jointextrema(v::Vector, v´::Vector) = jointextrema(safeextrema(v), safeextrema(v´))
+jointextrema(v::RangedVector, v´::RangedVector) = jointextrema(updated_range!(v), updated_range!(v´))
+jointextrema((min1, max1)::Tuple{Real,Real}, (min2, max2)::Tuple{Real,Real}) = (min(min1, min2), max(max1, max2))
+
+Base.push!(v::RangedVector, x) = push!(v.data, x)
+
+## API ##
+
+ranged(v, (min, max)::Tuple) = Ranged(v, (min, max))
+ranged(v, min, max) = Ranged(v, (min, max))
+
+#endregion
+
+############################################################################################
 # Misc tools
 #region
 

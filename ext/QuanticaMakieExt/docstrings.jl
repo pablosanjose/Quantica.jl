@@ -106,6 +106,24 @@ Element properties marked as accepting hop shaders may take either of these opti
 - `LocalSpectralDensitySolution`: a generator of local density of states at a fixed energy (see `ldos`). It is evaluated as the average between connected sites.
 - `CurrentDensitySolution`: a generator of local current density at a fixed energy (see `current`). It is taken as the current along the hop.
 
+Any of these shaders `s` can be wrapped with `ranged` to clip the shader value to an certain
+interval `(min, max)`
+
+    `ranged(s, (min, max))`
+
+As an example, the site color would become the maximum color in the `sitecolormap` for any
+value of the shader `vᵢ ≥ max`.
+
+# Examples
+```
+julia> h = HP.graphene(a0=1) |> supercell(10);  # unit cell spanning y from 0 to around 200
+
+julia> plotlattice(h, sitecolor = ranged((i,r)->r[2], (5, 10)), sitecolormap = :inferno)
+# plots all sites below y = 5 in black, and all sites above y = 10 in yellow
+```
+
+# See also
+    `qplot`, `plotbands`, `ranged`
 """
 plotlattice
 
@@ -141,6 +159,16 @@ subbands or subband slices (e.g. `ss = b[1:4]` or `ss = b[(:,0,:)]`).
 The element properties in the list above that accept band shaders may take either of these options
 - `(ψ, ϵ, ϕs[, metadata]) -> Real`: a real function of the eigenstates `ψ::Matrix` in the subband, eigenenergy `ϵ`, and Bloch phases `ϕs::SVector`. If `metadata` was computed, it will be passed as a fourth argument.
 
+A shader `s` can be wrapped with `ranged` to clip the shader value to an certain interval
+`(min, max)`
+
+    `ranged(s, (min, max))`
+
+As an example, the opacity of a subband would become zero (transparent subband) for any
+value of the shader `vᵢ ≤ min`.
+
+# See also
+    `qplot`, `plotlattice`, `ranged`
 """
 plotbands
 

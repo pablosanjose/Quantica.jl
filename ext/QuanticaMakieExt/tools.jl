@@ -27,10 +27,11 @@ ishidden(ss, hides) = any(s -> ishidden(s, hides), ss)
 
 normalize_range(c::T, (min, max)) where {T} = min ≈ max ? T(c) : T((c - min)/(max - min))
 
-jointextrema(v, v´) = min(minimum(v; init = 0f0), minimum(v´; init = 0f0)), max(maximum(v; init = 0f0), maximum(v´; init = 0f0))
-
-safeextrema(v::Missing) = (Float32(0), Float32(1))
-safeextrema(v) = isempty(v) ? (Float32(0), Float32(1)) : extrema(v)
+# if a shader is wapped in Ranged, record range and unwrap
+unwrap_ranged(opt, vs...) = opt
+unwrap_ranged(::Ranged, _...) = argerror("Used a ranged shader for a property that does not support it")
+unwrap_ranged(opt::Ranged, vs::RangedVector...) =
+    (foreach(v -> v.range = opt.range, vs); opt.data)
 
 has_transparencies(x::Real) = !(x ≈ 1)
 has_transparencies(::Missing) = false

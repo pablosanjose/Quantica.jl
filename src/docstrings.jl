@@ -2965,3 +2965,25 @@ julia> round(chern, digits=8)
     `bands`
 """
 berry_curvature
+
+"""
+    ranged(s, (min, max))
+    ranged(s, min, max)
+
+Create a `Ranged` object, typically used as a plot shader, that represents a clipping of the
+values of `s` to the interval `min <= s <= max`. For example, if `s` is a function, whenever
+it takes a value smaller than `min`, it is assumed to have reached its minimum `min`.
+
+# Examples
+```
+julia> h = HP.graphene(a0=1) |> supercell(10);  # unit cell spanning y from 0 to around 200
+
+julia> qplot(h, sitecolor = ranged((i,r)->r[2], (5, 10)), sitecolormap = :inferno)
+# plots all sites below y = 5 in black, and all sites above y = 10 in yellow
+```
+
+# See also
+    `meanfield`
+
+"""
+ranged
