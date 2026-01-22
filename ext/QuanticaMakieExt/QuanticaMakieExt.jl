@@ -10,7 +10,7 @@ using Quantica: Lattice, LatticeSlice, AbstractHamiltonian, Hamiltonian, OpenHam
       normalize, nsites, nzrange, rowvals, nonzeros, sanitize_SVector,
       default_plottable, parameters
 
-import Quantica: plotlattice, plotlattice!, plotbands, plotbands!, qplot, qplot!, qplotdefaults
+import Quantica: plotlattice, plotlattice!, plotbands, plotbands!, qplot, qplot!, qplotdefaults, Ranged, RangedVector, updated_range!, jointextrema
 
 ## PlotArgumentTypes
 

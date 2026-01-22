@@ -19,7 +19,9 @@ end
     @test qplot(h, hopcolor = :blue, hopradius = (ij, rdr) -> 1, flat=false) isa Figure
     @test qplot(h, hopcolor = (:blue, RGBAf(1,0,0)), sitecolor = [:orange, :white], inspector = true) isa Figure
     @test qplot(h, hopcolor = :yellow, hopopacity = current(g(0.2)), inspector = true, flat = false) isa Figure
+    @test qplot(h, hopcolor = :yellow, hopopacity = ranged(current(g(0.2)), (0,1)), inspector = true, flat = false) isa Figure
     @test qplot(g, hopcolor = :yellow, hopopacity = (ij, (r, dr)) -> r[1], inspector = true, flat = false) isa Figure
+    @test qplot(g, hopcolor = :yellow, hopopacity = ranged((ij, (r, dr)) -> r[1], 0, 1), inspector = true, flat = false) isa Figure
     @test scatter(h, :A) isa Makie.FigureAxisPlot
     @test scatter(g, 1) isa Makie.FigureAxisPlot
     @test scatter(lattice(g)) isa Makie.FigureAxisPlot
@@ -62,8 +64,10 @@ end
     h = LatticePresets.honeycomb(a0 = 1) |> model
     b = bands(h(α = 0.05), range(0, 2pi, length=60), range(0, 2pi, length = 60))
     @test qplot(b, color = (psi, e, k) -> angle(psi[1] / psi[2]), colormap = :cyclic_mrybm_35_75_c68_n256, inspector = true) isa Figure
+    @test qplot(b, color = ranged((psi, e, k) -> angle(psi[1] / psi[2]), -π/2, π/2), colormap = :cyclic_mrybm_35_75_c68_n256, inspector = true) isa Figure
     cs = Makie.ColorScheme([colorant"red", colorant"black"])
     @test qplot(b, color = (psi, e, k) -> angle(psi[1] / psi[2]), colormap = cs, inspector = true) isa Figure
+    @test qplot(b, color = ranged((psi, e, k) -> angle(psi[1] / psi[2]), (-π/2, 2)), colormap = cs, inspector = true) isa Figure
     cs = Makie.ColorScheme([colorant"red", colorant"white", colorant"blue"])
     b = bands(h(α = 0.05), range(0, 2pi, length=60), range(0, 2pi, length = 60); metadata = berry_curvature(h(α = 0.05)))
     @test qplot(b, color = (psi, e, k, m) -> m, colormap = cs, inspector = true) isa Figure

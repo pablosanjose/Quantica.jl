@@ -46,9 +46,9 @@ end
 struct MeshPrimitives{E,S}
     verts::Vector{Point{E,Float32}}
     simps::Vector{Int}                  # flattened neighbor matrix
-    hues::Vector{Float32}
-    opacities::Vector{Float32}
-    sizes::Vector{Float32}
+    hues::RangedVector{Float32}
+    opacities::RangedVector{Float32}
+    sizes::RangedVector{Float32}
     tooltips::Vector{String}
     colors::Vector{RGBAf}
 end
@@ -56,14 +56,16 @@ end
 #region ## Constructors ##
 
 MeshPrimitives{E,S}() where {E,S} =
-    MeshPrimitives{E,S}(Point{E,Float32}[], Int[], Float32[], Float32[], Float32[], String[], RGBAf[])
+    MeshPrimitives{E,S}(Point{E,Float32}[], Int[], RangedVector(Float32[]), RangedVector(Float32[]), RangedVector(Float32[]), String[], RGBAf[])
 
 function meshprimitives(meshes, plot)   # function barrier
-    opts = (plot[:color][], plot[:opacity][], plot[:size][])
     E, S = Quantica.dims(first(meshes))
     mp = MeshPrimitives{E,S}()
+    opts = (plot[:color][], plot[:opacity][], plot[:size][])
+    # reuse unwrap_ranged from plotlattice.jl
+    opts´ = unwrap_ranged.(opts, (mp.hues, mp.opacities, mp.sizes))
     for (s, mesh) in enumerate(meshes)
-        bandprimitives!(mp, mesh, s, opts)
+        bandprimitives!(mp, mesh, s, opts´)
     end
     update_colors!(mp, plot)
     update_sizes!(mp, plot)
@@ -129,8 +131,8 @@ push_subbandtooltip!(mp, (ψ, ϵ, k, m)::NTuple{4,Any}, s, iv) =
 ## update_color! ##
 
 function update_colors!(p::MeshPrimitives, plot)
-    extremahues = safeextrema(p.hues)
-    extremaops = safeextrema(p.opacities)
+    extremahues = updated_range!(p.hues)
+    extremaops = updated_range!(p.opacities)
     color = plot[:color][]
     opacity = plot[:opacity][]
     colormap = get_colorscheme(plot[:colormap][])
@@ -141,7 +143,7 @@ end
 ## update_sizes! ##
 
 function update_sizes!(p::MeshPrimitives, plot)
-    extremasizes = safeextrema(p.sizes)
+    extremasizes = updated_range!(p.sizes)
     size = plot[:size][]
     minmaxsize = plot[:minmaxsize][]
     return update_sizes!(p, extremasizes, size, minmaxsize) # function barrier
@@ -149,8 +151,8 @@ end
 
 # almost identical to update_radii! from plotlattice.jl
 function update_sizes!(p, extremasizes, size, minmaxsize)
-    for (i, r) in enumerate(p.sizes)
-        p.sizes[i] = primitive_size(normalize_range(r, extremasizes), size, minmaxsize)
+    for (i, r) in enumerate(p.sizes.data)
+        p.sizes.data[i] = primitive_size(normalize_range(r, extremasizes), size, minmaxsize)
     end
     return p
 end
@@ -178,12 +180,12 @@ function plotmeshes!(plot, mp::MeshPrimitives{<:Any,2})
     if !ishidden((:bands, :subbands), plot)
         verts = mp.verts[mp.simps]
         color = mp.colors[mp.simps]
-        linewidth = mp.sizes[mp.simps]
+        linewidth = mp.sizes.data[mp.simps]
         linesegments!(plot, verts; color, linewidth, inspectable = false)
     end
     if !ishidden((:nodes, :points, :vertices), plot)
         inspector_label = (self, i, r) -> mp.tooltips[i]
-        markersize = mp.sizes .* plot[:nodesizefactor][]
+        markersize = mp.sizes.data .* plot[:nodesizefactor][]
         color´ = darken.(mp.colors, plot[:nodedarken][])
         scatter!(plot, mp.verts; color = color´, markersize, inspector_label)
     end
@@ -204,7 +206,7 @@ function plotmeshes!(plot, mp::MeshPrimitives{<:Any,3})
     end
     if !ishidden((:nodes, :points, :vertices), plot)
         inspector_label = (self, i, r) -> mp.tooltips[i]
-        markersize = mp.sizes .* plot[:nodesizefactor][]
+        markersize = mp.sizes.data .* plot[:nodesizefactor][]
         color´ = darken.(mp.colors, plot[:nodedarken][])
         scatter!(plot, mp.verts; color = color´, markersize, transparency, inspector_label)
     end

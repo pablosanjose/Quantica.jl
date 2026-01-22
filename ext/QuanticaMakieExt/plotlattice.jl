@@ -65,9 +65,9 @@ end
 struct SitePrimitives{E}
     centers::Vector{Point{E,Float32}}
     indices::Vector{Int}
-    hues::Vector{Float32}
-    opacities::Vector{Float32}
-    radii::Vector{Float32}
+    hues::RangedVector{Float32}
+    opacities::RangedVector{Float32}
+    radii::RangedVector{Float32}
     tooltips::Vector{String}
     colors::Vector{RGBAf}
 end
@@ -76,9 +76,9 @@ struct HoppingPrimitives{E}
     centers::Vector{Point{E,Float32}}
     vectors::Vector{Vec{E,Float32}}
     indices::Vector{Tuple{Int,Int}}
-    hues::Vector{Float32}
-    opacities::Vector{Float32}
-    radii::Vector{Float32}
+    hues::RangedVector{Float32}
+    opacities::RangedVector{Float32}
+    radii::RangedVector{Float32}
     tooltips::Vector{String}
     colors::Vector{RGBAf}
 end
@@ -89,19 +89,20 @@ const ColorsPerSublat = Union{NTuple{<:Any,ColorOrSymbol}, AbstractVector{<:Colo
 #region ## Constructors ##
 
 SitePrimitives{E}() where {E} =
-    SitePrimitives(Point{E,Float32}[], Int[], Float32[], Float32[], Float32[], String[], RGBAf[])
+    SitePrimitives(Point{E,Float32}[], Int[], RangedVector(Float32[]), RangedVector(Float32[]), RangedVector(Float32[]), String[], RGBAf[])
 
 HoppingPrimitives{E}() where {E} =
-    HoppingPrimitives(Point{E,Float32}[], Vec{E,Float32}[], Tuple{Int,Int}[], Float32[], Float32[], Float32[], String[], RGBAf[])
+    HoppingPrimitives(Point{E,Float32}[], Vec{E,Float32}[], Tuple{Int,Int}[], RangedVector(Float32[]), RangedVector(Float32[]), RangedVector(Float32[]), String[], RGBAf[])
 
-function siteprimitives(ls, h, plot, is_shell)   # function barrier
+function siteprimitives(ls::LatticeSlice{<:Any,E}, h, plot, is_shell) where {E} # function barrier
+    sp = SitePrimitives{E}()
     opts = (plot[:sitecolor][], plot[:siteopacity][], plot[:shellopacity][], plot[:siteradius][])
-    opts´ = maybe_evaluate_observable.(opts, Ref(ls))
-    return _siteprimitives(ls, h, opts´, is_shell)
+    opts´ = unwrap_ranged.(opts, (sp.hues, sp.opacities, missing, sp.radii))
+    opts´´ = maybe_evaluate_observable.(opts´, Ref(ls))
+    return siteprimitives!(sp, ls, h, opts´´, is_shell)
 end
 
-function _siteprimitives(ls::LatticeSlice{<:Any,E}, h, opts, is_shell) where {E}
-    sp = SitePrimitives{E}()
+function siteprimitives!(sp, ls, h, opts, is_shell)
     lat = parent(ls)
     for (i´, cs) in enumerate(Quantica.cellsites(ls))
         ni = Quantica.cell(cs)
@@ -113,15 +114,18 @@ function _siteprimitives(ls::LatticeSlice{<:Any,E}, h, opts, is_shell) where {E}
     return sp
 end
 
-function hoppingprimitives(ls, ls´, h, siteradii, plot)   # function barrier
-    opts = (plot[:hopcolor][], plot[:hopopacity][], plot[:shellopacity][], plot[:hopradius][], plot[:flat][])
-    opts´ = maybe_evaluate_observable.(opts, Ref(ls))
-    return _hoppingprimitives(ls, ls´, h, opts´, siteradii)
-end
-
-function _hoppingprimitives(ls::LatticeSlice{<:Any,E}, ls´, h, opts, siteradii) where {E}
+function hoppingprimitives(ls::LatticeSlice{<:Any,E}, ls´, h, siteradii, plot)  where {E} # function barrier
     hp = HoppingPrimitives{E}()
     hp´ = HoppingPrimitives{E}()
+    opts = (plot[:hopcolor][], plot[:hopopacity][], plot[:shellopacity][], plot[:hopradius][], plot[:flat][])
+    opts´ = unwrap_ranged.(opts,
+        (hp.hues, hp.opacities, missing, hp.radii, missing),
+        (hp´.hues, hp´.opacities, missing, hp´.radii, missing))
+    opts´´ = maybe_evaluate_observable.(opts´, Ref(ls))
+    return hoppingprimitives!(hp, hp´, ls, ls´, h, opts´´, siteradii)
+end
+
+function hoppingprimitives!(hp, hp´, ls, ls´, h, opts, siteradii)
     lat = parent(ls)
     sdict = Quantica.siteindexdict(ls)
     sdict´ = Quantica.siteindexdict(ls´)
@@ -210,7 +214,7 @@ function push_hopprimitive!(hp, (hopcolor, hopopacity, shellopacity, hopradius, 
     push_hopopacity!(hp, hopopacity, shellopacity, (i, j), (r, dr), is_shell)
     push_hopradius!(hp, hopradius, (i, j), (r, dr))
     push_hoptooltip!(hp, (i, j), matij)
-    hopradius´ = last(hp.radii)  # needed below
+    hopradius´ = last(hp.radii.data)  # needed below
     # Now we determine hop position and size
     # If end site is opaque (not in outer shell), dst is midpoint, since the inverse hop will be plotted too
     # otherwise it is shifted by radius´ = radius minus hopradius correction if flat = false, and src also
@@ -254,7 +258,7 @@ embdim(p::HoppingPrimitives{E}) where {E} = E
 ## update_color! ##
 
 update_colors!(p::Union{SitePrimitives,HoppingPrimitives}, plot) =
-    update_colors!(p, plot, safeextrema(p.hues), safeextrema(p.opacities))
+    update_colors!(p, plot, updated_range!(p.hues), updated_range!(p.opacities))
 
 update_colors!(p::SitePrimitives, plot, extremahues, extremaops) =
     update_colors!(p, extremahues, extremaops, plot[:sitecolor][], plot[:siteopacity][],
@@ -265,8 +269,8 @@ update_colors!(p::HoppingPrimitives, plot, extremahues, extremaops) =
         get_colorscheme(plot[:hopcolormap][]), plot[:hopdarken][])
 
 function update_colors!(p, extremahues, extremaops, pcolor, popacity, colormap, pdarken)
-    resize!(p.colors, length(p.hues))
-    for (i, (c, α)) in enumerate(zip(p.hues, p.opacities))
+    resize!(p.colors, length(p.hues.data))
+    for (i, (c, α)) in enumerate(zip(p.hues.data, p.opacities.data))
         p.colors[i] = transparent(
             darken(primitive_color(c, extremahues, colormap, pcolor), pdarken),
             primitite_opacity(α, extremaops, popacity))
@@ -296,7 +300,7 @@ primitite_opacity(α, extrema, _) = α
 
 ## update_radii! ##
 
-update_radii!(p, plot) = update_radii!(p, plot, safeextrema(p.radii))
+update_radii!(p, plot) = update_radii!(p, plot, updated_range!(p.radii))
 
 function update_radii!(p::SitePrimitives, plot, extremarads)
     siteradius = plot[:siteradius][]
@@ -311,8 +315,8 @@ function update_radii!(p::HoppingPrimitives, plot, extremarads)
 end
 
 function update_radii!(p, extremarads, radius, minmaxradius)
-    for (i, r) in enumerate(p.radii)
-        p.radii[i] = primitive_radius(normalize_range(r, extremarads), radius, minmaxradius)
+    for (i, r) in enumerate(p.radii.data)
+        p.radii.data[i] = primitive_radius(normalize_range(r, extremarads), radius, minmaxradius)
     end
     return p
 end
@@ -326,7 +330,7 @@ function primitive_scales(p::HoppingPrimitives, plot)
     hopradius = plot[:hopradius][]
     minmaxhopradius = plot[:minmaxhopradius][]
     scales = Vec3f[]
-    for (r, v) in zip(p.radii, p.vectors)
+    for (r, v) in zip(p.radii.data, p.vectors)
         push!(scales, primitive_scale(r, v, hopradius, minmaxhopradius))
     end
     return scales
@@ -357,7 +361,7 @@ function primitive_linewidths(p::HoppingPrimitives{E}, plot) where {E}
     hoppixels = plot[:hoppixels][]
     hopradius = plot[:hopradius][]
     linewidths = Float32[]
-    for r in p.radii
+    for r in p.radii.data
         linewidth = primitive_linewidth(r, hopradius, hoppixels)
         append!(linewidths, (linewidth, linewidth))
     end
@@ -463,7 +467,7 @@ function Makie.plot!(plot::PlotLattice{Tuple{H,S,S´}}) where {H<:Hamiltonian,S<
 
     # collect hops
     if !hidehops
-        radii = hidesites ? () : sp.radii
+        radii = hidesites ? () : sp.radii.data
         hp, hp´ = hoppingprimitives(latslice, latslice´, h, radii, plot)
         if hideshell
             update_colors!(hp, plot)
@@ -628,7 +632,7 @@ function plotsites_shaded!(plot::PlotLattice, sp::SitePrimitives, transparency)
         marker = (; marker = plot[:marker][])
         sizefactor *= sqrt(2)
     end
-    markersize = sizefactor * sp.radii
+    markersize = sizefactor * sp.radii.data
     meshscatter!(plot, sp.centers; color = sp.colors, markersize, marker...,
             space = :data,
             transparency,
@@ -646,7 +650,7 @@ function plotsites_flat!(plot::PlotLattice, sp::SitePrimitives{E}, transparency)
         marker = (; marker = plot[:marker][])
         sizefactor *= 0.5
     end
-    markersize = 2*sp.radii*sizefactor
+    markersize = 2*sp.radii.data*sizefactor
     scatter!(plot, sp.centers;
         markersize, marker...,
         color = sp.colors,
