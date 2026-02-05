@@ -21,6 +21,7 @@ using Statistics: mean
 using QuadGK
 using SpecialFunctions
 using DelimitedFiles
+using FastLapackInterface
 
 export sublat, bravais_matrix, lattice, sites, supercell, hamiltonian,
        hopping, onsite, @onsite, @hopping, @onsite!, @hopping!, pos, ind, cell,
