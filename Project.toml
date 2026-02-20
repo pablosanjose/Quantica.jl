@@ -55,8 +55,8 @@ ProgressMeter = "1.2"
 QuadGK = "2"
 SpecialFunctions = "2"
 StaticArrays = "0.12.3, 0.13, 1"
+Statistics = "1.11.1"
 julia = "^1.9"
-
 [extras]
 LinearMaps = "7a12625a-238d-50fd-b39a-03d52299707e"
 ArnoldiMethod = "ec485272-7323-5ecc-a04f-4719b315124d"
