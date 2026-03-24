@@ -429,50 +429,6 @@ Base.summary(::Transmission) =
 
 #endregion
 
-# ############################################################################################
-# # Integrator
-# #region
-
-# function Base.show(io::IO, I::Integrator)
-#     i = get(io, :indent, "")
-#     print(io, i, summary(I), "\n",
-# "$i  Integration path    : $(path(I))
-# $i  Integration options : $(display_namedtuple(options(I)))
-# $i  Integrand           : ")
-#     ioindent = IOContext(io, :indent => i * "  ")
-#     show(ioindent, integrand(I))
-# end
-
-# Base.summary(::Integrator) = "Integrator: Complex-plane integrator"
-
-
-# display_namedtuple(nt::NamedTuple) = isempty(nt) ? "()" : "$nt"
-
-# #endregion
-
-############################################################################################
-# Josephson and DensityMatrix integrands
-#region
-
-function Base.show(io::IO, J::JosephsonIntegrand)
-    i = get(io, :indent, "")
-    print(io, summary(J), "\n",
-"$i  Temperature (kBT)       : $(temperature(J))
-$i  Contact                 : $(contact(J))
-$i  Number of phase shifts  : $(numphaseshifts(J))")
-end
-
-Base.summary(::JosephsonIntegrand{T}) where {T} = "JosephsonIntegrand{$T}"
-
-function Base.show(io::IO, D::DensityMatrixIntegrand)
-    i = get(io, :indent, "")
-    print(io, summary(D), "\n",
-"$i  Chemical potential      : $(chemicalpotential(D))
-$i  Temperature (kBT)       : $(temperature(D))")
-end
-
-Base.summary(::DensityMatrixIntegrand) = "DensityMatrixIntegrand"
-
 #endregion
 
 ############################################################################################
