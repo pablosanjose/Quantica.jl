@@ -356,63 +356,46 @@ end
 #   a polygonal path connecting (ωpoints...) in the complex plane,
 #       ρ(mu, kBT; params...) = -(1/π) Im ∫dω f(ω) g(ω; params...)
 #   ρ = densitymatrix(g::GreenSlice; opts...) uses a GreenSolver-specific algorithm
-#   Keywords opts are passed to QuadGK.quadgk for the integral or the algorithm used
+#   Keywords opts are passed to Backend.QuadGK for the integral or the algorithm used
 #region
-
-# produces integrand_transform!(gs(ω´; omegamap(ω´)..., params...) * f(ω´-mu))
-# with ω´ = path_transform(ω)
-struct DensityMatrixIntegrand{T,GF<:Function,P<:AbstractIntegrationPath,PT}
-    gsfunc::GF         # (ω, symmetrize) -> gs(ω; symmetrize, omegamap(ω)..., params...)
-    mu::T
-    kBT::T
-    path::P            # AbstractIntegrationPath object
-    pts::PT            # ω-points that define specific integration path, derived from `path`
-end
-
-# Default solver (integration in complex plane)
-struct DensityMatrixIntegratorSolver{I}
-    ifunc::I
-end
 
 struct DensityMatrix{S,G<:GreenSlice}
     solver::S
     gs::G
 end
 
-#region ## densitymatrix API ##
+struct DensityMatrixIntegralSolver{I<:Integral,F}
+    integral::I
+    post!::F
+end
 
-# redirects to specialized method
+# used as callable integrand in integral above
+struct DensityMatrixIntegrand{G<:GreenSlice,O,C}
+    gs::G
+    omegamap::O
+    callback::C
+end
+
+## API ##
+
 densitymatrix(gs::GreenSlice; kw...) =
     densitymatrix(solver(parent(gs)), gs::GreenSlice; kw...)
 
-# generic fallback if no specialized method exists
 densitymatrix(s::AppliedGreenSolver, gs::GreenSlice; kw...) =
     argerror("Dedicated `densitymatrix` algorithm not implemented for $(nameof(typeof(s))). Use generic one instead.")
 
-# default integrator solver
-densitymatrix(gs::GreenSlice, ωmax::Real; kw...) =
-    densitymatrix(gs::GreenSlice, Paths.radial(ωmax, π/4); kw...)
-
-densitymatrix(gs::GreenSlice, ωs::NTuple{<:Any,Real}; kw...) =
-    densitymatrix(gs::GreenSlice, Paths.sawtooth(ωs); kw...)
-
-function densitymatrix(gs::GreenSlice{T}, path::AbstractIntegrationPath; omegamap = Returns((;)), atol = 1e-7, opts...) where {T}
+function densitymatrix(gs::GreenSlice{T}, path::AbstractIntegrationPath; omegamap = Returns((;)), callback = Returns(nothing), atol = 1e-7, opts...) where {T}
     result = copy(call!_output(gs))
-    post = post_transform_rho(path, gs)
-    opts´ = (; post, atol, opts...)
-    function ifunc(mu, kBT; params...)
-        pts = points(path, mu, kBT; params...)
-        realpts = realpoints(path, pts)
-        gsfunc(ω, symmetrize) = call!(gs, ω; symmetrize, omegamap(ω)..., params...)
-        ρd = DensityMatrixIntegrand(gsfunc, T(mu), T(kBT), path, pts)
-        return Integrator(result, ρd, realpts; opts´...)
-    end
-    return DensityMatrix(DensityMatrixIntegratorSolver(ifunc), gs)
+    post! = post_transform_rho(path, gs)
+    dρ = DensityMatrixIntegrand(gs, omegamap, callback)
+    integral = Integral(dρ, path; result, backend = Backend.QuadGK(; atol, opts...))
+    solver = DensityMatrixIntegralSolver(integral, post!)
+    return DensityMatrix(solver, gs)
 end
 
-# we need to add the arc path segment from -∞ to ∞ * p.cisinf
+# we need to add the arc path segment from -∞ to ∞ * cis(inf)
 # we use the syntax gs(::UniformScaling) to find the identity matrix of our slice, see internal.jl
-function post_transform_rho(p::RadialPath, gs)
+function post_transform_rho(p::Paths.RadialPath, gs)
     arc = gs((p.angle/π)*I)
     function post!(x)
         x .+= arc
@@ -423,59 +406,24 @@ end
 
 post_transform_rho(::AbstractIntegrationPath, _) = identity
 
-#endregion
+## call ##
 
-#region ## call API ##
+(ρ::DensityMatrix)(mu = 0, kBT = 0; params...) = ρ.solver(mu, kBT; params...)
 
-# generic fallback (for other solvers)
-(ρ::DensityMatrix)(mu = 0, kBT = 0; params...) =
-    ρ.solver(mu, kBT; params...)
-# special case for integrator solver
-(ρ::DensityMatrix{<:DensityMatrixIntegratorSolver})(mu = 0, kBT = 0; params...) =
-    ρ.solver(mu, kBT; params...)()
+function (s::DensityMatrixIntegralSolver)(mu = 0, kBT = 0; params...)
+    integral = s.integral(mu, kBT; params...)
+    return s.post!(integral)
+end
 
-(s::DensityMatrixIntegratorSolver)(mu, kBT; params...) =
-    s.ifunc(mu, kBT; params...);
-
-(ρi::DensityMatrixIntegrand)(x) = copy(call!(ρi, x))
-
-function call!(ρi::DensityMatrixIntegrand, x)
-    ω = point(x, ρi.path, ρi.pts)
-    j = jacobian(x, ρi.path, ρi.pts)
-    f = fermi(chopsmall(ω - ρi.mu), inv(ρi.kBT))
-    symmetrize = -j*f/(2π*im)
-    output = ρi.gsfunc(ω, symmetrize)
-    return output
+function (i::DensityMatrixIntegrand)(out, ω, mu, kBT; params...)
+    f = fermi(chopsmall(ω - mu), inv(kBT))
+    symmetrize = -f/(2π*im) # to build g*symmetrize + h.c.
+    out .= call!(gs, ω; symmetrize, i.omegamap(ω)..., params...)
+    i.callback(ω, out)
+    return out
 end
 
 #endregion
-
-#region ## API ##
-
-integrand(ρ::DensityMatrix{<:DensityMatrixIntegratorSolver}, mu = 0.0, kBT = 0.0; params...) =
-    integrand(ρ.solver(mu, kBT; params...))
-
-points(ρ::DensityMatrix{<:DensityMatrixIntegratorSolver}, mu = 0.0, kBT = 0.0; params...) =
-    points(integrand(ρ, mu, kBT; params...))
-points(ρ::DensityMatrixIntegrand) = ρ.pts
-
-point(x, ρi::DensityMatrixIntegrand) = point(x, ρi.path, ρi.pts)
-
-temperature(D::DensityMatrixIntegrand) = D.kBT
-
-chemicalpotential(D::DensityMatrixIntegrand) = D.mu
-
-Base.parent(ρ::DensityMatrix) = ρ.gs
-
-call!_output(ρ::DensityMatrix) = call!_output(ρ.gs)
-
-solver(ρ::DensityMatrix) = ρ.solver
-
-#endregion
-
-#endregion
-#endregion
-
 
 ############################################################################################
 # josephson
@@ -490,15 +438,16 @@ solver(ρ::DensityMatrix) = ρ.solver
 #   Keywords opts are passed to quadgk for the integral
 #region
 
-struct JosephsonIntegrand{T<:AbstractFloat,P<:Union{Missing,AbstractArray},GF<:Function,PA,PT}
-    gfunc::GF                   # ω -> g(ω; params...)
-    kBT::T
-    contactind::Int             # contact index
-    tauz::Vector{Int}           # precomputed diagonal of tauz
-    phaseshifts::P              # missing or collection of phase shifts to apply
-    path::PA                    # AbstractIntegrationPath
-    pts::PT                     # points in actual integration path, derived from `path`
-    traces::P                   # preallocated workspace
+struct Josephson{S,G<:GreenSlice}
+    solver::S
+    gs::G
+end
+
+struct JosephsonIntegralSolver{I<:Integral}
+    integral::I
+end
+
+struct JosephsonIntegrandPrealloc{T}
     Σ::Matrix{Complex{T}}       # preallocated workspace, full self-energy
     ΣggΣ::Matrix{Complex{T}}    # preallocated workspace
     Σ´::Matrix{Complex{T}}      # preallocated workspace
@@ -507,148 +456,108 @@ struct JosephsonIntegrand{T<:AbstractFloat,P<:Union{Missing,AbstractArray},GF<:F
     cisτz::Vector{Complex{T}}   # preallocated workspace
 end
 
-struct Josephson{S,G<:GreenSlice}
-    solver::S
-    gs::G  # currently unused, but parallels DensityMatrix (used for OrbitalSliceArray conv)
+# used as callable integrand in integral above
+struct JosephsonIntegrand{P<:Union{Missing,AbstractArray},T,G<:GreenSlice{T},O,C}
+    gs::G
+    omegamap::O
+    callback::C
+    contactind::Int             # contact index
+    tauz::Vector{Int}           # precomputed diagonal of tauz
+    phaseshifts::P              # missing or collection of phase shifts to apply
+    prealloc::JosephsonIntegrandPrealloc{T}
 end
 
-# default solver (integration in complex plane)
-struct JosephsonIntegratorSolver{I}
-    ifunc::I
-end
-
-#region ## josephson API ##
-
-josephson(gs::GreenSlice, ωmax::Real; kw...) =
-    josephson(gs, Paths.radial(ωmax, π/4); kw...)
-
-josephson(gs::GreenSlice, ωs::NTuple{<:Any,Real}; kw...) =
-    josephson(gs, Paths.sawtooth(ωs); kw...)
-
-function josephson(gs::GreenSlice{T}, path::AbstractIntegrationPath; omegamap = Returns((;)), phases = missing, atol = 1e-7, opts...) where {T}
+function JosephsonIntegrand(gs::GreenSlice{T}, phaseshifts, omegamap, callback) where {T}
     check_nodiag_axes(gs)
     check_same_contact_slice(gs)
-    contact = rows(gs)
+    contactind = rows(gs)
     g = parent(gs)
     Σfull = similar_contactΣ(g)
-    Σ = similar_contactΣ(g, contact)
+    Σ = similar_contactΣ(g, contactind)
     normalsize = normal_size(hamiltonian(g))
     tauz = tauz_diag.(axes(Σ, 1), normalsize)
-    phases´, traces = sanitize_phases_traces(phases, T)
-    opts´ = (; post = real, atol, opts...)
-    function ifunc(kBT; params...)
-        pts = points(path, 0, kBT; params...)
-        realpts = realpoints(path, pts)
-        gfunc(ω) = call!(g, ω; omegamap(ω)..., params...)
-        jd = JosephsonIntegrand(gfunc, T(kBT), contact, tauz, phases´, path, pts,
-            traces, Σfull, Σ, similar(Σ), similar(Σ), similar(Σ), similar(tauz, Complex{T}))
-        return Integrator(traces, jd, realpts; opts´...)
-    end
-    return Josephson(JosephsonIntegratorSolver(ifunc), gs)
+    phaseshifts´  = sanitize_phases_traces(phaseshifts, T)
+    prealloc = JosephsonIntegrandPrealloc(
+        Σfull, Σ, similar(Σ), similar(Σ), similar(Σ), similar(tauz, Complex{T}))
+    return JosephsonIntegrand(gs, omegamap, callback, contactind, tauz, phaseshifts´, prealloc)
 end
 
-sanitize_phases_traces(::Missing, ::Type{T}) where {T} = missing, missing
+sanitize_phases_traces(::Missing, ::Type{T}) where {T} = missing
 sanitize_phases_traces(phases::Integer, ::Type{T}) where {T} =
     sanitize_phases_traces(range(0, 2π, length = phases), T)
+sanitize_phases_traces(phases, ::Type{T}) where {T} = Complex{T}.(phases)
 
-function sanitize_phases_traces(phases, ::Type{T}) where {T}
-    phases´ = Complex{T}.(phases)
-    traces = similar(phases´)
-    return phases´, traces
+## API ##
+
+function josephson(gs::GreenSlice, path::AbstractIntegrationPath; phases = missing, omegamap = Returns((;)), callback = Returns(nothing), atol = 1e-7, opts...)
+    dJ = JosephsonIntegrand(gs, phases, omegamap, callback)
+    # phases is sanitized and converted to dJ.phaseshifts. Preallocate result based on it.
+    result = ismissing(dJ.phaseshifts) ? nothing : similar(dJ.phaseshifts)
+    integral = Integral(dJ, path; result, backend = Backend.QuadGK(; atol, opts...))
+    return Josephson(integral, gs)
 end
 
-#endregion
+## call ##
 
-#region ## call API ##
+(J::Josephson)(kBT::T = 0; params...) where {T} = J.solver(zero(T), kBT; params...)
 
-# generic fallback (for other solvers)
-(j::Josephson)(kBT = 0; params...) = j.solver(kBT; params...)
-# special case for integrator solver (so we can access integrand etc before integrating)
-(j::Josephson{<:JosephsonIntegratorSolver})(kBT = 0; params...) =
-    j.solver(kBT; params...)()
-
-(s::JosephsonIntegratorSolver)(kBT; params...) = s.ifunc(kBT; params...)
-
-(J::JosephsonIntegrand)(x) = copy(call!(J, x))
-
-function call!(Ji::JosephsonIntegrand, x)
-    ω = point(x, Ji.path, Ji.pts)
-    gω = Ji.gfunc(ω)
-    f = fermi(ω, inv(Ji.kBT))
-    traces = josephson_traces(Ji, gω, f)
-    traces = mul_scalar_or_array!(traces, jacobian(x, Ji.path, Ji.pts))
-    return traces
+function (s::JosephsonIntegralSolver)(kBT; params...)
+    integral = s.integral(kBT; params...)
+    return real(integral)
 end
 
-#endregion
-
-#region ## API ##
-
-integrand(J::Josephson{<:JosephsonIntegratorSolver}, kBT = 0.0; params...) =
-    integrand(J.solver(kBT; params...))
-
-points(J::Josephson{<:JosephsonIntegratorSolver}, kBT = 0.0; params...) =
-    points(integrand(J, kBT; params...))
-points(J::JosephsonIntegrand) = J.pts
-
-point(x, Ji::JosephsonIntegrand) = point(x, Ji.path, Ji.pts)
-
-temperature(J::JosephsonIntegrand) = J.kBT
-
-contact(J::JosephsonIntegrand) = J.contactind
-
-phaseshifts(I::Integrator{<:JosephsonIntegrand}) = phaseshifts(integrand(I))
-phaseshifts(J::JosephsonIntegrand) = real.(J.phaseshifts)
-
-numphaseshifts(J::JosephsonIntegrand) = numphaseshifts(J.phaseshifts)
-numphaseshifts(::Missing) = 0
-numphaseshifts(phaseshifts) = length(phaseshifts)
-
-function josephson_traces(J, gω, f)
-    gr = view(gω, J.contactind, J.contactind)
-    Σi = selfenergy!(J.Σ, gω, J.contactind)
-    return josephson_traces!(J, gr, Σi, f)
+function (dJ::JosephsonIntegrand{Missing})(ω, kBT; params...)
+    f, gr, Σi = fgrΣi(dJ, ω, kBT; params...)
+    trace = josephson_trace!(dJ, gr, Σi, f)
+    i.callback(ω, trace)
+    return trace
 end
 
-josephson_traces!(J::JosephsonIntegrand{<:Any,Missing}, gr, Σi, f) =
-    josephson_one_trace!(J, gr, Σi, f)
-
-function josephson_traces!(J, gr, Σi, f)
-    for (i, phaseshift) in enumerate(J.phaseshifts)
-        gr´, Σi´ = apply_phaseshift!(J, gr, Σi, phaseshift)
-        J.traces[i] = josephson_one_trace!(J, gr´, Σi´, f)
+function (dJ::JosephsonIntegrand)(out, ω, kBT; params...)
+    f, gr, Σi = fgrΣi(dJ, ω, kBT; params...)
+    for (i, phaseshift) in enumerate(dJ.phaseshifts)
+        gr´, Σi´ = apply_phaseshift!(dJ, gr, Σi, phaseshift)
+        out[i] = josephson_trace!(dJ, gr´, Σi´, f)
     end
-    return J.traces
+    i.callback(ω, out)
+    return out
 end
 
-# 2 f(ω) Tr[(Σi * gr - gr * Σi) * τz]
-function josephson_one_trace!(J, gr, Σi, f)
-    ΣggΣ = J.ΣggΣ
+# computes fermi function (f), g at the contact (gr) and Σ at the contact (Σi)
+# to build: 2 f(ω) Tr[(Σi * gr - gr * Σi) * τz]
+function fgrΣi(dJ, ω, kBT; params...)
+    f = fermi(ω, inv(kBT))
+    gω = call!(parent(dJ.gs), ω; dJ.omegamap(ω)..., params...)
+    gr = view(gω, dJ.contactind, dJ.contactind)
+    Σi = selfenergy!(dJ.prealloc.Σ, gω, dJ.contactind)
+    return f, gr, Σi
+end
+
+# compute 2 f(ω) Tr[(Σi * gr - gr * Σi) * τz]
+function josephson_trace!(dJ, gr, Σi, f)
+    ΣggΣ = dJ.prealloc.ΣggΣ
     mul!(ΣggΣ, Σi, gr)
     mul!(ΣggΣ, gr, Σi, -1, 1)
-    trace = 2 * f * trace_tau(ΣggΣ, J.tauz)
+    trace = 2 * f * trace_tau(ΣggΣ, dJ.tauz)
     return trace
 end
 
 # Σi´ = U Σi U' and gr´ = (gr₀⁻¹ - Σi´)⁻¹ = (1+gr*(Σi-Σi´))⁻¹gr
-function apply_phaseshift!(J, gr, Σi, phaseshift)
-    Σi´ = J.Σ´
-    U = J.cisτz
+function apply_phaseshift!(dJ, gr, Σi, phaseshift)
+    Σi´ = dJ.prealloc.Σ´
+    U = dJ.prealloc.cisτz
     phasehalf = phaseshift/2
-    @. U = cis(-phasehalf * J.tauz)
+    @. U = cis(-phasehalf * dJ.tauz)
     @. Σi´ = U * Σi * U'
-
-    den = J.den
+    den = dJ.prealloc.den
     one!(den)
-    tmp = J.g´
+    tmp = dJ.prealloc.g´
     @. tmp = Σi - Σi´
     mul!(den, gr, tmp, 1, 1)            # den = 1-gr * (Σi - Σi´)
-    gr´ = ldiv!(J.g´, lu!(den), gr)     # gr´ = (1+gr*(Σi-Σi´))⁻¹gr
-
+    gr´ = ldiv!(tmp, lu!(den), gr)      # gr´ = (1+gr*(Σi-Σi´))⁻¹gr
     return gr´, Σi´
 end
 
-#endregion
 #endregion
 
 ############################################################################################

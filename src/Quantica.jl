@@ -21,6 +21,7 @@ using Statistics: mean
 using QuadGK
 using SpecialFunctions
 using DelimitedFiles
+using IntegrationInterface
 
 export sublat, bravais_matrix, lattice, sites, supercell, hamiltonian,
        hopping, onsite, @onsite, @hopping, @onsite!, @hopping!, pos, ind, cell,
@@ -65,7 +66,7 @@ include("transform.jl")
 include("mesh.jl")
 include("bands.jl")
 include("greenfunction.jl")
-include("integrator.jl")
+include("paths.jl")
 include("observables.jl")
 include("meanfield.jl")
 # Plumbing

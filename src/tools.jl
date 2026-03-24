@@ -140,10 +140,6 @@ chopsmall(xs, atol) = chopsmall.(xs, Ref(atol))
 chopsmall(xs) = chopsmall.(xs)
 chopsmall(xs::UniformScaling, atol...) = I * chopsmall(xs.λ, atol...)
 
-mul_scalar_or_array!(x::Number, factor) = factor * x
-mul_scalar_or_array!(x::Tuple, factor) = factor .* x
-mul_scalar_or_array!(x::AbstractArray, factor) = (x .*= factor; x)
-
 # Flattens matrix of Matrix{<:Number} into a matrix of Number's
 function mortar(ms::AbstractMatrix{M}) where {C<:Number,M<:Matrix{C}}
     isempty(ms) && return convert(Matrix{C}, ms)
