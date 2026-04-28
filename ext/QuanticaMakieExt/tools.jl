@@ -44,7 +44,6 @@ function resolve_cross_references!(plot::PlotLattice)
         property = plot[name][]
         if property isa Symbol && property in names
             plot[name][] = plot[property][]
-
         end
     end
     foreach(names) do name
