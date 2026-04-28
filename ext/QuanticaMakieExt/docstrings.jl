@@ -66,11 +66,11 @@ inter-site links, and a representation of contacts.
 
 - `flat = true`: whether to render sites and hops as flat circles and lines, or as 3D meshes
 - `force_transparency = false`: whether to disable occlusion of all non-transparent elements. Useful in case `inspector` tooltips are occluded.
-- `shellopacity = 0.07`: opacity of elements surrounding the unitcell or the set of selected sites (dubbed "shell")
+- `shellopacity = 0.15`: opacity of elements surrounding the unitcell or the set of selected sites (dubbed "shell")
 - `cellopacity = 0.03`: opacity of the unitcell's boundingbox
 - `cellcolor = RGBAf(0,0,1)`: color of the unitcell's boundingbox
 - `boundarycolor = RGBAf(1,0,0)`: color of boundary cells for GreenFunction plots
-- `boundaryopacity = 0.07`: opacity of boundary cells for GreenFunction plots
+- `boundaryopacity = 0.15`: opacity of boundary cells for GreenFunction plots
 - `sitecolor = missing`: color of sites, as a index in `sitecolormap`, a named color, a `Makie.Colorant`, a collection of either, or as a site shader (see below). If `missing`, cycle through `sitecolormap`. If a collection, cycle through that.
 - `sitecolormap = :Spectral_9`: colormap to use for `sitecolor` (see options in https://tinyurl.com/cschemes, or create your own with ColorSchemes.jl)
 - `siteopacity = missing`: opacity of sites, as a real between 0 and 1, or as a site shader (see below). If `missing`, obey `shellopacity`.

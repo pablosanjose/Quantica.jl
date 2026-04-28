@@ -6,11 +6,11 @@
     Theme(
         flat = true,
         force_transparency = false,
-        shellopacity = 0.07,
+        shellopacity = 0.15,
         cellopacity = 0.03,
         cellcolor = RGBAf(0,0,1),
         boundarycolor = RGBAf(1,0,0),
-        boundaryopacity = 0.07,
+        boundaryopacity = 0.15,
         sitecolor = missing,         # accepts (i, r) -> float, IndexableObservable
         siteopacity = missing,       # accepts (i, r) -> float, IndexableObservable
         minmaxsiteradius = (0.0, 0.5),
