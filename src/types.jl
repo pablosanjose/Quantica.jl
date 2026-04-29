@@ -872,7 +872,7 @@ Base.similar(m::A) where {A <: AppliedModifier} = A(m.blocktype, m.f, similar(m.
 Base.parent(m::AppliedOnsiteModifier) = OnsiteModifier(m.f, m.parentselector, m.spatial)
 Base.parent(m::AppliedHoppingModifier) = HoppingModifier(m.f, m.parentselector, m.spatial)
 
-# no-op by default. Some override this since they can be mutated (e.g. by reverse!)
+# no-op by default. Some override this since they can be mutated (e.g. by reverse_bravais!)
 # StitchModifier also overrides this, see hamiltonian.jl
 Base.copy(m::AbstractModifier) = m
 Base.copy(m::AppliedHoppingModifier) = AppliedHoppingModifier(m, copy.(m.ptrs))

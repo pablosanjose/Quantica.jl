@@ -475,7 +475,7 @@ end
     h´´ = reverse(h´)
     @test bravais_matrix(lattice(h´´)) == - bravais_matrix(lattice(h´))
     @test all(dcell(har´´) == -dcell(har´) for (har´´, har´) in zip(harmonics(h´´), harmonics(h´)))
-    @test Quantica.reverse!(h´´) === h´´
+    @test Quantica.reverse_bravais!(h´´) === h´´
     @test bravais_matrix(lattice(h´´)) == bravais_matrix(lattice(h´))
     # reverse invariants
     h = LP.square() |> supercell(2) |> hopping((r, dr) -> im*dr[2] + abs(dr[1]))

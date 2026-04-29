@@ -384,7 +384,7 @@ Lattice{Float64,2,2} : 2D lattice in 2D space
 ```
 
 # See also
-    `translate`, `reverse`, `reverse!`
+    `translate`, `reverse`
 """
 transform
 
@@ -414,7 +414,7 @@ julia> LatticePresets.square() |> translate((3,3)) |> sites
 ```
 
 # See also
-    `transform`, `reverse`, `reverse!`
+    `transform`, `reverse`
 
 """
 translate

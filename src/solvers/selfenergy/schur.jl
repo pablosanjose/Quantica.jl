@@ -71,7 +71,7 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurEmpty
         # but the bravais vectors and ±dn indices are flipped in place. Nothing else changes
         # consequently, this only affects plotting, not calculations
         hlead = copy_harmonics_shallow(hlead)
-        reverse!(hlead)
+        reverse_bravais!(hlead)
     end
 
     solver´ = SelfEnergySchurSolver(fsolver, hlead, reverse, boundary, leadorbs)
@@ -219,7 +219,7 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead1
         # but the bravais vectors and ±dn indices are flipped in place. Nothing else changes
         # consequently, this only affects plotting, not calculations
         hlead = copy_harmonics_shallow(hlead)
-        reverse!(hlead)
+        reverse_bravais!(hlead)
     end
 
     solver´ = extended_or_regular_solver(Σs, gslice, gunit, hcoupling, nparent)
@@ -317,7 +317,7 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead1
         # but the bravais vectors and ±dn indices are flipped in place. Nothing else changes
         # consequently, this only affects plotting, not calculations
         hlead = copy_harmonics_shallow(hlead)
-        reverse!(hlead)
+        reverse_bravais!(hlead)
     end
 
     solver´ = SelfEnergyGenericSolver(gslice, hlead, V´, V)

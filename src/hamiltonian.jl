@@ -696,7 +696,7 @@ apply_bloch_phases!(vals::AbstractArray{T}, ::Missing, _) where {T} = fill!(vals
 
 Base.parent(m::StitchModifier) = m.ph
 
-# copy(StitchModifer) must dealias, since m.groups_dcells_uw can be mutated, e.g. by reverse!
+# copy(StitchModifer) must dealias, since m.groups_dcells_uw can be mutated, e.g. by reverse_bravais!
 Base.copy(m::StitchModifier) = StitchModifier(m.ph, m.wrapped_phases, copy.(m.groups_dcells_uw))
 
 # Used for reverse: flip sign of dcells_u of unwrapped axes which are used to select the

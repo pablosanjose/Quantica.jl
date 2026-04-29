@@ -45,19 +45,19 @@ translate(l::Lattice, δr) = translate!(copy(l), δr)
 # reverse - flip all Bravais vectors of a lattice, and all dn in hamiltonian harmonics
 #   As a general rule, reverse does not change the Hamiltonian, only the meaning of the
 #   Bloch phase ϕ -> -ϕ, so that H(k) -> H(k), but H(ϕ) -> H(-ϕ)
-#   reverse!(ph::ParametricHamiltonian) is dangerous - it flips the harmonics of parent(ph)!
+#   reverse_bravais!(ph::ParametricHamiltonian) is dangerous - it flips the harmonics of parent(ph)!
 #   We don't export it or document it to avoid user surprises.
 #region
 
-Base.reverse(lat::Lattice) = reverse!(copy(lat))
+Base.reverse(lat::Lattice) = reverse_bravais!(copy(lat))
 
-Base.reverse(h::AbstractHamiltonian) = reverse!(copy(h))
+Base.reverse(h::AbstractHamiltonian) = reverse_bravais!(copy(h))
 
 # unexported
-reverse!(lat::Lattice) = (matrix(bravais(lat)) .*= -1; lat)
+reverse_bravais!(lat::Lattice) = (matrix(bravais(lat)) .*= -1; lat)
 
-function reverse!(h::Hamiltonian)
-    reverse!(lattice(h))
+function reverse_bravais!(h::Hamiltonian)
+    reverse_bravais!(lattice(h))
     hars = harmonics(h)
     for (i, har) in enumerate(hars)
         hars[i] = Harmonic(-dcell(har), matrix(har))
@@ -65,18 +65,18 @@ function reverse!(h::Hamiltonian)
     return h
 end
 
-function reverse!(ph::ParametricHamiltonian)
-    reverse!(parent(ph))
-    reverse!(hamiltonian(ph))
-    reverse!.(modifiers(ph))
+function reverse_bravais!(ph::ParametricHamiltonian)
+    reverse_bravais!(parent(ph))
+    reverse_bravais!(hamiltonian(ph))
+    reverse_bravais!.(modifiers(ph))
     return ph
 end
 
 # by default, modifiers do not care about reverse
-reverse!(m::AbstractModifier) = m
+reverse_bravais!(m::AbstractModifier) = m
 
 # AppliedHoppingModifiers contain CellSite's that contain nonzero dcell that must be flipped
-function reverse!(m::AppliedHoppingModifier)
+function reverse_bravais!(m::AppliedHoppingModifier)
     ptrs = pointers(m)
     for pcell in ptrs, (i, p) in enumerate(pcell)
         (ptr, r, dr, si, sj, norbs) = p
@@ -88,7 +88,7 @@ end
 # The StitchModifier is special, in that it contains a reference to the dn of stitched
 # harmonics that are a sum over subsets of parent harmonics. If the dcell of the former are
 # flipped, we must flip the dcell reference to them as well.
-reverse!(m::StitchModifier) = flip_dcells!(m)
+reverse_bravais!(m::StitchModifier) = flip_dcells!(m)
 
 #endregion
 
