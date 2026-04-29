@@ -475,8 +475,18 @@ end
     h´´ = reverse(h´)
     @test bravais_matrix(lattice(h´´)) == - bravais_matrix(lattice(h´))
     @test all(dcell(har´´) == -dcell(har´) for (har´´, har´) in zip(harmonics(h´´), harmonics(h´)))
-    @test reverse!(h´´) === h´´
+    @test Quantica.reverse!(h´´) === h´´
     @test bravais_matrix(lattice(h´´)) == bravais_matrix(lattice(h´))
+    # reverse invariants
+    h = LP.square() |> supercell(2) |> hopping((r, dr) -> im*dr[2] + abs(dr[1]))
+    h1 = @stitch(h, SA[1], ϕ)
+    hr = reverse(h1)
+    @test h1(SA[1]) ≈ hr(SA[-1])
+    @test h1(SA[1,2]'*bravais_matrix(h1)) ≈ hr(SA[1,2]'*bravais_matrix(hr))
+    h = LP.linear() |> @hopping((r, dr) -> im*dr[1])
+    @test h(SA[1]) ≈ reverse(h)(SA[-1]) != SA[0]
+    h = LP.linear() |> @hopping((i,j) --> im*(cell(i)-cell(j))[1])
+    @test h(SA[1]) ≈ reverse(h)(SA[1]) != SA[0]
 end
 
 @testset "hamiltonians combine" begin

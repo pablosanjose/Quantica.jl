@@ -694,6 +694,20 @@ end
 # If phases are missing, we just store structural zeros (for the parametric case)
 apply_bloch_phases!(vals::AbstractArray{T}, ::Missing, _) where {T} = fill!(vals, zero(T))
 
+Base.parent(m::StitchModifier) = m.ph
+
+# copy(StitchModifer) must dealias, since m.groups_dcells_uw can be mutated, e.g. by reverse!
+Base.copy(m::StitchModifier) = StitchModifier(m.ph, m.wrapped_phases, copy.(m.groups_dcells_uw))
+
+# Used for reverse: flip sign of dcells_u of unwrapped axes which are used to select the
+# stitched harmonics (assumed reversed) that are the sum of subsets of original harmonics.
+# see sum_harmonics_group! below
+function flip_dcells!(m::StitchModifier)
+    _, dcells_u, _ = stitch_groups(m)
+    dcells_u .*= -1
+    return m
+end
+
 #endregion
 
 #region ## applymodifier! API
