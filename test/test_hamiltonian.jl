@@ -479,10 +479,15 @@ end
     @test bravais_matrix(lattice(h´´)) == bravais_matrix(lattice(h´))
     # reverse invariants
     h = LP.square() |> supercell(2) |> hopping((r, dr) -> im*dr[2] + abs(dr[1]))
-    h1 = @stitch(h, SA[1], ϕ)
+    h1 = @stitch(h, SA[1], ϕ1)
     hr = reverse(h1)
     @test h1(SA[1]) ≈ hr(SA[-1])
     @test h1(SA[1,2]'*bravais_matrix(h1)) ≈ hr(SA[1,2]'*bravais_matrix(hr))
+    h2 = @stitch(h1, SA[1], ϕ2)
+    @test h2(SA[], ϕ1=2, ϕ2=3) ≈ h(SA[2,3])
+    h3 = @stitch(reverse(@stitch(h, SA[2], ϕ2)), SA[1], ϕ1)
+    @test h3(SA[], ϕ1=2, ϕ2=3) ≈ h(SA[-2,3])
+    @test !(h3(SA[], ϕ1=2, ϕ2=3) ≈ h(SA[2,3]))
     h = LP.linear() |> @hopping((r, dr) -> im*dr[1])
     @test h(SA[1]) ≈ reverse(h)(SA[-1]) != SA[0]
     h = LP.linear() |> @hopping((i,j) --> im*(cell(i)-cell(j))[1])

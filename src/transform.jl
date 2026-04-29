@@ -135,7 +135,7 @@ function _stitch(h::Hamiltonian, wp, wa, ua)
     lat´ = lattice(lat; bravais=b´)
     bs´ = blockstructure(h)
     bloch´ = copy_matrices(bloch(h))
-    hars´ = stitch_harmonics(harmonics(h), wp, wa, ua)
+    hars´ = stitch_harmonics(h, wp, wa, ua)
     return Hamiltonian(lat´, bs´, hars´, bloch´)
 end
 
@@ -166,14 +166,16 @@ function split_axes(::AbstractHamiltonian{<:Any,<:Any,L}, wrapaxes::SVector) whe
     return wp, wa, ua
 end
 
-function stitch_harmonics(hars, phases_w, wa, ua)
-    groups, dcells_u, dcells_w = stitch_groups(hars, wa, ua)
-    hars´ = [sum_harmonics_group(hars, inds, phases_w, dcells_u, dcells_w) for inds in groups]
+function stitch_harmonics(h, phases_w, wa, ua)
+    groups, dcells_u, dcells_w = stitch_groups(harmonics(h), wa, ua)
+    hars´ = [sum_harmonics_group(h, inds, phases_w, dcells_u, dcells_w) for inds in groups]
     return hars´
 end
 
 # similar to merge_sparse in tools.jl, but we sum everything with bloch phases
-function sum_harmonics_group(hars::Vector{<:Harmonic{<:Any,<:Any,B}}, inds, phases_w, dcells_u, dcells_w) where {B}
+# function sum_harmonics_group(hars::Vector{<:Harmonic{<:Any,<:Any,B}}, inds, phases_w, dcells_u, dcells_w) where {B}
+function sum_harmonics_group(h::AbstractHamiltonian{<:Any,<:Any,<:Any,B}, inds, phases_w, dcells_u, dcells_w) where {B}
+    hars = harmonics(h)
     I, J, V = Int[], Int[], B[]
     for i in inds
         I´, J´, V´ = findnz(unflat(matrix(hars[i])))
@@ -245,10 +247,15 @@ end
 
 parameter_names(m::StitchModifier) = parameter_names(m.ph)
 
+# all parent harmonics that get summed into each stitched harmonic adds its pointers.
 function _merge_pointers!(p, m::StitchModifier)
     hars = harmonics(hamiltonian(m.ph))
-    for (pn, har) in zip(p, hars)
-        append!(pn, eachindex(nonzeros(unflat(har))))
+    groups = first(m.groups_dcells_uw)
+    for (pn, group) in zip(p, groups)
+        for pn´ in group
+            append!(pn, eachindex(nonzeros(unflat(hars[pn´]))))
+        end
+        unique!(sort!(pn))
     end
     return p
 end
