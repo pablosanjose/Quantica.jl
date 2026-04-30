@@ -600,6 +600,9 @@ Base.copy(ls::LatticeSlice) = LatticeSlice(ls.lat, copy(ls.cellsdict))
 
 Base.collect(ci::CellIndices) = CellIndices(ci.cell, collect(ci.inds), ci.type)
 
+# reverse flips cell only.
+Base.reverse(ci::CellIndices) = CellIndices(-ci.cell, ci.inds, ci.type)
+
 #endregion
 #endregion
 
@@ -800,6 +803,7 @@ struct AppliedOnsiteModifier{B,N,R<:SVector,F<:ParametricFunction{N},S<:SiteSele
     f::F
     ptrs::Vector{Tuple{Int,R,P,Int}}
     # [(ptr, r, si, norbs)...] for each selected site, dn = 0 harmonic
+    # si is a CellSite
     spatial::Bool   # If true, f is a function of position r. Otherwise it takes a single CellSite
 end
 
@@ -815,6 +819,7 @@ struct AppliedHoppingModifier{B,N,R<:SVector,F<:ParametricFunction{N},S<:HopSele
     f::F
     ptrs::Vector{Vector{Tuple{Int,R,R,P,P,Tuple{Int,Int}}}}
     # [[(ptr, r, dr, si, sj, (norbs, norbs´)), ...], ...] for each selected hop on each harmonic
+    # si, sj are CellSite
     spatial::Bool  # If true, f is a function of positions r, dr. Otherwise it takes two CellSite's
 end
 
@@ -866,6 +871,12 @@ Base.similar(m::A) where {A <: AppliedModifier} = A(m.blocktype, m.f, similar(m.
 
 Base.parent(m::AppliedOnsiteModifier) = OnsiteModifier(m.f, m.parentselector, m.spatial)
 Base.parent(m::AppliedHoppingModifier) = HoppingModifier(m.f, m.parentselector, m.spatial)
+
+# no-op by default. Some override this since they can be mutated (e.g. by reverse_bravais!)
+# StitchModifier also overrides this, see hamiltonian.jl
+Base.copy(m::AbstractModifier) = m
+Base.copy(m::AppliedHoppingModifier) = AppliedHoppingModifier(m, copy.(m.ptrs))
+Base.copy(m::AppliedOnsiteModifier) = AppliedOnsiteModifier(m, copy(m.ptrs))
 
 #endregion
 #endregion
@@ -1608,7 +1619,7 @@ Base.parent(h::ParametricHamiltonian) = h.hparent
 Base.size(h::ParametricHamiltonian, i...) = size(parent(h), i...)
 
 Base.copy(p::ParametricHamiltonian) = ParametricHamiltonian(
-    copy(p.hparent), copy(p.h), p.modifiers, copy.(p.allptrs), copy(p.allparams))
+    copy(p.hparent), copy(p.h), copy.(p.modifiers), copy.(p.allptrs), copy(p.allparams))
 
 LinearAlgebra.ishermitian(h::ParametricHamiltonian) =
     argerror("`ishermitian(::ParametricHamiltonian)` not supported, as the result can depend on the values of parameters.")

@@ -343,22 +343,19 @@ supercell
     reverse(lat_or_h::Union{Lattice,AbstractHamiltonian})
 
 Build a new lattice or hamiltonian with the orientation of all Bravais vectors and harmonics
-reversed.
+reversed. The lattice itself (the position of sites) is not changed, only its description.
+
+For an AbstractHamiltonian `h`, we have `h(ϕ; kw...) == reverse(h)(-ϕ; kw...)`. An
+exception to the above are ParametricHamiltonian's that contains non-spatial parametric
+terms that depend on unit cell indices, such as `@hopping((i,j) -->
+im*(cell(i)-cell(j))[1])`). Since `reverse` flips Bravais vectors, it also flips unit cell
+indices, which changes the meaning of this hopping. This does not affect spatial models,
+since actual positions of sites are not changed by `reverse`.
 
 # See also
-    `reverse!`, `transform`
+    `transform`
 """
 Base.reverse
-
-"""
-    reverse!(lat_or_h::Union{Lattice,AbstractHamiltonian})
-
-In-place version of `reverse`, inverts all Bravais vectors and harmonics of `lat_or_h`.
-
-# See also
-    `reverse`, `transform`
-"""
-Base.reverse!
 
 """
     transform(lat_or_h::Union{Lattice,AbstractHamiltonian}, f::Function)
@@ -387,7 +384,7 @@ Lattice{Float64,2,2} : 2D lattice in 2D space
 ```
 
 # See also
-    `translate`, `reverse`, `reverse!`
+    `translate`, `reverse`
 """
 transform
 
@@ -417,7 +414,7 @@ julia> LatticePresets.square() |> translate((3,3)) |> sites
 ```
 
 # See also
-    `transform`, `reverse`, `reverse!`
+    `transform`, `reverse`
 
 """
 translate

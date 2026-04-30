@@ -236,7 +236,7 @@ julia> qplot(lat[cells = -7:7])
 !!! tip "No need to build selectors explicitly"
     Note that we we didn't build a `siteselector(region = ...)` object to pass it to `supercell`. Instead, as shown above, we passed the corresponding keywords directly to `supercell`, which then takes care to build the selector internally.
 
-To simply reverse the direction of the Bravais vectors of a lattice, while leaving the site positions unchanged, use `reverse` (or `reverse!` to do it in-place)
+To simply reverse the direction of the Bravais vectors of a lattice, while leaving the site positions unchanged, use `reverse`
 ```julia
 julia> reverse(LP.square())
 Lattice{Float64,2,2} : 2D lattice in 2D space
