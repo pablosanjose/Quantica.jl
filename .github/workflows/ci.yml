@@ -11,31 +11,24 @@ permissions:
 jobs:
   test:
     if: github.event_name == 'push' && contains(toJson(github.event.commits), '[skip test]') == false && contains(toJson(github.event.commits), '[skip tests]') == false
-    name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }}
+    name: Julia ${{ matrix.version }} - ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         version:
           - '1'
-          - '1.10'
+          - 'lts'
           # - 'pre'
           # - 'nightly'
         os:
           - ubuntu-latest
-          - macOS-latest
           - windows-latest
-        arch:
-          - x64
-          # - x86   ## Currently broken on nightly due to OutOfMemoryError()
-        # exclude:
-        #   - os: macOS-latest
-        #     arch: x86
+          - macOS-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: julia-actions/setup-julia@v2.2
+      - uses: julia-actions/setup-julia@v3
         with:
           version: ${{ matrix.version }}
-          arch: ${{ matrix.arch }}
       - uses: julia-actions/cache@v3
       - uses: julia-actions/julia-buildpkg@latest
       - uses: julia-actions/julia-runtest@latest
@@ -47,7 +40,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: julia-actions/setup-julia@v1
+      - uses: julia-actions/setup-julia@v3
         with:
           version: '1'
       - run: |
