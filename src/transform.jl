@@ -206,15 +206,6 @@ Base.parent(m::StitchModifier) = m.ph
 # copy(StitchModifer) must dealias, since m.groups_dcells_uw can be mutated, e.g. by reverse_bravais!
 Base.copy(m::StitchModifier) = StitchModifier(m.ph, m.wrapped_phases, copy.(m.groups_dcells_uw))
 
-# Used for reverse: flip sign of dcells_u of unwrapped axes which are used to select the
-# stitched harmonics (assumed reversed) that are the sum of subsets of original harmonics.
-# see sum_harmonics_group! below
-function flip_dcells!(m::StitchModifier)
-    _, dcells_u, _ = stitch_groups(m)
-    dcells_u .*= -1
-    return m
-end
-
 #endregion
 
 #region ## applymodifier! API
@@ -292,6 +283,7 @@ end
 
 Base.reverse(lat::Lattice) = reverse_bravais!(copy(lat))
 
+# cannot copy only lattice, since we also transform harmonics to match
 Base.reverse(h::AbstractHamiltonian) = reverse_bravais!(copy(h))
 
 # unexported
@@ -299,6 +291,19 @@ reverse_bravais!(lat::Lattice) = (matrix(bravais(lat)) .*= -1; lat)
 
 function reverse_bravais!(h::Hamiltonian)
     reverse_bravais!(lattice(h))
+    flip_dcells!(h)
+    return h
+end
+
+function reverse_bravais!(ph::ParametricHamiltonian)
+    reverse_bravais!(lattice(parent(ph)))
+    flip_dcells!(parent(ph))
+    flip_dcells!(hamiltonian(ph))
+    flip_dcells!.(modifiers(ph))
+    return ph
+end
+
+function flip_dcells!(h::Hamiltonian)
     hars = harmonics(h)
     for (i, har) in enumerate(hars)
         hars[i] = Harmonic(-dcell(har), matrix(har))
@@ -306,18 +311,20 @@ function reverse_bravais!(h::Hamiltonian)
     return h
 end
 
-function reverse_bravais!(ph::ParametricHamiltonian)
-    reverse_bravais!(parent(ph))
-    reverse_bravais!(hamiltonian(ph))
-    reverse_bravais!.(modifiers(ph))
-    return ph
+# by default, modifiers do not care about reverse
+flip_dcells!(m::AbstractModifier) = m
+
+# StitchModifier is special, in that it contains a reference to the dn of stitched
+# harmonics that are a sum over subsets of parent harmonics. If the dcell of the former are
+# flipped, we must flip the dcell reference to them as well.
+function flip_dcells!(m::StitchModifier)
+    _, dcells_u, _ = stitch_groups(m)
+    dcells_u .*= -1
+    return m
 end
 
-# by default, modifiers do not care about reverse
-reverse_bravais!(m::AbstractModifier) = m
-
 # AppliedHoppingModifiers contain CellSite's that contain nonzero dcell that must be flipped
-function reverse_bravais!(m::AppliedHoppingModifier)
+function flip_dcells!(m::AppliedHoppingModifier)
     ptrs = pointers(m)
     for pcell in ptrs, (i, p) in enumerate(pcell)
         (ptr, r, dr, si, sj, norbs) = p
@@ -326,9 +333,5 @@ function reverse_bravais!(m::AppliedHoppingModifier)
     return m
 end
 
-# The StitchModifier is special, in that it contains a reference to the dn of stitched
-# harmonics that are a sum over subsets of parent harmonics. If the dcell of the former are
-# flipped, we must flip the dcell reference to them as well.
-reverse_bravais!(m::StitchModifier) = flip_dcells!(m)
 
 #endregion

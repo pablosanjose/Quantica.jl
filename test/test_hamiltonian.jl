@@ -55,6 +55,21 @@ using Quantica: Hamiltonian, ParametricHamiltonian, BarebonesOperator, OrbitalSl
     @test ishermitian(h())
 end
 
+@testset "hamiltonian aliasing" begin
+    # lattice aliasing in ParametricHamiltonian
+    h = LP.linear() |> @hopping((; t = 1) -> t)
+    h´ = Quantica.copy_lattice(h)
+    @test lattice(hamiltonian(h´)) === lattice(parent(h´))
+        # without the above guarantee, this would fail (reverse would flip the bravais vectors of h)
+        # begin
+        #     h2 = LP.square() |> hopping(1)
+        #     h = @stitch(h2, SA[2], k)
+        #     g1 = greenfunction(h, GS.Schur(; boundary = 0))
+        #     oh = h |> attach(g1, cells = SA[0], reverse = true)
+        #     @test bravais_matrix(lattice(h)) == SA[1 0]'
+        # end
+end
+
 @testset "hamiltonian orbitals" begin
     lat = LP.honeycomb()
     hop = hopping(SA[1 0], sublats = :A => :B)
@@ -470,7 +485,7 @@ end
     @test h((1,2)) == h3((1,2))
     h = LP.square() |> @hopping((; t=1) -> t) |> supercell((2,0), (0, 1))
     h´ = h |> transform(r -> SA[r[2], r[1]])
-    @test sites(lattice(h´)) == sites(h´.h.lattice) != sites(lattice(parent(h´)))
+    @test sites(lattice(h´)) == sites(h´.h.lattice) != sites(lattice(h))
     @test sites(lattice(h´)) == [SA[0,0], SA[0,1]]
     h´´ = reverse(h´)
     @test bravais_matrix(lattice(h´´)) == - bravais_matrix(lattice(h´))

@@ -29,6 +29,8 @@ function isleftside(side)
     end
 end
 
+isreversed(s::SelfEnergySchurSolver) = s.isleftside
+
 #endregion
 
 #region ## API ##
@@ -66,13 +68,13 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurEmpty
     transform === missing || Quantica.transform!(hlead, transform)
     translate!(hlead, displacement)
 
-    if reverse
-        # this new hlead updates harmonic matrices with call! just like the original hlead
-        # but the bravais vectors and ±dn indices are flipped in place. Nothing else changes
-        # consequently, this only affects plotting, not calculations
-        hlead = copy_harmonics_shallow(hlead)
-        reverse_bravais!(hlead)
-    end
+    # if reverse
+    #     # this new hlead updates harmonic matrices with call! just like the original hlead
+    #     # but the bravais vectors and ±dn indices are flipped in place. Nothing else changes
+    #     # consequently, this only affects plotting, not calculations
+    #     hlead = copy_harmonics_shallow(hlead)
+    #     reverse_bravais!(hlead)
+    # end
 
     solver´ = SelfEnergySchurSolver(fsolver, hlead, reverse, boundary, leadorbs)
     return SelfEnergy(solver´, lsparent)
@@ -125,7 +127,8 @@ function minimal_callsafe_copy(s::SelfEnergySchurSolver)
 end
 
 function selfenergy_plottables(s::SelfEnergySchurSolver, ls::LatticeSlice)
-    p1 = ftuple(s.hlead; selector = siteselector(cells = SA[1]))
+    cells = ifelse(isreversed(s), SA[-1], SA[1])
+    p1 = ftuple(s.hlead; selector = siteselector(; cells))
     p2 = (ls, )
     return p1, p2
 end
@@ -214,14 +217,6 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead1
     gslice = glead[cells = SA[xunit]]
     Σs = selfenergies(contacts(glead))
 
-    if reverse
-        # this new hlead updates harmonic matrices with call! just like the original hlead
-        # but the bravais vectors and ±dn indices are flipped in place. Nothing else changes
-        # consequently, this only affects plotting, not calculations
-        hlead = copy_harmonics_shallow(hlead)
-        reverse_bravais!(hlead)
-    end
-
     solver´ = extended_or_regular_solver(Σs, gslice, gunit, hcoupling, nparent)
 
     return SelfEnergy(solver´, lsparent)
@@ -302,25 +297,17 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurLead1
     # convert lead site indices to lead orbital indices using lead's ContactOrbitals
     leadorbs = reordered_site_orbitals(leadsites, cellsdict(contactorbitals(glead)))
 
-    # build V and V´ as a leadorbs reordering of inter-cell harmonics of hlead
-    hlead = copy_lattice(hamiltonian(glead))  # careful, not parent, which could be a ParametricHamiltonian
-    h₊₁, h₋₁ = hlead[SA[1]], hlead[SA[-1]]
+    # build V and V´ as a leadorbs reordering of inter-cell harmonics of hcoupling
+    hcoupling = copy_lattice(hamiltonian(glead))  # careful, not parent, which could be a ParametricHamiltonian
+    h₊₁, h₋₁ = reverse ? (hcoupling[SA[-1]], hcoupling[SA[1]]) : (hcoupling[SA[1]], hcoupling[SA[-1]])
     V  = SparseMatrixView(view(h₊₁, :, leadorbs))
     V´ = SparseMatrixView(view(h₋₁, leadorbs, :))
 
-    # transform hlead (note that we did copy_lattice, so this preserves glead's lattice)
-    transform === missing || Quantica.transform!(hlead, transform)
-    translate!(hlead, displacement)
+    # transform hcoupling (note that we did copy_lattice, so this preserves glead's lattice)
+    transform === missing || Quantica.transform!(hcoupling, transform)
+    translate!(hcoupling, displacement)
 
-    if reverse
-        # this new hlead updates harmonic matrices with call! just like the original hlead
-        # but the bravais vectors and ±dn indices are flipped in place. Nothing else changes
-        # consequently, this only affects plotting, not calculations
-        hlead = copy_harmonics_shallow(hlead)
-        reverse_bravais!(hlead)
-    end
-
-    solver´ = SelfEnergyGenericSolver(gslice, hlead, V´, V)
+    solver´ = SelfEnergyGenericSolver(gslice, hcoupling, V´, V)
     return SelfEnergy(solver´, lsparent)
 end
 
