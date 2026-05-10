@@ -29,18 +29,16 @@ CellSites{L,V}(c::CellSites) where {L,V} =
 CellSites{L,V}(c::CellSite) where {L,V<:Vector} =
     CellIndices(convert(SVector{L,Int}, cell(c)), convert(V, [siteindices(c)]), SiteLike())
 
-function Hamiltonian{E}(h::Hamiltonian) where {E}
-    lat = lattice(h)
-    lat´ = lattice(lat, dim = Val(E))
+function Hamiltonian{E}(h::Hamiltonian, lat = lattice(lattice(h), dim = Val(E))) where {E}
     bs = blockstructure(h)
     hs = harmonics(h)
     b = bloch(h)
-    return Hamiltonian(lat´, bs, hs, b)
+    return Hamiltonian(lat, bs, hs, b)
 end
 
 function ParametricHamiltonian{E}(ph::ParametricHamiltonian) where {E}
     hparent = Hamiltonian{E}(parent(ph))
-    h = Hamiltonian{E}(hamiltonian(ph))
+    h = Hamiltonian{E}(hamiltonian(ph), lattice(hparent))
     ms = modifiers(ph)
     ptrs = pointers(ph)
     pars = parameter_names(ph)
