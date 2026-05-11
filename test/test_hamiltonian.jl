@@ -60,7 +60,7 @@ end
     h = LP.linear() |> @hopping((; t = 1) -> t)
     h´ = Quantica.copy_lattice(h)
     @test lattice(hamiltonian(h´)) === lattice(parent(h´))
-        # without the above guarantee, this would fail (reverse would flip the bravais vectors of h)
+        # without the above guarantee (#387), this would fail
         # begin
         #     h2 = LP.square() |> hopping(1)
         #     h = @stitch(h2, SA[2], k)
