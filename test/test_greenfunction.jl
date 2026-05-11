@@ -121,6 +121,14 @@ end
     gs = g(0.2)
     @test view(gs, 1, 2) isa SubArray
     @test (@allocations view(gs, 1, 2)) <= 2  # should be 1, but in some platforms/versions it could be 2
+
+    # check reverse gives same as non-reverse
+    model = -hopping(SA[1 0; 0 -1]) + @hopping((r, dr) ->  SA[0 dr[1]; -dr[1] 0])
+    h = LP.square() |> hamiltonian(model, orbitals = 2) |> stitch(SA[2])
+    glead = h |> greenfunction(GS.Schur(boundary = 0))
+    gR = h |> attach(glead, cells = SA[0], reverse = true) |> greenfunction(GS.Schur(boundary = -1))
+    gL = h |> attach(glead, cells = SA[0]) |> greenfunction(GS.Schur(boundary = 1))
+    @test gR[](0.01) ≈ gL[](0.01)
 end
 
 @testset "GreenFunction partial evaluation" begin
@@ -626,8 +634,8 @@ end
        attach(glead, region = r -> SA[-√3/2,1/2]' * r > 3.5, reverse = true) |>
        attach(glead, region = r -> SA[-√3/2,1/2]' * r < 0, reverse = false) |> greenfunction;
     @test g.contacts.selfenergies[2].solver.hlead[(0,)] === g.contacts.selfenergies[1].solver.hlead[(0,)]
-    @test g.contacts.selfenergies[2].solver.hlead[(1,)] === g.contacts.selfenergies[1].solver.hlead[(-1,)]
-    @test g.contacts.selfenergies[2].solver.hlead[(-1,)] === g.contacts.selfenergies[1].solver.hlead[(1,)]
+    @test g.contacts.selfenergies[2].solver.hlead[(-1,)] === g.contacts.selfenergies[1].solver.hlead[(-1,)]
+    @test g.contacts.selfenergies[2].solver.hlead[(1,)] === g.contacts.selfenergies[1].solver.hlead[(1,)]
 
     # ensure full dealiasing of lattices in attach
     model = hopping(SA[1 0; 0 -1]) + @onsite((; µ = 0) -> SA[-µ 0; 0 µ])

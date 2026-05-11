@@ -1546,6 +1546,9 @@ Base.iszero(h::Hamiltonian) = all(iszero, harmonics(h))
 Base.copy(h::Hamiltonian) = Hamiltonian(
     copy(lattice(h)), copy(blockstructure(h)), copy.(harmonics(h)), copy(bloch(h)))
 
+copy_except_lattice(h::Hamiltonian, lat) = Hamiltonian(
+    lat, copy(blockstructure(h)), copy.(harmonics(h)), copy(bloch(h)))
+
 copy_lattice(h::Hamiltonian) = Hamiltonian(
     copy(lattice(h)), blockstructure(h), harmonics(h), bloch(h))
 
@@ -1581,7 +1584,14 @@ struct ParametricHamiltonian{T,E,L,B,M<:NTuple{<:Any,AppliedModifier}} <: Abstra
                                    # because they involve kwargs
     allptrs::Vector{Vector{Int}}   # allptrs are all modified ptrs in each harmonic (needed for reset!)
     allparams::Vector{Symbol}
+    function ParametricHamiltonian{T,E,L,B,M}(hparent, h, modifiers, allptrs, allparams) where {T,E,L,B,M<:NTuple{<:Any,AppliedModifier}}
+        lattice(h) === lattice(hparent) || argerror("Lattice of ParametricHamiltonian's h must alias that of hparent")
+        return new(hparent, h, modifiers, allptrs, allparams)
+    end
 end
+
+ParametricHamiltonian(hparent::Hamiltonian{T,E,L,B}, h::Hamiltonian{T,E,L,B}, modifiers::M, allptrs::Vector{Vector{Int}}, allparams::Vector{Symbol}) where {T,E,L,B,M<:NTuple{<:Any,AppliedModifier}} =
+    ParametricHamiltonian{T,E,L,B,M}(hparent, h, modifiers, allptrs, allparams)
 
 #region ## API ##
 
@@ -1618,14 +1628,23 @@ Base.parent(h::ParametricHamiltonian) = h.hparent
 
 Base.size(h::ParametricHamiltonian, i...) = size(parent(h), i...)
 
-Base.copy(p::ParametricHamiltonian) = ParametricHamiltonian(
-    copy(p.hparent), copy(p.h), copy.(p.modifiers), copy.(p.allptrs), copy(p.allparams))
+function Base.copy(p::ParametricHamiltonian)
+    lat = copy(lattice(p))
+    p´ = ParametricHamiltonian(copy_except_lattice(p.hparent, lat), copy_except_lattice(p.h, lat),
+        copy.(p.modifiers), copy.(p.allptrs), copy(p.allparams))
+    return p´
+end
 
-LinearAlgebra.ishermitian(h::ParametricHamiltonian) =
+
+LinearAlgebra.ishermitian(::ParametricHamiltonian) =
     argerror("`ishermitian(::ParametricHamiltonian)` not supported, as the result can depend on the values of parameters.")
 
-copy_lattice(p::ParametricHamiltonian) = ParametricHamiltonian(
-    p.hparent, copy_lattice(p.h), p.modifiers, p.allptrs, p.allparams)
+function copy_lattice(p::ParametricHamiltonian)
+    lat = copy(lattice(p))
+    h = Hamiltonian(lat, blockstructure(p.h), harmonics(p.h), bloch(p.h))
+    hparent = Hamiltonian(lat, blockstructure(p.hparent), harmonics(p.hparent), bloch(p.hparent))
+    return ParametricHamiltonian(hparent, h, p.modifiers, p.allptrs, p.allparams)
+end
 
 copy_harmonics_shallow(p::ParametricHamiltonian) = ParametricHamiltonian(
     copy_harmonics_shallow(p.hparent), copy_harmonics_shallow(p.h), p.modifiers, p.allptrs, p.allparams)
@@ -1996,7 +2015,7 @@ attach(h::AbstractHamiltonian, args...; kw...) = attach(h, SelfEnergy(h, args...
 attach(h::AbstractHamiltonian, Σ::SelfEnergy) = OpenHamiltonian(h, (Σ,))
 
 # fallback for SelfEnergy constructor
-SelfEnergy(h::AbstractHamiltonian, args...; kw...) = argerror("Unknown attach/SelfEnergy systax")
+SelfEnergy(h::AbstractHamiltonian, args...; kw...) = argerror("Unknown attach/SelfEnergy syntax")
 
 minimal_callsafe_copy(oh::OpenHamiltonian) =
     OpenHamiltonian(minimal_callsafe_copy(oh.h), minimal_callsafe_copy.(oh.selfenergies))
