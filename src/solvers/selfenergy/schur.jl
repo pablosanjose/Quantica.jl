@@ -68,14 +68,6 @@ function SelfEnergy(hparent::AbstractHamiltonian, glead::GreenFunctionSchurEmpty
     transform === missing || Quantica.transform!(hlead, transform)
     translate!(hlead, displacement)
 
-    # if reverse
-    #     # this new hlead updates harmonic matrices with call! just like the original hlead
-    #     # but the bravais vectors and ±dn indices are flipped in place. Nothing else changes
-    #     # consequently, this only affects plotting, not calculations
-    #     hlead = copy_harmonics_shallow(hlead)
-    #     reverse_bravais!(hlead)
-    # end
-
     solver´ = SelfEnergySchurSolver(fsolver, hlead, reverse, boundary, leadorbs)
     return SelfEnergy(solver´, lsparent)
 end

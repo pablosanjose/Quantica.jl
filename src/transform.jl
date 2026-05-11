@@ -296,7 +296,7 @@ function reverse_bravais!(h::Hamiltonian)
 end
 
 function reverse_bravais!(ph::ParametricHamiltonian)
-    reverse_bravais!(lattice(parent(ph)))
+    reverse_bravais!(lattice(parent(ph)))  # lattice of ph.hparent and ph.h are aliased, so do this only once
     flip_dcells!(parent(ph))
     flip_dcells!(hamiltonian(ph))
     flip_dcells!.(modifiers(ph))
