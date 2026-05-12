@@ -2233,10 +2233,11 @@ units as the Hamiltonian) for the given `g` parameters `params`, if any.
 
 ## Keywords
 
-The generic integration algorithm allows for the following `opts` (see also `densitymatrix`):
+The integration algorithm allows for the following `opts` (see also `densitymatrix`):
 
 - `phases` : collection of superconducting phase biases to apply to the contact, so as to efficiently compute the full current-phase relation `[I_J(ϕ) for ϕ in phases]`. Note that each phase bias `ϕ` is applied by a `[cis(-ϕ/2)*I 0*I; 0*I cis(ϕ/2)*I]` rotation to the self energy, which is almost free. If `missing`, a single `I_J` is returned.
 - `omegamap`: a function `ω -> (; params...)` that translates `ω` at each point in the integration contour to a set of system parameters. Useful for `ParametricHamiltonians` which include terms `Σ(ω)` that depend on a parameter `ω` (one would then use `omegamap = ω -> (; ω)`). Default: `ω -> (;)`, i.e. no mapped parameters.
+- `phasemap`: a function `ϕ -> (; params...)` that translates each phase bias `ϕ` in `phases` to a set of system parameters. For performance, and unlike `omegamap`, `phasemap` is not applied to any self-energies of the system, only to the `AbstractHamiltonian` without attached contacts. Default: `ϕ -> (;)`, i.e. no mapped parameters.
 - `callback`: a function to be called as `callback(xs..., y)` at each point in the integration, where `xs` is the integration point (e.g. `xs = (ω,)` along a contour) and `y` is the integrand evaluated at that point. Useful for inspection and debugging, e.g. `callback(x, y) = @show x`. Default: `Returns(nothing)`.
 - `atol`: absolute integration tolerance. The default `1e-7` is chosen to avoid excessive integration times when the current is actually zero. Default `1e-7`.
 
