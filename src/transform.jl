@@ -225,7 +225,9 @@ end
 # inds are hars_parent indices
 function sum_harmonics_group!(h, hars_parent, inds, phases_w, dcells_u, dcells_w)
     dn_u = dcells_u[first(inds)]
-    mat = h[dn_u]                               # flat sparse matrix
+    hybmat = h[hybrid(dn_u)]                    # unflat HybridMatrix
+    was_unsynced = needs_flat_sync(hybmat)
+    mat = flat(hybmat)                          # flat sparse matrix - may cause flat_sync!
     for i in inds
         dn_w = dcells_w[i]
         e⁻ⁱᵠᵈⁿ = blochfactor(phases_w, dn_w)
@@ -233,6 +235,7 @@ function sum_harmonics_group!(h, hars_parent, inds, phases_w, dcells_u, dcells_w
         # by construction, all structural elements in mat_parent are in mat too. See tools.jl
         merged_flat_mul!(mat, mat_parent, e⁻ⁱᵠᵈⁿ, 1, 1)
     end
+    was_unsynced && needs_flat_sync!(hybmat)    # we restore the sync state
     return h
 end
 
