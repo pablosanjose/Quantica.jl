@@ -317,12 +317,15 @@ call!(p::ParametricHamiltonian, ft::FrankenTuple, axis = missing) =
     call!(p, sanitize_SVector(Tuple(ft)...), axis; NamedTuple(ft)...)
 
 function call!(ph::ParametricHamiltonian; kw...)
-    reset_to_parent!(ph)                # this sets flat_sync state to unsynced
+    # This reset also sets flat_sync state to unsynced, to be collected by flat_sync! below
+    reset_to_parent!(ph)
     h = hamiltonian(ph)
     foreach(modifiers(ph)) do m
-        applymodifiers!(h, m; kw...)    # we assume this never resets flat_sync state!
+        # we assume this only modifies unflat harmonics, and preserves needs_flat_sync state
+        applymodifiers!(h, m; kw...)
     end
-    flat_sync!(h)  # modifiers are applied to unflat, need to be synced to flat
+    # modifiers are applied *only* to unflat, need to be synced to flat
+    flat_sync!(h)
     return h
 end
 

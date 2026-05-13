@@ -213,7 +213,7 @@ Base.copy(m::StitchModifier) = StitchModifier(m.ph, m.wrapped_phases, copy.(m.gr
 function applymodifiers!(ph, m::StitchModifier; kw...)
     h_parent = call!(m.ph; kw...)
     hars_parent = harmonics(h_parent)
-    h = hamiltonian(ph)
+    h = hamiltonian(ph)                     # this has been reset_to_parent! already
     wp = m.wrapped_phases
     groups, dcells_u, dcells_w = stitch_groups(m)
     for inds in groups
@@ -225,17 +225,14 @@ end
 # inds are hars_parent indices
 function sum_harmonics_group!(h, hars_parent, inds, phases_w, dcells_u, dcells_w)
     dn_u = dcells_u[first(inds)]
-    hybmat = h[hybrid(dn_u)]                    # unflat HybridMatrix
-    was_unsynced = needs_flat_sync(hybmat)
-    mat = flat(hybmat)                          # flat sparse matrix - may cause flat_sync!
+    mat = h[unflat(dn_u)]                    # unflat HybridMatrix
     for i in inds
         dn_w = dcells_w[i]
         e⁻ⁱᵠᵈⁿ = blochfactor(phases_w, dn_w)
-        mat_parent = flat(hars_parent[i])       # flat sparse matrix
-        # by construction, all structural elements in mat_parent are in mat too. See tools.jl
-        merged_flat_mul!(mat, mat_parent, e⁻ⁱᵠᵈⁿ, 1, 1)
+        mat_parent = unflat(hars_parent[i])
+        # We do mat .+= e⁻ⁱᵠᵈⁿ * mat_parent but preserving sparsity structure of mat
+        merged_mul!(mat, mat_parent, e⁻ⁱᵠᵈⁿ, 1, 1)
     end
-    was_unsynced && needs_flat_sync!(hybmat)    # we restore the sync state
     return h
 end
 

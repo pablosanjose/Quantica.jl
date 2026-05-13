@@ -370,9 +370,10 @@ function merged_mul!(C::SparseMatrixCSC{<:Number}, A::HybridSparseMatrix, b::Num
 end
 
 merged_mul!(C::SparseMatrixCSC{<:Number}, ::OrbitalBlockStructure, A::SparseMatrixCSC{B}, b::Number, α = 1, β = 0) where {B<:Complex} =
-    merged_flat_mul!(C, A, b, α, β)
+    merged_mul!(C, A, b, α, β)
 
-function merged_flat_mul!(C::SparseMatrixCSC{<:Number}, A::SparseMatrixCSC{<:Number}, b::Number, α = 1, β = 0)
+# like mul! but preserves the sparse structure of C, which must include the structure of A.
+function merged_mul!(C::SparseMatrixCSC, A::SparseMatrixCSC, b::Number, α = 1, β = 0)
     nzA = nonzeros(A)
     nzC = nonzeros(C)
     αb = α * b
