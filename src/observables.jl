@@ -607,21 +607,23 @@ numphaseshifts(phaseshifts) = length(phaseshifts)
 
 function josephson_traces(J, ω, f)
     gω = J.gfunc(ω)  # computes gω at ϕ = 0
-    gr = view(gω, J.contactind, J.contactind)
     Σi = selfenergy!(J.Σ, gω, J.contactind)
-    return josephson_traces!(J, gr, ω, Σi, f)
+    return josephson_traces!(J, gω, ω, Σi, f)
 end
 
-josephson_traces!(J::JosephsonIntegrand{<:Any,Missing}, gr, ω, Σi, f) =
-    josephson_one_trace!(J, gr, Σi, f)
+function josephson_traces!(J::JosephsonIntegrand{<:Any,Missing}, gω, ω, Σi, f)
+    gr = view(gω, J.contactind, J.contactind)
+    return josephson_one_trace!(J, gr, Σi, f)
+end
 
-function josephson_traces!(J, gr, ω, Σi, f)
-    Σ0s = selfenergies(parent(gr))  # Σblocks from all contacts at ϕ = 0
+function josephson_traces!(J, gω, ω, Σi, f)
+    gr = view(gω, J.contactind, J.contactind)
+    Σ0s = selfenergies(gω)  # Σblocks from all contacts at ϕ = 0
     for (i, ϕ) in enumerate(J.phaseshifts)
         if J.hasphasemap
             # recompute gr with phasemap(ϕ) parameters, see #391
-            gω = J.gfunc(ω, ϕ, Σ0s)
-            gr = view(gω, J.contactind, J.contactind)
+            gω´ = J.gfunc(ω, ϕ, Σ0s)
+            gr = view(gω´, J.contactind, J.contactind)
         end
         gr´, Σi´ = apply_phaseshift!(J, gr, Σi, ϕ)
         J.traces[i] = josephson_one_trace!(J, gr´, Σi´, f)
