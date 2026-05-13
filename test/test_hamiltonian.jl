@@ -294,6 +294,10 @@ end
     h´´´ = h´ |> @hopping!((t; d = 0.5) -> t * d)
     @test h(SA[0.2,0.3,0.4]) ≈ h´(SA[0.3]; ϕ = SA[0.2,0.4]) ≈ h´´(SA[0.3,0.4]) ≈ h´´´(SA[0.3]; ϕ = SA[0.2,0.4], d = 1)
     @test !(h(SA[0.2,0.3,0.4]) ≈ h´´´(SA[0.3]; ϕ = SA[0.2,0.4]))
+
+    # sync state bug #389
+    h = @stitch(LP.honeycomb() |> hamiltonian(@onsite((; µ = 0.0) -> -µ*σ.z), orbitals=2), SA[1], ϕ) |> @onsite!((o; v=1) -> o + v*σ.z);
+    @test h(SA[0]; v = 5) == Quantica.Diagonal([5, -5, 5, -5])
 end
 
 @testset "hamiltonian HybridSparseMatrix" begin
