@@ -55,20 +55,24 @@ function call!(g::GreenFunction{T}, ω::T; params...) where {T}
 end
 
 function call!(g::GreenFunction{T}, ω::Complex{T}; params...) where {T}
-    gsolver = solver(g)
-    contacts´ = contacts(g)
-    Σblocks = supports_contacts(gsolver) ? call!(contacts´, ω; params...) : missing
-    corbs = contactorbitals(contacts´)
-    slicer = build_slicer(gsolver, g, ω, Σblocks, corbs; params...)
+    Σblocks = supports_contacts(solver(g)) ? call!(contacts(g), ω; params...) : missing
+    return call!(g, ω, Σblocks; params...)
+end
+
+function call!(g::GreenFunction{T}, ω::Complex{T}, Σblocks; params...) where {T}
+    corbs = contactorbitals(contacts(g))
+    slicer = build_slicer(solver(g), g, ω, Σblocks, corbs; params...)
     return GreenSolution(g, slicer, Σblocks, corbs)
 end
 
-# real frequency -> maybe complex frequency
-call!(g::GreenSlice{T}, ω::T; kw...) where {T} =
-    call!(g, retarded_omega(ω, solver(parent(g))); kw...)
 
-call!(gs::GreenSlice{T}, ω::Complex{T}; post = identity, symmetrize = missing, params...) where {T} =
-    getindex!(gs, call!(greenfunction(gs), ω; params...); post, symmetrize)
+# real frequency -> maybe complex frequency
+# Σ could be precomputed Σblocks, see above
+call!(g::GreenSlice{T}, ω::T, Σ...; kw...) where {T} =
+    call!(g, retarded_omega(ω, solver(parent(g))), Σ...; kw...)
+
+call!(gs::GreenSlice{T}, ω::Complex{T}, Σ...; post = identity, symmetrize = missing, params...) where {T} =
+    getindex!(gs, call!(greenfunction(gs), ω, Σ...; params...); post, symmetrize)
 
 real_or_complex_convert(::Type{T}, ω::Real) where {T<:Real} = convert(T, ω)
 real_or_complex_convert(::Type{T}, ω::Complex) where {T<:Real} = convert(Complex{T}, ω)

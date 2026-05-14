@@ -491,7 +491,8 @@ solver(ρ::DensityMatrix) = ρ.solver
 #region
 
 struct JosephsonIntegrand{T<:AbstractFloat,P<:Union{Missing,AbstractArray},GF<:Function,PA,PT}
-    gfunc::GF                   # ω -> g(ω; params...)
+    gfunc::GF                   # (ω, ϕ=0, Σ...) -> call!(gs, ω, Σ...; params..., omegamap(ω)..., phasemap(ϕ)...)
+    hasphasemap::Bool           # false if `phasemap === Returns((;))`
     kBT::T
     contactind::Int             # contact index
     tauz::Vector{Int}           # precomputed diagonal of tauz
@@ -525,7 +526,7 @@ josephson(gs::GreenSlice, ωmax::Real; kw...) =
 josephson(gs::GreenSlice, ωs::NTuple{<:Any,Real}; kw...) =
     josephson(gs, Paths.sawtooth(ωs); kw...)
 
-function josephson(gs::GreenSlice{T}, path::AbstractIntegrationPath; omegamap = Returns((;)), phases = missing, atol = 1e-7, opts...) where {T}
+function josephson(gs::GreenSlice{T}, path::AbstractIntegrationPath; omegamap = Returns((;)), phasemap = Returns((;)), phases = missing, atol = 1e-7, opts...) where {T}
     check_nodiag_axes(gs)
     check_same_contact_slice(gs)
     contact = rows(gs)
@@ -539,8 +540,9 @@ function josephson(gs::GreenSlice{T}, path::AbstractIntegrationPath; omegamap = 
     function ifunc(kBT; params...)
         pts = points(path, 0, kBT; params...)
         realpts = realpoints(path, pts)
-        gfunc(ω) = call!(g, ω; omegamap(ω)..., params...)
-        jd = JosephsonIntegrand(gfunc, T(kBT), contact, tauz, phases´, path, pts,
+        gfunc(ω, ϕ=0, Σ...) = call!(g, ω, Σ...; omegamap(ω)..., phasemap(ϕ)..., params...)
+        hasphasemap = phasemap !== Returns((;))
+        jd = JosephsonIntegrand(gfunc, hasphasemap, T(kBT), contact, tauz, phases´, path, pts,
             traces, Σfull, Σ, similar(Σ), similar(Σ), similar(Σ), similar(tauz, Complex{T}))
         return Integrator(traces, jd, realpts; opts´...)
     end
@@ -573,9 +575,8 @@ end
 
 function call!(Ji::JosephsonIntegrand, x)
     ω = point(x, Ji.path, Ji.pts)
-    gω = Ji.gfunc(ω)
     f = fermi(ω, inv(Ji.kBT))
-    traces = josephson_traces(Ji, gω, f)
+    traces = josephson_traces(Ji, ω, f)
     traces = mul_scalar_or_array!(traces, jacobian(x, Ji.path, Ji.pts))
     return traces
 end
@@ -604,18 +605,27 @@ numphaseshifts(J::JosephsonIntegrand) = numphaseshifts(J.phaseshifts)
 numphaseshifts(::Missing) = 0
 numphaseshifts(phaseshifts) = length(phaseshifts)
 
-function josephson_traces(J, gω, f)
-    gr = view(gω, J.contactind, J.contactind)
+function josephson_traces(J, ω, f)
+    gω = J.gfunc(ω)  # computes gω at ϕ = 0
     Σi = selfenergy!(J.Σ, gω, J.contactind)
-    return josephson_traces!(J, gr, Σi, f)
+    return josephson_traces!(J, gω, ω, Σi, f)
 end
 
-josephson_traces!(J::JosephsonIntegrand{<:Any,Missing}, gr, Σi, f) =
-    josephson_one_trace!(J, gr, Σi, f)
+function josephson_traces!(J::JosephsonIntegrand{<:Any,Missing}, gω, ω, Σi, f)
+    gr = view(gω, J.contactind, J.contactind)
+    return josephson_one_trace!(J, gr, Σi, f)
+end
 
-function josephson_traces!(J, gr, Σi, f)
-    for (i, phaseshift) in enumerate(J.phaseshifts)
-        gr´, Σi´ = apply_phaseshift!(J, gr, Σi, phaseshift)
+function josephson_traces!(J, gω, ω, Σi, f)
+    gr = view(gω, J.contactind, J.contactind)
+    Σ0s = selfenergies(gω)  # Σblocks from all contacts at ϕ = 0
+    for (i, ϕ) in enumerate(J.phaseshifts)
+        if J.hasphasemap
+            # recompute gr with phasemap(ϕ) parameters, see #391
+            gω´ = J.gfunc(ω, ϕ, Σ0s)
+            gr = view(gω´, J.contactind, J.contactind)
+        end
+        gr´, Σi´ = apply_phaseshift!(J, gr, Σi, ϕ)
         J.traces[i] = josephson_one_trace!(J, gr´, Σi´, f)
     end
     return J.traces
@@ -631,6 +641,7 @@ function josephson_one_trace!(J, gr, Σi, f)
 end
 
 # Σi´ = U Σi U' and gr´ = (gr₀⁻¹ - Σi´)⁻¹ = (1+gr*(Σi-Σi´))⁻¹gr
+# gr may have a phasemap applied, but not to its selfeergies, see #391
 function apply_phaseshift!(J, gr, Σi, phaseshift)
     Σi´ = J.Σ´
     U = J.cisτz
