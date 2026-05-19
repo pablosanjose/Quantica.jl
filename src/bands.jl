@@ -266,10 +266,12 @@ function subbands_diagonalize!(data)
     meter = Progress(length(baseverts); desc = "Step 1 - Diagonalizing: ")
     push!(data.coloffsets, 0) # first element
     if length(data.solvers) > 1
-        Threads.@threads :static for i in eachindex(baseverts)
+        solver_channel = build_channels(data.solvers)
+        Threads.@threads for i in eachindex(baseverts)
             vert = baseverts[i]
-            solver = data.solvers[Threads.threadid()]
+            solver = take!(solver_channel)
             data.eigens[i] = solver(vert)
+            put!(solver_channel, solver)
             data.showprogress && ProgressMeter.next!(meter)
         end
     else
@@ -285,6 +287,14 @@ function subbands_diagonalize!(data)
         append_bands_column!(data, basevert, eigen)
     end
     ProgressMeter.finish!(meter)
+end
+
+function build_channels(solvers::Vector{A}) where {A}
+    channel = Channel{A}(length(solvers))
+    for solver in solvers
+        put!(channel, solver)
+    end
+    return channel
 end
 
 const degeneracy_warning = 16
