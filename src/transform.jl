@@ -206,6 +206,9 @@ Base.parent(m::StitchModifier) = m.ph
 # copy(StitchModifer) must dealias, since m.groups_dcells_uw can be mutated, e.g. by reverse_bravais!
 Base.copy(m::StitchModifier) = StitchModifier(m.ph, m.wrapped_phases, copy.(m.groups_dcells_uw))
 
+# to make call! threadsafe, we must copy the wrapped m.ph
+minimal_callsafe_copy(m::StitchModifier, _) = StitchModifier(minimal_callsafe_copy(m.ph), m.wrapped_phases, m.groups_dcells_uw)
+
 #endregion
 
 #region ## applymodifier! API

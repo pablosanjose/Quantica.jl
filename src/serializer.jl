@@ -55,9 +55,11 @@ call!(s::AppliedSerializer; kw...) = AppliedSerializer(s.parent, call!(s.h; kw..
 hamiltonian(s::AppliedSerializer) = parametric(s.h, s)
 
 # assume s has been applied to h or a copy of h
+minimal_callsafe_copy(s::AppliedSerializer, h) = maybe_relink_serializer(s, h)
+
 maybe_relink_serializer(s::AppliedSerializer, h) =
     s.h === h ? s : AppliedSerializer(s.parent, h, s.ptrs, s.len)
-maybe_relink_serializer(m::AppliedModifier, _) = m
+maybe_relink_serializer(s::AppliedModifier, _) = s
 
 parent_hamiltonian(s::AppliedSerializer) = s.h
 
