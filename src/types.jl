@@ -1620,9 +1620,12 @@ lattice(h::ParametricHamiltonian) = lattice(hamiltonian(h))
 # if x´ = minimal_callsafe_copy(x), then a call!(x, ...; ...) will not affect x´ in any way
 function minimal_callsafe_copy(p::ParametricHamiltonian)
     h´ = minimal_callsafe_copy(p.h)
-    modifiers´ = maybe_relink_serializer.(p.modifiers, Ref(h´))
+    modifiers´ = minimal_callsafe_copy.(p.modifiers, Ref(h´))
     return ParametricHamiltonian(p.hparent, h´, modifiers´, p.allptrs, p.allparams)
 end
+
+# some modifiers may need some alias processing to be callsafe. Defaul fallback is a no-op.
+minimal_callsafe_copy(m::AppliedModifier, _) = m
 
 Base.parent(h::ParametricHamiltonian) = h.hparent
 

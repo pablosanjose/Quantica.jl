@@ -68,6 +68,9 @@ end
         #     oh = h |> attach(g1, cells = SA[0], reverse = true)
         #     @test bravais_matrix(lattice(h)) == SA[1 0]'
         # end
+    h = @stitch(HP.graphene(), SA[1], ϕ)
+    h´ = Quantica.minimal_callsafe_copy(h)
+    @test h´.modifiers[1].ph !== h.modifiers[1].ph
 end
 
 @testset "hamiltonian orbitals" begin
