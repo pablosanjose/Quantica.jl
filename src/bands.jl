@@ -275,10 +275,10 @@ function subbands_diagonalize!(data)
             data.showprogress && ProgressMeter.next!(meter)
         end
     else
-        solver = first(data.solvers)
+        solver1 = first(data.solvers)
         for i in eachindex(baseverts)
             vert = baseverts[i]
-            data.eigens[i] = solver(vert)
+            data.eigens[i] = solver1(vert)
             data.showprogress && ProgressMeter.next!(meter)
         end
     end
