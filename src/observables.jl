@@ -396,16 +396,18 @@ densitymatrix(gs::GreenSlice, ωmax::Real; kw...) =
 densitymatrix(gs::GreenSlice, ωs::NTuple{<:Any,Real}; kw...) =
     densitymatrix(gs::GreenSlice, Paths.sawtooth(ωs); kw...)
 
-function densitymatrix(gs::GreenSlice{T}, path::AbstractIntegrationPath; omegamap = Returns((;)), atol = 1e-7, opts...) where {T}
+function densitymatrix(gs::GreenSlice{T}, path::AbstractIntegrationPath; omegamap = Returns((;)), atol = 1e-7, callback = Returns(nothing), opts...) where {T}
     result = copy(call!_output(gs))
     post = post_transform_rho(path, gs)
     opts´ = (; post, atol, opts...)
     function ifunc(mu, kBT; params...)
         pts = points(path, mu, kBT; params...)
         realpts = realpoints(path, pts)
+        # callback should convert from realpts to actual point in the complex plane.
+        callback´ = callback === Returns(nothing) ? callback : (x,y) -> callback(point(x, path, pts), y)
         gsfunc(ω, symmetrize) = call!(gs, ω; symmetrize, omegamap(ω)..., params...)
         ρd = DensityMatrixIntegrand(gsfunc, T(mu), T(kBT), path, pts)
-        return Integrator(result, ρd, realpts; opts´...)
+        return Integrator(result, ρd, realpts; callback = callback´, opts´...)
     end
     return DensityMatrix(DensityMatrixIntegratorSolver(ifunc), gs)
 end
@@ -526,7 +528,7 @@ josephson(gs::GreenSlice, ωmax::Real; kw...) =
 josephson(gs::GreenSlice, ωs::NTuple{<:Any,Real}; kw...) =
     josephson(gs, Paths.sawtooth(ωs); kw...)
 
-function josephson(gs::GreenSlice{T}, path::AbstractIntegrationPath; omegamap = Returns((;)), phasemap = Returns((;)), phases = missing, atol = 1e-7, opts...) where {T}
+function josephson(gs::GreenSlice{T}, path::AbstractIntegrationPath; omegamap = Returns((;)), phasemap = Returns((;)), phases = missing, atol = 1e-7, callback = Returns(nothing), opts...) where {T}
     check_nodiag_axes(gs)
     check_same_contact_slice(gs)
     contact = rows(gs)
@@ -540,11 +542,13 @@ function josephson(gs::GreenSlice{T}, path::AbstractIntegrationPath; omegamap = 
     function ifunc(kBT; params...)
         pts = points(path, 0, kBT; params...)
         realpts = realpoints(path, pts)
+        # callback should convert from realpts to actual point in the complex plane.
+        callback´ = callback === Returns(nothing) ? callback : (x,y) -> callback(point(x, path, pts), y)
         gfunc(ω, ϕ=0, Σ...) = call!(g, ω, Σ...; omegamap(ω)..., phasemap(ϕ)..., params...)
         hasphasemap = phasemap !== Returns((;))
         jd = JosephsonIntegrand(gfunc, hasphasemap, T(kBT), contact, tauz, phases´, path, pts,
             traces, Σfull, Σ, similar(Σ), similar(Σ), similar(Σ), similar(tauz, Complex{T}))
-        return Integrator(traces, jd, realpts; opts´...)
+        return Integrator(traces, jd, realpts; callback = callback´, opts´...)
     end
     return Josephson(JosephsonIntegratorSolver(ifunc), gs)
 end

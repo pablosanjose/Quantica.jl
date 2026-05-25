@@ -446,7 +446,7 @@ function testjosephson(g0)
     @test typeof.(Quantica.points.((J1, J2, J3, J4, J5))) ==
         (Vector{ComplexF64}, Vector{ComplexF64}, Vector{ComplexF64}, Vector{ComplexF64}, Tuple{ComplexF64, ComplexF64, ComplexF64})
     # integration path logic
-    J = josephson(g0[1], Paths.sawtooth(-4, -1))
+    J = josephson(g0[1], Paths.sawtooth(-4, -1); callback = ((x,y) -> @test x isa ComplexF64 && y isa ComplexF64))
     @test J() <= eps(Float64)
     p1, p2 = Quantica.points(J, 0), Quantica.points(J, 0.2)
     @test p1 isa Vector{ComplexF64} && length(p1) == 3    # tuple sawtooth
