@@ -657,7 +657,7 @@ function apply_phaseshift!(J, gr, Σi, phaseshift)
     one!(den)
     tmp = J.g´
     @. tmp = Σi - Σi´
-    mul!(den, gr, tmp, 1, 1)            # den = 1-gr * (Σi - Σi´)
+    mul!(den, gr, tmp, 1, 1)            # den = 1 + gr * (Σi - Σi´)
     gr´ = ldiv!(J.g´, lu!(den), gr)     # gr´ = (1+gr*(Σi-Σi´))⁻¹gr
 
     return gr´, Σi´
