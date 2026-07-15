@@ -7,19 +7,15 @@ struct Sublat{T<:AbstractFloat,E}
     name::Symbol
 end
 
-#   merge_sublats specifies whether sublattices with repeated names should be consider the
-#   same by selectors. reserved_names specifies a list of sublattice names that should not
-#   be used for sublattice renaming.
 struct Unitcell{T<:AbstractFloat,E}
     sites::Vector{SVector{E,T}}
     names::Vector{Symbol}
     offsets::Vector{Int}                # Linear site number offsets for each sublat
     equivalent_sublats::Matrix{Bool}    # equivalent_sublats[i,j] = true if sublats i and j should be considered the same by selectors
-    function Unitcell{T,E}(sites, names_unsanitized, offsets; merge_sublats = false, reserved_names = ()) where {T<:AbstractFloat,E}
+    function Unitcell{T,E}(sites, names_unsanitized, offsets) where {T<:AbstractFloat,E}
         names = sanitize_Vector_of_Symbols(names_unsanitized)
-        equivalent_sublats = Matrix{Bool}(I, length(names), length(names))  # no equivalences by default
-        merge_sublats && merge_sublats!(equivalent_sublats, names)          # record repeated names into equivalent_sublats
-        uniquenames!(names; reserved_names)
+        assign_names!(names)  # give unique names to :unassigned sublats
+        equivalent_sublats = equivalent_sublats_matrix(names)
         length(names) == length(offsets) - 1 ||
             argerror("Incorrect number of sublattice names, got $(length(names)), expected $(length(offsets) - 1)")
         return new(sites, names, offsets, equivalent_sublats)
@@ -58,16 +54,14 @@ Bravais(::Type{T}, ::Val{E}, m::AbstractMatrix) where {T,E} =
 Bravais(::Type{T}, ::Val{E}, m::AbstractVector) where {T,E} =
     Bravais{T,E,1}(sanitize_Matrix(T, E, hcat(m)))
 
-Unitcell(sites::Vector{SVector{E,T}}, names, offsets; kw...) where {E,T} =
-    Unitcell{T,E}(sites, names, offsets; kw...)
+Unitcell(sites::Vector{SVector{E,T}}, names, offsets) where {E,T} =
+    Unitcell{T,E}(sites, names, offsets)
 
-function uniquenames!(names::Vector{Symbol}; reserved_names = ())
-    assigned_names = append!(Symbol[:_], reserved_names)
+function assign_names!(names::Vector{Symbol})
+    assigned_names = Symbol[:_]
     for (i, name) in enumerate(names)
-        if name in assigned_names
-            names[i] = uniquename(assigned_names, names, i)
-            @warn "Renamed repeated sublattice :$name to :$(names[i])"
-        end
+        name == :unassigned || continue
+        names[i] = uniquename(assigned_names, names, i)
         push!(assigned_names, names[i])
     end
     return names
@@ -82,10 +76,10 @@ function uniquename(assigned_names, names, i = 1)
 end
 
 # Injects M[i,j] = true if the i, j sublattices had originally the same name.
-function merge_sublats!(M, names)
-    M .= reshape(names, 1, :) .== names
+function equivalent_sublats_matrix(names)
+    M = reshape(names, 1, :) .== names
     nmerged = count(col -> sum(col) > 1, eachcol(M))
-    iszero(nmerged) || @warn "Found $nmerged sublattices with repeated names, which were merged with their duplicates."
+    iszero(nmerged) || @warn "Found $nmerged sublattices with repeated names, which will be merged with their duplicates."
     return M
 end
 
@@ -114,13 +108,13 @@ sublatname(l::Lattice, s) = sublatname(l.unitcell, s)
 sublatname(u::Unitcell, s) = u.names[s]
 sublatname(s::Sublat) = s.name
 
-sublatindex_or_nothing(l::Lattice, name::Symbol) = sublatindex_or_nothing(l.unitcell, name)
+first_sublatindex_or_nothing(l::Lattice, name::Symbol) = first_sublatindex_or_nothing(l.unitcell, name)
 
 # May return nothing
-sublatindex_or_nothing(u::Unitcell, name::Symbol) = findfirst(==(name), sublatnames(u))
+first_sublatindex_or_nothing(u::Unitcell, name::Symbol) = findfirst(==(name), sublatnames(u))
 
-function sublatindex_or_error(u, s)
-    i = sublatindex_or_nothing(u, s)
+function first_sublatindex_or_error(u, s)
+    i = first_sublatindex_or_nothing(u, s)
     i === nothing && boundserror(u, string(s))
     return i
 end
@@ -145,14 +139,14 @@ sites(u::Unitcell) = u.sites
 sites(u::Unitcell, sublat) = view(u.sites, siterange(u, sublat))
 sites(u::Unitcell, ::Missing) = sites(u)            # to work with QuanticaMakieExt
 sites(l::Lattice, name::Symbol) = sites(unitcell(l), name)
-sites(u::Unitcell, name::Symbol) = sites(u, sublatindex_or_error(u, name))
+sites(u::Unitcell, name::Symbol) = sites(u, first_sublatindex_or_error(u, name))
 
 site(l::Lattice, i) = sites(l)[i]
 site(l::Lattice, i, dn) = site(l, i) + bravais_matrix(l) * dn
 
 siterange(l::Lattice, sublat...) = siterange(l.unitcell, sublat...)
 siterange(u::Unitcell, sublat::Integer) = (1+u.offsets[sublat]):u.offsets[sublat+1]
-siterange(u::Unitcell, name::Symbol) = siterange(u, sublatindex_or_error(u, name))
+siterange(u::Unitcell, name::Symbol) = siterange(u, first_sublatindex_or_error(u, name))
 siterange(u::Unitcell) = 1:last(u.offsets)
 
 sitesublat(lat::Lattice, siteidx) = sitesublat(lat.unitcell.offsets, siteidx)
@@ -195,11 +189,7 @@ Base.length(l::Lattice) = nsites(l)
 Base.copy(l::Lattice) = Lattice(copy(l.bravais), copy(l.unitcell), copy(l.nranges))
 Base.copy(b::Bravais{T,E,L}) where {T,E,L} = Bravais{T,E,L}(copy(b.matrix))
 
-function Base.copy(u::Unitcell{T,E}) where {T,E}
-    u´ = Unitcell{T,E}(copy(u.sites), copy(u.names), copy(u.offsets))
-    equivalent_sublats(u´) .= equivalent_sublats(u)
-    return u´
-end
+Base.copy(u::Unitcell{T,E}) where {T,E} = Unitcell{T,E}(copy(u.sites), copy(u.names), copy(u.offsets))
 
 Base.:(==)(l::Lattice, l´::Lattice) = l.bravais == l´.bravais && l.unitcell == l´.unitcell
 Base.:(==)(b::Bravais, b´::Bravais) = b.matrix == b´.matrix
@@ -1497,7 +1487,7 @@ flatsize(h::AbstractHamiltonian, args...) = flatsize(blockstructure(h), args...)
 flatrange(h::AbstractHamiltonian, iunflat) = flatrange(blockstructure(h), iunflat)
 
 flatrange(h::AbstractHamiltonian, name::Symbol) =
-    sublatorbrange(blockstructure(h), sublatindex_or_error(lattice(h), name))
+    sublatorbrange(blockstructure(h), first_sublatindex_or_error(lattice(h), name))
 
 zerocell(h::AbstractHamiltonian) = zerocell(lattice(h))
 

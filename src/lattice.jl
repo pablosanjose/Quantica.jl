@@ -2,10 +2,10 @@
 # sublat
 #region
 
-sublat(sites::Union{Number,Tuple,SVector,AbstractVector{<:Number}}...; name = :A) =
+sublat(sites::Union{Number,Tuple,SVector,AbstractVector{<:Number}}...; name = :unassigned) =
     Sublat([float.(promote(sanitize_SVector.(sites)...))...], Symbol(name))
 
-function sublat(sites::AbstractVector; name = :A)
+function sublat(sites::AbstractVector; name = :unassigned)
     T = foldl((x, y) -> promote_type(x, eltype(sanitize_SVector(y))), sites; init = Bool)
     return Sublat(sanitize_SVector.(float(T), sites), Symbol(name))
 end
@@ -14,8 +14,6 @@ end
 
 ############################################################################################
 # lattice
-#   Here unitcell_kws = (; merge_sublats = false, reserved_names = ()), that specify how to
-#   deal with repeated sublattice names. See types.jl for details.
 #region
 
 lattice(s::Sublat, ss::Sublat...; kw...) = _lattice(promote(s, ss...)...; kw...)
@@ -29,26 +27,26 @@ _lattice(ss::Sublat{T,E}...;
     bravais = (),
     dim = Val(E),
     type::Type{T´} = T,
-    names = sublatname.(ss), unitcell_kws...) where {T,E,T´} =
-    _lattice(ss, bravais, dim, type, names; unitcell_kws...)
+    names = sublatname.(ss)) where {T,E,T´} =
+    _lattice(ss, bravais, dim, type, names)
 
 _lattice(ss::AbstractVector{S};
     bravais = (),
     dim = Val(E),
     type::Type{T´} = T,
-    names = sublatname.(ss), unitcell_kws...) where {T,E,T´,S<:Sublat{T,E}} =
-    _lattice(ss, bravais, dim, type, names; unitcell_kws...)
+    names = sublatname.(ss)) where {T,E,T´,S<:Sublat{T,E}} =
+    _lattice(ss, bravais, dim, type, names)
 
-_lattice(ss, bravais, dim, type, names; unitcell_kws...) =
-    Lattice(Bravais(type, dim, bravais), unitcell(ss, names, postype(dim, type); unitcell_kws...))
+_lattice(ss, bravais, dim, type, names) =
+    Lattice(Bravais(type, dim, bravais), unitcell(ss, names, postype(dim, type)))
 
 function lattice(lat::Lattice{T,E};
                  bravais = bravais_matrix(lat),
                  dim = Val(E),
                  type::Type{T´} = T,
                  names = sublatnames(lat),
-                 unitcell_kws...) where {T,E,T´}
-    u = unitcell(unitcell(lat), names, postype(dim, type); unitcell_kws...)
+            ) where {T,E,T´}
+    u = unitcell(unitcell(lat), names, postype(dim, type))
     b = Bravais(type, dim, bravais)
     return Lattice(b, u)
 end
@@ -56,7 +54,7 @@ end
 postype(dim, type) = SVector{dim,type}
 postype(::Val{E}, type) where {E} = SVector{E,type}
 
-function unitcell(sublats, names, postype::Type{S}; unitcell_kws...) where {S<:SVector}
+function unitcell(sublats, names, postype::Type{S}) where {S<:SVector}
     sites´ = S[]
     offsets´ = [0]  # length(offsets) == length(sublats) + 1
     for s in eachindex(sublats)
@@ -65,18 +63,18 @@ function unitcell(sublats, names, postype::Type{S}; unitcell_kws...) where {S<:S
         end
         push!(offsets´, length(sites´))
     end
-    return Unitcell(sites´, names, offsets´; unitcell_kws...)
+    return Unitcell(sites´, names, offsets´)
 end
 
-function unitcell(u::Unitcell{T´,E´}, names, postype::Type{S}; unitcell_kws...) where {T´,E´,S<:SVector}
+function unitcell(u::Unitcell{T´,E´}, names, postype::Type{S}) where {T´,E´,S<:SVector}
     sites´ = sanitize_SVector.(S, sites(u))
     offsets´ = offsets(u)
-    Unitcell(sites´, names, offsets´; unitcell_kws...)
+    Unitcell(sites´, names, offsets´)
 end
 
 # with simple rename, don't copy sites
-unitcell(u::Unitcell{T,E}, names, postype::Type{S}; unitcell_kws...)  where {T,E,S<:SVector{E,T}} =
-    Unitcell(sites(u), names, offsets(u); unitcell_kws...)
+unitcell(u::Unitcell{T,E}, names, postype::Type{S})  where {T,E,S<:SVector{E,T}} =
+    Unitcell(sites(u), names, offsets(u))
 
 #endregion
 
@@ -100,7 +98,7 @@ function combine(ucells::Unitcell...)
     names´ = vcat(sublatnames.(ucells)...)
     sites´ = vcat(sites.(ucells)...)
     offsets´ = combined_offsets(offsets.(ucells)...)
-    return Unitcell(sites´, names´, offsets´; merge_sublats = true)
+    return Unitcell(sites´, names´, offsets´)
 end
 
 isapprox_modulo_shuffle() = true

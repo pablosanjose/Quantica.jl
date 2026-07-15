@@ -242,5 +242,5 @@ The `coupling` keyword, available when combining `h::AbstractHamiltonian`s, is a
 The objects to be combined must satisfy some conditions:
 
 - They must have the same Bravais vectors (modulo reorderings), which will be then inherited by the combined object.
+- Their embedding dimension must be the same
 - They must have the same position type (the `T` in `AbstractHamiltonian{T}` and `Lattice{T}`)
-- They must have no repeated sublattice names among them (unless the combined object is non-parametric)

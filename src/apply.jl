@@ -16,10 +16,11 @@ apply(s::Union{SiteSelector,HopSelector}, l::LatticeSlice) = apply(s, parent(l),
 
 function apply(s::SiteSelector, lat::Lattice{T,E,L}, cellcandidates...) where {T,E,L}
     region = applied_region_site(s.region, s.cells)
-    # Here we assume names are unique: you can transform names to unique indices, or zero if not found
-    intsublats = recursive_apply(name -> sublatindex_or_zero(lat, name), s.sublats)
+    # Here we just match the first sublattice with a given name.
+    intsublats = recursive_apply(name -> first_sublatindex_or_zero(lat, name), s.sublats)
     sublats = recursive_push!(Int[], intsublats)
     unique!(sort!(sublats))
+    # Now we add equivalent sublattices (i.e. with the same name)
     equivalent_sublats(lat) == I || apply_equivalent_sublats!(sublats, equivalent_sublats(lat))
     cells = recursive_push!(SVector{L,Int}[], sanitize_cells(s.cells, Val(L)), cellcandidates...)
     # we don't sort cells, in case we have received them as an explicit list
@@ -36,9 +37,11 @@ function apply(s::HopSelector, lat::Lattice{T,E,L}, cellcandidates...) where {T,
         throw(ErrorException("Tried to apply an infinite-range HopSelector on an unbounded lattice"))
     sign = ifelse(s.adjoint, -1, 1)
     region = applied_region_hop(sign, s.region, s.dcells)
-    intsublats = recursive_apply(names -> sublatindex_or_zero(lat, names), s.sublats)
+    # Here we just match the first sublattice with a given name.
+    intsublats = recursive_apply(names -> first_sublatindex_or_zero(lat, names), s.sublats)
     sublats = recursive_push!(Pair{Int,Int}[], intsublats)
     unique!(sublats)
+    # Now we add equivalent sublattices (i.e. with the same name)
     equivalent_sublats(lat) == I || apply_equivalent_sublats!(sublats, equivalent_sublats(lat))
     dcells = recursive_push!(SVector{L,Int}[], sanitize_cells(s.dcells, Val(L)), cellcandidates...)
     unique!(dcells)
@@ -52,16 +55,16 @@ function apply(s::HopSelector, lat::Lattice{T,E,L}, cellcandidates...) where {T,
     return AppliedHopSelector{T,E,L}(lat, region, sublats, dcells, (rmin, rmax), includeonsite, isnull)
 end
 
-sublatindex_or_zero(lat, ::Missing) = missing
-sublatindex_or_zero(lat, i::Integer) = ifelse(1 <= i <= nsublats(lat), Int(i), 0)
+first_sublatindex_or_zero(lat, ::Missing) = missing
+first_sublatindex_or_zero(lat, i::Integer) = ifelse(1 <= i <= nsublats(lat), Int(i), 0)
 
-function sublatindex_or_zero(lat, name::Symbol)
-    i = sublatindex_or_nothing(lat, name)
-    return sublatindex_or_zero(i)
+function first_sublatindex_or_zero(lat, name::Symbol)
+    i = first_sublatindex_or_nothing(lat, name)
+    return first_sublatindex_or_zero(i)
 end
 
-sublatindex_or_zero(i::Number) = Int(i)
-sublatindex_or_zero(_) = 0
+first_sublatindex_or_zero(i::Number) = Int(i)
+first_sublatindex_or_zero(_) = 0
 
 sanitize_minmaxrange(r, lat) = sanitize_minmaxrange((zero(numbertype(lat)), r), lat)
 sanitize_minmaxrange((rmin, rmax)::Tuple{Any,Any}, lat) =

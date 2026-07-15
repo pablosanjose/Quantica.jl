@@ -119,11 +119,13 @@ corresponding function.
 ExternalPresets
 
 """
-    sublat(sites...; name::Symbol = :A)
-    sublat(sites::AbstractVector; name::Symbol = :A)
+    sublat(sites...; name::Symbol = :unassigned)
+    sublat(sites::AbstractVector; name::Symbol = :unassigned)
 
 Create a `Sublat{E,T}` that adds a sublattice, of name `name`, with sites at positions
 `sites` in `E` dimensional space. Sites positions can be entered as `Tuple`s or `SVector`s.
+If `name == :unassigned`, it will be automatically renamed to a unique name `:A`, `:B`,
+etc. when the sublattice is added to a `Lattice`, see `lattice` for details.
 
 # Examples
 
@@ -133,6 +135,9 @@ Sublat{2,Float64} : sublattice of Float64-typed sites in 2D space
   Sites    : 3
   Name     : :A
 ```
+
+# See also
+    `lattice`
 """
 sublat
 
@@ -166,7 +171,10 @@ bravais_matrix
 
 Create a `Lattice{T,E,L}` from sublattices `sublats`, where `L` is the number of Bravais
 vectors given by `bravais`, `T = type` is the `AbstractFloat` type of spatial site
-coordinates, and `dim = E` is the spatial embedding dimension.
+coordinates, and `dim = E` is the spatial embedding dimension. Sublattice `names` need not
+be unique. Two or more sublattices with the same name will be considered equivalent by
+selectors. However, in `AbstractHamiltonians`, they will correspond to distinct matrix
+blocks.
 
     lattice(lat::Lattice; bravais = missing, dim = missing, type = missing, names = missing)
 
@@ -179,7 +187,7 @@ Return the parent lattice of object `x`, of type e.g. `LatticeSlice`, `Hamiltoni
 ## Keywords
 
 - `bravais`: a collection of one or more Bravais vectors of type NTuple{E} or SVector{E}. It can also be an `AbstractMatrix` of dimension `E×L`. The default `bravais = ()` corresponds to a bounded lattice with no Bravais vectors.
-- `names`: a collection of Symbols. Can be used to rename `sublats`. Any repeated names will be replaced if necessary by `:A`, `:B` etc. to ensure that all sublattice names are unique.
+- `names`: a collection of Symbols. Can be used to rename `sublats`. Any `:unassigned` names will be replaced if necessary by `:A`, `:B` etc.
 
 ## Indexing
 
@@ -423,8 +431,6 @@ translate
     combine(lats::Lattice...)
 
 If all `lats` have compatible Bravais vectors, combine them into a single lattice.
-If necessary, sublattice names are renamed to remain unique, but when they are, they will be
-marked as equivalent, so that selectors treat them as the same sublattice.
 
     combine(hams::Hamiltonians...; coupling = TighbindingModel())
 
@@ -433,9 +439,7 @@ lattices, and optionally by adding a coupling between them, given by the hopping
 `coupling`.
 
 Note that the `coupling` model will be applied to the combined lattice. However, only
-hopping terms between different `hams` blocks will be applied. When sublattice are renamed
-in the combined lattice, they will be marked as equivalent, so that sublattice selectors in
-`coupling` need not be changed.
+hopping terms between different `hams` blocks will be applied.
 
 ## Limitations
 
