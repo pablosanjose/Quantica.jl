@@ -16,14 +16,15 @@
         minmaxsiteradius = (0.0, 0.5),
         siteradius = 0.2,            # accepts (i, r) -> float, IndexableObservable
         siteradiusfactor = 1.0,      # independent multiplier to apply to siteradius
+        neighborscaling = true,      # if true, all sizes are scaled by the minimum distance to nearest neighbor site
         siteoutline = 2,
         siteoutlinedarken = 0.6,
         sitedarken = 0.0,
         sitecolormap = :Spectral_9,
         hopcolor = missing,          # accepts ((i,j), (r,dr)) -> float, IndexableObservable
         hopopacity = missing,        # accepts ((i,j), (r,dr)) -> float, IndexableObservable
-        minmaxhopradius = (0.0, 0.1),
-        hopradius = 0.01,            # accepts ((i,j), (r,dr)) -> float, IndexableObservable
+        minmaxhopradius = (0.0, 0.2),# when hopradius is a function, range of values to scale to
+        hopradius = 0.1,             # accepts ((i,j), (r,dr)) -> float, IndexableObservable
         hopdarken = 0.85,
         hopcolormap = :Spectral_9,
         hoppixels = 2,
@@ -169,6 +170,8 @@ maybe_getindex(v::AbstractVector{<:Number}, i, j) = 0.5*(v[i] + v[j])
 maybe_getindex(m::AbstractMatrix{<:Number}, i, j) = m[i, j]
 maybe_getindex(v, i, j) = v
 
+default_siteradius(::Missing, ls) = 0.2
+
 ## push! ##
 
 # sitecolor here could be a color, a symbol, a vector/tuple of either, a number, a function, or missing
@@ -305,13 +308,17 @@ update_radii!(p, plot) = update_radii!(p, plot, updated_range!(p.radii))
 function update_radii!(p::SitePrimitives, plot, extremarads)
     siteradius = plot[:siteradius][]
     minmaxsiteradius = plot[:minmaxsiteradius][]
-    return update_radii!(p, extremarads, siteradius, minmaxsiteradius)
+    update_radii!(p, extremarads, siteradius, minmaxsiteradius)
+    maybe_scale_radii_to_neighbors!(p, plot)
+    return p
 end
 
 function update_radii!(p::HoppingPrimitives, plot, extremarads)
     hopradius = plot[:hopradius][]
     minmaxhopradius = plot[:minmaxhopradius][]
-    return update_radii!(p, extremarads, hopradius, minmaxhopradius)
+    update_radii!(p, extremarads, hopradius, minmaxhopradius)
+    !plot[:flat][] && maybe_scale_radii_to_neighbors!(p, plot)
+    return p
 end
 
 function update_radii!(p, extremarads, radius, minmaxradius)
@@ -324,25 +331,26 @@ end
 primitive_radius(normr, radius::Number, minmaxradius) = radius
 primitive_radius(normr, radius, (minr, maxr)) = minr + (maxr - minr) * normr
 
+function maybe_scale_radii_to_neighbors!(p, plot)
+    if plot[:neighborscaling][]
+        lat = lattice(to_value(plot[2]))
+        basescale = Quantica.neighbors(1, lat)
+        p.radii.data .*= basescale
+    end
+    return p
+end
+
+
 ## primitive_scales ##
 
 function primitive_scales(p::HoppingPrimitives, plot)
-    hopradius = plot[:hopradius][]
-    minmaxhopradius = plot[:minmaxhopradius][]
     scales = Vec3f[]
     for (r, v) in zip(p.radii.data, p.vectors)
-        push!(scales, primitive_scale(r, v, hopradius, minmaxhopradius))
+        push!(scales, Vec3f(r, r, norm(v)/2))
     end
     return scales
 end
 
-primitive_scale(normr, v, hopradius::Number, minmaxhopradius) =
-    Vec3f(hopradius, hopradius, norm(v)/2)
-
-function primitive_scale(normr, v, hopradius, (minr, maxr))
-    hopradius´ = minr + (maxr - minr) * normr
-    return Vec3f(hopradius´, hopradius´, norm(v)/2)
-end
 
 ## primitive_segments ##
 
@@ -360,16 +368,17 @@ end
 function primitive_linewidths(p::HoppingPrimitives{E}, plot) where {E}
     hoppixels = plot[:hoppixels][]
     hopradius = plot[:hopradius][]
+    maxhopradius = last(plot[:minmaxhopradius][])
     linewidths = Float32[]
     for r in p.radii.data
-        linewidth = primitive_linewidth(r, hopradius, hoppixels)
+        linewidth = primitive_linewidth(r, hopradius, hoppixels, maxhopradius)
         append!(linewidths, (linewidth, linewidth))
     end
     return linewidths
 end
 
-primitive_linewidth(normr, hopradius::Number, hoppixels) = hoppixels
-primitive_linewidth(normr, hopradius, hoppixels) = hoppixels * normr
+primitive_linewidth(normr, hopradius::Number, hoppixels, maxhopradius) = hoppixels
+primitive_linewidth(normr, hopradius, hoppixels, maxhopradius) = hoppixels * normr/maxhopradius
 
 #endregion
 
