@@ -70,6 +70,11 @@ end
     @test bravais_matrix(lat2) == SA[1 2; 3 4]
     # dim/type promotion
     @test lattice(sublat(Float16(0), name = :A), sublat(SA[1,2f0], name = :B)) isa Lattice{Float32,2}
+    # unique name assignment
+    lat = lattice(sublat(0, name = :B), sublat(1), sublat(2, name = :B), sublat(3))
+    @test Quantica.sublatnames(lat) == SA[:B,:C,:B,:D]
+    lat = lattice(sublat(0, name = :C), sublat(1), sublat(2), sublat(3))
+    @test Quantica.sublatnames(lat) == SA[:C,:B,:D,:E]
 end
 
 @testset "lattice presets" begin
