@@ -198,4 +198,7 @@ end
     ls = lat[region = RP.circle(4)]
     ls´ = ls[cells = n -> !isreal(n[1])]
     @test isempty(ls´)
+    # repeated sublat names
+    lat = lattice(sublat(0, name = :A), sublat(1, name = :B), sublat(2, name = :A))
+    @test lat[sublats = :A] |> sites |> collect |> length == 2
 end

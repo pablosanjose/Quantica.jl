@@ -145,6 +145,10 @@ end
     @test LP.linear()[cells = !iszero, region = RP.circle(1)] |> nsites == 2
     h = LP.linear() |> hopping(1; range = 2, dcells = !iszero) |> @hopping!(t->2t; dcells = [[2],[-2]])
     @test only(h()[1]) == only(h()[-1]) == 1 && only(h()[2]) == only(h()[-2]) == 2
+    # Repeated sublattice names (Issue #398)
+    h = lattice(sublat(0, name = :A), sublat(1, name = :B), sublat(2, name = :A), bravais = SA[3]) |>
+        hopping(I, sublats = :A => :A) - onsite(2, sublats = :A) + onsite(2, sublats = :B)
+    @test h(SA[0]) == SA[-2 0 1; 0 2 0; 1 0 -2]
 end
 
 @testset "models" begin
@@ -564,6 +568,18 @@ end
         @test h[1,2] == h[2,1] == h[3,4] == h[4,3] == ifelse(scalarmodel, 1, 2) * one
         @test h[1,3] == h[3,1] == h[2,4] == h[4,2] == ifelse(scalarcoupling, 1, 10) * one
     end
+    # Sublats with same name (Issue #398)
+    lat0 = LatticePresets.honeycomb(dim = 3)
+    lat = combine(lat0, translate(lat0, SA[0,1,1]/sqrt(3)))
+    @test Quantica.sublatnames(lat) == SA[:A,:B,:A,:B]
+    model = hopping(I, sublats = (:A, :B) .=> (:B,:A))
+    h = lat |> model
+    @test h(SA[0,0]) == SA[0 3 0 0; 3 0 1 0; 0 1 0 3; 0 0 3 0]
+    model = hopping(I, sublats = (:A, :B) .=> (:B,:A), range = 1)
+    h1 = lat |> hamiltonian(model, orbitals = 2)
+    h0 = lat0 |> hamiltonian(model, orbitals = 2)
+    h1´ = combine(h0, translate(h0, SA[0,1,1]/sqrt(3)); coupling = model)
+    @test h1 == h1´
 end
 
 @testset "current operator" begin

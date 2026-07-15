@@ -11,11 +11,12 @@ struct Unitcell{T<:AbstractFloat,E}
     sites::Vector{SVector{E,T}}
     names::Vector{Symbol}
     offsets::Vector{Int}                # Linear site number offsets for each sublat
-    equivalent_sublats::Matrix{Bool}    # equivalent_sublats[i,j] = true if sublats i and j should be considered the same by selectors
+    equivalent_sublats::Matrix{Bool}    # equivalent_sublats[i,j] = true if sublats i and j
+                                        # have the same name (they are equivalent for selectors)
     function Unitcell{T,E}(sites, names_unsanitized, offsets) where {T<:AbstractFloat,E}
         names = sanitize_Vector_of_Symbols(names_unsanitized)
         assign_names!(names)  # give unique names to :unassigned sublats
-        equivalent_sublats = equivalent_sublats_matrix(names)
+        equivalent_sublats = reshape(names, 1, :) .== names
         length(names) == length(offsets) - 1 ||
             argerror("Incorrect number of sublattice names, got $(length(names)), expected $(length(offsets) - 1)")
         return new(sites, names, offsets, equivalent_sublats)
@@ -75,13 +76,6 @@ function uniquename(assigned_names, names, i = 1)
     return newname
 end
 
-# Injects M[i,j] = true if the i, j sublattices had originally the same name.
-function equivalent_sublats_matrix(names)
-    M = reshape(names, 1, :) .== names
-    nmerged = count(col -> sum(col) > 1, eachcol(M))
-    iszero(nmerged) || @warn "Found $nmerged sublattices with repeated names, which will be merged with their duplicates."
-    return M
-end
 
 #endregion
 
