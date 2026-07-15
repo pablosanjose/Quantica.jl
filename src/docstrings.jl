@@ -423,7 +423,8 @@ translate
     combine(lats::Lattice...)
 
 If all `lats` have compatible Bravais vectors, combine them into a single lattice.
-If necessary, sublattice names are renamed to remain unique.
+If necessary, sublattice names are renamed to remain unique, but when they are, they will be
+marked as merged, so that selectors treat them as the same sublattice.
 
     combine(hams::Hamiltonians...; coupling = TighbindingModel())
 
@@ -431,19 +432,15 @@ Combine a collection `hams` of Hamiltonians into one by combining their correspo
 lattices, and optionally by adding a coupling between them, given by the hopping terms in
 `coupling`.
 
-Note that the `coupling` model will be applied to the combined lattice (which may have
-renamed sublattices to avoid name collissions). However, only hopping terms between
-different `hams` blocks will be applied.
+Note that the `coupling` model will be applied to the combined lattice. However, only
+hopping terms between different `hams` blocks will be applied. When sublattice are renamed
+in the combined lattice, they will be marked as merged, so that sublattice selectors in
+`coupling` need not be changed.
 
 ## Limitations
 
 Currently, `combine` only works with `Lattice{T}` `AbstractHamiltonians{T}` with the same
-`T`. Furthermore, if any of the `hams` is a `ParametricHamiltonian` or `coupling` is a
-`ParametricModel`, the sublattice names of all `hams` must be distinct. This ensures that
-parametric models, which get applied through `Modifiers` after construction of the
-`ParametricHamiltonian`, are not applied to the wrong sublattice, since sublattice names
-could be renamed by `combine` if they are not unique. Therefore, be sure to choose unique
-sublattice names upon construction for all the `hams` to be combined (see `lattice`).
+`T`, with the same lattice dimension and the same embedding dimension.
 
 # Examples
 ```jldoctest

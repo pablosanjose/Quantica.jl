@@ -7,15 +7,21 @@ struct Sublat{T<:AbstractFloat,E}
     name::Symbol
 end
 
+#   merged_sublats specifies whether sublattices with repeated names should be consider the
+#   same by selectors. reserved_names specifies a list of sublattice names that should not
+#   be used for sublattice renaming.
 struct Unitcell{T<:AbstractFloat,E}
     sites::Vector{SVector{E,T}}
     names::Vector{Symbol}
-    offsets::Vector{Int}        # Linear site number offsets for each sublat
-    function Unitcell{T,E}(sites, names, offsets) where {T<:AbstractFloat,E}
-        names´ = uniquenames!(sanitize_Vector_of_Symbols(names))
+    offsets::Vector{Int}            # Linear site number offsets for each sublat
+    merged_sublats::Matrix{Bool}    # merged_sublats[i,j] = true if sublats i and j should be considered the same by selectors
+    function Unitcell{T,E}(sites, names, offsets; merge_sublats = false, reserved_names = ()) where {T<:AbstractFloat,E}
+        names´ = uniquenames!(sanitize_Vector_of_Symbols(names); reserved_names)
         length(names´) == length(offsets) - 1 ||
             argerror("Incorrect number of sublattice names, got $(length(names´)), expected $(length(offsets) - 1)")
-        return new(sites, names´, offsets)
+        merged_sublats = Matrix{Bool}(I, length(names), length(names))  # no equivalences by default
+        merge_sublats && merge_sublats!(merged_sublats, names)          # record repeated names into merged_sublats
+        return new(sites, names´, offsets, merged_sublats)
     end
 end
 
@@ -51,27 +57,46 @@ Bravais(::Type{T}, ::Val{E}, m::AbstractMatrix) where {T,E} =
 Bravais(::Type{T}, ::Val{E}, m::AbstractVector) where {T,E} =
     Bravais{T,E,1}(sanitize_Matrix(T, E, hcat(m)))
 
-Unitcell(sites::Vector{SVector{E,T}}, names, offsets) where {E,T} =
-    Unitcell{T,E}(sites, names, offsets)
+Unitcell(sites::Vector{SVector{E,T}}, names, offsets; kw...) where {E,T} =
+    Unitcell{T,E}(sites, names, offsets; kw...)
 
-function uniquenames!(names::Vector{Symbol})
-    allnames = Symbol[:_]
+function uniquenames!(names::Vector{Symbol}; reserved_names = ())
+    assigned_names = append!(Symbol[:_], reserved_names)
     for (i, name) in enumerate(names)
-        if name in allnames
-            names[i] = uniquename(allnames, name, i)
+        if name in assigned_names
+            names[i] = uniquename(assigned_names, names, i)
             @warn "Renamed repeated sublattice :$name to :$(names[i])"
         end
-        push!(allnames, names[i])
+        push!(assigned_names, names[i])
     end
     return names
 end
 
-function uniquename(allnames, name, i)
-    newname = Symbol(Char(64+i)) # Lexicographic, starting from Char(65) = 'A'
-    newname = newname in allnames ? uniquename(allnames, name, i + 1) : newname
+# recursively look for the first letter from the i-th, that is not in assigned_names or names
+function uniquename(assigned_names, names, i = 1)
+    newname = Symbol(Char(64+i)) # Lexicographic, starting from Char(65) = 'A' if i = 1
+    newname = newname in assigned_names || newname in names ?
+        uniquename(assigned_names, names, i + 1) : newname
     return newname
 end
 
+# Injects M[i,j] = true for i != j if the i, j sublattices had originally the same name.
+function merge_sublats!(M, names)
+    nmerged = 0
+    for j in axes(M, 2)
+        isrepeated = false
+        for i in axes(M, 1)
+            i == j && continue
+            if names[i] == names[j]
+                M[i,j] = true
+                isrepeated = true
+            end
+        end
+        isrepeated && (nmerged += 1)
+    end
+    iszero(nmerged) || @warn "Found $nmerged sublattices with repeated names, which were merged with their duplicates."
+    return M
+end
 
 #endregion
 
@@ -108,6 +133,9 @@ function sublatindex_or_error(u, s)
     i === nothing && boundserror(u, string(s))
     return i
 end
+
+merged_sublats(l::Lattice) = merged_sublats(l.unitcell)
+merged_sublats(u::Unitcell) = u.merged_sublats
 
 nsublats(l::Lattice) = nsublats(l.unitcell)
 nsublats(u::Unitcell) = length(u.names)
@@ -175,11 +203,16 @@ Base.length(l::Lattice) = nsites(l)
 
 Base.copy(l::Lattice) = Lattice(copy(l.bravais), copy(l.unitcell), copy(l.nranges))
 Base.copy(b::Bravais{T,E,L}) where {T,E,L} = Bravais{T,E,L}(copy(b.matrix))
-Base.copy(u::Unitcell{T,E}) where {T,E} = Unitcell{T,E}(copy(u.sites), copy(u.names), copy(u.offsets))
+
+function Base.copy(u::Unitcell{T,E}) where {T,E}
+    u´ = Unitcell{T,E}(copy(u.sites), copy(u.names), copy(u.offsets))
+    u´.merged_sublats .= u.merged_sublats
+    return u´
+end
 
 Base.:(==)(l::Lattice, l´::Lattice) = l.bravais == l´.bravais && l.unitcell == l´.unitcell
 Base.:(==)(b::Bravais, b´::Bravais) = b.matrix == b´.matrix
-# we do not demand equal names for unitcells to be equal
+# we do not demand equal names for unitcells to be equal, or the same set of merged sublats
 Base.:(==)(u::Unitcell, u´::Unitcell) = u.sites == u´.sites && u.offsets == u´.offsets
 
 #endregion

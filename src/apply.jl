@@ -18,8 +18,9 @@ function apply(s::SiteSelector, lat::Lattice{T,E,L}, cellcandidates...) where {T
     region = applied_region_site(s.region, s.cells)
     intsublats = recursive_apply(name -> sublatindex_or_zero(lat, name), s.sublats)
     sublats = recursive_push!(Int[], intsublats)
-    cells = recursive_push!(SVector{L,Int}[], sanitize_cells(s.cells, Val(L)), cellcandidates...)
     unique!(sort!(sublats))
+    merged_sublats(lat) == I || apply_merged_sublats!(sublats, merged_sublats(lat))
+    cells = recursive_push!(SVector{L,Int}[], sanitize_cells(s.cells, Val(L)), cellcandidates...)
     # we don't sort cells, in case we have received them as an explicit list
     unique!(cells)
     # isnull: to distinguish in a type-stable way between s.cells === missing and no-selected-cells
@@ -36,8 +37,9 @@ function apply(s::HopSelector, lat::Lattice{T,E,L}, cellcandidates...) where {T,
     region = applied_region_hop(sign, s.region, s.dcells)
     intsublats = recursive_apply(names -> sublatindex_or_zero(lat, names), s.sublats)
     sublats = recursive_push!(Pair{Int,Int}[], intsublats)
-    dcells = recursive_push!(SVector{L,Int}[], sanitize_cells(s.dcells, Val(L)), cellcandidates...)
     unique!(sublats)
+    merged_sublats(lat) == I || apply_merged_sublats!(sublats, merged_sublats(lat))
+    dcells = recursive_push!(SVector{L,Int}[], sanitize_cells(s.dcells, Val(L)), cellcandidates...)
     unique!(dcells)
     if s.adjoint
         sublats .= reverse.(sublats)
@@ -119,7 +121,7 @@ recursive_push!(v::Vector, cells, cellcandidates) =
     intersect!(recursive_push!(v, cells), cellcandidates)
 
 applyrange(ss::Tuple, h::AbstractHamiltonian) = applyrange.(ss, Ref(h))
-applyrange(s::Modifier, h::AbstractHamiltonian) = s
+applyrange(s::AbstractModifier, h::AbstractHamiltonian) = s
 applyrange(s::AppliedHoppingModifier, h::ParametricHamiltonian) =
     AppliedHoppingModifier(s, applyrange(selector(s), lattice(h)))
 applyrange(s::HopSelector, lat::Lattice) = hopselector(s; range = sanitize_minmaxrange(hoprange(s), lat))
@@ -129,6 +131,30 @@ applyrange(r::Real, lat::Lattice) = r
 
 isnull_selector(sel::Union{Missing,Function}, list) = false
 isnull_selector(_, list) = isempty(list)
+
+# M[i,j] = true if sublats i and j should be assumed to be the same by selectors.
+#  SiteSelector version
+function apply_merged_sublats!(sublats::Vector{Int}, M)
+    sbool = in.(axes(M, 1), Ref(sublats))
+    sbool´ = M * sbool
+    empty!(sublats)
+    for (i, s) in enumerate(sbool´)
+        !iszero(s) && push!(sublats, i)
+    end
+    return sublats
+end
+
+#  HopSelector version
+function apply_merged_sublats!(sublats::Vector{Pair{Int,Int}}, M)
+    sbool = ((j,i) -> in(j=>i, sublats)).(axes(M, 2)', axes(M, 1))
+    sbool´ = M * sbool * M
+    empty!(sublats)
+    for j in axes(sbool´, 2), i in axes(sbool´, 1)
+        !iszero(sbool´[i,j]) && push!(sublats, j=>i)
+    end
+    return sublats
+end
+
 
 #endregion
 
