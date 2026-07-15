@@ -23,8 +23,8 @@
         sitecolormap = :Spectral_9,
         hopcolor = missing,          # accepts ((i,j), (r,dr)) -> float, IndexableObservable
         hopopacity = missing,        # accepts ((i,j), (r,dr)) -> float, IndexableObservable
-        minmaxhopradius = (0.0, 0.2),# when hopradius is a function, range of values to scale to
-        hopradius = 0.1,             # accepts ((i,j), (r,dr)) -> float, IndexableObservable
+        minmaxhopradius = (0.0, 0.1),# when hopradius is a function, range of values to scale to
+        hopradius = 0.03,            # accepts ((i,j), (r,dr)) -> float, IndexableObservable
         hopdarken = 0.85,
         hopcolormap = :Spectral_9,
         hoppixels = 2,
@@ -334,11 +334,12 @@ primitive_radius(normr, radius, (minr, maxr)) = minr + (maxr - minr) * normr
 
 ## retract_hops! ##
 
-function retract_hops!(hp::HoppingPrimitives, sp::SitePrimitives)
+function retract_hops!(hp::HoppingPrimitives, sp::SitePrimitives, plot)
     for n in eachindex(hp.vectors)
         r, dr = hp.centers[n], hp.vectors[n]
         _, j = hp.indices[n]
         R, Rj = hp.radii.data[n], sp.radii.data[j]
+        plot[:flat][] && (R = zero(R))
         dl = (Rj>R ? sqrt(Rj^2-R^2) : 0.0) * dr/norm(dr)
         dr´ = dr - dl
         r´ = r + 0.5 * dl
@@ -490,10 +491,8 @@ function Makie.plot!(plot::PlotLattice{Tuple{H,S,S´}}) where {H<:Hamiltonian,S<
         else
             joint_colors_radii_update!(hp, hp´, plot)
         end
-        if !plot[:flat][]
-            retract_hops!(hp, sp)
-            retract_hops!(hp´, sp)
-        end
+        retract_hops!(hp, sp, plot)
+        retract_hops!(hp´, sp, plot)
     end
 
     # plot hops
@@ -714,8 +713,9 @@ function plotbravais!(plot::PlotLattice, lat::Lattice{<:Any,E,L}, latslice) wher
     vtot = sum(vs)
     r0 = Point{E,Float32}(Quantica.mean(Quantica.sites(lat))) - 0.5 * vtot
     if !ishidden(:axes, plot)
+        markerscale = maximum(norm, vs) * 0.2
         for (v, color) in zip(vs, (:red, :green, :blue))
-            arrows3d!(plot, [r0], [v]; color, inspectable = false, markerscale = 1)
+            arrows3d!(plot, [r0], [v]; color, inspectable = false, markerscale)
         end
     end
     if !ishidden((:cell, :cells), plot) && L > 1
