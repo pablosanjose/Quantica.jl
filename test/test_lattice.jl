@@ -114,6 +114,7 @@ end
     lat2 = combine(lat0, lat1)
     @test lat2 isa typeof(lat0)
     @test allunique(Quantica.sublatnames(lat2))
+    @test Quantica.equivalent_sublats(lat2) == SA[1 0 1 0; 0 1 0 1; 1 0 1 0; 0 1 0 1]
     lat1 = transform(LatticePresets.honeycomb(), r -> SA[r[2], -r[1]]) |> supercell((-3,3), (1,1))
     @test_throws ArgumentError combine(lat0, lat1)
 end

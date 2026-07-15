@@ -16,6 +16,7 @@ apply(s::Union{SiteSelector,HopSelector}, l::LatticeSlice) = apply(s, parent(l),
 
 function apply(s::SiteSelector, lat::Lattice{T,E,L}, cellcandidates...) where {T,E,L}
     region = applied_region_site(s.region, s.cells)
+    # Here we assume names are unique: you can transform names to unique indices, or zero if not found
     intsublats = recursive_apply(name -> sublatindex_or_zero(lat, name), s.sublats)
     sublats = recursive_push!(Int[], intsublats)
     unique!(sort!(sublats))

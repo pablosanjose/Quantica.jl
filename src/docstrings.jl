@@ -424,7 +424,7 @@ translate
 
 If all `lats` have compatible Bravais vectors, combine them into a single lattice.
 If necessary, sublattice names are renamed to remain unique, but when they are, they will be
-marked as merged, so that selectors treat them as the same sublattice.
+marked as equivalent, so that selectors treat them as the same sublattice.
 
     combine(hams::Hamiltonians...; coupling = TighbindingModel())
 
@@ -434,7 +434,7 @@ lattices, and optionally by adding a coupling between them, given by the hopping
 
 Note that the `coupling` model will be applied to the combined lattice. However, only
 hopping terms between different `hams` blocks will be applied. When sublattice are renamed
-in the combined lattice, they will be marked as merged, so that sublattice selectors in
+in the combined lattice, they will be marked as equivalent, so that sublattice selectors in
 `coupling` need not be changed.
 
 ## Limitations
