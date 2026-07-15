@@ -147,11 +147,13 @@ function hoppingprimitives!(hp, hp´, ls, ls´, h, opts, siteradii)
                 if i´ === nothing   # dst is not in latslice
                     if haskey(sdict´, csi)  # dst is in latslice´
                         opts´ = maybe_getindex.(opts, j´)
-                        push_hopprimitive!(hp´, opts´, lat, (i, j), (ni, nj), siteradius, view(h, csi, csj), false)
+                        is_shell = false
+                        push_hopprimitive!(hp´, opts´, lat, (i, j), (ni, nj), siteradius, view(h, csi, csj), is_shell)
                     end
                 else
                     opts´ = maybe_getindex.(opts, i´, j´)
-                    push_hopprimitive!(hp, opts´, lat, (i, j), (ni, nj), siteradius, view(h, csi, csj), true)
+                    is_shell = true
+                    push_hopprimitive!(hp, opts´, lat, (i, j), (ni, nj), siteradius, view(h, csi, csj), is_shell)
                 end
             end
         end
@@ -209,23 +211,15 @@ push_sitetooltip!(sp, i, r) = push!(sp.tooltips, positionstring(i, r))
 
 # hopcolor here could be a color, a symbol, a vector/tuple of either, a number, a function, or missing
 function push_hopprimitive!(hp, (hopcolor, hopopacity, shellopacity, hopradius, flat), lat, (i, j), (ni, nj), radius, matij, is_shell)
+    # No hop retraction, that is done at the end with retract_hops!
     src, dst = Quantica.site(lat, j, nj), Quantica.site(lat, i, ni)
-    # First we evaluate hop shaders using uncorrected r, dr
+    dst = is_shell ? (src + dst)/2 : dst
     r, dr = (src + dst)/2, (dst - src)
     sj = Quantica.sitesublat(lat, j)
     push_hophue!(hp, hopcolor, (i, j), (r, dr), sj)
     push_hopopacity!(hp, hopopacity, shellopacity, (i, j), (r, dr), is_shell)
     push_hopradius!(hp, hopradius, (i, j), (r, dr))
     push_hoptooltip!(hp, (i, j), matij)
-    hopradius´ = last(hp.radii.data)  # needed below
-    # Now we determine hop position and size
-    # If end site is opaque (not in outer shell), dst is midpoint, since the inverse hop will be plotted too
-    # otherwise it is shifted by radius´ = radius minus hopradius correction if flat = false, and src also
-    radius´ = flat ? radius : sqrt(max(0, radius^2 - hopradius´^2))
-    unitvec = normalize(dst - src)
-    dst = is_shell ? (src + dst)/2 : dst - unitvec * radius´
-    src = src + unitvec * radius´
-    r, dr = (src + dst)/2, (dst - src)
     push!(hp.centers, r)
     push!(hp.vectors, dr)
     push!(hp.indices, (i, j))
@@ -309,7 +303,7 @@ function update_radii!(p::SitePrimitives, plot, extremarads)
     siteradius = plot[:siteradius][]
     minmaxsiteradius = plot[:minmaxsiteradius][]
     update_radii!(p, extremarads, siteradius, minmaxsiteradius)
-    maybe_scale_radii_to_neighbors!(p, plot)
+    plot[:neighborscaling][] && scale_radii_to_neighbors!(p, plot)
     return p
 end
 
@@ -317,7 +311,7 @@ function update_radii!(p::HoppingPrimitives, plot, extremarads)
     hopradius = plot[:hopradius][]
     minmaxhopradius = plot[:minmaxhopradius][]
     update_radii!(p, extremarads, hopradius, minmaxhopradius)
-    !plot[:flat][] && maybe_scale_radii_to_neighbors!(p, plot)
+    !plot[:flat][] && plot[:neighborscaling][] && scale_radii_to_neighbors!(p, plot)
     return p
 end
 
@@ -328,18 +322,31 @@ function update_radii!(p, extremarads, radius, minmaxradius)
     return p
 end
 
-primitive_radius(normr, radius::Number, minmaxradius) = radius
-primitive_radius(normr, radius, (minr, maxr)) = minr + (maxr - minr) * normr
-
-function maybe_scale_radii_to_neighbors!(p, plot)
-    if plot[:neighborscaling][]
-        lat = lattice(to_value(plot[2]))
-        basescale = Quantica.neighbors(1, lat)
-        p.radii.data .*= basescale
-    end
+function scale_radii_to_neighbors!(p, plot)
+    lat = lattice(to_value(plot[2]))
+    basescale = Quantica.neighbors(1, lat)
+    p.radii.data .*= basescale
     return p
 end
 
+primitive_radius(normr, radius::Number, minmaxradius) = radius
+primitive_radius(normr, radius, (minr, maxr)) = minr + (maxr - minr) * normr
+
+## retract_hops! ##
+
+function retract_hops!(hp::HoppingPrimitives, sp::SitePrimitives)
+    for n in eachindex(hp.vectors)
+        r, dr = hp.centers[n], hp.vectors[n]
+        _, j = hp.indices[n]
+        R, Rj = hp.radii.data[n], sp.radii.data[j]
+        dl = sqrt(Rj^2-R^2) * dr/norm(dr)
+        dr´ = dr - dl
+        r´ = r + 0.5 * dl
+        hp.centers[n] = r´
+        hp.vectors[n] = dr´
+    end
+    return hp
+end
 
 ## primitive_scales ##
 
@@ -350,7 +357,6 @@ function primitive_scales(p::HoppingPrimitives, plot)
     end
     return scales
 end
-
 
 ## primitive_segments ##
 
@@ -483,6 +489,10 @@ function Makie.plot!(plot::PlotLattice{Tuple{H,S,S´}}) where {H<:Hamiltonian,S<
             update_radii!(hp, plot)
         else
             joint_colors_radii_update!(hp, hp´, plot)
+        end
+        if !plot[:flat][]
+            retract_hops!(hp, sp)
+            retract_hops!(hp´, sp)
         end
     end
 
