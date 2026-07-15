@@ -14,7 +14,7 @@ end
 
 ############################################################################################
 # lattice
-#   Here unitcell_kws = (; merged_sublats = false, reserved_names = ()), that specify how to
+#   Here unitcell_kws = (; merge_sublats = false, reserved_names = ()), that specify how to
 #   deal with repeated sublattice names. See types.jl for details.
 #region
 

@@ -19,7 +19,7 @@ function apply(s::SiteSelector, lat::Lattice{T,E,L}, cellcandidates...) where {T
     intsublats = recursive_apply(name -> sublatindex_or_zero(lat, name), s.sublats)
     sublats = recursive_push!(Int[], intsublats)
     unique!(sort!(sublats))
-    merged_sublats(lat) == I || apply_merged_sublats!(sublats, merged_sublats(lat))
+    equivalent_sublats(lat) == I || apply_equivalent_sublats!(sublats, equivalent_sublats(lat))
     cells = recursive_push!(SVector{L,Int}[], sanitize_cells(s.cells, Val(L)), cellcandidates...)
     # we don't sort cells, in case we have received them as an explicit list
     unique!(cells)
@@ -38,7 +38,7 @@ function apply(s::HopSelector, lat::Lattice{T,E,L}, cellcandidates...) where {T,
     intsublats = recursive_apply(names -> sublatindex_or_zero(lat, names), s.sublats)
     sublats = recursive_push!(Pair{Int,Int}[], intsublats)
     unique!(sublats)
-    merged_sublats(lat) == I || apply_merged_sublats!(sublats, merged_sublats(lat))
+    equivalent_sublats(lat) == I || apply_equivalent_sublats!(sublats, equivalent_sublats(lat))
     dcells = recursive_push!(SVector{L,Int}[], sanitize_cells(s.dcells, Val(L)), cellcandidates...)
     unique!(dcells)
     if s.adjoint
@@ -134,7 +134,7 @@ isnull_selector(_, list) = isempty(list)
 
 # M[i,j] = true if sublats i and j should be assumed to be the same by selectors.
 #  SiteSelector version
-function apply_merged_sublats!(sublats::Vector{Int}, M)
+function apply_equivalent_sublats!(sublats::Vector{Int}, M)
     sbool = in.(axes(M, 1), Ref(sublats))
     sbool´ = M * sbool
     empty!(sublats)
@@ -145,7 +145,7 @@ function apply_merged_sublats!(sublats::Vector{Int}, M)
 end
 
 #  HopSelector version
-function apply_merged_sublats!(sublats::Vector{Pair{Int,Int}}, M)
+function apply_equivalent_sublats!(sublats::Vector{Pair{Int,Int}}, M)
     sbool = ((j,i) -> in(j=>i, sublats)).(axes(M, 2)', axes(M, 1))
     sbool´ = M * sbool * M
     empty!(sublats)
