@@ -339,7 +339,7 @@ function retract_hops!(hp::HoppingPrimitives, sp::SitePrimitives)
         r, dr = hp.centers[n], hp.vectors[n]
         _, j = hp.indices[n]
         R, Rj = hp.radii.data[n], sp.radii.data[j]
-        dl = sqrt(Rj^2-R^2) * dr/norm(dr)
+        dl = (Rj>R ? sqrt(Rj^2-R^2) : 0.0) * dr/norm(dr)
         dr´ = dr - dl
         r´ = r + 0.5 * dl
         hp.centers[n] = r´
