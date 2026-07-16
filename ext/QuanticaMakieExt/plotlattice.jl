@@ -464,12 +464,8 @@ function Makie.plot!(plot::PlotLattice{Tuple{H,S,S´}}) where {H<:Hamiltonian,S<
     hidebravais = ishidden((:bravais, :all), plot)
     hideshell = ishidden((:shell, :all), plot) || iszero(Quantica.latdim(h))
 
-    if hidesites && hidehops && hidebravais
-        # An empty recipe (no child plots) causes backends to call draw_atomic on the
-        # recipe itself, which has no method. Add a dummy invisible child to prevent this.
-        linesegments!(plot, Point3f[]; visible = false)
-        return plot
-    end
+    # We put an invisible something in the plot to circunvent a Makie bug that breaks when there are no child plots.
+    linesegments!(plot, Point3f[])
 
     # plot bravais axes
     if !hidebravais
