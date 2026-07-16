@@ -464,6 +464,13 @@ function Makie.plot!(plot::PlotLattice{Tuple{H,S,S´}}) where {H<:Hamiltonian,S<
     hidebravais = ishidden((:bravais, :all), plot)
     hideshell = ishidden((:shell, :all), plot) || iszero(Quantica.latdim(h))
 
+    if hidesites && hidehops && hidebravais
+        # An empty recipe (no child plots) causes backends to call draw_atomic on the
+        # recipe itself, which has no method. Add a dummy invisible child to prevent this.
+        linesegments!(plot, Point3f[]; visible = false)
+        return plot
+    end
+
     # plot bravais axes
     if !hidebravais
         plotbravais!(plot, lat, latslice)
@@ -491,8 +498,10 @@ function Makie.plot!(plot::PlotLattice{Tuple{H,S,S´}}) where {H<:Hamiltonian,S<
         else
             joint_colors_radii_update!(hp, hp´, plot)
         end
-        retract_hops!(hp, sp, plot)
-        retract_hops!(hp´, sp, plot)
+        if !hidesites
+            retract_hops!(hp, sp, plot)
+            retract_hops!(hp´, sp, plot)
+        end
     end
 
     # plot hops
@@ -566,8 +575,9 @@ function Makie.plot!(plot::PlotLattice{Tuple{G}}) where {G<:Union{GreenFunction,
             Σplottables = Quantica.selfenergy_plottables(Σ)
             for Σp in Σplottables
                 plottables, kws = get_plottables_and_kws(Σp)
+                hide = (hideΣ..., get(kws, :hide, ()))
                 plottables´ = default_plottable.(plottables; params...)
-                plotlattice!(plot, attr, plottables´...; hide = hideΣ, marker = squaremarker, kws..., Σkw...)
+                plotlattice!(plot, attr, plottables´...; marker = squaremarker, kws..., Σkw..., hide)
             end
         end
     end
