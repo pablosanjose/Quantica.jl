@@ -305,6 +305,9 @@ end
     # sync state bug #389
     h = @stitch(LP.honeycomb() |> hamiltonian(@onsite((; µ = 0.0) -> -µ*σ.z), orbitals=2), SA[1], ϕ) |> @onsite!((o; v=1) -> o + v*σ.z);
     @test h(SA[0]; v = 5) == Quantica.Diagonal([5, -5, 5, -5])
+
+    # no supercell of stitch allowed (Issue #388)
+    @test_throws ArgumentError stitch(LP.honeycomb() |> @hopping((;t)->t), SA[2]) |> supercell(2)
 end
 
 @testset "hamiltonian HybridSparseMatrix" begin
