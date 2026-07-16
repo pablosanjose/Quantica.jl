@@ -319,6 +319,7 @@ function supercell(p::ParametricHamiltonian, v...; mincoordination = 0, kw...)
     data = supercell_data(lattice(h), v...; kw...)
     h´ = supercell(h, data; mincoordination)
     shifts = supercell_shifts(data)     # allows to compute new ptrs to old r, dr
+    check_no_stitch.(modifiers(p))
     ms = parent.(modifiers(p))          # extract unapplied modifiers to reapply them to h´
     ams = apply.(ms, Ref(h´), Ref(shifts))
     p´ = hamiltonian(h´, ams...)
@@ -332,5 +333,7 @@ function supercell_shifts(data::SupercellData)
     return shifts
 end
 
+check_no_stitch(_) = nothing
+check_no_stitch(::StitchModifier) = argerror("Supercell of a stitched ParametricHamiltonian is currently not supported. Consider applying the stitch after the supercell transformation instead.")
 
 #endregion
