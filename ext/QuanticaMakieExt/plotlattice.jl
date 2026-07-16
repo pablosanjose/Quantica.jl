@@ -16,14 +16,15 @@
         minmaxsiteradius = (0.0, 0.5),
         siteradius = 0.2,            # accepts (i, r) -> float, IndexableObservable
         siteradiusfactor = 1.0,      # independent multiplier to apply to siteradius
+        neighborscaling = true,      # if true, all sizes are scaled by the minimum distance to nearest neighbor site
         siteoutline = 2,
         siteoutlinedarken = 0.6,
         sitedarken = 0.0,
         sitecolormap = :Spectral_9,
         hopcolor = missing,          # accepts ((i,j), (r,dr)) -> float, IndexableObservable
         hopopacity = missing,        # accepts ((i,j), (r,dr)) -> float, IndexableObservable
-        minmaxhopradius = (0.0, 0.1),
-        hopradius = 0.01,            # accepts ((i,j), (r,dr)) -> float, IndexableObservable
+        minmaxhopradius = (0.0, 0.1),# when hopradius is a function, range of values to scale to
+        hopradius = 0.03,            # accepts ((i,j), (r,dr)) -> float, IndexableObservable
         hopdarken = 0.85,
         hopcolormap = :Spectral_9,
         hoppixels = 2,
@@ -146,11 +147,13 @@ function hoppingprimitives!(hp, hp´, ls, ls´, h, opts, siteradii)
                 if i´ === nothing   # dst is not in latslice
                     if haskey(sdict´, csi)  # dst is in latslice´
                         opts´ = maybe_getindex.(opts, j´)
-                        push_hopprimitive!(hp´, opts´, lat, (i, j), (ni, nj), siteradius, view(h, csi, csj), false)
+                        is_shell = false
+                        push_hopprimitive!(hp´, opts´, lat, (i, j), (ni, nj), siteradius, view(h, csi, csj), is_shell)
                     end
                 else
                     opts´ = maybe_getindex.(opts, i´, j´)
-                    push_hopprimitive!(hp, opts´, lat, (i, j), (ni, nj), siteradius, view(h, csi, csj), true)
+                    is_shell = true
+                    push_hopprimitive!(hp, opts´, lat, (i, j), (ni, nj), siteradius, view(h, csi, csj), is_shell)
                 end
             end
         end
@@ -168,6 +171,8 @@ maybe_getindex(v, i) = v
 maybe_getindex(v::AbstractVector{<:Number}, i, j) = 0.5*(v[i] + v[j])
 maybe_getindex(m::AbstractMatrix{<:Number}, i, j) = m[i, j]
 maybe_getindex(v, i, j) = v
+
+default_siteradius(::Missing, ls) = 0.2
 
 ## push! ##
 
@@ -206,23 +211,15 @@ push_sitetooltip!(sp, i, r) = push!(sp.tooltips, positionstring(i, r))
 
 # hopcolor here could be a color, a symbol, a vector/tuple of either, a number, a function, or missing
 function push_hopprimitive!(hp, (hopcolor, hopopacity, shellopacity, hopradius, flat), lat, (i, j), (ni, nj), radius, matij, is_shell)
+    # No hop retraction, that is done at the end with retract_hops!
     src, dst = Quantica.site(lat, j, nj), Quantica.site(lat, i, ni)
-    # First we evaluate hop shaders using uncorrected r, dr
+    dst = is_shell ? (src + dst)/2 : dst
     r, dr = (src + dst)/2, (dst - src)
     sj = Quantica.sitesublat(lat, j)
     push_hophue!(hp, hopcolor, (i, j), (r, dr), sj)
     push_hopopacity!(hp, hopopacity, shellopacity, (i, j), (r, dr), is_shell)
     push_hopradius!(hp, hopradius, (i, j), (r, dr))
     push_hoptooltip!(hp, (i, j), matij)
-    hopradius´ = last(hp.radii.data)  # needed below
-    # Now we determine hop position and size
-    # If end site is opaque (not in outer shell), dst is midpoint, since the inverse hop will be plotted too
-    # otherwise it is shifted by radius´ = radius minus hopradius correction if flat = false, and src also
-    radius´ = flat ? radius : sqrt(max(0, radius^2 - hopradius´^2))
-    unitvec = normalize(dst - src)
-    dst = is_shell ? (src + dst)/2 : dst - unitvec * radius´
-    src = src + unitvec * radius´
-    r, dr = (src + dst)/2, (dst - src)
     push!(hp.centers, r)
     push!(hp.vectors, dr)
     push!(hp.indices, (i, j))
@@ -305,13 +302,17 @@ update_radii!(p, plot) = update_radii!(p, plot, updated_range!(p.radii))
 function update_radii!(p::SitePrimitives, plot, extremarads)
     siteradius = plot[:siteradius][]
     minmaxsiteradius = plot[:minmaxsiteradius][]
-    return update_radii!(p, extremarads, siteradius, minmaxsiteradius)
+    update_radii!(p, extremarads, siteradius, minmaxsiteradius)
+    plot[:neighborscaling][] && scale_radii_to_neighbors!(p, plot)
+    return p
 end
 
 function update_radii!(p::HoppingPrimitives, plot, extremarads)
     hopradius = plot[:hopradius][]
     minmaxhopradius = plot[:minmaxhopradius][]
-    return update_radii!(p, extremarads, hopradius, minmaxhopradius)
+    update_radii!(p, extremarads, hopradius, minmaxhopradius)
+    !plot[:flat][] && plot[:neighborscaling][] && scale_radii_to_neighbors!(p, plot)
+    return p
 end
 
 function update_radii!(p, extremarads, radius, minmaxradius)
@@ -321,27 +322,41 @@ function update_radii!(p, extremarads, radius, minmaxradius)
     return p
 end
 
+function scale_radii_to_neighbors!(p, plot)
+    lat = lattice(to_value(plot[2]))
+    basescale = Quantica.neighbors(1, lat)
+    p.radii.data .*= basescale
+    return p
+end
+
 primitive_radius(normr, radius::Number, minmaxradius) = radius
 primitive_radius(normr, radius, (minr, maxr)) = minr + (maxr - minr) * normr
+
+## retract_hops! ##
+
+function retract_hops!(hp::HoppingPrimitives, sp::SitePrimitives, plot)
+    for n in eachindex(hp.vectors)
+        r, dr = hp.centers[n], hp.vectors[n]
+        _, j = hp.indices[n]
+        R, Rj = hp.radii.data[n], sp.radii.data[j]
+        plot[:flat][] && (R = zero(R))
+        dl = (Rj>R ? sqrt(Rj^2-R^2) : 0.0) * dr/norm(dr)
+        dr´ = dr - dl
+        r´ = r + 0.5 * dl
+        hp.centers[n] = r´
+        hp.vectors[n] = dr´
+    end
+    return hp
+end
 
 ## primitive_scales ##
 
 function primitive_scales(p::HoppingPrimitives, plot)
-    hopradius = plot[:hopradius][]
-    minmaxhopradius = plot[:minmaxhopradius][]
     scales = Vec3f[]
     for (r, v) in zip(p.radii.data, p.vectors)
-        push!(scales, primitive_scale(r, v, hopradius, minmaxhopradius))
+        push!(scales, Vec3f(r, r, norm(v)/2))
     end
     return scales
-end
-
-primitive_scale(normr, v, hopradius::Number, minmaxhopradius) =
-    Vec3f(hopradius, hopradius, norm(v)/2)
-
-function primitive_scale(normr, v, hopradius, (minr, maxr))
-    hopradius´ = minr + (maxr - minr) * normr
-    return Vec3f(hopradius´, hopradius´, norm(v)/2)
 end
 
 ## primitive_segments ##
@@ -360,16 +375,17 @@ end
 function primitive_linewidths(p::HoppingPrimitives{E}, plot) where {E}
     hoppixels = plot[:hoppixels][]
     hopradius = plot[:hopradius][]
+    maxhopradius = last(plot[:minmaxhopradius][])
     linewidths = Float32[]
     for r in p.radii.data
-        linewidth = primitive_linewidth(r, hopradius, hoppixels)
+        linewidth = primitive_linewidth(r, hopradius, hoppixels, maxhopradius)
         append!(linewidths, (linewidth, linewidth))
     end
     return linewidths
 end
 
-primitive_linewidth(normr, hopradius::Number, hoppixels) = hoppixels
-primitive_linewidth(normr, hopradius, hoppixels) = hoppixels * normr
+primitive_linewidth(normr, hopradius::Number, hoppixels, maxhopradius) = hoppixels
+primitive_linewidth(normr, hopradius, hoppixels, maxhopradius) = hoppixels * normr/maxhopradius
 
 #endregion
 
@@ -448,6 +464,9 @@ function Makie.plot!(plot::PlotLattice{Tuple{H,S,S´}}) where {H<:Hamiltonian,S<
     hidebravais = ishidden((:bravais, :all), plot)
     hideshell = ishidden((:shell, :all), plot) || iszero(Quantica.latdim(h))
 
+    # We put an invisible something in the plot to circunvent a Makie bug that breaks when there are no child plots.
+    linesegments!(plot, Point3f[])
+
     # plot bravais axes
     if !hidebravais
         plotbravais!(plot, lat, latslice)
@@ -474,6 +493,10 @@ function Makie.plot!(plot::PlotLattice{Tuple{H,S,S´}}) where {H<:Hamiltonian,S<
             update_radii!(hp, plot)
         else
             joint_colors_radii_update!(hp, hp´, plot)
+        end
+        if !hidesites
+            retract_hops!(hp, sp, plot)
+            retract_hops!(hp´, sp, plot)
         end
     end
 
@@ -548,8 +571,9 @@ function Makie.plot!(plot::PlotLattice{Tuple{G}}) where {G<:Union{GreenFunction,
             Σplottables = Quantica.selfenergy_plottables(Σ)
             for Σp in Σplottables
                 plottables, kws = get_plottables_and_kws(Σp)
+                hide = (hideΣ..., get(kws, :hide, ()))
                 plottables´ = default_plottable.(plottables; params...)
-                plotlattice!(plot, attr, plottables´...; hide = hideΣ, marker = squaremarker, kws..., Σkw...)
+                plotlattice!(plot, attr, plottables´...; marker = squaremarker, kws..., Σkw..., hide)
             end
         end
     end
@@ -695,8 +719,9 @@ function plotbravais!(plot::PlotLattice, lat::Lattice{<:Any,E,L}, latslice) wher
     vtot = sum(vs)
     r0 = Point{E,Float32}(Quantica.mean(Quantica.sites(lat))) - 0.5 * vtot
     if !ishidden(:axes, plot)
+        markerscale = maximum(norm, vs) * 0.2
         for (v, color) in zip(vs, (:red, :green, :blue))
-            arrows3d!(plot, [r0], [v]; color, inspectable = false, markerscale = 1)
+            arrows3d!(plot, [r0], [v]; color, inspectable = false, markerscale)
         end
     end
     if !ishidden((:cell, :cells), plot) && L > 1

@@ -19,6 +19,7 @@ dnshell(::Lattice{<:Any,<:Any,L}, span = -1:1) where {L} =
     sort!(vec(SVector.(Iterators.product(ntuple(_ -> span, Val(L))...))), by = norm)
 
 ishidden(s, plot::Union{PlotLattice,PlotBands}) = ishidden(s, plot[:hide][])
+ishidden(s, t::NamedTuple) = ishidden(s, get(t, :hide, nothing))
 ishidden(s, ::Nothing) = false
 ishidden(s, ::Pair) = false     # for cellsites => function
 ishidden(s::Symbol, hide::Symbol) = s === hide

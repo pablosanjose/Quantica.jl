@@ -74,7 +74,7 @@ inter-site links, and a representation of contacts.
 - `sitecolor = missing`: color of sites, as a index in `sitecolormap`, a named color, a `Makie.Colorant`, a collection of either, or as a site shader (see below). If `missing`, cycle through `sitecolormap`. If a collection, cycle through that.
 - `sitecolormap = :Spectral_9`: colormap to use for `sitecolor` (see options in https://tinyurl.com/cschemes, or create your own with ColorSchemes.jl)
 - `siteopacity = missing`: opacity of sites, as a real between 0 and 1, or as a site shader (see below). If `missing`, obey `shellopacity`.
-- `siteradius = 0.25`: radius of sites as a real in units of lattice dimensions, or as a site shader (see below)
+- `siteradius = 0.2`: radius of sites as a real number, or as a site shader (see below)
 - `minmaxsiteradius = (0.0, 0.5)`: if `sitedradius` is a shader, minimum and maximum site radius.
 - `siteoutline = 2`: thickness of the outline around flat sites
 - `siteoutlinedarken = 0.6`: darkening factor of the outline around flat sites
@@ -82,10 +82,11 @@ inter-site links, and a representation of contacts.
 - `hopcolor = missing`: color of hops, as a index in `hopcolormap`, a named color, a `Makie.Colorant`, a collection of either, or as a hop shader (see below). If `missing`, cycle through `sitecolormap`. If a collection, cycle through that.
 - `hopcolormap = :Spectral_9`: colormap to use for `hopcolor` (see options in https://tinyurl.com/cschemes, or create your own with ColorSchemes.jl)
 - `hopopacity = missing`: opacity of hops, as a real between 0 and 1, or as a hop shader (see below)
-- `hopradius = 0.03`: radius of hops as a real number in units of lattice dimensions, or as a hop shader (see below)
+- `hopradius = 0.03`: if `flat = false` radius of hops as a real number, or as a hop shader (see below)
 - `hoppixels = 6`: if `flat = true` fixed hop linewidth in pixels, or maximum pixel linewidth if `hopradius` is a shader.
 - `minmaxhopradius = (0, 0.1)`: if `hopdradius` is a shader, minimum and maximum hop radius.
 - `hopdarken = 0.85`: darkening factor for hops
+- `neighborscaling = true`: if `true`, all spatial scales above are multiplied by the nearest-neighbor distance of the lattice before plotting.
 - `selector = missing`: an optional `siteselector(; sites...)` to filter which sites are shown (see `siteselector`)
 - `hide = (:cell,)`: collection of elements to hide, to choose from `(:hops, :sites, :hops, :bravais, :cell, :axes, :shell, :boundary, :contacts, :all)`. It can also be an empty collection or `nothing` to show all elements.
 - `children = missing`: collection of `NamedTuple`s of any of the above keywords to be applied (cyclically) to contacts in GreenFunction plots
