@@ -32,6 +32,8 @@ end
 
 #region ## API ##
 
+needs_omega_shift(s::AppliedSparseLUGreenSolver) = true
+
 inverse_green(s::AppliedSparseLUGreenSolver) = s.invgreen
 
 unitcellinds_contacts(s::SparseLUGreenSlicer) = s.unitcinds

@@ -87,7 +87,9 @@ The currently implemented `GreenSolvers` (abbreviated as `GS`) are the following
   For 1D (`L == 1`) and 2D (`L == 2`) AbstractHamiltonians with only nearest-cell coupling along `axis`. Default for `L=1`.
 
   Uses a deflating Generalized Schur (QZ) factorization of the generalized eigenvalue 1D problem along `axis` to compute the unit-cell self energies.
-  The Dyson equation then yields the Green function between arbitrary unit cells, which is further dressed using a T-matrix approach if the lead has any attached self-energy. Wavevector along transverse axes in 2D systes are numerically integrated with the QuadGK package using `integrate_options`.
+  The Dyson equation then yields the Green function between arbitrary unit cells, which is further dressed using a T-matrix approach if the lead has any attached self-energy. Wavevector along transverse axes in 2D systems are numerically integrated with the QuadGK package using `integrate_options`.
+
+  Note: In the 2D case, density of states singularities may lead to non-convergent integrals. If this happens, shift `ω` away from the real axis.
 
 - `GS.Bands(bandsargs...; boundary = missing, bandskw...)`
 

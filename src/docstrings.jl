@@ -1790,6 +1790,7 @@ possible keyword arguments are
 - `GS.Schur(; boundary = Inf, axis = 1, integrate_opts...)` : Solver for 1D and 2D Hamiltonians based on a deflated, generalized Schur factorization and (possibly) integration over the Brillouin zone.
     - `boundary` : 1D cell index of a boundary cell, or `Inf` for no boundaries. Equivalent to removing that specific cell from the lattice when computing the Green function.
     - If the system is 2D, the wavevector along the transverse axis (the one different from the 1D `axis` given in the options) is numerically integrated using QuadGK with options given by `integrate_opts`, which is `(; atol = 1e-7)` by default.
+    - In the 2D case, density of states singularities may lead to non-convergent integrals. If this happens, shift `ω` away from the real axis manually.
     - `integrate_opts` can also contain a `callback = f`, where `f` is a function that will be called `f(ϕs..., y)` at each point in the momentum integration. Here `ϕs` is the integration point in the Brillouin zone and `y` is the integrand evaluated at that point. Useful for inspection and debugging, e.g. `callback(x, y) = @show x`. Default: `Returns(nothing)`.
 - `GS.KPM(; order = 100, bandrange = missing, kernel = I)` : Kernel polynomial method solver for 0D Hamiltonians
     - `order` : order of the expansion in Chebyshev polynomials `Tₙ(h)` of the Hamiltonian `h` (lowest possible order is `n = 0`).

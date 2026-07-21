@@ -415,13 +415,12 @@ function testcond(g0; nambu = false)
     @test_throws ArgumentError transmission(g0[1])
     @test_throws ArgumentError transmission(g0[1, 1])
     for ω in -3:0.1:3
-        ωc = ω + im*1e-10
-        @test ifelse(nambu, 6.000001, 3.00000001) >= G1(ωc) >= 0
-        @test G1(ωc) ≈ G1(-ωc) ≈ G2(ωc) ≈ G2(-ωc)
-        @test T12(ωc) ≈ T12(-ωc)
-        nambu || @test G1(ωc) ≈ T12(ωc) atol = 0.000001
-        @test G12(ωc) ≈ G12(-ωc) atol = 0.000001
-        nambu || @test G1(ωc) ≈ -G12(ωc) atol = 0.000001
+        @test ifelse(nambu, 6.000001, 3.00000001) >= G1(ω) >= 0
+        @test G1(ω) ≈ G1(-ω) ≈ G2(ω) ≈ G2(-ω)
+        @test T12(ω) ≈ T12(-ω)
+        nambu || @test G1(ω) ≈ T12(ω) atol = 1e-8
+        @test G12(ω) ≈ G12(-ω) atol = 1e-8
+        nambu || @test G1(ω) ≈ -G12(ω) atol = 1e-8
     end
 end
 
@@ -584,7 +583,8 @@ end
     g = LP.square() |> hopping(1) |> supercell(3,1) |> greenfunction(GS.Schur(; axis = 2, atol = 1e-2, callback))
     ρ = densitymatrix(g[])
     @test iszero(ref[])
-    @test all(x->abs(real(x)) < 1e-4, diag(g(0)[]))
+    # LDOS singularity at ω = 0 has zero real part of g. Needs broadening for integral to converge
+    @test all(x->abs(real(x)) < 1e-4, diag(g(0 + 1e-8im)[]))
     @test !iszero(ref[])
     ref = Ref(0.0)
     @test diag(ρ()) ≈ [0.5,0.5,0.5]

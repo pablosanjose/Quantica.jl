@@ -287,6 +287,21 @@ biascontact(G) = G.j
 
 function (G::Conductance)(ω; params...)
     τe, τz = G.τezdiag
+    GΓGΓτ, gʳⱼᵢ, Γi = GΓGΓτ_gr_Γ(G, τz, ω; params...)
+    # the -Tr{GʳΓⁱτzGᵃΓʲτₑ} term
+    cond = - real(trace_tau(GΓGΓτ, τe))        # simple trace if τe is missing
+    if G.i == G.j
+        # add the Tr(i(Gʳ-Gᵃ)Γⁱτₑ) term
+        gmg = gʳⱼᵢ
+        gᵃᵢⱼ = gʳⱼᵢ'
+        gmg .-= gᵃᵢⱼ
+        iGmGΓ = mul!(GΓGΓτ, gmg, Γi, im, 0)
+        cond += real(trace_tau(iGmGΓ, τe))      # simple trace if τe is missing
+    end
+    return cond
+end
+
+function GΓGΓτ_gr_Γ(G::Conductance, τ, ω; params...)
     gω = call!(G.g, ω; params...)
     gʳⱼᵢ = gω[G.j, G.i]
     gᵃᵢⱼ = gʳⱼᵢ'
@@ -294,18 +309,9 @@ function (G::Conductance)(ω; params...)
     mul!(G.GrΓi, gʳⱼᵢ, Γi)
     Γj = G.i == G.j ? Γi : selfenergy!(G.Γ, gω, G.j; onlyΓ = true)
     mul!(G.GaΓj, gᵃᵢⱼ, Γj)
-    mul_tau!(G.GrΓi, τz)                        # no-op if τz is missing
+    mul_tau!(G.GrΓi, τ)                        # no-op if τ is missing
     mul!(G.GΓGΓ, G.GrΓi, G.GaΓj)
-    # the -Tr{GʳΓⁱτzGᵃΓʲτₑ} term
-    cond = - real(trace_tau(G.GΓGΓ, τe))        # simple trace if τe is missing
-    if G.i == G.j
-        # add the Tr(i(Gʳ-Gᵃ)Γⁱτₑ) term
-        gmg = gʳⱼᵢ
-        gmg .-= gᵃᵢⱼ
-        iGmGΓ = mul!(G.GΓGΓ, gmg, Γi, im, 0)
-        cond += real(trace_tau(iGmGΓ, τe))      # simple trace if τe is missing
-    end
-    return cond
+    return G.GΓGΓ, gʳⱼᵢ, Γi
 end
 
 #endregion
@@ -334,15 +340,8 @@ Base.parent(t::Transmission) = t.conductance
 
 function (T::Transmission)(ω; params...)
     G = T.conductance
-    gω = call!(G.g, ω; params...)
-    gʳⱼᵢ = gω[G.j, G.i]
-    gᵃᵢⱼ = gʳⱼᵢ'
-    Γi = selfenergy!(G.Γ, gω, G.i; onlyΓ = true)
-    mul!(G.GrΓi, gʳⱼᵢ, Γi)
-    Γj = G.i == G.j ? Γi : selfenergy!(G.Γ, gω, G.j; onlyΓ = true)
-    mul!(G.GaΓj, gᵃᵢⱼ, Γj)
-    mul!(G.GΓGΓ, G.GrΓi, G.GaΓj)
-    t = real(tr(G.GΓGΓ))
+    GΓGΓ, _, _ = GΓGΓτ_gr_Γ(G, missing, ω; params...)
+    t = real(tr(GΓGΓ))
     return t
 end
 

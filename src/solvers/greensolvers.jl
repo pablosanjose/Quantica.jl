@@ -5,7 +5,7 @@
 #   All new s::AppliedGreenSolver must implement (with Σblock a [possibly nested] tuple of MatrixBlock's)
 #      - build_slicer(s, g::GreenFunction, ω, Σblocks, ::ContactOrbitals; params...) -> GreenSlicer
 #      - minimal_callsafe_copy(s, parentham, parentcontacts)  # injects aliases from parent
-#      - optional: needs_omega_shift(s) (has a `true` default fallback)
+#      - optional: needs_omega_shift(s) (has a `false` default fallback)
 #   A gs::GreenSlicer's allows to compute G[gi, gi´]::AbstractMatrix for indices gi
 #   To do this, it must implement contact slicing (unless it relies on TMatrixSlicer)
 #      - view(gs, ::Int, ::Int) -> g(ω; kw...) between specific contacts (has error fallback)
@@ -39,7 +39,7 @@ struct Schur{T<:AbstractFloat,O<:NamedTuple} <: AbstractGreenSolver
 end
 
 Schur(; shift = 1.0, boundary = Inf, axis = 1, atol = 1e-7, integrate_opts...) =
-    Schur(shift, float(boundary), axis, (; atol, integrate_opts...))
+    Schur(float(shift), float(boundary), axis, (; atol, integrate_opts...))
 
 struct KPM{B<:Union{Missing,NTuple{2}},A} <: AbstractGreenSolver
     order::Int

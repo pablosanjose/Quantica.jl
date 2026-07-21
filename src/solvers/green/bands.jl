@@ -621,8 +621,6 @@ end
 # Parent hamiltonian needs to be non-parametric, so no need to alias
 minimal_callsafe_copy(s::AppliedBandsGreenSolver, parentham, parentcontacts) = s
 
-needs_omega_shift(s::AppliedBandsGreenSolver) = false
-
 bands(g::GreenFunction{<:Any,<:Any,<:Any,<:AppliedBandsGreenSolver}) = g.solver.subband
 
 boundaries(s::AppliedBandsGreenSolver{Missing}) =  ()
