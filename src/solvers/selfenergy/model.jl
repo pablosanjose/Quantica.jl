@@ -44,6 +44,8 @@ end
 call!_output(s::SelfEnergyModelSolver) =
     view(call!_output(s.ph), s.parentinds, s.parentinds)
 
+needs_omega_shift(s::SelfEnergyModelSolver) = false
+
 minimal_callsafe_copy(s::SelfEnergyModelSolver) =
     SelfEnergyModelSolver(minimal_callsafe_copy(s.ph), s.parentinds)
 

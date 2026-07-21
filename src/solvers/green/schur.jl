@@ -20,7 +20,7 @@
 
 ############################################################################################
 # SchurFactorsSolver - see scattering.pdf notes for derivations
-#   Auxiliary functions for AppliedSchurGreenSolverSolver
+#   Auxiliary functions for AppliedSchurGreenSolver
 #   Computes dense factors PR*R*Z21, Z11 and R'*PR'. The retarded self-energy on the open
 #   unitcell surface of a semi-infinite rightward lead reads Σᵣ = PR R Z21 Z11⁻¹ R' PR'
 #   Computes also the leftward PL*L*Z11´, Z21´, L'*PL', with  Σₗ = PL L Z11´ Z21´⁻¹ L' PL'
@@ -33,6 +33,8 @@ struct SchurWorkspace{C}
     RG::Matrix{C}
     A::Matrix{C}
     B::Matrix{C}
+    V1::Matrix{C}
+    V2::Matrix{C}
     Z11::Matrix{C}
     Z21::Matrix{C}
     Z11´::Matrix{C}
@@ -41,6 +43,7 @@ struct SchurWorkspace{C}
     DL::Matrix{C}
     RD::Matrix{C}
     DR::Matrix{C}
+    whichmodes::Vector{Bool}
 end
 
 struct SchurFactorsSolver{T,B}
@@ -84,6 +87,8 @@ function SchurWorkspace{C}((n, d), l, r) where {C}
     RG = Matrix{C}(undef, d, n)
     A = Matrix{C}(undef, 2d, 2d)
     B = Matrix{C}(undef, 2d, 2d)
+    V1 = Matrix{C}(undef, 2d, 2d)
+    V2 = Matrix{C}(undef, 2d, 2d)
     Z11 = Matrix{C}(undef, d, d)
     Z21 = Matrix{C}(undef, d, d)
     Z11´ = Matrix{C}(undef, d, d)
@@ -92,7 +97,8 @@ function SchurWorkspace{C}((n, d), l, r) where {C}
     DL = Matrix{C}(undef, d, l)
     RD = Matrix{C}(undef, r, d)
     DR = Matrix{C}(undef, d, r)
-    return SchurWorkspace(GL, GR, LG, RG, A, B, Z11, Z21, Z11´, Z21´, LD, DL, RD, DR)
+    whichmodes = Vector{Bool}(undef, 2d)
+    return SchurWorkspace(GL, GR, LG, RG, A, B, V1, V2, Z11, Z21, Z11´, Z21´, LD, DL, RD, DR, whichmodes)
 end
 
 function nearest_cell_harmonics(h)
@@ -176,28 +182,25 @@ call!_output(s::SchurFactorsSolver) =
     (s.tmp.RD, s.tmp.Z11, s.tmp.DR), (s.tmp.LD, s.tmp.Z21´, s.tmp.DL)
 
 function call!(s::SchurFactorsSolver, ω)
-    R, Z11, Z21, L, Z11´, Z21´ = s.R, s.tmp.Z11, s.tmp.Z21, s.L, s.tmp.Z11´, s.tmp.Z21´
+    R, Z11, Z21, L, Z11´, Z21´, whichmodes = s.R, s.tmp.Z11, s.tmp.Z21, s.L, s.tmp.Z11´, s.tmp.Z21´, s.tmp.whichmodes
     update_LR!(s)     # We must update L, R in case a parametric parent has been call!-ed
     update_iG!(s, ω)  # also iG = ω - h0 + iΩP'P
 
     A, B = pencilAB!(s)
     sch = schur!(A, B)
-    whichmodes = Vector{Bool}(undef, length(sch.α))
-    r = size(A, 1) ÷ 2
+    d = size(A, 1) ÷ 2
 
     # Retarded modes
-    retarded_modes!(whichmodes, sch)
+    ordschur_retarded!(sch; temp = (whichmodes, s.tmp.V1, s.tmp.V2))
     checkmodes(whichmodes)
-    ordschur!(sch, whichmodes)
-    copy!(Z11, view(sch.Z, 1:r, 1:sum(whichmodes)))
-    copy!(Z21, view(sch.Z, r+1:2r, 1:sum(whichmodes)))
+    copy!(Z11, view(sch.Z, 1:d, 1:d))
+    copy!(Z21, view(sch.Z, d+1:2d, 1:d))
 
     # Advanced modes
-    advanced_modes!(whichmodes, sch)
-    checkmodes(whichmodes)
+    whichmodes .= 1:2d .> d   # at this point upper block is retarded, lower is advanced
     ordschur!(sch, whichmodes)
-    copy!(Z11´, view(sch.Z, 1:r, 1:sum(whichmodes)))
-    copy!(Z21´, view(sch.Z, r+1:2r, 1:sum(whichmodes)))
+    copy!(Z11´, view(sch.Z, 1:d, 1:d))
+    copy!(Z21´, view(sch.Z, d+1:2d, 1:d))
 
     RZ21, LZ11´, LD, DL, RD, DR = s.tmp.GR, s.tmp.GL, s.tmp.LD, s.tmp.DL, s.tmp.RD, s.tmp.DR
     linds, rinds = s.linds, s.rinds
@@ -211,17 +214,6 @@ function call!(s::SchurFactorsSolver, ω)
     L´_PL = copy!(DL, view(L', :, linds))
 
     return (PR_R_Z21, Z11, R´_PR), (PL_L_Z11´, Z21´, L´_PL)
-end
-
-# need this barrier for type-stability (sch.α and sch.β are finicky)
-function retarded_modes!(whichmodes, sch)
-    whichmodes .= abs.(sch.α) .< abs.(sch.β)
-    return whichmodes
-end
-
-function advanced_modes!(whichmodes, sch)
-    whichmodes .= abs.(sch.β) .< abs.(sch.α)
-    return whichmodes
 end
 
 checkmodes(whichmodes) = sum(whichmodes) == length(whichmodes) ÷ 2 ||
@@ -240,6 +232,97 @@ end
 minimal_callsafe_copy(s::SchurWorkspace) =
     SchurWorkspace(copy.((s.GL, s.GR, s.LG, s.RG, s.A, s.B, s.Z11, s.Z21, s.Z11´, s.Z21´,
     s.LD, s.DL, s.RD, s.DR))...)
+
+## ordschur_retarded!
+#=
+  Unpivoted LDL' Factorization for retarded mode classification
+
+  Computes the signs of the expectation values of a Hermitian operator V
+  (Velocity) evaluated for the propagating eigenstates of a QZ pencil (A - λ B), recording
+  positive values into isretarded::Vector{Bool}. If not propagating, isretarded is simply
+  dictated by the condition |λ| < 1.
+
+  Mathematical Context:
+  Let Φ be the eigenstates of the pencil, which take the form Φ = Z * R,
+  where Z is unitary (from the QZ decomposition) and R is an unknown upper
+  triangular matrix.
+  The expectation values of V for these eigenstates form a diagonal matrix D_ex:
+      D_ex = Φ' * V * Φ
+  Substituting Φ = Z * R yields:
+      D_ex = R' * Z' * V * Z * R
+  Defining V´ = Z' * V * Z and rearranging gives:
+      V´ = (R')^{-1} * D_ex * R^{-1}
+  Because R is upper triangular, L_ex = (R')^{-1} is lower triangular. This
+  forms a lower-diagonal-lower factorization of V´. Factoring out the
+  diagonal of L_ex yields a unit lower triangular matrix L and a diagonal D:
+      V´ = L * D * L'
+  The elements of D differ from D_ex only by strictly positive scaling factors
+  (|1/R_kk|^2). Therefore, the signs of the computed D exactly match the signs
+  of the expectation values D_ex.
+
+  Algorithm:
+  The algorithm iteratively computes the Schur complement. At step k:
+  1. The top-left element of the active submatrix is the pivot d_k.
+  2. The sign of d_k is use to record retarded modes.
+  3. A rank-1 update is applied to the remaining lower-right submatrix:
+         A_{22} = A_{22} - (v * v') / d_k
+     where v is the column vector below d_k.
+
+  Key Details:
+  - Unpivoted: Standard LAPACK routines use pivoting for stability, which
+    permutes rows/columns and destroys the eigenvalue ordering established
+    by the QZ decomposition. This custom loop enforces a strict unpivoted
+    factorization to maintain the exact correspondence with Φ.
+  - Memory: The matrix V´ is overwritten in-place. The inner loop
+    iterates over rows to ensure contiguous, column-major memory access
+    and is vectorized via @simd.
+  - For this to work correctly the propagating eigenvalues should come first.
+=#
+
+function ordschur_retarded!(S::GeneralizedSchur; tol = 1e-12, temp = (similar(S.α, Bool), similar(S.Z), similar(S.Z)))
+    (whichmodes, V´, VZ) = temp
+    @. whichmodes = abs(S.β)-tol < abs(S.α) < abs(S.β)+tol  # propagating
+    if any(whichmodes)  # classify propagating modes using velocity
+        nprop = sum(whichmodes)
+        ordschur!(S, whichmodes)
+        V´ = build_velocity!(V´, VZ, S.Z)
+        @. whichmodes = abs(S.α) < abs(S.β)+tol  # evanescent retarded
+        classify_retarded_propagating!(whichmodes, V´, nprop)  # propagating or evanescent retarded
+    else
+        @. whichmodes = abs(S.α) <= abs(S.β) - tol  # evanescent retarded
+    end
+    ordschur!(S, whichmodes)
+    return S
+end
+
+# V´ = Z'*V*Z where V = [0 im; -im 0] is a 2dx2d matrix over the deflated space.
+function build_velocity!(V´, VZ, Z)
+    d = size(Z, 1) ÷ 2
+    view(VZ, 1:d, :) .= im .* view(Z, d+1:2d, :)
+    view(VZ, d+1:2d, :) .= (-im) .* view(Z, 1:d, :)
+    mul!(V´, Z', VZ)
+    return V´
+end
+
+# use the sign of the D diagonal in LDL' factorization of V´ to classify propagating modes
+# as retarded. Only the top nprop x nprop block of V' is needed.
+function classify_retarded_propagating!(whichmodes, V´, nprop)
+    @inbounds for k in 1:nprop
+        dk = real(V´[k, k])
+        whichmodes[k] = dk > 0
+        # Apply rank-1 update if we are not on the last element
+        if k < nprop
+            inv_dk = inv(dk)
+            for j in (k+1):nprop
+                fac = conj(V´[j, k]) * inv_dk
+                @simd for i in j:nprop
+                    V´[i, j] -= V´[i, k] * fac
+                end
+            end
+        end
+    end
+    return whichmodes
+end
 
 ## Pencil A - λB ##
 
@@ -348,6 +431,8 @@ AppliedSchurGreenSolver{G,G∞}(fsolver::SchurFactorsSolver{T,B}, boundary, ohL:
 schurfactorsolver(s::AppliedSchurGreenSolver) = s.fsolver
 
 boundaries(s::AppliedSchurGreenSolver) = isfinite(s.boundary) ? (1 => s.boundary,) : ()
+
+needs_omega_shift(s::AppliedSchurGreenSolver) = false
 
 #endregion
 

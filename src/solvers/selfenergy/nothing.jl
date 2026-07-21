@@ -19,6 +19,8 @@ call!(s::SelfEnergyEmptySolver, ω; params...) = s.emptymat
 
 call!_output(s::SelfEnergyEmptySolver) = s.emptymat
 
+needs_omega_shift(s::SelfEnergyEmptySolver) = false
+
 has_selfenergy(::SelfEnergyEmptySolver) = false
 
 minimal_callsafe_copy(s::SelfEnergyEmptySolver) = s

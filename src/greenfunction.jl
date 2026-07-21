@@ -50,7 +50,7 @@ call!(g::G, ω; params...) where {T,G<:Union{GreenFunction{T},GreenSlice{T}}} =
     call!(g, real_or_complex_convert(T, ω); params...)
 
 function call!(g::GreenFunction{T}, ω::T; params...) where {T}
-    ω´ = retarded_omega(ω, solver(g))
+    ω´ = retarded_omega(ω, g)
     return call!(g, ω´; params...)
 end
 
@@ -69,7 +69,7 @@ end
 # real frequency -> maybe complex frequency
 # Σ could be precomputed Σblocks, see above
 call!(g::GreenSlice{T}, ω::T, Σ...; kw...) where {T} =
-    call!(g, retarded_omega(ω, solver(parent(g))), Σ...; kw...)
+    call!(g, retarded_omega(ω, parent(g)), Σ...; kw...)
 
 call!(gs::GreenSlice{T}, ω::Complex{T}, Σ...; post = identity, symmetrize = missing, params...) where {T} =
     getindex!(gs, call!(greenfunction(gs), ω, Σ...; params...); post, symmetrize)
@@ -77,11 +77,17 @@ call!(gs::GreenSlice{T}, ω::Complex{T}, Σ...; post = identity, symmetrize = mi
 real_or_complex_convert(::Type{T}, ω::Real) where {T<:Real} = convert(T, ω)
 real_or_complex_convert(::Type{T}, ω::Complex) where {T<:Real} = convert(Complex{T}, ω)
 
-retarded_omega(ω::T, s::AppliedGreenSolver) where {T<:Real} =
-    ω + im * sqrt(eps(float(T))) * needs_omega_shift(s)
+retarded_omega(ω::T, g::GreenFunction) where {T<:Real} =
+    ω + im * sqrt(eps(float(T))) * needs_omega_shift(g)
 
-# fallback, may be overridden
+# omega shift need is determined by leads if present
+needs_omega_shift(g::GreenFunction) = isempty(selfenergies(g)) ?
+        needs_omega_shift(solver(g)) :
+        any(Σ -> needs_omega_shift(solver(Σ)), selfenergies(g))
+# by default a GreenFunction without self-energies needs a retarded shift (isolated system)
 needs_omega_shift(s::AppliedGreenSolver) = true
+# by default a self-energy already has a retarded shift, no need to add one
+needs_omega_shift(s::AbstractSelfEnergySolver) = false
 
 supports_contacts(s::AppliedGreenSolver) = true
 
