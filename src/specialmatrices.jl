@@ -581,38 +581,6 @@ LinearAlgebra.diag(a::OrbitalSliceMatrix) =
 
 LinearAlgebra.norm(a::AbstractOrbitalMatrix) = norm(parent(a))
 
-## CompressedOrbitalMatrix
-
-# decoding access
-Base.view(a::CompressedOrbitalMatrix{C}, i::AnyCellSites, j::AnyCellSites = i) where {C} =
-    checkbounds(Bool, a, i, j) ? getindex_decode(a, i, j) : zero(decoder(a)(zero(C)))
-
-@inline function getindex_decode(a::CompressedOrbitalMatrix, ci, cj)
-    i, j = only.(indexcollection(a, ci, cj))
-    # Only lower-triangle is stored in the hermitian case
-    if ishermitian(a)
-        # we find the indices for a[sites(-ni, j), sites(0, i)],
-        # the conjugate of a[sites(ni, i), sites(0, j)],
-        ci´, cj´ = sites(-cell(ci), siteindex(cj)), sites(cell(cj), siteindex(ci))
-        i´, j´ = only.(indexcollection(a, ci´, cj´))
-        val = getindex_decode_hermitian(a, i, j)
-        val´ = getindex_decode_hermitian(a, i´, j´)'
-        return 0.5 * (val + val´)
-    end
-    return dec(parent(a)[i, j])
-end
-
-function getindex_decode_hermitian(a::CompressedOrbitalMatrix, i, j)
-    dec = decoder(a)
-    if i < j
-        return dec(parent(a)[j, i])'
-    elseif i == j
-        return dec(parent(a)[i, j])
-    else
-        return dec(parent(a)[i, j])
-    end
-end
-
 ## checkbounds
 
 # checkbounds axis
