@@ -39,7 +39,7 @@ struct Schur{T<:AbstractFloat,O<:NamedTuple} <: AbstractGreenSolver
 end
 
 Schur(; shift = 1.0, boundary = Inf, axis = 1, atol = 1e-7, integrate_opts...) =
-    Schur(shift, float(boundary), axis, (; atol, integrate_opts...))
+    Schur(float(shift), float(boundary), axis, (; atol, integrate_opts...))
 
 struct KPM{B<:Union{Missing,NTuple{2}},A} <: AbstractGreenSolver
     order::Int

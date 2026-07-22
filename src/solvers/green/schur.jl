@@ -213,6 +213,9 @@ function call!(s::SchurFactorsSolver, ω)
     PL_L_Z11´ = copy!(LD, view(LZ11´, linds, :))
     L´_PL = copy!(DL, view(L', :, linds))
 
+    # These are analogous to (V', g⁻¹, V) blocks of an ExtendedSelfEnergySolver
+    # and in fact end up as the output of SelfEnergyCouplingSchurSolver
+    # through call!_output(::SchurFactorsSolver) to be assembled as any other extended Σ
     return (PR_R_Z21, Z11, R´_PR), (PL_L_Z11´, Z21´, L´_PL)
 end
 
@@ -230,8 +233,8 @@ function minimal_callsafe_copy(s::SchurFactorsSolver, parentham)
 end
 
 minimal_callsafe_copy(s::SchurWorkspace) =
-    SchurWorkspace(copy.((s.GL, s.GR, s.LG, s.RG, s.A, s.B, s.Z11, s.Z21, s.Z11´, s.Z21´,
-    s.LD, s.DL, s.RD, s.DR))...)
+    SchurWorkspace(copy.((s.GL, s.GR, s.LG, s.RG, s.A, s.B, s.V1, s.V2, s.Z11, s.Z21, s.Z11´, s.Z21´,
+    s.LD, s.DL, s.RD, s.DR, s.whichmodes))...)
 
 ## ordschur_retarded!
 #=
