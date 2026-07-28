@@ -309,8 +309,8 @@ function ordschur_retarded!(sch::GeneralizedSchur{Complex{T}}, s::SchurFactorsSo
     if !success  # retarded and advanced modes could not be resolved (flat-band-like situation)
         # We hit this when more than two propagating modes with the same λ have vk = 0
         # Need to recompute the pencil and Schur with a larger imag(ω) to break the degeneracy
-        @warn "Retarded and advanced modes could not be resolved at ω = $ω. Recomputing with a larger imag(ω) to break degeneracy."
         imω = iszero(imag(ω)) ? tol : 2*imag(ω)
+        # @warn "Retarded and advanced modes could not be resolved at ω = $ω. Recomputing with a larger imag(ω) = $imω to break degeneracy."
         ω´ = ω + im * imω
         sch´ = schur_pencil!(s, ω´)
         return ordschur_retarded!(sch´, s, ω´)  # wipes and recomputes whichmodes at ω´
