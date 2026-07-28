@@ -32,7 +32,7 @@ end
 
 #region ## API ##
 
-needs_omega_shift(s::AppliedSparseLUGreenSolver) = true
+needs_omega_shift(::AppliedSparseLUGreenSolver) = true
 
 inverse_green(s::AppliedSparseLUGreenSolver) = s.invgreen
 

@@ -65,7 +65,6 @@ function call!(g::GreenFunction{T}, ω::Complex{T}, Σblocks; params...) where {
     return GreenSolution(g, slicer, Σblocks, corbs)
 end
 
-
 # real frequency -> maybe complex frequency
 # Σ could be precomputed Σblocks, see above
 call!(g::GreenSlice{T}, ω::T, Σ...; kw...) where {T} =
@@ -77,20 +76,21 @@ call!(gs::GreenSlice{T}, ω::Complex{T}, Σ...; post = identity, symmetrize = mi
 real_or_complex_convert(::Type{T}, ω::Real) where {T<:Real} = convert(T, ω)
 real_or_complex_convert(::Type{T}, ω::Complex) where {T<:Real} = convert(Complex{T}, ω)
 
-# The default ω shift is the minimal eps(T) since sqrt(eps(T)) introduces unnecessary errors
+# The default ω shift is a tiny 4*eps(T) since sqrt(eps(T)) introduces unnecessary errors
+# The reason for the 4 is empirical (Schur becomes able to resolve λ degeneracies with this)
 retarded_omega(ω::T, g::GreenFunction) where {T<:Real} =
-    ω + im * eps(float(T)) * needs_omega_shift(g)
+    ω + im * 4*eps(float(T)) * needs_omega_shift(g)
 
 # omega shift need is also determined by leads if present (cannot assume Σ introduces shift)
 needs_omega_shift(g::GreenFunction) =
         needs_omega_shift(solver(g)) || any(Σ -> needs_omega_shift(solver(Σ)), selfenergies(g))
 # by default a GreenFunction without self-energies doesn't need a retarded shift.
 # Any solver that needs it should implement needs_omega_shift(::AppliedGreenSolver)
-needs_omega_shift(s::AppliedGreenSolver) = false
+needs_omega_shift(::AppliedGreenSolver) = false
 # by default a self-energy already has a retarded shift, no need to add one
-needs_omega_shift(s::AbstractSelfEnergySolver) = false
+needs_omega_shift(::AbstractSelfEnergySolver) = false
 
-supports_contacts(s::AppliedGreenSolver) = true
+supports_contacts(::AppliedGreenSolver) = true
 
 #endregion
 

@@ -514,6 +514,9 @@ end
     T = transmission(g0[2, 1])
     @test T(0) ≈ T(0.2) ≈ 3
     @test T(1) ≈ 2
+    # band-edge effects
+    @test T(1.99999999999) ≈ 2
+    @test T(2.00000000001) ≈ 1
 
     glead = LP.square() |> hamiltonian(hopping(1)) |> supercell((0,1), region = r -> -1 <= r[1] <= 1) |> attach(nothing; cells = SA[10]) |> greenfunction(GS.Schur(boundary = 0));
     contact1 = r -> r[1] ≈ 5 && -1 <= r[2] <= 1

@@ -23,7 +23,7 @@ end
 
 #region ## API ##
 
-needs_omega_shift(s::AppliedSpectrumGreenSolver) = true
+needs_omega_shift(::AppliedSpectrumGreenSolver) = true
 
 # Parent ham needs to be non-parametric, so no need to alias
 minimal_callsafe_copy(s::AppliedSpectrumGreenSolver{<:Spectrum}, parentham, parentcontacts) =

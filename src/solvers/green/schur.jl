@@ -293,7 +293,7 @@ minimal_callsafe_copy(s::SchurWorkspace) =
   - For this to work correctly the propagating eigenvalues should come first.
 =#
 
-function ordschur_retarded!(sch::GeneralizedSchur{Complex{T}}, s::SchurFactorsSolver, ω; tol = sqrt(eps(T))) where {T}
+function ordschur_retarded!(sch::GeneralizedSchur{Complex{T}}, s::SchurFactorsSolver, ω; tol = 4*eps(T)) where {T}
     whichmodes, V´, VZ = s.tmp.whichmodes, s.tmp.V1, s.tmp.V2
     @. whichmodes = abs(sch.β)-tol < abs(sch.α) < abs(sch.β)+tol      # propagating
     if any(whichmodes)                                          # classify propagating modes using velocity
@@ -519,6 +519,8 @@ green_type(::H,::S1,::S2) where {T,E,H<:AbstractHamiltonian{T,E},S1,S2} =
 #endregion
 
 #region ## call API ##
+
+needs_omega_shift(::AppliedSchurGreenSolver) = true
 
 function minimal_callsafe_copy(s::AppliedSchurGreenSolver, parentham, _)
     fsolver´ = minimal_callsafe_copy(s.fsolver, parentham)
