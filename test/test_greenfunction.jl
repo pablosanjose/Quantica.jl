@@ -1,5 +1,5 @@
 using Quantica: GreenFunction, GreenSlice, GreenSolution, zerocell, CellOrbitals, ncontacts,
-    solver, Diagonal
+    solver, Diagonal, blockeltype
 
 using ArnoldiMethod  # for KPM bandrange
 using LinearAlgebra
@@ -12,6 +12,7 @@ function testgreen(h, s; kw...)
     @test gω isa GreenSolution
     @test g(0) isa GreenSolution # promote Int to AbstractFloat to add eps
     L = Quantica.latdim(lattice(h))
+    T = real(blockeltype(parent(g)))
     z = zero(SVector{L,Int})
     o = Quantica.unitvector(1, SVector{L,Int})
     conts = ntuple(identity, ncontacts(h))
@@ -23,7 +24,8 @@ function testgreen(h, s; kw...)
         gsω = gs(ω; kw...)
         gωs = gω[loc, loc´]
         @test gsω == gωs
-        loc === loc´ && @test all(x->imag(x)<=0, diag(gωs))
+        # need 10*eps(T) here for cases with 32bit precision and imag(ω) == 0 (Schur)
+        loc === loc´ && @test all(x->imag(x)<=10*eps(T), diag(gωs))
     end
     return nothing
 end
@@ -505,6 +507,13 @@ end
     @test iszero(ρ0)        # rows are on boundary
     @test ρ0[sites(1), sites(SA[1], 1)] isa Matrix
     @test size(view(ρ0, sites(1), sites(SA[1], 1))) == (2, 2)
+
+    # Quantized conductance
+    glead = LP.square() |> hopping(1) |> supercell((1,0), region = r->-2<r[2]<2) |> greenfunction(GS.Schur(boundary = 0));
+    g0 = LP.square() |> hopping(1) |> supercell(region = r->-2<r[2]<2 && r[1]≈0) |> attach(glead, reverse = true) |> attach(glead) |> greenfunction;
+    T = transmission(g0[2, 1])
+    @test T(0) ≈ T(0.2) ≈ 3
+    @test T(1) ≈ 2
 
     glead = LP.square() |> hamiltonian(hopping(1)) |> supercell((0,1), region = r -> -1 <= r[1] <= 1) |> attach(nothing; cells = SA[10]) |> greenfunction(GS.Schur(boundary = 0));
     contact1 = r -> r[1] ≈ 5 && -1 <= r[2] <= 1

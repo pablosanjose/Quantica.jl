@@ -2108,11 +2108,9 @@ Transmission: total transmission between two different contacts
   From contact  : 1
   To contact    : 2
 
-julia> T(0.2) ≈ 3   # The difference from 3 is due to the automatic `im*sqrt(eps(Float64))` added to `ω`
-false
-
-julia> T(0.2 + 1e-10im) ≈ 3
+julia> T(0.2) ≈ 3
 true
+
 ```
 
 # See also
