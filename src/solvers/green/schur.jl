@@ -309,6 +309,7 @@ function ordschur_retarded!(sch::GeneralizedSchur{Complex{T}}, s::SchurFactorsSo
     if !success  # retarded and advanced modes could not be resolved (flat-band-like situation)
         # We hit this when more than two propagating modes with the same λ have vk = 0
         # Need to recompute the pencil and Schur with a larger imag(ω) to break the degeneracy
+        @warn "Retarded and advanced modes could not be resolved at ω = $ω. Recomputing with a larger imag(ω) to break degeneracy."
         imω = iszero(imag(ω)) ? tol : 2*imag(ω)
         ω´ = ω + im * imω
         sch´ = schur_pencil!(s, ω´)
@@ -334,8 +335,6 @@ end
 function classify_retarded_propagating!(whichmodes, V´, nprop)
     for k in 1:nprop
         vk = real(V´[k, k])
-        # deal with flat modes (vk == 0). Only the first with a given λ is marked as retarded.
-        # If there are more than two, we get an imbalance => success == false in caller
         whichmodes[k] = vk > 0
         # Apply rank-1 update if we are not on the last element
         if k < nprop
