@@ -357,6 +357,8 @@ function call!(g::GreenFunction{T,<:Any,<:Any,<:FixedParamGreenSolver}, ω::Comp
     return call!(s.gfixed, ω; s.params...)  # we pass s.params in case they were not applied (e.g. to contacts)
 end
 
+needs_omega_shift(s::FixedParamGreenSolver) = needs_omega_shift(s.gfixed)
+
 function minimal_callsafe_copy(s::FixedParamGreenSolver, parentham, parentcontacts)
     solver´ = minimal_callsafe_copy(solver(s.gfixed), parentham, parentcontacts)
     gfixed = GreenFunction(parentham, solver´, parentcontacts)

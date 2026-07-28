@@ -820,6 +820,8 @@ end
 
 #region ## API ##
 
+needs_omega_shift(::AppliedSchurGreenSolver2D) = true
+
 function minimal_callsafe_copy(s::AppliedSchurGreenSolver2D, args...)
     h1D´ = minimal_callsafe_copy(s.h1D)
     solver1D´ = minimal_callsafe_copy(s.solver1D, h1D´, missing)

@@ -24,8 +24,7 @@ function testgreen(h, s; kw...)
         gsω = gs(ω; kw...)
         gωs = gω[loc, loc´]
         @test gsω == gωs
-        # need 10*eps(T) here for cases with 32bit precision and imag(ω) == 0 (Schur)
-        loc === loc´ && @test all(x->imag(x)<=10*eps(T), diag(gωs))
+        loc === loc´ && @test all(x->imag(x)<=0, diag(gωs))
     end
     return nothing
 end
