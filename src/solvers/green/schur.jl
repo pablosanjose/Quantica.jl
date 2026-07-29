@@ -743,10 +743,13 @@ maybe_SMatrix(G, rows, cols) = G
 ############################################################################################
 # schur_eigvals
 #   computes schur_eigenvalues of all lead modes
+# decay_lengths
+#   compute the decay lengths of evanescent modes
 #region
 
+# We don't add an imaginary part to ω here, as decay lengths depend dramatically on its value.
 schur_eigvals(g::GreenFunctionSchurLead1D, ω::Real; params...) =
-    schur_eigvals(g, retarded_omega(ω, g); params...)
+    schur_eigvals(g, complex(ω); params...)
 
 schur_eigvals(g::GreenFunctionSchurLead1D, ω::Complex; params...) =
     schur_eigvals((parent(g), g.solver), ω; params...)
