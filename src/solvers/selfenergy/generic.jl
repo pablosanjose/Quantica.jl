@@ -64,6 +64,8 @@ end
 
 call!_output(s::SelfEnergyGenericSolver) = s.Σ
 
+needs_omega_shift(s::SelfEnergyGenericSolver) = needs_omega_shift(parent(s.gslice))
+
 function minimal_callsafe_copy(s::SelfEnergyGenericSolver)
     hcoupling´ = minimal_callsafe_copy(s.hcoupling)
     s´ = SelfEnergyGenericSolver(

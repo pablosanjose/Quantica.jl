@@ -37,8 +37,6 @@ function build_slicer(s::AppliedModelGreenSolver, g, ω::C, Σblocks, contactorb
     return slicer
 end
 
-needs_omega_shift(s::AppliedModelGreenSolver) = false
-
 supports_contacts(s::AppliedModelGreenSolver) = false
 
 minimal_callsafe_copy(s::AppliedModelGreenSolver, args...) = s
