@@ -133,7 +133,7 @@ end
 # SelfEnergy(h, glead, model::AbstractModel; kw...)
 #   Depending on whether glead has zero contacts or not, it yields an Extended or Generic
 #       self-energy. Model gives arbitrary couplings to parent Hamiltonian.
-#   For the Extended self energy, is uses g⁻¹ = h0 + ExtendedSchurΣ  (adds extended sites)
+#   For the Extended self energy, is uses g⁻¹ = ω-h0-ExtendedSchurΣ  (adds extended sites)
 #   V and V´ are SparseMatrixView because they span only the coupled parent <-> unitcell
 #       sites, but for Extended they need to be padded with zeros over the extended sites
 #region
