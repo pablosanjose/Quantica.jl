@@ -79,7 +79,7 @@ real_or_complex_convert(::Type{T}, ω::Complex) where {T<:Real} = convert(Comple
 # The default ω shift is a tiny 5*eps(T) since sqrt(eps(T)) introduces unnecessary errors
 # The reason for the 5 is empirical (Schur becomes able to resolve λ degeneracies with this)
 retarded_omega(ω::T, g::GreenFunction) where {T<:Real} =
-    ω + im * 5*eps(float(T)) * needs_omega_shift(g)
+    ω + im * 10*eps(float(T)) * needs_omega_shift(g)
 
 # omega shift need is also determined by leads if present (cannot assume Σ introduces shift)
 needs_omega_shift(g::GreenFunction) =
