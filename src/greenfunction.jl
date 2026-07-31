@@ -76,10 +76,10 @@ call!(gs::GreenSlice{T}, ω::Complex{T}, Σ...; post = identity, symmetrize = mi
 real_or_complex_convert(::Type{T}, ω::Real) where {T<:Real} = convert(T, ω)
 real_or_complex_convert(::Type{T}, ω::Complex) where {T<:Real} = convert(Complex{T}, ω)
 
-# The default ω shift is a tiny 4*eps(T) since sqrt(eps(T)) introduces unnecessary errors
-# The reason for the 10 is empirical (Schur becomes able to resolve λ degeneracies with this)
+# The default ω shift is a tiny 6*eps(T) since sqrt(eps(T)) introduces unnecessary errors
+# The reason for the 6 is empirical (Schur becomes able to resolve λ degeneracies with this)
 retarded_omega(ω::T, g::GreenFunction) where {T<:Real} =
-    ω + im * 10*eps(float(T)) * needs_omega_shift(g)
+    ω + im * 6*eps(float(T)) * needs_omega_shift(g)
 
 # omega shift need is also determined by leads if present (cannot assume Σ introduces shift)
 needs_omega_shift(g::GreenFunction) =

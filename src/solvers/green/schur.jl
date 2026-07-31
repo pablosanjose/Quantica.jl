@@ -222,7 +222,7 @@ function schur_pencil!(s::SchurFactorsSolver, ω)
     A, B = pencilAB!(s)
     sch = schur!(A, B)
     # disallow zeros in deflated α's or β's for real ω
-    tol = 10*eps(real(typeof(ω)))
+    tol = 6*eps(real(typeof(ω)))
     if iszero(imag(ω)) && (any(x->abs(x)<tol, sch.α) || any(x->abs(x)<tol, sch.β))
         # Schur pencil has zero α or β. Recomputing with imag(ω) = tol to avoid singular pencil
         sch = schur_pencil!(s, ω + im * tol)
@@ -293,7 +293,7 @@ minimal_callsafe_copy(s::SchurWorkspace) =
   - For this to work correctly the propagating eigenvalues should come first.
 =#
 
-function ordschur_retarded!(sch::GeneralizedSchur{Complex{T}}, s::SchurFactorsSolver, ω; tol = 10*eps(T)) where {T}
+function ordschur_retarded!(sch::GeneralizedSchur{Complex{T}}, s::SchurFactorsSolver, ω; tol = 6*eps(T)) where {T}
     whichmodes, V´, VZ = s.tmp.whichmodes, s.tmp.V1, s.tmp.V2
     @. whichmodes = abs(sch.β)-tol < abs(sch.α) < abs(sch.β)+tol      # propagating
     if any(whichmodes)                                          # classify propagating modes using velocity
