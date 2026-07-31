@@ -165,6 +165,8 @@ sanitize_eigen(ε::AbstractVector, Ψs::AbstractVector{<:AbstractVector}) =
 sanitize_eigen(ε, Ψ) = Eigen(sorteigs!(sanitize_eigen(ε), sanitize_eigen(Ψ))...)
 sanitize_eigen(x::AbstractArray{<:Real}) = complex.(x)
 sanitize_eigen(x::AbstractArray{<:Complex}) = x
+# some eigensolvers (e.g. KrylovKit) return sparse arrays. EigenComplex assumes dense matrices.
+sanitize_eigen(x::AbstractSparseMatrix{T}) where {T} = convert(Matrix{complex(T)}, x)
 
 function sorteigs!(ϵ::AbstractVector, ψ::AbstractMatrix)
     p = Vector{Int}(undef, length(ϵ))
