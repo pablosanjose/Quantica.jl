@@ -18,8 +18,8 @@ jobs:
         version:
           - '1'
           - 'lts'
-          # - 'pre'
-          # - 'nightly'
+          - 'pre'
+          - 'nightly'
         os:
           - ubuntu-latest
           - windows-latest
