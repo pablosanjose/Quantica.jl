@@ -67,6 +67,7 @@ include("greenfunction.jl")
 include("integrator.jl")
 include("observables.jl")
 include("meanfield.jl")
+include("scattering.jl")
 # Plumbing
 include("apply.jl")
 include("show.jl")
