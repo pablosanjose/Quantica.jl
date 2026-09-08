@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   test:
-    if: github.event_name == 'push' && contains(toJson(github.event.commits), '[skip test]') == false && contains(toJson(github.event.commits), '[skip tests]') == false
+    # if: github.event_name == 'push' && contains(toJson(github.event.commits), '[skip test]') == false && contains(toJson(github.event.commits), '[skip tests]') == false
     name: Julia ${{ matrix.version }} - ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.version == 'nightly' }}
@@ -32,6 +32,8 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: julia-actions/cache@v3
+        with:
+          cache-compiled: "true"
       - uses: julia-actions/julia-buildpkg@latest
       - uses: julia-actions/julia-runtest@latest
       - uses: julia-actions/julia-uploadcodecov@latest
@@ -46,6 +48,9 @@ jobs:
       - uses: julia-actions/setup-julia@v3
         with:
           version: '1'
+      - uses: julia-actions/cache@v3
+        with:
+          cache-compiled: "true"
       - run: |
           julia --project=docs -e '
             using Pkg

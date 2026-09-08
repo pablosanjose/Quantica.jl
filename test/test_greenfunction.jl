@@ -766,9 +766,10 @@ end
 using Distributed; addprocs(1) # for Serialization below
 @everywhere using Quantica
 
-@testset begin "OrbitalSliceArray serialization"
+@testset "OrbitalSliceArray serialization" begin
     g = LP.linear() |> supercell(4) |> supercell |> hamiltonian(hopping(I), orbitals = 2) |> greenfunction
     m = g(0.2)[cells = 0]
+    @test parent(2 * m) ≈ 2 * parent(m)
     v = serialize(m)
     @test v === parent(m)
     @test deserialize(m, v) === m
@@ -800,7 +801,7 @@ using Distributed; addprocs(1) # for Serialization below
 end
 
 
-@testset begin "SpectralSum"
+@testset "SpectralSum" begin
     g = LP.linear() |> @hopping((;t = 1) -> t) |> supercell(10) |> supercell |> greenfunction(GS.Spectrum())
     gs = getindex(g, siteselector(region = r -> 2<=r[1]<=5))
     ss = Quantica.SpectralSum(gs)
@@ -815,4 +816,37 @@ end
     @test ss(<(0)) do fn, φn
         (φn * φn') .* fn
     end |> diag ≈ SA[1,1,1,1]/2
+end
+
+
+@testset "Scattering" begin
+    model = hopping(1, range = √2)
+    glead = LP.square() |> model |> supercell((4,0), region = r->-3<r[2]<3-0.5*r[1]) |> greenfunction(GS.Schur(boundary = 0))
+    glead´ = LP.square() |> model |> supercell((4,0), region = r->-2<r[2]<2-0.5*r[1]) |> greenfunction(GS.Schur(boundary = 0))
+    g = LP.square() |> model |> supercell(region = r->abs(r[2])<4 && 0<=r[1]<=3) |>
+        attach(glead´, model; reverse = true) |>
+        attach(@onsite((ω; Γ = 0) -> -im*Γ*I), region = r -> r[1] == 1) |>
+        attach(glead, model) |> greenfunction
+    s = scattering(g)
+    S = Matrix(s(0.2))
+    @test S'S ≈ I
+    # with loss
+    S = Matrix(s(0.2; Γ = 0.1))
+    @test real(tr(S'S)) < 0.9*size(S,1)
+    # with gain
+    S = Matrix(s(0.2; Γ = -0.1))
+    @test real(tr(S'S)) > 1.1*size(S,1)
+    
+    # Methods without a model for coupling
+    glead = LP.square() |> hopping(1) |> supercell((1,0), region = r->-2<r[2]<2) |> greenfunction(GS.Schur(boundary = 0))
+    g = LP.square() |> supercell(region = r->-2<r[2]<2 && r[1]≈0) |> hopping(1) + @onsite((r; U = 0) -> U * (r[2] ≈ 1)) |>
+        attach(glead, reverse = true) |> attach(glead) |> greenfunction
+    s = scattering(g)
+    sω = s(0.2; U = 2)
+    @test Quantica.islead(s) == Quantica.islead(sω) == (true, true)
+    @test Quantica.numleads(s) == Quantica.numleads(sω) == 2
+    S = Matrix(sω)
+    @test S'S ≈ I
+    @test sω[2, 1] == Quantica.matrix(sω)[2, 1]
+    @test tr(sω[2, 1]'sω[2, 1]) ≈ transmission(g[2, 1])(0.2; U = 2)
 end

@@ -25,7 +25,8 @@ makedocs(;
             "Hamiltonians" => "tutorial/hamiltonians.md",
             "Bandstructures" => "tutorial/bandstructures.md",
             "GreenFunctions" => "tutorial/greenfunctions.md",
-            "Observables" => "tutorial/observables.md"
+            "Observables" => "tutorial/observables.md",
+            "Scattering" => "tutorial/scattering.md"
             ],
         "Advanced" => [
             "Non-spatial models" => "advanced/nonspatial.md",

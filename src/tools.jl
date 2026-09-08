@@ -130,6 +130,8 @@ end
 copy_ifnotmissing(::Missing) = missing
 copy_ifnotmissing(d) = copy(d)
 
+copyview(v::SubArray) = view(copy(parent(v)), parentindices(v)...)
+
 typename(::T) where {T} = nameof(T)
 
 chopsmall(x::T, atol = sqrt(eps(real(T)))) where {T<:Real} =
@@ -144,22 +146,28 @@ mul_scalar_or_array!(x::Number, factor) = factor * x
 mul_scalar_or_array!(x::Tuple, factor) = factor .* x
 mul_scalar_or_array!(x::AbstractArray, factor) = (x .*= factor; x)
 
-# Flattens matrix of Matrix{<:Number} into a matrix of Number's
-function mortar(ms::AbstractMatrix{M}) where {C<:Number,M<:Matrix{C}}
-    isempty(ms) && return convert(Matrix{C}, ms)
-    mrows = size.(ms, 1)
-    mcols = size.(ms, 2)
-    allequal(eachrow(mcols)) && allequal(eachcol(mrows)) ||
-        internalerror("mortar: inconsistent rows or columns")
-    roff = lengths_to_offsets(view(mrows, :, 1))
-    coff = lengths_to_offsets(view(mcols, 1, :))
-    mat = zeros(C, last(roff), last(coff))
-    for c in CartesianIndices(ms)
-        src = ms[c]
-        i, j = Tuple(c)
-        Rdst = CartesianIndices((roff[i]+1:roff[i+1], coff[j]+1:coff[j+1]))
-        Rsrc = CartesianIndices(src)
-        copyto!(mat, Rdst, src, Rsrc)
+function mortar(ms::AbstractMatrix{<:AbstractMatrix{C}}) where {C<:Number}
+    isempty(ms) && return Matrix{C}(undef, 0, 0)
+    ax1, ax2 = axes(ms, 1), axes(ms, 2)
+    i1, j1 = first(ax1), first(ax2)
+    total_rows = sum(i -> size(ms[i, j1], 1), ax1)
+    total_cols = sum(j -> size(ms[i1, j], 2), ax2)
+    mat = Matrix{C}(undef, total_rows, total_cols)
+    coff = 0
+    for j in ax2
+        ncols = size(ms[i1, j], 2)
+        roff = 0
+        for i in ax1
+            src = ms[i, j]
+            nrows = size(ms[i, j1], 1)
+            (size(src, 1) == nrows && size(src, 2) == ncols) ||
+                throw(DimensionMismatch("mortar: inconsistent block dimensions at ($i, $j)"))
+            Rdst = CartesianIndices((roff + 1 : roff + nrows, coff + 1 : coff + ncols))
+            copyto!(mat, Rdst, src, CartesianIndices(src))
+
+            roff += nrows
+        end
+        coff += ncols
     end
     return mat
 end
@@ -429,5 +437,53 @@ function merged_mul!(C::SparseMatrixCSC{<:Number}, bs::OrbitalBlockStructure{B},
     end
     return C
 end
+
+#endregion
+
+############################################################################################
+# LAPACK tools
+#   Wrapper for LAPACK's tgevc! to compute the right eigenvectors of a matrix pencil (A, B)
+#region
+
+using LinearAlgebra: BlasComplex, BlasInt, checksquare, require_one_based_indexing, chkstride1
+using LinearAlgebra.LAPACK: liblapack, chklapackerror
+using LinearAlgebra.BLAS: @blasfunc
+
+# Complex types only (ztgevc_, ctgevc_): our Schur pencils are always complex
+for (tgevc, elty, relty) in ((:ztgevc_, :ComplexF64, :Float64),
+                             (:ctgevc_, :ComplexF32, :Float32))
+    @eval begin
+        function tgevc!(side::AbstractChar, howmny::AbstractChar, select::AbstractVector{BlasInt},
+                        S::AbstractMatrix{$elty}, P::AbstractMatrix{$elty},
+                        VL::AbstractMatrix{$elty}, VR::AbstractMatrix{$elty})
+            require_one_based_indexing(S, P, VL, VR)
+            chkstride1(S, P, VL, VR)
+            n = checksquare(S)
+            checksquare(P) == n || throw(DimensionMismatch("P must have same dimensions as S"))
+
+            ldvl  = max(1, stride(VL, 2))
+            ldvr  = max(1, stride(VR, 2))
+            mm    = max(1, size(VR, 2))
+            m     = Ref{BlasInt}(0)
+            work  = Vector{$elty}(undef, 2n)
+            rwork = Vector{$relty}(undef, 2n)
+            info  = Ref{BlasInt}(0)
+
+            ccall((@blasfunc($tgevc), liblapack), Cvoid,
+                (Ref{UInt8}, Ref{UInt8}, Ptr{BlasInt}, Ref{BlasInt},
+                 Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
+                 Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
+                 Ref{BlasInt}, Ptr{BlasInt}, Ptr{$elty}, Ptr{$relty}, Ptr{BlasInt}),
+                side, howmny, select, n,
+                S, max(1, stride(S, 2)), P, max(1, stride(P, 2)),
+                VL, ldvl, VR, ldvr,
+                mm, m, work, rwork, info)
+
+            chklapackerror(info[])
+            return VR
+        end
+    end
+end
+
 
 #endregion

@@ -325,7 +325,7 @@ end
 function scale_radii_to_neighbors!(p, plot)
     lat = lattice(to_value(plot[2]))
     basescale = Quantica.neighbors(1, lat)
-    p.radii.data .*= basescale
+    isfinite(basescale) && (p.radii.data .*= basescale)
     return p
 end
 

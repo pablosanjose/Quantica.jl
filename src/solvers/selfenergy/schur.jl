@@ -1,4 +1,58 @@
 ############################################################################################
+# ModeSolution
+#region
+
+struct ModeSolution{T}
+    incoming_λ::Vector{Complex{T}}                    # incoming (advanced) eigenvalues
+    incoming_Φ::Matrix{Complex{T}}                    # incoming (advanced) eigenmodes
+    incoming_v::Vector{T}                             # incoming (advanced) velocity factors 1/√(-V_a^p) if propagating, zero otherwise
+    outgoing_λ::Vector{Complex{T}}                    # outgoing (retarded) eigenvalues
+    outgoing_Φ::Matrix{Complex{T}}                    # outgoing (retarded) eigenmodes
+    outgoing_v::Vector{T}                             # outgoing (retarded) velocity factors 1/√(V_r^p) if propagating, zero otherwise
+    outgoing_gr::Matrix{Complex{T}}                   # outgoing (retarded) greenfunction gʳ
+end
+
+## Constructors ##
+
+# n = number of orbitals in the lead unit cell, d = number of deflated modes
+function ModeSolution(::Type{T}, n, d) where {T}
+    incoming_λ = zeros(Complex{T}, d)
+    incoming_Φ = zeros(Complex{T}, n, d)
+    incoming_v = zeros(T, d)
+    outgoing_λ = zeros(Complex{T}, d)
+    outgoing_Φ = zeros(Complex{T}, n, d)
+    outgoing_v = zeros(T, d)
+    outgoing_gr = zeros(Complex{T}, n, n)
+    return ModeSolution(incoming_λ, incoming_Φ, incoming_v, outgoing_λ, outgoing_Φ, outgoing_v, outgoing_gr)
+end
+
+ModeSolution(fsolver::SchurFactorsSolver{T}) where {T} =
+    ModeSolution(T, size_undeflated_deflated(fsolver)...)
+
+## API ##
+
+incoming_λ(s::ModeSolution) = s.incoming_λ
+
+incoming_Φ(s::ModeSolution) = s.incoming_Φ
+
+incoming_vfactors(s::ModeSolution) = s.incoming_v
+
+outgoing_λ(s::ModeSolution) = s.outgoing_λ
+
+outgoing_Φ(s::ModeSolution) = s.outgoing_Φ
+
+outgoing_vfactors(s::ModeSolution) = s.outgoing_v
+
+outgoing_gr(s::ModeSolution) = s.outgoing_gr
+
+deflated_dimension(s::ModeSolution) = length(incoming_λ(s))
+
+Base.copy(s::ModeSolution) =
+    ModeSolution(copy.((s.incoming_λ, s.incoming_Φ, s.incoming_v, s.outgoing_λ, s.outgoing_Φ, s.outgoing_v, s.outgoing_gr))...)
+
+#endregion
+
+############################################################################################
 # SelfEnergy(h, glead::GreenFunctionSchurEmptyLead1D; kw...)
 #   Extended self energy solver for deflated ΣL or ΣR Schur factors of lead unitcell
 #   See notes on solvers/green/schur.jl
@@ -11,15 +65,16 @@ struct SelfEnergySchurSolver{T,B,V<:Union{Missing,Vector{Int}},H<:AbstractHamilt
     boundary::T
     leadtoparent::V  # orbital index in parent for each orbital in open lead surface
                      # so that Σlead[leadtoparent, leadtoparent] == Σparent
+    modes::ModeSolution{T}  # preallocation of mode solution
 end
 
 
 #region ## Constructors ##
 
-SelfEnergySchurSolver(fsolver::SchurFactorsSolver, hlead, side::Symbol, boundary, parentinds = missing) =
-    SelfEnergySchurSolver(fsolver, hlead, isleftside(side), boundary, parentinds)
+SelfEnergySchurSolver(fsolver::SchurFactorsSolver, hlead, side, boundary, parentinds = missing) =
+    SelfEnergySchurSolver(fsolver, hlead, isleftside(side), boundary, parentinds, ModeSolution(fsolver))
 
-function isleftside(side)
+function isleftside(side::Symbol)
     if side == :L
         return true
     elseif side == :R
@@ -28,6 +83,8 @@ function isleftside(side)
         argerror("Unexpeced side = $side in SelfEnergySchurSolver. Only :L and :R are allowed.")
     end
 end
+
+isleftside(b::Bool) = b
 
 isreversed(s::SelfEnergySchurSolver) = s.isleftside
 
@@ -90,15 +147,18 @@ end
 
 # This solver produces two solutions (L/R) for the price of one. We can opt out of calling
 # it if we know it has already been called, so the solution is already in its call!_output
+# skipmodes_internal = false can also be optionally passed to the fsolver call to compute
+# the full incoming states
 function call!(s::SelfEnergySchurSolver, ω;
-               skipsolve_internal = false, params...)
+               skipsolve_internal = false, skipmodes_internal = true, params...)
     fsolver = s.fsolver
     Rfactors, Lfactors = if skipsolve_internal
         call!_output(fsolver)
     else
-        # first apply params to the lead Hamiltonian
+        # first apply params to the lead Hamiltonian to update all its harmonics
         call!(s.hlead; params...)
-        call!(fsolver, ω)
+        # gives the Schur equivalents of the (V´,g⁻¹,V) factors for both L and R sides
+        skipmodes_internal ? call!(fsolver, ω) : call!(fsolver, ω; modesolver = s)
     end
     factors = maybe_match_parent(ifelse(s.isleftside, Lfactors, Rfactors), s.leadtoparent)
     return factors
@@ -111,10 +171,26 @@ maybe_match_parent((V, ig, V´), leadtoparent) =
 
 maybe_match_parent(factors, ::Missing) = factors
 
+# Scattering API
+coupling_to_from_lead(s::SelfEnergySchurSolver) = _coupling_to_from_lead(s, s.leadtoparent)
+
+_coupling_to_from_lead(s, ::Missing) = flat(s.fsolver.hp), flat(s.fsolver.hm)
+_coupling_to_from_lead(s, leadtoparent) =
+    view(flat(s.fsolver.hp), :, leadtoparent), view(flat(s.fsolver.hm), leadtoparent, :)
+
+couplings_intralead(s::SelfEnergySchurSolver) = isreversed(s) ?
+    (flat(s.fsolver.hp), flat(s.fsolver.hm)) :
+    (flat(s.fsolver.hm), flat(s.fsolver.hp))
+
+modesolution(s::SelfEnergySchurSolver) = s.modes
+
+schurfactorsolver(s::SelfEnergySchurSolver) = s.fsolver
+
 function minimal_callsafe_copy(s::SelfEnergySchurSolver)
     hlead´ = minimal_callsafe_copy(s.hlead)
-    fsolver´ = minimal_callsafe_copy(s.fsolver, hlead´)
-    s´ = SelfEnergySchurSolver(fsolver´, hlead´, s.isleftside, s.boundary, s.leadtoparent)
+    fsolver´ = minimal_callsafe_copy(s.fsolver, hlead´)  # to keep the internal aliasing
+    modes´ = copy(modesolution(s))
+    s´ = SelfEnergySchurSolver(fsolver´, hlead´, s.isleftside, s.boundary, s.leadtoparent, modes´)
     return s´
 end
 
@@ -138,12 +214,12 @@ end
 #       sites, but for Extended they need to be padded with zeros over the extended sites
 #region
 
-mutable struct SelfEnergyCouplingSchurSolver{C,G,H,S<:SparseMatrixView,S´<:SparseMatrixView} <: ExtendedSelfEnergySolver
+mutable struct SelfEnergyCouplingSchurSolver{T,G,H,S<:SparseMatrixView,S´<:SparseMatrixView} <: ExtendedSelfEnergySolver
     gunit::G
     hcoupling::H
-    V´::S´                              # aliases a view of hcoupling
-    g⁻¹::InverseGreenBlockSparse{C}     # aliases the one in solver(gunit)::AppliedSparseLUGreenSolver
-    V::S                                # aliases a view of hcoupling
+    V´::S´                                    # aliases a view of hcoupling
+    g⁻¹::InverseGreenBlockSparse{Complex{T}}  # aliases the one in solver(gunit)::AppliedSparseLUGreenSolver
+    V::S                                      # aliases a view of hcoupling
 end
 
 #region ## Constructors ##
@@ -231,6 +307,19 @@ function call!(s::SelfEnergyCouplingSchurSolver, ω; params...)
 end
 
 call!_output(s::SelfEnergyCouplingSchurSolver) = matrix(s.V´), matrix(s.g⁻¹), matrix(s.V)
+
+# SelfEnergySchurSolver embedded in the unitcell's only self energy
+schursolver(s::SelfEnergyCouplingSchurSolver) = solver(only(selfenergies(s.gunit)))
+
+coupling_to_from_lead(s::SelfEnergyCouplingSchurSolver) = matrix_view(s.V), matrix_view(s.V´)
+
+couplings_intralead(s::SelfEnergyCouplingSchurSolver) = couplings_intralead(schursolver(s))
+
+modesolution(s::SelfEnergyCouplingSchurSolver) = modesolution(schursolver(s))
+
+schurfactorsolver(s::SelfEnergyCouplingSchurSolver) = schurfactorsolver(schursolver(s))
+
+isreversed(s::SelfEnergyCouplingSchurSolver) = isreversed(schursolver(s))
 
 function minimal_callsafe_copy(s::SelfEnergyCouplingSchurSolver)
     hcoupling´ = minimal_callsafe_copy(s.hcoupling)

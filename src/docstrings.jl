@@ -2120,6 +2120,76 @@ true
 transmission
 
 """
+    scattering(g::GreenFunction)
+
+Build a `s::Scattering` object representing the scattering problem of a 0D central system
+`g` with a number of attached contacts, of which at least one must be a 1D lead using a
+`GS.Schur` solver (which allows to compute incoming/outgoing modes). Additional contacts are
+also allowed but their blocks will not be included in the scattering matrix.
+
+## Full evaluation
+
+    s(ω; params...)
+
+Solve the scattering problem at energy `ω` and for the specified `params` of `g`, returning
+a `sω::ScatteringSolution`. Its scattering matrix is computed between the propagating modes
+of all leads at energy `ω`.
+
+## Indexing
+
+    sω[i::Integer, j::Integer]
+
+Return the block of the scattering matrix from the incoming propagating modes in lead `j` to
+the outgoing propagating modes in lead `i`. This is a reflection matrix if `i == j` and a
+transmission matrix otherwise. Each block is of size `nᵢ × nⱼ`, where `nᵢ` is the number of
+propagating modes in lead `i` at energy `ω`, or zero for non-lead contacts.
+
+    Matrix(sω)
+
+Return the full scattering matrix, assembled from all `sω[i, j]` blocks.
+
+# Examples
+
+```julia
+julia> # A 1D wire with an onsite potential defect of energy `U`
+
+julia> glead = LP.linear() |> @hopping((; t = 1) -> t) |> greenfunction(GS.Schur(boundary = 0));
+
+julia> g = LP.linear() |> @onsite((; U = 0) -> U) |> supercell(region = iszero) |> attach(glead, reverse = true) |> attach(glead) |> greenfunction;
+
+julia> s = scattering(g)
+Scattering{Float64}: scattering problem of a 0D system with several contacts, of which at least one is a lead
+  Number of contacts : 2
+  Lead contacts      : (1, 2)
+
+julia> s(0.2; U = 0) # transparent
+ScatteringSolution{Float64}: scattering problem solved at a fixed energy
+  Block sizes       : (1, 1)
+  Scattering matrix :
+    7.64646e-17+4.87532e-16im       -0.296+0.955188im
+         -0.296+0.955188im     7.89071e-17+8.05351e-16im
+
+julia> sω = s(0.2; U = 1) # non-transparent
+ScatteringSolution{Float64}: scattering problem solved at a fixed energy
+  Block sizes       : (1, 1)
+  Scattering matrix :
+    0.442903-0.0738216im  0.146903+0.881366im
+    0.146903+0.881366im   0.442903-0.0738216im
+
+julia> S = Matrix(sω); S'S ≈ I
+true
+
+julia> tr(sω[2, 1]'sω[2, 1]) ≈ transmission(g[2, 1])(0.2; U = 1)
+true
+```
+
+# See also
+    `greenfunction`, `attach`, `transmission`, `conductance`
+
+"""
+scattering
+
+"""
     densitymatrix(gs::GreenSlice; opts...)
 
 Compute a `ρ::DensityMatrix` at thermal equilibrium on sites encoded in `gs`. The actual

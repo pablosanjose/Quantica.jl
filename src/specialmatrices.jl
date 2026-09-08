@@ -500,11 +500,11 @@ Base.size(a::AbstractOrbitalArray) = size(parent(a))
 Base.iterate(a::AbstractOrbitalArray, i...) = iterate(parent(a), i...)
 Base.length(a::AbstractOrbitalArray) = length(parent(a))
 Base.IndexStyle(::Type{T}) where {M,T<:AbstractOrbitalArray{<:Any,<:Any,M}} = IndexStyle(M)
-Base.similar(a::AbstractOrbitalArray) = similar(a, similar(parent(a)), orbaxes(a))
-Base.similar(a::AbstractOrbitalArray, t::Type) = similar(a, similar(parent(a), t), orbaxes(a))
+Base.similar(a::AbstractOrbitalArray) = similar_orbarray(a, similar(parent(a)), orbaxes(a))
+Base.similar(a::AbstractOrbitalArray, t::Type) = similar_orbarray(a, similar(parent(a), t), orbaxes(a))
 # doesn't make sense to keep orbaxes in similar with different dimensions, return parent
 Base.similar(a::AbstractOrbitalArray, dims::Tuple) = similar(parent(a), dims)
-Base.copy(a::AbstractOrbitalArray) = similar(a, copy(parent(a)), orbaxes(a))
+Base.copy(a::AbstractOrbitalArray) = similar_orbarray(a, copy(parent(a)), orbaxes(a))
 Base.@propagate_inbounds Base.getindex(a::AbstractOrbitalArray, i::Int) =
     getindex(parent(a), i)
 Base.@propagate_inbounds Base.getindex(a::AbstractOrbitalArray, I::Vararg{Int, N}) where {N} =
@@ -512,7 +512,7 @@ Base.@propagate_inbounds Base.getindex(a::AbstractOrbitalArray, I::Vararg{Int, N
 Base.@propagate_inbounds Base.setindex!(a::AbstractOrbitalArray, v, i::Int) = setindex!(parent(a), v, i)
 Base.@propagate_inbounds Base.setindex!(a::AbstractOrbitalArray, v, I::Vararg{Int, N}) where {N} = setindex!(parent(a), v, I...)
 
-Base.:*(x::Number, a::AbstractOrbitalArray) = similar(a, parent(a) * x, orbaxes(a))
+Base.:*(x::Number, a::AbstractOrbitalArray) = similar_orbarray(a, parent(a) * x, orbaxes(a))
 Base.:*(a::AbstractOrbitalArray, x::Number) = x * a
 
 Base.:+(a::AbstractOrbitalArray, b::AbstractOrbitalArray) = parent(a) + parent(b)
@@ -535,7 +535,7 @@ function Base.getindex(a::AbstractOrbitalMatrix, i::SiteSelector, j::SiteSelecto
     rows = collect(indexcollection(rowslice, rowslice´))
     cols = i === j && rowslice === colslice ? rows : indexcollection(colslice, colslice´)
     m = parent(a)[rows, cols]
-    return similar(a, m, (rowslice´, colslice´))
+    return similar_orbarray(a, m, (rowslice´, colslice´))
 end
 
 # CellSites: return an unwrapped Matrix

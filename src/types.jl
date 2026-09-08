@@ -1183,6 +1183,8 @@ end
 
 matrix(s::SparseMatrixView) = s.mat
 
+matrix_view(s::SparseMatrixView) = s.matview
+
 function update!(s::SparseMatrixView)
     nzs = nonzeros(s.mat)
     nzs´ = nonzeros(parent(s.matview))
@@ -2524,9 +2526,9 @@ end
 CompressedOrbitalMatrix(o::OrbitalSliceMatrix; hermitian = false, encoder = identity, decoder = identity) =
     CompressedOrbitalMatrix(o, hermitian, encoder, decoder)
 
-Base.similar(::OrbitalSliceArray, mat, orbaxes) = OrbitalSliceArray(mat, orbaxes)
-Base.similar(a::CompressedOrbitalMatrix, mat, orbaxes) =
-    CompressedOrbitalMatrix(similar(a.omat, mat, orbaxes), a.hermitian, a.encoder, a.decoder)
+similar_orbarray(::OrbitalSliceArray, mat, orbaxes) = OrbitalSliceArray(mat, orbaxes)
+similar_orbarray(a::CompressedOrbitalMatrix, mat, orbaxes) =
+    CompressedOrbitalMatrix(similar_orbarray(a.omat, mat, orbaxes), a.hermitian, a.encoder, a.decoder)
 
 #endregion
 #region ## API ##
