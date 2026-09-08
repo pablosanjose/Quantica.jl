@@ -44,6 +44,16 @@ struct SchurWorkspace{C}
     RD::Matrix{C}
     DR::Matrix{C}
     whichmodes::Vector{Bool}
+    select::Vector{BlasInt}
+    EE::Matrix{C}
+    EN::Matrix{C}
+end
+
+struct ModeSolver{T}
+    incoming_λΦ::EigenComplex{T}                      # incoming (advanced) eigenpairs Φₐ, Λₐ. Computed only if skipmodes_internal == false
+    outgoing_gr::Matrix{Complex{T}}                   # outgoing (retarded) greenfunction gʳ. Computed only if skipmodes_internal == false
+    incoming_v::Vector{T}                             # incoming (advanced) velocity factors 1/√(-V_a^p) if propagating, zero otherwise. Computed only if skipmodes_internal == false
+    outgoing_v::Vector{T}                             # incoming (advanced) velocity factors √(V_r^p) if propagating, zero otherwise. Computed only if skipmodes_internal == false
 end
 
 struct SchurFactorsSolver{T,B}
@@ -60,15 +70,17 @@ struct SchurFactorsSolver{T,B}
     L::Matrix{ComplexF64}                             # l<=r ? PL : PL*H' === hp PR  (n × min(l,r))
     R::Matrix{ComplexF64}                             # l<=r ? PR*H === hm PL : PR   (n × min(l,r))
     R´L´::Matrix{ComplexF64}                          # [R'; -L']. L and R must be dense for iG \ (L,R)
+    modesolver::ModeSolver{T}
     tmp::SchurWorkspace{Complex{T}}                   # L, R, R´L´ need 64bit
 end
+
 
 #region ## Constructors ##
 
 SchurFactorsSolver(::AbstractHamiltonian, _) =
     argerror("The Schur solver requires 1D Hamiltonians with 0 and ±1 as only Bloch Harmonics.")
 
-function SchurFactorsSolver(h::Hamiltonian{T,<:Any,1}, shift = one(Complex{T})) where {T}
+function SchurFactorsSolver(h::Hamiltonian{T,<:Any,1}, shift=one(Complex{T})) where {T}
     hm, h0, hp = nearest_cell_harmonics(h)
     fhm, fh0, fhp = flat(hm), flat(h0), flat(hp)
     # h*'s may be updated after flat but only fh* structure matters
@@ -76,8 +88,10 @@ function SchurFactorsSolver(h::Hamiltonian{T,<:Any,1}, shift = one(Complex{T})) 
     R´L´ = [R'; -L']
     iG, (p, pd) = store_diagonal_ptrs(fh0)
     ptrs = (p, pd, pd[sinds])
-    workspace = SchurWorkspace{Complex{T}}(size(L), length(linds), length(rinds))
-    return SchurFactorsSolver(T(shift), hm, h0, hp, l_leq_r, iG, ptrs, linds, rinds, sinds, L, R, R´L´, workspace)
+    n, d = size(L)
+    modesolver = ModeSolver(T, n,  d)
+    workspace = SchurWorkspace{Complex{T}}((n, d), length(linds), length(rinds))
+    return SchurFactorsSolver(T(shift), hm, h0, hp, l_leq_r, iG, ptrs, linds, rinds, sinds, L, R, R´L´, modesolver, workspace)
 end
 
 function SchurWorkspace{C}((n, d), l, r) where {C}
@@ -98,7 +112,18 @@ function SchurWorkspace{C}((n, d), l, r) where {C}
     RD = Matrix{C}(undef, r, d)
     DR = Matrix{C}(undef, d, r)
     whichmodes = Vector{Bool}(undef, 2d)
-    return SchurWorkspace(GL, GR, LG, RG, A, B, V1, V2, Z11, Z21, Z11´, Z21´, LD, DL, RD, DR, whichmodes)
+    select = BlasInt[ifelse(i <= d, 1, 0) for i in 1:2d] # used in eigen_schur_half!
+    EE = Matrix{C}(undef, n+d, n+d)
+    EN = Matrix{C}(undef, n+d, n)
+    return SchurWorkspace(GL, GR, LG, RG, A, B, V1, V2, Z11, Z21, Z11´, Z21´, LD, DL, RD, DR, whichmodes, select, EE, EN)
+end
+
+function ModeSolver(::Type{T}, n, d) where {T}
+    incoming_λΦ = Eigen(zeros(Complex{T}, d), zeros(Complex{T}, n, d))
+    outgoing_gr = zeros(Complex{T}, n, n)
+    incoming_v = zeros(T, n)
+    outgoing_v = zeros(T, n)
+    return ModeSolver(incoming_λΦ, outgoing_gr, incoming_v, outgoing_v)
 end
 
 function nearest_cell_harmonics(h)
@@ -114,24 +139,24 @@ function nearest_cell_harmonics(h)
     return hm, h0, hp
 end
 
-# hp = L*R' = PL H' PR'. We assume hm = hp'
+# hp = L*R' = PL' H' PR. We assume hm = hp'
 function left_right_projectors(hm::SparseMatrixCSC, hp::SparseMatrixCSC)
     linds = stored_cols(hm)
     rinds = stored_cols(hp)
     # dense projectors
     o = one(ComplexF64) * I
-    allrows = 1:size(hp,1)
+    allrows = 1:size(hp, 1)
     l_leq_r = length(linds) <= length(rinds)
-    PR = o[allrows, rinds]
-    PL = o[allrows, linds]
+    PR´ = o[allrows, rinds]
+    PL´ = o[allrows, linds]
     if l_leq_r
         sinds = linds
-        R = Matrix{ComplexF64}(hm[:, linds])  # R = PR H = hm PL
-        L = PL
+        R = Matrix{ComplexF64}(hm[:, linds])  # R = PR' H = hm PL'
+        L = PL´
     else
         sinds = rinds
-        R = PR
-        L = Matrix{ComplexF64}(hp[:, rinds])  # L = PL H' = hp PR
+        R = PR´
+        L = Matrix{ComplexF64}(hp[:, rinds])  # L = PL H' = hp PR'
     end
     return linds, rinds, L, R, sinds, l_leq_r
 end
@@ -176,37 +201,79 @@ end
 
 #region ## API ##
 
+# Scattering getter API
+
+incoming_λΦ(s) = modesolver(s).incoming_λΦ
+
+outgoing_gr(s) = modesolver(s).outgoing_gr
+
+incoming_vfactors(s) = modesolver(s).incoming_v
+
+outgoing_vfactors(s) = modesolver(s).outgoing_v
+
+deflated_dimension(s) = length(modesolver(s).incoming_λΦ.values)
+
+# Can be overloaded by other objects
+modesolver(s::SchurFactorsSolver) = s.modesolver
+
 ## Call API ##
 
 call!_output(s::SchurFactorsSolver) =
     (s.tmp.RD, s.tmp.Z11, s.tmp.DR), (s.tmp.LD, s.tmp.Z21´, s.tmp.DL)
 
-function call!(s::SchurFactorsSolver, ω)
+function call!(s::SchurFactorsSolver, ω; skipmodes_internal=true)
     R, Z11, Z21, L, Z11´, Z21´, whichmodes = s.R, s.tmp.Z11, s.tmp.Z21, s.L, s.tmp.Z11´, s.tmp.Z21´, s.tmp.whichmodes
+    LD, DL, RD, DR = s.tmp.GR, s.tmp.GL, s.tmp.LD, s.tmp.DL, s.tmp.RD, s.tmp.DR
+    linds, rinds = s.linds, s.rinds
+
     update_LR!(s)     # We must update L, R in case a parametric parent has been call!-ed
     d = size(Z11, 1)
 
     sch = schur_pencil!(s, ω)  # we ensure no zeros in deflated α's or β's for real ω
 
-    # Retarded modes. This may need to recompute the pencil and Schur in case of a flat band
-    sch = ordschur_retarded!(sch, s, ω)
+    # RETARDED
+    sch = ordschur_retarded!(sch, s, ω)  # This may need to recompute the pencil and Schur in case of a flat band
     checkmodes(whichmodes)
     copy!(Z11, view(sch.Z, 1:d, 1:d))
-    copy!(Z21, view(sch.Z, d+1:2d, 1:d))
+    copy!(Z21, view(sch.Z, (d+1):2d, 1:d))
 
-    # Advanced modes
+    # Retarded (outgoing) modes - populate s.modesolver.outgoing_v
+    # This is done only on-demand, since eigen_schur_half! is expensive
+    if !skipmodes_internal
+        out_modes = eigen_schur_half!(s, sch)       # deflated out modes (λr, Φr´, Χr´). Modes alias Z11´, Z21´
+        undeflated_outgoing_vfactors!(s, out_modes) # computes all outgoing_v = √V or zero if not propagating
+    end
+
+    # ADVANCED
     whichmodes .= 1:2d .> d   # at this point first half is retarded, second half is advanced
     ordschur!(sch, whichmodes)
-    copy!(Z11´, view(sch.Z, 1:d, 1:d))
-    copy!(Z21´, view(sch.Z, d+1:2d, 1:d))
 
-    RZ21, LZ11´, LD, DL, RD, DR = s.tmp.GR, s.tmp.GL, s.tmp.LD, s.tmp.DL, s.tmp.RD, s.tmp.DR
-    linds, rinds = s.linds, s.rinds
-    # compute rightward blocks: PR*R*Z21, Z11 and R'*PR'
+    # Advanced (incoming) modes - populate rest of s.modesolver
+    # This is done only on-demand, since eigen_schur_half! is expensive
+    if !skipmodes_internal
+        in_modes = eigen_schur_half!(s, sch)        # deflated incoming modes (λa, Φa´, Χa´). Modes alias Z11´, Z21´
+        undeflated_incoming_vfactors!(s, in_modes)  # computes all incoming_v = 1/√(-V) or zero if not propagating
+        undeflated_incoming_modes!(s, in_modes)     # undeflates in_modes. Overwrites in_modes. Uses s.tmp.GL and s.tmp.GR
+    end
+
+    # Reclaim Z11´, Z21´ for advanced Z blocks
+    copy!(Z11´, view(sch.Z, 1:d, 1:d))
+    copy!(Z21´, view(sch.Z, (d+1):2d, 1:d))
+
+    # SELF-ENERGY BLOCKS
+    RZ21, LZ11´ = s.tmp.GL, s.tmp.GR  # reuse GL, GR for temporary storage of RZ21 and LZ11´
+
+    # Rightward blocks: PR*R*Z21, Z11 and R'*PR'. Overwrites GR === RZ21
     mul!(RZ21, R, Z21)
     PR_R_Z21 = copy!(RD, view(RZ21, rinds, :))
     R´_PR = copy!(DR, view(R', :, rinds))
-    # compute leftward blocks: PL*L*Z11´, Z21´, L'*PL'
+
+    # RZ21 is used to build gr - required for scattering modes reconstruction
+    if !skipmodes_internal
+        undeflated_gr!(s, ω, RZ21, Z11, R)          # solves gʳ using LU
+    end
+
+    # Leftward blocks: PL*L*Z11´, Z21´, L'*PL'. . Overwrites GL === LZ11´
     mul!(LZ11´, L, Z11´)
     PL_L_Z11´ = copy!(LD, view(LZ11´, linds, :))
     L´_PL = copy!(DL, view(L', :, linds))
@@ -216,6 +283,28 @@ function call!(s::SchurFactorsSolver, ω)
     # through call!_output(::SchurFactorsSolver) to be assembled as any other extended Σ
     return (PR_R_Z21, Z11, R´_PR), (PL_L_Z11´, Z21´, L´_PL)
 end
+
+checkmodes(whichmodes) = sum(whichmodes) == length(whichmodes) ÷ 2 ||
+    argerror("Cannot differentiate retarded from advanced modes. Consider increasing imag(ω) or check that your Hamiltonian is Hermitian")
+
+# this does not include a parentcontacts because there are none
+# (SchurFactorsSolver is not an AppliedGreenSolver, so it may have different API)
+function minimal_callsafe_copy(s::SchurFactorsSolver, parentham)
+    hm´, h0´, hp´ = nearest_cell_harmonics(parentham)
+    s´ = SchurFactorsSolver(s.shift, hm´, h0´, hp´, s.l_leq_r, copy(s.iG),
+        s.ptrs, s.linds, s.rinds, s.sinds, copy(s.L), copy(s.R), copy(s.R´L´),
+        copy(s.modesolver), copy(s.tmp))
+    return s´
+end
+
+Base.copy(s::SchurWorkspace) =
+    SchurWorkspace(copy.((s.GL, s.GR, s.LG, s.RG, s.A, s.B, s.V1, s.V2, s.Z11, s.Z21, s.Z11´, s.Z21´,
+        s.LD, s.DL, s.RD, s.DR, s.whichmodes, s.select, s.EE, s.ED))...)
+
+Base.copy(s::ModeSolver) =
+    ModeSolver(copy.((s.incoming_λΦ, s.outgoing_gr, s.incoming_v, s.outgoing_v))...)
+
+## Pencil A - λB ##
 
 function schur_pencil!(s::SchurFactorsSolver{T}, ω) where {T}
     update_iG!(s, ω)  # iG = ω - h0 + iΩP'P
@@ -231,24 +320,70 @@ function schur_pencil!(s::SchurFactorsSolver{T}, ω) where {T}
     return sch
 end
 
-checkmodes(whichmodes) = sum(whichmodes) == length(whichmodes) ÷ 2 ||
-    argerror("Cannot differentiate retarded from advanced modes. Consider increasing imag(ω) or check that your Hamiltonian is Hermitian")
-
-# this does not include a parentcontacts because there are none
-# (SchurFactorsSolver is not an AppliedGreenSolver, so it may have different API)
-function minimal_callsafe_copy(s::SchurFactorsSolver, parentham)
-    hm´, h0´, hp´ = nearest_cell_harmonics(parentham)
-    s´ = SchurFactorsSolver(s.shift, hm´, h0´, hp´, s.l_leq_r, copy(s.iG),
-        s.ptrs, s.linds, s.rinds, s.sinds, copy(s.L), copy(s.R), copy(s.R´L´),
-        minimal_callsafe_copy(s.tmp))
-    return s´
+# Compute G*R and G*L where G = inv(ω - h0 - Σₐᵤₓ) for Σₐᵤₓ = -iΩL'L or -iΩR'R
+# From this compute the deflated A - λB, whose eigenstates are the deflated eigenmodes
+# Pencil A - λB :
+#    A = [R'GL  (1-δ)iΩR'GL; -L'GL  1-(1-δ)iΩL´GL] and B = [1-δiΩR'GR  -R'GR; δiΩL'GR  L'GR]
+#    where δ = l <= r ? 1 : 0
+#    A = [Γₗ (1-δ)iΩΓₗ] + [0 0; 0 1] and B = [-Γᵣ -δiΩΓᵣ] + [1 0; 0 0]
+#    Γₗ = [R'; -L']GL  and  Γᵣ = [R'; -L']GR
+function pencilAB!(s::SchurFactorsSolver{T}) where {T}
+    o, z = one(Complex{T}), zero(Complex{T})
+    iGlu = lu(s.iG)
+    Ω = s.shift
+    d = size(s.L, 2)
+    GL = ldiv!(s.tmp.GL, iGlu, s.L)
+    GR = ldiv!(s.tmp.GR, iGlu, s.R)
+    A, B, R´L´ = s.tmp.A, s.tmp.B, s.R´L´
+    fill!(A, z)
+    fill!(B, z)
+    mul!(view(A, :, 1:d), R´L´, GL)
+    mul!(view(B, :, (d+1):2d), R´L´, GR, -1, 0)
+    if s.l_leq_r
+        view(A, :, (d+1):2d) .= view(A, :, 1:d) .* (im*Ω)
+    else
+        view(B, :, 1:d) .= view(B, :, (d+1):2d) .* (im*Ω)
+    end
+    for i in 1:d
+        A[d+i, d+i] += o
+        B[i, i] += o
+    end
+    return A, B
 end
 
-minimal_callsafe_copy(s::SchurWorkspace) =
-    SchurWorkspace(copy.((s.GL, s.GR, s.LG, s.RG, s.A, s.B, s.V1, s.V2, s.Z11, s.Z21, s.Z11´, s.Z21´,
-    s.LD, s.DL, s.RD, s.DR, s.whichmodes))...)
+# updates L and R from the current hm and hp
+function update_LR!(s)
+    d = size(s.L, 2)
+    if s.l_leq_r
+        # slicing is faster than a view of sparse
+        copy!(s.R, flat(s.hm)[:, s.sinds])
+        view(s.R´L´, 1:d, :) .= s.R'
+    else
+        # slicing is faster than a view of sparse
+        copy!(s.L, flat(s.hp)[:, s.sinds])
+        view(s.R´L´, (d+1):2d, :) .= .- s.L'
+    end
+    return s
+end
 
-## ordschur_retarded!
+# updates iG = ω - h0 - Σₐᵤₓ from the present h0
+function update_iG!(s::SchurFactorsSolver{T}, ω; Ω=s.shift) where {T}
+    nzs, nzsh0 = nonzeros(s.iG), nonzeros(flat(s.h0))
+    ps, pds, pss = s.ptrs
+    fill!(nzs, zero(Complex{T}))
+    for (p, p´) in enumerate(ps)
+        nzs[p´] = -nzsh0[p]
+    end
+    for pd in pds
+        nzs[pd] += ω
+    end
+    for ps in pss
+        nzs[ps] += im*Ω
+    end
+    return s
+end
+
+## ordschur_retarded! - fast, velocity-based, retarded Schur ordering ##
 #=
   Unpivoted LDL' Factorization for retarded mode classification
 
@@ -302,9 +437,9 @@ function ordschur_retarded!(sch::GeneralizedSchur{Complex{T}}, s::SchurFactorsSo
     if any(whichmodes)                                              # classify propagating modes using velocity
         nprop = sum(whichmodes)
         ordschur!(sch, whichmodes)
-        V´ = build_velocity!(V´, VZ, sch.Z)
+        V´ = build_velocity_matrix!(V´, VZ, sch.Z)
         @. whichmodes = abs(sch.α) <= abs(sch.β) - tol              # evanescent retarded
-        classify_retarded_propagating!(whichmodes,  V´, nprop) # propagating or evanescent retarded
+        classify_retarded_propagating!(whichmodes, V´, nprop)       # propagating or evanescent retarded
     else
         @. whichmodes = abs(sch.α) <= abs(sch.β) - tol              # evanescent retarded
     end
@@ -323,11 +458,12 @@ function ordschur_retarded!(sch::GeneralizedSchur{Complex{T}}, s::SchurFactorsSo
 end
 
 # V´ = Z'*V*Z where V = [0 im; -im 0] is a 2dx2d matrix over the deflated space.
+# This is *not* the velocity matrix of eigenmodes, since Z are only invariant subspaces.
 # ordering here is all propagating first, then all evanescent
-function build_velocity!(V´, VZ, Z)
+function build_velocity_matrix!(V´, VZ, Z)
     d = size(Z, 1) ÷ 2
-    view(VZ, 1:d, :) .= im .* view(Z, d+1:2d, :)
-    view(VZ, d+1:2d, :) .= (-im) .* view(Z, 1:d, :)
+    view(VZ, 1:d, :) .= im .* view(Z, (d+1):2d, :)
+    view(VZ, (d+1):2d, :) .= (-im) .* view(Z, 1:d, :)
     mul!(V´, Z', VZ)
     return V´
 end
@@ -353,69 +489,108 @@ function classify_retarded_propagating!(whichmodes, V´, nprop)
     return whichmodes
 end
 
-## Pencil A - λB ##
+## Mode solver ##
 
-# Compute G*R and G*L where G = inv(ω - h0 - Σₐᵤₓ) for Σₐᵤₓ = -iΩL'L or -iΩR'R
-# From this compute the deflated A - λB, whose eigenstates are the deflated eigenmodes
-# Pencil A - λB :
-#    A = [R'GL  (1-δ)iΩR'GL; -L'GL  1-(1-δ)iΩL´GL] and B = [1-δiΩR'GR  -R'GR; δiΩL'GR  L'GR]
-#    where δ = l <= r ? 1 : 0
-#    A = [Γₗ (1-δ)iΩΓₗ] + [0 0; 0 1] and B = [-Γᵣ -δiΩΓᵣ] + [1 0; 0 0]
-#    Γₗ = [R'; -L']GL  and  Γᵣ = [R'; -L']GR
-function pencilAB!(s::SchurFactorsSolver{T}) where {T}
-    o, z = one(Complex{T}), zero(Complex{T})
-    iGlu = lu(s.iG)
-    Ω = s.shift
-    d = size(s.L, 2)
-    GL = ldiv!(s.tmp.GL, iGlu, s.L)
-    GR = ldiv!(s.tmp.GR, iGlu, s.R)
-    A, B, R´L´ = s.tmp.A, s.tmp.B, s.R´L´
-    fill!(A, z)
-    fill!(B, z)
-    mul!(view(A, :, 1:d), R´L´, GL)
-    mul!(view(B, :, d+1:2d), R´L´, GR, -1, 0)
-    if s.l_leq_r
-        view(A, :, d+1:2d) .= view(A, :, 1:d) .* (im*Ω)
-    else
-        view(B, :, 1:d) .= view(B, :, d+1:2d) .* (im*Ω)
+# Computes the leading half of the right eigenvectors and eigenvalues of Generalized Schur
+# factorization of pencil schur(A,B) efficiently, dispatching to LAPACK's tgevc! routine.
+# The compuation is done in-place, overwriting (λ, φ, χ) but also sch.Q
+function eigen_schur_half!(s::SchurFactorsSolver, sch::GeneralizedSchur{<:BlasFloat})
+    Φ, Χ = s.tmp.Z11´, s.tmp.Z21´
+    (λ, _) = s.modesolver.incoming_λΦ   # to be overwritten with first half of eigenvalues
+    S = sch.S
+    T = sch.T
+    d = size(S, 1) ÷ 2
+
+    copy!(λ, view(sch.values, 1:d))
+
+    side = 'R'                          # right eigenvectors
+    howmny = 'S'                        # select mode
+    VL = sch.Z                          # Dummy matrix for VL, not used
+    VR = view(sch.Q, :, (d+1):2d)
+    select = s.tmp.select               # already prepared on creation to select first half
+    tgevc!(side, howmny, select, S, T, VL, VR)  # Dispatch to the LAPACK wrapper (tools.jl)
+
+    mul!(Φ, view(sch.Z, 1:d, :), VR)    # convert Φ to original basis
+    mul!(Χ, view(sch.Z, (d+1):2d, :), VR) # convert Χ to original basis
+
+    # Normalization: for normalized undeflated modes, deflated must have norm √diag(RR')
+    for col in eachindex(λ)
+        colΦ, colχ, rowR = view(Φ, :, col), view(Χ, :, col), view(s.R, col, :)
+        factor = norm(rowR) / norm(colΦ)
+        colΦ .*= factor
+        colχ .*= factor
     end
-    for i in 1:d
-        A[d+i, d+i] += o
-        B[i, i] += o
-    end
-    return A, B
+
+    return (λ, Φ, Χ)                    # these eigenmodes are deflated and not normalized yet
 end
 
-# updates L and R from the current hm and hp
-function update_LR!(s)
-    d = size(s.L, 2)
+# Overwrite incoming_λΦ with the undeflated incoming modes Φₐ´, Λₐ, using the expression
+# Φ = GLΦ´Λ⁻¹ + GRΧ´ + iΩ * Q, where Q = ifelse(l <= r, GLΧ´Λ⁻¹, GRΦ´)
+# so Φ = ifelse(l<=r, GRΧ´ + GL(Φ´+iΩΧ´)Λ⁻¹, GLΦ´Λ⁻¹ + GR(Χ´+iΩΦ´))
+function undeflated_incoming_modes!(s::SchurFactorsSolver, (λa, Φa´, Χa´))
+    # Φa´, Χa´ are dxd, Φa is nxd (undeflated)
+    GL, GR = s.tmp.GL, s.tmp.GR         # GL, GR are already updated by pencilAB! here
+    (_, Φa) = s.modesolver.incoming_λΦ  # to be overwritten with undeflated incoming modes
+
     if s.l_leq_r
-        # slicing is faster than a view of sparse
-        copy!(s.R, flat(s.hm)[:, s.sinds])
-        view(s.R´L´, 1:d, :) .= s.R'
+        mul!(Φa, GR, Χa´)               # GRΧₐ´
+        Φa´ .+= Χa´ .* (im * s.shift)   # Φₐ´ + iΩΧₐ´
+        Φa´ .*= transpose(inv.(λa))     # (Φₐ´ + iΩΧₐ´)Λₐ⁻¹
+        mul!(Φa, GL, Φa´, 1, 1)         # GRΧₐ´ + GL(Φₐ´ + iΩΧₐ´)Λₐ⁻¹
     else
-        # slicing is faster than a view of sparse
-        copy!(s.L, flat(s.hp)[:, s.sinds])
-        view(s.R´L´, d+1:2d, :) .= .- s.L'
+        mul!(Φa, GL, Φa´)               # GLΦₐ´
+        Φa .*= transpose(inv.(λa))      # GLΦₐ´Λₐ⁻¹
+        Χa´ .+= Φa´ .* (im * s.shift)   # Χₐ´ + iΩΦₐ´
+        mul!(Φa, GR, Χa´, 1, 1)         # GLΦₐ´Λₐ⁻¹ + GR(Χₐ´ + iΩΦₐ´)Λₐ⁻¹
     end
+
     return s
 end
 
-# updates iG = ω - h0 - Σₐᵤₓ from the present h0
-function update_iG!(s::SchurFactorsSolver{T}, ω) where {T}
-    Ω = s.shift
-    nzs, nzsh0 = nonzeros(s.iG), nonzeros(flat(s.h0))
-    ps, pds, pss = s.ptrs
-    fill!(nzs, zero(Complex{T}))
-    for (p, p´) in enumerate(ps)
-        nzs[p´] = -nzsh0[p]
+# Overwrite incoming_v with advanced velocity factors 1/√(-V) or zero if not propagating
+# where V = im*ϕ'*Χ-im*Χ'*ϕ. We assume propagating modes come first, rest evanescent (V = 0)
+function undeflated_incoming_vfactors!(s::SchurFactorsSolver{T}, (λ, Φ, Χ)) where {T}
+    vs = s.modesolver.incoming_v
+    tol = sqrt(eps(T))
+    fill!(vs, zero(eltype(vs)))
+    for mode in eachindex(λ)                # only deflated modes, rest are not propagating
+        abs(λ[mode]) > 1 + tol && break     # start of evanescent modes, break
+        v = real(2im * dot(view(Φ, :, mode), view(Χ, :, mode)))
+        vs[mode] = 1/sqrt(-v)
     end
-    for pd in pds
-        nzs[pd] += ω
+
+    return s
+end
+
+# Overwrite outgoing_v with retarded velocity factors √V or zero if not propagating
+# where V = im*ϕ'*Χ-im*Χ'*ϕ. We assume propagating modes come first, rest evanescent (V = 0)
+function undeflated_outgoing_vfactors!(s::SchurFactorsSolver{T}, (λ, Φ, Χ)) where {T}
+    vs = s.modesolver.outgoing_v
+    tol = sqrt(eps(T))
+    fill!(vs, zero(eltype(vs)))
+    for mode in eachindex(λ)                # only deflated modes, rest are not propagating
+        abs(λ[mode]) < 1 - tol && break     # start of evanescent modes, break
+        v = real(2im * dot(view(Φ, :, mode), view(Χ, :, mode)))
+        vs[mode] = sqrt(v)
     end
-    for ps in pss
-        nzs[ps] += im*Ω
-    end
+
+    return s
+end
+
+# Overwrite outgoing_gr with gʳ = [1 0] * [iG RZ21; R' Z11]⁻¹ * [1; 0], with Ω = 0 (zero shift)
+function undeflated_gr!(s::SchurFactorsSolver{T}, ω, RZ21, Z11, R) where {T}
+    update_iG!(s, ω; Ω=0)               # removes Ω in s.iG = ω - h0
+    iG, iGΣ, source = s.iG, s.tmp.EE, s.tmp.EN
+    nd, n = size(source)                # nd = n + d, where d = size(Z11, 1)
+    copyto!(source, I)
+    copy!(view(iGΣ, 1:n, 1:n), iG)
+    copy!(view(iGΣ, 1:n, (n+1):nd), RZ21)
+    copy!(view(iGΣ, (n+1):nd, 1:n), R')
+    copy!(view(iGΣ, (n+1):nd, (n+1):nd), Z11)
+    luiG = lu!(iGΣ)
+    grE = ldiv!(luiG, source)
+    copy!(s.modesolver.outgoing_gr, view(grE, 1:n, :))
+
     return s
 end
 
@@ -514,9 +689,9 @@ end
 const GFUnit{T,E,H,N,S} =
     GreenFunction{T,E,0,AppliedSparseLUGreenSolver{Complex{T}},H,Contacts{0,N,S,OrbitalSliceGrouped{T,E,0}}}
 
-green_type(::H,::S) where {T,E,H<:AbstractHamiltonian{T,E},S} =
+green_type(::H, ::S) where {T,E,H<:AbstractHamiltonian{T,E},S} =
     GFUnit{T,E,H,1,Tuple{S}}
-green_type(::H,::S1,::S2) where {T,E,H<:AbstractHamiltonian{T,E},S1,S2} =
+green_type(::H, ::S1, ::S2) where {T,E,H<:AbstractHamiltonian{T,E},S1,S2} =
     GFUnit{T,E,H,2,Tuple{S1,S2}}
 
 #endregion
@@ -567,7 +742,7 @@ integrate_opts(s::AppliedSchurGreenSolver) = s.integrate_opts
 
 # We delay initialization of most fields until they are first needed (which may be never)
 # should not have any contacts (we defer to TMatrixSlicer for that)
-mutable struct SchurGreenSlicer{C,A<:AppliedSchurGreenSolver}  <: GreenSlicer{C}
+mutable struct SchurGreenSlicer{C,A<:AppliedSchurGreenSolver} <: GreenSlicer{C}
     ω::C
     solver::A
     boundary::C
@@ -614,11 +789,11 @@ function Base.getproperty(s::SchurGreenSlicer, f::Symbol)
         if f == :G₋₁₋₁
             # we ran SchurFactorSolver when constructing s, so skipsolve_internal = true
             # to avoid running it again
-            s.G₋₁₋₁ = slicer(call!(solver.gL, s.ω; skipsolve_internal = true))
+            s.G₋₁₋₁ = slicer(call!(solver.gL, s.ω; skipsolve_internal=true))
         elseif f == :G₁₁
-            s.G₁₁ = slicer(call!(solver.gR, s.ω; skipsolve_internal = true))
+            s.G₁₁ = slicer(call!(solver.gR, s.ω; skipsolve_internal=true))
         elseif f == :G∞₀₀
-            s.G∞₀₀ = slicer(call!(solver.g∞, s.ω; skipsolve_internal = true))
+            s.G∞₀₀ = slicer(call!(solver.g∞, s.ω; skipsolve_internal=true))
         elseif f == :L´G∞₀₀
             tmp = solver.fsolver.tmp.LG
             s.L´G∞₀₀ = extended_rdiv!(tmp, s.L, s.G∞₀₀)
@@ -718,8 +893,8 @@ function semi_schur_slice(s::SchurGreenSlicer{C}, i, j) where {C}
         R´G₁₁L = s.R´G₁₁L
         G₁₁L = view(s.G₁₁L, rows, :)
         Gₙₘ = n == 1 ?
-            mul!(G∞ₙₘ, G₁₁L, R´G∞₀ₘ, -1, 1) :
-            mul!(G∞ₙₘ, G₁₁L, (R´G₁₁L^(n-1)) * R´G∞₀ₘ, -1, 1)
+              mul!(G∞ₙₘ, G₁₁L, R´G∞₀ₘ, -1, 1) :
+              mul!(G∞ₙₘ, G₁₁L, (R´G₁₁L^(n-1)) * R´G∞₀ₘ, -1, 1)
         return Gₙₘ
     else  # m, n <= -1                             # Gₙₘ = G∞ₙₘ - G₋₁₋₁R(L'G₋₁₋₁R)⁻ⁿ⁻¹L'G∞₀ₘ
         i´ = CellOrbitals(n, rows)
@@ -730,8 +905,8 @@ function semi_schur_slice(s::SchurGreenSlicer{C}, i, j) where {C}
         L´G₋₁₋₁R = s.L´G₋₁₋₁R
         G₋₁₋₁R = view(s.G₋₁₋₁R, rows, :)
         Gₙₘ = n == -1 ?
-            mul!(G∞ₙₘ, G₋₁₋₁R, L´G∞₀ₘ, -1, 1) :
-            mul!(G∞ₙₘ, G₋₁₋₁R, (L´G₋₁₋₁R^(-n-1)) * L´G∞₀ₘ, -1, 1)
+              mul!(G∞ₙₘ, G₋₁₋₁R, L´G∞₀ₘ, -1, 1) :
+              mul!(G∞ₙₘ, G₋₁₋₁R, (L´G₋₁₋₁R^(-n-1)) * L´G∞₀ₘ, -1, 1)
         return Gₙₘ
     end
 end
@@ -767,24 +942,24 @@ function schur_eigvals((h, solver)::Tuple{AbstractHamiltonian1D,AppliedSchurGree
     return λs
 end
 
-retarded_eigvals(g, ω, minabs = 0; params...) =
+retarded_eigvals(g, ω, minabs=0; params...) =
     filter!(λ -> 1 > abs(λ) > minabs, schur_eigvals(g, ω; params...))
 
-advanced_eigvals(g, ω, maxabs = Inf; params...) =
+advanced_eigvals(g, ω, maxabs=Inf; params...) =
     filter!(λ -> 1 < abs(λ) < maxabs, schur_eigvals(g, ω; params...))
 
-propagating_eigvals(g, ω, margin = 0; params...) =
+propagating_eigvals(g, ω, margin=0; params...) =
     iszero(margin) ?
-        filter!(λ -> abs(λ) ≈ 1, schur_eigvals(g, ω; params...)) :
-        filter!(λ -> 1 - margin < abs(λ) < 1 + margin, schur_eigvals(g, ω; params...))
+    filter!(λ -> abs(λ) ≈ 1, schur_eigvals(g, ω; params...)) :
+    filter!(λ -> 1 - margin < abs(λ) < 1 + margin, schur_eigvals(g, ω; params...))
 
-function decay_lengths(g::GreenFunctionSchurLead1D, args...; reverse = false, params...)
-    λs = reverse ? advanced_eigvals(g, args...; params...) :  retarded_eigvals(g, args...; params...)
+function decay_lengths(g::GreenFunctionSchurLead1D, args...; reverse=false, params...)
+    λs = reverse ? advanced_eigvals(g, args...; params...) : retarded_eigvals(g, args...; params...)
     ls = @. -1/log(abs(λs))         # compute the decay lengths in units of a0
     return ls
 end
 
-decay_lengths(g::AbstractHamiltonian1D, µ = 0, args...; params...) =
+decay_lengths(g::AbstractHamiltonian1D, µ=0, args...; params...) =
     decay_lengths(greenfunction(g, GS.Schur()), µ, args...; params...)
 
 #endregion
@@ -793,7 +968,7 @@ decay_lengths(g::AbstractHamiltonian1D, µ = 0, args...; params...) =
 # AppliedSchurGreenSolver in 2D
 #region
 
-struct AppliedSchurGreenSolver2D{L,H<:AbstractHamiltonian1D,S<:AppliedSchurGreenSolver,F,P<:NamedTuple}  <: AppliedGreenSolver
+struct AppliedSchurGreenSolver2D{L,H<:AbstractHamiltonian1D,S<:AppliedSchurGreenSolver,F,P<:NamedTuple} <: AppliedGreenSolver
     h1D::H
     solver1D::S
     axis1D::SVector{1,Int}
@@ -850,7 +1025,7 @@ function Base.getindex(s::SchurGreenSlicer2D, i::CellOrbitals, j::CellOrbitals)
     uas, was = s.solver.axis1D, s.solver.wrapped_axes
     ni, nj = cell(i), cell(j)
     i´, j´ = CellOrbitals(ni[uas], orbindices(i)), CellOrbitals(nj[uas], orbindices(j))
-    dn = (ni - nj)[was]
+    dn = (ni-nj)[was]
     solver = s.solver
     function integrand(x)
         ϕs = sanitize_SVector(2π * x)
@@ -974,7 +1149,7 @@ function fermi_points(g, µ; params...)
     return xs
 end
 
-function sanitize_integration_path(xs, (xmin, xmax) = (-0.5, 0.5))
+function sanitize_integration_path(xs, (xmin, xmax)=(-0.5, 0.5))
     sort!(xs)
     pushfirst!(xs, xmin)
     push!(xs, xmax)
@@ -982,7 +1157,7 @@ function sanitize_integration_path(xs, (xmin, xmax) = (-0.5, 0.5))
     return xs´
 end
 
-function fermi_h!(s, ϕ, µ, β = 0; params...)
+function fermi_h!(s, ϕ, µ, β=0; params...)
     h = parent(parent(s.gs)) # may be a ParametricHamiltonian
     bs = blockstructure(h)
     # Similar to spectrum(h, ϕ; params...), but less work (no sort! or sanitization)

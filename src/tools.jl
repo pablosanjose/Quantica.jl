@@ -431,3 +431,86 @@ function merged_mul!(C::SparseMatrixCSC{<:Number}, bs::OrbitalBlockStructure{B},
 end
 
 #endregion
+
+############################################################################################
+# LAPACK tools
+#   Wrapper for LAPACK's tgevc! to compute the right eigenvectors of a matrix pencil (A, B)
+#region
+
+using LinearAlgebra: BlasFloat, BlasInt, checksquare, require_one_based_indexing, chkstride1
+using LinearAlgebra.LAPACK: liblapack, chklapackerror
+using LinearAlgebra.BLAS: @blasfunc
+
+# 1. Real Types: dtgevc_, stgevc_
+for (tgevc, elty) in ((:dtgevc_, :Float64),
+                      (:stgevc_, :Float32))
+    @eval begin
+        function tgevc!(side::AbstractChar, howmny::AbstractChar, select::AbstractVector{BlasInt},
+                        S::AbstractMatrix{$elty}, P::AbstractMatrix{$elty},
+                        VL::AbstractMatrix{$elty}, VR::AbstractMatrix{$elty})
+            require_one_based_indexing(S, P, VL, VR)
+            chkstride1(S, P, VL, VR)
+            n = checksquare(S)
+            checksquare(P) == n || throw(DimensionMismatch("P must have same dimensions as S"))
+
+            ldvl = max(1, stride(VL, 2))
+            ldvr = max(1, stride(VR, 2))
+            mm   = max(1, size(VR, 2))
+            m    = Ref{BlasInt}(0)
+            work = Vector{$elty}(undef, 6n)
+            info = Ref{BlasInt}(0)
+
+            ccall((@blasfunc($tgevc), liblapack), Cvoid,
+                (Ref{UInt8}, Ref{UInt8}, Ptr{BlasInt}, Ref{BlasInt},
+                 Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
+                 Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
+                 Ref{BlasInt}, Ptr{BlasInt}, Ptr{$elty}, Ptr{BlasInt}),
+                side, howmny, select, n,
+                S, max(1, stride(S, 2)), P, max(1, stride(P, 2)),
+                VL, ldvl, VR, ldvr,
+                mm, m, work, info)
+
+            chklapackerror(info[])
+            return VR
+        end
+    end
+end
+
+# 2. Complex Types: ztgevc_, ctgevc_
+for (tgevc, elty, relty) in ((:ztgevc_, :ComplexF64, :Float64),
+                             (:ctgevc_, :ComplexF32, :Float32))
+    @eval begin
+        function tgevc!(side::AbstractChar, howmny::AbstractChar, select::AbstractVector{BlasInt},
+                        S::AbstractMatrix{$elty}, P::AbstractMatrix{$elty},
+                        VL::AbstractMatrix{$elty}, VR::AbstractMatrix{$elty})
+            require_one_based_indexing(S, P, VL, VR)
+            chkstride1(S, P, VL, VR)
+            n = checksquare(S)
+            checksquare(P) == n || throw(DimensionMismatch("P must have same dimensions as S"))
+
+            ldvl  = max(1, stride(VL, 2))
+            ldvr  = max(1, stride(VR, 2))
+            mm    = max(1, size(VR, 2))
+            m     = Ref{BlasInt}(0)
+            work  = Vector{$elty}(undef, 2n)
+            rwork = Vector{$relty}(undef, 2n)
+            info  = Ref{BlasInt}(0)
+
+            ccall((@blasfunc($tgevc), liblapack), Cvoid,
+                (Ref{UInt8}, Ref{UInt8}, Ptr{BlasInt}, Ref{BlasInt},
+                 Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
+                 Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
+                 Ref{BlasInt}, Ptr{BlasInt}, Ptr{$elty}, Ptr{$relty}, Ptr{BlasInt}),
+                side, howmny, select, n,
+                S, max(1, stride(S, 2)), P, max(1, stride(P, 2)),
+                VL, ldvl, VR, ldvr,
+                mm, m, work, rwork, info)
+
+            chklapackerror(info[])
+            return VR
+        end
+    end
+end
+
+
+#endregion

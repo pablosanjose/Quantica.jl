@@ -90,15 +90,18 @@ end
 
 # This solver produces two solutions (L/R) for the price of one. We can opt out of calling
 # it if we know it has already been called, so the solution is already in its call!_output
+# skipmodes_internal = false can also be optionally passed to the fsolver call to compute
+# the full incoming states
 function call!(s::SelfEnergySchurSolver, ω;
-               skipsolve_internal = false, params...)
+               skipsolve_internal = false, skipmodes_internal = true, params...)
     fsolver = s.fsolver
     Rfactors, Lfactors = if skipsolve_internal
         call!_output(fsolver)
     else
-        # first apply params to the lead Hamiltonian
+        # first apply params to the lead Hamiltonian to update all its harmonics
         call!(s.hlead; params...)
-        call!(fsolver, ω)
+        # gives the Schur equivalents of the (V´,g⁻¹,V) factors for both L and R sides
+        call!(fsolver, ω; skipmodes_internal)
     end
     factors = maybe_match_parent(ifelse(s.isleftside, Lfactors, Rfactors), s.leadtoparent)
     return factors
@@ -111,9 +114,20 @@ maybe_match_parent((V, ig, V´), leadtoparent) =
 
 maybe_match_parent(factors, ::Missing) = factors
 
+# Scattering API
+coupling_to_from_lead(s::SelfEnergySchurSolver) = _coupling_to_from_lead(s, s.leadtoparent)
+
+_coupling_to_from_lead(s, ::Missing) = flat(s.fsolver.hp), flat(s.fsolver.hm)
+_coupling_to_from_lead(s, leadtoparent) =
+    view(flat(s.fsolver.hp), :, leadtoparent), view(flat(s.fsolver.hm), leadtoparent, :)
+
+couplings_intralead(s::SelfEnergySchurSolver) = flat(s.fsolver.hm), flat(s.fsolver.hp)
+
+modesolver(s::SelfEnergySchurSolver) = modesolver(s.fsolver)
+
 function minimal_callsafe_copy(s::SelfEnergySchurSolver)
     hlead´ = minimal_callsafe_copy(s.hlead)
-    fsolver´ = minimal_callsafe_copy(s.fsolver, hlead´)
+    fsolver´ = minimal_callsafe_copy(s.fsolver, hlead´)  # to keep the internal aliasing
     s´ = SelfEnergySchurSolver(fsolver´, hlead´, s.isleftside, s.boundary, s.leadtoparent)
     return s´
 end
@@ -138,12 +152,12 @@ end
 #       sites, but for Extended they need to be padded with zeros over the extended sites
 #region
 
-mutable struct SelfEnergyCouplingSchurSolver{C,G,H,S<:SparseMatrixView,S´<:SparseMatrixView} <: ExtendedSelfEnergySolver
+mutable struct SelfEnergyCouplingSchurSolver{T,G,H,S<:SparseMatrixView,S´<:SparseMatrixView} <: ExtendedSelfEnergySolver
     gunit::G
     hcoupling::H
-    V´::S´                              # aliases a view of hcoupling
-    g⁻¹::InverseGreenBlockSparse{C}     # aliases the one in solver(gunit)::AppliedSparseLUGreenSolver
-    V::S                                # aliases a view of hcoupling
+    V´::S´                                    # aliases a view of hcoupling
+    g⁻¹::InverseGreenBlockSparse{Complex{T}}  # aliases the one in solver(gunit)::AppliedSparseLUGreenSolver
+    V::S                                      # aliases a view of hcoupling
 end
 
 #region ## Constructors ##
@@ -231,6 +245,14 @@ function call!(s::SelfEnergyCouplingSchurSolver, ω; params...)
 end
 
 call!_output(s::SelfEnergyCouplingSchurSolver) = matrix(s.V´), matrix(s.g⁻¹), matrix(s.V)
+
+# Scattering API
+coupling_to_from_lead(s::SelfEnergyCouplingSchurSolver) = matrix_view(s.V), matrix_view(s.V´)
+
+couplings_intralead(s::SelfEnergyCouplingSchurSolver) =
+    couplings_intralead(solver(only(selfenergies(s.gunit))))
+
+modesolver(s::SelfEnergyCouplingSchurSolver) = modesolver(solver(only(selfenergies(s.gunit))).fsolver)
 
 function minimal_callsafe_copy(s::SelfEnergyCouplingSchurSolver)
     hcoupling´ = minimal_callsafe_copy(s.hcoupling)
