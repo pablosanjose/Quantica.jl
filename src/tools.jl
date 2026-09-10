@@ -431,3 +431,124 @@ function merged_mul!(C::SparseMatrixCSC{<:Number}, bs::OrbitalBlockStructure{B},
 end
 
 #endregion
+
+############################################################################################
+# LAPACK tools
+#   Wrapper for LAPACK's tgevc! to compute the right eigenvectors of a matrix pencil (A, B)
+#
+#region
+
+using LinearAlgebra: BlasFloat, BlasInt, checksquare, require_one_based_indexing, chkstride1
+using LinearAlgebra.LAPACK: liblapack, chklapackerror
+using LinearAlgebra.BLAS: @blasfunc
+
+# 1. Real Types: dtgevc_, stgevc_
+for (tgevc, elty) in ((:dtgevc_, :Float64),
+                      (:stgevc_, :Float32))
+    @eval begin
+        function tgevc!(side::AbstractChar, howmny::AbstractChar, select::AbstractVector{BlasInt},
+                        S::AbstractMatrix{$elty}, P::AbstractMatrix{$elty},
+                        VL::AbstractMatrix{$elty}, VR::AbstractMatrix{$elty})
+            require_one_based_indexing(S, P, VL, VR)
+            chkstride1(S, P, VL, VR)
+            n = checksquare(S)
+            checksquare(P) == n || throw(DimensionMismatch("P must have same dimensions as S"))
+
+            ldvl = max(1, stride(VL, 2))
+            ldvr = max(1, stride(VR, 2))
+            mm   = max(1, size(VR, 2))
+            m    = Ref{BlasInt}(0)
+            work = Vector{$elty}(undef, 6n)
+            info = Ref{BlasInt}(0)
+
+            ccall((@blasfunc($tgevc), liblapack), Cvoid,
+                (Ref{UInt8}, Ref{UInt8}, Ptr{BlasInt}, Ref{BlasInt},
+                 Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
+                 Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
+                 Ref{BlasInt}, Ptr{BlasInt}, Ptr{$elty}, Ptr{BlasInt}),
+                side, howmny, select, n,
+                S, max(1, stride(S, 2)), P, max(1, stride(P, 2)),
+                VL, ldvl, VR, ldvr,
+                mm, m, work, info)
+
+            chklapackerror(info[])
+            return VR
+        end
+    end
+end
+
+# 2. Complex Types: ztgevc_, ctgevc_
+for (tgevc, elty, relty) in ((:ztgevc_, :ComplexF64, :Float64),
+                             (:ctgevc_, :ComplexF32, :Float32))
+    @eval begin
+        function tgevc!(side::AbstractChar, howmny::AbstractChar, select::AbstractVector{BlasInt},
+                        S::AbstractMatrix{$elty}, P::AbstractMatrix{$elty},
+                        VL::AbstractMatrix{$elty}, VR::AbstractMatrix{$elty})
+            require_one_based_indexing(S, P, VL, VR)
+            chkstride1(S, P, VL, VR)
+            n = checksquare(S)
+            checksquare(P) == n || throw(DimensionMismatch("P must have same dimensions as S"))
+
+            ldvl  = max(1, stride(VL, 2))
+            ldvr  = max(1, stride(VR, 2))
+            mm    = max(1, size(VR, 2))
+            m     = Ref{BlasInt}(0)
+            work  = Vector{$elty}(undef, 2n)
+            rwork = Vector{$relty}(undef, 2n)
+            info  = Ref{BlasInt}(0)
+
+            ccall((@blasfunc($tgevc), liblapack), Cvoid,
+                (Ref{UInt8}, Ref{UInt8}, Ptr{BlasInt}, Ref{BlasInt},
+                 Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
+                 Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
+                 Ref{BlasInt}, Ptr{BlasInt}, Ptr{$elty}, Ptr{$relty}, Ptr{BlasInt}),
+                side, howmny, select, n,
+                S, max(1, stride(S, 2)), P, max(1, stride(P, 2)),
+                VL, ldvl, VR, ldvr,
+                mm, m, work, rwork, info)
+
+            chklapackerror(info[])
+            return VR
+        end
+    end
+end
+
+"""
+    eigen_schur_half!(e::Eigen, sch::GeneralizedSchur{<: BlasFloat})
+
+Computes the leading half of the right eigenvectors and eigenvalues of Generalized Schur
+factorization of pencil schur(A,B) efficiently, dispatching to LAPACK's tgevc! routine.
+The compuation is done in-place, overwriting e::Eigen and sch.Q
+"""
+function eigen_schur_half!(eigen::Eigen, sch::GeneralizedSchur{<:BlasFloat})
+    S = sch.S
+    T = sch.T
+
+    n2 = checksquare(S)
+    n = n2 ÷ 2
+    (λ, φs) = eigen
+    length(λ) == n && size(φs) == (n2, n) || argerror("Eigen must have dimension $(n2, n)")
+
+    copy!(e.values, view(sch.values, 1:n))
+
+    # 'R' for Right eigenvectors, 'A' for All modes in the block
+    side   = 'R'
+    howmny = 'S'
+
+    # 'select' is unreferenced when howmny = 'A'
+    select = BlasInt[ifelse(i <= n, 1, 0) for i in 1:n2]
+
+    # Dummy matrix for VL, valid pre-allocation for VR
+    VL = sch.Z
+    VR = view(sch.Q, :, n+1:n2)
+
+    # Dispatch to the generated LAPACK wrappers
+    tgevc!(side, howmny, select, S, T, VL, VR)
+
+    mul!(e.vectors, sch.Z, VR)
+
+    return eigen
+end
+
+
+#endregion

@@ -90,15 +90,17 @@ end
 
 # This solver produces two solutions (L/R) for the price of one. We can opt out of calling
 # it if we know it has already been called, so the solution is already in its call!_output
+# fullsolve_internal can also be optionally passed to the fsolver call to compute the full
+# incoming states
 function call!(s::SelfEnergySchurSolver, ω;
-               skipsolve_internal = false, params...)
+               skipsolve_internal = false, fullsolve_internal = false, params...)
     fsolver = s.fsolver
     Rfactors, Lfactors = if skipsolve_internal
         call!_output(fsolver)
     else
         # first apply params to the lead Hamiltonian
         call!(s.hlead; params...)
-        call!(fsolver, ω)
+        call!(fsolver, ω; fullsolve_internal)
     end
     factors = maybe_match_parent(ifelse(s.isleftside, Lfactors, Rfactors), s.leadtoparent)
     return factors
@@ -110,6 +112,10 @@ maybe_match_parent((V, ig, V´), leadtoparent) =
     (view(V, leadtoparent, :), ig, view(V´, :, leadtoparent))
 
 maybe_match_parent(factors, ::Missing) = factors
+
+coupling_from_lead(s::SelfEnergySchurSolver) = flat(s.fsolver.hm)
+coupling_to_lead(s::SelfEnergySchurSolver) = flat(s.fsolver.hp)
+couplings_intralead(s::SelfEnergySchurSolver) = flat(s.fsolver.hm), flat(s.fsolver.hp)
 
 function minimal_callsafe_copy(s::SelfEnergySchurSolver)
     hlead´ = minimal_callsafe_copy(s.hlead)
@@ -138,12 +144,12 @@ end
 #       sites, but for Extended they need to be padded with zeros over the extended sites
 #region
 
-mutable struct SelfEnergyCouplingSchurSolver{C,G,H,S<:SparseMatrixView,S´<:SparseMatrixView} <: ExtendedSelfEnergySolver
+mutable struct SelfEnergyCouplingSchurSolver{T,G,H,S<:SparseMatrixView,S´<:SparseMatrixView} <: ExtendedSelfEnergySolver
     gunit::G
     hcoupling::H
-    V´::S´                              # aliases a view of hcoupling
-    g⁻¹::InverseGreenBlockSparse{C}     # aliases the one in solver(gunit)::AppliedSparseLUGreenSolver
-    V::S                                # aliases a view of hcoupling
+    V´::S´                                    # aliases a view of hcoupling
+    g⁻¹::InverseGreenBlockSparse{Complex{T}}  # aliases the one in solver(gunit)::AppliedSparseLUGreenSolver
+    V::S                                      # aliases a view of hcoupling
 end
 
 #region ## Constructors ##
@@ -231,6 +237,11 @@ function call!(s::SelfEnergyCouplingSchurSolver, ω; params...)
 end
 
 call!_output(s::SelfEnergyCouplingSchurSolver) = matrix(s.V´), matrix(s.g⁻¹), matrix(s.V)
+
+coupling_from_lead(s::SelfEnergyCouplingSchurSolver) = s.V´
+coupling_to_lead(s::SelfEnergyCouplingSchurSolver) = s.V
+couplings_intralead(s::SelfEnergyCouplingSchurSolver) =
+    couplings_intralead(solver(only(selfenergies(s.gunit))))
 
 function minimal_callsafe_copy(s::SelfEnergyCouplingSchurSolver)
     hcoupling´ = minimal_callsafe_copy(s.hcoupling)
