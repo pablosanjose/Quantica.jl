@@ -60,6 +60,7 @@ struct SchurFactorsSolver{T,B}
     L::Matrix{ComplexF64}                             # l<=r ? PL : PL*H' === hp PR  (n × min(l,r))
     R::Matrix{ComplexF64}                             # l<=r ? PR*H === hm PL : PR   (n × min(l,r))
     R´L´::Matrix{ComplexF64}                          # [R'; -L']. L and R must be dense for iG \ (L,R)
+    incoming::EigenComplex{T}                         # incoming (advanced) eigenpairs Φₐ, Λₐ. Computed only if fullsolve_internal = true
     tmp::SchurWorkspace{Complex{T}}                   # L, R, R´L´ need 64bit
 end
 
@@ -76,8 +77,10 @@ function SchurFactorsSolver(h::Hamiltonian{T,<:Any,1}, shift = one(Complex{T})) 
     R´L´ = [R'; -L']
     iG, (p, pd) = store_diagonal_ptrs(fh0)
     ptrs = (p, pd, pd[sinds])
-    workspace = SchurWorkspace{Complex{T}}(size(L), length(linds), length(rinds))
-    return SchurFactorsSolver(T(shift), hm, h0, hp, l_leq_r, iG, ptrs, linds, rinds, sinds, L, R, R´L´, workspace)
+    n, d = size(L)
+    incoming = Eigen(zeros(Complex{T}, d), zeros(Complex{T}, n, d))
+    workspace = SchurWorkspace{Complex{T}}((n, d), length(linds), length(rinds))
+    return SchurFactorsSolver(T(shift), hm, h0, hp, l_leq_r, iG, ptrs, linds, rinds, sinds, L, R, R´L´, incoming, workspace)
 end
 
 function SchurWorkspace{C}((n, d), l, r) where {C}
@@ -181,7 +184,7 @@ end
 call!_output(s::SchurFactorsSolver) =
     (s.tmp.RD, s.tmp.Z11, s.tmp.DR), (s.tmp.LD, s.tmp.Z21´, s.tmp.DL)
 
-function call!(s::SchurFactorsSolver, ω)
+function call!(s::SchurFactorsSolver, ω; fullsolve_internal = false)
     R, Z11, Z21, L, Z11´, Z21´, whichmodes = s.R, s.tmp.Z11, s.tmp.Z21, s.L, s.tmp.Z11´, s.tmp.Z21´, s.tmp.whichmodes
     update_LR!(s)     # We must update L, R in case a parametric parent has been call!-ed
     d = size(Z11, 1)
@@ -199,6 +202,8 @@ function call!(s::SchurFactorsSolver, ω)
     ordschur!(sch, whichmodes)
     copy!(Z11´, view(sch.Z, 1:d, 1:d))
     copy!(Z21´, view(sch.Z, d+1:2d, 1:d))
+
+    fullsolve_internal && eigen_schur_half!(s.incoming, sch)
 
     RZ21, LZ11´, LD, DL, RD, DR = s.tmp.GR, s.tmp.GL, s.tmp.LD, s.tmp.DL, s.tmp.RD, s.tmp.DR
     linds, rinds = s.linds, s.rinds
