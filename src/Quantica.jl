@@ -34,7 +34,8 @@ export sublat, bravais_matrix, lattice, sites, supercell, hamiltonian,
        OrbitalSliceArray, OrbitalSliceVector, OrbitalSliceMatrix, orbaxes, siteindexdict,
        serializer, serialize, serialize!, deserialize!, deserialize,
        meanfield, zerofield,
-       berry_curvature
+       berry_curvature,
+       scattering, scatteringstates
 
 export LatticePresets, LP, RegionPresets, RP, HamiltonianPresets, HP, ExternalPresets, EP
 export EigenSolvers, ES, GreenSolvers, GS
@@ -68,18 +69,20 @@ include("greenfunction.jl")
 include("integrator.jl")
 include("observables.jl")
 include("meanfield.jl")
-include("scattering.jl")
+
 # Plumbing
 include("apply.jl")
 include("show.jl")
 include("convert.jl")
 include("sanitizers.jl")
 
-
 # Solvers
 include("solvers/eigensolvers.jl")
 include("solvers/greensolvers.jl")
 include("solvers/selfenergysolvers.jl")
+
+# Scattering (depends on solvers)
+include("scattering.jl")
 
 # Presets
 include("presets/regions.jl")
