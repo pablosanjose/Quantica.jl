@@ -435,7 +435,6 @@ end
 ############################################################################################
 # LAPACK tools
 #   Wrapper for LAPACK's tgevc! to compute the right eigenvectors of a matrix pencil (A, B)
-#
 #region
 
 using LinearAlgebra: BlasFloat, BlasInt, checksquare, require_one_based_indexing, chkstride1
@@ -511,43 +510,6 @@ for (tgevc, elty, relty) in ((:ztgevc_, :ComplexF64, :Float64),
             return VR
         end
     end
-end
-
-"""
-    eigen_schur_half!(e::Eigen, sch::GeneralizedSchur{<: BlasFloat})
-
-Computes the leading half of the right eigenvectors and eigenvalues of Generalized Schur
-factorization of pencil schur(A,B) efficiently, dispatching to LAPACK's tgevc! routine.
-The compuation is done in-place, overwriting e::Eigen and sch.Q
-"""
-function eigen_schur_half!(eigen::Eigen, sch::GeneralizedSchur{<:BlasFloat})
-    S = sch.S
-    T = sch.T
-
-    n2 = checksquare(S)
-    n = n2 ÷ 2
-    (λ, φs) = eigen
-    length(λ) == n && size(φs) == (n2, n) || argerror("Eigen must have dimension $(n2, n)")
-
-    copy!(e.values, view(sch.values, 1:n))
-
-    # 'R' for Right eigenvectors, 'A' for All modes in the block
-    side   = 'R'
-    howmny = 'S'
-
-    # 'select' is unreferenced when howmny = 'A'
-    select = BlasInt[ifelse(i <= n, 1, 0) for i in 1:n2]
-
-    # Dummy matrix for VL, valid pre-allocation for VR
-    VL = sch.Z
-    VR = view(sch.Q, :, n+1:n2)
-
-    # Dispatch to the generated LAPACK wrappers
-    tgevc!(side, howmny, select, S, T, VL, VR)
-
-    mul!(e.vectors, sch.Z, VR)
-
-    return eigen
 end
 
 
