@@ -109,15 +109,20 @@ end
 
 call!_output(s::SelfEnergySchurSolver) = call!(s, missing; skipsolve_internal = true)
 
-maybe_match_parent((V, ig, V´), leadtoparent) =
+maybe_match_parent((V, ig, V´)::Tuple, leadtoparent) =
+    (view(V, leadtoparent, :), ig, view(V´, :, leadtoparent))
+
+maybe_match_parent((V, ig, V´)::Tuple, leadtoparent) =
     (view(V, leadtoparent, :), ig, view(V´, :, leadtoparent))
 
 maybe_match_parent(factors, ::Missing) = factors
 
 # Scattering API
-coupling_from_lead(s::SelfEnergySchurSolver) = flat(s.fsolver.hm)
+coupling_to_from_leads(s::SelfEnergySchurSolver) = _coupling_to_from_leads(s, s.leadtoparent)
 
-coupling_to_lead(s::SelfEnergySchurSolver) = flat(s.fsolver.hp)
+_coupling_to_from_leads(s, ::Missing) = flat(s.fsolver.hp), flat(s.fsolver.hm)
+_coupling_to_from_leads(s, leadtoparent) =
+    view(flat(s.fsolver.hp), :, leadtoparent), view(flat(s.fsolver.hm), leadtoparent, :)
 
 couplings_intralead(s::SelfEnergySchurSolver) = flat(s.fsolver.hm), flat(s.fsolver.hp)
 
@@ -250,9 +255,7 @@ end
 call!_output(s::SelfEnergyCouplingSchurSolver) = matrix(s.V´), matrix(s.g⁻¹), matrix(s.V)
 
 # Scattering API
-coupling_from_lead(s::SelfEnergyCouplingSchurSolver) = s.V´
-
-coupling_to_lead(s::SelfEnergyCouplingSchurSolver) = s.V
+coupling_to_from_leads(s::SelfEnergyCouplingSchurSolver) = s.V, s.V´
 
 couplings_intralead(s::SelfEnergyCouplingSchurSolver) =
     couplings_intralead(solver(only(selfenergies(s.gunit))))

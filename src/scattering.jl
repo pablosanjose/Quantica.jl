@@ -22,7 +22,7 @@ end
 
 struct ScatteringWorkspace{T}
     ll::Matrix{Complex{T}}       # lead-lead intermediate preallocation
-    ll´::Matrix{Complex{T}}       # lead-lead intermediate preallocation
+    ll´::Matrix{Complex{T}}      # lead-lead intermediate preallocation
     lc::Matrix{Complex{T}}       # lead-central intermediate preallocation
     cl::Matrix{Complex{T}}       # central-lead intermediate preallocation
     leadsol::LeadSolution{T}     # solution preallocation
@@ -55,7 +55,7 @@ end
 ScatteringWorkspace(_) = nothing
 
 function ScatteringWorkspace(s::Union{SelfEnergySchurSolver{T},SelfEnergyCouplingSchurSolver{T}}) where {T}
-    (nc, nl) = size(coupling_from_lead(s))
+    (nl, nc) = size(first(coupling_to_from_lead(s)))
     d = deflated_dimension(s)
     ll = Matrix{Complex{T}}(undef, nl, nl)
     ll´ = similar(ll)
@@ -95,11 +95,13 @@ Base.copy(s::LeadSolution) =
 
 ## SelfEnergySchurSolver lead solution ##
 
-# This is the uniform coupling case, for which φʳR = gʳh₊(iG₀₀Γ-1)Φₐ
-# The source term reads source = iΓΦₐΛₐ⁻¹
+# The reflected wave reads φʳR = (gʳh₊)ⁿ⁻¹(iG₁₁Γ-1)Φₐ at cell n
+# The G₁₁ matrix is G₁₁ = gʳ + gʳH_{LC}G₀₀H_{CL}gʳ, where G₀₀ is central G at the contact
+# The source term reads source = H_{CL}(Φₐ - gʳh₊ΦₐΛₐ⁻¹)
 function solve_lead(solver::SelfEnergySchurSolver, Gω, leadindex, sw::ScatteringWorkspace)
     leadsol, Γ, ll = sw.leadsol, sw.ll´, sw.ll
     G00 = Gω[leadindex, leadindex]
+    HLC, HCL = coupling_to_from_leads(solver)
     hm, _ = couplings_intralead(solver)
     grhp = outgoing_gh(solver)
     λa, Φa = incoming_λΦ(solver)
@@ -108,6 +110,9 @@ function solve_lead(solver::SelfEnergySchurSolver, Gω, leadindex, sw::Scatterin
     mul!(Γ, hm, grhp, im, 0)        # ih₋gʳh₊
     ll .= Γ'
     Γ .+= ll                        # ih₋gʳh₊ - i(h₋gʳh₊)')
+
+    # Building G₁₁
+
 
     # Populating lead solution
     @show size(leadsol.phi_a), size(Φa)
