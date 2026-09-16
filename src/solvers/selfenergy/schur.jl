@@ -112,26 +112,22 @@ call!_output(s::SelfEnergySchurSolver) = call!(s, missing; skipsolve_internal = 
 maybe_match_parent((V, ig, V´)::Tuple, leadtoparent) =
     (view(V, leadtoparent, :), ig, view(V´, :, leadtoparent))
 
-maybe_match_parent((V, ig, V´)::Tuple, leadtoparent) =
-    (view(V, leadtoparent, :), ig, view(V´, :, leadtoparent))
-
 maybe_match_parent(factors, ::Missing) = factors
 
 # Scattering API
-coupling_to_from_leads(s::SelfEnergySchurSolver) = _coupling_to_from_leads(s, s.leadtoparent)
+coupling_to_from_lead(s::SelfEnergySchurSolver) = _coupling_to_from_lead(s, s.leadtoparent)
 
-_coupling_to_from_leads(s, ::Missing) = flat(s.fsolver.hp), flat(s.fsolver.hm)
-_coupling_to_from_leads(s, leadtoparent) =
+_coupling_to_from_lead(s, ::Missing) = flat(s.fsolver.hp), flat(s.fsolver.hm)
+_coupling_to_from_lead(s, leadtoparent) =
     view(flat(s.fsolver.hp), :, leadtoparent), view(flat(s.fsolver.hm), leadtoparent, :)
 
 couplings_intralead(s::SelfEnergySchurSolver) = flat(s.fsolver.hm), flat(s.fsolver.hp)
 
-incoming_λΦ(s::SelfEnergySchurSolver) = s.fsolver.incoming
+incoming_λΦ(s::SelfEnergySchurSolver) = s.fsolver.incoming_λΦ
 
-outgoing_gh(s::SelfEnergySchurSolver) = s.fsolver.outgoing
+outgoing_gr(s::SelfEnergySchurSolver) = s.fsolver.outgoing_gr
 
-deflated_dimension(s::SelfEnergySchurSolver) = length(s.fsolver.incoming.values)
-
+deflated_dimension(s::SelfEnergySchurSolver) = length(s.fsolver.incoming_λΦ.values)
 
 function minimal_callsafe_copy(s::SelfEnergySchurSolver)
     hlead´ = minimal_callsafe_copy(s.hlead)
@@ -255,10 +251,16 @@ end
 call!_output(s::SelfEnergyCouplingSchurSolver) = matrix(s.V´), matrix(s.g⁻¹), matrix(s.V)
 
 # Scattering API
-coupling_to_from_leads(s::SelfEnergyCouplingSchurSolver) = s.V, s.V´
+coupling_to_from_lead(s::SelfEnergyCouplingSchurSolver) = s.V, s.V´
 
 couplings_intralead(s::SelfEnergyCouplingSchurSolver) =
     couplings_intralead(solver(only(selfenergies(s.gunit))))
+
+incoming_λΦ(s::SelfEnergyCouplingSchurSolver) = s.fsolver.incoming_λΦ
+
+outgoing_gr(s::SelfEnergyCouplingSchurSolver) = s.fsolver.outgoing_gr
+
+deflated_dimension(s::SelfEnergyCouplingSchurSolver) = length(s.fsolver.incoming_λΦ.values)
 
 function minimal_callsafe_copy(s::SelfEnergyCouplingSchurSolver)
     hcoupling´ = minimal_callsafe_copy(s.hcoupling)

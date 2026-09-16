@@ -98,12 +98,12 @@ Base.copy(s::LeadSolution) =
 # The reflected wave reads φʳR = (gʳh₊)ⁿ⁻¹(iG₁₁Γ-1)Φₐ at cell n
 # The G₁₁ matrix is G₁₁ = gʳ + gʳH_{LC}G₀₀H_{CL}gʳ, where G₀₀ is central G at the contact
 # The source term reads source = H_{CL}(Φₐ - gʳh₊ΦₐΛₐ⁻¹)
-function solve_lead(solver::SelfEnergySchurSolver, Gω, leadindex, sw::ScatteringWorkspace)
-    leadsol, Γ, ll = sw.leadsol, sw.ll´, sw.ll
+function solve_lead(solver::Union{SelfEnergySchurSolver,SelfEnergyCouplingSchurSolver}, Gω, leadindex, sw::ScatteringWorkspace)
+    leadsol, Γ, ll, lc, cl = sw.leadsol, sw.ll´, sw.ll, sw.lc, sw.cl
     G00 = Gω[leadindex, leadindex]
-    HLC, HCL = coupling_to_from_leads(solver)
+    HLC, HCL = coupling_to_from_lead(solver)
     hm, _ = couplings_intralead(solver)
-    grhp = outgoing_gh(solver)
+    gr = outgoing_gr(solver)
     λa, Φa = incoming_λΦ(solver)
 
     # Building Γ = i(h₋gʳh₊ - (h₋gʳh₊)')
@@ -112,10 +112,10 @@ function solve_lead(solver::SelfEnergySchurSolver, Gω, leadindex, sw::Scatterin
     Γ .+= ll                        # ih₋gʳh₊ - i(h₋gʳh₊)')
 
     # Building G₁₁
+    # mul!(
 
 
     # Populating lead solution
-    @show size(leadsol.phi_a), size(Φa)
     copy!(leadsol.phi_a, Φa)
     copy!(leadsol.lambda_a, λa)
     copy!(leadsol.gh, grhp)
@@ -129,5 +129,7 @@ function solve_lead(solver::SelfEnergySchurSolver, Gω, leadindex, sw::Scatterin
 
     return leadsol
 end
+
+solve_lead(solver, _...) = nothing  # fallback for non-Schur leads
 
 #endregion
