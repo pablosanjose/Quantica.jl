@@ -517,6 +517,17 @@ end
     @test T(1.99999999999) ≈ 2
     @test T(2.00000000001) ≈ 1
 
+    # Schur velocity classifier stability
+    nnn(dr, ϕ) = ifelse(iseven(round(Int, atan(dr[2], dr[1])/(pi/3))), cis(ϕ), cis(-ϕ))
+    haldane_hop(sub, ϕ) = @hopping((r, dr; α = Returns(0)) -> α(r)/(6√3)*nnn(dr, ϕ), sublats = sub=>sub, range = (0.9,1.1))
+    haldane = haldane_hop(:A, π/2) + haldane_hop(:B, -π/2)
+    h = LP.honeycomb() |> supercell((2,-1), (-1,2)) |> hopping(-3.1) + haldane |> supercell((1,1), (1,0)) |> stitch((0, :))
+    gR = h(α = Returns(0.02)) |> greenfunction(GS.Schur(boundary = 0))
+    gL = h(α = Returns(-0.02)) |> greenfunction(GS.Schur(boundary = 0))
+    gC = supercell(h(α = r -> 0.02 * sign(r[1])); region = r -> abs(r[1]) < 0.51) |>  attach(gR; region = r->r[1] >= 0) |> attach(gL; region = r->r[1] <= 0, reverse = true) |> greenfunction
+    G = conductance(gC[1])
+    @test 0 < G(0.019) < 2
+
     glead = LP.square() |> hamiltonian(hopping(1)) |> supercell((0,1), region = r -> -1 <= r[1] <= 1) |> attach(nothing; cells = SA[10]) |> greenfunction(GS.Schur(boundary = 0));
     contact1 = r -> r[1] ≈ 5 && -1 <= r[2] <= 1
     contact2 = r -> r[2] ≈ 5 && -1 <= r[1] <= 1

@@ -76,7 +76,7 @@ call!(gs::GreenSlice{T}, ω::Complex{T}, Σ...; post = identity, symmetrize = mi
 real_or_complex_convert(::Type{T}, ω::Real) where {T<:Real} = convert(T, ω)
 real_or_complex_convert(::Type{T}, ω::Complex) where {T<:Real} = convert(Complex{T}, ω)
 
-# The default ω shift is a tiny 4*eps(T) since sqrt(eps(T)) introduces unnecessary errors
+# The default ω shift is a tiny 5*eps(T) since sqrt(eps(T)) introduces unnecessary errors
 # The reason for the 5 is empirical (Schur becomes able to resolve λ degeneracies with this)
 retarded_omega(ω::T, g::GreenFunction) where {T<:Real} =
     ω + im * 5*eps(float(T)) * needs_omega_shift(g)
