@@ -12,7 +12,6 @@ using LinearAlgebra
 using Dictionaries
 using ProgressMeter
 using Random
-using SuiteSparse
 using FunctionWrappers: FunctionWrapper
 using ExprTools
 using IntervalTrees

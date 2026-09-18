@@ -13,13 +13,15 @@ jobs:
     if: github.event_name == 'push' && contains(toJson(github.event.commits), '[skip test]') == false && contains(toJson(github.event.commits), '[skip tests]') == false
     name: Julia ${{ matrix.version }} - ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.version == 'nightly' }}
     strategy:
+      fail-fast: false
       matrix:
         version:
           - '1'
           - 'lts'
-          # - 'pre'
-          # - 'nightly'
+          - 'pre'
+          - 'nightly'
         os:
           - ubuntu-latest
           - windows-latest
@@ -33,6 +35,7 @@ jobs:
       - uses: julia-actions/julia-buildpkg@latest
       - uses: julia-actions/julia-runtest@latest
       - uses: julia-actions/julia-uploadcodecov@latest
+        if: matrix.version != 'nightly'
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
   docs:
