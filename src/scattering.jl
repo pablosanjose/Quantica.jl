@@ -1,4 +1,4 @@
-############################################################################################
+ ############################################################################################
 # Scattering
 #   Represents a scattering problem with a central 0D system and N contacts
 # ScatteringSolution
@@ -97,35 +97,44 @@ Base.copy(s::LeadSolution) =
 
 # The reflected wave reads φʳR = (gʳh₊)ⁿ⁻¹(iG₁₁Γ-1)Φₐ at cell n
 # The G₁₁ matrix is G₁₁ = gʳ + gʳH_{LC}G₀₀H_{CL}gʳ, where G₀₀ is central G at the contact
+# Then iG₁₁Γ = i(1 + gʳH_{LC}G₀₀H_{CL})gʳΓ and (iG₁₁Γ-1)Φₐ = i(1 + gʳH_{LC}G₀₀H_{CL})gʳΓΦₐ - Φₐ
 # The source term reads source = H_{CL}(Φₐ - gʳh₊ΦₐΛₐ⁻¹)
 function solve_lead(solver::Union{SelfEnergySchurSolver,SelfEnergyCouplingSchurSolver}, Gω, leadindex, sw::ScatteringWorkspace)
-    leadsol, Γ, ll, lc, cl = sw.leadsol, sw.ll´, sw.ll, sw.lc, sw.cl
-    G00 = Gω[leadindex, leadindex]
+    leadsol, ll, ll´, lc, cl = sw.leadsol, sw.ll, sw.ll´, sw.lc, sw.cl
+    G₀₀ = Gω[leadindex, leadindex]
     HLC, HCL = coupling_to_from_lead(solver)
-    hm, _ = couplings_intralead(solver)
-    gr = outgoing_gr(solver)
-    λa, Φa = incoming_λΦ(solver)
+    h₋, h₊ = couplings_intralead(solver)
+    gʳ = outgoing_gr(solver)
+    λₐ, Φₐ = incoming_λΦ(solver)
+
+    # Copying λₐ and Φₐ to lead solution
+    copy!(leadsol.lambda_a, λₐ)
+    copy!(leadsol.phi_a, Φₐ)
+
+    # Building gʳh₊
+    gʳh₊ = mul!(leadsol.gh, gʳ, h₊)        # gʳh₊
 
     # Building Γ = i(h₋gʳh₊ - (h₋gʳh₊)')
-    mul!(Γ, hm, grhp, im, 0)        # ih₋gʳh₊
-    ll .= Γ'
-    Γ .+= ll                        # ih₋gʳh₊ - i(h₋gʳh₊)')
+    mul!(ll, h₋, gʳh₊, im, 0)       # ih₋gʳh₊
+    ll´ .= ll'
+    ll´ .+= ll                      # ih₋gʳh₊ - i(h₋gʳh₊)')
+    gʳΓ = mul!(ll, gʳ, ll´)         # gʳΓ = gʳ(i(h₋gʳh₊ - (h₋gʳh₊)')), aliases ll
+    gʳΓΦₐ = mul!(ll´, gʳΓ, Φₐ)      # gʳΓΦₐ, aliases ll´. ll is now free
 
-    # Building G₁₁
-    # mul!(
+    # Building G₁₁ abd φʳR
+    φʳR = leadsol.phiR
+    mul!(cl, G₀₀, HCL)
+    mul!(lc, gʳ, HLC)
+    copyto!(ll, I)
+    mul!(ll, lc, cl, im, im)        # i(1 + gʳH_{LC}G₀₀H_{CL})
+    copy!(φʳR, Φₐ)
+    mul!(φʳR, ll, gʳΓΦₐ, 1, -1)     # φʳR = i(1 + gʳH_{LC}G₀₀H_{CL})gʳΓΦₐ - Φₐ = (iG₁₁Γ-1)Φₐ
 
-
-    # Populating lead solution
-    copy!(leadsol.phi_a, Φa)
-    copy!(leadsol.lambda_a, λa)
-    copy!(leadsol.gh, grhp)
-    mul!(leadsol.source, Γ, Φa, im, 0)
-    leadsol.source ./= transpose(λa)    # iΓΦₐΛₐ⁻¹
-
-    # Building φʳR = (iG₀₀Γ-1)Φₐ
-    copyto!(ll, -I)
-    mul!(ll, G00, Γ, im, 1)         # (iG₀₀Γ-1)
-    mul!(leadsol.phiR, grhp, mul!(Γ, ll, Φa)) # φʳR = gʳh₊(iG₀₀Γ-1)Φₐ, we reuse Γ as temporary
+    # Building source
+    mul!(ll, gʳh₊, Φₐ, -1, 0)
+    ll ./= transpose(λₐ)            # -gʳh₊ΦₐΛₐ⁻¹
+    ll .+= Φₐ                       # Φₐ - gʳh₊ΦₐΛₐ⁻¹
+    mul!(leadsol.source, HCL, ll)   # H_{CL}(Φₐ - gʳh₊ΦₐΛₐ⁻¹)
 
     return leadsol
 end

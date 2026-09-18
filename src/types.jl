@@ -1183,6 +1183,8 @@ end
 
 matrix(s::SparseMatrixView) = s.mat
 
+matrix_view(s::SparseMatrixView) = s.matview
+
 function update!(s::SparseMatrixView)
     nzs = nonzeros(s.mat)
     nzs´ = nonzeros(parent(s.matview))

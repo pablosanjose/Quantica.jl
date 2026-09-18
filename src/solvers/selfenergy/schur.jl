@@ -109,7 +109,7 @@ end
 
 call!_output(s::SelfEnergySchurSolver) = call!(s, missing; skipsolve_internal = true)
 
-maybe_match_parent((V, ig, V´)::Tuple, leadtoparent) =
+maybe_match_parent((V, ig, V´), leadtoparent) =
     (view(V, leadtoparent, :), ig, view(V´, :, leadtoparent))
 
 maybe_match_parent(factors, ::Missing) = factors
@@ -251,16 +251,18 @@ end
 call!_output(s::SelfEnergyCouplingSchurSolver) = matrix(s.V´), matrix(s.g⁻¹), matrix(s.V)
 
 # Scattering API
-coupling_to_from_lead(s::SelfEnergyCouplingSchurSolver) = s.V, s.V´
+coupling_to_from_lead(s::SelfEnergyCouplingSchurSolver) = matrix_view(s.V), matrix_view(s.V´)
 
 couplings_intralead(s::SelfEnergyCouplingSchurSolver) =
     couplings_intralead(solver(only(selfenergies(s.gunit))))
 
-incoming_λΦ(s::SelfEnergyCouplingSchurSolver) = s.fsolver.incoming_λΦ
+factor_solver(s::SelfEnergyCouplingSchurSolver) = solver(only(selfenergies(s.gunit))).fsolver
 
-outgoing_gr(s::SelfEnergyCouplingSchurSolver) = s.fsolver.outgoing_gr
+incoming_λΦ(s::SelfEnergyCouplingSchurSolver) = factor_solver(s).incoming_λΦ
 
-deflated_dimension(s::SelfEnergyCouplingSchurSolver) = length(s.fsolver.incoming_λΦ.values)
+outgoing_gr(s::SelfEnergyCouplingSchurSolver) = factor_solver(s).outgoing_gr
+
+deflated_dimension(s::SelfEnergyCouplingSchurSolver) = length(factor_solver(s).incoming_λΦ.values)
 
 function minimal_callsafe_copy(s::SelfEnergyCouplingSchurSolver)
     hcoupling´ = minimal_callsafe_copy(s.hcoupling)
