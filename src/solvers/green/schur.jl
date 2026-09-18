@@ -217,15 +217,16 @@ function call!(s::SchurFactorsSolver, ω)
     return (PR_R_Z21, Z11, R´_PR), (PL_L_Z11´, Z21´, L´_PL)
 end
 
-function schur_pencil!(s::SchurFactorsSolver, ω)
+function schur_pencil!(s::SchurFactorsSolver{T}, ω) where {T}
     update_iG!(s, ω)  # iG = ω - h0 + iΩP'P
     A, B = pencilAB!(s)
     sch = schur!(A, B)
     # disallow zeros in deflated α's or β's for real ω
-    tol = 5*eps(real(typeof(ω)))
+    tol = sqrt(eps(T))
+    ωshift = 5*eps(T)
     if iszero(imag(ω)) && (any(x->abs(x)<tol, sch.α) || any(x->abs(x)<tol, sch.β))
         # Schur pencil has zero α or β. Recomputing with imag(ω) = tol to avoid singular pencil
-        sch = schur_pencil!(s, ω + im * tol)
+        sch = schur_pencil!(s, ω + im * ωshift)
     end
     return sch
 end
@@ -293,10 +294,12 @@ minimal_callsafe_copy(s::SchurWorkspace) =
   - For this to work correctly the propagating eigenvalues should come first.
 =#
 
-function ordschur_retarded!(sch::GeneralizedSchur{Complex{T}}, s::SchurFactorsSolver, ω; tol = 5*eps(T)) where {T}
+function ordschur_retarded!(sch::GeneralizedSchur{Complex{T}}, s::SchurFactorsSolver, ω) where {T}
+    tol = sqrt(eps(T))
+    ωshift = 5*eps(T)
     whichmodes, V´, VZ = s.tmp.whichmodes, s.tmp.V1, s.tmp.V2
-    @. whichmodes = abs(sch.β)-tol < abs(sch.α) < abs(sch.β)+tol      # propagating
-    if any(whichmodes)                                          # classify propagating modes using velocity
+    @. whichmodes = abs(sch.β)-tol < abs(sch.α) < abs(sch.β)+tol    # propagating classifier (lax)
+    if any(whichmodes)                                              # classify propagating modes using velocity
         nprop = sum(whichmodes)
         ordschur!(sch, whichmodes)
         V´ = build_velocity!(V´, VZ, sch.Z)
@@ -309,7 +312,7 @@ function ordschur_retarded!(sch::GeneralizedSchur{Complex{T}}, s::SchurFactorsSo
     if !success  # retarded and advanced modes could not be resolved (flat-band-like situation)
         # We hit this when more than two propagating modes with the same λ have vk = 0
         # Need to recompute the pencil and Schur with a larger imag(ω) to break the degeneracy
-        imω = iszero(imag(ω)) ? tol : 2*imag(ω)
+        imω = iszero(imag(ω)) ? ωshift : 2*imag(ω)
         # @warn "Retarded and advanced modes could not be resolved at ω = $ω. Recomputing with a larger imag(ω) = $imω to break degeneracy."
         ω´ = ω + im * imω
         sch´ = schur_pencil!(s, ω´)
