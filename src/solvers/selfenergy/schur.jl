@@ -123,7 +123,7 @@ _coupling_to_from_lead(s, leadtoparent) =
 
 couplings_intralead(s::SelfEnergySchurSolver) = flat(s.fsolver.hm), flat(s.fsolver.hp)
 
-modesolver(s::SelfEnergySchurSolver) = modesolver(s.fsolver)
+modesolution(s::SelfEnergySchurSolver) = modesolution(s.fsolver)
 
 function minimal_callsafe_copy(s::SelfEnergySchurSolver)
     hlead´ = minimal_callsafe_copy(s.hlead)
@@ -252,7 +252,7 @@ coupling_to_from_lead(s::SelfEnergyCouplingSchurSolver) = matrix_view(s.V), matr
 couplings_intralead(s::SelfEnergyCouplingSchurSolver) =
     couplings_intralead(solver(only(selfenergies(s.gunit))))
 
-modesolver(s::SelfEnergyCouplingSchurSolver) = modesolver(solver(only(selfenergies(s.gunit))).fsolver)
+modesolution(s::SelfEnergyCouplingSchurSolver) = modesolution(solver(only(selfenergies(s.gunit))).fsolver)
 
 function minimal_callsafe_copy(s::SelfEnergyCouplingSchurSolver)
     hcoupling´ = minimal_callsafe_copy(s.hcoupling)

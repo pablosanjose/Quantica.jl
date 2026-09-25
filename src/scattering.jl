@@ -34,6 +34,7 @@ struct LeadSolution{T}
     phi_a::Matrix{Complex{T}}         # incoming modes Φₐ
     lambda_a::Vector{Complex{T}}      # eigenvalues of incoming modes λₐ, so Λₐ = Diagonal(λₐ)
     ggpa::Matrix{Complex{T}}          # gʳΓΦₐ matrix, required to compute scattering matrix
+    prpg::Matrix{Complex{T}}          # Φᵣ'Γ matrix, required to compute scattering matrix
     source::Matrix{Complex{T}}        # source in central region V'(Φₐ - gʳh₊ΦₐΛₐ⁻¹)
 end
 
@@ -93,8 +94,9 @@ function LeadSolution{T}(nl, nc, d) where {T}
     phi_a = Matrix{Complex{T}}(undef, nl, d)
     lambda_a = Vector{Complex{T}}(undef, d)
     ggpa = Matrix{Complex{T}}(undef, nl, d)
+    prpg = Matrix{Complex{T}}(undef, d, nl)
     source = Matrix{Complex{T}}(undef, nc, d)
-    return LeadSolution(gh, phi_a, lambda_a, ggpa, source)
+    return LeadSolution(gh, phi_a, lambda_a, ggpa, prpg, source)
 end
 
 # at least one of the leadworkspace is not Nothing, otherwise this is never called
@@ -137,7 +139,7 @@ Base.copy(s::ScatteringSolution) = ScatteringSolution(s.gω, copy_or_nothing.(s.
 Base.copy(s::ScatteringMatrix) = ScatteringMatrix(copy.(s.PhiS), copy.(s.S))
 
 copy_or_nothing(s::LeadSolution) =
-    LeadSolution(copy(s.gh), copy(s.phi_a), copy(s.lambda_a), copy(s.ggpa), copy(s.source))
+    LeadSolution(copy(s.gh), copy(s.phi_a), copy(s.lambda_a), copy(s.ggpa), copy(s.prpg), copy(s.source))
 
 copy_or_nothing(::Nothing) = nothing
 
@@ -149,21 +151,22 @@ function solve_lead(sw::LeadWorkspace, solver::Union{SelfEnergySchurSolver,SelfE
     _, HCL = coupling_to_from_lead(solver)
     h₋, h₊ = couplings_intralead(solver)
     gʳ = outgoing_gr(solver)
-    λₐ, Φₐ = incoming_λΦ(solver)
-
-    # Building gʳh₊
-    gʳh₊ = mul!(leadsol.gh, gʳ, h₊)   # gʳh₊
-
-    # Building Γ = i(h₋gʳh₊ - (h₋gʳh₊)') and gʳΓΦₐ
-    gʳΓΦₐ = leadsol.ggpa
-    mul!(ll, h₋, gʳh₊, im, 0)         # ih₋gʳh₊
-    gʳΓΦₐ .= ll' .+ ll                # gʳΓΦₐ temporarily holds Γ = ih₋gʳh₊ - i(h₋gʳh₊)'
-    gʳΓ = mul!(ll, gʳ, gʳΓΦₐ)         # gʳΓ = gʳ(i(h₋gʳh₊ - (h₋gʳh₊)')), aliases ll
-    mul!(gʳΓΦₐ, gʳΓ, Φₐ)              # ll is now free
+    λₐ, Φₐ, Φᵣ = incoming_λ(solver), incoming_Φ(solver), outgoing_Φ(solver)
 
     # Copying λₐ and Φₐ to lead solution
     copy!(leadsol.lambda_a, λₐ)
     copy!(leadsol.phi_a, Φₐ)
+
+    # Building gʳh₊
+    gʳh₊ = mul!(leadsol.gh, gʳ, h₊)   # gʳh₊
+
+    # Building Γ = i(h₋gʳh₊ - (h₋gʳh₊)') Φᵣ'Γ and gʳΓΦₐ
+    gʳΓΦₐ, Φᵣ´Γ = leadsol.ggpa, leadsol.prpg
+    mul!(ll, h₋, gʳh₊, im, 0)         # ih₋gʳh₊
+    Γ = (gʳΓΦₐ .= ll' .+ ll)          # gʳΓΦₐ temporarily holds Γ = ih₋gʳh₊ - i(h₋gʳh₊)'
+    mul!(Φᵣ´Γ, Φᵣ', Γ)                # Φᵣ´Γ
+    gʳΓ = mul!(ll, gʳ, Γ)             # gʳΓ = gʳ(i(h₋gʳh₊ - (h₋gʳh₊)')), aliases ll
+    mul!(gʳΓΦₐ, gʳΓ, Φₐ)              # ll is now free
 
     # Building source
     mul!(ll, gʳh₊, Φₐ, -1, 0)
@@ -195,7 +198,7 @@ function compute_scattering_row!(s::Scattering, j, Gω, leadsols, solvers)
     # Diagonal block (reflection)
     solver, leadsol, leadtmp = solvers[j], leadsols[j], s.leadtmps[j]
     cl, lc, ll, smat = s.scattmp.cl_ij[j,j], s.scattmp.lc_i[j], leadtmp.ll, s.scattmp.smat
-    PhiR, r, G00, Φₐ, gʳΓΦₐ = smat.PhiS[j,j], smat.S[j,j], Gω[j,j], leadsol.phi_a, leadsol.ggpa
+    PhiR, r, G00, Φₐ, gʳΓΦₐ, Φᵣ´Γ = smat.PhiS[j,j], smat.S[j,j], Gω[j,j], leadsol.phi_a, leadsol.ggpa, leadsol.prpg
     HLC, HCL = coupling_to_from_lead(solver)
     gʳ = outgoing_gr(solver)
 
@@ -210,15 +213,15 @@ function compute_scattering_row!(s::Scattering, j, Gω, leadsols, solvers)
     # reflection matrix r
     vaf = incoming_vfactors(solver)
     vrf = outgoing_vfactors(solver)
-    @show 1 ./ vaf .^ 2, vrf .^ 2
-    @. r = vrf * PhiR * vaf'
+    mul!(r, Φᵣ´Γ, PhiR)
+    @. r = vrf * r * vaf'
 
     # Off-diagonal blocks (transmissions)
     for i in 1:length(leadsols)
         (i == j || isnothing(leadsols[i])) && continue
-        solver´ = solvers[j]
+        solver´, leadsol´ = solvers[i], leadsols[i]
         c´l, l´c´ = s.scattmp.cl_ij[i,j], s.scattmp.lc_i[i]
-        PhiT, t, G0´0 = smat.PhiS[i,j], smat.S[i,j], Gω[i,j]
+        PhiT, t, G0´0, Φᵣ´Γ = smat.PhiS[i,j], smat.S[i,j], Gω[i,j], leadsol´.prpg
         HL´C, _ = coupling_to_from_lead(solver´)
         g´ʳ = outgoing_gr(solver´)
 
@@ -230,7 +233,8 @@ function compute_scattering_row!(s::Scattering, j, Gω, leadsols, solvers)
 
         # transmission matrix t
         vrf´ = outgoing_vfactors(solver´)
-        @. t = vrf´ * PhiT * vaf'
+        mul!(t, Φᵣ´Γ, PhiT)
+        @. t = vrf´ * t * vaf'
     end
 
     return s
