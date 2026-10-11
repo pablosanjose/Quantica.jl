@@ -212,6 +212,13 @@ end
     for ω in subdiv(-3, 3, 20)
         @test all(x -> sign(x) == sign(ω), ρs(ω))
     end
+
+    # Issue 413
+    @test Quantica.jackson!(ones(201))[1] == 1
+    h = LP.honeycomb() |> hopping(1) |> supercell(region = RP.circle(10))
+    g = h |> attach(nothing, region = RP.circle(0.6)) |>
+        greenfunction(GS.KPM(order = 200, bandrange = (-3.1, 3.1)))
+    @test densitymatrix(g[diagonal(1)])(0.0) ≈ 0.5*I
 end
 
 @testset "greenfunction bands" begin
