@@ -816,3 +816,8 @@ end
         (φn * φn') .* fn
     end |> diag ≈ SA[1,1,1,1]/2
 end
+
+
+# @testset begin "Scattering"
+
+# end

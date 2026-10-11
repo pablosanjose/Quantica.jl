@@ -1,4 +1,4 @@
- ############################################################################################
+############################################################################################
 # Scattering
 #   Represents a scattering problem with a central 0D system and N contacts
 # ScatteringSolution
@@ -53,11 +53,6 @@ struct ScatteringSolution{T,N,G<:GreenSolution{T},S<:NTuple{N,Union{Nothing,Lead
     gω::G
     leadsols::S                  # any lead that is not empty Schur has `nothing` lead solution
     matrix::ScatteringMatrix{T}  # and its corresponding smat blocks are empty matrices
-end
-
-struct ScatteringStates{T,H<:Hamiltonian{T}}
-    h_with_leads::H              # combined Hamiltonian with a number of lead unit cells
-    state::Matrix{Complex{T}}    # columns are scattering states for a given incoming mode
 end
 
 ## Constructors ##
@@ -120,6 +115,12 @@ lead_flatsize(lw::LeadWorkspace) = size(lw.ll, 1)
 central_flatsize(::Nothing) = 0
 central_flatsize(lw::LeadWorkspace) = size(lw.leadsol.source, 1)
 
+numpropagating(::Nothing) = 0
+numpropagating(ls::LeadSolution) = numpropagating(ls.lambda_a)
+numpropagating(λs::AbstractVector{Complex{T}}; tol = sqrt(eps(T))) where {T} =
+    findfirst(λ -> !ispropagating(λ; tol), λs) - 1
+
+ispropagating(λ::Complex{T}; tol = sqrt(eps(T))) where {T} = abs(abs(λ) - 1) < tol
 
 ## API ##
 
@@ -134,6 +135,12 @@ function call!(s::Scattering{<:Any,N}, ω; params...) where {N}
 end
 
 (s::Scattering)(ω; params...) = copy(call!(s, ω; params...))
+
+function getindex(s::ScatteringSolution, j::Int, i::Int = j)
+    nj = numpropagating(s.leadsols[j])
+    ni = i == j ? nj : numpropagating(s.leadsols[i])
+    return view(s.matrix.S[j,i], 1:nj, 1:ni)
+end
 
 Base.copy(s::ScatteringSolution) = ScatteringSolution(s.gω, copy_or_nothing.(s.leadsols), copy(s.matrix))
 Base.copy(s::ScatteringMatrix) = ScatteringMatrix(copy.(s.PhiS), copy.(s.S))
@@ -154,6 +161,7 @@ function solve_lead(sw::LeadWorkspace, solver::Union{SelfEnergySchurSolver,SelfE
     λₐ, Φₐ, Φᵣ = incoming_λ(solver), incoming_Φ(solver), outgoing_Φ(solver)
 
     # Copying λₐ and Φₐ to lead solution
+    check_propagating_first(λₐ)
     copy!(leadsol.lambda_a, λₐ)
     copy!(leadsol.phi_a, Φₐ)
 
@@ -179,6 +187,12 @@ end
 
 # fallback for non-Schur leads
 solve_lead(_...) = nothing
+
+# check eigenvalues are sorted with propagating modes first, otherwise the scattering matrix
+# blocks will be wrong
+check_propagating_first(λ) =
+    any(ispropagating, view(λ, numpropagating(λ)+1:length(λ))) &&
+        internalerror("solve_lead: eigenvalues of incoming modes must be sorted with propagating modes first")
 
 function compute_scattering_matrix!(s::Scattering, Gω, leadsols, solvers)
     for j in eachindex(s.leadtmps)
@@ -240,5 +254,16 @@ function compute_scattering_row!(s::Scattering, j, Gω, leadsols, solvers)
     return s
 end
 
+
+#endregion
+
+############################################################################################
+# ScatteringStates
+#region
+
+# struct ScatteringStates{T,H<:Hamiltonian{T}}
+#     h_with_leads::H              # combined Hamiltonian with a number of lead unit cells
+#     state::Matrix{Complex{T}}    # columns are scattering states for a given incoming mode
+# end
 
 #endregion
