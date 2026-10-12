@@ -212,6 +212,13 @@ end
     for ω in subdiv(-3, 3, 20)
         @test all(x -> sign(x) == sign(ω), ρs(ω))
     end
+
+    # Issue 413
+    @test Quantica.jackson!(ones(201))[1] == 1
+    h = LP.honeycomb() |> hopping(1) |> supercell(region = RP.circle(10))
+    g = h |> attach(nothing, region = RP.circle(0.6)) |>
+        greenfunction(GS.KPM(order = 200, bandrange = (-3.1, 3.1)))
+    @test densitymatrix(g[diagonal(1)])(0.0) ≈ 0.5*I
 end
 
 @testset "greenfunction bands" begin
@@ -292,9 +299,7 @@ end
         supercell(region = RP.circle(20)) |>
         attach(nothing, region = RP.circle(1)) |> greenfunction(GS.KPM(order = 300, bandrange = (-3.1, 3.1)))
     ρs = ldos(g[1], kernel = missing)
-    for ω in -3:0.1:3
-        @test all(>=(0), ρs(ω))
-    end
+    @test all(ω -> sum(ρs(ω))>=0, -3:0.1:3)
 end
 
 @testset "greenfunction sparse slicing" begin

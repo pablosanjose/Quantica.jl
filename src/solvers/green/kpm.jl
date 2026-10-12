@@ -118,8 +118,8 @@ minusat!(A::Vector{<:Number}, n, x) = (A[n] -= x)
 
 function jackson!(μ::AbstractVector)
     order = length(μ) - 1
-    @inbounds for n in eachindex(μ)
-        μ[n] *= ((order - n + 1) * cos(π * n / (order + 1)) +
+    @inbounds for n in 0:order
+        μ[n+1] *= ((order - n + 1) * cos(π * n / (order + 1)) +
                 sin(π * n / (order + 1)) * cot(π / (order + 1))) / (order + 1)
     end
     return μ
