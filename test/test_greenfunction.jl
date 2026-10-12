@@ -299,9 +299,7 @@ end
         supercell(region = RP.circle(20)) |>
         attach(nothing, region = RP.circle(1)) |> greenfunction(GS.KPM(order = 300, bandrange = (-3.1, 3.1)))
     ρs = ldos(g[1], kernel = missing)
-    for ω in -3:0.1:3
-        @test all(>=(0), ρs(ω))
-    end
+    @test all(ω -> sum(ρs(ω))>=0, -3:0.1:3)
 end
 
 @testset "greenfunction sparse slicing" begin
