@@ -100,6 +100,7 @@ function SchurFactorsSolver(h::Hamiltonian{T,<:Any,1}, shift=one(Complex{T})) wh
 end
 
 function SchurWorkspace{C}((n, d), l, r) where {C}
+    @show (n, d, l, r)
     GL = Matrix{ComplexF64}(undef, n, d)
     GR = Matrix{ComplexF64}(undef, n, d)
     ND = Matrix{ComplexF64}(undef, n, d)
@@ -128,9 +129,9 @@ end
 function ModeSolution(::Type{T}, n, d) where {T}
     incoming_λ = zeros(Complex{T}, d)
     incoming_Φ = zeros(Complex{T}, n, d)
-    incoming_v = zeros(T, n)
+    incoming_v = zeros(T, d)
     outgoing_Φ = zeros(Complex{T}, n, d)
-    outgoing_v = zeros(T, n)
+    outgoing_v = zeros(T, d)
     outgoing_gr = zeros(Complex{T}, n, n)
     return ModeSolution(incoming_λ, incoming_Φ, incoming_v, outgoing_Φ, outgoing_v, outgoing_gr)
 end

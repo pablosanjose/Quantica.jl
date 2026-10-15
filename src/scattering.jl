@@ -40,6 +40,7 @@ end
 
 struct LeadWorkspace{T}
     ll::Matrix{Complex{T}}            # lead-lead intermediate preallocation
+    Γ::Matrix{Complex{T}}             # Γ intermediate preallocation
     leadsol::LeadSolution{T}          # solution preallocation
 end
 
@@ -72,8 +73,9 @@ function LeadWorkspace(s::Union{SelfEnergySchurSolver{T},SelfEnergyCouplingSchur
     (nl, nc) = size(first(coupling_to_from_lead(s)))
     d = deflated_dimension(s)
     ll = Matrix{Complex{T}}(undef, nl, nl)
+    Γ = Matrix{Complex{T}}(undef, nl, nl)
     leadsol = LeadSolution{T}(nl, nc, d)
-    return LeadWorkspace(ll, leadsol)
+    return LeadWorkspace(ll, Γ, leadsol)
 end
 
 # at least one of the leadworkspace is not Nothing, otherwise this is never called
@@ -101,24 +103,30 @@ function ScatteringMatrix(leadtmp::NTuple{<:Any,Union{Nothing,LeadWorkspace{T}}}
     PhiS = Matrix{Matrix{Complex{T}}}(undef, N, N)
     for j in 1:N, i in 1:N
         dimi = lead_flatsize(leadtmp[i])
-        dimj = lead_flatsize(leadtmp[j])
-        S[i,j] = Matrix{Complex{T}}(undef, dimi, dimj)
-        PhiS[i,j] = Matrix{Complex{T}}(undef, dimi, dimj)
+        numi = lead_nummodes(leadtmp[i])
+        numj = lead_nummodes(leadtmp[j])
+        S[i,j] = Matrix{Complex{T}}(undef, numi, numj)
+        PhiS[i,j] = Matrix{Complex{T}}(undef, dimi, numj)
     end
     return ScatteringMatrix(PhiS, S)
 end
 
+# Total orbital size in lead unit cell
 lead_flatsize(::Nothing) = 0
 lead_flatsize(lw::LeadWorkspace) = size(lw.ll, 1)
 
-# computes the maximum of nc and nl for a given lead
+# Total number of deflated advanced=retarded modes in a lead, i.e. deflated size
+lead_nummodes(lw::LeadWorkspace) = lead_nummodes(lw.leadsol)
+lead_nummodes(ls::LeadSolution) = length(ls.lambda_a)
+
+# maximum of nc and nl for a given lead
 central_flatsize(::Nothing) = 0
 central_flatsize(lw::LeadWorkspace) = size(lw.leadsol.source, 1)
 
 numpropagating(::Nothing) = 0
 numpropagating(ls::LeadSolution) = numpropagating(ls.lambda_a)
 numpropagating(λs::AbstractVector{Complex{T}}; tol = sqrt(eps(T))) where {T} =
-    findfirst(λ -> !ispropagating(λ; tol), λs) - 1
+    count(λ -> ispropagating(λ; tol), λs)
 
 ispropagating(λ::Complex{T}; tol = sqrt(eps(T))) where {T} = abs(abs(λ) - 1) < tol
 
@@ -136,7 +144,7 @@ end
 
 (s::Scattering)(ω; params...) = copy(call!(s, ω; params...))
 
-function getindex(s::ScatteringSolution, j::Int, i::Int = j)
+function Base.getindex(s::ScatteringSolution, j::Int, i::Int = j)
     nj = numpropagating(s.leadsols[j])
     ni = i == j ? nj : numpropagating(s.leadsols[i])
     return view(s.matrix.S[j,i], 1:nj, 1:ni)
@@ -154,7 +162,7 @@ copy_or_nothing(::Nothing) = nothing
 
 # source = H_{CL}(Φₐ - gʳh₊ΦₐΛₐ⁻¹) and Γ = i(h₋gʳh₊ - (h₋gʳh₊)')
 function solve_lead(sw::LeadWorkspace, solver::Union{SelfEnergySchurSolver,SelfEnergyCouplingSchurSolver})
-    leadsol, ll = sw.leadsol, sw.ll
+    leadsol, ll, Γ = sw.leadsol, sw.ll, sw.Γ
     _, HCL = coupling_to_from_lead(solver)
     h₋, h₊ = couplings_intralead(solver)
     gʳ = outgoing_gr(solver)
@@ -168,19 +176,21 @@ function solve_lead(sw::LeadWorkspace, solver::Union{SelfEnergySchurSolver,SelfE
     # Building gʳh₊
     gʳh₊ = mul!(leadsol.gh, gʳ, h₊)   # gʳh₊
 
+    # Building source
+    tmp = leadsol.ggpa
+    mul!(tmp, gʳh₊, Φₐ)             # gʳΓΦₐ = leadsol.ggpa temporarily holds gʳh₊Φₐ
+    tmp ./= -transpose(λₐ)          # -gʳh₊ΦₐΛₐ⁻¹
+    tmp .+= Φₐ                      # Φₐ - gʳh₊ΦₐΛₐ⁻¹
+    mul!(leadsol.source, HCL, tmp)  # H_{CL}(Φₐ - gʳh₊ΦₐΛₐ⁻¹)
+
     # Building Γ = i(h₋gʳh₊ - (h₋gʳh₊)') Φᵣ'Γ and gʳΓΦₐ
     gʳΓΦₐ, Φᵣ´Γ = leadsol.ggpa, leadsol.prpg
     mul!(ll, h₋, gʳh₊, im, 0)         # ih₋gʳh₊
-    Γ = (gʳΓΦₐ .= ll' .+ ll)          # gʳΓΦₐ temporarily holds Γ = ih₋gʳh₊ - i(h₋gʳh₊)'
+    Γ .= ll' .+ ll                    # Γ = ih₋gʳh₊ - i(h₋gʳh₊)'
     mul!(Φᵣ´Γ, Φᵣ', Γ)                # Φᵣ´Γ
     gʳΓ = mul!(ll, gʳ, Γ)             # gʳΓ = gʳ(i(h₋gʳh₊ - (h₋gʳh₊)')), aliases ll
     mul!(gʳΓΦₐ, gʳΓ, Φₐ)              # ll is now free
-
-    # Building source
-    mul!(ll, gʳh₊, Φₐ, -1, 0)
-    ll ./= transpose(λₐ)            # -gʳh₊ΦₐΛₐ⁻¹
-    ll .+= Φₐ                       # Φₐ - gʳh₊ΦₐΛₐ⁻¹
-    mul!(leadsol.source, HCL, ll)   # H_{CL}(Φₐ - gʳh₊ΦₐΛₐ⁻¹)
+    @show gʳΓ
 
     return leadsol
 end
@@ -216,7 +226,7 @@ function compute_scattering_row!(s::Scattering, j, Gω, leadsols, solvers)
     HLC, HCL = coupling_to_from_lead(solver)
     gʳ = outgoing_gr(solver)
 
-    # Building G₁₁ abd φʳR
+    # Building φʳR
     mul!(cl, G00, HCL)
     mul!(lc, gʳ, HLC)
     copyto!(ll, I)
@@ -239,11 +249,13 @@ function compute_scattering_row!(s::Scattering, j, Gω, leadsols, solvers)
         HL´C, _ = coupling_to_from_lead(solver´)
         g´ʳ = outgoing_gr(solver´)
 
-        # Building G₁´₁ abd φʳR
-        mul!(c´l, G0´0, HCL)
-        mul!(l´c´, g´ʳ, HL´C)
-        mul!(t, l´c´, c´l, im, 0)       # t temporarily holds ig´ʳH_{L´C}GH_{CL}
-        mul!(PhiT, t, gʳΓΦₐ)            # φʳR = ig´ʳH_{L´C}GH_{CL}gʳΓΦₐ = iG₁´₁ΓΦₐ
+        # Building φʳT
+        drng = axes(gʳΓΦₐ, 2)
+        cd, c´d = view(cl, :, drng), view(c´l, :, drng)
+        mul!(cd, HCL, gʳΓΦₐ)            # cl = H_{CL}gʳΓΦₐ
+        mul!(c´d, G0´0, cd)             # c´l = G₁'₁H_{CL}gʳΓΦₐ
+        mul!(l´c´, g´ʳ, HL´C)           # l´c´ = g´ʳH_{L´C}
+        mul!(PhiT, l´c´, c´d, im, 0)    # φʳR = ig´ʳH_{L´C}GH_{CL}gʳΓΦₐ = iG₁´₁ΓΦₐ
 
         # transmission matrix t
         vrf´ = outgoing_vfactors(solver´)
