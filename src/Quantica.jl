@@ -92,7 +92,7 @@ include("presets/hamiltonians.jl")
 include("presets/external.jl")
 include("presets/docstrings.jl")
 
-# include("precompile.jl")
+include("precompile.jl")
 
 # Extension stubs for QuanticaMakieExt
 function plotlattice end

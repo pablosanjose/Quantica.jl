@@ -24,21 +24,21 @@ empty_mulist(::Vector{C}, order) where {C<:Complex} =
 empty_mulist(ket::Matrix{C}, order) where {C<:Complex} =
     [zeros(C, size(ket, 2), size(ket, 2)) for _ in 1:(order + 1)]
 
-function momentaKPM(h, ket, (center, halfwidth); order = 10, kernel = I)
+function momentaKPM(h, ket, (center, halfwidth); order = 10, kernel = I, showprogress = true)
     pmeter = Progress(order; desc = "Computing moments: ")
     builder = KPMBuilder(h, kernel, ket, (center, halfwidth), order)
-    mulist = addmomentaKPM!(builder, pmeter)
+    mulist = addmomentaKPM!(builder, pmeter; showprogress)
     jackson!(mulist)
     return mulist
 end
 
 # Single step algorithm (non-identity Kernel)
-function addmomentaKPM!(b::KPMBuilder{<:AbstractMatrix}, pmeter)
+function addmomentaKPM!(b::KPMBuilder{<:AbstractMatrix}, pmeter; showprogress = true)
     seed_singlestep_KPM!(b)
     mulist, h, bandCH, kmat, kmat0, kmat1 = b.mulist, b.h, b.bandCH, b.ket, b.ket1, b.ket2
     order = length(mulist) - 1
     for n in 3:(order+1)
-        ProgressMeter.next!(pmeter; showvalues = ())
+        showprogress && ProgressMeter.next!(pmeter; showvalues = ())
         iterateKPM!(kmat0, h', kmat1, bandCH)
         mulat!(mulist, n, kmat0', kmat, 1, 1)           # μ[n] += kmat0'*kmat1
         kmat0, kmat1 = kmat1, kmat0
@@ -47,13 +47,13 @@ function addmomentaKPM!(b::KPMBuilder{<:AbstractMatrix}, pmeter)
 end
 
 # Double step algorithm (identity Kernel)
-function addmomentaKPM!(b::KPMBuilder{<:UniformScaling}, pmeter)
+function addmomentaKPM!(b::KPMBuilder{<:UniformScaling}, pmeter; showprogress = true)
     μ0, μ1 = seed_doublestep_KPM!(b)
     mulist, h, bandCH, A, kmat0, kmat1 = b.mulist, b.h, b.bandCH, b.kernel, b.ket1, b.ket2
     order = length(mulist) - 1
     for n in 3:2:(order+1)
-        ProgressMeter.next!(pmeter; showvalues = ())
-        ProgressMeter.next!(pmeter; showvalues = ())    # twice because of 2-step
+        showprogress && ProgressMeter.next!(pmeter; showvalues = ())
+        showprogress && ProgressMeter.next!(pmeter; showvalues = ())    # twice because of 2-step
         iterateKPM!(kmat0, h', kmat1, bandCH)
         mulat!(mulist, n, kmat1', kmat1, 2, 1)
         minusat!(mulist, n, μ0)                         # μ[n] += 2*kmat1'*kmat1 - μ0
@@ -152,7 +152,7 @@ function apply(s::GS.KPM,  h::Hamiltonian{T,<:Any,0}, cs::Contacts) where {T}
     hmat = h(())
     bandCH = T.(band_ceter_halfwidth(hmat, s.bandrange, s.padfactor))
     ket = contact_basis(h, cs)
-    momenta = momentaKPM(hmat, ket, bandCH; order = s.order, kernel = s.kernel)
+    momenta = momentaKPM(hmat, ket, bandCH; order = s.order, kernel = s.kernel, s.showprogress)
     return AppliedKPMGreenSolver(momenta, bandCH)
 end
 

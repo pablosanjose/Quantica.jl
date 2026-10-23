@@ -1792,10 +1792,11 @@ possible keyword arguments are
     - If the system is 2D, the wavevector along the transverse axis (the one different from the 1D `axis` given in the options) is numerically integrated using QuadGK with options given by `integrate_opts`, which is `(; atol = 1e-7)` by default.
     - In the 2D case, density of states singularities may lead to non-convergent integrals. If this happens, shift `ω` away from the real axis manually.
     - `integrate_opts` can also contain a `callback = f`, where `f` is a function that will be called `f(ϕs..., y)` at each point in the momentum integration. Here `ϕs` is the integration point in the Brillouin zone and `y` is the integrand evaluated at that point. Useful for inspection and debugging, e.g. `callback(x, y) = @show x`. Default: `Returns(nothing)`.
-- `GS.KPM(; order = 100, bandrange = missing, kernel = I)` : Kernel polynomial method solver for 0D Hamiltonians
+- `GS.KPM(; order = 100, bandrange = missing, kernel = I, showprogress = true)` : Kernel polynomial method solver for 0D Hamiltonians
     - `order` : order of the expansion in Chebyshev polynomials `Tₙ(h)` of the Hamiltonian `h` (lowest possible order is `n = 0`).
     - `bandrange` : a `(min_energy, max_energy)::Tuple` interval that encompasses the full band of the Hamiltonian. If `missing`, it is computed automatically, but `using ArnoldiMethod` is required first.
     - `kernel` : generalization that computes momenta as `μₙ = Tr[Tₙ(h)*kernel]`, so that the local density of states (see `ldos`) becomes the density of the `kernel` operator.
+    - `showprogress::Bool`: whether to show or not a progress bar while computing the momenta. Default: `true`
     - This solver does not allow arbitrary indexing of the resulting `g::GreenFunction`, only on contacts `g[contact_ind::Integer]`. If the system has none, we can add a dummy contact using `attach(h, nothing; sites...)`, see `attach`.
 - `GS.Bands(bands_arguments; boundary = missing, bands_kw...)`: solver based on the integration of bandstructure simplices
     - `bands_arguments`: positional arguments passed on to `bands`

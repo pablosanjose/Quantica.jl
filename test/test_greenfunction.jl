@@ -4,41 +4,6 @@ using Quantica: GreenFunction, GreenSlice, GreenSolution, zerocell, CellOrbitals
 using ArnoldiMethod  # for KPM bandrange
 using LinearAlgebra
 
-# @nospecialize: inferring the whole helper body for each concrete h/s type is very costly to compile
-function testgreen(@nospecialize(h), @nospecialize(s); allpairs = false, kw...)
-    ω = 0.2
-    g = greenfunction(h, s)
-    @test g isa GreenFunction
-    gω = g(ω; kw...)
-    @test gω isa GreenSolution
-    L = Quantica.latdim(lattice(h))
-    z = zero(SVector{L,Int})
-    o = Quantica.unitvector(1, SVector{L,Int})
-    conts = ntuple(identity, ncontacts(h))
-    locs = (sites(z, :), sites(z, 2), sites(1:2), sites(o, (1,2)), (; cells = z),
-        CellOrbitals(o, 1), CellOrbitals(z, :), CellOrbitals(z, SA[1,2]))
-    for (loc, loc´) in locpairs(locs, conts; allpairs)
-        gs = g[loc, loc´]
-        @test gs isa GreenSlice
-        gsω = gs(ω; kw...)
-        gωs = gω[loc, loc´]
-        @test gsω == gωs
-        loc === loc´ && @test all(x->imag(x)<=0, diag(gωs))
-    end
-    return nothing
-end
-
-# allpairs = false: every loc paired with itself and its two cyclic neighbors, every loc paired
-# with every contact (both orders), and all contact pairs. This covers all index-class combinations
-# (contact, single-cell, multi-cell) with far fewer specializations than the full cartesian product
-function locpairs(locs, conts; allpairs = false)
-    allpairs && return vec(collect(Iterators.product((locs..., conts...), (locs..., conts...))))
-    n = length(locs)
-    neighbors = [(locs[i], locs[mod1(i + o, n)]) for i in 1:n for o in (0, 1, -1)]
-    withconts = [p for l in locs for c in conts for p in ((l, c), (c, l))]
-    return [neighbors; withconts; vec(collect(Iterators.product(conts, conts)))]
-end
-
 @testset "basic greenfunctions" begin
     h0 = LP.honeycomb() |> hamiltonian(hopping(SA[0 1; 1 0]), orbitals = 2) |> supercell(region = RP.circle(5))  # small: h0´ + Spectrum re-diagonalizes on every call
     h0´ = h0 |> @hopping!((t; p = 1) -> p*t)

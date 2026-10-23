@@ -49,61 +49,6 @@ using LinearAlgebra
     @test Quantica.nnz(parent(mat)) < length(parent(mat))  # no broken sparsity
 end
 
-function testcond(@nospecialize(g0); nambu = false)
-    G1 = conductance(g0[1]; nambu)
-    G2 = conductance(g0[2]; nambu)
-    G12 = conductance(g0[1,2]; nambu)
-    T12 = transmission(g0[1,2])
-    @test_throws ArgumentError transmission(g0[1])
-    @test_throws ArgumentError transmission(g0[1, 1])
-    for ω in -3:0.1:3
-        @test ifelse(nambu, 6.000001, 3.00000001) >= G1(ω) >= 0
-        @test G1(ω) ≈ G1(-ω) ≈ G2(ω) ≈ G2(-ω)
-        @test T12(ω) ≈ T12(-ω)
-        nambu || @test G1(ω) ≈ T12(ω) atol = 1e-8
-        @test G12(ω) ≈ G12(-ω) atol = 1e-8
-        nambu || @test G1(ω) ≈ -G12(ω) atol = 1e-8
-    end
-end
-
-# @nospecialize: whole-body inference over all the Josephson types takes minutes to compile otherwise
-function testjosephson(@nospecialize(g0))
-    J1 = josephson(g0[1], 1; phases = subdiv(0, pi, 10))
-    J2 = josephson(g0[2], 1; phases = subdiv(0, pi, 10))
-    J3 = josephson(g0[1], (-5, 0); phases = subdiv(0, pi, 10))
-    J4 = josephson(g0[1], Paths.sawtooth(range(-5, 0, 3)); phases = subdiv(0, pi, 10))
-    p5(µ, T) = ifelse(iszero(T),(-5,-2+3im,0),(-5,-2+3im,0,2+3im,5)) .+ sqrt(eps(Float64))*im
-    J5 = josephson(g0[1], Paths.polygon(p5); phases = subdiv(0, pi, 10))
-    j1 = J1()
-    @test all(>=(0), Quantica.chopsmall.(j1))
-    @test all(((j1, j2) -> ≈(j1, j2, atol = 1e-6)).(j1, J2()))
-    @test all(((j1, j2) -> ≈(j1, j2, atol = 1e-6)).(j1, J3()))
-    @test all(((j1, j2) -> ≈(j1, j2, atol = 1e-6)).(j1, J4()))
-    @test all(((j1, j2) -> ≈(j1, j2, atol = 1e-6)).(j1, J5()))
-    @test all(((j1, j2) -> ≈(j1, j2, atol = 1e-6)).(J1(0.1), J5(0.1)))
-
-    j = Quantica.integrand(J1)
-    @test Quantica.call!(j, 0.2) isa Vector
-    # static length of integration points (required for QuadGK.quadgk type-stability)
-    @test typeof.(Quantica.points.((J1, J2, J3, J4, J5))) ==
-        (Vector{ComplexF64}, Vector{ComplexF64}, Vector{ComplexF64}, Vector{ComplexF64}, Tuple{ComplexF64, ComplexF64, ComplexF64})
-    # integration path logic
-    J = josephson(g0[1], Paths.sawtooth(-4, -1); callback = ((x,y) -> @test x isa ComplexF64 && y isa ComplexF64))
-    @test J() <= 10*eps(Float64)
-    p1, p2 = Quantica.points(J, 0), Quantica.points(J, 0.2)
-    @test p1 isa Vector{ComplexF64} && length(p1) == 3    # tuple sawtooth
-    @test p2 isa Vector{ComplexF64} && length(p2) == 3
-    J = josephson(g0[1], Paths.sawtooth(-4, 0); phases = subdiv(0, pi, 10))
-    p1, p2 = Quantica.points(J, 0), Quantica.points(J, 0.2)
-    @test p1 isa Vector{ComplexF64} && length(p1) == 3    # tuple sawtooth
-    @test p2 isa Vector{ComplexF64} && length(p2) == 3
-    @test all(p2 .≈ p1)
-    J = josephson(g0[1], Paths.sawtooth(-4, 1); phases = subdiv(0, pi, 10))
-    p1, p2 = Quantica.points(J, 0), Quantica.points(J, 0.2)
-    @test p1 isa Vector{ComplexF64} && length(p1) == 3 && maximum(real(p1)) == 0
-    @test p2 isa Vector{ComplexF64} && length(p2) == 5 && maximum(real(p2)) == 1
-end
-
 @testset "observables" begin
     # single-orbital vs two-orbital
     g1 = LP.square() |> supercell((1,0), region = r->-2<r[2]<2) |> hamiltonian(@hopping((r, dr; B = 0.1) -> I * cis(B * dr' * SA[r[2],-r[1]])), orbitals = 1) |> greenfunction(GS.Schur(boundary = 0));
