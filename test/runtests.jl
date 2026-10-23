@@ -22,6 +22,13 @@ init_code = quote
     redirect_stdout(devnull); redirect_stderr(devnull)
 end
 
+# ParallelTestRunner sizes its worker pool as min(cores, available memory ÷ 2 GiB), but available
+# memory is a noisy snapshot on macOS (a 7 GB GitHub runner sometimes got a single worker).
+# Use total memory instead, which is fixed. Set PTR_NUM_JOBS or pass --jobs=N to override.
+if Sys.isapple() && !haskey(ENV, "PTR_NUM_JOBS")
+    ENV["PTR_NUM_JOBS"] = string(clamp(Sys.total_memory() ÷ (2 * 2^30), 1, Sys.CPU_THREADS))
+end
+
 # These files check errors thrown before an extension's trigger package is loaded
 # (e.g. qplot without a Makie backend). Workers are reused across files and packages
 # can't be unloaded, so these files get a dedicated new worker.
