@@ -23,7 +23,6 @@ using ArnoldiMethod
         @test nothing === show(stdout, b)
         @test nothing === show(stdout, b[(0,0)])
         @test nothing === show(stdout, Quantica.slice(b, (0,0)))
-        @test nothing === show(stdout, Quantica.slice(b, (0,0)))
         @test nothing === show(stdout, g)
         @test nothing === show(stdout, g[cells = ()])
         @test nothing === show(stdout, MIME("text/plain"), g[diagonal(cells = ())](0.1))
