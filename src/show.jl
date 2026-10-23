@@ -656,3 +656,35 @@ Base.summary(B::BerryCurvature) =
     "BerryCurvature: Non-Abelian Berry curvature of a 2D AbstractHamiltonian, with maximum dimension $(maxdim(B))"
 
 #endregion
+
+############################################################################################
+# Scattering
+#region
+
+function Base.show(io::IO, s::Scattering)
+    i = get(io, :indent, "")
+    print(io, i, summary(s), "\n",
+"$i  Number of contacts : $(ncontacts(s))
+$i  Lead contacts      : $(display_as_tuple(findall(islead(s))))")
+end
+
+Base.summary(::Scattering{T}) where {T} =
+    "Scattering{$T}: scattering problem of a 0D system with several contacts, of which at least one is a lead"
+
+function Base.show(io::IO, s::ScatteringSolution)
+    i = get(io, :indent, "")
+    print(io, i, summary(s), "\n",
+"$i  Block sizes       : $(display_as_tuple(numpropagating(s)))
+$i  Scattering matrix :", "\n")
+    Base.print_matrix(IOContext(io, :compact => true), Matrix(s), i * "    ")
+end
+
+Base.summary(::ScatteringSolution{T}) where {T} =
+    "ScatteringSolution{$T}: scattering problem solved at a fixed energy"
+
+Base.summary(::ScatteringMatrix{T}) where {T} =
+    "ScatteringMatrix{$T}: blocks of the scattering matrix between leads"
+
+Base.show(io::IO, s::ScatteringMatrix) = print(io, get(io, :indent, ""), summary(s))
+
+#endregion

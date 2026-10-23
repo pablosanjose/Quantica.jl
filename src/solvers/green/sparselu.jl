@@ -133,8 +133,9 @@ function compute_or_retrieve_green(s::SparseLUGreenSlicer{C}, dstinds, srcinds, 
         dstinds´ = ifelse(dstinds === allinds, s.nonextrng, dstinds)
         srcinds´ = convert(typeof(srcinds), 1:length(srcinds))
         g = view(sourceC, dstinds´, srcinds´)
-        if srcinds == allinds
-            s.unitg = copy(view(gext, s.nonextrng, s.nonextrng))     # exclude extended orbs
+        if srcinds == allinds || srcinds == s.nonextrng
+            # exclude extended orbs. sourceC == gext here, and is of the same type as s.unitg, unlike gext.
+            s.unitg = copy(view(sourceC, s.nonextrng, s.nonextrng))
         end
     end
     return g

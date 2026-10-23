@@ -71,4 +71,12 @@ using ArnoldiMethod
     @test nothing === show(stdout, position(w))
     M = LP.linear() |> hopping(1) |> greenfunction |> meanfield
     @test nothing === show(stdout, M)
+    model = hopping(1, range = √2)
+    glead = LP.square() |> model |> supercell((4,0), region = r->-2<r[2]<2-0.5*r[1]) |> greenfunction(GS.Schur(boundary = 0))
+    g = LP.square() |> model |> supercell(region = r->abs(r[2])<3 && 0<=r[1]<=3) |>
+        attach(glead, model; reverse = true) |> attach(glead, model) |> attach(@onsite(ω -> im*I), region = r -> r[1] == 1) |> greenfunction
+    s = scattering(g)
+    @test nothing === show(stdout, s)
+    @test nothing === show(stdout, s(0.3))
+    @test nothing === show(stdout, Quantica.matrix(s(0.3)))
 end
