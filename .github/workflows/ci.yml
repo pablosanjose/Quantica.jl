@@ -1,27 +1,31 @@
 name: CI
 on:
-  - push
-  - pull_request
+  push:
+    branches:
+      - master
+    tags: ['*']
+  pull_request:
+  workflow_dispatch:
 concurrency:
+  # Skip intermediate builds: always.
+  # Cancel intermediate builds: only for pull requests (never for master or tags).
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-permissions:
-  actions: write
-  contents: read
+  cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
 jobs:
   test:
-    # if: github.event_name == 'push' && contains(toJson(github.event.commits), '[skip test]') == false && contains(toJson(github.event.commits), '[skip tests]') == false
     name: Julia ${{ matrix.version }} - ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    # continue-on-error: ${{ matrix.version == 'nightly' }}
+    timeout-minutes: 70
+    permissions: # needed to allow julia-actions/cache to delete old caches it has created
+      actions: write
+      contents: read
     strategy:
-      # fail-fast: false
+      fail-fast: false
       matrix:
         version:
           - '1'
           - 'lts'
           - 'pre'
-          # - 'nightly'
         os:
           - ubuntu-latest
           - windows-latest
@@ -34,15 +38,21 @@ jobs:
       - uses: julia-actions/cache@v3
         with:
           cache-compiled: "true"
-      - uses: julia-actions/julia-buildpkg@latest
-      - uses: julia-actions/julia-runtest@latest
-      - uses: julia-actions/julia-uploadcodecov@latest
-        if: matrix.version != 'nightly'
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      - uses: julia-actions/julia-buildpkg@v1
+      - uses: julia-actions/julia-runtest@v1
+      - uses: julia-actions/julia-processcoverage@v1
+      - uses: codecov/codecov-action@v6
+        with:
+          files: lcov.info
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
   docs:
     name: Documentation
     runs-on: ubuntu-latest
+    permissions:
+      actions: write   # julia-actions/cache cleanup
+      contents: write  # push to gh-pages
+      statuses: write  # Documenter deployment status
     steps:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
@@ -51,12 +61,14 @@ jobs:
       - uses: julia-actions/cache@v3
         with:
           cache-compiled: "true"
-      - run: |
+      - name: Install docs dependencies
+        run: |
           julia --project=docs -e '
             using Pkg
             Pkg.develop(PackageSpec(path=pwd()))
             Pkg.instantiate()'
-      - run: julia --project=docs docs/make.jl
+      - name: Build and deploy docs
+        run: julia --project=docs docs/make.jl
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
