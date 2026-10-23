@@ -2,6 +2,7 @@ using ParallelTestRunner
 using Quantica
 
 # Each test file runs concurrently in its own sandbox module (see ParallelTestRunner.jl docs)
+# For optimal test times, make each test file's runtime more or less the same
 testsuite = find_tests(@__DIR__)
 delete!(testsuite, "testutils")  # shared helpers, not a test file
 Sys.WORD_SIZE == 64 || delete!(testsuite, "test_plots")
