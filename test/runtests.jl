@@ -27,12 +27,5 @@ end
 # can't be unloaded, so these files get a dedicated new worker.
 const NEEDS_FRESH_WORKER = ("test_bandstructure", "test_plots")
 
-# TEMPORARY: diagnose PTR's default worker count on macOS CI runners
-if Sys.isapple() && haskey(ENV, "GITHUB_ACTIONS")
-    @info "PTR worker inputs" Sys.CPU_THREADS get(ENV, "JULIA_CPU_THREADS", nothing) (@static isdefined(Sys, :EFFECTIVE_CPU_THREADS) ? Sys.EFFECTIVE_CPU_THREADS : nothing) ParallelTestRunner.available_memory()/2^30 Sys.free_memory()/2^30 Sys.total_memory()/2^30 ParallelTestRunner.default_njobs()
-    run(`vm_stat`)
-    run(pipeline(`ps -axm -o rss=,comm=`, `head -12`))
-end
-
 runtests(Quantica, ARGS; testsuite, init_code,
     test_worker = test -> test in NEEDS_FRESH_WORKER ? addworker() : nothing)
