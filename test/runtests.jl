@@ -27,5 +27,16 @@ end
 # can't be unloaded, so these files get a dedicated new worker.
 const NEEDS_FRESH_WORKER = ("test_bandstructure", "test_plots")
 
+# PTR_NUM_JOBS overrides ParallelTestRunner's memory-based number of workers (set on macOS
+# CI, see ci.yml). Log what it would have chosen, to judge whether the override is still
+# needed. Uses PTR internals, hence the isdefined guard.
+const NUM_JOBS_OVERRIDE = tryparse(Int, get(ENV, "PTR_NUM_JOBS", ""))
+if NUM_JOBS_OVERRIDE !== nothing && isdefined(ParallelTestRunner, :available_memory) &&
+        isdefined(ParallelTestRunner, :default_njobs)
+    mem_GiB = ParallelTestRunner.available_memory() / 2^30
+    @info "PTR_NUM_JOBS=$NUM_JOBS_OVERRIDE overrides default of $(ParallelTestRunner.default_njobs()) workers" available_GiB =
+        round(mem_GiB; digits = 2) per_worker_GiB = round(mem_GiB / NUM_JOBS_OVERRIDE; digits = 2)
+end
+
 runtests(Quantica, ARGS; testsuite, init_code,
     test_worker = test -> test in NEEDS_FRESH_WORKER ? addworker() : nothing)
