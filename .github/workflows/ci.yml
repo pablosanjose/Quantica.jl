@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
 jobs:
   test:
-    name: Julia ${{ matrix.version }} - ${{ matrix.os }}
+    name: Julia ${{ matrix.version }} - ${{ matrix.os }} (${{ matrix.group }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 70
     permissions: # needed to allow julia-actions/cache to delete old caches it has created
@@ -21,15 +21,27 @@ jobs:
       contents: read
     strategy:
       fail-fast: false
+      # All OSes on the current release; lts on Linux and macOS (many users), pre on Linux only.
+      # The Makie stack (test_plots) is tested in a single "plots" job: Makie has hundreds of
+      # dependencies, so it gets recompiled whenever any of them is updated. The "main" jobs
+      # never load or compile it. Fewer jobs and smaller caches also keep the per-job
+      # julia-actions/cache entries within GitHub's 10 GB repository cache limit.
       matrix:
-        version:
-          - '1'
-          - 'lts'
-          - 'pre'
-        os:
-          - ubuntu-latest
-          - windows-latest
-          - macOS-latest
+        include:
+          - { version: '1',   os: ubuntu-latest,  group: main }
+          - { version: '1',   os: windows-latest, group: main }
+          - { version: '1',   os: macOS-latest,   group: main }
+          - { version: 'lts', os: ubuntu-latest,  group: main }
+          - { version: 'lts', os: macOS-latest,   group: main }
+          - { version: 'pre', os: ubuntu-latest,  group: main }
+          - { version: '1',   os: ubuntu-latest,  group: plots }
+    env:
+      QUANTICA_TEST_GROUP: ${{ matrix.group }}       # read by test/runtests.jl
+      # Precompile packages only when loaded, so "main" jobs never compile the Makie stack
+      JULIA_PKG_PRECOMPILE_AUTO: ${{ matrix.group == 'plots' && '1' || '0' }}
+      # macOS runners have 7 GB, about half taken by the OS, so ParallelTestRunner's default
+      # often picks a single worker. Force two (three thrash). Empty = ParallelTestRunner default.
+      PTR_NUM_JOBS: ${{ startsWith(matrix.os, 'macOS') && '2' || '' }}
     steps:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
@@ -38,6 +50,9 @@ jobs:
       - uses: julia-actions/cache@v3
         with:
           cache-compiled: "true"
+          # don't save caches from failed or cancelled jobs, which may hold an incomplete
+          # (half-precompiled) depot that the next run would restore
+          save-always: "false"
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
       - uses: julia-actions/julia-processcoverage@v1

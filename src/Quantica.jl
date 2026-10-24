@@ -92,6 +92,7 @@ include("presets/hamiltonians.jl")
 include("presets/external.jl")
 include("presets/docstrings.jl")
 
+# Precompilation - adds about 40s to build time, not worth it for now, but can be uncommented if needed
 # include("precompile.jl")
 
 # Extension stubs for QuanticaMakieExt

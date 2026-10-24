@@ -286,7 +286,8 @@ function subbands_diagonalize!(data)
     for (basevert, eigen) in zip(baseverts, data.eigens)
         append_bands_column!(data, basevert, eigen)
     end
-    ProgressMeter.finish!(meter)
+    data.showprogress && ProgressMeter.finish!(meter)
+    return data
 end
 
 function build_channels(solvers::Vector{A}) where {A}
@@ -353,7 +354,7 @@ function subbands_knit!(data)
         end
         data.showprogress && ProgressMeter.next!(meter)
     end
-    ProgressMeter.finish!(meter)
+    data.showprogress && ProgressMeter.finish!(meter)
     return data
 end
 

@@ -8,13 +8,12 @@ using Quantica: Hamiltonian, ParametricHamiltonian, BarebonesOperator, OrbitalSl
     types = (Float16, Float32, Float64)
     ts = (1, 2.0I, @SMatrix[1 2; 3 4], 1.0f0*I)
     orbs = (1, Val(1), Val(2), 2)
-    for preset in presets, type in types, lat in (preset(; type), supercell(preset(; type)))
-        E, L = Quantica.embdim(lat), Quantica.latdim(lat)
-        dn0 = ntuple(_ -> 1, Val(L))
-        for (t, o) in zip(ts, orbs)
-            @test hamiltonian(lat, onsite(t) + hopping(t; range = 1), orbitals = o) isa Hamiltonian
-            @test hamiltonian(lat, onsite(t) - hopping(t; dcells = dn0), orbitals = o) isa Hamiltonian
-        end
+    # all presets × supercell × orbital variants, with the float type cycled through (see testutils.jl)
+    for (preset, sc, (t, o), type) in cyclic_product((presets, (false, true), tuple.(ts, orbs)), (types,))
+        lat = sc ? supercell(preset(; type)) : preset(; type)
+        dn0 = ntuple(_ -> 1, Val(Quantica.latdim(lat)))
+        @test hamiltonian(lat, onsite(t) + hopping(t; range = 1), orbitals = o) isa Hamiltonian
+        @test hamiltonian(lat, onsite(t) - hopping(t; dcells = dn0), orbitals = o) isa Hamiltonian
     end
     h = LatticePresets.honeycomb() |> hopping(1, range = 1/√3)
     @test h[SA[0,0]] === h[()] === flat(h.harmonics[1].h)
@@ -123,15 +122,18 @@ end
     end
     r1 = RP.ellipse((10,15))
     r2 = (r, dr) -> norm(r) + norm(dr) < 2
-    for region in (r1, missing),
-        sublats in (:A, 1, (:A, :B), missing),
-        c in (SA[0,1], (0,1)), dcells in (c, (c, 2 .* c), missing),
-        range in (1, neighbors(2), (1, 2.0), (1, neighbors(3))),
-        sublats´ in (:A, 1, (:A, :B)),
-        regionhop in (r2, missing)
-
-        sublatshop = ifelse(sublats === missing, missing, sublats´ .=> sublats)
+    for region in (r1, missing), sublats in (:A, 1, (:A, :B), missing)
         @test Quantica.apply(siteselector(; region, sublats), lat) isa Quantica.AppliedSiteSelector
+    end
+    # HopSelector fields are sanitized independently, except region × dcells (see apply in
+    # src/apply.jl), so we take all combinations of those (and sublats) and cycle the rest
+    sublatss  = (:A, 1, (:A, :B), missing)
+    dcellss   = (SA[0,1], (SA[0,1], SA[0,2]), (0,1), ((0,1), (0,2)), missing)
+    regions   = (r2, missing)
+    ranges    = (1, neighbors(2), (1, 2.0), (1, neighbors(3)))
+    sublats´s = (:A, 1, (:A, :B))
+    for (sublats, dcells, regionhop, range, sublats´) in cyclic_product((sublatss, dcellss, regions), (ranges, sublats´s))
+        sublatshop = ifelse(sublats === missing, missing, sublats´ .=> sublats)
         @test Quantica.apply(hopselector(; range, dcells, region = regionhop, sublats = sublatshop), lat) isa Quantica.AppliedHopSelector
         sublatshop = ifelse(sublats === missing, missing, sublats´ => sublats)
         @test Quantica.apply(hopselector(; range, dcells, region = regionhop, sublats = sublatshop), lat) isa Quantica.AppliedHopSelector

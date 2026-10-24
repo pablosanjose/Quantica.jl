@@ -46,10 +46,11 @@ struct KPM{B<:Union{Missing,NTuple{2}},A} <: AbstractGreenSolver
     bandrange::B
     kernel::A
     padfactor::Float64  # for automatically computed bandrange
+    showprogress::Bool
 end
 
-KPM(; order = 100, bandrange = missing, padfactor = 1.01, kernel = I) =
-    KPM(order, bandrange, kernel, padfactor)
+KPM(; order = 100, bandrange = missing, padfactor = 1.01, kernel = I, showprogress = true) =
+    KPM(order, bandrange, kernel, padfactor, showprogress)
 
 struct Spectrum{K} <:AbstractGreenSolver
     spectrumkw::K
