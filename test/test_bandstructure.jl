@@ -1,4 +1,5 @@
 using Quantica: nsubbands, nvertices, nedges, nsimplices
+using LinearAlgebra: eigvals, Diagonal
 using Random
 
 @testset "extensions not loaded" begin
@@ -46,17 +47,26 @@ using LinearMaps, ArnoldiMethod, KrylovKit, Arpack
     @test nvertices(b) == 23
 
     # complex spectra
-    h = LatticePresets.honeycomb() |> hamiltonian(onsite(im) + hopping(-1)) |> supercell(2)
+    h = LatticePresets.honeycomb() |> onsite(im) + hopping(-1) |> supercell(2)
     b = bands(h, subdiv(-pi, pi, 13), subdiv(-pi,pi, 13), showprogress = false)
     @test nsubbands(b)  == 1
+    # non-normal spectra (nonreciprocal hopping), through the non-Hermitian eigen workspace of b's solver
+    h = LatticePresets.honeycomb() |> onsite(im) + hopping((r, dr) -> -1 + 0.3*dr[1]) |> supercell(2)
+    b = bands(h, subdiv(-pi, pi, 13), subdiv(-pi,pi, 13), showprogress = false)
+    for φs in (SA[0.2, -0.7], SA[1.3, 0.4])
+        sp = spectrum(b, φs)
+        ε, ψ, H = energies(sp), states(sp), Matrix(h(φs))
+        @test sort(ε, by = z -> (real(z), imag(z))) ≈ sort(eigvals(H), by = z -> (real(z), imag(z)))
+        @test H * ψ ≈ ψ * Diagonal(ε)
+    end
 
     # spectrum sorting
-    h = LatticePresets.honeycomb() |> hamiltonian(hopping(-1)) |> supercell(10)
+    h = LatticePresets.honeycomb() |> hopping(-1) |> supercell(10)
     b = bands(h, subdiv(0, 1, 7); solver = ES.Arpack(sigma = 0.1im, nev = 12), mapping = (:K, :K´), showprogress = false)
     @test nsubbands(b) == 1
 
     # defect insertion and patching
-    h = LatticePresets.honeycomb() |> hamiltonian(hopping(-1))
+    h = LatticePresets.honeycomb() |> hopping(-1)
     b = bands(h, subdiv(0, 2pi, 8), subdiv(0, 2pi, 8); showprogress = false, defects = ((2pi/3, 4pi/3), (4pi/3, 2pi/3)), patches = 10)
     @test nvertices(b) == 140
 
@@ -64,6 +74,14 @@ using LinearMaps, ArnoldiMethod, KrylovKit, Arpack
     h = LP.square() |> hamiltonian(onsite(3*I) -hopping(I) + hopping((r, dr) -> 0.1*(im*dr[1]*SA[0 -im; im 0] - im*dr[2]*SA[0 1; 1 0])), orbitals = 2)
     b = bands(h, subdiv(-π, π, 19), subdiv(-π, π, 19))
     @test nsimplices(b) == 1312
+
+    # bands of a degenerate system reuse eigen and svd workspaces and the knitting colproj buffer
+    # (~2.7 MiB, vs ~4 MiB without the eigen workspaces and ~8.5 MiB without any of them)
+    h = LP.square() |> hamiltonian(hopping(I), orbitals = 2) |> supercell(2)
+    let h = h, ks = subdiv(-π, π, 13)  # locals, to avoid global-scope allocations
+        bands(h, ks, ks; showprogress = false)                                    # first call, to compile
+        @test (@allocated bands(h, ks, ks; showprogress = false)) < 3.5 * 2^20    # 3.5 MiB
+    end
 end
 
 @testset "functional bandstructures" begin

@@ -7,7 +7,7 @@ function spectrum(h::AbstractHamiltonian{T}, φs; solver = ES.LinearAlgebra(), t
     mapping = (φ...) -> ftuple(φ...; kw...)
     φs´ = sanitize_SVector(T, φs)
     S = typeof(φs´)
-    asolver = apply(solver, h, S, mapping, transform)
+    asolver = apply(solver, h, S, mapping, transform; use_workspace = Val(false))
     eigen = asolver(φs´)
     return Spectrum(eigen, os)
 end

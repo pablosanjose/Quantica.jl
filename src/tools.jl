@@ -505,6 +505,19 @@ end
 eigen_ws!(ws::HermitianEigenWs, A) =
     LAPACK.syevr!(ws, 'V', 'A', 'U', A, 0.0, 0.0, 0, 0, -1.0)
 
+# as eigen!(A) for a non-Hermitian complex A -> (λs, ψs), sorted by (real, imag) as in
+# LinearAlgebra's sorteig!, but λs and ψs are ws buffers, overwritten by the next call
+function eigen_ws!(ws::EigenWs{<:BlasComplex}, A)
+    _, λs, _, ψs = LAPACK.geevx!(ws, 'B', 'N', 'V', 'N', A)  # (A, W, VL, VR, ...) if complex
+    by = λ -> (real(λ), imag(λ))
+    if !issorted(λs; by)
+        p = sortperm(λs; alg = QuickSort, by)
+        permute!(λs, p)
+        Base.permutecols!!(ψs, p)
+    end
+    return λs, ψs
+end
+
 # as svdvals!(A), but the result is a view of a ws buffer, overwritten by the next call.
 # FastLapackInterface's gesdd! skips its size check for job = 'N', so we resize! ws here
 function svdvals_ws!(ws::SVDsddWs, A)
