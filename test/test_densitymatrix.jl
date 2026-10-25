@@ -7,6 +7,16 @@ using LinearAlgebra
     g2 = LP.square() |> hopping(1) - onsite(1) |> supercell(3) |> supercell |> attach(nothing, region = RP.circle(2)) |> greenfunction(GS.Spectrum())
     g3 = LP.triangular() |> hamiltonian(hopping(-I) + onsite(1.8I), orbitals = 2) |> supercell(10) |> supercell |>
         attach(nothing, region = RP.circle(2)) |> attach(nothing, region = RP.circle(2, SA[1,2])) |> greenfunction(GS.KPM(bandrange=(-4,5)))
+    # Schur density matrix reuses its LAPACK workspaces (~70 KB per call, vs ~2-5 MB without them)
+    ρ1 = densitymatrix(g1[diagonal(:)])
+    for kBT in (0, 0.02)
+        ρ1(0.1, kBT)                                # first call, to compile
+        @test (@allocated ρ1(0.1, kBT)) < 2^18      # 2^18 bytes = 256 KiB
+    end
+    let s = ρ1.solver, ϕ = SA[0.3]  # locals, to avoid global-scope allocations
+        Quantica.fermi_h!(s, ϕ, 0.1, 50.0)          # first call, to compile
+        @test (@allocations Quantica.fermi_h!(s, ϕ, 0.1, 50.0)) <= 2  # should be 0
+    end
     # g3 excluded since KPM doesn't support finite temperatures or generic indexing yet
     # all inds × path combinations, with g cycled through (see testutils.jl)
     indss = (diagonal(1), diagonal(:), sitepairs(range = 1))

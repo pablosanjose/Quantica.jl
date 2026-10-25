@@ -26,31 +26,32 @@
 #   Computes also the leftward PL*L*Z11´, Z21´, L'*PL', with  Σₗ = PL L Z11´ Z21´⁻¹ L' PL'
 #region
 
-struct SchurWorkspace{C}
+struct SchurWorkspace{T}
     GL::Matrix{ComplexF64}    # these ComplexF64 are required due to UMFPACK limitations
     GR::Matrix{ComplexF64}
-    ND::Matrix{C}
-    ND´::Matrix{C}
-    LG::Matrix{C}
-    RG::Matrix{C}
-    A::Matrix{C}
-    B::Matrix{C}
-    V1::Matrix{C}
-    V2::Matrix{C}
-    Z11::Matrix{C}
-    Z21::Matrix{C}
-    Z11´::Matrix{C}
-    Z21´::Matrix{C}
-    LD::Matrix{C}
-    DL::Matrix{C}
-    RD::Matrix{C}
-    DR::Matrix{C}
+    ND::Matrix{Complex{T}}
+    ND´::Matrix{Complex{T}}
+    LG::Matrix{Complex{T}}
+    RG::Matrix{Complex{T}}
+    A::Matrix{Complex{T}}
+    B::Matrix{Complex{T}}
+    V1::Matrix{Complex{T}}
+    V2::Matrix{Complex{T}}
+    Z11::Matrix{Complex{T}}
+    Z21::Matrix{Complex{T}}
+    Z11´::Matrix{Complex{T}}
+    Z21´::Matrix{Complex{T}}
+    LD::Matrix{Complex{T}}
+    DL::Matrix{Complex{T}}
+    RD::Matrix{Complex{T}}
+    DR::Matrix{Complex{T}}
     whichmodes::Vector{Bool}
     select::Vector{BlasInt}
-    DD::Matrix{C}
-    DD´::Matrix{C}
-    EE::Matrix{C}
-    EN::Matrix{C}
+    DD::Matrix{Complex{T}}
+    DD´::Matrix{Complex{T}}
+    EE::Matrix{Complex{T}}
+    EN::Matrix{Complex{T}}
+    ggev::GeneralizedEigenWs{Complex{T},Matrix{Complex{T}},T}  # for schur_eigvals
 end
 
 struct SchurFactorsSolver{T,B}
@@ -67,7 +68,7 @@ struct SchurFactorsSolver{T,B}
     L::Matrix{ComplexF64}                             # l<=r ? PL : PL*H' === hp PR  (n × min(l,r))
     R::Matrix{ComplexF64}                             # l<=r ? PR*H === hm PL : PR   (n × min(l,r))
     R´L´::Matrix{ComplexF64}                          # [R'; -L']. L and R must be dense for iG \ (L,R)
-    tmp::SchurWorkspace{Complex{T}}                   # L, R, R´L´ need 64bit
+    tmp::SchurWorkspace{T}                            # L, R, R´L´ need 64bit
 end
 
 #region ## Constructors ##
@@ -84,11 +85,12 @@ function SchurFactorsSolver(h::Hamiltonian{T,<:Any,1}, shift = one(Complex{T})) 
     iG, (p, pd) = store_diagonal_ptrs(fh0)
     ptrs = (p, pd, pd[sinds])
     n, d = size(L)
-    workspace = SchurWorkspace{Complex{T}}((n, d), length(linds), length(rinds))
+    workspace = SchurWorkspace{T}((n, d), length(linds), length(rinds))
     return SchurFactorsSolver(T(shift), hm, h0, hp, l_leq_r, iG, ptrs, linds, rinds, sinds, L, R, R´L´, workspace)
 end
 
-function SchurWorkspace{C}((n, d), l, r) where {C}
+function SchurWorkspace{T}((n, d), l, r) where {T}
+    C = Complex{T}
     GL = Matrix{ComplexF64}(undef, n, d)
     GR = Matrix{ComplexF64}(undef, n, d)
     ND = Matrix{C}(undef, n, d)
@@ -113,7 +115,8 @@ function SchurWorkspace{C}((n, d), l, r) where {C}
     DD´ = Matrix{C}(undef, d, d)
     EE = Matrix{C}(undef, n+d, n+d)
     EN = Matrix{C}(undef, n+d, n)
-    return SchurWorkspace(GL, GR, ND, ND´, LG, RG, A, B, V1, V2, Z11, Z21, Z11´, Z21´, LD, DL, RD, DR, whichmodes, select, DD, DD´, EE, EN)
+    ggev = GeneralizedEigenWs(A)
+    return SchurWorkspace(GL, GR, ND, ND´, LG, RG, A, B, V1, V2, Z11, Z21, Z11´, Z21´, LD, DL, RD, DR, whichmodes, select, DD, DD´, EE, EN, ggev)
 end
 
 function nearest_cell_harmonics(h)
@@ -255,9 +258,10 @@ function minimal_callsafe_copy(s::SchurFactorsSolver, parentham)
     return s´
 end
 
+# ggev is pure scratch, so a fresh one suffices (FastLapackInterface has no copy for it)
 Base.copy(s::SchurWorkspace) =
     SchurWorkspace(copy.((s.GL, s.GR, s.ND, s.ND´, s.LG, s.RG, s.A, s.B, s.V1, s.V2, s.Z11, s.Z21, s.Z11´, s.Z21´,
-        s.LD, s.DL, s.RD, s.DR, s.whichmodes, s.select, s.DD, s.DD´, s.EE, s.EN))...)
+        s.LD, s.DL, s.RD, s.DR, s.whichmodes, s.select, s.DD, s.DD´, s.EE, s.EN))..., GeneralizedEigenWs(s.A))
 
 #region ## Pencil A - λB ##
 
@@ -936,7 +940,9 @@ function schur_eigvals((h, solver)::Tuple{AbstractHamiltonian1D,AppliedSchurGree
     update_LR!(sf)                  # Ensure L and R matrices are updated after updating h
     update_iG!(sf, ω)               # shift inverse G with ω
     A, B = pencilAB!(sf)            # build the pecil
-    λs = eigvals!(A, B)             # extract the λs as geeraized eigenvales of the pencil
+    α, β = generalized_eigvals!(sf.tmp.ggev, A, B)  # generalized eigenvalues λ = α/β of the pencil
+    λs = α ./ β                     # fresh vector, since callers may filter! it
+    sort!(λs, by = λ -> (real(λ), imag(λ)))  # same ordering as eigvals!(A, B)
     return λs
 end
 
@@ -1060,6 +1066,7 @@ struct DensityMatrixSchurSolver{T,L,A,G<:GreenSlice{T,<:Any,L},O<:NamedTuple}
     hmat::Matrix{Complex{T}}        # it spans just the unit cell, dense Bloch matrix
     psis::Matrix{Complex{T}}        # it spans just the unit cell, Eigenstates
     integrate_opts::O               # callback [missing or a function f(ϕ, z) or f(ϕ1, ϕ2, z)] + kwargs for quadgk
+    eigws::HermitianEigenWs{Complex{T},Matrix{Complex{T}},T}  # workspace for eigen of hmat
 end
 
 ## Constructor
@@ -1081,7 +1088,8 @@ function densitymatrix_schur(gs; int_opts...)
     hmat = similar_Array(hamiltonian(g))
     psis = similar(hmat)
     orbaxes = orbrows(gs), orbcols(gs)
-    solver = DensityMatrixSchurSolver(gs, orbaxes, hmat, psis, NamedTuple(int_opts))
+    eigws = HermitianEigenWs(hmat; vecs = true)
+    solver = DensityMatrixSchurSolver(gs, orbaxes, hmat, psis, NamedTuple(int_opts), eigws)
     return DensityMatrix(solver, gs)
 end
 
@@ -1158,9 +1166,9 @@ end
 function fermi_h!(s, ϕ, µ, β = 0; params...)
     h = parent(parent(s.gs)) # may be a ParametricHamiltonian
     bs = blockstructure(h)
-    # Similar to spectrum(h, ϕ; params...), but less work (no sort! or sanitization)
     copy!(s.hmat, call!(h, ϕ; params...))  # sparse to dense
-    ϵs, psis = eigen!(Hermitian(s.hmat))
+    # Similar to spectrum(h, ϕ; params...), but less work (no sort! or sanitization, use s.eigws workspace)
+    ϵs, psis = hermitian_eigen!(s.eigws, s.hmat)
     # special-casing β = Inf with views turns out to be slower
     fs = (@. ϵs = fermi(ϵs - µ, β))
     fpsis = (s.psis .= psis .* transpose(fs))

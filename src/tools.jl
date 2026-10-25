@@ -443,6 +443,7 @@ end
 ############################################################################################
 # LAPACK tools
 #   Wrapper for LAPACK's tgevc! to compute the right eigenvectors of a matrix pencil (A, B)
+#   Non-allocating LinearAlgebra equivalents using FastLapackInterface workspaces
 #region
 
 using LinearAlgebra: BlasComplex, BlasInt, checksquare, require_one_based_indexing, chkstride1
@@ -485,5 +486,15 @@ for (tgevc, elty, relty) in ((:ztgevc_, :ComplexF64, :Float64),
     end
 end
 
+# as eigvals!(A, B) -> (α, β), with eigenvalues λs = α ./ β (unsorted), but α and β are ws
+# buffers, overwritten by the next call. Callers must not resize them.
+function generalized_eigvals!(ws::GeneralizedEigenWs, A, B)
+    α, β = LAPACK.ggev!(ws, 'N', 'N', A, B)
+    return α, β
+end
+
+# as eigen!(Hermitian(A)) -> (ϵs, ψs), but ϵs and ψs are ws buffers, overwritten by the next call
+hermitian_eigen!(ws::HermitianEigenWs, A) =
+    LAPACK.syevr!(ws, 'V', 'A', 'U', A, 0.0, 0.0, 0, 0, -1.0)
 
 #endregion
