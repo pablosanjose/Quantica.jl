@@ -228,6 +228,13 @@ function cut_tail!(f, xs)
     return xs
 end
 
+# m×n matrix aliasing the first m*n elements of buf, which grows if needed. It is
+# reshape of a view so that buf stays resizable (reshape(buf) would block resize!(buf))
+function matrix_view!(buf::Vector, m, n)
+    length(buf) < m*n && resize!(buf, m*n)
+    return reshape(view(buf, 1:m*n), m, n)
+end
+
 # fast tr(A*B)
 trace_prod(A, B) = (check_sizes(A,B); unsafe_trace_prod(A, B))
 

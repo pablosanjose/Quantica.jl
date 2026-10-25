@@ -138,9 +138,10 @@ function subbands_precompilable(hf::FunctionWrapper, mf::FunctionWrapper{M}, sol
     frustrated = similar(crossed)
     subbands = Subband{T,L+1,M}[]
     svdws = SVDsddWs(Matrix{Complex{T}}(undef, 2, 2); job = 'N')  # for connection_rank!
+    colprojbuf = Complex{T}[]                                      # for knit_seam!
     data = (; hf, mf, solvers, basemesh, eigens, bandverts, bandneighs, bandneideg, coloffsets,
               L, crossed, frustrated, subbands, defects, patches, showprogress, degtol,
-              split, warn, projectors, svdws)
+              split, warn, projectors, svdws, colprojbuf)
 
     # Step 1 - Diagonalize:
     # Uses multiple SpectrumSolvers (one per Julia thread) to diagonalize h at each
@@ -366,7 +367,8 @@ function knit_seam!(data, ib, jb)
     dstrange = column_range(data, jb)
     _, statesib = data.eigens[ib]
     _, statesjb = data.eigens[jb]
-    colproj  = statesjb' * statesib
+    colproj = matrix_view!(data.colprojbuf, size(statesjb, 2), size(statesib, 2))
+    mul!(colproj, statesjb', statesib)
     for i in srcrange
         src = data.bandverts[i]
         for j in dstrange
