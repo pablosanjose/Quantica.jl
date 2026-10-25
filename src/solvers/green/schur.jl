@@ -940,7 +940,7 @@ function schur_eigvals((h, solver)::Tuple{AbstractHamiltonian1D,AppliedSchurGree
     update_LR!(sf)                  # Ensure L and R matrices are updated after updating h
     update_iG!(sf, ω)               # shift inverse G with ω
     A, B = pencilAB!(sf)            # build the pecil
-    α, β = generalized_eigvals!(sf.tmp.ggev, A, B)  # generalized eigenvalues λ = α/β of the pencil
+    α, β = eigvals_ws!(sf.tmp.ggev, A, B)  # generalized eigenvalues λ = α/β of the pencil
     λs = α ./ β                     # fresh vector, since callers may filter! it
     sort!(λs, by = λ -> (real(λ), imag(λ)))  # same ordering as eigvals!(A, B)
     return λs
@@ -1168,7 +1168,7 @@ function fermi_h!(s, ϕ, µ, β = 0; params...)
     bs = blockstructure(h)
     copy!(s.hmat, call!(h, ϕ; params...))  # sparse to dense
     # Similar to spectrum(h, ϕ; params...), but less work (no sort! or sanitization, use s.eigws workspace)
-    ϵs, psis = hermitian_eigen!(s.eigws, s.hmat)
+    ϵs, psis = eigen_ws!(s.eigws, s.hmat)
     # special-casing β = Inf with views turns out to be slower
     fs = (@. ϵs = fermi(ϵs - µ, β))
     fpsis = (s.psis .= psis .* transpose(fs))

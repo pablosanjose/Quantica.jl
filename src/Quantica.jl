@@ -20,7 +20,7 @@ using Statistics: mean
 using QuadGK
 using SpecialFunctions
 using DelimitedFiles
-using FastLapackInterface: HermitianEigenWs, GeneralizedEigenWs
+using FastLapackInterface: HermitianEigenWs, GeneralizedEigenWs, SVDsddWs
 
 export sublat, bravais_matrix, lattice, sites, supercell, hamiltonian,
        hopping, onsite, @onsite, @hopping, @onsite!, @hopping!, pos, ind, cell,

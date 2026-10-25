@@ -443,7 +443,8 @@ end
 ############################################################################################
 # LAPACK tools
 #   Wrapper for LAPACK's tgevc! to compute the right eigenvectors of a matrix pencil (A, B)
-#   Non-allocating LinearAlgebra equivalents using FastLapackInterface workspaces
+#   Non-allocating LinearAlgebra equivalents using FastLapackInterface workspaces:
+#   xxx_ws!(ws, args...) works as LinearAlgebra's xxx!(args...), but its results are ws buffers
 #region
 
 using LinearAlgebra: BlasComplex, BlasInt, checksquare, require_one_based_indexing, chkstride1
@@ -488,13 +489,22 @@ end
 
 # as eigvals!(A, B) -> (α, β), with eigenvalues λs = α ./ β (unsorted), but α and β are ws
 # buffers, overwritten by the next call. Callers must not resize them.
-function generalized_eigvals!(ws::GeneralizedEigenWs, A, B)
+function eigvals_ws!(ws::GeneralizedEigenWs, A, B)
     α, β = LAPACK.ggev!(ws, 'N', 'N', A, B)
     return α, β
 end
 
 # as eigen!(Hermitian(A)) -> (ϵs, ψs), but ϵs and ψs are ws buffers, overwritten by the next call
-hermitian_eigen!(ws::HermitianEigenWs, A) =
+eigen_ws!(ws::HermitianEigenWs, A) =
     LAPACK.syevr!(ws, 'V', 'A', 'U', A, 0.0, 0.0, 0, 0, -1.0)
+
+# as svdvals!(A), but the result is a view of a ws buffer, overwritten by the next call.
+# FastLapackInterface's gesdd! skips its size check for job = 'N', so we resize! ws here
+function svdvals_ws!(ws::SVDsddWs, A)
+    m, n = size(A)
+    (size(ws.U, 1), size(ws.VT, 1)) == (m, n) || resize!(ws, A; job = 'N')
+    _, S, _ = LAPACK.gesdd!(ws, 'N', A)
+    return view(S, 1:min(m, n))
+end
 
 #endregion

@@ -137,9 +137,10 @@ function subbands_precompilable(hf::FunctionWrapper, mf::FunctionWrapper{M}, sol
     crossed = NTuple{6,Int}[]
     frustrated = similar(crossed)
     subbands = Subband{T,L+1,M}[]
+    svdws = SVDsddWs(Matrix{Complex{T}}(undef, 2, 2); job = 'N')  # for connection_rank!
     data = (; hf, mf, solvers, basemesh, eigens, bandverts, bandneighs, bandneideg, coloffsets,
               L, crossed, frustrated, subbands, defects, patches, showprogress, degtol,
-              split, warn, projectors)
+              split, warn, projectors, svdws)
 
     # Step 1 - Diagonalize:
     # Uses multiple SpectrumSolvers (one per Julia thread) to diagonalize h at each
@@ -371,7 +372,7 @@ function knit_seam!(data, ib, jb)
         for j in dstrange
             dst = data.bandverts[j]
             proj = view(colproj, parentcols(dst), parentcols(src))
-            connections = connection_rank(proj)
+            connections = connection_rank!(proj, data.svdws)  # may overwrite proj, not reused
             if connections > 0
                 push!(data.bandneighs[i], j)
                 push!(data.bandneighs[j], i)
@@ -395,14 +396,15 @@ end
 # Fast rank-1 |svd|^2 is r = tr(proj'proj). For higher ranks and r > 0 we must compute and
 # count singular values. The min_squared_overlap is arbitrary, and is fixed heuristically to
 # a high enough value to connect in the coarsest base lattices
-function connection_rank(proj)
+# The svd overwrites proj, using the svdws::SVDsddWs workspace
+function connection_rank!(proj, svdws)
     min_squared_overlap = 0.499
     rankf = sum(abs2, proj) # = tr(proj'proj)
     fastrank = ifelse(rankf > min_squared_overlap, 1, 0)  # For rank=1 proj: upon doubt, connect
     if iszero(fastrank) || size(proj, 1) == 1 || size(proj, 2) == 1
         return fastrank
     else
-        sv = svdvals(proj)
+        sv = svdvals_ws!(svdws, proj)
         return count(s -> abs2(s) > min_squared_overlap, sv)
     end
 end
