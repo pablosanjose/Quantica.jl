@@ -7,7 +7,7 @@ using LinearAlgebra
     g2 = LP.square() |> hopping(1) - onsite(1) |> supercell(3) |> supercell |> attach(nothing, region = RP.circle(2)) |> greenfunction(GS.Spectrum())
     g3 = LP.triangular() |> hamiltonian(hopping(-I) + onsite(1.8I), orbitals = 2) |> supercell(10) |> supercell |>
         attach(nothing, region = RP.circle(2)) |> attach(nothing, region = RP.circle(2, SA[1,2])) |> greenfunction(GS.KPM(bandrange=(-4,5)))
-    # Schur density matrix reuses its LAPACK workspaces (~70 KB per call, vs ~2-5 MB without them)
+    # PR #419: Schur density matrix reuses its LAPACK workspaces (~70 KB per call, vs ~2-5 MB without them)
     ρ1 = densitymatrix(g1[diagonal(:)])
     for kBT in (0, 0.02)
         ρ1(0.1, kBT)                                # first call, to compile

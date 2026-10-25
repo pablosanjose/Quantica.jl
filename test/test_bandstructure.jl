@@ -50,7 +50,7 @@ using LinearMaps, ArnoldiMethod, KrylovKit, Arpack
     h = LatticePresets.honeycomb() |> onsite(im) + hopping(-1) |> supercell(2)
     b = bands(h, subdiv(-pi, pi, 13), subdiv(-pi,pi, 13), showprogress = false)
     @test nsubbands(b)  == 1
-    # non-normal spectra (nonreciprocal hopping), through the non-Hermitian eigen workspace of b's solver
+    # PR #419: non-normal spectra (nonreciprocal hopping), through the non-Hermitian eigen workspace of b's solver
     h = LatticePresets.honeycomb() |> onsite(im) + hopping((r, dr) -> -1 + 0.3*dr[1]) |> supercell(2)
     b = bands(h, subdiv(-pi, pi, 13), subdiv(-pi,pi, 13), showprogress = false)
     for φs in (SA[0.2, -0.7], SA[1.3, 0.4])
@@ -75,12 +75,14 @@ using LinearMaps, ArnoldiMethod, KrylovKit, Arpack
     b = bands(h, subdiv(-π, π, 19), subdiv(-π, π, 19))
     @test nsimplices(b) == 1312
 
-    # bands of a degenerate system reuse eigen and svd workspaces and the knitting colproj buffer
+    # PR #419: bands of a degenerate system reuse eigen and svd workspaces and the knitting colproj buffer
     # (~2.7 MiB, vs ~4 MiB without the eigen workspaces and ~8.5 MiB without any of them)
     h = LP.square() |> hamiltonian(hopping(I), orbitals = 2) |> supercell(2)
     let h = h, ks = subdiv(-π, π, 13)  # locals, to avoid global-scope allocations
         bands(h, ks, ks; showprogress = false)                                    # first call, to compile
         @test (@allocated bands(h, ks, ks; showprogress = false)) < 3.5 * 2^20    # 3.5 MiB
+        # PR #419: unboxed captured variables in subbands_split! (~11k-18k allocs, vs ~24k-38k boxed)
+        @test (@allocations bands(h, ks, ks; showprogress = false)) < 21000
     end
 end
 

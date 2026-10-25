@@ -599,8 +599,10 @@ function subbands_split!(data)
             # avoid subbands with no simplices
             if length(subset) > data.L
                 sverts  = data.bandverts[subset]
-                sneighs = [ [old2new[dstold] - offset for dstold in data.bandneighs[srcold]]
+                sneighs = let offset = offset  # avoids boxing offset (reassigned below) in the closures
+                    [ [old2new[dstold] - offset for dstold in data.bandneighs[srcold]]
                         for srcold in subset]
+                end
                 sband = Subband(sverts, sneighs)
                 isempty(sband) || push!(data.subbands, sband)
             end

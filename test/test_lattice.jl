@@ -206,4 +206,9 @@ end
     # repeated sublat names
     lat = lattice(sublat(0, name = :A), sublat(1, name = :B), sublat(2, name = :A))
     @test lat[sublats = :A] |> sites |> collect |> length == 2
+    # PR #419: unboxed captured variables in sublatsites (~40-70 allocs, vs ~1.9k boxed)
+    let ls = LP.honeycomb() |> supercell(region = RP.circle(20)) |> (lat -> lat[region = RP.circle(14)])
+        Quantica.lattice0D(ls)                                       # first call, to compile
+        @test (@allocations Quantica.lattice0D(ls)) < 500            # 1416 sites
+    end
 end

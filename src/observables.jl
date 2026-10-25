@@ -676,10 +676,10 @@ function gaps(h::Hamiltonian{T,<:Any,1}, µ = 0, ϕstore = missing; atol = eps(T
     # remove duplicates within tolerance
     sort!(cϕs, by = real)
     runs = Runs(cϕs, (x, y) -> isapprox(real(x), real(y); atol))
-    cϕs = [cϕs[first(rng)] for rng in runs]
-    rϕs = real.(cϕs)
-    iϕs = chopsmall.(abs.(imag.(cϕs)), atol)
-    ϕstore === missing || copy!(ϕstore, cϕs)
+    cϕs´ = [cϕs[first(rng)] for rng in runs]
+    rϕs = real.(cϕs´)
+    iϕs = chopsmall.(abs.(imag.(cϕs´)), atol)
+    ϕstore === missing || copy!(ϕstore, cϕs´)
     solver = ES.ShiftInvert(ES.ArnoldiMethod(; nev, kw...), µ)
     n = flatsize(h)
     Δs = [iszero(iϕ) || rank(h(rϕ)-µ*I; tol=atol) < n ?
