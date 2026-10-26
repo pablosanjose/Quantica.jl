@@ -85,13 +85,13 @@ using LinearMaps, ArnoldiMethod, KrylovKit, Arpack
         # PR #419: unboxed captured variables in subbands_split! (~11k-18k allocs, vs ~24k-38k boxed)
         @test (@allocations bands(h, ks, ks; showprogress = false)) < 21000
     end
-    # PR #419: simplex building reuses its buffers across vertices (~6-7 allocs, vs ~3.6k-9k)
-    b = bands(HP.graphene(), subdiv(0, 2π, 30), subdiv(0, 2π, 30); showprogress = false)
     # PR #419: band vertices are preallocated, and not copied if there is a single subband
     # (~2.5-2.7 MiB, vs ~3-3.5 MiB)
+    b = bands(HP.graphene(), subdiv(0, 2π, 30), subdiv(0, 2π, 30); showprogress = false)
     let h = HP.graphene(), ks = subdiv(0, 2π, 30)
         @test (@allocated bands(h, ks, ks; showprogress = false)) < 2.85 * 2^20  # 2.85 MiB
     end
+    # PR #419: simplex building reuses its buffers across vertices (~6-7 allocs, vs ~3.6k-9k)
     let neighs = Quantica.neighbors(Quantica.subbands(b)[1])                 # 1800 vertices
         Quantica.build_cliques(neighs, Val(3))                               # first call, to compile
         @test (@allocations Quantica.build_cliques(neighs, Val(3))) < 50
@@ -109,6 +109,15 @@ using LinearMaps, ArnoldiMethod, KrylovKit, Arpack
     @test !isempty(p1) && p1 == p2
     # the user's random numbers are unaffected
     @test r1 == r2
+    # PR #419: splitting into several subbands re-indexes neighbor lists in place instead of
+    # copying them (~100-160 extra allocs over split = false, vs ~1.9k-3.8k)
+    h = LP.honeycomb() |> hopping(1) + onsite(0.5, sublats = :A) - onsite(0.5, sublats = :B)
+    let h = h, ks = subdiv(0, 2π, 30)                                          # 1800 vertices
+        @test nsubbands(bands(h, ks, ks; showprogress = false)) == 2         # first call, to compile
+        bands(h, ks, ks; split = false, showprogress = false)
+        @test (@allocations bands(h, ks, ks; showprogress = false)) -
+              (@allocations bands(h, ks, ks; split = false, showprogress = false)) < 1000
+    end
 end
 
 @testset "functional bandstructures" begin

@@ -606,10 +606,13 @@ function subbands_split!(data)
         for subset in svinds
             # avoid subbands with no simplices
             if length(subset) > data.L
+                # This makes a copy of the subset of vertices in each subband
                 sverts  = data.bandverts[subset]
-                sneighs = let offset = offset  # avoids boxing offset (reassigned below) in the closures
-                    [ [old2new[dstold] - offset for dstold in data.bandneighs[srcold]]
-                        for srcold in subset]
+                # data.bandneighs is a Vector of vectors (list of neighbors for each vertex)
+                # This makes a copy of the outer vector, but not of the inner ones (reused)
+                sneighs = data.bandneighs[subset]
+                for ns in sneighs, (n, dst_old) in enumerate(ns)
+                    ns[n] = old2new[dst_old] - offset
                 end
                 sband = Subband(sverts, sneighs)
                 isempty(sband) || push!(data.subbands, sband)
