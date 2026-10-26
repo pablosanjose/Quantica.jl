@@ -1791,10 +1791,15 @@ function Subband(mesh::Mesh{<:BandVertex{T}}, trees) where {T}
 end
 
 function subband_trees(verts::Vector{<:BandVertex{T,E}}, simps) where {T,E}
+    list = Vector{IntervalValue{T,Int}}(undef, length(simps))  # reused for all trees, which copy it
     trees = ntuple(Val(E)) do i
-        list = [IntervalValue(shrinkright(extrema(j->coordinates(verts[j])[i], s))..., n)
-                     for (n, s) in enumerate(simps)]
+        for (n, s) in enumerate(simps)
+            list[n] = IntervalValue(shrinkright(extrema(j->coordinates(verts[j])[i], s))..., n)
+        end
+        # sort! allocates a scratch buffer. If sort!'s scratch keyword became public (it is
+        # undocumented), we could also reuse that buffer across trees, saving ~1/3 more
         sort!(list)
+        # IntervalTree constructor copies list, so we can reuse it for the next tree
         return IntervalTree{T,IntervalValue{T,Int}}(list)
     end
     return trees

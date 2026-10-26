@@ -91,6 +91,11 @@ using LinearMaps, ArnoldiMethod, KrylovKit, Arpack
         Quantica.build_cliques(neighs, Val(3))                               # first call, to compile
         @test (@allocations Quantica.build_cliques(neighs, Val(3))) < 50
     end
+    # PR #419: subband interval trees reuse one temporary list (~690-700 KiB, vs ~850-860 KiB)
+    let sb = Quantica.subbands(b)[1], verts = Quantica.vertices(sb), simps = Quantica.simplices(sb)
+        Quantica.subband_trees(verts, simps)                                 # first call, to compile
+        @test (@allocated Quantica.subband_trees(verts, simps)) < 775 * 2^10 # 775 KiB
+    end
 end
 
 @testset "functional bandstructures" begin
