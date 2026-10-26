@@ -91,9 +91,17 @@ rebuild_cliques!(mesh::Mesh) = rebuild_cliques!(simplices(mesh), neighbors(mesh)
 
 function rebuild_cliques!(cliques::Vector{NTuple{N,Int}}, neighs) where {N}
     empty!(cliques)
+    # (N-1)! simplices per vertex in marching meshes. Band crossings add a few more, so then
+    # cliques will be silently resized once
+    sizehint!(cliques, factorial(N - 1) * length(neighs))
+    dsts_f = Int[]     # indexable forward neighbors of each src, reused
+    combstate = Int[]  # reused state of Combinations
     for (src, dsts) in enumerate(neighs)
-        dsts_f = filter(>(src), dsts)  # indexable forward neighbors
-        for ids in Combinations(length(dsts_f), N - 1)
+        empty!(dsts_f)
+        for dst in dsts
+            dst > src && push!(dsts_f, dst)
+        end
+        for ids in Combinations(length(dsts_f), N - 1, combstate)
             if all_adjacent(ids, dsts_f, neighs)
                 # clique = (src, dsts_f[ids]...), but non-allocating
                 clique = ntuple(i -> i == 1 ? src : dsts_f[ids[i - 1]], Val(N))

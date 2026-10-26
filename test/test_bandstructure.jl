@@ -85,6 +85,12 @@ using LinearMaps, ArnoldiMethod, KrylovKit, Arpack
         # PR #419: unboxed captured variables in subbands_split! (~11k-18k allocs, vs ~24k-38k boxed)
         @test (@allocations bands(h, ks, ks; showprogress = false)) < 21000
     end
+    # PR #419: simplex building reuses its buffers across vertices (~6-7 allocs, vs ~3.6k-9k)
+    b = bands(HP.graphene(), subdiv(0, 2π, 30), subdiv(0, 2π, 30); showprogress = false)
+    let neighs = Quantica.neighbors(Quantica.subbands(b)[1])                 # 1800 vertices
+        Quantica.build_cliques(neighs, Val(3))                               # first call, to compile
+        @test (@allocations Quantica.build_cliques(neighs, Val(3))) < 50
+    end
 end
 
 @testset "functional bandstructures" begin
