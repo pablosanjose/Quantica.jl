@@ -449,49 +449,31 @@ end
 
 ############################################################################################
 # LAPACK tools
-#   Wrapper for LAPACK's tgevc! to compute the right eigenvectors of a matrix pencil (A, B)
 #   Non-allocating LinearAlgebra equivalents using FastLapackInterface workspaces:
 #   xxx_ws!(ws, args...) works as LinearAlgebra's xxx!(args...), but its results are ws buffers
 #region
 
-using LinearAlgebra: BlasComplex, BlasInt, checksquare, require_one_based_indexing, chkstride1
-using LinearAlgebra.LAPACK: liblapack, chklapackerror
-using LinearAlgebra.BLAS: @blasfunc
+using LinearAlgebra: BlasComplex, BlasInt
 
-# Complex types only (ztgevc_, ctgevc_): our Schur pencils are always complex
-for (tgevc, elty, relty) in ((:ztgevc_, :ComplexF64, :Float64),
-                             (:ctgevc_, :ComplexF32, :Float32))
-    @eval begin
-        function tgevc!(side::AbstractChar, howmny::AbstractChar, select::AbstractVector{BlasInt},
-                        S::AbstractMatrix{$elty}, P::AbstractMatrix{$elty},
-                        VL::AbstractMatrix{$elty}, VR::AbstractMatrix{$elty})
-            require_one_based_indexing(S, P, VL, VR)
-            chkstride1(S, P, VL, VR)
-            n = checksquare(S)
-            checksquare(P) == n || throw(DimensionMismatch("P must have same dimensions as S"))
+# as schur!(A, B), but A and B are overwritten as S and T, and α, β, Q, Z are ws buffers
+function schur_ws!(ws::GeneralizedSchurWs, A, B)
+    S, T, α, β, Q, Z = LAPACK.gges!(ws, 'V', 'V', A, B)
+    return GeneralizedSchur(S, T, α, β, Q, Z)
+end
 
-            ldvl  = max(1, stride(VL, 2))
-            ldvr  = max(1, stride(VR, 2))
-            mm    = max(1, size(VR, 2))
-            m     = Ref{BlasInt}(0)
-            work  = Vector{$elty}(undef, 2n)
-            rwork = Vector{$relty}(undef, 2n)
-            info  = Ref{BlasInt}(0)
+# as ordschur!(sch, select), but select must be a Vector{BlasInt}
+function ordschur_ws!(ws::GeneralizedOrdSchurWs, sch::GeneralizedSchur, select)
+    _, _, α, β, _, _ = LAPACK.tgsen!(ws, select, sch.S, sch.T, sch.Q, sch.Z)
+    copy!(sch.α, α)
+    copy!(sch.β, β)
+    return sch
+end
 
-            ccall((@blasfunc($tgevc), liblapack), Cvoid,
-                (Ref{UInt8}, Ref{UInt8}, Ptr{BlasInt}, Ref{BlasInt},
-                 Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                 Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                 Ref{BlasInt}, Ptr{BlasInt}, Ptr{$elty}, Ptr{$relty}, Ptr{BlasInt}),
-                side, howmny, select, n,
-                S, max(1, stride(S, 2)), P, max(1, stride(P, 2)),
-                VL, ldvl, VR, ldvr,
-                mm, m, work, rwork, info)
-
-            chklapackerror(info[])
-            return VR
-        end
-    end
+# right eigenvectors of the pencil (S, T) in generalized Schur form, for the eigenvalues
+# selected by select, written into VR (may be a view)
+function eigvecs_ws!(ws::GeneralizedEigenvectorsWs, select, S, T, VR)
+    FastLapackInterface.tgevc!(ws, 'R', 'S', select, S, T, VR, VR)  # VL is not referenced
+    return VR
 end
 
 # as eigvals!(A, B) -> (α, β), with eigenvalues λs = α ./ β (unsorted), but α and β are ws

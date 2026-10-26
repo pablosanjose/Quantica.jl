@@ -31,6 +31,11 @@ ArnoldiMethod = "ec485272-7323-5ecc-a04f-4719b315124d"
 KrylovKit = "0b1a1467-8014-51b9-945f-bf0ae24f4b77"
 Arpack = "7d9fca2a-8960-54d3-9f78-7d1dccf2cb97"
 
+[sources]
+# PR C needs unreleased FastLapackInterface features (complex gges!, tgsen!, tgevc!).
+# Remove this section and bump the FastLapackInterface compat once they are released.
+FastLapackInterface = {url = "https://github.com/pablosanjose/FastLapackInterface.jl", rev = "complex-schur-reorder"}
+
 [extensions]
 QuanticaMakieExt = "Makie"
 QuanticaLinearMapsExt = "LinearMaps"

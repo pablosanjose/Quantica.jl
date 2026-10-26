@@ -45,13 +45,15 @@ struct SchurWorkspace{T}
     DL::Matrix{Complex{T}}
     RD::Matrix{Complex{T}}
     DR::Matrix{Complex{T}}
-    whichmodes::Vector{Bool}
-    select::Vector{BlasInt}
+    whichmodes::Vector{BlasInt}                                      # also LAPACK select for ordschur_ws! and eigvecs_ws! (read-only there)
     DD::Matrix{Complex{T}}
     DD´::Matrix{Complex{T}}
     EE::Matrix{Complex{T}}
     EN::Matrix{Complex{T}}
-    ggev::GeneralizedEigenWs{Complex{T},Matrix{Complex{T}},T}  # for schur_eigvals
+    ws_eigvals::GeneralizedEigenWs{Complex{T},Matrix{Complex{T}},T}  # for schur_eigvals
+    ws_schur::GeneralizedSchurWs{Complex{T},T}                       # for schur_pencil!
+    ws_ordschur::GeneralizedOrdSchurWs{Complex{T}}                   # for ordschur
+    ws_eigvecs::GeneralizedEigenvectorsWs{Complex{T},T}              # for eigen_schur_half!
 end
 
 struct SchurFactorsSolver{T,B}
@@ -109,14 +111,15 @@ function SchurWorkspace{T}((n, d), l, r) where {T}
     DL = Matrix{C}(undef, d, l)
     RD = Matrix{C}(undef, r, d)
     DR = Matrix{C}(undef, d, r)
-    whichmodes = Vector{Bool}(undef, 2d)
-    select = BlasInt[ifelse(i <= d, 1, 0) for i in 1:2d] # used in eigen_schur_half!
+    whichmodes = Vector{BlasInt}(undef, 2d)
     DD = Matrix{C}(undef, d, d)
     DD´ = Matrix{C}(undef, d, d)
     EE = Matrix{C}(undef, n+d, n+d)
     EN = Matrix{C}(undef, n+d, n)
-    ggev = GeneralizedEigenWs(A)
-    return SchurWorkspace(GL, GR, ND, ND´, LG, RG, A, B, V1, V2, Z11, Z21, Z11´, Z21´, LD, DL, RD, DR, whichmodes, select, DD, DD´, EE, EN, ggev)
+    ws_eigvals, ws_schur = GeneralizedEigenWs(A), GeneralizedSchurWs(A)
+    ws_ordschur, ws_eigvecs = GeneralizedOrdSchurWs(A), GeneralizedEigenvectorsWs(A)
+    return SchurWorkspace(GL, GR, ND, ND´, LG, RG, A, B, V1, V2, Z11, Z21, Z11´, Z21´, LD, DL, RD, DR, whichmodes, DD, DD´, EE, EN,
+        ws_eigvals, ws_schur, ws_ordschur, ws_eigvecs)
 end
 
 function nearest_cell_harmonics(h)
@@ -203,7 +206,7 @@ call!_output(s::SchurFactorsSolver) =
 function call!(s::SchurFactorsSolver, ω; modesolver = missing)
     R, Z11, Z21, L, Z11´, Z21´, whichmodes = s.R, s.tmp.Z11, s.tmp.Z21, s.L, s.tmp.Z11´, s.tmp.Z21´, s.tmp.whichmodes
     RZ21, LZ11´, LD, DL, RD, DR = s.tmp.ND, s.tmp.ND´, s.tmp.LD, s.tmp.DL, s.tmp.RD, s.tmp.DR
-    linds, rinds = s.linds, s.rinds
+    linds, rinds, ws = s.linds, s.rinds, s.tmp.ws_ordschur
 
     update_LR!(s)     # We must update L, R in case a parametric parent has been call!-ed
     d = size(Z11, 1)
@@ -225,7 +228,7 @@ function call!(s::SchurFactorsSolver, ω; modesolver = missing)
 
     # ADVANCED
     whichmodes .= 1:2d .> d   # at this point first half is retarded, second half is advanced
-    ordschur!(sch, whichmodes)
+    ordschur_ws!(ws, sch, whichmodes)
 
     # Reclaim Z11´, Z21´ for advanced Z blocks
     copy!(Z11´, view(sch.Z, 1:d, 1:d))
@@ -258,17 +261,18 @@ function minimal_callsafe_copy(s::SchurFactorsSolver, parentham)
     return s´
 end
 
-# ggev is pure scratch, so a fresh one suffices (FastLapackInterface has no copy for it)
 Base.copy(s::SchurWorkspace) =
     SchurWorkspace(copy.((s.GL, s.GR, s.ND, s.ND´, s.LG, s.RG, s.A, s.B, s.V1, s.V2, s.Z11, s.Z21, s.Z11´, s.Z21´,
-        s.LD, s.DL, s.RD, s.DR, s.whichmodes, s.select, s.DD, s.DD´, s.EE, s.EN))..., GeneralizedEigenWs(s.A))
+        s.LD, s.DL, s.RD, s.DR, s.whichmodes, s.DD, s.DD´, s.EE, s.EN))...,
+        GeneralizedEigenWs(s.A), GeneralizedSchurWs(s.A), GeneralizedOrdSchurWs(s.A), GeneralizedEigenvectorsWs(s.A))
 
 #region ## Pencil A - λB ##
 
 function schur_pencil!(s::SchurFactorsSolver{T}, ω) where {T}
+    ws = s.tmp.ws_schur
     update_iG!(s, ω)  # iG = ω - h0 + iΩP'P
     A, B = pencilAB!(s)
-    sch = schur!(A, B)
+    sch = schur_ws!(ws, A, B)  # sch is made of ws buffers
     # disallow zeros in deflated α's or β's for real ω
     tol = sqrt(eps(T))
     ωshift = 5*eps(T)
@@ -392,11 +396,11 @@ end
 function ordschur_retarded!(sch::GeneralizedSchur{Complex{T}}, s::SchurFactorsSolver, ω) where {T}
     tol = sqrt(eps(T))
     ωshift = 5*eps(T)
-    whichmodes, V´, VZ = s.tmp.whichmodes, s.tmp.V1, s.tmp.V2
+    whichmodes, V´, VZ, ws = s.tmp.whichmodes, s.tmp.V1, s.tmp.V2, s.tmp.ws_ordschur
     @. whichmodes = abs(sch.β)-tol < abs(sch.α) < abs(sch.β)+tol    # propagating classifier (lax)
-    if any(whichmodes)                                              # classify propagating modes using velocity
-        nprop = sum(whichmodes)
-        ordschur!(sch, whichmodes)
+    nprop = sum(whichmodes)
+    if nprop > 0                                                    # classify propagating modes using velocity
+        ordschur_ws!(ws, sch, whichmodes)
         V´ = build_velocity_matrix!(V´, VZ, sch.Z)
         @. whichmodes = abs(sch.α) <= abs(sch.β) - tol              # evanescent retarded
         classify_retarded_propagating!(whichmodes, V´, nprop)       # propagating or evanescent retarded
@@ -413,7 +417,7 @@ function ordschur_retarded!(sch::GeneralizedSchur{Complex{T}}, s::SchurFactorsSo
         sch´ = schur_pencil!(s, ω´)
         return ordschur_retarded!(sch´, s, ω´)  # wipes and recomputes whichmodes at ω´
     end
-    ordschur!(sch, whichmodes)
+    ordschur_ws!(ws, sch, whichmodes)
     return sch
 end
 
@@ -484,21 +488,18 @@ function solve_modes_advanced_schur!(modesol, fsolver, sch)
 end
 
 # Computes the leading half of the right eigenvectors and eigenvalues of Generalized Schur
-# factorization of pencil schur(A,B) efficiently, dispatching to LAPACK's tgevc! routine.
+# factorization of pencil schur(A,B) efficiently, dispatching to FastLapackInterface.tgevc! (via eigvecs_ws!).
 # The compuation is done in-place, overwriting (λ, φ, χ) but also sch.Q
 function eigen_schur_half!(sch::GeneralizedSchur, s::SchurFactorsSolver)
-    Φ, Χ = s.tmp.DD, s.tmp.DD´
+    Φ, Χ, select, ws = s.tmp.DD, s.tmp.DD´, s.tmp.whichmodes, s.tmp.ws_eigvecs  # whichmodes is no longer needed here
     S = sch.S
     T = sch.T
     d = size(S, 1) ÷ 2
     λ = view(sch.values, 1:d)
 
-    side = 'R'                          # right eigenvectors
-    howmny = 'S'                        # select mode
-    VL = sch.Z                          # Dummy matrix for VL, not used
     VR = view(sch.Q, :, (d+1):2d)
-    select = s.tmp.select               # already prepared on creation to select first half
-    tgevc!(side, howmny, select, S, T, VL, VR)  # Dispatch to the LAPACK wrapper (tools.jl)
+    select .= 1:2d .<= d                # select first half
+    eigvecs_ws!(ws, select, S, T, VR)   # FastLapackInterface wrapper (tools.jl)
 
     mul!(Φ, view(sch.Z, 1:d, :), VR)    # convert Φ to original basis
     mul!(Χ, view(sch.Z, (d+1):2d, :), VR) # convert Χ to original basis
@@ -937,10 +938,11 @@ schur_eigvals(g::GreenFunctionSchurLead1D, ω::Complex; params...) =
 function schur_eigvals((h, solver)::Tuple{AbstractHamiltonian1D,AppliedSchurGreenSolver}, ω::Complex; params...)
     call!(h; params...)             # update the (Parametric)Hamiltonian with the params
     sf = solver.fsolver             # obtain the SchurFactorSolver that computes the AB pencil
+    ws = sf.tmp.ws_eigvals
     update_LR!(sf)                  # Ensure L and R matrices are updated after updating h
     update_iG!(sf, ω)               # shift inverse G with ω
     A, B = pencilAB!(sf)            # build the pecil
-    α, β = eigvals_ws!(sf.tmp.ggev, A, B)  # generalized eigenvalues λ = α/β of the pencil
+    α, β = eigvals_ws!(ws, A, B)    # generalized eigenvalues λ = α/β of the pencil
     λs = α ./ β                     # fresh vector, since callers may filter! it
     sort!(λs, by = λ -> (real(λ), imag(λ)))  # same ordering as eigvals!(A, B)
     return λs
