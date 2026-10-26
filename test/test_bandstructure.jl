@@ -87,6 +87,11 @@ using LinearMaps, ArnoldiMethod, KrylovKit, Arpack
     end
     # PR #419: simplex building reuses its buffers across vertices (~6-7 allocs, vs ~3.6k-9k)
     b = bands(HP.graphene(), subdiv(0, 2π, 30), subdiv(0, 2π, 30); showprogress = false)
+    # PR #419: band vertices are preallocated, and not copied if there is a single subband
+    # (~2.5-2.7 MiB, vs ~3-3.5 MiB)
+    let h = HP.graphene(), ks = subdiv(0, 2π, 30)
+        @test (@allocated bands(h, ks, ks; showprogress = false)) < 2.85 * 2^20  # 2.85 MiB
+    end
     let neighs = Quantica.neighbors(Quantica.subbands(b)[1])                 # 1800 vertices
         Quantica.build_cliques(neighs, Val(3))                               # first call, to compile
         @test (@allocations Quantica.build_cliques(neighs, Val(3))) < 50

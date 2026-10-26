@@ -284,7 +284,13 @@ function subbands_diagonalize!(data)
             data.showprogress && ProgressMeter.next!(meter)
         end
     end
-    # Collect band vertices and store column offsets
+
+    # Compute number of band vertices (bunches of degenerate eigenvalues) to do a sizehint!
+    # Patches may add a few more later, so then these may be silently resized
+    nverts = sum(eigen -> count(Returns(true), approxruns(first(eigen), data.degtol)), data.eigens)
+    foreach(v -> sizehint!(v, nverts), (data.bandverts, data.bandneighs, data.bandneideg))
+
+    # Collect band vertices and store column offsets.
     for (basevert, eigen) in zip(baseverts, data.eigens)
         append_bands_column!(data, basevert, eigen)
     end
@@ -591,6 +597,8 @@ function subbands_split!(data)
         # vsinds are the subband index of each vertex index
         # svinds is lists of band vertex indices that belong to the same subband
         vsinds, svinds = subsets(data.bandneighs)
+        # a single subset has all vertices, sorted, so we can skip the rest
+        length(svinds) == 1 && return subbands_nosplit!(data)
         meter = Progress(length(svinds); desc = "Step 4 - Splitting: ")
         new2old = sortperm(vsinds)
         old2new = invperm(new2old)
@@ -610,9 +618,14 @@ function subbands_split!(data)
             data.showprogress && ProgressMeter.next!(meter)
         end
     else
-        sband = Subband(data.bandverts, data.bandneighs)
-        isempty(sband) || push!(data.subbands, sband)
+        subbands_nosplit!(data)
     end
+    return data
+end
+
+function subbands_nosplit!(data)
+    sband = Subband(data.bandverts, data.bandneighs)
+    isempty(sband) || push!(data.subbands, sband)
     return data
 end
 
