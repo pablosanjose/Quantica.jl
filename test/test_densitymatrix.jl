@@ -17,6 +17,11 @@ using LinearAlgebra
         Quantica.fermi_h!(s, ϕ, 0.1, 50.0)          # first call, to compile
         @test (@allocations Quantica.fermi_h!(s, ϕ, 0.1, 50.0)) <= 2  # should be 0
     end
+    # Schur factors reuse gges/tgsen/tgevc workspaces (~55 KB per call, vs ~180 KB without them)
+    let fs = g1.solver.fsolver, ω = 0.2 + 0.0im
+        Quantica.call!(fs, ω)                       # first call, to compile
+        @test (@allocated Quantica.call!(fs, ω)) < 2^17  # 2^17 bytes = 128 KiB
+    end
     # g3 excluded since KPM doesn't support finite temperatures or generic indexing yet
     # all inds × path combinations, with g cycled through (see testutils.jl)
     indss = (diagonal(1), diagonal(:), sitepairs(range = 1))
