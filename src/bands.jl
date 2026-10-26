@@ -660,8 +660,10 @@ function subband_projectors!(s::Subband{T}, hf, meter, showprogress) where {T}
     isempty(projstates) || return s
     verts = vertices(s)
     simps = simplices(s)
-    # a random symmetry-breaking perturbation common to all simplices
+    # a random symmetry-breaking perturbation common to all simplices, using a local rng
+    # for reproducibility, so we don't touch the global rng either
     perturbation = Complex{T}[]
+    rng = Xoshiro(1)
     for (sind, simp) in enumerate(simps)
         degs = degeneracy.(getindex.(Ref(verts), simp))
         if any(>(1), degs)
@@ -670,7 +672,7 @@ function subband_projectors!(s::Subband{T}, hf, meter, showprogress) where {T}
             hkav = hf(kav)
             nzs = nonzeros(hkav)
             nnzs = length(nzs)
-            nnzs == length(perturbation) || resize_perturbation!(perturbation, nnzs)
+            nnzs == length(perturbation) || resize_perturbation!(perturbation, nnzs, rng)
             nzs .+= perturbation     # in-place allowed since hkav gets updated on each call
             mindeg = minimum(degs)
             for (vind, deg) in zip(simp, degs)
@@ -685,13 +687,13 @@ function subband_projectors!(s::Subband{T}, hf, meter, showprogress) where {T}
     return projstates
 end
 
-function resize_perturbation!(p::Vector{C}, n) where {C}
+function resize_perturbation!(p::Vector{C}, n, rng) where {C}
     l = length(p)
     @assert n > l   # perturbation length should not decrease
     resize!(p, n)
     η = sqrt(eps(real(C)))  # makes the perturbation small
     for i in l+1:n
-        p[i] = η * rand(C)
+        p[i] = η * rand(rng, C)
     end
     return p
 end

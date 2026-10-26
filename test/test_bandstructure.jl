@@ -101,6 +101,14 @@ using LinearMaps, ArnoldiMethod, KrylovKit, Arpack
         Quantica.subband_trees(verts, simps)                                 # first call, to compile
         @test (@allocated Quantica.subband_trees(verts, simps)) < 775 * 2^10 # 775 KiB
     end
+    # PR #419: projectors use a local rng, so they are reproducible and leave the global rng alone
+    h = LP.square() |> hamiltonian(hopping(I), orbitals = 2) |> supercell(2)
+    ks = subdiv(-π, π, 7)
+    Random.seed!(1); r1 = rand(); p1 = Quantica.projected_states(only(Quantica.subbands(bands(h, ks, ks; projectors = true, showprogress = false))))
+    Random.seed!(1); p2 = Quantica.projected_states(only(Quantica.subbands(bands(h, ks, ks; projectors = true, showprogress = false)))); r2 = rand()
+    @test !isempty(p1) && p1 == p2
+    # the user's random numbers are unaffected
+    @test r1 == r2
 end
 
 @testset "functional bandstructures" begin
