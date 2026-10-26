@@ -76,11 +76,12 @@ using LinearMaps, ArnoldiMethod, KrylovKit, Arpack
     @test nsimplices(b) == 1312
 
     # PR #419: bands of a degenerate system reuse eigen and svd workspaces and the knitting colproj buffer
-    # (~2.7 MiB, vs ~4 MiB without the eigen workspaces and ~8.5 MiB without any of them)
+    # (~1.4-1.7 MiB, vs ~2.5-3 MiB if the svd workspace is resized to each new shape instead of
+    # only grown, ~4 MiB without the eigen workspaces and ~8.5 MiB without any of them)
     h = LP.square() |> hamiltonian(hopping(I), orbitals = 2) |> supercell(2)
     let h = h, ks = subdiv(-π, π, 13)  # locals, to avoid global-scope allocations
         bands(h, ks, ks; showprogress = false)                                    # first call, to compile
-        @test (@allocated bands(h, ks, ks; showprogress = false)) < 3.5 * 2^20    # 3.5 MiB
+        @test (@allocated bands(h, ks, ks; showprogress = false)) < 2 * 2^20      # 2 MiB
         # PR #419: unboxed captured variables in subbands_split! (~11k-18k allocs, vs ~24k-38k boxed)
         @test (@allocations bands(h, ks, ks; showprogress = false)) < 21000
     end

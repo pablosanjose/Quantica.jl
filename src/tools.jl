@@ -518,13 +518,21 @@ function eigen_ws!(ws::EigenWs{<:BlasComplex}, A)
     return λs, ψs
 end
 
-# as svdvals!(A), but the result is a view of a ws buffer, overwritten by the next call.
-# FastLapackInterface's gesdd! skips its size check for job = 'N', so we resize! ws here
+# as svdvals!(A), but the result is a view of a ws buffer, overwritten by the next call
 function svdvals_ws!(ws::SVDsddWs, A)
-    m, n = size(A)
-    (size(ws.U, 1), size(ws.VT, 1)) == (m, n) || resize!(ws, A; job = 'N')
+    maybe_resize_ws!(ws, A)
     _, S, _ = LAPACK.gesdd!(ws, 'N', A)
-    return view(S, 1:min(m, n))
+    return view(S, 1:min(size(A)...))
+end
+
+# Grow ws, if needed, so that it can be used with A. It never shrinks, so that alternating
+# sizes of A don't resize ws on every call. Only for ws whose xxx_ws! results are views
+# into ws buffers. FastLapackInterface's gesdd! skips its own size check for job = 'N'.
+function maybe_resize_ws!(ws::SVDsddWs, A)
+    m, n = size(A)
+    M, N = size(ws.U, 1), size(ws.VT, 1)  # U and VT are M×0 and N×0 for job = 'N'
+    m <= M && n <= N || resize!(ws, similar(A, max(m, M), max(n, N)); job = 'N')
+    return ws
 end
 
 #endregion
