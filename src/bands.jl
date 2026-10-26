@@ -7,7 +7,7 @@ function spectrum(h::AbstractHamiltonian{T}, φs; solver = ES.LinearAlgebra(), t
     mapping = (φ...) -> ftuple(φ...; kw...)
     φs´ = sanitize_SVector(T, φs)
     S = typeof(φs´)
-    asolver = apply(solver, h, S, mapping, transform)
+    asolver = apply(solver, h, S, mapping, transform; use_workspace = Val(false))
     eigen = asolver(φs´)
     return Spectrum(eigen, os)
 end
@@ -137,9 +137,11 @@ function subbands_precompilable(hf::FunctionWrapper, mf::FunctionWrapper{M}, sol
     crossed = NTuple{6,Int}[]
     frustrated = similar(crossed)
     subbands = Subband{T,L+1,M}[]
+    svdws = SVDsddWs(Matrix{Complex{T}}(undef, 2, 2); job = 'N')  # for connection_rank!
+    colprojbuf = Complex{T}[]                                      # for knit_seam!
     data = (; hf, mf, solvers, basemesh, eigens, bandverts, bandneighs, bandneideg, coloffsets,
               L, crossed, frustrated, subbands, defects, patches, showprogress, degtol,
-              split, warn, projectors)
+              split, warn, projectors, svdws, colprojbuf)
 
     # Step 1 - Diagonalize:
     # Uses multiple SpectrumSolvers (one per Julia thread) to diagonalize h at each
@@ -282,7 +284,13 @@ function subbands_diagonalize!(data)
             data.showprogress && ProgressMeter.next!(meter)
         end
     end
-    # Collect band vertices and store column offsets
+
+    # Compute number of band vertices (bunches of degenerate eigenvalues) to do a sizehint!
+    # Patches may add a few more later, so then these may be silently resized
+    nverts = sum(eigen -> count(Returns(true), approxruns(first(eigen), data.degtol)), data.eigens)
+    foreach(v -> sizehint!(v, nverts), (data.bandverts, data.bandneighs, data.bandneideg))
+
+    # Collect band vertices and store column offsets.
     for (basevert, eigen) in zip(baseverts, data.eigens)
         append_bands_column!(data, basevert, eigen)
     end
@@ -365,13 +373,14 @@ function knit_seam!(data, ib, jb)
     dstrange = column_range(data, jb)
     _, statesib = data.eigens[ib]
     _, statesjb = data.eigens[jb]
-    colproj  = statesjb' * statesib
+    colproj = matrix_view!(data.colprojbuf, size(statesjb, 2), size(statesib, 2))
+    mul!(colproj, statesjb', statesib)
     for i in srcrange
         src = data.bandverts[i]
         for j in dstrange
             dst = data.bandverts[j]
             proj = view(colproj, parentcols(dst), parentcols(src))
-            connections = connection_rank(proj)
+            connections = connection_rank!(proj, data.svdws)  # may overwrite proj, not reused
             if connections > 0
                 push!(data.bandneighs[i], j)
                 push!(data.bandneighs[j], i)
@@ -395,14 +404,15 @@ end
 # Fast rank-1 |svd|^2 is r = tr(proj'proj). For higher ranks and r > 0 we must compute and
 # count singular values. The min_squared_overlap is arbitrary, and is fixed heuristically to
 # a high enough value to connect in the coarsest base lattices
-function connection_rank(proj)
+# The svd overwrites proj, using the svdws::SVDsddWs workspace
+function connection_rank!(proj, svdws)
     min_squared_overlap = 0.499
     rankf = sum(abs2, proj) # = tr(proj'proj)
     fastrank = ifelse(rankf > min_squared_overlap, 1, 0)  # For rank=1 proj: upon doubt, connect
     if iszero(fastrank) || size(proj, 1) == 1 || size(proj, 2) == 1
         return fastrank
     else
-        sv = svdvals(proj)
+        sv = svdvals_ws!(svdws, proj)
         return count(s -> abs2(s) > min_squared_overlap, sv)
     end
 end
@@ -587,6 +597,8 @@ function subbands_split!(data)
         # vsinds are the subband index of each vertex index
         # svinds is lists of band vertex indices that belong to the same subband
         vsinds, svinds = subsets(data.bandneighs)
+        # a single subset has all vertices, sorted, so we can skip the rest
+        length(svinds) == 1 && return subbands_nosplit!(data)
         meter = Progress(length(svinds); desc = "Step 4 - Splitting: ")
         new2old = sortperm(vsinds)
         old2new = invperm(new2old)
@@ -594,9 +606,14 @@ function subbands_split!(data)
         for subset in svinds
             # avoid subbands with no simplices
             if length(subset) > data.L
+                # This makes a copy of the subset of vertices in each subband
                 sverts  = data.bandverts[subset]
-                sneighs = [ [old2new[dstold] - offset for dstold in data.bandneighs[srcold]]
-                        for srcold in subset]
+                # data.bandneighs is a Vector of vectors (list of neighbors for each vertex)
+                # This makes a copy of the outer vector, but not of the inner ones (reused)
+                sneighs = data.bandneighs[subset]
+                for ns in sneighs, (n, dst_old) in enumerate(ns)
+                    ns[n] = old2new[dst_old] - offset
+                end
                 sband = Subband(sverts, sneighs)
                 isempty(sband) || push!(data.subbands, sband)
             end
@@ -604,9 +621,14 @@ function subbands_split!(data)
             data.showprogress && ProgressMeter.next!(meter)
         end
     else
-        sband = Subband(data.bandverts, data.bandneighs)
-        isempty(sband) || push!(data.subbands, sband)
+        subbands_nosplit!(data)
     end
+    return data
+end
+
+function subbands_nosplit!(data)
+    sband = Subband(data.bandverts, data.bandneighs)
+    isempty(sband) || push!(data.subbands, sband)
     return data
 end
 
@@ -641,8 +663,10 @@ function subband_projectors!(s::Subband{T}, hf, meter, showprogress) where {T}
     isempty(projstates) || return s
     verts = vertices(s)
     simps = simplices(s)
-    # a random symmetry-breaking perturbation common to all simplices
+    # a random symmetry-breaking perturbation common to all simplices, using a local rng
+    # for reproducibility, so we don't touch the global rng either
     perturbation = Complex{T}[]
+    rng = Xoshiro(1)
     for (sind, simp) in enumerate(simps)
         degs = degeneracy.(getindex.(Ref(verts), simp))
         if any(>(1), degs)
@@ -651,7 +675,7 @@ function subband_projectors!(s::Subband{T}, hf, meter, showprogress) where {T}
             hkav = hf(kav)
             nzs = nonzeros(hkav)
             nnzs = length(nzs)
-            nnzs == length(perturbation) || resize_perturbation!(perturbation, nnzs)
+            nnzs == length(perturbation) || resize_perturbation!(perturbation, nnzs, rng)
             nzs .+= perturbation     # in-place allowed since hkav gets updated on each call
             mindeg = minimum(degs)
             for (vind, deg) in zip(simp, degs)
@@ -666,13 +690,13 @@ function subband_projectors!(s::Subband{T}, hf, meter, showprogress) where {T}
     return projstates
 end
 
-function resize_perturbation!(p::Vector{C}, n) where {C}
+function resize_perturbation!(p::Vector{C}, n, rng) where {C}
     l = length(p)
     @assert n > l   # perturbation length should not decrease
     resize!(p, n)
     η = sqrt(eps(real(C)))  # makes the perturbation small
     for i in l+1:n
-        p[i] = η * rand(C)
+        p[i] = η * rand(rng, C)
     end
     return p
 end

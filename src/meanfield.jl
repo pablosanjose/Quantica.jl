@@ -74,8 +74,8 @@ end
 # Potential-based usage
 function meanfield_models(::GreenFunction{T,E}, onsite, potential, selector) where {T,E}
     V = sanitize_potential(potential)
-    U = onsite === missing ? T(V(zero(SVector{E,T}))) : T(onsite)
-    U = potential === nothing ? zero(U) : U
+    U0 = onsite === missing ? T(V(zero(SVector{E,T}))) : T(onsite)
+    U = potential === nothing ? zero(U0) : U0
 
     isfinite(U) || argerror("Onsite potential must be finite, consider setting `onsite`")
 

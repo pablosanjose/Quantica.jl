@@ -17,10 +17,10 @@ function Base.getindex(lat::Lattice, as::AppliedSiteSelector)
     L = latdim(lat)
     csites = CellSites{L,Vector{Int}}[]
     if !isnull(as)
-        sinds = Int[]
+        sinds = Ref(Int[])  # Ref instead of a reassigned variable, which the closure below would box
         foreach_cell(as) do cell
-            isempty(sinds) || (sinds = Int[])
-            cs = CellSites(cell, sinds)
+            isempty(sinds[]) || (sinds[] = Int[])
+            cs = CellSites(cell, sinds[])
             foreach_site(as, cell) do s, i, r
                 push!(siteindices(cs), i)
             end
@@ -316,10 +316,10 @@ end
 
 # positions of sites in a given sublattice. Pushes selected slice indices into store
 function sublatsites(l::LatticeSlice, s::Integer, store = missing)
-    n = 0
-    gen = ((missing_or_push!(store, n); site(lattice(l), i, cell(subcell)))
+    n = Ref(0)  # Ref instead of a reassigned variable, which the generator would box
+    gen = ((missing_or_push!(store, n[]); site(lattice(l), i, cell(subcell)))
         for subcell in cellsdict(l) for i in siteindices(subcell)
-        if (n += 1; i in siterange(lattice(l), s)))
+        if (n[] += 1; i in siterange(lattice(l), s)))
     return gen
 end
 

@@ -1,4 +1,5 @@
 using Quantica: nsubbands, nvertices, nedges, nsimplices
+using LinearAlgebra: eigvals, Diagonal
 using Random
 
 @testset "extensions not loaded" begin
@@ -46,17 +47,26 @@ using LinearMaps, ArnoldiMethod, KrylovKit, Arpack
     @test nvertices(b) == 23
 
     # complex spectra
-    h = LatticePresets.honeycomb() |> hamiltonian(onsite(im) + hopping(-1)) |> supercell(2)
+    h = LatticePresets.honeycomb() |> onsite(im) + hopping(-1) |> supercell(2)
     b = bands(h, subdiv(-pi, pi, 13), subdiv(-pi,pi, 13), showprogress = false)
     @test nsubbands(b)  == 1
+    # PR #419: non-normal spectra (nonreciprocal hopping), through the non-Hermitian eigen workspace of b's solver
+    h = LatticePresets.honeycomb() |> onsite(im) + hopping((r, dr) -> -1 + 0.3*dr[1]) |> supercell(2)
+    b = bands(h, subdiv(-pi, pi, 13), subdiv(-pi,pi, 13), showprogress = false)
+    for φs in (SA[0.2, -0.7], SA[1.3, 0.4])
+        sp = spectrum(b, φs)
+        ε, ψ, H = energies(sp), states(sp), Matrix(h(φs))
+        @test sort(ε, by = z -> (real(z), imag(z))) ≈ sort(eigvals(H), by = z -> (real(z), imag(z)))
+        @test H * ψ ≈ ψ * Diagonal(ε)
+    end
 
     # spectrum sorting
-    h = LatticePresets.honeycomb() |> hamiltonian(hopping(-1)) |> supercell(10)
+    h = LatticePresets.honeycomb() |> hopping(-1) |> supercell(10)
     b = bands(h, subdiv(0, 1, 7); solver = ES.Arpack(sigma = 0.1im, nev = 12), mapping = (:K, :K´), showprogress = false)
     @test nsubbands(b) == 1
 
     # defect insertion and patching
-    h = LatticePresets.honeycomb() |> hamiltonian(hopping(-1))
+    h = LatticePresets.honeycomb() |> hopping(-1)
     b = bands(h, subdiv(0, 2pi, 8), subdiv(0, 2pi, 8); showprogress = false, defects = ((2pi/3, 4pi/3), (4pi/3, 2pi/3)), patches = 10)
     @test nvertices(b) == 140
 
@@ -64,6 +74,50 @@ using LinearMaps, ArnoldiMethod, KrylovKit, Arpack
     h = LP.square() |> hamiltonian(onsite(3*I) -hopping(I) + hopping((r, dr) -> 0.1*(im*dr[1]*SA[0 -im; im 0] - im*dr[2]*SA[0 1; 1 0])), orbitals = 2)
     b = bands(h, subdiv(-π, π, 19), subdiv(-π, π, 19))
     @test nsimplices(b) == 1312
+
+    # PR #419: bands of a degenerate system reuse eigen and svd workspaces and the knitting colproj buffer
+    # (~1.4-1.7 MiB, vs ~2.5-3 MiB if the svd workspace is resized to each new shape instead of
+    # only grown, ~4 MiB without the eigen workspaces and ~8.5 MiB without any of them)
+    h = LP.square() |> hamiltonian(hopping(I), orbitals = 2) |> supercell(2)
+    let h = h, ks = subdiv(-π, π, 13)  # locals, to avoid global-scope allocations
+        bands(h, ks, ks; showprogress = false)                                    # first call, to compile
+        @test (@allocated bands(h, ks, ks; showprogress = false)) < 2 * 2^20      # 2 MiB
+        # PR #419: unboxed captured variables in subbands_split! (~11k-18k allocs, vs ~24k-38k boxed)
+        @test (@allocations bands(h, ks, ks; showprogress = false)) < 21000
+    end
+    # PR #419: band vertices are preallocated, and not copied if there is a single subband
+    # (~2.5-2.7 MiB, vs ~3-3.5 MiB)
+    b = bands(HP.graphene(), subdiv(0, 2π, 30), subdiv(0, 2π, 30); showprogress = false)
+    let h = HP.graphene(), ks = subdiv(0, 2π, 30)
+        @test (@allocated bands(h, ks, ks; showprogress = false)) < 2.85 * 2^20  # 2.85 MiB
+    end
+    # PR #419: simplex building reuses its buffers across vertices (~6-7 allocs, vs ~3.6k-9k)
+    let neighs = Quantica.neighbors(Quantica.subbands(b)[1])                 # 1800 vertices
+        Quantica.build_cliques(neighs, Val(3))                               # first call, to compile
+        @test (@allocations Quantica.build_cliques(neighs, Val(3))) < 50
+    end
+    # PR #419: subband interval trees reuse one temporary list (~690-700 KiB, vs ~850-860 KiB)
+    let sb = Quantica.subbands(b)[1], verts = Quantica.vertices(sb), simps = Quantica.simplices(sb)
+        Quantica.subband_trees(verts, simps)                                 # first call, to compile
+        @test (@allocated Quantica.subband_trees(verts, simps)) < 775 * 2^10 # 775 KiB
+    end
+    # PR #419: projectors use a local rng, so they are reproducible and leave the global rng alone
+    h = LP.square() |> hamiltonian(hopping(I), orbitals = 2) |> supercell(2)
+    ks = subdiv(-π, π, 7)
+    Random.seed!(1); r1 = rand(); p1 = Quantica.projected_states(only(Quantica.subbands(bands(h, ks, ks; projectors = true, showprogress = false))))
+    Random.seed!(1); p2 = Quantica.projected_states(only(Quantica.subbands(bands(h, ks, ks; projectors = true, showprogress = false)))); r2 = rand()
+    @test !isempty(p1) && p1 == p2
+    # the user's random numbers are unaffected
+    @test r1 == r2
+    # PR #419: splitting into several subbands re-indexes neighbor lists in place instead of
+    # copying them (~100-160 extra allocs over split = false, vs ~1.9k-3.8k)
+    h = LP.honeycomb() |> hopping(1) + onsite(0.5, sublats = :A) - onsite(0.5, sublats = :B)
+    let h = h, ks = subdiv(0, 2π, 30)                                          # 1800 vertices
+        @test nsubbands(bands(h, ks, ks; showprogress = false)) == 2         # first call, to compile
+        bands(h, ks, ks; split = false, showprogress = false)
+        @test (@allocations bands(h, ks, ks; showprogress = false)) -
+              (@allocations bands(h, ks, ks; split = false, showprogress = false)) < 1000
+    end
 end
 
 @testset "functional bandstructures" begin

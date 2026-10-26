@@ -385,10 +385,14 @@ end
 # apply AbstractEigenSolver
 #region
 
-function apply(solver::AbstractEigenSolver, h::AbstractHamiltonian, ::Type{S}, mapping, transform) where {T<:Real,S<:SVector{<:Any,T}}
+function apply(solver::AbstractEigenSolver, h::AbstractHamiltonian, ::Type{S}, mapping, transform; use_workspace = Val(true)) where {T<:Real,S<:SVector{<:Any,T}}
     # Some solvers (e.g. ES.LinearAlgebra) only accept certain matrix types
     # so this mat´ could be an alias of the call! output, or an unaliased conversion
     mat´ = ES.input_matrix(solver, h)
+    workspace = ES.eigen_workspace(solver, mat´, use_workspace)  # could be missing
+    # solvers with a workspace may overwrite mat´, which must therefore not alias h's call! output
+    workspace === missing || mat´ !== call!_output(h) ||
+        internalerror("apply: eigensolver workspace requires an unaliased input matrix")
     function sfunc(φs, dryrun = false)
         # this branch seems to solve #235 and out-of-order extension loading bugs
         # The errors stem from FunctionWrappers (world-age incompatible?). TODO: Why??
@@ -400,7 +404,7 @@ function apply(solver::AbstractEigenSolver, h::AbstractHamiltonian, ::Type{S}, m
             mat´ === mat || copy!(mat´, mat)
             # mat´ could be dense, while mat is sparse, so if not egal, we copy
             # the solver always receives the type of matrix mat´ declared by ES.input_matrix
-            eigen = solver(mat´)
+            eigen = solver(mat´, workspace)
             apply_transform!(eigen, transform)
         end
         return eigen
@@ -422,7 +426,7 @@ function apply(solver::AbstractEigenSolver, hf::Function, ::Type{S}, mapping, tr
     return asolver
 end
 
-apply(solver::AbstractEigenSolver, h, S, mapping, transform) =
+apply(solver::AbstractEigenSolver, h, S, mapping, transform; kw...) =
     argerror("Encountered an unexpected type as argument to an eigensolver. Are your mesh vertices real?")
 
 apply_transform!(eigen, ::Missing) = eigen

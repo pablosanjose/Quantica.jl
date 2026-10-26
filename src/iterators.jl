@@ -217,15 +217,20 @@ end
 #endregion
 
 #######################################################################
-# Combinations -- gratefully borrowed from Combinatorics.jl
+# Combinations -- gratefully borrowed and adapted from Combinatorics.jl
 #region
 
 struct Combinations
     n::Int
     t::Int
+    state::Vector{Int}  # overwritten when iterating, so it can be reused across Combinations
 end
 
-@inline function Base.iterate(c::Combinations, s = [min(c.t - 1, i) for i in 1:c.t])
+Combinations(n, t) = Combinations(n, t, Vector{Int}(undef, t))
+
+init_state!(c::Combinations) = (resize!(c.state, c.t); c.state .= min.(c.t - 1, 1:c.t); c.state)
+
+@inline function Base.iterate(c::Combinations, s = init_state!(c))
     if c.t == 0 # special case to generate 1 result for t==0
         isempty(s) && return (s, [1])
         return

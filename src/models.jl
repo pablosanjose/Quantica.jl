@@ -187,15 +187,11 @@ intrablock(m::AbstractModel, inds) = Intrablock(m, inds)
 interblock(m::AbstractModifier, inds) = Interblock(m, inds)
 intrablock(m::AbstractModifier, inds) = Intrablock(m, inds)
 
-function blockindices(hams::NTuple{N,Any}) where {N}
-    offset = 0
-    inds = ntuple(Val(N)) do i
-        ns = nsites(lattice(hams[i]))
-        rng = offset + 1:offset + ns
-        offset += ns
-        rng
-    end
-    return inds
+# site index ranges of each Hamiltonian in hams when combined, e.g. (1:n1, n1+1:n1+n2, ...)
+function blockindices(hams::Tuple)
+    ns = map(h -> nsites(lattice(h)), hams)
+    lasts = accumulate(+, ns)
+    return map((n, l) -> l-n+1:l, ns, lasts)
 end
 
 #endregion

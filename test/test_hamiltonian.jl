@@ -585,6 +585,11 @@ end
     h0 = lat0 |> hamiltonian(model, orbitals = 2)
     h1´ = combine(h0, translate(h0, SA[0,1,1]/sqrt(3)); coupling = model)
     @test h1 == h1´
+    # PR #419: unboxed captured variables in blockindices
+    let hams = (h0, translate(h0, SA[0,1,1]/sqrt(3)))
+        Quantica.blockindices(hams)                                  # first call, to compile
+        @test (@allocations Quantica.blockindices(hams)) <= 2        # should be 0, in 1.10 `let` adds 2 allocs
+    end
 end
 
 @testset "current operator" begin
