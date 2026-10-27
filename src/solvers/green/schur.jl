@@ -27,7 +27,7 @@
 #region
 
 struct SchurWorkspace{T}
-    GL::Matrix{ComplexF64}    # these ComplexF64 are required due to UMFPACK limitations
+    GL::Matrix{ComplexF64}    # these ComplexF64 are required due to KLU limitations
     GR::Matrix{ComplexF64}
     ND::Matrix{Complex{T}}
     ND´::Matrix{Complex{T}}
@@ -61,6 +61,7 @@ struct SchurFactorsSolver{T,B}
     hp::HybridSparseMatrix{T,B}                       # aliases parent hamiltonian
     l_leq_r::Bool                                     # whether l <= r (left and right surface dims)
     iG::SparseMatrixCSC{Complex{T},Int}               # to store iG = ω - h0 - Σₐᵤₓ
+    iGlu::KLUFactorization{ComplexF64,Int}            # LU of iG, with its own copy of nonzeros(iG)
     ptrs::Tuple{Vector{Int},Vector{Int},Vector{Int}}  # iG ptrs for h0 nzvals, diagonal and Σₐᵤₓ surface
     linds::Vector{Int}                                # orbital indices on left surface
     rinds::Vector{Int}                                # orbital indices on right surface
@@ -83,11 +84,15 @@ function SchurFactorsSolver(h::Hamiltonian{T,<:Any,1}, shift = one(Complex{T})) 
     linds, rinds, L, R, sinds, l_leq_r = left_right_projectors(fhm, fhp)
     R´L´ = [R'; -L']
     iG, (p, pd) = store_diagonal_ptrs(fh0)
+    iGlu = klu_factorization(iG)
     ptrs = (p, pd, pd[sinds])
     n, d = size(L)
     workspace = SchurWorkspace{T}((n, d), length(linds), length(rinds))
-    return SchurFactorsSolver(T(shift), hm, h0, hp, l_leq_r, iG, ptrs, linds, rinds, sinds, L, R, R´L´, workspace)
+    return SchurFactorsSolver(T(shift), hm, h0, hp, l_leq_r, iG, iGlu, ptrs, linds, rinds, sinds, L, R, R´L´, workspace)
 end
+
+# Unfactorized. KLU only supports ComplexF64, and keeps its own copy of nonzeros(iG) in any case
+klu_factorization(iG) = KLUFactorization(convert(SparseMatrixCSC{ComplexF64,Int}, iG))
 
 function SchurWorkspace{T}((n, d), l, r) where {T}
     C = Complex{T}
@@ -253,7 +258,8 @@ checkmodes(whichmodes) = sum(whichmodes) == length(whichmodes) ÷ 2 ||
 # (SchurFactorsSolver is not an AppliedGreenSolver, so it may have different API)
 function minimal_callsafe_copy(s::SchurFactorsSolver, parentham)
     hm´, h0´, hp´ = nearest_cell_harmonics(parentham)
-    s´ = SchurFactorsSolver(s.shift, hm´, h0´, hp´, s.l_leq_r, copy(s.iG),
+    iG´ = copy(s.iG)
+    s´ = SchurFactorsSolver(s.shift, hm´, h0´, hp´, s.l_leq_r, iG´, klu_factorization(iG´),
         s.ptrs, s.linds, s.rinds, s.sinds, copy(s.L), copy(s.R), copy(s.R´L´), copy(s.tmp))
     return s´
 end
@@ -288,11 +294,13 @@ end
 #    Γₗ = [R'; -L']GL  and  Γᵣ = [R'; -L']GR
 function pencilAB!(s::SchurFactorsSolver{T}) where {T}
     o, z = one(Complex{T}), zero(Complex{T})
-    iGlu = lu(s.iG)
+    iG, iGlu, L, R, GL, GR = s.iG, s.iGlu, s.L, s.R, s.tmp.GL, s.tmp.GR
+    copy!(iGlu.nzval, nonzeros(iG))
+    klu_factor!(iGlu)   # reuses the symbolic analysis, but re-pivots (klu! would not)
     Ω = s.shift
-    d = size(s.L, 2)
-    GL = ldiv!(s.tmp.GL, iGlu, s.L)
-    GR = ldiv!(s.tmp.GR, iGlu, s.R)
+    d = size(L, 2)
+    ldiv!(iGlu, copy!(GL, L))
+    ldiv!(iGlu, copy!(GR, R))
     A, B, R´L´ = s.tmp.A, s.tmp.B, s.R´L´
     fill!(A, z)
     fill!(B, z)

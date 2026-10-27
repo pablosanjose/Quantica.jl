@@ -8,6 +8,7 @@ using StaticArrays
 using NearestNeighbors
 using SparseArrays
 using SparseArrays: getcolptr, AbstractSparseMatrix, AbstractSparseMatrixCSC
+using KLU: KLUFactorization, klu, klu_factor!
 using LinearAlgebra
 using Dictionaries
 using ProgressMeter

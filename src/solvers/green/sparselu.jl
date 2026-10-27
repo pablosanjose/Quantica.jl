@@ -10,7 +10,7 @@ struct AppliedSparseLUGreenSolver{C} <: AppliedGreenSolver
 end
 
 mutable struct SparseLUGreenSlicer{C} <:GreenSlicer{C}
-    fact::SparseArrays.UMFPACK.UmfpackLU{ComplexF64,Int}  # of full system plus extended orbs
+    fact::KLUFactorization{ComplexF64,Int}  # of full system plus extended orbs
     nonextrng::UnitRange{Int}       # range of non-extended orbital indices
     unitcinds::Vector{Vector{Int}}  # non-extended fact indices per contact
     unitcindsall::Vector{Int}       # merged and uniqued unitcinds
@@ -19,7 +19,7 @@ mutable struct SparseLUGreenSlicer{C} <:GreenSlicer{C}
     unitg::Matrix{C}                # lazy storage of a full ldiv! solve of all (nonextrng) sites
     function SparseLUGreenSlicer{C}(fact, nonextrng, unitcinds, unitcindsall, source64) where {C}
         s = new()
-        s.fact = fact   # Note that there is no SparseArrays.UMFPACK.UmfpackLU{ComplexF32}
+        s.fact = fact   # Note that there is no KLUFactorization{ComplexF32}
         s.nonextrng = nonextrng
         s.unitcinds = unitcinds
         s.unitcindsall = unitcindsall
@@ -76,8 +76,9 @@ function build_slicer(s::AppliedSparseLUGreenSolver{C}, g, ω, Σblocks, contact
     update!(invgreen, ω)
     igmat = matrix(invgreen)
 
+    # klu may alias nonzeros(igmat), which later calls overwrite, but solves only use the factors
     fact = try
-        lu(igmat)
+        klu(igmat)
     catch
         argerror("Encountered a singular G⁻¹(ω) at ω = $ω, cannot factorize")
     end
@@ -125,7 +126,7 @@ function compute_or_retrieve_green(s::SparseLUGreenSlicer{C}, dstinds, srcinds, 
         g = view(s.unitg, dstinds, srcinds)
     else                        # we haven't, so we must do some work still
         fact = s.fact
-        allinds = 1:size(fact, 1) # axes not defined on SparseArrays.UMFPACK.UmfpackLU
+        allinds = 1:size(fact, 1) # axes not defined on KLUFactorization
         one!(source64, srcinds)
         gext = ldiv!(fact, source64)
         sourceC === gext || copy!(sourceC, gext)  # required when C != ComplexF64
