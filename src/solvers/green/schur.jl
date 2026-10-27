@@ -51,7 +51,7 @@ struct SchurWorkspace{T}
     DD´::Matrix{Complex{T}}
     EE::Matrix{Complex{T}}
     EN::Matrix{Complex{T}}
-    ggev::GeneralizedEigenWs{Complex{T},Matrix{Complex{T}},T}  # for schur_eigvals
+    ws_eigvals::GeneralizedEigenWs{Complex{T},Matrix{Complex{T}},T}  # for schur_eigvals
 end
 
 struct SchurFactorsSolver{T,B}
@@ -115,8 +115,8 @@ function SchurWorkspace{T}((n, d), l, r) where {T}
     DD´ = Matrix{C}(undef, d, d)
     EE = Matrix{C}(undef, n+d, n+d)
     EN = Matrix{C}(undef, n+d, n)
-    ggev = GeneralizedEigenWs(A)
-    return SchurWorkspace(GL, GR, ND, ND´, LG, RG, A, B, V1, V2, Z11, Z21, Z11´, Z21´, LD, DL, RD, DR, whichmodes, select, DD, DD´, EE, EN, ggev)
+    ws_eigvals = GeneralizedEigenWs(A)
+    return SchurWorkspace(GL, GR, ND, ND´, LG, RG, A, B, V1, V2, Z11, Z21, Z11´, Z21´, LD, DL, RD, DR, whichmodes, select, DD, DD´, EE, EN, ws_eigvals)
 end
 
 function nearest_cell_harmonics(h)
@@ -258,7 +258,6 @@ function minimal_callsafe_copy(s::SchurFactorsSolver, parentham)
     return s´
 end
 
-# ggev is pure scratch, so a fresh one suffices (FastLapackInterface has no copy for it)
 Base.copy(s::SchurWorkspace) =
     SchurWorkspace(copy.((s.GL, s.GR, s.ND, s.ND´, s.LG, s.RG, s.A, s.B, s.V1, s.V2, s.Z11, s.Z21, s.Z11´, s.Z21´,
         s.LD, s.DL, s.RD, s.DR, s.whichmodes, s.select, s.DD, s.DD´, s.EE, s.EN))..., GeneralizedEigenWs(s.A))
@@ -313,13 +312,12 @@ end
 # updates L and R from the current hm and hp
 function update_LR!(s)
     d = size(s.L, 2)
+    # direct copy is faster than a slice or a view of sparse
     if s.l_leq_r
-        # slicing is faster than a view of sparse
-        copy!(s.R, flat(s.hm)[:, s.sinds])
+        copy_columns!(s.R, flat(s.hm), s.sinds)
         view(s.R´L´, 1:d, :) .= s.R'
     else
-        # slicing is faster than a view of sparse
-        copy!(s.L, flat(s.hp)[:, s.sinds])
+        copy_columns!(s.L, flat(s.hp), s.sinds)
         view(s.R´L´, (d+1):2d, :) .= .- s.L'
     end
     return s
@@ -393,7 +391,9 @@ function ordschur_retarded!(sch::GeneralizedSchur{Complex{T}}, s::SchurFactorsSo
     tol = sqrt(eps(T))
     ωshift = 5*eps(T)
     whichmodes, V´, VZ = s.tmp.whichmodes, s.tmp.V1, s.tmp.V2
-    @. whichmodes = abs(sch.β)-tol < abs(sch.α) < abs(sch.β)+tol    # propagating classifier (lax)
+    # propagating classifier (lax). Not chained as a < b < c, which allocates when b is not
+    # a plain variable (b is then materialized into a temporary array)
+    @. whichmodes = (abs(sch.β)-tol < abs(sch.α)) & (abs(sch.α) < abs(sch.β)+tol)
     if any(whichmodes)                                              # classify propagating modes using velocity
         nprop = sum(whichmodes)
         ordschur!(sch, whichmodes)
@@ -937,10 +937,11 @@ schur_eigvals(g::GreenFunctionSchurLead1D, ω::Complex; params...) =
 function schur_eigvals((h, solver)::Tuple{AbstractHamiltonian1D,AppliedSchurGreenSolver}, ω::Complex; params...)
     call!(h; params...)             # update the (Parametric)Hamiltonian with the params
     sf = solver.fsolver             # obtain the SchurFactorSolver that computes the AB pencil
+    ws = sf.tmp.ws_eigvals
     update_LR!(sf)                  # Ensure L and R matrices are updated after updating h
     update_iG!(sf, ω)               # shift inverse G with ω
     A, B = pencilAB!(sf)            # build the pecil
-    α, β = eigvals_ws!(sf.tmp.ggev, A, B)  # generalized eigenvalues λ = α/β of the pencil
+    α, β = eigvals_ws!(ws, A, B)    # generalized eigenvalues λ = α/β of the pencil
     λs = α ./ β                     # fresh vector, since callers may filter! it
     sort!(λs, by = λ -> (real(λ), imag(λ)))  # same ordering as eigvals!(A, B)
     return λs
