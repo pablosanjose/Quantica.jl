@@ -59,6 +59,9 @@ using LinearMaps, ArnoldiMethod, KrylovKit, Arpack
         @test sort(ε, by = z -> (real(z), imag(z))) ≈ sort(eigvals(H), by = z -> (real(z), imag(z)))
         @test H * ψ ≈ ψ * Diagonal(ε)
     end
+    # graphene's Bloch matrix at φ is Hermitian only up to rounding, but still diagonalized as Hermitian
+    ε, _ = spectrum(HP.graphene(), (0.3, 1.1))
+    @test all(iszero ∘ imag, ε)
 
     # spectrum sorting
     h = LatticePresets.honeycomb() |> hopping(-1) |> supercell(10)

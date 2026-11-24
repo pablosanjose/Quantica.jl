@@ -255,6 +255,17 @@ check_sizes(A::AbstractMatrix,B::AbstractMatrix) = size(A,2) == size(B,1) ||
     throw(DimensionMismatch("A has dimensions $(size(A)) but B has dimensions $(size(B))"))
 check_sizes(_, _) = nothing
 
+# as LinearAlgebra's generic ishermitian, but up to |A[i,j] - adjoint(A[j,i])| <= atol
+function ishermitian_approx(A::DenseMatrix{T}; atol = sqrt(eps(real(float(T))))) where {T<:Number}
+    indsm, indsn = axes(A)
+    indsm == indsn || return false
+    atol2 = atol^2
+    @inbounds for i in indsn, j in i:last(indsn)
+        abs2(A[i, j] - adjoint(A[j, i])) <= atol2 || return false
+    end
+    return true
+end
+
 # Taken from Base julia, now deprecated there
 function permute!!(a, p::AbstractVector{<:Integer})
     Base.require_one_based_indexing(a, p)
