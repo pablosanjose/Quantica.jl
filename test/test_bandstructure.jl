@@ -194,6 +194,57 @@ end
     end
 end
 
+@testset "diagonalizer" begin
+    hs = ((LP.honeycomb() |> hopping(1) |> supercell(3), (;)),
+          (LP.honeycomb() |> hamiltonian(hopping(I) + @onsite((; µ = 0) -> µ * I), orbitals = 2) |> supercell(2), (; µ = 0.3)),
+          (LP.honeycomb() |> hopping(1) + onsite(0.1im) |> supercell(2), (;)),          # non-Hermitian
+          (LP.honeycomb() |> onsite(r -> r[1] + 0.1im * r[2]) |> supercell(2), (;)))    # diagonal
+    sortby = λ -> (real(λ), imag(λ))
+    for (h, params) in hs
+        s = Quantica.diagonalizer(h)
+        φ = SA[0.3, 0.7]
+        sp = Quantica.call!(s, φ; params...)
+        @test energies(sp) ≈ energies(spectrum(h, φ; solver = ES.LinearAlgebra(; sortby), params...))
+        ψ = states(sp)
+        @test Matrix(h(φ; params...)) * ψ ≈ ψ * Diagonal(energies(sp))
+        @test energies(Quantica.call!(s, 2φ; params...)) === energies(sp)   # aliases s
+        @test energies(s(φ; params...)) !== energies(s(φ; params...))       # does not alias s
+        @test energies(s(φ; params...)) ≈ energies(Quantica.call!(s, φ; params...))
+        f(s, φ, params) = @allocated Quantica.call!(s, φ; params...)
+        f(s, φ, params)
+        @test f(s, φ, params) == 0
+    end
+    h = LP.linear() |> hopping(1) |> supercell(4) |> supercell
+    s = Quantica.diagonalizer(h; transform = -)
+    @test energies(s()) ≈ energies(Quantica.call!(s)) ≈ -energies(spectrum(h))
+    @test Quantica.solver_workspace(s) isa ES.AbstractEigenWorkspace
+    for solver in (ES.LinearAlgebra(sortby = abs), ES.ArnoldiMethod(nev = 2))   # no workspace
+        s = Quantica.diagonalizer(h; solver)
+        @test Quantica.solver_workspace(s) isa Quantica.MissingWorkspace
+        @test length(energies(Quantica.call!(s))) == length(energies(s()))
+    end
+    @test Quantica.diagonalizer(solver = ES.LinearAlgebra())(h) isa Quantica.AppliedEigenSolver
+    h = LP.linear() |> hopping(1) + @onsite((; m = 0) -> m) |> supercell(8)
+    for solver in (ES.LinearAlgebra(), ES.LinearAlgebra(sortby = abs), ES.ArnoldiMethod(nev = 2))
+        s = Quantica.diagonalizer(h; solver)
+        s´ = Quantica.minimal_callsafe_copy(s)
+        @test Quantica.hamiltonian(s´) !== Quantica.hamiltonian(s)
+        ws, ws´ = Quantica.solver_workspace(s), Quantica.solver_workspace(s´)
+        @test ws isa Quantica.MissingWorkspace || ws !== ws´
+        sp´ = Quantica.call!(s´, 0.3; m = 0.1)
+        e´ = copy(energies(sp´))
+        Quantica.call!(s, 0.0; m = 0.7)
+        @test energies(sp´) == e´      # call! on s does not affect s´
+    end
+    h = LP.honeycomb(type = Float16) |> hopping(1) |> supercell(2)   # non-BLAS: no workspace
+    s = Quantica.diagonalizer(h)
+    @test Quantica.solver_workspace(s) isa Quantica.MissingWorkspace
+    @test energies(s((0.3, 0.7))) ≈ energies(Quantica.call!(s, (0.3, 0.7))) ≈ energies(spectrum(h, (0.3, 0.7)))
+    b = bands(h, subdiv(0, 1, 5), subdiv(0, 1, 5), showprogress = false, projectors = true)
+    @test b isa Quantica.Bandstructure{Float16}
+    @test energies(spectrum(b, (0.2, 0.3))) ≈ energies(spectrum(h, (0.2, 0.3)))
+end
+
 @testset "bandstructures/spectrum slices" begin
     h = LatticePresets.honeycomb() |> hamiltonian(hopping(-1, range = 1/√3)) |> supercell(4)
     b = bands(h, subdiv(0, 2pi, 13), subdiv(0, 2pi, 15), showprogress = false)

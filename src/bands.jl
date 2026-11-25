@@ -2,25 +2,35 @@
 # spectrum
 #region
 
-function spectrum(h::AbstractHamiltonian{T}, φs; solver = ES.LinearAlgebra(), transform = missing, kw...) where {T}
-    os = blockstructure(h)
-    mapping = (φ...) -> ftuple(φ...; kw...)
+function spectrum(h::AbstractHamiltonian{T}, φs; solver = ES.LinearAlgebra(), transform = missing, params...) where {T}
     φs´ = sanitize_SVector(T, φs)
-    S = typeof(φs´)
-    asolver = apply(solver, h, S, mapping, transform; use_workspace = Val(false))
-    eigen = asolver(φs´)
-    return Spectrum(eigen, os)
+    call!(h, φs´; params...)
+    mat = ES.input_matrix(solver, h)      # alias of call!_output(h), or a converted copy
+    eigen = apply_transform!(solver(mat), transform)   # one-shot: no workspace
+    return Spectrum(eigen, h)
 end
 
 spectrum(h::AbstractHamiltonian{T,<:Any,0}; kw...) where {T} =
     spectrum(h, SVector{0,T}(); kw...)
 
-function spectrum(b::Bandstructure, φs;)
+function spectrum(b::Bandstructure{T,<:Any,L}, φs) where {T,L}
     os = blockstructure(b)
+    length(φs) == L ||
+        argerror("A spectrum of a $L-dimensional Bandstructure requires $L Bloch phases or parameters, received $φs")
     solver = first(solvers(b))
-    eigen = solver(φs)
+    eigen = solver(sanitize_SVector(SVector{L,T}, φs))
     return Spectrum(eigen, os)
 end
+
+#endregion
+
+############################################################################################
+# diagonalizer - see types.jl for the AppliedEigenSolver API
+#region
+
+diagonalizer(h::AbstractHamiltonian; solver = ES.LinearAlgebra(), transform = missing) =
+    apply(solver, h, transform)
+diagonalizer(; kw...) = h -> diagonalizer(h; kw...)   # currying
 
 #endregion
 
@@ -96,9 +106,37 @@ end
 function eigensolvers_thread_pool(solver, h, S, mapping, transform)
     # if h::Function we cannot be sure it is thread-safe
     nsolvers = ES.is_thread_safe(solver) && h isa AbstractHamiltonian ? Threads.nthreads() : 1
-    solvers = [apply(solver, copy_if_hamiltonian(h), S, mapping, transform) for _ in 1:nsolvers]
+    solvers = [bands_eigensolver(solver, copy_if_hamiltonian(h), S, mapping, transform) for _ in 1:nsolvers]
     return solvers
 end
+
+# type-erased eigensolver over the mesh vertices φs::S, mapped by mapping
+function bands_eigensolver(solver::AbstractEigenSolver, h::AbstractHamiltonian, ::Type{S}, mapping, transform) where {T<:Real,L,S<:SVector{L,T}}
+    asolver = apply(solver, h, transform)
+    function sfunc(φs, dryrun = false)
+        # Calling sfunc once at construction (dryrun) works around a FunctionWrapper bug on
+        # Julia 1.10 < 1.10.11 (Linux), where h could be GC'd despite the closure (#235), and
+        # out-of-order extension loading issues. Remove when/if FunctionWrappers is dropped.
+        dryrun && return EigenComplex{T}(Complex{T}[], Complex{T}[;;])
+        sp = call!(asolver, apply_map(mapping, φs))  # mapping can give a FrankenTuple
+        return eigen_copy(sp)                        # stored by bands, so it must not alias asolver
+    end
+    sfunc(zero(S), true)  # dryrun to avoid issue #235
+    return FunctionWrapper{EigenComplex{T},Tuple{SVector{L,T}}}(sfunc)
+end
+
+function bands_eigensolver(solver::AbstractEigenSolver, hf::Function, ::Type{S}, mapping, transform) where {T<:Real,L,S<:SVector{L,T}}
+    function sfunc(φs)
+        φs´ = apply_map(mapping, φs)    # can be a FrankenTuple, should be accepted by hf
+        mat = hf(φs´)
+        eigen = solver(mat)
+        return apply_transform!(eigen, transform)
+    end
+    return FunctionWrapper{EigenComplex{T},Tuple{SVector{L,T}}}(sfunc)
+end
+
+bands_eigensolver(solver, h, S, mapping, transform) =
+    argerror("Encountered an unexpected type as argument to an eigensolver. Are your mesh vertices real?")
 
 copy_if_hamiltonian(h::AbstractHamiltonian) = minimal_callsafe_copy(h)
 copy_if_hamiltonian(f) = f
@@ -126,7 +164,7 @@ sanitize_mapping((xs, nodes)::Pair{X,S}, ::Val{L}) where {N,L,T,X<:NTuple{N,Real
     polygonpath(xs, nodes)
 
 function subbands_precompilable(hf::FunctionWrapper, mf::FunctionWrapper{M}, solvers::Vector{A}, basemesh::Mesh{SVector{L,T}},
-    showprogress, defects, patches, degtol, split, warn, projectors) where {T,L,A<:AppliedEigenSolver{T,L},M}
+    showprogress, defects, patches, degtol, split, warn, projectors) where {T,L,A<:FunctionWrapper{EigenComplex{T},Tuple{SVector{L,T}}},M}
 
     basemesh = copy(basemesh) # will become part of Band, possibly refined
     eigens = Vector{EigenComplex{T}}(undef, length(vertices(basemesh)))
@@ -137,7 +175,7 @@ function subbands_precompilable(hf::FunctionWrapper, mf::FunctionWrapper{M}, sol
     crossed = NTuple{6,Int}[]
     frustrated = similar(crossed)
     subbands = Subband{T,L+1,M}[]
-    svdws = SVDsddWs(Matrix{Complex{T}}(undef, 2, 2); job = 'N')  # for connection_rank!
+    svdws = svd_workspace(Complex{T})  # for connection_rank!
     colprojbuf = Complex{T}[]                                      # for knit_seam!
     data = (; hf, mf, solvers, basemesh, eigens, bandverts, bandneighs, bandneideg, coloffsets,
               L, crossed, frustrated, subbands, defects, patches, showprogress, degtol,
@@ -310,7 +348,6 @@ const degeneracy_warning = 16
 
 # collect eigen into a band column (vector of BandVertices for equal base vertex)
 function append_bands_column!(data, basevert, eigen)
-    T = eltype(basevert)
     energies, states = eigen
     subs = collect(approxruns(energies, data.degtol))
     for (i, rng) in enumerate(subs)
@@ -868,8 +905,10 @@ bands_metadata(_) = argerror("metadata should be `missing` or a valid `AbstractB
 #   Uses Eq. (1.13) in Xiao, Chang, and Niu. Rev. Mod. Phys. 82, 1959--2007 (2010).
 #region
 
-struct BerryCurvature{M,T,H<:AbstractHamiltonian{T,<:Any,2}} <: AbstractBandsMetadata{M}
+struct BerryCurvature{M,T,H<:AbstractHamiltonian{T,<:Any,2},E<:AppliedEigenSolver} <:
+                      AbstractBandsMetadata{M}
     h::H
+    solver::E           # diagonalizer(h), reused across evaluations
     ∂1h::SparseMatrixCSC{Complex{T},Int}
     ∂2h::SparseMatrixCSC{Complex{T},Int}
     ∂1hψn::Matrix{Complex{T}}
@@ -889,7 +928,8 @@ function _berry_temporaries(h::AbstractHamiltonian{T}, maxdim) where {T}
     ∂2hψn = copy(∂1hψn)
     ψn´∂1h´ψm = zeros(Complex{T}, maxdim´)
     ψn´∂2h´ψm = copy(ψn´∂1h´ψm)
-    return (h, ∂1h, ∂2h, ∂1hψn, ∂2hψn, ψn´∂1h´ψm, ψn´∂2h´ψm)
+    solver = diagonalizer(h)
+    return (h, solver, ∂1h, ∂2h, ∂1hψn, ∂2hψn, ψn´∂1h´ψm, ψn´∂2h´ψm)
 end
 
 sanitize_maxdim(::Missing) = 1
@@ -910,10 +950,11 @@ berry_curvature(h::AbstractHamiltonian; kw...) =
 
 maxdim(B::BerryCurvature) = size(B.ψn´∂1h´ψm, 1)
 
-(B::BerryCurvature)(ϕs, i; params...) = B(ϕs, spectrum(B.h, ϕs; params...), i; params...)
+# call!(B.solver, ...) avoids allocations. Its result aliases B.solver, but is only used here
+(B::BerryCurvature)(ϕs, i; params...) = B(ϕs, call!(B.solver, ϕs; params...), i; params...)
 
 function (B::BerryCurvature{<:Any,T})(ϕs; atol = sqrt(eps(real(T))), params...) where {T}
-    (ϵs, ψs) = spectrum(B.h, ϕs; params...)
+    (ϵs, ψs) = call!(B.solver, ϕs; params...)
     return [B(ϕs, (ϵs, ψs), rng; params...) for rng in approxruns(ϵs, atol)]
 end
 

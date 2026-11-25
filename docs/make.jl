@@ -32,7 +32,8 @@ makedocs(;
             "Non-spatial models" => "advanced/nonspatial.md",
             "Serializers" => "advanced/serializers.md",
             "Self-consistent mean fields" => "advanced/meanfield.md",
-            "Wannier90 imports" => "advanced/wannier90.md"
+            "Wannier90 imports" => "advanced/wannier90.md",
+            "Non-allocating evaluation" => "advanced/nonallocating.md"
             ],
         "Examples" => "examples.md",
         "API" => "api.md",

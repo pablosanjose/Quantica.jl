@@ -169,6 +169,7 @@ sanitize_eigen(x::AbstractArray{<:Complex}) = x
 sanitize_eigen(x::AbstractSparseMatrix{T}) where {T} = convert(Matrix{complex(T)}, x)
 
 function sorteigs!(ϵ::AbstractVector, ψ::AbstractMatrix)
+    issorted(ϵ, by = real) && return ϵ, ψ   # e.g. Hermitian LAPACK output, avoids allocations
     p = Vector{Int}(undef, length(ϵ))
     p´ = similar(p)
     sortperm!(p, ϵ, by = real, alg = Base.DEFAULT_UNSTABLE)

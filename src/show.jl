@@ -274,12 +274,30 @@ Base.summary(s::AbstractEigenSolver) =
 
 function Base.show(io::IO, s::AppliedEigenSolver)
     i = get(io, :indent, "")
-    ioindent = IOContext(io, :indent => i * "  ")
-    print(io, i, summary(s), "\n")
+    print(io, i, summary(s), "\n",
+"$i  Solver          : $(nameof(typeof(solver(s))))
+$i  Workspace       : $(display_workspace(solver_workspace(s)))
+$i  Matrix size     : $(flatsize(hamiltonian(s))) × $(flatsize(hamiltonian(s)))")
 end
 
-Base.summary(::AppliedEigenSolver{T,L}) where {T,L} =
-    "AppliedEigenSolver{$T,$L}: eigensolver over an $L-dimensional parameter manifold of type $T"
+Base.summary(::AppliedEigenSolver{T,H}) where {T,E,L,H<:AbstractHamiltonian{T,E,L}} =
+    "AppliedEigenSolver{$T}: diagonalizer for a $(L)D AbstractHamiltonian"
+
+display_workspace(::MissingWorkspace) = "none"
+display_workspace(_) = "allocation-free call! enabled"
+
+#endregion
+
+############################################################################################
+# LinearAlgebraWorkspace
+#region
+
+Base.show(io::IO, ws::ES.LinearAlgebraWorkspace) = print(io, get(io, :indent, ""), summary(ws))
+
+function Base.summary(ws::ES.LinearAlgebraWorkspace{C}) where {C}
+    n, m = size(ES.input_matrix(ws))
+    return "LinearAlgebraWorkspace{$C}: $n×$m eigenproblem workspace, to be used with diagonalizer call!"
+end
 
 #endregion
 

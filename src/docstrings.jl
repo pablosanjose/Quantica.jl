@@ -1398,9 +1398,53 @@ States:
 ```
 
 # See also
-    `EigenSolvers`, `bands`
+    `EigenSolvers`, `bands`, `Quantica.diagonalizer`
 """
 spectrum
+
+"""
+    Quantica.diagonalizer(h::AbstractHamiltonian; solver = EigenSolvers.LinearAlgebra(), transform = missing)
+
+Build a `d::AppliedEigenSolver` that diagonalizes `h` using `solver`, with `transform`
+applied to the resulting eigenenergies, if not `missing`. If `solver` supports it
+(currently `EigenSolvers.LinearAlgebra()` without keywords), `d` also holds a workspace for
+allocation-free diagonalizations.
+
+    Quantica.diagonalizer(; kw...)
+
+Curried form, equivalent to `h -> Quantica.diagonalizer(h; kw...)`.
+
+## Call API
+
+    d(ϕs; params...)
+
+Compute the `Spectrum` of `h(ϕs; params...)`, like `spectrum(h, ϕs; solver, transform,
+params...)`, but reusing `d` across calls. For a 0D `h`, use `d(; params...)`.
+
+Advanced: in addition to the above, an unexported method `Quantica.call!(d, ϕs; params...)`
+is provided to reuse the output `Spectrum` (preallocated inside `d`), so that it does not
+allocate if `d` has a workspace. Use with caution, as it may lead to unexpected aliasing: the
+result is overwritten by the next call. A `d` is not thread-safe: use one per thread.
+
+# Examples
+
+```jldoctest
+julia> h = HP.graphene(t0 = 1); d = Quantica.diagonalizer(h)
+AppliedEigenSolver{Float64}: diagonalizer for a 2D AbstractHamiltonian
+  Solver          : LinearAlgebra
+  Workspace       : allocation-free call! enabled
+  Matrix size     : 2 × 2
+
+julia> d((0, 0)) |> energies
+2-element Vector{ComplexF64}:
+ -2.9999999999999982 + 0.0im
+  2.9999999999999982 + 0.0im
+```
+
+# See also
+    `spectrum`, `EigenSolvers`, `bands`, `Quantica.call!`
+"""
+diagonalizer
 
 """
     energies(sp::Spectrum)
@@ -3056,3 +3100,67 @@ julia> qplot(h, sitecolor = ranged((i,r)->r[2], (5, 10)), sitecolormap = :infern
 
 """
 ranged
+
+"""
+    Quantica.call!(x, args...; params...)
+
+Advanced: in-place, non-allocating version of `x(args...; params...)` for several Quantica
+objects `x`. The result is not an independent copy, as `x(args...; params...)` would be,
+but is aliased with internal buffers of `x` that are overwritten by the next `call!` on `x`.
+Use with caution, as it may lead to unexpected aliasing. Like `x` itself, it is not
+thread-safe: use one `x` per thread.
+
+The main methods are
+
+    Quantica.call!(h::AbstractHamiltonian, ϕs; params...)
+
+In-place version of `h(ϕs; params...)`: the flat Bloch matrix of `h` at Bloch phases `ϕs`.
+
+    Quantica.call!(ph::ParametricHamiltonian; params...)
+
+In-place version of `ph(; params...)`: a `Hamiltonian` with `params` applied.
+
+    Quantica.call!(d::AppliedEigenSolver, ϕs; params...)
+
+In-place version of `d(ϕs; params...)`: the `Spectrum` of `h(ϕs; params...)`, see
+`Quantica.diagonalizer`. Allocation-free if `d` has a workspace.
+
+    Quantica.call!(gs::GreenSlice, ω; params...)
+
+In-place version of `gs(ω; params...)`: the Green function matrix at energy `ω`.
+
+    Quantica.call!(ρs::LocalSpectralDensitySlice, ω; params...)
+
+In-place version of `ρs(ω; params...)`: the local density of states at energy `ω`.
+
+    Quantica.call!(s::Scattering, ω; params...)
+
+In-place version of `s(ω; params...)`: the `ScatteringSolution` at energy `ω`.
+
+    Quantica.call!(M::MeanField, µ = 0, kBT = 0; params...)
+
+In-place version of `M(µ, kBT; params...)`: the mean field `Φ`.
+
+    Quantica.call!(as::AppliedSerializer; params...)
+
+In-place version of `as(; params...)`, see `serializer`.
+
+Note that for `g::GreenFunction`, `g(ω; params...)` is already equivalent to
+`Quantica.call!(g, ω; params...)`.
+
+# Examples
+
+```jldoctest
+julia> h = HP.graphene(t0 = 1);
+
+julia> Quantica.call!(h, (0, 0)) === Quantica.call!(h, (π, 0))  # same aliased matrix
+true
+
+julia> h((0, 0)) === h((0, 0))  # independent copies
+false
+```
+
+# See also
+    `hamiltonian`, `Quantica.diagonalizer`, `greenfunction`, `ldos`, `scattering`, `meanfield`
+"""
+call!

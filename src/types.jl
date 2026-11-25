@@ -1722,9 +1722,24 @@ Base.copy(m::Mesh) = Mesh(copy(m.verts), copy.(m.neighs), copy(m.simps))
 #endregion
 
 ############################################################################################
+# Workspaces - preallocated buffers for non-allocating computations
+#   see "LAPACK tools and workspaces" in tools.jl, and solvers/eigensolvers.jl
+#region
+
+# solver-specific workspaces for allocation-free diagonalization, see eigensolvers.jl
+# independent of FastLapackInterface hierarchy, it's meant for our own workspace wrappers
+abstract type AbstractEigenWorkspace end
+
+# singleton type for computations without workspace support (e.g. non-BLAS types)
+# not a subtype of AbstractEigenWorkspace, because it represents any kind, not only eigen.
+struct MissingWorkspace end
+
+#endregion
+
+############################################################################################
 # Spectrum and Bandstructure - see solvers/eigensolvers.jl for solver backends <: AbstractEigenSolver
 #                    -  see bands.jl for methods
-# AppliedEigenSolver - wraps a solver vs ϕs, with a mapping and transform, into a FunctionWrapper
+# AppliedEigenSolver - an AbstractEigenSolver applied to an AbstractHamiltonian, see apply.jl
 #region
 
 abstract type AbstractEigenSolver end
@@ -1738,8 +1753,14 @@ struct Spectrum{T<:AbstractFloat,B}
     blockstruct::OrbitalBlockStructure{B}
 end
 
-struct AppliedEigenSolver{T<:AbstractFloat,L}
-    solver::FunctionWrapper{EigenComplex{T},Tuple{SVector{L,T}}}
+struct AppliedEigenSolver{T<:AbstractFloat,H<:AbstractHamiltonian{T},S<:AbstractEigenSolver,
+                          M<:AbstractMatrix,W<:Union{MissingWorkspace,AbstractEigenWorkspace},
+                          F}
+    h::H
+    solver::S
+    mat::M          # solver input: alias of call!_output(h), a conversion, or owned by ws
+    ws::W           # MissingWorkspace if the solver does not support workspaces
+    transform::F    # applied in place to eigenenergies, or missing
 end
 
 struct BandVertex{T,E,M}
@@ -1760,7 +1781,7 @@ end
 
 struct Bandstructure{T,E,L,B,M} # E = L+1
     subbands::Vector{Subband{T,E,M}}
-    solvers::Vector{AppliedEigenSolver{T,L}}  # one per Julia thread
+    solvers::Vector{FunctionWrapper{EigenComplex{T},Tuple{SVector{L,T}}}}  # one per Julia thread
     blockstruct::OrbitalBlockStructure{B}
 end
 
@@ -1820,17 +1841,46 @@ shrinkright((x, y)) = (x, prevfloat(y))
 
 #region ## API ##
 
-(s::AppliedEigenSolver{T,0})() where {T} = s.solver(SVector{0,T}())
-(s::AppliedEigenSolver{T,L})(φs::SVector{L}) where {T,L} = s.solver(sanitize_SVector(SVector{L,T}, φs))
-(s::AppliedEigenSolver{T,L})(φs::NTuple{L,Any}) where {T,L} = s.solver(sanitize_SVector(SVector{L,T}, φs))
-(s::AppliedEigenSolver{T,L})(φs...) where {T,L} =
-    throw(ArgumentError("AppliedEigenSolver call requires $L parameters/Bloch phases, received $φs"))
+## Spectrum
 
 energies(s::Spectrum) = s.eigen.values
 
 states(s::Spectrum) = s.eigen.vectors
 
 blockstructure(s::Spectrum) = s.blockstruct
+
+Base.copy(s::Spectrum) = Spectrum(eigen_copy(s), s.blockstruct)
+
+eigen_copy(s::Spectrum) = Eigen(copy(energies(s)), copy(states(s)))
+
+## AppliedEigenSolver
+
+hamiltonian(s::AppliedEigenSolver) = s.h
+
+solver(s::AppliedEigenSolver) = s.solver
+
+solver_workspace(s::AppliedEigenSolver) = s.ws
+
+# workspaces are scratch, fully determined by (solver, h), so we rebuild them with apply
+minimal_callsafe_copy(s::AppliedEigenSolver) =
+    apply(s.solver, minimal_callsafe_copy(s.h), s.transform)
+
+# Compute Spectrum of h(φs; params...), using a workspace if available
+function call!(s::AppliedEigenSolver, φs; params...)
+    (; h, solver, mat, ws, transform) = s
+    hmat = call!(h, φs; params...)
+    mat === hmat || copy!(mat, hmat)    # mat may be a conversion of hmat, e.g. dense
+    eigen = apply_transform!(solver(mat, ws), transform)
+    return Spectrum(eigen, h)
+end
+
+call!(s::AppliedEigenSolver{T,<:AbstractHamiltonian{<:Any,<:Any,0}}; params...) where {T} =
+    call!(s, SVector{0,T}(); params...)
+
+(s::AppliedEigenSolver)(φs...; params...) = copy(call!(s, φs...; params...))
+
+## Bandstructure
+
 blockstructure(b::Bandstructure) = b.blockstruct
 
 solvers(b::Bandstructure) = b.solvers
