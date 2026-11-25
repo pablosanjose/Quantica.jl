@@ -59,5 +59,8 @@ julia> @btime mingap($d, range(-π, π, 301); m = 0.3)
 ```
 Note that each `Spectrum` returned by `call!(d, ...)` is overwritten by the next call, so it should be used (or copied) right away, as done above.
 
+!!! tip "Fixed parameters"
+    For a `ParametricHamiltonian` `h`, each `Quantica.call!(d, ϕs; params...)` re-applies all its modifiers, whose cost depends on the user's modifier functions. If the parameters stay fixed across many Bloch phases, apply them once by building the diagonalizer from the resulting `Hamiltonian` instead, `d = Quantica.diagonalizer(h(; params...))`, and then use `Quantica.call!(d, ϕs)`.
+
 !!! tip "Bandstructures"
     `bands` already reuses one `Quantica.diagonalizer` per thread internally.

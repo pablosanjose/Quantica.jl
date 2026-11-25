@@ -343,10 +343,8 @@ function call!(ph::ParametricHamiltonian; kw...)
     # This reset also sets flat_sync state to unsynced, to be collected by flat_sync! below
     reset_to_parent!(ph)
     h = hamiltonian(ph)
-    foreach(modifiers(ph)) do m
-        # we assume this only modifies unflat harmonics, and preserves needs_flat_sync state
-        applymodifiers!(h, m; kw...)
-    end
+    # we assume this only modifies unflat harmonics, and preserves needs_flat_sync state
+    applymodifiers!(h, modifiers(ph); kw...)
     # modifiers are applied *only* to unflat, need to be synced to flat
     flat_sync!(h)
     return h
@@ -372,6 +370,11 @@ function reset_to_parent!(ph)
     return ph
 end
 
+# recursion over a tuple of heterogeneous modifiers, instead of foreach, so that each call is
+# statically dispatched (foreach may fail to, which allocates)
+applymodifiers!(h, ::Tuple{}; kw...) = h
+applymodifiers!(h, ms::Tuple; kw...) =
+    (applymodifiers!(h, first(ms); kw...); applymodifiers!(h, Base.tail(ms); kw...))
 applymodifiers!(h, m::Modifier; kw...) = applymodifiers!(h, apply(m, h); kw...)
 
 function applymodifiers!(h, m::AppliedOnsiteModifier; kw...)

@@ -477,6 +477,15 @@ end
     f(h, φ) = Quantica.call!(h, φ; α = (0.3, 0.4))
     f(h, SA[0.1, 0.2])
     @test (@allocations f(h, SA[0.1, 0.2])) <= 2   # should be 0
+
+    # several heterogeneous modifiers, with omitted (default) params (was 3 allocations)
+    h = LP.honeycomb(dim = 3) |> hamiltonian(@onsite((r; m = 0) -> m * r[3]) +
+        @hopping((r, dr; t2 = 0.1) -> t2 * hal(dr); range = 1) +
+        @hopping((r, dr; t3 = 0.1, ξ = 1.0) -> t3 * exp(-hypot(dr...)/ξ); range = 2),
+        @hopping!((t, r, dr; λ = 1, B = 0) -> λ * t * cis(B * r[1] * dr[2]))) |> supercell(2)
+    f´(h, φ) = Quantica.call!(h, φ; m = 0.1, t2 = 0.2, t3 = 0.3, ξ = 1.0, λ = 1.0)
+    f´(h, SA[0.1, 0.2])
+    @test (@allocations f´(h, SA[0.1, 0.2])) <= 2  # should be 0
 end
 
 @testset "ExternalPresets.wannier90" begin
