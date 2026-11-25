@@ -59,9 +59,14 @@ using LinearMaps, ArnoldiMethod, KrylovKit, Arpack
         @test sort(ε, by = z -> (real(z), imag(z))) ≈ sort(eigvals(H), by = z -> (real(z), imag(z)))
         @test H * ψ ≈ ψ * Diagonal(ε)
     end
-    # graphene's Bloch matrix at φ is Hermitian only up to rounding, but still diagonalized as Hermitian
+    # Hermitian Bloch matrices are diagonalized as Hermitian (real ε)
     ε, _ = spectrum(HP.graphene(), (0.3, 1.1))
     @test all(iszero ∘ imag, ε)
+    # Hermiticity check tolerates rounding only, not small physical anti-Hermitian terms
+    @test Quantica.ishermitian_approx([1.0 1+1e-15; 1 2])
+    @test !Quantica.ishermitian_approx([1.0 1+1e-10; 1 2])
+    ε, _ = spectrum(LP.honeycomb() |> hopping(1) + onsite(1e-10im), (0.3, 1.1))
+    @test all(!iszero ∘ imag, ε)
 
     # spectrum sorting
     h = LatticePresets.honeycomb() |> hopping(-1) |> supercell(10)

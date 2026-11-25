@@ -40,7 +40,11 @@ ranged(v, min, max) = Ranged(v, (min, max))
 # Misc tools
 #region
 
+# (r, dr) of a hop from r1 to r2
 rdr((r1, r2)::Pair) = (0.5 * (r1 + r2), r2 - r1)
+# (r, dr) of a hop from rj to ri + Adn, with Adn a Bravais vector. dr is exactly antisymmetric
+# under (rj, ri, Adn) -> (ri, rj, -Adn), so f(dr) gives exactly adjoint hoppings
+rdr((rj, ri)::Pair, Adn) = (0.5 * (rj + (ri + Adn)), (ri - rj) + Adn)
 
 @inline tuplejoin() = ()
 @inline tuplejoin(x) = x
@@ -63,6 +67,9 @@ padtuple(t, x, N) = ntuple(i -> i <= length(t) ? t[i] : x, N)
     is = SVector{N,Int}(1:N)
     return s[is, is]
 end
+
+# allunique(f, v) for v sorted such that elements with equal f are adjacent. No allocations.
+allunique_sorted(f, v) = all(i -> f(v[i]) != f(v[i+1]), firstindex(v):lastindex(v)-1)
 
 # find indices in range 1:L that are not in inds, assuming inds is sorted and unique
 inds_complement(val, inds::SVector) = SVector(inds_complement(val, Tuple(inds)))
@@ -255,12 +262,14 @@ check_sizes(A::AbstractMatrix,B::AbstractMatrix) = size(A,2) == size(B,1) ||
     throw(DimensionMismatch("A has dimensions $(size(A)) but B has dimensions $(size(B))"))
 check_sizes(_, _) = nothing
 
-# as LinearAlgebra's generic ishermitian, but up to |A[i,j] - adjoint(A[j,i])| <= atol
-function ishermitian_approx(A::DenseMatrix{T}; atol = sqrt(eps(real(float(T))))) where {T<:Number}
+# as LinearAlgebra's generic ishermitian, but up to |A[i,j] - adjoint(A[j,i])| <= rtol * max|A|.
+# rtol is at the rounding level: it absorbs rounding asymmetries in user-defined models, but not
+# small physical anti-Hermitian terms (e.g. a tiny iη broadening)
+function ishermitian_approx(A::DenseMatrix{T}; rtol = 64 * eps(real(float(T)))) where {T<:Number}
     indsm, indsn = axes(A)
     indsm == indsn || return false
-    atol2 = atol^2
-    @inbounds for i in indsn, j in i:last(indsn)
+    atol2 = abs2(rtol * maximum(abs, A; init = zero(real(float(T)))))
+    @inbounds for i in indsm, j in i:last(indsn)
         abs2(A[i, j] - adjoint(A[j, i])) <= atol2 || return false
     end
     return true
@@ -395,72 +404,64 @@ function merge_sparse(mats, ::Type{B} = eltype(first(mats))) where {B}
     return matrix
 end
 
-function merged_mul!(C::SparseMatrixCSC{<:Number}, A::HybridSparseMatrix, b::Number, α = 1, β = 0)
-    bs = blockstructure(A)
-    if needs_flat_sync(A)
-        merged_mul!(C, bs, unflat(A), b, α, β)
-    else
-        merged_mul!(C, bs, flat(A), b, α, β)
+# In-place muladd(A, b, C), i.e. C .+= b * A (+ b´ * A´), preserving the
+# structure of C, which must include those of A (and A´), hence "merged". With
+# two terms, they are summed before accumulating, with plain * and +, so C stays
+# bitwise Hermitian if it was and A´ == A', b´ == conj(b) (or A == A', b real
+# with one term).
+function merged_muladd!(C::SparseMatrixCSC, A::SparseMatrixCSC, b::Number)
+    size(A) == size(C) || throw(DimensionMismatch("merged_muladd!: size mismatch"))
+    rowsC, valsC = rowvals(C), nonzeros(C)
+    rowsA, valsA = rowvals(A), nonzeros(A)
+    if length(valsA) == length(valsC)  # same structure, since C includes that of A
+        @. valsC += b * valsA
+        return C
     end
-    return C
-end
-
-merged_mul!(C::SparseMatrixCSC{<:Number}, ::OrbitalBlockStructure, A::SparseMatrixCSC{B}, b::Number, α = 1, β = 0) where {B<:Complex} =
-    merged_mul!(C, A, b, α, β)
-
-# like mul! but preserves the sparse structure of C, which must include the structure of A.
-function merged_mul!(C::SparseMatrixCSC, A::SparseMatrixCSC, b::Number, α = 1, β = 0)
-    nzA = nonzeros(A)
-    nzC = nonzeros(C)
-    αb = α * b
-    if length(nzA) == length(nzC)  # assume identical structure (C has merged structure)
-        @. nzC = muladd(αb, nzA, β * nzC)
-    else
-        # A has less elements than C, but C includes all of A
-        for col in axes(A, 2), p in nzrange(A, col)
-            row = rowvals(A)[p]
-            for p´ in nzrange(C, col)
-                row´ = rowvals(C)[p´]
-                if row == row´
-                    nzC[p´] = muladd(αb, nzA[p], β * nzC[p´])
-                    break
-                end
+    for col in axes(C, 2)
+        ptrsA = nzrange(A, col)
+        ptrA = first(ptrsA)
+        for ptrC in nzrange(C, col)
+            # does A have any stored entries in this column? Otherwise, next column
+            ptrA in ptrsA || break
+            if rowsA[ptrA] == rowsC[ptrC]
+                valsC[ptrC] += b * valsA[ptrA]
+                ptrA += 1
             end
         end
     end
     return C
 end
 
-function merged_mul!(C::SparseMatrixCSC{<:Number}, bs::OrbitalBlockStructure{B}, A::SparseMatrixCSC{B}, b::Number, α = 1, β = 0) where {B<:MatrixElementNonscalarType}
-    colsA = axes(A, 2)
-    rowsA = rowvals(A)
-    valsA = nonzeros(A)
-    rowsC = rowvals(C)
-    valsC = nonzeros(C)
-    αb = α * b
-    colC = 1
-    for colA in colsA
-        N = blocksize(bs, colA)
-        for colN in 1:N
-            ptrsA, ptrsC = nzrange(A, colA), nzrange(C, colC)
-            ptrA, ptrC = first(ptrsA), first(ptrsC)
-            while ptrA in ptrsA && ptrC in ptrsC
-                rowA, rowC = rowsA[ptrA], rowsC[ptrC]
-                rngflat = flatrange(bs, rowA)
-                rowAflat, N´ = first(rngflat), length(rngflat)
-                if rowAflat == rowC
-                    valA = valsA[ptrA]
-                    for rowN in 1:N´
-                        valsC[ptrC] = muladd(αb, valA[rowN, colN], β * valsC[ptrC])
-                        ptrC += 1
-                    end
-                elseif rowAflat > rowC
-                    ptrC += N´
-                else
-                    ptrA += 1
-                end
+function merged_muladd!(C::SparseMatrixCSC, A::SparseMatrixCSC, b::Number, A´::SparseMatrixCSC, b´::Number)
+    size(A) == size(A´) == size(C) || throw(DimensionMismatch("merged_muladd!: size mismatch"))
+    rowsC, valsC = rowvals(C), nonzeros(C)
+    rowsA, valsA = rowvals(A), nonzeros(A)
+    rowsA´, valsA´ = rowvals(A´), nonzeros(A´)
+    if length(valsA) == length(valsA´) == length(valsC)  # same structure for all three
+        @. valsC += b * valsA + b´ * valsA´
+        return C
+    end
+    for col in axes(C, 2)
+        ptrsA, ptrsA´ = nzrange(A, col), nzrange(A´, col)
+        ptrA, ptrA´ = first(ptrsA), first(ptrsA´)
+        for ptrC in nzrange(C, col)
+            row = rowsC[ptrC]
+            # whether A and A´ have still stored entries pending to add in this col
+            inA, inA´ = ptrA in ptrsA, ptrA´ in ptrsA´
+            inA || inA´ || break
+            # If either does, is the current C row the row of the current A or A´ stored entry.
+            addA = (inA && rowsA[ptrA] == row)
+            addA´ = (inA´ && rowsA´[ptrA´] == row)
+            if addA && addA´
+                valsC[ptrC] += b * valsA[ptrA] + b´ * valsA´[ptrA´]
+            elseif addA
+                valsC[ptrC] += b * valsA[ptrA]
+            elseif addA´
+                valsC[ptrC] += b´ * valsA´[ptrA´]
             end
-            colC += 1
+            # advance to next stored entry if they have been added
+            ptrA += addA
+            ptrA´ += addA´
         end
     end
     return C

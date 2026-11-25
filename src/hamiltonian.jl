@@ -261,18 +261,41 @@ function flat_bloch!(h::Hamiltonian{T}, φs::SVector, axis=missing) where {T}
     needs_initialization(hbloch) && initialize_bloch!(hbloch, harmonics(h))
     fbloch = flat(hbloch)
     fill!(fbloch, zero(Complex{T}))  # This preserves sparsity structure
-    addblochs!(fbloch, h, φs, axis)
+    addharmonics!(fbloch, h, φs, axis)
     return fbloch
 end
 
-function addblochs!(dst::SparseMatrixCSC, h::Hamiltonian, φs, axis)
+function addharmonics!(dst::SparseMatrixCSC, h::Hamiltonian, φs, axis)
     checkbloch(h, φs)
     hars = harmonics(h)
     isvelocity = axis isa Integer
-    for har in hars
-        iszero(dcell(har)) && isvelocity && continue
-        αe⁻ⁱᵠᵈⁿ = blochfactor(dcell(har), φs, axis)
-        merged_mul!(dst, matrix(har), αe⁻ⁱᵠᵈⁿ, 1, 1)  # see tools.jl
+    inds = (firstindex(hars) + isvelocity):lastindex(hars)  # velocity skips dn = 0, the first harmonic
+    phase(i) = blochfactor(dcell(hars[i]), φs, axis)
+    harmat(i) = flat(hars[i])
+    addharmonics!(dst, hars, harmat, phase, inds)
+    return dst
+end
+
+# dst .+= sum(phase(i) * flat_or_unflat(hars[i]) for i in inds), with
+# flat_or_unflat = flat or unflat and inds sorted as hars. Each (dn, -dn) pair,
+# adjacent if present (see harmonic_order), is summed first, with conj(phase)
+# for -dn. This keeps dst bitwise Hermitian if it was and the pairs are adjoints
+# (see merged_muladd!).
+function addharmonics!(dst::SparseMatrixCSC, hars, harmat, phase, inds)
+    k = firstindex(inds)
+    while k <= lastindex(inds)
+        ind = inds[k]
+        A, eⁱᵠ = harmat(ind), phase(ind)
+        ind´ = k == lastindex(inds) ? ind : inds[k+1]  # next harmonic, if any
+        are_partners = ind != ind´ && dcell(hars[ind´]) == -dcell(hars[ind])
+        if are_partners
+            A´, e⁻ⁱᵠ = harmat(ind´), conj(eⁱᵠ)
+            merged_muladd!(dst, A, eⁱᵠ, A´, e⁻ⁱᵠ)
+            k += 2
+        else
+            merged_muladd!(dst, A, eⁱᵠ)
+            k += 1
+        end
     end
     return dst
 end
