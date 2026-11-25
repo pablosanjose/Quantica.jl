@@ -468,6 +468,15 @@ end
     # no allocations even for large models
     h = LP.linear() |> sum(@onsite((; a = 0) -> 0) for _ in 1:20)
     Quantica.call!(h; a=0); @test (@allocations Quantica.call!(h; a=0)) <= 10
+
+    # forced specialization of pass-through args in parametric terms (was 252 allocations)
+    hal(dr) = im * sign(cos(3 * atan(dr[2], dr[1]))) / (3√3)
+    g(α, r, dr, N, a) = (l = round(Int, r[3]/a + (N + 1)/2); hal(dr) * (l == 1 ? α[1] : l == N ? α[2] : 0.0))
+    mk(N, a) = @hopping((r, dr; α = nothing) -> g(α, r, dr, N, a), range = 1)
+    h = LP.honeycomb(dim = 3) |> mk(1, 0.335)
+    f(h, φ) = Quantica.call!(h, φ; α = (0.3, 0.4))
+    f(h, SA[0.1, 0.2])
+    @test (@allocations f(h, SA[0.1, 0.2])) <= 2   # should be 0
 end
 
 @testset "ExternalPresets.wannier90" begin

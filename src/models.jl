@@ -136,13 +136,17 @@ zero_model(term::ParametricHoppingTerm) =
     HoppingTerm((r, dr) -> 0I, selector(term), coefficient(term))
 
 function modifier(term::ParametricOnsiteTerm{N}) where {N}
-    f = (o, args...; kw...) -> o + term(args...; kw...)
+    # Vararg{Any,M} forces specialization on args (Julia does not specialize on a pass-through
+    # args..., which allocates if the call to term is not inlined)
+    f(o, args::Vararg{Any,M}; kw...) where {M} = o + term(args...; kw...)
     pf = ParametricFunction{N+1}(f, parameter_names(term))
     return OnsiteModifier(pf, selector(term), is_spatial(term))
 end
 
 function modifier(term::ParametricHoppingTerm{N}) where {N}
-    f = (t, args...; kw...) -> t + term(args...; kw...)
+    # Vararg{Any,M} forces specialization on args (Julia does not specialize on a pass-through
+    # args..., which allocates if the call to term is not inlined)
+    f(t, args::Vararg{Any,M}; kw...) where {M} = t + term(args...; kw...)
     pf = ParametricFunction{N+1}(f, parameter_names(term))
     return HoppingModifier(pf, selector(term), is_spatial(term))
 end
