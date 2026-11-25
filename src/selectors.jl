@@ -130,6 +130,7 @@ function foreach_hop(f, sel::AppliedHopSelector, kdtrees::Vector{<:KDTree}, ni::
     _, rmax = sel.range
     # source cell at origin
     nj = zero(ni)
+    Adn = bravais_matrix(lat) * ni  # nj = 0
     found = false
     for si in sublats(lat), sj in sublats(lat)
         insublats(sj => si, sel) || continue
@@ -138,7 +139,7 @@ function foreach_hop(f, sel::AppliedHopSelector, kdtrees::Vector{<:KDTree}, ni::
             is = inrange_targets(site(lat, j, nj - ni), lat, si, rmax, kdtrees)
             for i in is
                 !includeonsite(sel) && isonsite((j, i), ni - nj) && continue
-                r, dr = rdr(site(lat, j, nj) => site(lat, i, ni))
+                r, dr = rdr(site(lat, j) => site(lat, i), Adn)
                 # Make sure we don't stop searching cells until we reach minimum range
                 isbelowrange(dr, sel) && (found = true)
                 if iswithinrange(dr, sel) && inregion((r, dr, ni), sel)

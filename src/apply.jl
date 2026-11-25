@@ -270,6 +270,7 @@ function push_pointers!(ptrs, h, har, s::AppliedHopSelector, shifts = missing, b
     lat = lattice(h)
     dn0 = zerocell(lat)
     dn = dcell(har)
+    Adn = bravais_matrix(lat) * dn
     norbs = norbitals(h, :)
     umat = unflat(har)
     rows = rowvals(umat)
@@ -279,7 +280,7 @@ function push_pointers!(ptrs, h, har, s::AppliedHopSelector, shifts = missing, b
         srow = sitesublat(lat, row)
         rcol = site(lat, col, dn0)
         rrow = site(lat, row, dn)
-        r, dr = rdr(rcol => rrow)
+        r, dr = rdr(site(lat, col) => site(lat, row), Adn) # this form is required to ensure hermiticity
         r = apply_shift(shifts, r, col)
         if (col => row, scol => srow, (r, dr), dn) in s
             ncol = norbs[scol]

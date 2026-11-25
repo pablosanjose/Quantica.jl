@@ -367,6 +367,17 @@ end
     end
     h = hamiltonian(LP.linear(), hopping(1))
     @test h(π) == h((π,)) == h([π]) == [-2;;]
+    # (dn, -dn) harmonics are summed in pairs, so Bloch matrices are bitwise Hermitian
+    for h in (LP.square() |> hopping(1, range = 2), HP.graphene(orbitals = 2))
+        @test ishermitian(h((0.3, 1.1))) && ishermitian(h((0.3, 1.1), 1))
+    end
+    # dr is exactly antisymmetric, so dr-dependent hoppings give exactly adjoint harmonics
+    h = LP.honeycomb() |> hamiltonian(hopping((r, dr) -> SA[1 im; -im 2] / norm(dr), range = 3), orbitals = 2)
+    @test all(har -> h[dcell(har)] == h[-dcell(har)]', harmonics(h))
+    @test ishermitian(h((0.3, 1.1))) && ishermitian(h((0.3, 1.1), 1))
+    # harmonics must have unique dn
+    har = last(harmonics(h))
+    @test_throws ArgumentError Hamiltonian(Quantica.lattice(h), Quantica.blockstructure(h), [har, har])
 end
 
 @testset "parametric hamiltonian" begin

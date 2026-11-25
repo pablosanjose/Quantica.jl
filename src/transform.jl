@@ -213,13 +213,9 @@ end
 function sum_harmonics_group!(h, hars_parent, inds, phases_w, dcells_u, dcells_w)
     dn_u = dcells_u[first(inds)]
     mat = h[unflat(dn_u)]                    # unflat HybridMatrix
-    for i in inds
-        dn_w = dcells_w[i]
-        e⁻ⁱᵠᵈⁿ = blochfactor(phases_w, dn_w)
-        mat_parent = unflat(hars_parent[i])
-        # We do mat .+= e⁻ⁱᵠᵈⁿ * mat_parent but preserving sparsity structure of mat
-        merged_mul!(mat, mat_parent, e⁻ⁱᵠᵈⁿ, 1, 1)
-    end
+    phase(i) = blochfactor(dcells_w[i], phases_w)
+    harmat(i) = unflat(hars_parent[i])
+    addharmonics!(mat, hars_parent, harmat, phase, inds)
     return h
 end
 

@@ -1391,7 +1391,13 @@ blocktype(::Harmonic{<:Any,<:Any,B}) where {B} = B
 
 Base.size(h::Harmonic, i...) = size(matrix(h), i...)
 
-Base.isless(h::Harmonic, h´::Harmonic) = sum(abs2, dcell(h)) < sum(abs2, dcell(h´))
+# sort!(harmonics) puts dn = 0 first and each (-dn, dn) pair adjacent (see harmonic_order)
+Base.isless(h::Harmonic, h´::Harmonic) = isless(harmonic_order(dcell(h)), harmonic_order(dcell(h´)))
+
+# Lexicographic sort key: 1) |dn|², so dn = 0 is first; 2) the lexicographically larger of
+# dn and -dn, shared by both, so the pair is adjacent; 3) whether dn is that larger one
+# (false < true), so the smaller one comes first within the pair.
+harmonic_order(dn) = (sum(abs2, dn), max(Tuple(dn), Tuple(-dn)), Tuple(dn) > Tuple(-dn))
 
 Base.zero(h::Harmonic{<:Any,<:Any,B}) where {B} = Harmonic(zero(dcell(h)), zero(matrix(h)))
 
@@ -1454,7 +1460,9 @@ struct Hamiltonian{T,E,L,B} <: AbstractHamiltonian{T,E,L,B}
         n = nsites(lattice)
         all(har -> size(matrix(har)) == (n, n), harmonics) ||
             throw(DimensionMismatch("Harmonic $(size.(matrix.(harmonics), 1)) sizes don't match number of sites $n"))
-        sort!(harmonics)
+        sort!(harmonics)  # dn = 0 first, (-dn, dn) pairs adjacent (see isless), as addharmonics! needs
+        allunique_sorted(dcell, harmonics) ||  # equal dn are adjacent after sort!
+            argerror("Hamiltonian harmonics must have unique cell distances dn")
         (isempty(harmonics) || !iszero(dcell(first(harmonics)))) && pushfirst!(harmonics,
             Harmonic(zero(SVector{L,Int}), HybridSparseMatrix(blockstruct, spzeros(B, n, n))))
         return new(lattice, blockstruct, harmonics, bloch)

@@ -16,9 +16,9 @@ module EigenSolvers
 using FunctionWrappers: FunctionWrapper
 using SparseArrays: SparseMatrixCSC, AbstractSparseMatrix
 using FastLapackInterface: HermitianEigenWs, EigenWs
-using Quantica: Eigen, I, lu, ldiv!
+using Quantica: Eigen, I, lu, ldiv!, Hermitian
 using Quantica: Quantica, AbstractEigenSolver, SVector, SMatrix,
-                sanitize_eigen, call!_output, argerror, ishermitian, isdiag
+                sanitize_eigen, call!_output, argerror, ishermitian_approx, isdiag
 import Quantica: get_eigen
 
 #endregion
@@ -57,23 +57,32 @@ end
 LinearAlgebra(; kw...) = LinearAlgebra(NamedTuple(kw))
 
 # no extension for LinearAlgebra, it is a strong dependency
+# Hermitian eigen (complex ϵ, for type stability) if mat is Hermitian up to rounding and kwargs allow it
 function Quantica.get_eigen(solver::LinearAlgebra, mat::AbstractMatrix{<:Number})
-    ϵ, ψ = Quantica.LinearAlgebra.eigen(mat; solver.kwargs...)  # destructure: splatting an Eigen allocates
-    return ϵ, ψ
+    kw = solver.kwargs
+    # destructure: splatting an Eigen allocates
+    if keys(kw) ⊆ (:sortby, :alg) && ishermitian_approx(mat)
+        ϵ, ψ = Quantica.LinearAlgebra.eigen(Hermitian(mat); kw...)
+        return complex.(ϵ), ψ
+    else
+        ϵ, ψ = Quantica.LinearAlgebra.eigen(mat; kw...)
+        return ϵ, ψ
+    end
 end
 
 # workspaces are only used without eigen kwargs (e.g. sortby), which they don't support
 # mat is overwritten by this get_eigen method, but it is a copy of call!_output(h), so its safe
-# the ishermitian call is negligible compared to eigen, and LinearAlgebra actually does that check internally
+# the ishermitian_approx call is negligible compared to eigen
 # the workspace tuple type is required to avoid ambiguity with the missing-workspace method
 function Quantica.get_eigen(solver::LinearAlgebra, mat::AbstractMatrix{<:Number},
                    (hermitian_ws, general_ws)::Tuple{HermitianEigenWs,EigenWs})
     if !isempty(solver.kwargs) || isdiag(mat)   # isdiag: LinearAlgebra's no-LAPACK shortcut
         Quantica.get_eigen(solver, mat)
-    elseif ishermitian(mat)
-        copy.(Quantica.eigen_ws!(hermitian_ws, mat))
+    elseif ishermitian_approx(mat)
+        ϵs, ψs = Quantica.eigen_ws!(hermitian_ws, mat)
+        return complex.(ϵs), copy(ψs)  # complex ϵs for type stability
     else
-        copy.(Quantica.eigen_ws!(general_ws, mat))
+        return copy.(Quantica.eigen_ws!(general_ws, mat))
     end
 end
 
