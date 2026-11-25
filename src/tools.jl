@@ -268,8 +268,9 @@ check_sizes(_, _) = nothing
 function ishermitian_approx(A::DenseMatrix{T}; rtol = 64 * eps(real(float(T)))) where {T<:Number}
     indsm, indsn = axes(A)
     indsm == indsn || return false
-    atol2 = abs2(rtol * maximum(abs, A; init = zero(real(float(T)))))
-    @inbounds for i in indsm, j in i:last(indsn)
+    # abs2 avoids a hypot per element, and the loop is column-major for cache efficiency
+    atol2 = rtol^2 * maximum(abs2, A; init = zero(real(float(T))))
+    @inbounds for j in indsn, i in first(indsm):j
         abs2(A[i, j] - adjoint(A[j, i])) <= atol2 || return false
     end
     return true

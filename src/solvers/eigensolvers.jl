@@ -84,8 +84,8 @@ struct LinearAlgebraWorkspace{C<:Complex,H<:HermitianEigenWs,G<:EigenWs} <: Abst
     mat::Matrix{C}
     hermitian_ws::H
     general_ws::G
-    ϵs::Vector{C}
-    ψs::Matrix{C}
+    ϵs::Vector{C}       # complex eigenvalues for the Hermitian and isdiag branches
+    ψs::Matrix{C}       # eigenvectors for the isdiag shortcut (LAPACK ones are in its ws)
     p::Vector{Int}      # permutation buffers for sorting
     p´::Vector{Int}
 end
@@ -110,40 +110,40 @@ linalg_workspace(_) = MissingWorkspace()  # no LAPACK workspaces for e.g. Comple
 # Hermitian eigen (real ϵs) if mat is Hermitian up to rounding, general eigen otherwise.
 # Overwrites mat. Returns an Eigen sorted by (real, imag) that aliases the ws buffers, which
 # are overwritten by the next call. The ishermitian_approx call is negligible vs eigen.
-# Method of Quantica.eigen_ws!, see tools.jl
+# Results are the LAPACK workspace buffers, except Hermitian eigenvalues, which are copied
+# into ws.ϵs to make them complex, and the isdiag shortcut. Method of Quantica.eigen_ws!
 function Quantica.eigen_ws!(ws::LinearAlgebraWorkspace, mat::AbstractMatrix)
-    (; hermitian_ws, general_ws, ϵs, ψs) = ws
+    (; hermitian_ws, general_ws) = ws
     if isdiag(mat)          # as LinearAlgebra's no-LAPACK shortcut, exact unit eigenvectors
         herm = ishermitian_approx(mat)
+        ϵs = ws.ϵs
         for i in eachindex(ϵs)
             x = mat[i, i]
             ϵs[i] = herm ? complex(real(x)) : x     # same type in both branches
         end
-        copyto!(ψs, I)
-        sorteigs_ws!(ws)
+        ψs = copyto!(ws.ψs, I)
+        sorteigs_ws!(ws, ϵs, ψs)
     elseif ishermitian_approx(mat)
-        ϵs´, ψs´ = Quantica.eigen_ws!(hermitian_ws, mat)    # sorted by LAPACK
-        ϵs .= ϵs´
-        copyto!(ψs, ψs´)
+        ϵs´, ψs = Quantica.eigen_ws!(hermitian_ws, mat)     # real ϵs´, sorted by LAPACK
+        ϵs = (ws.ϵs .= ϵs´)                                 # complex, for type stability
     else
-        ϵs´, ψs´ = Quantica.eigen_ws!(general_ws, mat)      # unsorted
-        ϵs .= ϵs´
-        copyto!(ψs, ψs´)
-        sorteigs_ws!(ws)
+        ϵs, ψs = Quantica.eigen_ws!(general_ws, mat)        # complex, unsorted
+        sorteigs_ws!(ws, ϵs, ψs)
     end
     return Eigen(ϵs, ψs)
 end
 
-# sort by (real, imag) as LinearAlgebra's sorteig!, using the ws permutation buffers
-function sorteigs_ws!(ws::LinearAlgebraWorkspace)
-    (; ϵs, ψs, p, p´) = ws
+# sort ϵs and the columns of ψs by (real, imag), as LinearAlgebra's sorteig!, using the ws
+# permutation buffers
+function sorteigs_ws!(ws::LinearAlgebraWorkspace, ϵs, ψs)
+    (; p, p´) = ws
     by = λ -> (real(λ), imag(λ))
     if !issorted(ϵs; by)
         sortperm!(p, ϵs; alg = QuickSort, by)
         Quantica.permute!!(ϵs, copy!(p´, p))
         Quantica.permutecols!!(ψs, p)
     end
-    return ws
+    return ϵs, ψs
 end
 
 #### Arpack #####
