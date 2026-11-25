@@ -250,10 +250,7 @@ end
     @test_throws ArgumentError meanfield(g)
     # PR #419: unboxed captured variables in meanfield_models (~6.7k-6.8k allocs, vs ~10k boxed)
     g = LP.honeycomb() |> hamiltonian(hopping(I), orbitals = 2) |> supercell((1,-1), region = r -> 0 <= r[2] <= 15) |> greenfunction
-    let g = g
-        meanfield(g; selector = (; range = 1), potential = 2, fock = 1.5, nambu = false)       # first call, to compile
-        @test (@allocations meanfield(g; selector = (; range = 1), potential = 2, fock = 1.5, nambu = false)) < 8500
-    end
+    @test allocs(meanfield, g; selector = (; range = 1), potential = 2, fock = 1.5, nambu = false) < 8500
 end
 
 @testset "SpectralSum" begin

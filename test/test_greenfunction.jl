@@ -260,8 +260,7 @@ end
     @test gmat´ isa Matrix
     @test size(gmat´) == (2, 2)
     c = sites(SA[1], 1)
-    view(gmat, c)
-    @test (@allocations view(gmat, c)) <= 2
+    @test allocs(view, gmat, c) <= 2
     i, j = orbaxes(gmat)
     @test g(0.2)[i, j] isa Quantica.OrbitalSliceMatrix
     @test gmat[c] isa Matrix

@@ -370,11 +370,12 @@ function reset_to_parent!(ph)
     return ph
 end
 
-# recursion over a tuple of heterogeneous modifiers, instead of foreach, so that each call is
-# statically dispatched (foreach may fail to, which allocates)
-applymodifiers!(h, ::Tuple{}; kw...) = h
-applymodifiers!(h, ms::Tuple; kw...) =
-    (applymodifiers!(h, first(ms); kw...); applymodifiers!(h, Base.tail(ms); kw...))
+# Apply a tuple of heterogeneous modifiers. Base unrolls map over tuples, so each call is
+# statically dispatched. Instead, foreach loops over the tuple, which allocates when it has
+# too many different modifier types, and first/tail recursion hits inference limits for
+# long tuples (e.g. 20+ modifiers on Julia 1.10)
+applymodifiers!(h, ms::Tuple; kw...) = (map(m -> (applymodifiers!(h, m; kw...); nothing), ms); h)
+
 applymodifiers!(h, m::Modifier; kw...) = applymodifiers!(h, apply(m, h); kw...)
 
 function applymodifiers!(h, m::AppliedOnsiteModifier; kw...)

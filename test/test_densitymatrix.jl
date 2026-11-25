@@ -13,10 +13,7 @@ using LinearAlgebra
         ρ1(0.1, kBT)                                # first call, to compile
         @test (@allocated ρ1(0.1, kBT)) < 2^18      # 2^18 bytes = 256 KiB
     end
-    let s = ρ1.solver, ϕ = SA[0.3]  # locals, to avoid global-scope allocations
-        Quantica.fermi_h!(s, ϕ, 0.1, 50.0)          # first call, to compile
-        @test (@allocations Quantica.fermi_h!(s, ϕ, 0.1, 50.0)) <= 2  # should be 0
-    end
+    @test allocs(Quantica.fermi_h!, ρ1.solver, SA[0.3], 0.1, 50.0) == 0
     # g3 excluded since KPM doesn't support finite temperatures or generic indexing yet
     # all inds × path combinations, with g cycled through (see testutils.jl)
     indss = (diagonal(1), diagonal(:), sitepairs(range = 1))

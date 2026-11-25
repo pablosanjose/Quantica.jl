@@ -119,7 +119,8 @@ function bands_eigensolver(solver::AbstractEigenSolver, h::AbstractHamiltonian, 
         # out-of-order extension loading issues. Remove when/if FunctionWrappers is dropped.
         dryrun && return EigenComplex{T}(Complex{T}[], Complex{T}[;;])
         sp = call!(asolver, apply_map(mapping, φs))  # mapping can give a FrankenTuple
-        return eigen_copy(sp)                        # stored by bands, so it must not alias asolver
+        # copy, as it is stored by bands. Complex{T} conversion: LinearAlgebra may promote e.g. Float16
+        return Eigen(Complex{T}.(energies(sp)), Complex{T}.(states(sp)))
     end
     sfunc(zero(S), true)  # dryrun to avoid issue #235
     return FunctionWrapper{EigenComplex{T},Tuple{SVector{L,T}}}(sfunc)

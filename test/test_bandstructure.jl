@@ -91,7 +91,7 @@ using LinearMaps, ArnoldiMethod, KrylovKit, Arpack
         bands(h, ks, ks; showprogress = false)                                    # first call, to compile
         @test (@allocated bands(h, ks, ks; showprogress = false)) < 2 * 2^20      # 2 MiB
         # PR #419: unboxed captured variables in subbands_split! (~11k-18k allocs, vs ~24k-38k boxed)
-        @test (@allocations bands(h, ks, ks; showprogress = false)) < 21000
+        @test allocs(bands, h, ks, ks; showprogress = false) < 21000
     end
     # PR #419: band vertices are preallocated, and not copied if there is a single subband
     # (~2.5-2.7 MiB, vs ~3-3.5 MiB)
@@ -100,10 +100,8 @@ using LinearMaps, ArnoldiMethod, KrylovKit, Arpack
         @test (@allocated bands(h, ks, ks; showprogress = false)) < 2.85 * 2^20  # 2.85 MiB
     end
     # PR #419: simplex building reuses its buffers across vertices (~6-7 allocs, vs ~3.6k-9k)
-    let neighs = Quantica.neighbors(Quantica.subbands(b)[1])                 # 1800 vertices
-        Quantica.build_cliques(neighs, Val(3))                               # first call, to compile
-        @test (@allocations Quantica.build_cliques(neighs, Val(3))) < 50
-    end
+    neighs = Quantica.neighbors(Quantica.subbands(b)[1])                     # 1800 vertices
+    @test allocs(Quantica.build_cliques, neighs, Val(3)) < 50
     # PR #419: subband interval trees reuse one temporary list (~690-700 KiB, vs ~850-860 KiB)
     let sb = Quantica.subbands(b)[1], verts = Quantica.vertices(sb), simps = Quantica.simplices(sb)
         Quantica.subband_trees(verts, simps)                                 # first call, to compile
@@ -123,8 +121,8 @@ using LinearMaps, ArnoldiMethod, KrylovKit, Arpack
     let h = h, ks = subdiv(0, 2π, 30)                                          # 1800 vertices
         @test nsubbands(bands(h, ks, ks; showprogress = false)) == 2         # first call, to compile
         bands(h, ks, ks; split = false, showprogress = false)
-        @test (@allocations bands(h, ks, ks; showprogress = false)) -
-              (@allocations bands(h, ks, ks; split = false, showprogress = false)) < 1000
+        @test allocs(bands, h, ks, ks; showprogress = false) -
+              allocs(bands, h, ks, ks; split = false, showprogress = false) < 1000
     end
 end
 
@@ -210,9 +208,7 @@ end
         @test energies(Quantica.call!(s, 2φ; params...)) === energies(sp)   # aliases s
         @test energies(s(φ; params...)) !== energies(s(φ; params...))       # does not alias s
         @test energies(s(φ; params...)) ≈ energies(Quantica.call!(s, φ; params...))
-        f(s, φ, params) = @allocated Quantica.call!(s, φ; params...)
-        f(s, φ, params)
-        @test f(s, φ, params) == 0
+        @test allocs(Quantica.call!, s, φ; params...) == 0
     end
     h = LP.linear() |> hopping(1) |> supercell(4) |> supercell
     s = Quantica.diagonalizer(h; transform = -)

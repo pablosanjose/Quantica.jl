@@ -1849,9 +1849,7 @@ states(s::Spectrum) = s.eigen.vectors
 
 blockstructure(s::Spectrum) = s.blockstruct
 
-Base.copy(s::Spectrum) = Spectrum(eigen_copy(s), s.blockstruct)
-
-eigen_copy(s::Spectrum) = Eigen(copy(energies(s)), copy(states(s)))
+Base.copy(s::Spectrum) = Spectrum(Eigen(copy(energies(s)), copy(states(s))), s.blockstruct)
 
 ## AppliedEigenSolver
 
