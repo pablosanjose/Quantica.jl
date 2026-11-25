@@ -351,6 +351,16 @@ function stored_cols(m::AbstractSparseMatrixCSC)
     return cols
 end
 
+# as copy!(dst, src[:, cols]) for a dense dst, without the intermediate sparse slice
+function copy_columns!(dst::AbstractMatrix, src::AbstractSparseMatrixCSC, cols)
+    fill!(dst, zero(eltype(dst)))
+    rows, vals = rowvals(src), nonzeros(src)
+    for (k, col) in enumerate(cols), ptr in nzrange(src, col)
+        dst[rows[ptr], k] = vals[ptr]
+    end
+    return dst
+end
+
 # merge several sparse matrices onto the first using only structural zeros
 function merge_sparse(mats, ::Type{B} = eltype(first(mats))) where {B}
     mat0 = first(mats)

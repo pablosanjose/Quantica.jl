@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "Quantica.jl"
+type: software
+authors:
+  - family-names: San-Jose
+    given-names: Pablo
+    affiliation: "Instituto de Ciencia de Materiales de Madrid (ICMM-CSIC)"
+    orcid: "https://orcid.org/0000-0002-7920-5273"
+abstract: "A Julia package for building and computing properties of tight-binding models."
+repository-code: "https://github.com/pablosanjose/Quantica.jl"
+doi: 10.5281/zenodo.4762963
+license: MIT
+keywords:
+  - tight-binding
+  - quantum transport
+  - Julia

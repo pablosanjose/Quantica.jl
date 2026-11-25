@@ -312,13 +312,12 @@ end
 # updates L and R from the current hm and hp
 function update_LR!(s)
     d = size(s.L, 2)
+    # direct copy is faster than a slice or a view of sparse
     if s.l_leq_r
-        # slicing is faster than a view of sparse
-        copy!(s.R, flat(s.hm)[:, s.sinds])
+        copy_columns!(s.R, flat(s.hm), s.sinds)
         view(s.R´L´, 1:d, :) .= s.R'
     else
-        # slicing is faster than a view of sparse
-        copy!(s.L, flat(s.hp)[:, s.sinds])
+        copy_columns!(s.L, flat(s.hp), s.sinds)
         view(s.R´L´, (d+1):2d, :) .= .- s.L'
     end
     return s
@@ -392,7 +391,9 @@ function ordschur_retarded!(sch::GeneralizedSchur{Complex{T}}, s::SchurFactorsSo
     tol = sqrt(eps(T))
     ωshift = 5*eps(T)
     whichmodes, V´, VZ = s.tmp.whichmodes, s.tmp.V1, s.tmp.V2
-    @. whichmodes = abs(sch.β)-tol < abs(sch.α) < abs(sch.β)+tol    # propagating classifier (lax)
+    # propagating classifier (lax). Not chained as a < b < c, which allocates when b is not
+    # a plain variable (b is then materialized into a temporary array)
+    @. whichmodes = (abs(sch.β)-tol < abs(sch.α)) & (abs(sch.α) < abs(sch.β)+tol)
     if any(whichmodes)                                              # classify propagating modes using velocity
         nprop = sum(whichmodes)
         ordschur!(sch, whichmodes)
