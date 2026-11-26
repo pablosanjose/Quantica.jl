@@ -55,6 +55,12 @@ end
     h = LP.honeycomb() |> @onsite((; o = 1) -> o*I) |> supercell
     @test greenfunction(h, GS.Spectrum()) isa GreenFunction
     @test greenfunction(h(), GS.Spectrum()) isa GreenFunction
+    # GS.Spectrum requires a Hermitian h (Lehmann representation)
+    @test_throws ArgumentError greenfunction(h(o = im), GS.Spectrum())
+    g = greenfunction(h, GS.Spectrum())
+    @test g(0.2; o = 2)[] isa AbstractMatrix
+    @test_throws ArgumentError g(0.2; o = im)
+    @test_throws ArgumentError g(; o = im)
 end
 
 @testset "greenfunction KPM" begin

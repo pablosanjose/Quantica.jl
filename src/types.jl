@@ -1581,6 +1581,13 @@ function LinearAlgebra.ishermitian(h::Hamiltonian)
     return true
 end
 
+# Eigenstate-based algorithms (Lehmann sums, densitymatrix) assume orthonormal eigenstates
+function check_hermitian(h::Hamiltonian)
+    ishermitian(h) ||
+        argerror("Required a Hermitian Hamiltonian, but received a non-Hermitian one")
+    return h
+end
+
 function Base.:(==)(h::Hamiltonian, h´::Hamiltonian)
     hs = sort(h.harmonics, by = har -> har.dn)
     hs´ = sort(h´.harmonics, by = har -> har.dn)

@@ -5,8 +5,9 @@ description: Coding style, conventions, testing and workflow for the Quantica.jl
 
 # Quantica.jl: style and conventions
 
-These are the maintainer's preferences, learned over several PRs. Follow them unless they say
-otherwise. When unsure, copy what the surrounding code does.
+These are the maintainer's preferences, learned over several PRs. They are guidelines
+gleaned from the codebase itself, and may be broken for an actual reason. Follow them unless
+the maintainer says otherwise. When unsure, check how the codebase does it.
 
 ## Workflow
 
@@ -36,7 +37,10 @@ otherwise. When unsure, copy what the surrounding code does.
 - **Use short-form definitions,** including for local functions:
   `f(o, args::Vararg{Any,M}; kw...) where {M} = ...`. Never `f = function ... end`.
 - **Throw errors with `argerror("...")`** (from `tools.jl`), with a message that tells the user what
-  went wrong and what was received.
+  went wrong and what was received. Don't name the function or solver raising it (no
+  `name` argument in check helpers such as `check_hermitian(h)`): the stack trace shows
+  where it came from. The only exception is `internalerror`, worded to encourage bug
+  reports.
 
 ### File organization
 - **Organize files with regions.** Each one opens with a header of `#` characters, then the title,
@@ -50,7 +54,14 @@ otherwise. When unsure, copy what the surrounding code does.
   ```
   Inside `types.jl`, regions such as `#region ## Constructors ##` and `#region ## API ##` hold
   the accessors.
-- **Keep lines around 100 characters wide.** Comments should explain *why*, not what.
+- **Keep lines within 92 characters,** the width of the `#` region dividers (soft rule).
+  These may run longer: function signatures, struct type parameters, other argument lists,
+  and string literals such as `argerror` messages (breaking them adds unintended newlines).
+  Wrap other code and comments only where a natural break exists: an overlong line beats an
+  awkward break. Comments should explain *why*, not what.
+- **`where` clauses end a line, never start one:** `f(x::T) where {T} =`, then the body.
+- **Explicit `return` at the exit points of `function ... end` blocks,** unless there is an
+  actual reason not to. Short-form definitions need none.
 - **Keep comments inside function bodies short.** Prefer a brief trailing comment, e.g.
   `# complex, for type stability`. Save longer explanations for a comment block above the
   function or region.

@@ -380,9 +380,13 @@ end
 
 #region ## densitymatrix API ##
 
-# redirects to specialized method
-densitymatrix(gs::GreenSlice; kw...) =
-    densitymatrix(solver(parent(gs)), gs::GreenSlice; kw...)
+# redirects to specialized method. These rely on spectra of h, so they can't support an
+# ω-dependent h, as produced by omegamap
+function densitymatrix(gs::GreenSlice; omegamap = missing, kw...)
+    omegamap === missing ||
+        argerror("`omegamap` is only supported by the generic integration algorithm, `densitymatrix(gs, path; omegamap, ...)`")
+    return densitymatrix(solver(parent(gs)), gs::GreenSlice; kw...)
+end
 
 # generic fallback if no specialized method exists
 densitymatrix(s::AppliedGreenSolver, gs::GreenSlice; kw...) =
