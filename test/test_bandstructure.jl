@@ -239,6 +239,7 @@ end
     b = bands(h, subdiv(0, 1, 5), subdiv(0, 1, 5), showprogress = false, projectors = true)
     @test b isa Quantica.Bandstructure{Float16}
     @test energies(spectrum(b, (0.2, 0.3))) ≈ energies(spectrum(h, (0.2, 0.3)))
+    @test_throws ArgumentError spectrum(b, (0.2,))      # wrong number of Bloch phases
 end
 
 @testset "bandstructures/spectrum slices" begin

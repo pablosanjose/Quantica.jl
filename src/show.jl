@@ -289,19 +289,6 @@ display_workspace(_) = "allocation-free call! enabled"
 #endregion
 
 ############################################################################################
-# LinearAlgebraWorkspace
-#region
-
-Base.show(io::IO, ws::ES.LinearAlgebraWorkspace) = print(io, get(io, :indent, ""), summary(ws))
-
-function Base.summary(ws::ES.LinearAlgebraWorkspace{C}) where {C}
-    n, m = size(ES.input_matrix(ws))
-    return "LinearAlgebraWorkspace{$C}: $n×$m eigenproblem workspace, to be used with diagonalizer call!"
-end
-
-#endregion
-
-############################################################################################
 # Spectrum
 #region
 
