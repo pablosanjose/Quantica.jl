@@ -268,8 +268,9 @@ check_sizes(_, _) = nothing
 function ishermitian_approx(A::DenseMatrix{T}; rtol = 64 * eps(real(float(T)))) where {T<:Number}
     indsm, indsn = axes(A)
     indsm == indsn || return false
-    atol2 = abs2(rtol * maximum(abs, A; init = zero(real(float(T)))))
-    @inbounds for i in indsm, j in i:last(indsn)
+    # abs2 avoids a hypot per element, and the loop is column-major for cache efficiency
+    atol2 = rtol^2 * maximum(abs2, A; init = zero(real(float(T))))
+    @inbounds for j in indsn, i in first(indsm):j
         abs2(A[i, j] - adjoint(A[j, i])) <= atol2 || return false
     end
     return true
@@ -470,10 +471,13 @@ end
 #endregion
 
 ############################################################################################
-# LAPACK tools
+# LAPACK tools and workspaces
 #   Wrapper for LAPACK's tgevc! to compute the right eigenvectors of a matrix pencil (A, B)
 #   Non-allocating LinearAlgebra equivalents using FastLapackInterface workspaces:
 #   xxx_ws!(ws, args...) works as LinearAlgebra's xxx!(args...), but its results are ws buffers
+#     eigvals_ws!(::GeneralizedEigenWs, A, B), eigen_ws!(::HermitianEigenWs, A),
+#     eigen_ws!(::EigenWs, A), svdvals_ws!(::Union{SVDsddWs,MissingWorkspace}, A)
+#   svd_workspace(T) builds an SVDsddWs, or a MissingWorkspace for non-BLAS types
 #region
 
 using LinearAlgebra: BlasComplex, BlasInt, checksquare, require_one_based_indexing, chkstride1
@@ -527,18 +531,18 @@ end
 eigen_ws!(ws::HermitianEigenWs, A) =
     LAPACK.syevr!(ws, 'V', 'A', 'U', A, 0.0, 0.0, 0, 0, -1.0)
 
-# as eigen!(A) for a non-Hermitian complex A -> (λs, ψs), sorted by (real, imag) as in
-# LinearAlgebra's sorteig!, but λs and ψs are ws buffers, overwritten by the next call
+# as eigen!(A) for a non-Hermitian complex A -> (λs, ψs), but unsorted, and λs and ψs are ws
+# buffers, overwritten by the next call
 function eigen_ws!(ws::EigenWs{<:BlasComplex}, A)
     _, λs, _, ψs = LAPACK.geevx!(ws, 'B', 'N', 'V', 'N', A)  # (A, W, VL, VR, ...) if complex
-    by = λ -> (real(λ), imag(λ))
-    if !issorted(λs; by)
-        p = sortperm(λs; alg = QuickSort, by)
-        permute!(λs, p)
-        Base.permutecols!!(ψs, p)
-    end
     return λs, ψs
 end
+
+# SVD workspace for svdvals_ws!, or MissingWorkspace for non-BLAS types (e.g. ComplexF16)
+# The initial 2×2 size is a placeholder, svdvals_ws! grows ws as needed (see maybe_grow_ws!).
+# 2×2 is the smallest size used by connection_rank!, which skips the SVD for 1×n or n×1
+svd_workspace(::Type{C}) where {C<:BlasComplex} = SVDsddWs(Matrix{C}(undef, 2, 2); job = 'N')
+svd_workspace(_) = MissingWorkspace()
 
 # as svdvals!(A), but the result is a view of a ws buffer, overwritten by the next call
 function svdvals_ws!(ws::SVDsddWs, A)
@@ -546,6 +550,8 @@ function svdvals_ws!(ws::SVDsddWs, A)
     _, S, _ = LAPACK.gesdd!(ws, 'N', A)
     return view(S, 1:min(size(A)...))
 end
+
+svdvals_ws!(::MissingWorkspace, A) = svdvals(A)
 
 # Grow ws, if needed, so that it can be used with A. It never shrinks, so that alternating
 # sizes of A don't resize ws on every call. Only for ws whose xxx_ws! results are views

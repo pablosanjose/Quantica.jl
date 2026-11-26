@@ -4,6 +4,18 @@ using Quantica: GreenFunction, GreenSlice, GreenSolution, CellOrbitals, ncontact
 using LinearAlgebra: diag
 
 """
+    allocs(f, args...; kw...)
+
+Number of allocations of `f(args...; kw...)`, after a first call to compile it. It is
+measured inside a function, as test-scope variables can add spurious allocations (e.g. on
+Julia 1.10).
+"""
+function allocs(f::F, args::Vararg{Any,N}; kw...) where {F,N}
+    f(args...; kw...)
+    return @allocations f(args...; kw...)
+end
+
+"""
     cycled(xs, i)
 
 Element `i` of `xs`, wrapping around cyclically, i.e. `xs[mod1(i, length(xs))]`.

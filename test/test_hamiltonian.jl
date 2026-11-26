@@ -467,7 +467,21 @@ end
 
     # no allocations even for large models
     h = LP.linear() |> sum(@onsite((; a = 0) -> 0) for _ in 1:20)
-    Quantica.call!(h; a=0); @test (@allocations Quantica.call!(h; a=0)) <= 10
+    @test allocs(Quantica.call!, h; a = 0) == 0
+
+    # forced specialization of pass-through args in parametric terms (was 252 allocations)
+    hal(dr) = im * sign(cos(3 * atan(dr[2], dr[1]))) / (3√3)
+    g(α, r, dr, N, a) = (l = round(Int, r[3]/a + (N + 1)/2); hal(dr) * (l == 1 ? α[1] : l == N ? α[2] : 0.0))
+    mk(N, a) = @hopping((r, dr; α = nothing) -> g(α, r, dr, N, a), range = 1)
+    h = LP.honeycomb(dim = 3) |> mk(1, 0.335)
+    @test allocs(Quantica.call!, h, SA[0.1, 0.2]; α = (0.3, 0.4)) == 0
+
+    # several heterogeneous modifiers, with omitted (default) params (was 3 allocations)
+    h = LP.honeycomb(dim = 3) |> hamiltonian(@onsite((r; m = 0) -> m * r[3]) +
+        @hopping((r, dr; t2 = 0.1) -> t2 * hal(dr); range = 1) +
+        @hopping((r, dr; t3 = 0.1, ξ = 1.0) -> t3 * exp(-hypot(dr...)/ξ); range = 2),
+        @hopping!((t, r, dr; λ = 1, B = 0) -> λ * t * cis(B * r[1] * dr[2]))) |> supercell(2)
+    @test allocs(Quantica.call!, h, SA[0.1, 0.2]; m = 0.1, t2 = 0.2, t3 = 0.3, ξ = 1.0, λ = 1.0) == 0
 end
 
 @testset "ExternalPresets.wannier90" begin
@@ -597,10 +611,7 @@ end
     h1´ = combine(h0, translate(h0, SA[0,1,1]/sqrt(3)); coupling = model)
     @test h1 == h1´
     # PR #419: unboxed captured variables in blockindices
-    let hams = (h0, translate(h0, SA[0,1,1]/sqrt(3)))
-        Quantica.blockindices(hams)                                  # first call, to compile
-        @test (@allocations Quantica.blockindices(hams)) <= 2        # should be 0, in 1.10 `let` adds 2 allocs
-    end
+    @test allocs(Quantica.blockindices, (h0, translate(h0, SA[0,1,1]/sqrt(3)))) == 0
 end
 
 @testset "current operator" begin

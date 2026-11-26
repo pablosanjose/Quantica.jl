@@ -20,6 +20,8 @@ using ArnoldiMethod
         @test nothing === show(stdout, current(h))
         @test nothing === show(stdout, ES.LinearAlgebra())
         @test nothing === show(stdout, spectrum(h, (0,0)))
+        @test nothing === show(stdout, Quantica.diagonalizer(h))
+        @test nothing === show(stdout, Quantica.diagonalizer(h; solver = ES.LinearAlgebra(sortby = abs)))  # no workspace
         @test nothing === show(stdout, b)
         @test nothing === show(stdout, b[(0,0)])
         @test nothing === show(stdout, Quantica.slice(b, (0,0)))

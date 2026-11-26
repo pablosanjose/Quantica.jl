@@ -69,7 +69,7 @@ using LinearAlgebra
     g = LP.linear() |> hopping(1) |> attach(@onsite((ω; p = 1) -> p), cells = 1) |> attach(@onsite((ω; p = 1) -> p), cells = 3) |> greenfunction
     gs = g(0.2)
     @test view(gs, 1, 2) isa SubArray
-    @test (@allocations view(gs, 1, 2)) <= 2  # should be 1, but in some platforms/versions it could be 2
+    @test allocs(view, gs, 1, 2) <= 2  # should be 1, but in some platforms/versions it could be 2
 
     # check reverse gives same as non-reverse
     model = -hopping(SA[1 0; 0 -1]) + @hopping((r, dr) ->  SA[0 dr[1]; -dr[1] 0])

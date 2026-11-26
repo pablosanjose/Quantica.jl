@@ -386,49 +386,12 @@ end
 # apply AbstractEigenSolver
 #region
 
-function apply(solver::AbstractEigenSolver, h::AbstractHamiltonian, ::Type{S}, mapping, transform; use_workspace = Val(true)) where {T<:Real,S<:SVector{<:Any,T}}
-    # Some solvers (e.g. ES.LinearAlgebra) only accept certain matrix types
-    # so this mat´ could be an alias of the call! output, or an unaliased conversion
-    mat´ = ES.input_matrix(solver, h)
-    workspace = ES.eigen_workspace(solver, mat´, use_workspace)  # could be missing
-    # solvers with a workspace may overwrite mat´, which must therefore not alias h's call! output
-    workspace === missing || mat´ !== call!_output(h) ||
-        internalerror("apply: eigensolver workspace requires an unaliased input matrix")
-    function sfunc(φs, dryrun = false)
-        # this branch seems to solve #235 and out-of-order extension loading bugs
-        # The errors stem from FunctionWrappers (world-age incompatible?). TODO: Why??
-        if dryrun
-            eigen = EigenComplex{T}(Complex{T}[], Complex{T}[;;])
-        else
-            φs´ = apply_map(mapping, φs)      # this can be a FrankenTuple
-            mat = call!(h, φs´)
-            mat´ === mat || copy!(mat´, mat)
-            # mat´ could be dense, while mat is sparse, so if not egal, we copy
-            # the solver always receives the type of matrix mat´ declared by ES.input_matrix
-            eigen = solver(mat´, workspace)
-            apply_transform!(eigen, transform)
-        end
-        return eigen
-    end
-    sfunc(zero(S), true)  # dryrun to avoid world age bugs
-    asolver = AppliedEigenSolver(FunctionWrapper{EigenComplex{T},Tuple{S}}(sfunc))
-    return asolver
+function apply(solver::AbstractEigenSolver, h::AbstractHamiltonian, transform = missing)
+    ws = ES.eigen_workspace(solver, h)          # could be MissingWorkspace()
+    # alias of h's call! output, an unaliased conversion, or the matrix owned by ws
+    mat = ES.input_matrix(solver, h, ws)
+    return AppliedEigenSolver(h, solver, mat, ws, transform)
 end
-
-function apply(solver::AbstractEigenSolver, hf::Function, ::Type{S}, mapping, transform) where {T<:Real,S<:SVector{<:Any,T}}
-    function sfunc(φs)
-        φs´ = apply_map(mapping, φs)    # can be a FrankenTuple, should be accepted by hf
-        mat = hf(φs´)
-        eigen = solver(mat)
-        apply_transform!(eigen, transform)
-        return eigen
-    end
-    asolver = AppliedEigenSolver(FunctionWrapper{EigenComplex{T},Tuple{S}}(sfunc))
-    return asolver
-end
-
-apply(solver::AbstractEigenSolver, h, S, mapping, transform; kw...) =
-    argerror("Encountered an unexpected type as argument to an eigensolver. Are your mesh vertices real?")
 
 apply_transform!(eigen, ::Missing) = eigen
 

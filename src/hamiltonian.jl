@@ -343,10 +343,8 @@ function call!(ph::ParametricHamiltonian; kw...)
     # This reset also sets flat_sync state to unsynced, to be collected by flat_sync! below
     reset_to_parent!(ph)
     h = hamiltonian(ph)
-    foreach(modifiers(ph)) do m
-        # we assume this only modifies unflat harmonics, and preserves needs_flat_sync state
-        applymodifiers!(h, m; kw...)
-    end
+    # we assume this only modifies unflat harmonics, and preserves needs_flat_sync state
+    applymodifiers!(h, modifiers(ph); kw...)
     # modifiers are applied *only* to unflat, need to be synced to flat
     flat_sync!(h)
     return h
@@ -371,6 +369,12 @@ function reset_to_parent!(ph)
     end
     return ph
 end
+
+# Apply a tuple of heterogeneous modifiers. Base unrolls map over tuples, so each call is
+# statically dispatched. Instead, foreach loops over the tuple, which allocates when it has
+# too many different modifier types, and first/tail recursion hits inference limits for
+# long tuples (e.g. 20+ modifiers on Julia 1.10)
+applymodifiers!(h, ms::Tuple; kw...) = (map(m -> (applymodifiers!(h, m; kw...); nothing), ms); h)
 
 applymodifiers!(h, m::Modifier; kw...) = applymodifiers!(h, apply(m, h); kw...)
 
