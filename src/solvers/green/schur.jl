@@ -1061,13 +1061,12 @@ callback(s::AppliedSchurGreenSolver2D) = callback(s.integrate_opts)
 #   1D and 2D routines. Does not support non-Nothing contacts
 #region
 
-struct DensityMatrixSchurSolver{T,L,A,G<:GreenSlice{T,<:Any,L},O<:NamedTuple}
+struct DensityMatrixSchurSolver{T,L,A,G<:GreenSlice{T,<:Any,L},O<:NamedTuple,D<:AppliedEigenSolver{T}}
     gs::G                           # GreenSlice
     orbaxes::A                      # axes of GreenSlice (orbrows, orbcols)
-    hmat::Matrix{Complex{T}}        # it spans just the unit cell, dense Bloch matrix
-    psis::Matrix{Complex{T}}        # it spans just the unit cell, Eigenstates
+    fpsis::Matrix{Complex{T}}       # unit cell, occupation-weighted eigenstates
     integrate_opts::O               # callback [missing or a function f(ϕ, z) or f(ϕ1, ϕ2, z)] + kwargs for quadgk
-    eigws::HermitianEigenWs{Complex{T},Matrix{Complex{T}},T}  # workspace for eigen of hmat
+    eigsolver::D                    # diagonalizer of hamiltonian(g), with params applied
 end
 
 ## Constructor
@@ -1084,13 +1083,15 @@ check_no_boundaries_schur(s) = isempty(boundaries(s)) ||
 check_no_contacts_schur(gs) = has_selfenergy(gs) &&
     argerror("The Schur densitymatrix solver currently support only `nothing` contacts")
 
+# The diagonalizer acts on hamiltonian(g), which for a ParametricHamiltonian is the internal
+# Hamiltonian updated in place by call!(h; params...). Hence, params are applied once per
+# evaluation (see apply_params_schur!), not at each Bloch phase.
 function densitymatrix_schur(gs; int_opts...)
     g = parent(gs)
-    hmat = similar_Array(hamiltonian(g))
-    psis = similar(hmat)
+    eigsolver = diagonalizer(hamiltonian(g))
+    fpsis = similar_Array(hamiltonian(g))
     orbaxes = orbrows(gs), orbcols(gs)
-    eigws = HermitianEigenWs(hmat; vecs = true)
-    solver = DensityMatrixSchurSolver(gs, orbaxes, hmat, psis, NamedTuple(int_opts), eigws)
+    solver = DensityMatrixSchurSolver(gs, orbaxes, fpsis, NamedTuple(int_opts), eigsolver)
     return DensityMatrix(solver, gs)
 end
 
@@ -1108,9 +1109,10 @@ function integrate_rho_schur(s::DensityMatrixSchurSolver{<:Any,1}, µ, kBT; para
     data = serialize(result)
     g = parent(s.gs)
     xs = fermi_points_integration_path(g, µ; params...)
+    apply_params_schur!(s; params...)
     function integrand!(x)
         ϕ = 2π * x
-        z = fermi_h!(s, SA[ϕ], µ, inv(kBT); params...)
+        z = fermi_h!(s, SA[ϕ], µ, inv(kBT))
         callback(s)(ϕ, z)
         return z
     end
@@ -1127,9 +1129,13 @@ function integrate_rho_schur(s::DensityMatrixSchurSolver{<:Any,2}, µ, kBT; para
 
     axisorder = SA[only(s2D.axis1D), only(s2D.wrapped_axes)]
 
+    # h1D is stitched from h, so call!(h1D; params...) in integrand_outer! re-applies the
+    # same params to h, leaving it unchanged. Inner Bloch phases never re-apply params.
+    apply_params_schur!(s; params...)
+
     function integrand_inner!(x1, x2)
         ϕ = 2π * SA[x1, x2][axisorder]
-        z = fermi_h!(s, ϕ, µ, inv(kBT); params...)
+        z = fermi_h!(s, ϕ, µ, inv(kBT))
         callback(s)(ϕ..., z)
         return z
     end
@@ -1164,18 +1170,24 @@ function sanitize_integration_path(xs, (xmin, xmax) = (-0.5, 0.5))
     return xs´
 end
 
-function fermi_h!(s, ϕ, µ, β = 0; params...)
-    h = parent(parent(s.gs)) # may be a ParametricHamiltonian
-    bs = blockstructure(h)
-    copy!(s.hmat, call!(h, ϕ; params...))  # sparse to dense
-    # Similar to spectrum(h, ϕ; params...), but less work (no sort! or sanitization, use s.eigws workspace)
-    ϵs, psis = eigen_ws!(s.eigws, s.hmat)
+# apply params to h once per evaluation. The result is aliased by s.eigsolver.
+function apply_params_schur!(s::DensityMatrixSchurSolver; params...)
+    h´ = call!(parent(parent(s.gs)); params...)    # may be a ParametricHamiltonian
+    check_hermitian(h´)
+    return h´
+end
+
+# assumes params have been applied with apply_params_schur!
+function fermi_h!(s, ϕ, µ, β = 0)
+    (; eigsolver, fpsis, orbaxes) = s
+    bs = blockstructure(hamiltonian(eigsolver))
+    ϵs, psis = call!(eigsolver, ϕ)
     # special-casing β = Inf with views turns out to be slower
-    fs = (@. ϵs = fermi(ϵs - µ, β))
-    fpsis = (s.psis .= psis .* transpose(fs))
+    fs = (@. ϵs = fermi(ϵs - µ, β))         # ϵs: eigsolver buffer, ok to overwrite
+    fpsis .= psis .* transpose(fs)
     ρcell = EigenProduct(bs, psis, fpsis, ϕ)
     result = call!_output(s.gs)
-    getindex!(result, ρcell, s.orbaxes...)
+    getindex!(result, ρcell, orbaxes...)
     data = serialize(result)
     return data
 end

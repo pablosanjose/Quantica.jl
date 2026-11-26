@@ -52,3 +52,25 @@ using LinearAlgebra
     mat = ρ0(0.2, 0.3)
     @test Quantica.nnz(parent(mat)) < length(parent(mat))  # no broken sparsity
 end
+
+@testset "densitymatrix Schur params and errors" begin
+    # params are applied once per evaluation: a uniform onsite o shifts µ, in 1D and 2D
+    h1 = LP.linear() |> supercell(2) |> hopping(1) + @onsite((; o = 0) -> o)
+    h2 = LP.square() |> hopping(1) + @onsite((; o = 0) -> o)
+    for h in (h1, h2)
+        ρ = densitymatrix(greenfunction(h, GS.Schur())[cells = 0])
+        @test ρ(0.3, 0.1; o = 0.2) ≈ ρ(0.1, 0.1; o = 0) atol = 1e-6
+        ϕ = Quantica.latdim(h) == 1 ? SA[0.3] : SA[0.3, 0.2]
+        @test allocs(Quantica.fermi_h!, ρ.solver, ϕ, 0.1, 50.0) == 0
+    end
+    # non-Hermitian h for some params
+    h = LP.linear() |> hopping(1) + @onsite((; η = 0) -> im*η)
+    g = greenfunction(h, GS.Schur())
+    ρ = densitymatrix(g[cells = 0])
+    @test ρ(0.1) isa AbstractMatrix
+    @test_throws ArgumentError ρ(0.1; η = 0.1)
+    # omegamap is only for the generic integration path
+    @test_throws ArgumentError densitymatrix(g[cells = 0]; omegamap = ω -> (; η = 0))
+    g = h |> supercell(4) |> supercell |> greenfunction(GS.Spectrum())
+    @test_throws ArgumentError densitymatrix(g[cells = 0]; omegamap = ω -> (; η = 0))
+end

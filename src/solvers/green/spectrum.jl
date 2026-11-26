@@ -36,7 +36,7 @@ minimal_callsafe_copy(s::AppliedSpectrumGreenSolver{<:SpectrumSolver}, parentham
 #region ## apply ##
 
 apply(s::GS.Spectrum, h::Hamiltonian{<:Any,<:Any,0}, ::Contacts) =
-    AppliedSpectrumGreenSolver(spectrum(h; s.spectrumkw...))
+    AppliedSpectrumGreenSolver(spectrum(check_hermitian(h); s.spectrumkw...))
 
 apply(s::GS.Spectrum, h::ParametricHamiltonian{<:Any,<:Any,0}, ::Contacts) =
     AppliedSpectrumGreenSolver(SpectrumSolver(h, s))
@@ -58,12 +58,17 @@ end
 # get spectrum from solver
 spectrum(s::AppliedSpectrumGreenSolver{<:Spectrum}; params...) =
     s.spectrum
-spectrum(s::AppliedSpectrumGreenSolver{<:SpectrumSolver}; params...) =
-    spectrum(call!(s.spectrum.h; params...); s.spectrum.solver.spectrumkw...)
+function spectrum(s::AppliedSpectrumGreenSolver{<:SpectrumSolver}; params...)
+    (; h, solver) = s.spectrum
+    return spectrum(check_hermitian(call!(h; params...)); solver.spectrumkw...)
+end
 
 # FixedParamGreenSolver support
-maybe_apply_params(s::AppliedSpectrumGreenSolver{<:SpectrumSolver}, h, c; params...) =
-    AppliedSpectrumGreenSolver(spectrum(call!(h; params...); s.spectrum.solver.spectrumkw...))
+function maybe_apply_params(s::AppliedSpectrumGreenSolver{<:SpectrumSolver}, h, c; params...)
+    (; spectrumkw) = s.spectrum.solver
+    sp = spectrum(check_hermitian(call!(h; params...)); spectrumkw...)
+    return AppliedSpectrumGreenSolver(sp)
+end
 
 #endregion
 
